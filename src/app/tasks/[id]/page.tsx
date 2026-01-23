@@ -1,5 +1,6 @@
 'use client';
 
+import { use } from 'react';
 import Link from 'next/link';
 import { trpc } from '../../../frontend/lib/trpc';
 
@@ -13,8 +14,8 @@ const stateColors: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-800',
 };
 
-export default function TaskDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
 
   const {
     data: task,
