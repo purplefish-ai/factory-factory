@@ -1,0 +1,285 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { trpc } from '../../../frontend/lib/trpc';
+
+export default function AdminSystemPage() {
+  const [rateLimits, setRateLimits] = useState({
+    claudeRequestsPerMinute: 60,
+    claudeRequestsPerHour: 1000,
+    maxConcurrentWorkers: 10,
+    maxConcurrentSupervisors: 5,
+    maxConcurrentEpics: 5,
+  });
+
+  const { data: profiles } = trpc.admin.getAgentProfiles.useQuery();
+  const { data: apiUsage } = trpc.admin.getApiUsageByAgent.useQuery(undefined, {
+    refetchInterval: 5000,
+  });
+  const { data: stats } = trpc.admin.getSystemStats.useQuery();
+
+  const updateRateLimits = trpc.admin.updateRateLimits.useMutation();
+
+  const handleSaveRateLimits = () => {
+    updateRateLimits.mutate(rateLimits);
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
+          <p className="text-gray-600 mt-1">Configure system behavior and limits</p>
+        </div>
+        <Link
+          href="/admin"
+          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+        >
+          Back to Admin
+        </Link>
+      </div>
+
+      {/* Agent Profiles */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-4">Agent Profiles</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Agent models and permissions can be configured via environment variables.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {profiles?.profiles && Object.entries(profiles.profiles).map(([type, profile]) => (
+            <div key={type} className="border border-gray-200 rounded-lg p-4">
+              <h3 className="font-medium text-lg mb-2">{type}</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Model:</span>
+                  <span className="font-mono text-xs">{profile.model.split('-').slice(-2).join('-')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Permission Mode:</span>
+                  <span className={`px-2 py-0.5 rounded text-xs ${
+                    profile.permissionMode === 'yolo' ? 'bg-yellow-100 text-yellow-800' :
+                    profile.permissionMode === 'relaxed' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {profile.permissionMode}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Max Tokens:</span>
+                  <span>{profile.maxTokens.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm">
+          <h4 className="font-medium mb-2">Environment Variables</h4>
+          <ul className="space-y-1 font-mono text-xs">
+            <li><code>ORCHESTRATOR_MODEL</code>: sonnet, opus, haiku</li>
+            <li><code>SUPERVISOR_MODEL</code>: sonnet, opus, haiku</li>
+            <li><code>WORKER_MODEL</code>: sonnet, opus, haiku</li>
+            <li><code>ORCHESTRATOR_PERMISSIONS</code>: strict, relaxed, yolo</li>
+            <li><code>SUPERVISOR_PERMISSIONS</code>: strict, relaxed, yolo</li>
+            <li><code>WORKER_PERMISSIONS</code>: strict, relaxed, yolo</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Rate Limits */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-4">Rate Limits</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Claude Requests/min
+            </label>
+            <input
+              type="number"
+              value={rateLimits.claudeRequestsPerMinute}
+              onChange={(e) => setRateLimits({ ...rateLimits, claudeRequestsPerMinute: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Claude Requests/hour
+            </label>
+            <input
+              type="number"
+              value={rateLimits.claudeRequestsPerHour}
+              onChange={(e) => setRateLimits({ ...rateLimits, claudeRequestsPerHour: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Max Concurrent Workers
+            </label>
+            <input
+              type="number"
+              value={rateLimits.maxConcurrentWorkers}
+              onChange={(e) => setRateLimits({ ...rateLimits, maxConcurrentWorkers: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Max Concurrent Supervisors
+            </label>
+            <input
+              type="number"
+              value={rateLimits.maxConcurrentSupervisors}
+              onChange={(e) => setRateLimits({ ...rateLimits, maxConcurrentSupervisors: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Max Concurrent Epics
+            </label>
+            <input
+              type="number"
+              value={rateLimits.maxConcurrentEpics}
+              onChange={(e) => setRateLimits({ ...rateLimits, maxConcurrentEpics: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <button
+            onClick={handleSaveRateLimits}
+            disabled={updateRateLimits.isPending}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {updateRateLimits.isPending ? 'Saving...' : 'Save Rate Limits'}
+          </button>
+          {updateRateLimits.data && (
+            <span className="ml-4 text-green-600">Saved successfully!</span>
+          )}
+        </div>
+      </div>
+
+      {/* API Usage by Agent */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-4">API Usage by Agent</h2>
+        {apiUsage?.byAgent && Object.keys(apiUsage.byAgent).length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Agent ID</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requests</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {Object.entries(apiUsage.byAgent)
+                  .sort(([, a], [, b]) => (b as number) - (a as number))
+                  .slice(0, 20)
+                  .map(([agentId, count]) => (
+                    <tr key={agentId}>
+                      <td className="px-4 py-2 text-sm font-mono">{agentId}</td>
+                      <td className="px-4 py-2 text-sm text-right">{count as number}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-500">No API usage data yet</p>
+        )}
+      </div>
+
+      {/* API Usage by Epic */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-4">API Usage by Epic</h2>
+        {apiUsage?.byEpic && Object.keys(apiUsage.byEpic).length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Epic ID</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requests</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {Object.entries(apiUsage.byEpic)
+                  .sort(([, a], [, b]) => (b as number) - (a as number))
+                  .map(([epicId, count]) => (
+                    <tr key={epicId}>
+                      <td className="px-4 py-2 text-sm">
+                        <Link href={`/epics/${epicId}`} className="text-blue-600 hover:text-blue-800">
+                          {epicId}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2 text-sm text-right">{count as number}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-500">No API usage data yet</p>
+        )}
+      </div>
+
+      {/* Feature Flags */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-4">Feature Flags</h2>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div>
+              <span className="font-medium">Authentication</span>
+              <p className="text-sm text-gray-500">Require authentication for all routes</p>
+            </div>
+            <span className={`px-2 py-1 rounded text-xs ${
+              stats?.features?.authentication ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {stats?.features?.authentication ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div>
+              <span className="font-medium">Metrics</span>
+              <p className="text-sm text-gray-500">Export Prometheus metrics</p>
+            </div>
+            <span className={`px-2 py-1 rounded text-xs ${
+              stats?.features?.metrics ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {stats?.features?.metrics ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="font-medium">Error Tracking</span>
+              <p className="text-sm text-gray-500">Send errors to tracking service</p>
+            </div>
+            <span className={`px-2 py-1 rounded text-xs ${
+              stats?.features?.errorTracking ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {stats?.features?.errorTracking ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+        </div>
+        <p className="text-sm text-gray-500 mt-4">
+          Feature flags are configured via environment variables:
+          <code className="ml-2 font-mono text-xs">FEATURE_AUTHENTICATION=true</code>
+        </p>
+      </div>
+
+      {/* Available Models */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-4">Available Models</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {profiles?.availableModels?.map((m) => (
+            <div key={m.alias} className="border border-gray-200 rounded-lg p-3">
+              <span className="font-medium">{m.alias}</span>
+              <p className="text-xs font-mono text-gray-500 mt-1">{m.model}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

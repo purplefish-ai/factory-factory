@@ -1,9 +1,10 @@
 import { agentAccessor, decisionLogAccessor } from "../../resource_accessors/index.js";
 import { checkToolPermissions } from "./permissions.js";
-import {
+import type {
   McpToolContext,
   McpToolRegistryEntry,
-  McpToolResponse,
+  McpToolResponse} from "./types.js";
+import {
   McpErrorCode,
 } from "./types.js";
 import {

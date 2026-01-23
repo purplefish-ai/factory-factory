@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { decisionLogAccessor } from "../../resource_accessors/index.js";
-import {
+import type {
   McpToolContext,
-  McpToolResponse,
+  McpToolResponse} from "./types.js";
+import {
   McpErrorCode,
 } from "./types.js";
 import {

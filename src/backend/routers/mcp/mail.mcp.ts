@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { mailAccessor } from "../../resource_accessors/index.js";
 import { inngest } from "../../inngest/client.js";
-import {
+import type {
   McpToolContext,
-  McpToolResponse,
+  McpToolResponse} from "./types.js";
+import {
   McpErrorCode,
 } from "./types.js";
 import {

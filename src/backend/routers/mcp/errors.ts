@@ -1,4 +1,4 @@
-import { Agent } from "@prisma/client";
+import type { Agent } from "@prisma/client";
 import { mailAccessor } from "../../resource_accessors/index.js";
 
 /**

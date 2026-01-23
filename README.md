@@ -99,8 +99,13 @@ FactoryFactory/
 │       ├── app/               # Next.js App Router
 │       └── components/        # React components (tmux-terminal, etc.)
 ├── docs/
-│   └── MCP_TOOLS.md          # MCP tools documentation
-├── docker-compose.yml         # PostgreSQL setup
+│   ├── MCP_TOOLS.md          # MCP tools documentation
+│   ├── ARCHITECTURE.md       # System architecture details
+│   ├── DEPLOYMENT_GUIDE.md   # Production deployment guide
+│   └── USER_GUIDE.md         # End-user documentation
+├── docker-compose.yml         # Docker services (dev/production)
+├── Dockerfile                 # Production container image
+├── nginx.conf                 # Production reverse proxy config
 └── package.json
 ```
 
@@ -127,14 +132,36 @@ The system uses five main models:
 
 ## Available Scripts
 
+### Development
 - `npm run dev` - Start Next.js frontend
 - `npm run backend:dev` - Start backend server with hot reload
 - `npm run inngest:dev` - Start Inngest dev server
-- `npm run db:migrate` - Run Prisma migrations
+- `npm run dev:all` - Start all development servers concurrently
+
+### Database
+- `npm run db:migrate` - Run Prisma migrations (dev)
+- `npm run db:migrate:deploy` - Run Prisma migrations (production)
 - `npm run db:generate` - Generate Prisma client
 - `npm run db:studio` - Open Prisma Studio GUI
+
+### Production
+- `npm run build` - Build Next.js frontend
+- `npm run build:backend` - Build backend TypeScript
+- `npm run build:all` - Build frontend and backend
+- `npm run start` - Start production frontend
+- `npm run start:backend` - Start production backend
+- `npm run start:all` - Start all production servers
+
+### Quality
 - `npm run lint` - Lint code
+- `npm run lint:fix` - Lint and auto-fix
 - `npm run format` - Format code with Prettier
+- `npm run format:check` - Check formatting
+- `npm run typecheck` - TypeScript type checking
+
+### Health
+- `npm run health` - Quick health check
+- `npm run health:all` - Comprehensive health check
 
 ## Environment Variables
 
@@ -199,10 +226,24 @@ Agents communicate via:
 - ✅ Mock agent testing utilities
 - ✅ Inngest event handlers for mail
 
-**Not yet implemented**:
-- Real agent implementation with Claude SDK (Phase 2)
-- Supervisor and orchestrator agents (Phase 2+)
-- Frontend UI for monitoring (Phase 3+)
+### Phase 2-6: Agent Implementation ✅
+- ✅ Real agent implementation with Claude SDK
+- ✅ Worker, Supervisor, and Orchestrator agents
+- ✅ Epic and task management workflows
+- ✅ Git worktree and PR management
+- ✅ Frontend UI for monitoring
+
+### Phase 7: Polish & Production Readiness ✅
+- ✅ Edge case handling (epic/task lifecycle, PR conflicts)
+- ✅ Agent crash recovery with loop detection
+- ✅ Claude API rate limiting and concurrency controls
+- ✅ Resource management (worktree cleanup)
+- ✅ Agent execution profiles (model/permission configuration)
+- ✅ Admin tools and debugging utilities
+- ✅ Security hardening (input validation, CORS, sanitization)
+- ✅ Production deployment (Docker, Nginx, docker-compose)
+- ✅ Monitoring and observability (structured logging, health checks)
+- ✅ Comprehensive documentation
 
 ## MCP Tools
 
@@ -275,6 +316,28 @@ npx prisma migrate reset
 # Re-generate Prisma client
 npm run db:generate
 ```
+
+## Documentation
+
+- [User Guide](docs/USER_GUIDE.md) - Getting started and usage instructions
+- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) - Production deployment and configuration
+- [Architecture](docs/ARCHITECTURE.md) - System design and technical details
+- [MCP Tools](docs/MCP_TOOLS.md) - Agent tools and protocols
+
+## Production Deployment
+
+For production deployment:
+
+```bash
+# Build and start with Docker
+docker-compose --profile production up -d
+
+# Or manually
+npm run build:all
+npm run start:all
+```
+
+See [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) for complete instructions.
 
 ## Contributing
 

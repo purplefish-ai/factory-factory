@@ -4,6 +4,7 @@ import { taskRouter } from './task.trpc';
 import { agentRouter } from './agent.trpc';
 import { mailRouter } from './mail.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
+import { adminRouter } from './admin.trpc';
 
 export const appRouter = router({
   epic: epicRouter,
@@ -11,6 +12,7 @@ export const appRouter = router({
   agent: agentRouter,
   mail: mailRouter,
   decisionLog: decisionLogRouter,
+  admin: adminRouter,
 });
 
 // Export type for use in frontend
