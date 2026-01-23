@@ -45,3 +45,4 @@ prisma/migrations/**/*.sql
 
 # Worktrees
 worktrees/
+src/generated/

@@ -1,13 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "target": "ES2023",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "allowJs": true,
     "checkJs": false,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -39,9 +43,27 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@prisma/client": [
+        "./src/generated/prisma/client.ts"
+      ],
+      "@prisma/client/*": [
+        "./src/generated/prisma/*"
+      ]
     }
   },
-  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "dist", ".next"]
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next"
+  ]
 }

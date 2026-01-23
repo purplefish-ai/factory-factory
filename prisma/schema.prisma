@@ -2,44 +2,44 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Enums
 enum EpicState {
-  PLANNING       // Epic is being planned
-  IN_PROGRESS    // Epic is being worked on
-  BLOCKED        // Epic is blocked
-  COMPLETED      // Epic is completed
-  CANCELLED      // Epic was cancelled
+  PLANNING
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
 }
 
 enum TaskState {
-  PENDING        // Task is waiting to be picked up
-  ASSIGNED       // Task has been assigned to an agent
-  IN_PROGRESS    // Task is being worked on
-  REVIEW         // Task is waiting for review
-  BLOCKED        // Task is blocked
-  COMPLETED      // Task is completed
-  FAILED         // Task failed
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  REVIEW
+  BLOCKED
+  COMPLETED
+  FAILED
 }
 
 enum AgentType {
-  SUPERVISOR     // High-level orchestrator
-  ORCHESTRATOR   // Epic-level manager
-  WORKER         // Task executor
+  SUPERVISOR
+  ORCHESTRATOR
+  WORKER
 }
 
 enum AgentState {
-  IDLE           // Agent is idle
-  BUSY           // Agent is working
-  WAITING        // Agent is waiting for something
-  FAILED         // Agent encountered an error
+  IDLE
+  BUSY
+  WAITING
+  FAILED
 }
 
 // Models
@@ -72,7 +72,7 @@ model Task {
   worktreePath      String?
   branchName        String?
   prUrl             String?
-  attempts          Int         @default(0)  // Number of worker recovery attempts
+  attempts          Int         @default(0)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   completedAt       DateTime?
@@ -94,7 +94,7 @@ model Agent {
   currentEpicId     String?     @unique
   currentTaskId     String?
   tmuxSessionName   String?
-  sessionId         String?     // Claude Code CLI session ID for resume
+  sessionId         String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   lastActiveAt      DateTime    @default(now())
