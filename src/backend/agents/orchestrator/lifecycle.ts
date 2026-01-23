@@ -8,16 +8,16 @@
  * - Get orchestrator status
  */
 
-import { AgentType, AgentState } from '@prisma/client';
+import { AgentState, AgentType } from '@prisma/client';
+import { agentAccessor } from '../../resource_accessors/index.js';
 import {
   createOrchestrator,
-  runOrchestrator,
-  stopOrchestrator,
-  killOrchestrator,
   getActiveOrchestrator,
   isOrchestratorRunning,
+  killOrchestrator,
+  runOrchestrator,
+  stopOrchestrator,
 } from './orchestrator.agent.js';
-import { agentAccessor } from '../../resource_accessors/index.js';
 
 /**
  * Start the orchestrator
@@ -33,9 +33,7 @@ export async function startOrchestrator(): Promise<string> {
   const existingOrchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
 
   // Find active (non-failed) orchestrators
-  const activeOrchestrators = existingOrchestrators.filter(
-    (o) => o.state !== AgentState.FAILED
-  );
+  const activeOrchestrators = existingOrchestrators.filter((o) => o.state !== AgentState.FAILED);
 
   // If there's an active orchestrator, check if it's running
   if (activeOrchestrators.length > 0) {
@@ -126,15 +124,13 @@ export async function killOrchestratorAndCleanup(agentId: string): Promise<void>
 export async function getOrchestrator(): Promise<string | null> {
   // First check in-memory
   const active = getActiveOrchestrator();
-  if (active && active.isRunning) {
+  if (active?.isRunning) {
     return active.agentId;
   }
 
   // Then check database
   const orchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-  const activeOrchestrators = orchestrators.filter(
-    (o) => o.state !== AgentState.FAILED
-  );
+  const activeOrchestrators = orchestrators.filter((o) => o.state !== AgentState.FAILED);
 
   if (activeOrchestrators.length > 0) {
     return activeOrchestrators[0].id;
@@ -164,9 +160,7 @@ export async function getOrchestratorStatus(agentId: string): Promise<{
   }
 
   const now = Date.now();
-  const minutesSinceHeartbeat = Math.floor(
-    (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-  );
+  const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
 
   return {
     agentId: agent.id,

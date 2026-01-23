@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { router, publicProcedure } from './trpc';
-import { mailAccessor } from '../resource_accessors/mail.accessor';
 import { inngest } from '../inngest/client';
+import { mailAccessor } from '../resource_accessors/mail.accessor';
+import { publicProcedure, router } from './trpc';
 
 export const mailRouter = router({
   // List human inbox
@@ -18,21 +18,19 @@ export const mailRouter = router({
     }),
 
   // Get mail by ID
-  getById: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const mail = await mailAccessor.findById(input.id);
-      if (!mail) {
-        throw new Error(`Mail not found: ${input.id}`);
-      }
+  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+    const mail = await mailAccessor.findById(input.id);
+    if (!mail) {
+      throw new Error(`Mail not found: ${input.id}`);
+    }
 
-      // Mark as read when viewed
-      if (!mail.isRead) {
-        await mailAccessor.markAsRead(input.id);
-      }
+    // Mark as read when viewed
+    if (!mail.isRead) {
+      await mailAccessor.markAsRead(input.id);
+    }
 
-      return mail;
-    }),
+    return mail;
+  }),
 
   // Send mail to an agent (from human)
   sendToAgent: publicProcedure
@@ -109,11 +107,9 @@ export const mailRouter = router({
     }),
 
   // Mark mail as read
-  markAsRead: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ input }) => {
-      return mailAccessor.markAsRead(input.id);
-    }),
+  markAsRead: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    return mailAccessor.markAsRead(input.id);
+  }),
 
   // Get unread count for human inbox
   getUnreadCount: publicProcedure.query(async () => {

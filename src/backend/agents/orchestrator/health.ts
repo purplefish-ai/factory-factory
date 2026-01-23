@@ -5,13 +5,13 @@
  * The orchestrator periodically checks supervisor health and triggers cascading recovery when needed.
  */
 
-import { AgentType, AgentState, TaskState } from '@prisma/client';
+import { AgentState, AgentType, TaskState } from '@prisma/client';
 import {
   agentAccessor,
-  taskAccessor,
+  decisionLogAccessor,
   epicAccessor,
   mailAccessor,
-  decisionLogAccessor,
+  taskAccessor,
 } from '../../resource_accessors/index.js';
 import { killSupervisorAndCleanup, startSupervisorForEpic } from '../supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../worker/lifecycle.js';
@@ -303,9 +303,7 @@ export async function getSupervisorHealthSummary(): Promise<{
 
   const supervisorDetails = await Promise.all(
     supervisors.map(async (s) => {
-      const epic = s.currentEpicId
-        ? await epicAccessor.findById(s.currentEpicId)
-        : null;
+      const epic = s.currentEpicId ? await epicAccessor.findById(s.currentEpicId) : null;
 
       return {
         supervisorId: s.id,

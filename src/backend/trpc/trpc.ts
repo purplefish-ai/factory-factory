@@ -3,9 +3,7 @@ import superjson from 'superjson';
 
 // Context for tRPC procedures
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface Context {
-  // Future: add user auth context here
-}
+export type Context = {};
 
 export const createContext = (): Context => {
   return {};

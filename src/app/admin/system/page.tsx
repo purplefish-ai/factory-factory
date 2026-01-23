@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { trpc } from '../../../frontend/lib/trpc';
 
 export default function AdminSystemPage() {
@@ -47,42 +47,61 @@ export default function AdminSystemPage() {
           Agent models and permissions can be configured via environment variables.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {profiles?.profiles && Object.entries(profiles.profiles).map(([type, profile]) => (
-            <div key={type} className="border border-gray-200 rounded-lg p-4">
-              <h3 className="font-medium text-lg mb-2">{type}</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Model:</span>
-                  <span className="font-mono text-xs">{profile.model.split('-').slice(-2).join('-')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Permission Mode:</span>
-                  <span className={`px-2 py-0.5 rounded text-xs ${
-                    profile.permissionMode === 'yolo' ? 'bg-yellow-100 text-yellow-800' :
-                    profile.permissionMode === 'relaxed' ? 'bg-blue-100 text-blue-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {profile.permissionMode}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Max Tokens:</span>
-                  <span>{profile.maxTokens.toLocaleString()}</span>
+          {profiles?.profiles &&
+            Object.entries(profiles.profiles).map(([type, profile]) => (
+              <div key={type} className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-medium text-lg mb-2">{type}</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Model:</span>
+                    <span className="font-mono text-xs">
+                      {profile.model.split('-').slice(-2).join('-')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Permission Mode:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs ${
+                        profile.permissionMode === 'yolo'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : profile.permissionMode === 'relaxed'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                      }`}
+                    >
+                      {profile.permissionMode}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Max Tokens:</span>
+                    <span>{profile.maxTokens.toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
 
         <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm">
           <h4 className="font-medium mb-2">Environment Variables</h4>
           <ul className="space-y-1 font-mono text-xs">
-            <li><code>ORCHESTRATOR_MODEL</code>: sonnet, opus, haiku</li>
-            <li><code>SUPERVISOR_MODEL</code>: sonnet, opus, haiku</li>
-            <li><code>WORKER_MODEL</code>: sonnet, opus, haiku</li>
-            <li><code>ORCHESTRATOR_PERMISSIONS</code>: strict, relaxed, yolo</li>
-            <li><code>SUPERVISOR_PERMISSIONS</code>: strict, relaxed, yolo</li>
-            <li><code>WORKER_PERMISSIONS</code>: strict, relaxed, yolo</li>
+            <li>
+              <code>ORCHESTRATOR_MODEL</code>: sonnet, opus, haiku
+            </li>
+            <li>
+              <code>SUPERVISOR_MODEL</code>: sonnet, opus, haiku
+            </li>
+            <li>
+              <code>WORKER_MODEL</code>: sonnet, opus, haiku
+            </li>
+            <li>
+              <code>ORCHESTRATOR_PERMISSIONS</code>: strict, relaxed, yolo
+            </li>
+            <li>
+              <code>SUPERVISOR_PERMISSIONS</code>: strict, relaxed, yolo
+            </li>
+            <li>
+              <code>WORKER_PERMISSIONS</code>: strict, relaxed, yolo
+            </li>
           </ul>
         </div>
       </div>
@@ -98,7 +117,12 @@ export default function AdminSystemPage() {
             <input
               type="number"
               value={rateLimits.claudeRequestsPerMinute}
-              onChange={(e) => setRateLimits({ ...rateLimits, claudeRequestsPerMinute: parseInt(e.target.value) })}
+              onChange={(e) =>
+                setRateLimits({
+                  ...rateLimits,
+                  claudeRequestsPerMinute: parseInt(e.target.value, 10),
+                })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
@@ -109,7 +133,12 @@ export default function AdminSystemPage() {
             <input
               type="number"
               value={rateLimits.claudeRequestsPerHour}
-              onChange={(e) => setRateLimits({ ...rateLimits, claudeRequestsPerHour: parseInt(e.target.value) })}
+              onChange={(e) =>
+                setRateLimits({
+                  ...rateLimits,
+                  claudeRequestsPerHour: parseInt(e.target.value, 10),
+                })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
@@ -120,7 +149,9 @@ export default function AdminSystemPage() {
             <input
               type="number"
               value={rateLimits.maxConcurrentWorkers}
-              onChange={(e) => setRateLimits({ ...rateLimits, maxConcurrentWorkers: parseInt(e.target.value) })}
+              onChange={(e) =>
+                setRateLimits({ ...rateLimits, maxConcurrentWorkers: parseInt(e.target.value, 10) })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
@@ -131,7 +162,12 @@ export default function AdminSystemPage() {
             <input
               type="number"
               value={rateLimits.maxConcurrentSupervisors}
-              onChange={(e) => setRateLimits({ ...rateLimits, maxConcurrentSupervisors: parseInt(e.target.value) })}
+              onChange={(e) =>
+                setRateLimits({
+                  ...rateLimits,
+                  maxConcurrentSupervisors: parseInt(e.target.value, 10),
+                })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
@@ -142,7 +178,9 @@ export default function AdminSystemPage() {
             <input
               type="number"
               value={rateLimits.maxConcurrentEpics}
-              onChange={(e) => setRateLimits({ ...rateLimits, maxConcurrentEpics: parseInt(e.target.value) })}
+              onChange={(e) =>
+                setRateLimits({ ...rateLimits, maxConcurrentEpics: parseInt(e.target.value, 10) })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
@@ -169,8 +207,12 @@ export default function AdminSystemPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Agent ID</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requests</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    Agent ID
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    Requests
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -199,8 +241,12 @@ export default function AdminSystemPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Epic ID</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requests</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    Epic ID
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    Requests
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -209,7 +255,10 @@ export default function AdminSystemPage() {
                   .map(([epicId, count]) => (
                     <tr key={epicId}>
                       <td className="px-4 py-2 text-sm">
-                        <Link href={`/epics/${epicId}`} className="text-blue-600 hover:text-blue-800">
+                        <Link
+                          href={`/epics/${epicId}`}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
                           {epicId}
                         </Link>
                       </td>
@@ -233,9 +282,13 @@ export default function AdminSystemPage() {
               <span className="font-medium">Authentication</span>
               <p className="text-sm text-gray-500">Require authentication for all routes</p>
             </div>
-            <span className={`px-2 py-1 rounded text-xs ${
-              stats?.features?.authentication ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-            }`}>
+            <span
+              className={`px-2 py-1 rounded text-xs ${
+                stats?.features?.authentication
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
               {stats?.features?.authentication ? 'Enabled' : 'Disabled'}
             </span>
           </div>
@@ -244,9 +297,13 @@ export default function AdminSystemPage() {
               <span className="font-medium">Metrics</span>
               <p className="text-sm text-gray-500">Export Prometheus metrics</p>
             </div>
-            <span className={`px-2 py-1 rounded text-xs ${
-              stats?.features?.metrics ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-            }`}>
+            <span
+              className={`px-2 py-1 rounded text-xs ${
+                stats?.features?.metrics
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
               {stats?.features?.metrics ? 'Enabled' : 'Disabled'}
             </span>
           </div>
@@ -255,9 +312,13 @@ export default function AdminSystemPage() {
               <span className="font-medium">Error Tracking</span>
               <p className="text-sm text-gray-500">Send errors to tracking service</p>
             </div>
-            <span className={`px-2 py-1 rounded text-xs ${
-              stats?.features?.errorTracking ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-            }`}>
+            <span
+              className={`px-2 py-1 rounded text-xs ${
+                stats?.features?.errorTracking
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
               {stats?.features?.errorTracking ? 'Enabled' : 'Disabled'}
             </span>
           </div>

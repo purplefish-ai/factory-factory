@@ -1,26 +1,22 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { AgentType, EpicState, TaskState } from '@prisma/client';
 import { z } from 'zod';
-import { AgentType, TaskState, EpicState } from '@prisma/client';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import { startWorker } from '../../agents/worker/lifecycle.js';
+import { gitClient } from '../../clients/git.client.js';
+import { githubClient } from '../../clients/index.js';
+import { inngest } from '../../inngest/client.js';
 import {
   agentAccessor,
-  taskAccessor,
-  epicAccessor,
   decisionLogAccessor,
+  epicAccessor,
   mailAccessor,
+  taskAccessor,
 } from '../../resource_accessors/index.js';
-import { githubClient } from '../../clients/index.js';
-import { gitClient } from '../../clients/git.client.js';
-import type { McpToolContext, McpToolResponse} from './types.js';
-import { McpErrorCode } from './types.js';
-import {
-  registerMcpTool,
-  createSuccessResponse,
-  createErrorResponse,
-} from './server.js';
-import { inngest } from '../../inngest/client.js';
-import { startWorker } from '../../agents/worker/lifecycle.js';
 import { notificationService } from '../../services/notification.service.js';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
+import type { McpToolContext, McpToolResponse } from './types.js';
+import { McpErrorCode } from './types.js';
 
 // ============================================================================
 // Input Schemas
@@ -71,8 +67,7 @@ const ForceCompleteTaskInputSchema = z.object({
 async function verifySupervisorWithEpic(
   context: McpToolContext
 ): Promise<
-  | { success: true; agentId: string; epicId: string }
-  | { success: false; error: McpToolResponse }
+  { success: true; agentId: string; epicId: string } | { success: false; error: McpToolResponse }
 > {
   const agent = await agentAccessor.findById(context.agentId);
   if (!agent) {
@@ -127,10 +122,7 @@ function generateWorktreeName(taskId: string, title: string): string {
 /**
  * Create a new task for the epic (SUPERVISOR only)
  */
-async function createTask(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function createTask(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = CreateTaskInputSchema.parse(input);
 
@@ -161,17 +153,12 @@ async function createTask(
     const worktreeName = generateWorktreeName(task.id, validatedInput.title);
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(
-      context.agentId,
-      'mcp__epic__create_task',
-      'result',
-      {
-        taskId: task.id,
-        epicId: epic.id,
-        title: validatedInput.title,
-        worktreeName,
-      }
-    );
+    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__create_task', 'result', {
+      taskId: task.id,
+      epicId: epic.id,
+      title: validatedInput.title,
+      worktreeName,
+    });
 
     // Fire task.created event (for logging/observability)
     try {
@@ -184,7 +171,10 @@ async function createTask(
         },
       });
     } catch (error) {
-      console.log('Inngest event send failed (this is OK if Inngest dev server is not running):', error);
+      console.log(
+        'Inngest event send failed (this is OK if Inngest dev server is not running):',
+        error
+      );
     }
 
     // Start worker directly (don't wait for Inngest)
@@ -209,11 +199,7 @@ async function createTask(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -222,10 +208,7 @@ async function createTask(
 /**
  * List all tasks for the epic (SUPERVISOR only)
  */
-async function listTasks(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function listTasks(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = ListTasksInputSchema.parse(input);
 
@@ -242,16 +225,11 @@ async function listTasks(
     });
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(
-      context.agentId,
-      'mcp__epic__list_tasks',
-      'result',
-      {
-        epicId: verification.epicId,
-        taskCount: tasks.length,
-        filterState: validatedInput.state,
-      }
-    );
+    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__list_tasks', 'result', {
+      epicId: verification.epicId,
+      taskCount: tasks.length,
+      filterState: validatedInput.state,
+    });
 
     return createSuccessResponse({
       epicId: verification.epicId,
@@ -272,11 +250,7 @@ async function listTasks(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -285,10 +259,7 @@ async function listTasks(
 /**
  * Get the PR review queue for the epic (SUPERVISOR only)
  */
-async function getReviewQueue(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function getReviewQueue(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetReviewQueueInputSchema.parse(input);
 
@@ -305,9 +276,7 @@ async function getReviewQueue(
     });
 
     // Sort by updatedAt (submission order)
-    const sortedTasks = tasks.sort(
-      (a, b) => a.updatedAt.getTime() - b.updatedAt.getTime()
-    );
+    const sortedTasks = tasks.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
 
     // Log decision
     await decisionLogAccessor.createAutomatic(
@@ -336,11 +305,7 @@ async function getReviewQueue(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -350,10 +315,7 @@ async function getReviewQueue(
  * Approve a task and merge worker's branch into epic branch (SUPERVISOR only)
  * This does a git merge locally, then pushes the epic branch to origin.
  */
-async function approveTask(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function approveTask(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = ApproveTaskInputSchema.parse(input);
 
@@ -430,7 +392,9 @@ async function approveTask(
       await gitClient.pushBranchWithUpstream(epicWorktreePath);
       pushed = true;
     } catch (error) {
-      console.log(`Note: Could not push epic branch (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`);
+      console.log(
+        `Note: Could not push epic branch (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
+      );
     }
 
     // Update task state to COMPLETED
@@ -475,7 +439,9 @@ async function approveTask(
         workerCleanedUp = true;
         console.log(`Cleaned up worker ${task.assignedAgentId} after task approval`);
       } catch (error) {
-        console.log(`Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`);
+        console.log(
+          `Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
 
@@ -506,11 +472,7 @@ async function approveTask(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -519,10 +481,7 @@ async function approveTask(
 /**
  * Request changes on a PR (SUPERVISOR only)
  */
-async function requestChanges(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function requestChanges(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = RequestChangesInputSchema.parse(input);
 
@@ -595,11 +554,7 @@ async function requestChanges(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -608,10 +563,7 @@ async function requestChanges(
 /**
  * Read a file from a worker's worktree (SUPERVISOR only)
  */
-async function readFile(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function readFile(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = ReadFileInputSchema.parse(input);
 
@@ -674,16 +626,11 @@ async function readFile(
     }
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(
-      context.agentId,
-      'mcp__epic__read_file',
-      'result',
-      {
-        taskId: task.id,
-        filePath: validatedInput.filePath,
-        contentLength: content.length,
-      }
-    );
+    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__read_file', 'result', {
+      taskId: task.id,
+      filePath: validatedInput.filePath,
+      contentLength: content.length,
+    });
 
     return createSuccessResponse({
       taskId: task.id,
@@ -692,11 +639,7 @@ async function readFile(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -763,11 +706,7 @@ async function forceCompleteTask(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -777,10 +716,7 @@ async function forceCompleteTask(
  * Create PR from epic branch to main (SUPERVISOR only)
  * Also cleans up worker tmux sessions for completed tasks
  */
-async function createEpicPR(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function createEpicPR(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = CreateEpicPRInputSchema.parse(input);
 
@@ -824,7 +760,9 @@ async function createEpicPR(
     const completedTasks = tasks.filter((t) => t.state === TaskState.COMPLETED);
     const failedTasks = tasks.filter((t) => t.state === TaskState.FAILED);
 
-    const prDescription = validatedInput.description || `## Epic: ${epic.title}
+    const prDescription =
+      validatedInput.description ||
+      `## Epic: ${epic.title}
 
 ${epic.description || 'No description provided.'}
 
@@ -849,7 +787,9 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
       );
       prCreated = true;
     } catch (error) {
-      console.log(`Note: Could not create PR (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`);
+      console.log(
+        `Note: Could not create PR (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
+      );
     }
 
     // Clean up worker tmux sessions for all tasks
@@ -861,7 +801,9 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
           await killWorkerAndCleanup(task.assignedAgentId);
           cleanedUpCount++;
         } catch (error) {
-          console.log(`Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`);
+          console.log(
+            `Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`
+          );
         }
       }
     }
@@ -879,7 +821,7 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
       isForHuman: true,
       subject: `Epic Complete: ${epic.title}`,
       body: prCreated
-        ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo!.url}\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
+        ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo?.url}\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
         : `The epic "${epic.title}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`,
     });
 
@@ -901,10 +843,7 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
 
     // Send desktop notification for epic completion
     try {
-      await notificationService.notifyEpicComplete(
-        epic.title,
-        prInfo?.url || undefined
-      );
+      await notificationService.notifyEpicComplete(epic.title, prInfo?.url || undefined);
     } catch (error) {
       console.error('Failed to send epic completion notification:', error);
       // Don't fail the operation if notification fails
@@ -920,7 +859,10 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
         },
       });
     } catch (error) {
-      console.log('Inngest event send failed (this is OK if Inngest dev server is not running):', error);
+      console.log(
+        'Inngest event send failed (this is OK if Inngest dev server is not running):',
+        error
+      );
     }
 
     return createSuccessResponse({
@@ -936,11 +878,7 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -991,7 +929,7 @@ export function registerEpicTools(): void {
 
   registerMcpTool({
     name: 'mcp__epic__read_file',
-    description: 'Read a file from a worker\'s worktree for code review (SUPERVISOR only)',
+    description: "Read a file from a worker's worktree for code review (SUPERVISOR only)",
     handler: readFile,
     schema: ReadFileInputSchema,
   });
@@ -999,7 +937,8 @@ export function registerEpicTools(): void {
   // Recovery Tools
   registerMcpTool({
     name: 'mcp__epic__force_complete_task',
-    description: 'Force mark a task as completed when normal approval fails (e.g., merge conflicts resolved manually) (SUPERVISOR only)',
+    description:
+      'Force mark a task as completed when normal approval fails (e.g., merge conflicts resolved manually) (SUPERVISOR only)',
     handler: forceCompleteTask,
     schema: ForceCompleteTaskInputSchema,
   });

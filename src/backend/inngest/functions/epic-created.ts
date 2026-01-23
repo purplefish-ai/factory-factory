@@ -1,6 +1,6 @@
-import { inngest } from '../client.js';
 import { startSupervisorForEpic } from '../../agents/supervisor/lifecycle.js';
 import { decisionLogAccessor, epicAccessor, mailAccessor } from '../../resource_accessors/index.js';
+import { inngest } from '../client.js';
 
 /**
  * Handle epic.created event by starting a supervisor agent
@@ -64,7 +64,8 @@ export const epicCreatedHandler = inngest.createFunction(
         await mailAccessor.create({
           isForHuman: true,
           subject: `Failed to create supervisor for epic: ${title}`,
-          body: `The system failed to automatically create a supervisor for epic "${title}".\n\n` +
+          body:
+            `The system failed to automatically create a supervisor for epic "${title}".\n\n` +
             `Epic ID: ${epicId}\n` +
             `Linear Issue: ${linearIssueId}\n` +
             `Error: ${errorMessage}\n\n` +

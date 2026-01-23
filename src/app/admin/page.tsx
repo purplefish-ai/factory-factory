@@ -21,7 +21,9 @@ function StatCard({
   };
 
   return (
-    <div className={`bg-white p-6 rounded-lg shadow-sm border-l-4 ${status ? statusColors[status] : 'border-gray-200'}`}>
+    <div
+      className={`bg-white p-6 rounded-lg shadow-sm border-l-4 ${status ? statusColors[status] : 'border-gray-200'}`}
+    >
       <h3 className="text-sm font-medium text-gray-600">{title}</h3>
       <p className="text-2xl font-bold mt-1">{value}</p>
       {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
@@ -64,7 +66,11 @@ function IssuesList({ issues }: { issues: string[] }) {
 }
 
 export default function AdminDashboardPage() {
-  const { data: stats, isLoading, refetch } = trpc.admin.getSystemStats.useQuery(undefined, {
+  const {
+    data: stats,
+    isLoading,
+    refetch,
+  } = trpc.admin.getSystemStats.useQuery(undefined, {
     refetchInterval: 5000,
   });
 
@@ -151,14 +157,8 @@ export default function AdminDashboardPage() {
             value={stats?.apiUsage.requestsLastMinute || 0}
             status={stats?.apiUsage.isRateLimited ? 'warning' : 'ok'}
           />
-          <StatCard
-            title="Requests/hour"
-            value={stats?.apiUsage.requestsLastHour || 0}
-          />
-          <StatCard
-            title="Total Requests"
-            value={stats?.apiUsage.totalRequests || 0}
-          />
+          <StatCard title="Requests/hour" value={stats?.apiUsage.requestsLastHour || 0} />
+          <StatCard title="Total Requests" value={stats?.apiUsage.totalRequests || 0} />
           <StatCard
             title="Queue Depth"
             value={stats?.apiUsage.queueDepth || 0}
@@ -258,10 +258,7 @@ export default function AdminDashboardPage() {
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard
-            title="Total Worktrees"
-            value={stats?.worktrees.total || 0}
-          />
+          <StatCard title="Total Worktrees" value={stats?.worktrees.total || 0} />
           <StatCard
             title="Orphaned"
             value={stats?.worktrees.orphaned || 0}
@@ -270,13 +267,15 @@ export default function AdminDashboardPage() {
           <div className="bg-white p-6 rounded-lg border border-gray-200">
             <h3 className="text-sm font-medium text-gray-600">By Reason</h3>
             <div className="mt-2 space-y-1 text-sm">
-              {stats?.worktrees.byReason && Object.entries(stats.worktrees.byReason).map(([reason, count]) => (
-                <div key={reason} className="flex justify-between">
-                  <span className="text-gray-600">{reason}</span>
-                  <span className="font-medium">{count}</span>
-                </div>
-              ))}
-              {(!stats?.worktrees.byReason || Object.keys(stats.worktrees.byReason).length === 0) && (
+              {stats?.worktrees.byReason &&
+                Object.entries(stats.worktrees.byReason).map(([reason, count]) => (
+                  <div key={reason} className="flex justify-between">
+                    <span className="text-gray-600">{reason}</span>
+                    <span className="font-medium">{count}</span>
+                  </div>
+                ))}
+              {(!stats?.worktrees.byReason ||
+                Object.keys(stats.worktrees.byReason).length === 0) && (
                 <span className="text-gray-500">None</span>
               )}
             </div>
@@ -284,7 +283,8 @@ export default function AdminDashboardPage() {
         </div>
         {cleanupWorktrees.data && (
           <div className="mt-4 p-3 bg-green-50 rounded-lg text-green-700 text-sm">
-            Cleaned {cleanupWorktrees.data.cleaned} worktrees. {cleanupWorktrees.data.failed} failed.
+            Cleaned {cleanupWorktrees.data.cleaned} worktrees. {cleanupWorktrees.data.failed}{' '}
+            failed.
           </div>
         )}
       </div>
@@ -318,10 +318,12 @@ export default function AdminDashboardPage() {
       <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
         <span className="font-medium">Environment:</span> {stats?.environment || 'unknown'} |{' '}
         <span className="font-medium">Features:</span>{' '}
-        {stats?.features && Object.entries(stats.features)
-          .filter(([, enabled]) => enabled)
-          .map(([feature]) => feature)
-          .join(', ') || 'none'}
+        {(stats?.features &&
+          Object.entries(stats.features)
+            .filter(([, enabled]) => enabled)
+            .map(([feature]) => feature)
+            .join(', ')) ||
+          'none'}
       </div>
     </div>
   );

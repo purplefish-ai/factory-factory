@@ -1,17 +1,17 @@
-import { AgentType, AgentState } from '@prisma/client';
-import { inngest } from '../client.js';
+import { AgentState, AgentType } from '@prisma/client';
+import {
+  checkSupervisorHealth,
+  getPendingEpicsNeedingSupervisors,
+  recoverSupervisor,
+} from '../../agents/orchestrator/health.js';
+import { startSupervisorForEpic } from '../../agents/supervisor/lifecycle.js';
 import {
   agentAccessor,
   decisionLogAccessor,
   mailAccessor,
 } from '../../resource_accessors/index.js';
-import {
-  checkSupervisorHealth,
-  recoverSupervisor,
-  getPendingEpicsNeedingSupervisors,
-} from '../../agents/orchestrator/health.js';
-import { startSupervisorForEpic } from '../../agents/supervisor/lifecycle.js';
 import { notificationService } from '../../services/notification.service.js';
+import { inngest } from '../client.js';
 
 /**
  * Orchestrator Health Check Cron Job
@@ -38,9 +38,7 @@ export const orchestratorCheckHandler = inngest.createFunction(
     // Step 1: Get the orchestrator agent (if one exists)
     const orchestrator = await step.run('get-orchestrator', async () => {
       const orchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-      const activeOrchestrators = orchestrators.filter(
-        (o) => o.state !== AgentState.FAILED
-      );
+      const activeOrchestrators = orchestrators.filter((o) => o.state !== AgentState.FAILED);
 
       if (activeOrchestrators.length === 0) {
         console.log('No active orchestrator found');
@@ -59,7 +57,8 @@ export const orchestratorCheckHandler = inngest.createFunction(
 
     // Step 2: Check supervisor health
     const healthCheckResult = await step.run('check-supervisor-health', async () => {
-      const { healthySupervisors, unhealthySupervisors } = await checkSupervisorHealth(orchestratorId);
+      const { healthySupervisors, unhealthySupervisors } =
+        await checkSupervisorHealth(orchestratorId);
 
       console.log(
         `Supervisor health: ${healthySupervisors.length} healthy, ${unhealthySupervisors.length} unhealthy`
@@ -209,7 +208,8 @@ export const orchestratorCheckHandler = inngest.createFunction(
           await mailAccessor.create({
             isForHuman: true,
             subject: `Failed to create supervisor for epic: ${epic.title}`,
-            body: `The cron job failed to create a supervisor for epic "${epic.title}".\n\n` +
+            body:
+              `The cron job failed to create a supervisor for epic "${epic.title}".\n\n` +
               `Epic ID: ${epic.epicId}\n` +
               `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
               `Manual intervention may be required.`,
@@ -230,8 +230,8 @@ export const orchestratorCheckHandler = inngest.createFunction(
 
     console.log(
       `Orchestrator check complete. ` +
-      `Supervisors: ${healthCheckResult.unhealthyCount} unhealthy, ${totalRecovered} recovered, ${totalFailed} failed. ` +
-      `Pending epics: ${pendingEpicsResult.pendingEpicsProcessed} processed, ${totalNewSupervisors} new supervisors created.`
+        `Supervisors: ${healthCheckResult.unhealthyCount} unhealthy, ${totalRecovered} recovered, ${totalFailed} failed. ` +
+        `Pending epics: ${pendingEpicsResult.pendingEpicsProcessed} processed, ${totalNewSupervisors} new supervisors created.`
     );
 
     return {

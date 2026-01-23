@@ -4,37 +4,14 @@
  * Central export point for all backend services.
  */
 
-// Logger service
-export { Logger, createLogger, logger, type LogLevel, type LoggerConfig } from './logger.service.js';
-
-// Rate limiter service
-export {
-  RateLimiter,
-  rateLimiter,
-  RequestPriority,
-  type RateLimiterConfig,
-  type ApiUsageStats,
-  type ConcurrencyStats,
-} from './rate-limiter.service.js';
-
 // Configuration service
 export {
+  type AgentProfile,
   ConfigService,
   configService,
   type PermissionMode,
-  type AgentProfile,
   type SystemConfig,
 } from './config.service.js';
-
-// Validation service
-export {
-  ValidationService,
-  validationService,
-  type ValidationResult,
-  type EpicDesignValidation,
-  type BranchNameValidation,
-} from './validation.service.js';
-
 // Crash recovery service
 export {
   CrashRecoveryService,
@@ -42,28 +19,50 @@ export {
   type RecoveryResult,
   type SystemHealthStatus,
 } from './crash-recovery.service.js';
-
-// Worktree service
+// Logger service
 export {
-  WorktreeService,
-  worktreeService,
-  type WorktreeInfo,
-  type OrphanedWorktree,
-  type CleanupResult,
-} from './worktree.service.js';
-
+  createLogger,
+  Logger,
+  type LoggerConfig,
+  type LogLevel,
+  logger,
+} from './logger.service.js';
 // Notification service
 export {
+  type NotificationConfig,
   NotificationService,
   notificationService,
-  type NotificationConfig,
 } from './notification.service.js';
-
 // PR conflict service
 export {
-  PrConflictService,
-  prConflictService,
-  type PrCreationResult,
-  type RebaseResult,
   type MergeConflictInfo,
+  PrConflictService,
+  type PrCreationResult,
+  prConflictService,
+  type RebaseResult,
 } from './pr-conflict.service.js';
+// Rate limiter service
+export {
+  type ApiUsageStats,
+  type ConcurrencyStats,
+  RateLimiter,
+  type RateLimiterConfig,
+  RequestPriority,
+  rateLimiter,
+} from './rate-limiter.service.js';
+// Validation service
+export {
+  type BranchNameValidation,
+  type EpicDesignValidation,
+  type ValidationResult,
+  ValidationService,
+  validationService,
+} from './validation.service.js';
+// Worktree service
+export {
+  type CleanupResult,
+  type OrphanedWorktree,
+  type WorktreeInfo,
+  WorktreeService,
+  worktreeService,
+} from './worktree.service.js';

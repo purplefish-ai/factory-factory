@@ -1,11 +1,11 @@
+import { agentAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import {
   createWorker,
+  isWorkerRunning,
+  killWorker,
   runWorker,
   stopWorker,
-  killWorker,
-  isWorkerRunning,
 } from './worker.agent.js';
-import { taskAccessor, agentAccessor } from '../../resource_accessors/index.js';
 
 /**
  * Start a worker for a task

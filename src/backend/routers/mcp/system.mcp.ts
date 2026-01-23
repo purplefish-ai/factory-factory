@@ -1,16 +1,8 @@
-import { z } from "zod";
-import { decisionLogAccessor } from "../../resource_accessors/index.js";
-import type {
-  McpToolContext,
-  McpToolResponse} from "./types.js";
-import {
-  McpErrorCode,
-} from "./types.js";
-import {
-  registerMcpTool,
-  createSuccessResponse,
-  createErrorResponse,
-} from "./server.js";
+import { z } from 'zod';
+import { decisionLogAccessor } from '../../resource_accessors/index.js';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
+import type { McpToolContext, McpToolResponse } from './types.js';
+import { McpErrorCode } from './types.js';
 
 // ============================================================================
 // Input Schemas
@@ -28,19 +20,12 @@ const LogDecisionInputSchema = z.object({
 /**
  * Manually log a decision or business logic event
  */
-async function logDecision(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function logDecision(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const parsed = LogDecisionInputSchema.parse(input);
     const { title, body } = parsed;
 
-    const log = await decisionLogAccessor.createManual(
-      context.agentId,
-      title,
-      body
-    );
+    const log = await decisionLogAccessor.createManual(context.agentId, title, body);
 
     return createSuccessResponse({
       logId: log.id,
@@ -48,11 +33,7 @@ async function logDecision(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -64,8 +45,8 @@ async function logDecision(
 
 export function registerSystemTools(): void {
   registerMcpTool({
-    name: "mcp__system__log_decision",
-    description: "Manually log a decision or business logic event",
+    name: 'mcp__system__log_decision',
+    description: 'Manually log a decision or business logic event',
     handler: logDecision,
     schema: LogDecisionInputSchema,
   });

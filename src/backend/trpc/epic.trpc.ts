@@ -1,8 +1,8 @@
-import { z } from 'zod';
-import { router, publicProcedure } from './trpc';
-import { epicAccessor } from '../resource_accessors/epic.accessor';
-import { inngest } from '../inngest/client';
 import { EpicState } from '@prisma/client';
+import { z } from 'zod';
+import { inngest } from '../inngest/client';
+import { epicAccessor } from '../resource_accessors/epic.accessor';
+import { publicProcedure, router } from './trpc';
 
 export const epicRouter = router({
   // List all epics with optional filtering
@@ -21,15 +21,13 @@ export const epicRouter = router({
     }),
 
   // Get epic by ID
-  getById: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const epic = await epicAccessor.findById(input.id);
-      if (!epic) {
-        throw new Error(`Epic not found: ${input.id}`);
-      }
-      return epic;
-    }),
+  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+    const epic = await epicAccessor.findById(input.id);
+    if (!epic) {
+      throw new Error(`Epic not found: ${input.id}`);
+    }
+    return epic;
+  }),
 
   // Create a new epic
   create: publicProcedure
@@ -104,11 +102,9 @@ export const epicRouter = router({
     }),
 
   // Delete an epic
-  delete: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ input }) => {
-      return epicAccessor.delete(input.id);
-    }),
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    return epicAccessor.delete(input.id);
+  }),
 
   // Get summary stats for dashboard
   getStats: publicProcedure.query(async () => {

@@ -1,6 +1,6 @@
-import { prisma } from '../db';
-import type { Task, Prisma } from '@prisma/client';
+import type { Prisma, Task } from '@prisma/client';
 import { TaskState } from '@prisma/client';
+import { prisma } from '../db';
 
 export interface CreateTaskInput {
   epicId: string;

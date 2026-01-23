@@ -23,12 +23,12 @@ async function test() {
     console.log('4. Listing all sessions...');
     const sessions = await tmuxClient.listSessions();
     console.log('   ✅ Found', sessions.length, 'session(s)');
-    sessions.forEach(s => console.log('      -', s.name));
+    sessions.forEach((s) => console.log('      -', s.name));
 
     // Capture pane
     console.log('5. Capturing pane output...');
     const output = await tmuxClient.capturePane('test-phase0', 20);
-    console.log('   ✅ Captured output (truncated):', output.substring(0, 100) + '...');
+    console.log('   ✅ Captured output (truncated):', `${output.substring(0, 100)}...`);
 
     // Kill session
     console.log('6. Killing session...');

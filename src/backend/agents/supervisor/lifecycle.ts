@@ -1,12 +1,12 @@
 import { AgentType } from '@prisma/client';
+import { agentAccessor } from '../../resource_accessors/index.js';
 import {
   createSupervisor,
+  isSupervisorRunning,
+  killSupervisor,
   runSupervisor,
   stopSupervisor,
-  killSupervisor,
-  isSupervisorRunning,
 } from './supervisor.agent.js';
-import { agentAccessor } from '../../resource_accessors/index.js';
 
 // Re-export runSupervisor so it can be used to start an existing supervisor
 export { runSupervisor };
@@ -111,12 +111,14 @@ export async function getSupervisorForEpic(epicId: string): Promise<string | nul
 /**
  * List all supervisors
  */
-export async function listAllSupervisors(): Promise<Array<{
-  agentId: string;
-  epicId: string | null;
-  state: string;
-  isRunning: boolean;
-}>> {
+export async function listAllSupervisors(): Promise<
+  Array<{
+    agentId: string;
+    epicId: string | null;
+    state: string;
+    isRunning: boolean;
+  }>
+> {
   const supervisors = await agentAccessor.findByType(AgentType.SUPERVISOR);
 
   return supervisors.map((s) => ({

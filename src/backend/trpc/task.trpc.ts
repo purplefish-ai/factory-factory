@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { router, publicProcedure } from './trpc';
-import { taskAccessor } from '../resource_accessors/task.accessor';
 import { TaskState } from '@prisma/client';
+import { z } from 'zod';
+import { taskAccessor } from '../resource_accessors/task.accessor';
+import { publicProcedure, router } from './trpc';
 
 export const taskRouter = router({
   // List all tasks with optional filtering
@@ -22,22 +22,18 @@ export const taskRouter = router({
     }),
 
   // Get task by ID
-  getById: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const task = await taskAccessor.findById(input.id);
-      if (!task) {
-        throw new Error(`Task not found: ${input.id}`);
-      }
-      return task;
-    }),
+  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+    const task = await taskAccessor.findById(input.id);
+    if (!task) {
+      throw new Error(`Task not found: ${input.id}`);
+    }
+    return task;
+  }),
 
   // Get tasks by epic ID
-  listByEpic: publicProcedure
-    .input(z.object({ epicId: z.string() }))
-    .query(async ({ input }) => {
-      return taskAccessor.findByEpicId(input.epicId);
-    }),
+  listByEpic: publicProcedure.input(z.object({ epicId: z.string() })).query(async ({ input }) => {
+    return taskAccessor.findByEpicId(input.epicId);
+  }),
 
   // Update a task (admin use)
   update: publicProcedure

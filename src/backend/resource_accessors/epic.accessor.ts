@@ -1,6 +1,6 @@
-import { prisma } from '../db';
 import type { Epic, Prisma } from '@prisma/client';
 import { EpicState } from '@prisma/client';
+import { prisma } from '../db';
 
 export interface CreateEpicInput {
   linearIssueId: string;

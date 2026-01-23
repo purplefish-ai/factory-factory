@@ -1,8 +1,8 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { exec } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { promisify } from 'node:util';
 import { v4 as uuidv4 } from 'uuid';
 import { requireClaudeSetup } from './claude-auth.js';
 
@@ -103,7 +103,7 @@ export async function createWorkerSession(
   await execAsync(`tmux send-keys -t ${tmuxSessionName} "${claudeCommand}" Enter`);
 
   // Wait a moment for Claude to initialize
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   return {
     agentId,
@@ -235,9 +235,7 @@ export async function captureOutput(agentId: string, lines: number = 100): Promi
   }
 
   // Capture pane content
-  const { stdout } = await execAsync(
-    `tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`
-  );
+  const { stdout } = await execAsync(`tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`);
 
   return stdout;
 }
@@ -288,7 +286,7 @@ export async function stopSession(agentId: string): Promise<void> {
   await execAsync(`tmux send-keys -t ${tmuxSessionName} C-c`);
 
   // Wait a moment
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 }
 
 /**
@@ -320,7 +318,7 @@ export async function listWorkerSessions(): Promise<string[]> {
   try {
     const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}"');
     const sessions = stdout.trim().split('\n');
-    return sessions.filter(name => name.startsWith('worker-'));
+    return sessions.filter((name) => name.startsWith('worker-'));
   } catch {
     return []; // No sessions
   }

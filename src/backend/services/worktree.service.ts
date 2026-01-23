@@ -4,11 +4,11 @@
  * Handles git worktree cleanup, orphan detection, and management.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { existsSync, rmSync } from 'fs';
+import { exec } from 'node:child_process';
+import { existsSync, rmSync } from 'node:fs';
+import { promisify } from 'node:util';
+import { epicAccessor, taskAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';
-import { taskAccessor, epicAccessor } from '../resource_accessors/index.js';
 
 const execAsync = promisify(exec);
 const logger = createLogger('worktree');
@@ -296,10 +296,9 @@ export class WorktreeService {
       await execAsync(`mkdir -p $(dirname "${worktreePath}")`);
 
       // Create the worktree
-      await execAsync(
-        `git worktree add -b ${branchName} "${worktreePath}" ${baseBranch}`,
-        { cwd: this.repoPath }
-      );
+      await execAsync(`git worktree add -b ${branchName} "${worktreePath}" ${baseBranch}`, {
+        cwd: this.repoPath,
+      });
 
       logger.info('Worktree created', {
         taskId,

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { TRPCProvider } from '../frontend/lib/providers';
 import { Navigation } from '../frontend/components/navigation';
+import { TRPCProvider } from '../frontend/lib/providers';
 
 export const metadata: Metadata = {
   title: 'FactoryFactory',

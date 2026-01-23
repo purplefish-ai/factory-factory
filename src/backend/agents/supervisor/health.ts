@@ -8,9 +8,9 @@
 import { AgentState, TaskState } from '@prisma/client';
 import {
   agentAccessor,
-  taskAccessor,
-  mailAccessor,
   decisionLogAccessor,
+  mailAccessor,
+  taskAccessor,
 } from '../../resource_accessors/index.js';
 import { killWorkerAndCleanup, startWorker } from '../worker/lifecycle.js';
 
@@ -69,9 +69,7 @@ export async function checkWorkerHealth(supervisorId: string): Promise<{
       continue;
     }
 
-    const minutesSinceHeartbeat = Math.floor(
-      (now - worker.lastActiveAt.getTime()) / (60 * 1000)
-    );
+    const minutesSinceHeartbeat = Math.floor((now - worker.lastActiveAt.getTime()) / (60 * 1000));
 
     if (
       minutesSinceHeartbeat >= WORKER_HEALTH_THRESHOLD_MINUTES ||
@@ -285,13 +283,10 @@ export async function getWorkerHealthSummary(epicId: string): Promise<{
       continue;
     }
 
-    const minutesSinceHeartbeat = Math.floor(
-      (now - worker.lastActiveAt.getTime()) / (60 * 1000)
-    );
+    const minutesSinceHeartbeat = Math.floor((now - worker.lastActiveAt.getTime()) / (60 * 1000));
 
     const isHealthy =
-      minutesSinceHeartbeat < WORKER_HEALTH_THRESHOLD_MINUTES &&
-      worker.state !== AgentState.FAILED;
+      minutesSinceHeartbeat < WORKER_HEALTH_THRESHOLD_MINUTES && worker.state !== AgentState.FAILED;
 
     workers.push({
       workerId: worker.id,

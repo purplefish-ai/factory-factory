@@ -1,20 +1,16 @@
-import { z } from 'zod';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { AgentType, TaskState } from '@prisma/client';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { z } from 'zod';
 import {
   agentAccessor,
-  taskAccessor,
-  epicAccessor,
   decisionLogAccessor,
+  epicAccessor,
+  taskAccessor,
 } from '../../resource_accessors/index.js';
-import type { McpToolContext, McpToolResponse} from './types.js';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
+import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
-import {
-  registerMcpTool,
-  createSuccessResponse,
-  createErrorResponse,
-} from './server.js';
 
 const execAsync = promisify(exec);
 
@@ -33,10 +29,7 @@ const RebaseInputSchema = z.object({});
 /**
  * Get diff between task branch and epic branch (WORKER only)
  */
-async function getDiff(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function getDiff(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetDiffInputSchema.parse(input);
 
@@ -131,25 +124,22 @@ async function getDiff(
     }
 
     // Parse stats to get files changed, insertions, deletions
-    const statsMatch = diffStats.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
+    const statsMatch = diffStats.match(
+      /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
+    );
     const filesChanged = statsMatch ? parseInt(statsMatch[1], 10) : 0;
-    const insertions = statsMatch && statsMatch[2] ? parseInt(statsMatch[2], 10) : 0;
-    const deletions = statsMatch && statsMatch[3] ? parseInt(statsMatch[3], 10) : 0;
+    const insertions = statsMatch?.[2] ? parseInt(statsMatch[2], 10) : 0;
+    const deletions = statsMatch?.[3] ? parseInt(statsMatch[3], 10) : 0;
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(
-      context.agentId,
-      'mcp__git__get_diff',
-      'result',
-      {
-        taskId: task.id,
-        epicBranch: epicBranchName,
-        taskBranch: task.branchName,
-        filesChanged,
-        insertions,
-        deletions,
-      }
-    );
+    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__get_diff', 'result', {
+      taskId: task.id,
+      epicBranch: epicBranchName,
+      taskBranch: task.branchName,
+      filesChanged,
+      insertions,
+      deletions,
+    });
 
     return createSuccessResponse({
       taskId: task.id,
@@ -163,11 +153,7 @@ async function getDiff(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -176,10 +162,7 @@ async function getDiff(
 /**
  * Rebase task branch onto epic branch (WORKER only)
  */
-async function rebase(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function rebase(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     RebaseInputSchema.parse(input);
 
@@ -194,10 +177,7 @@ async function rebase(
 
     // Verify agent is WORKER
     if (agent.type !== AgentType.WORKER) {
-      return createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Only WORKER agents can rebase'
-      );
+      return createErrorResponse(McpErrorCode.PERMISSION_DENIED, 'Only WORKER agents can rebase');
     }
 
     // Verify agent has a task
@@ -268,7 +248,9 @@ async function rebase(
 
       // Check for conflicts
       try {
-        const { stdout } = await execAsync(`git -C "${task.worktreePath}" diff --name-only --diff-filter=U`);
+        const { stdout } = await execAsync(
+          `git -C "${task.worktreePath}" diff --name-only --diff-filter=U`
+        );
         conflictFiles = stdout.split('\n').filter((line) => line.trim().length > 0);
       } catch {
         // Ignore error getting conflict files
@@ -290,32 +272,25 @@ async function rebase(
       });
 
       // Log decision
-      await decisionLogAccessor.createAutomatic(
-        context.agentId,
-        'mcp__git__rebase',
-        'error',
-        {
-          taskId: task.id,
-          epicBranch: epicBranchName,
-          taskBranch: task.branchName,
-          conflictFiles,
-          error: rebaseError,
-        }
-      );
+      await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__rebase', 'error', {
+        taskId: task.id,
+        epicBranch: epicBranchName,
+        taskBranch: task.branchName,
+        conflictFiles,
+        error: rebaseError,
+      });
 
-      return createErrorResponse(
-        McpErrorCode.INTERNAL_ERROR,
-        'Rebase failed with conflicts',
-        {
-          conflictFiles,
-          error: rebaseError,
-        }
-      );
+      return createErrorResponse(McpErrorCode.INTERNAL_ERROR, 'Rebase failed with conflicts', {
+        conflictFiles,
+        error: rebaseError,
+      });
     }
 
     // Force push rebased branch
     try {
-      await execAsync(`git -C "${task.worktreePath}" push --force-with-lease origin ${task.branchName}`);
+      await execAsync(
+        `git -C "${task.worktreePath}" push --force-with-lease origin ${task.branchName}`
+      );
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -324,17 +299,12 @@ async function rebase(
     }
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(
-      context.agentId,
-      'mcp__git__rebase',
-      'result',
-      {
-        taskId: task.id,
-        epicBranch: epicBranchName,
-        taskBranch: task.branchName,
-        success: true,
-      }
-    );
+    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__rebase', 'result', {
+      taskId: task.id,
+      epicBranch: epicBranchName,
+      taskBranch: task.branchName,
+      success: true,
+    });
 
     return createSuccessResponse({
       taskId: task.id,
@@ -345,11 +315,7 @@ async function rebase(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }

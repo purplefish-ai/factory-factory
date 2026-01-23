@@ -1,7 +1,7 @@
-import type { AgentType } from "@prisma/client";
-import { agentAccessor } from "../resource_accessors/index.js";
-import { executeMcpTool } from "../routers/mcp/index.js";
-import type { McpToolResponse } from "../routers/mcp/types.js";
+import type { AgentType } from '@prisma/client';
+import { agentAccessor } from '../resource_accessors/index.js';
+import { executeMcpTool } from '../routers/mcp/index.js';
+import type { McpToolResponse } from '../routers/mcp/types.js';
 
 /**
  * Create a mock agent for testing
@@ -23,16 +23,9 @@ export async function sendMcpTool<TInput = unknown, TOutput = unknown>(
   toolName: string,
   input: TInput
 ): Promise<McpToolResponse<TOutput>> {
-  console.log(
-    `Mock agent ${agentId} calling tool '${toolName}' with input:`,
-    input
-  );
+  console.log(`Mock agent ${agentId} calling tool '${toolName}' with input:`, input);
 
-  const result = await executeMcpTool<TInput, TOutput>(
-    agentId,
-    toolName,
-    input
-  );
+  const result = await executeMcpTool<TInput, TOutput>(agentId, toolName, input);
 
   console.log(`Tool '${toolName}' result:`, result);
   return result;

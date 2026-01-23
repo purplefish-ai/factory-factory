@@ -1,7 +1,7 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as path from 'path';
-import * as fs from 'fs/promises';
+import { exec } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
@@ -145,9 +145,7 @@ export class GitClient {
       await execAsync(mergeCommand);
 
       // Get the merge commit SHA
-      const { stdout: commitSha } = await execAsync(
-        `git -C "${worktreePath}" rev-parse HEAD`
-      );
+      const { stdout: commitSha } = await execAsync(`git -C "${worktreePath}" rev-parse HEAD`);
 
       return {
         success: true,
@@ -195,9 +193,7 @@ export class GitClient {
     try {
       await execAsync(`git -C "${worktreePath}" fetch origin`);
     } catch (error) {
-      throw new Error(
-        `Failed to fetch: ${error instanceof Error ? error.message : String(error)}`
-      );
+      throw new Error(`Failed to fetch: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -206,9 +202,7 @@ export class GitClient {
    */
   async getCurrentBranch(worktreePath: string): Promise<string> {
     try {
-      const { stdout } = await execAsync(
-        `git -C "${worktreePath}" rev-parse --abbrev-ref HEAD`
-      );
+      const { stdout } = await execAsync(`git -C "${worktreePath}" rev-parse --abbrev-ref HEAD`);
       return stdout.trim();
     } catch (error) {
       throw new Error(
@@ -222,9 +216,7 @@ export class GitClient {
    */
   async getLatestCommitMessage(worktreePath: string): Promise<string> {
     try {
-      const { stdout } = await execAsync(
-        `git -C "${worktreePath}" log -1 --format=%s`
-      );
+      const { stdout } = await execAsync(`git -C "${worktreePath}" log -1 --format=%s`);
       return stdout.trim();
     } catch (error) {
       throw new Error(

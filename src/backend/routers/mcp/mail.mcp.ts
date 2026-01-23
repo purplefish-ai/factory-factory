@@ -1,17 +1,9 @@
-import { z } from "zod";
-import { mailAccessor } from "../../resource_accessors/index.js";
-import { inngest } from "../../inngest/client.js";
-import type {
-  McpToolContext,
-  McpToolResponse} from "./types.js";
-import {
-  McpErrorCode,
-} from "./types.js";
-import {
-  registerMcpTool,
-  createSuccessResponse,
-  createErrorResponse,
-} from "./server.js";
+import { z } from 'zod';
+import { inngest } from '../../inngest/client.js';
+import { mailAccessor } from '../../resource_accessors/index.js';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
+import type { McpToolContext, McpToolResponse } from './types.js';
+import { McpErrorCode } from './types.js';
 
 // ============================================================================
 // Input Schemas
@@ -44,10 +36,7 @@ const ReplyMailInputSchema = z.object({
 /**
  * List inbox for the current agent
  */
-async function listInbox(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function listInbox(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const parsed = ListInboxInputSchema.parse(input);
     const { includeRead } = parsed;
@@ -72,11 +61,7 @@ async function listInbox(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -85,10 +70,7 @@ async function listInbox(
 /**
  * Read a specific mail and mark it as read
  */
-async function readMail(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function readMail(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const parsed = ReadMailInputSchema.parse(input);
     const { mailId } = parsed;
@@ -107,7 +89,7 @@ async function readMail(
     if (mail.toAgentId !== context.agentId) {
       return createErrorResponse(
         McpErrorCode.PERMISSION_DENIED,
-        "You do not have permission to read this mail"
+        'You do not have permission to read this mail'
       );
     }
 
@@ -129,11 +111,7 @@ async function readMail(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -142,10 +120,7 @@ async function readMail(
 /**
  * Send mail to another agent or to human
  */
-async function sendMail(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function sendMail(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const parsed = SendMailInputSchema.parse(input);
     const { toAgentId, toHuman, subject, body } = parsed;
@@ -176,7 +151,7 @@ async function sendMail(
 
     // Fire Inngest event
     await inngest.send({
-      name: "mail.sent",
+      name: 'mail.sent',
       data: {
         mailId: mail.id,
         toAgentId: mail.toAgentId ?? undefined,
@@ -191,11 +166,7 @@ async function sendMail(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -204,10 +175,7 @@ async function sendMail(
 /**
  * Reply to a received mail
  */
-async function replyMail(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function replyMail(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const parsed = ReplyMailInputSchema.parse(input);
     const { originalMailId, body } = parsed;
@@ -226,7 +194,7 @@ async function replyMail(
     if (originalMail.toAgentId !== context.agentId) {
       return createErrorResponse(
         McpErrorCode.PERMISSION_DENIED,
-        "You can only reply to mail you received"
+        'You can only reply to mail you received'
       );
     }
 
@@ -235,7 +203,7 @@ async function replyMail(
     const isForHuman = !recipientAgentId;
 
     // Create reply subject
-    const replySubject = originalMail.subject.startsWith("Re: ")
+    const replySubject = originalMail.subject.startsWith('Re: ')
       ? originalMail.subject
       : `Re: ${originalMail.subject}`;
 
@@ -250,7 +218,7 @@ async function replyMail(
 
     // Fire Inngest event
     await inngest.send({
-      name: "mail.sent",
+      name: 'mail.sent',
       data: {
         mailId: replyMail.id,
         toAgentId: replyMail.toAgentId ?? undefined,
@@ -265,11 +233,7 @@ async function replyMail(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -281,29 +245,29 @@ async function replyMail(
 
 export function registerMailTools(): void {
   registerMcpTool({
-    name: "mcp__mail__list_inbox",
+    name: 'mcp__mail__list_inbox',
     description: "List mail in the agent's inbox",
     handler: listInbox,
     schema: ListInboxInputSchema,
   });
 
   registerMcpTool({
-    name: "mcp__mail__read",
-    description: "Read a specific mail and mark it as read",
+    name: 'mcp__mail__read',
+    description: 'Read a specific mail and mark it as read',
     handler: readMail,
     schema: ReadMailInputSchema,
   });
 
   registerMcpTool({
-    name: "mcp__mail__send",
-    description: "Send mail to another agent or to a human",
+    name: 'mcp__mail__send',
+    description: 'Send mail to another agent or to a human',
     handler: sendMail,
     schema: SendMailInputSchema,
   });
 
   registerMcpTool({
-    name: "mcp__mail__reply",
-    description: "Reply to a received mail",
+    name: 'mcp__mail__reply',
+    description: 'Reply to a received mail',
     handler: replyMail,
     schema: ReplyMailInputSchema,
   });

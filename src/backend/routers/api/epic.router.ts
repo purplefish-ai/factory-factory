@@ -1,17 +1,17 @@
+import { EpicState } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
-import { EpicState } from '@prisma/client';
-import { epicAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import {
+  getSupervisorForEpic,
+  getSupervisorStatus,
+  killSupervisorAndCleanup,
+  listAllSupervisors,
+  recreateSupervisor,
   startSupervisorForEpic,
   stopSupervisorGracefully,
-  killSupervisorAndCleanup,
-  recreateSupervisor,
-  getSupervisorStatus,
-  getSupervisorForEpic,
-  listAllSupervisors,
 } from '../../agents/supervisor/lifecycle.js';
 import { inngest } from '../../inngest/client.js';
+import { epicAccessor, taskAccessor } from '../../resource_accessors/index.js';
 
 const router = Router();
 
@@ -56,7 +56,8 @@ router.post('/create', async (req, res) => {
 
     // Generate a placeholder linear issue ID if not provided
     const linearIssueId = validatedInput.linearIssueId || `manual-${Date.now()}`;
-    const linearIssueUrl = validatedInput.linearIssueUrl || `https://linear.app/manual/${linearIssueId}`;
+    const linearIssueUrl =
+      validatedInput.linearIssueUrl || `https://linear.app/manual/${linearIssueId}`;
 
     // Create epic
     const epic = await epicAccessor.create({

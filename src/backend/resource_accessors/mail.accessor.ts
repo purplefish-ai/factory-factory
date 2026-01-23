@@ -1,5 +1,5 @@
-import { prisma } from '../db';
 import type { Mail, Prisma } from '@prisma/client';
+import { prisma } from '../db';
 
 export interface CreateMailInput {
   fromAgentId?: string;

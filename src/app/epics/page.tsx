@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
-import { trpc } from '../../frontend/lib/trpc';
 import { EpicState } from '@prisma/client';
+import Link from 'next/link';
 import { useState } from 'react';
+import { trpc } from '../../frontend/lib/trpc';
 
 const stateColors: Record<string, string> = {
   PLANNING: 'bg-gray-100 text-gray-800',

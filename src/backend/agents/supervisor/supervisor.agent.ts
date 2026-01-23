@@ -1,17 +1,15 @@
-import { AgentType, AgentState, EpicState } from '@prisma/client';
+import { AgentState, AgentType, EpicState } from '@prisma/client';
+import { createWorkerSession } from '../../clients/claude-code.client.js';
+import { gitClient } from '../../clients/git.client.js';
 import {
   agentAccessor,
   epicAccessor,
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
-import {
-  createWorkerSession,
-} from '../../clients/claude-code.client.js';
-import { gitClient } from '../../clients/git.client.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
-import { buildSupervisorPrompt } from './supervisor.prompts.js';
 import { checkWorkerHealth, recoverWorker } from './health.js';
+import { buildSupervisorPrompt } from './supervisor.prompts.js';
 
 /**
  * Supervisor agent context - tracks running supervisors
@@ -128,11 +126,7 @@ export async function createSupervisor(epicId: string): Promise<string> {
   // Create Claude Code session in tmux
   // Note: We need to modify createWorkerSession to support supervisors
   // For now, we use the same function but with supervisor tmux naming
-  const sessionContext = await createSupervisorSession(
-    agent.id,
-    systemPrompt,
-    worktreeInfo.path
-  );
+  const sessionContext = await createSupervisorSession(agent.id, systemPrompt, worktreeInfo.path);
 
   // Update agent with session info
   await agentAccessor.update(agent.id, {
@@ -162,8 +156,8 @@ async function createSupervisorSession(
   // Rename tmux session to supervisor naming
   const supervisorTmuxName = getSupervisorTmuxSessionName(agentId);
   try {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
     const execAsync = promisify(exec);
     await execAsync(`tmux rename-session -t ${context.tmuxSessionName} ${supervisorTmuxName}`);
   } catch (error) {
@@ -251,11 +245,16 @@ export async function runSupervisor(agentId: string): Promise<void> {
   }, 30000); // Check every 30 seconds
 
   // Start worker health check loop (7 minutes)
-  supervisorContext.workerHealthCheckInterval = setInterval(async () => {
-    await performWorkerHealthCheck(agentId);
-  }, 7 * 60 * 1000); // Check every 7 minutes
+  supervisorContext.workerHealthCheckInterval = setInterval(
+    async () => {
+      await performWorkerHealthCheck(agentId);
+    },
+    7 * 60 * 1000
+  ); // Check every 7 minutes
 
-  console.log(`Supervisor ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`);
+  console.log(
+    `Supervisor ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`
+  );
 }
 
 /**
@@ -265,8 +264,8 @@ async function sendSupervisorMessage(agentId: string, message: string): Promise<
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
 
   // Use the same atomic pattern as worker
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   // Check session exists
@@ -287,8 +286,8 @@ async function sendSupervisorMessage(agentId: string, message: string): Promise<
 async function captureSupervisorOutput(agentId: string, lines: number = 100): Promise<string> {
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
 
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   // Check session exists
@@ -299,9 +298,7 @@ async function captureSupervisorOutput(agentId: string, lines: number = 100): Pr
   }
 
   // Capture pane content
-  const { stdout } = await execAsync(
-    `tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`
-  );
+  const { stdout } = await execAsync(`tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`);
 
   return stdout;
 }
@@ -331,11 +328,7 @@ async function monitorSupervisor(agentId: string): Promise<void> {
           console.log(`Supervisor ${agentId}: Executing ${toolCall.toolName}`);
 
           // Execute tool via MCP
-          const result = await executeMcpTool(
-            agentId,
-            toolCall.toolName,
-            toolCall.toolInput
-          );
+          const result = await executeMcpTool(agentId, toolCall.toolName, toolCall.toolInput);
 
           // Format result for Claude
           const resultMessage = `Tool ${toolCall.toolName} result:\n${JSON.stringify(result, null, 2)}`;
@@ -398,10 +391,14 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
     const reviewTasks = tasks.filter((t) => t.state === 'REVIEW');
     const completedTasks = tasks.filter((t) => t.state === 'COMPLETED');
     const failedTasks = tasks.filter((t) => t.state === 'FAILED');
-    const inProgressTasks = tasks.filter((t) => t.state === 'IN_PROGRESS' || t.state === 'ASSIGNED');
+    const inProgressTasks = tasks.filter(
+      (t) => t.state === 'IN_PROGRESS' || t.state === 'ASSIGNED'
+    );
 
     // Filter to only NEW review tasks we haven't notified about
-    const newReviewTasks = reviewTasks.filter((t) => !supervisorContext.lastNotifiedReviewTaskIds.has(t.id));
+    const newReviewTasks = reviewTasks.filter(
+      (t) => !supervisorContext.lastNotifiedReviewTaskIds.has(t.id)
+    );
 
     // If there are NEW tasks ready for review, prompt supervisor
     if (newReviewTasks.length > 0) {
@@ -415,9 +412,9 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
       await sendSupervisorMessage(
         agentId,
         `📋 NEW TASKS READY FOR REVIEW:\n` +
-        `${newReviewTasks.map((t) => `- ${t.title} (${t.id})`).join('\n')}\n\n` +
-        `Total status: ${reviewTasks.length} in review, ${inProgressTasks.length} in progress, ${completedTasks.length} completed, ${failedTasks.length} failed\n\n` +
-        `Use mcp__epic__get_review_queue to see the full review queue.`
+          `${newReviewTasks.map((t) => `- ${t.title} (${t.id})`).join('\n')}\n\n` +
+          `Total status: ${reviewTasks.length} in review, ${inProgressTasks.length} in progress, ${completedTasks.length} completed, ${failedTasks.length} failed\n\n` +
+          `Use mcp__epic__get_review_queue to see the full review queue.`
       );
     }
     // If all tasks are done and we haven't notified yet, prompt to create epic PR
@@ -429,10 +426,10 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
         await sendSupervisorMessage(
           agentId,
           `🎉 ALL TASKS COMPLETE!\n` +
-          `- ${completedTasks.length} task(s) completed successfully\n` +
-          `- ${failedTasks.length} task(s) failed\n\n` +
-          `It's time to create the final PR from the epic branch to main.\n` +
-          `Use mcp__epic__create_epic_pr to create the epic PR.`
+            `- ${completedTasks.length} task(s) completed successfully\n` +
+            `- ${failedTasks.length} task(s) failed\n\n` +
+            `It's time to create the final PR from the epic branch to main.\n` +
+            `Use mcp__epic__create_epic_pr to create the epic PR.`
         );
       }
     }
@@ -560,8 +557,8 @@ export async function stopSupervisor(agentId: string): Promise<void> {
 
   // Stop Claude session
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   try {
@@ -600,8 +597,8 @@ export async function killSupervisor(agentId: string): Promise<void> {
 
   // Kill tmux session
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   try {
@@ -621,9 +618,9 @@ export async function killSupervisor(agentId: string): Promise<void> {
   }
 
   // Clean up system prompt file
-  const { promises: fs } = await import('fs');
-  const path = await import('path');
-  const os = await import('os');
+  const { promises: fs } = await import('node:fs');
+  const path = await import('node:path');
+  const os = await import('node:os');
   const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
   try {
     await fs.unlink(systemPromptPath);

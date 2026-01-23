@@ -8,20 +8,17 @@
  * There should only be ONE orchestrator instance running at a time.
  */
 
-import { AgentType, AgentState } from '@prisma/client';
-import {
-  agentAccessor,
-  decisionLogAccessor,
-} from '../../resource_accessors/index.js';
+import { AgentState, AgentType } from '@prisma/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
+import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
-import { buildOrchestratorPrompt } from './orchestrator.prompts.js';
+import { startSupervisorForEpic } from '../supervisor/lifecycle.js';
 import {
   checkSupervisorHealth,
-  recoverSupervisor,
   getPendingEpicsNeedingSupervisors,
+  recoverSupervisor,
 } from './health.js';
-import { startSupervisorForEpic } from '../supervisor/lifecycle.js';
+import { buildOrchestratorPrompt } from './orchestrator.prompts.js';
 
 /**
  * Orchestrator agent context - tracks the running orchestrator
@@ -106,9 +103,7 @@ function getOrchestratorTmuxSessionName(agentId: string): string {
 export async function createOrchestrator(): Promise<string> {
   // Check if orchestrator already exists
   const existingOrchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-  const activeOrchestrators = existingOrchestrators.filter(
-    (o) => o.state !== AgentState.FAILED
-  );
+  const activeOrchestrators = existingOrchestrators.filter((o) => o.state !== AgentState.FAILED);
 
   if (activeOrchestrators.length > 0) {
     throw new Error(
@@ -133,11 +128,7 @@ export async function createOrchestrator(): Promise<string> {
   const repoRoot = process.cwd();
 
   // Create Claude Code session in tmux
-  const sessionContext = await createOrchestratorSession(
-    agent.id,
-    systemPrompt,
-    repoRoot
-  );
+  const sessionContext = await createOrchestratorSession(agent.id, systemPrompt, repoRoot);
 
   // Update agent with session info
   await agentAccessor.update(agent.id, {
@@ -166,8 +157,8 @@ async function createOrchestratorSession(
   // Rename tmux session to orchestrator naming
   const orchestratorTmuxName = getOrchestratorTmuxSessionName(agentId);
   try {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
     const execAsync = promisify(exec);
     await execAsync(`tmux rename-session -t ${context.tmuxSessionName} ${orchestratorTmuxName}`);
   } catch (error) {
@@ -199,7 +190,7 @@ export async function runOrchestrator(agentId: string): Promise<void> {
   }
 
   // Check if already running
-  if (activeOrchestrator && activeOrchestrator.isRunning) {
+  if (activeOrchestrator?.isRunning) {
     throw new Error(`Orchestrator ${activeOrchestrator.agentId} is already running`);
   }
 
@@ -256,8 +247,8 @@ export async function runOrchestrator(agentId: string): Promise<void> {
 async function sendOrchestratorMessage(agentId: string, message: string): Promise<void> {
   const tmuxSessionName = getOrchestratorTmuxSessionName(agentId);
 
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   // Check session exists
@@ -278,8 +269,8 @@ async function sendOrchestratorMessage(agentId: string, message: string): Promis
 async function captureOrchestratorOutput(agentId: string, lines: number = 100): Promise<string> {
   const tmuxSessionName = getOrchestratorTmuxSessionName(agentId);
 
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   // Check session exists
@@ -290,9 +281,7 @@ async function captureOrchestratorOutput(agentId: string, lines: number = 100): 
   }
 
   // Capture pane content
-  const { stdout } = await execAsync(
-    `tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`
-  );
+  const { stdout } = await execAsync(`tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`);
 
   return stdout;
 }
@@ -321,11 +310,7 @@ async function monitorOrchestrator(agentId: string): Promise<void> {
           console.log(`Orchestrator ${agentId}: Executing ${toolCall.toolName}`);
 
           // Execute tool via MCP
-          const result = await executeMcpTool(
-            agentId,
-            toolCall.toolName,
-            toolCall.toolInput
-          );
+          const result = await executeMcpTool(agentId, toolCall.toolName, toolCall.toolInput);
 
           // Format result for Claude
           const resultMessage = `Tool ${toolCall.toolName} result:\n${JSON.stringify(result, null, 2)}`;
@@ -374,11 +359,7 @@ async function performHealthCheck(agentId: string): Promise<void> {
       );
 
       try {
-        const result = await recoverSupervisor(
-          unhealthy.supervisorId,
-          unhealthy.epicId,
-          agentId
-        );
+        const result = await recoverSupervisor(unhealthy.supervisorId, unhealthy.epicId, agentId);
 
         console.log(`Orchestrator ${agentId}: Recovery result - ${result.message}`);
 
@@ -498,8 +479,8 @@ export async function stopOrchestrator(agentId: string): Promise<void> {
 
   // Send Ctrl+C to stop Claude
   const tmuxSessionName = getOrchestratorTmuxSessionName(agentId);
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   try {
@@ -538,8 +519,8 @@ export async function killOrchestrator(agentId: string): Promise<void> {
 
   // Kill tmux session
   const tmuxSessionName = getOrchestratorTmuxSessionName(agentId);
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
   const execAsync = promisify(exec);
 
   try {
@@ -549,9 +530,9 @@ export async function killOrchestrator(agentId: string): Promise<void> {
   }
 
   // Clean up system prompt file
-  const { promises: fs } = await import('fs');
-  const path = await import('path');
-  const os = await import('os');
+  const { promises: fs } = await import('node:fs');
+  const path = await import('node:path');
+  const os = await import('node:os');
   const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
   try {
     await fs.unlink(systemPromptPath);

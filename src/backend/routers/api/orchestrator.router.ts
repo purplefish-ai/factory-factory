@@ -1,21 +1,22 @@
+import { AgentType } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
-import { AgentType } from '@prisma/client';
-import { agentAccessor } from '../../resource_accessors/index.js';
 import {
-  startOrchestrator,
-  stopOrchestratorGracefully,
-  killOrchestratorAndCleanup,
+  checkSupervisorHealth,
+  getPendingEpicsNeedingSupervisors,
+  getSupervisorHealthSummary,
+  recoverSupervisor,
+} from '../../agents/orchestrator/health.js';
+import {
   getOrchestrator,
   getOrchestratorStatus,
+  killOrchestratorAndCleanup,
+  startOrchestrator,
+  stopOrchestratorGracefully,
 } from '../../agents/orchestrator/lifecycle.js';
-import {
-  getSupervisorHealthSummary,
-  getPendingEpicsNeedingSupervisors,
-} from '../../agents/orchestrator/health.js';
 import { checkWorkerHealth, recoverWorker } from '../../agents/supervisor/health.js';
-import { checkSupervisorHealth, recoverSupervisor } from '../../agents/orchestrator/health.js';
-import { runSupervisor, recreateSupervisor } from '../../agents/supervisor/lifecycle.js';
+import { recreateSupervisor, runSupervisor } from '../../agents/supervisor/lifecycle.js';
+import { agentAccessor } from '../../resource_accessors/index.js';
 
 const router = Router();
 

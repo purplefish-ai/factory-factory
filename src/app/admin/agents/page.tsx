@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { trpc } from '../../../frontend/lib/trpc';
 
 function AgentStateIndicator({ state, isInCrashLoop }: { state: string; isInCrashLoop: boolean }) {
@@ -14,7 +14,9 @@ function AgentStateIndicator({ state, isInCrashLoop }: { state: string; isInCras
 
   return (
     <div className="flex items-center gap-2">
-      <span className={`px-2 py-1 rounded text-xs font-medium ${stateColors[state] || 'bg-gray-100'}`}>
+      <span
+        className={`px-2 py-1 rounded text-xs font-medium ${stateColors[state] || 'bg-gray-100'}`}
+      >
         {state}
       </span>
       {isInCrashLoop && (
@@ -108,10 +110,18 @@ export default function AdminAgentsPage() {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">State</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  State
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Last Active
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -155,19 +165,34 @@ export default function AdminAgentsPage() {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">State</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Epic</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Session</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  State
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Epic
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Session
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Last Active
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {supervisors.map((agent) => (
                 <tr key={agent.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-mono">
-                    <Link href={`/agents/${agent.id}`} className="text-blue-600 hover:text-blue-800">
+                    <Link
+                      href={`/agents/${agent.id}`}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
                       {agent.id.slice(0, 8)}...
                     </Link>
                   </td>
@@ -176,7 +201,10 @@ export default function AdminAgentsPage() {
                   </td>
                   <td className="px-6 py-4 text-sm">
                     {agent.currentEpicId ? (
-                      <Link href={`/epics/${agent.currentEpicId}`} className="text-blue-600 hover:text-blue-800">
+                      <Link
+                        href={`/epics/${agent.currentEpicId}`}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
                         {agent.currentEpicId.slice(0, 8)}...
                       </Link>
                     ) : (
@@ -231,19 +259,34 @@ export default function AdminAgentsPage() {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">State</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Task</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Session</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  State
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Task
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Session
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Last Active
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {workers.map((agent) => (
                 <tr key={agent.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-mono">
-                    <Link href={`/agents/${agent.id}`} className="text-blue-600 hover:text-blue-800">
+                    <Link
+                      href={`/agents/${agent.id}`}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
                       {agent.id.slice(0, 8)}...
                     </Link>
                   </td>
@@ -252,7 +295,10 @@ export default function AdminAgentsPage() {
                   </td>
                   <td className="px-6 py-4 text-sm">
                     {agent.currentTaskId ? (
-                      <Link href={`/tasks/${agent.currentTaskId}`} className="text-blue-600 hover:text-blue-800">
+                      <Link
+                        href={`/tasks/${agent.currentTaskId}`}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
                         {agent.currentTaskId.slice(0, 8)}...
                       </Link>
                     ) : (

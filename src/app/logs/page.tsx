@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { trpc } from '../../frontend/lib/trpc';
 import type { DecisionLogWithRelations } from '../../frontend/lib/types';
 
@@ -104,9 +104,7 @@ export default function LogsPage() {
                     {log.context && (
                       <div className="mt-2">
                         <button
-                          onClick={() =>
-                            setExpandedLogId(expandedLogId === log.id ? null : log.id)
-                          }
+                          onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
                           className="text-xs text-blue-600 hover:text-blue-800"
                         >
                           {expandedLogId === log.id ? 'Hide context' : 'Show context'}

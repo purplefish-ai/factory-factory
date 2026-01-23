@@ -1,14 +1,14 @@
-import { AgentType, AgentState } from '@prisma/client';
-import { inngest } from '../client.js';
+import { AgentState, AgentType } from '@prisma/client';
+import { killSupervisorAndCleanup } from '../../agents/supervisor/lifecycle.js';
+import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
 import {
   agentAccessor,
   decisionLogAccessor,
+  epicAccessor,
   mailAccessor,
   taskAccessor,
-  epicAccessor,
 } from '../../resource_accessors/index.js';
-import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
-import { killSupervisorAndCleanup } from '../../agents/supervisor/lifecycle.js';
+import { inngest } from '../client.js';
 
 /**
  * Handle agent.completed event
@@ -63,7 +63,10 @@ export const agentCompletedHandler = inngest.createFunction(
           return handleWorkerCompletion(agentId, taskId, agentInfo.currentEpicId);
 
         case AgentType.SUPERVISOR:
-          return handleSupervisorCompletion(agentId, epicId || agentInfo.currentEpicId || undefined);
+          return handleSupervisorCompletion(
+            agentId,
+            epicId || agentInfo.currentEpicId || undefined
+          );
 
         case AgentType.ORCHESTRATOR:
           return handleOrchestratorCompletion(agentId);
@@ -145,7 +148,8 @@ async function handleWorkerCompletion(
         fromAgentId: agentId,
         toAgentId: supervisorId,
         subject: `Worker completed: ${taskTitle}`,
-        body: `Worker ${agentId} has completed work on task "${taskTitle}".\n\n` +
+        body:
+          `Worker ${agentId} has completed work on task "${taskTitle}".\n\n` +
           `Task ID: ${taskId}\n` +
           `The task should now be ready for review.`,
       });
@@ -203,7 +207,8 @@ async function handleSupervisorCompletion(
       fromAgentId: agentId,
       isForHuman: true,
       subject: `Epic completed: ${epicTitle}`,
-      body: `The supervisor has completed work on epic "${epicTitle}".\n\n` +
+      body:
+        `The supervisor has completed work on epic "${epicTitle}".\n\n` +
         `Epic ID: ${epicId}\n` +
         `Supervisor ID: ${agentId}\n\n` +
         `The epic should now be ready for your review. Check the epic PR for the final changes.`,
@@ -242,7 +247,8 @@ async function handleOrchestratorCompletion(
       fromAgentId: agentId,
       isForHuman: true,
       subject: `NOTICE: Orchestrator has stopped`,
-      body: `The orchestrator agent has stopped running.\n\n` +
+      body:
+        `The orchestrator agent has stopped running.\n\n` +
         `Orchestrator ID: ${agentId}\n\n` +
         `This is unusual behavior - the orchestrator should run indefinitely.\n` +
         `You may need to restart the orchestrator manually.`,

@@ -1,4 +1,5 @@
 import * as dotenv from 'dotenv';
+
 dotenv.config();
 
 import { gitClient } from './src/backend/clients/git.client';
@@ -34,7 +35,7 @@ async function test() {
     console.log('5. Listing all worktrees...');
     const worktrees = await gitClient.listWorktrees();
     console.log('   ✅ Found', worktrees.length, 'worktree(s)');
-    worktrees.forEach(w => console.log('      -', w));
+    worktrees.forEach((w) => console.log('      -', w));
 
     // Delete worktree
     console.log('6. Deleting worktree...');

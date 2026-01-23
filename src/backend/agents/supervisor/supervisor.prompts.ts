@@ -246,10 +246,7 @@ Now, review your epic assignment below and begin by breaking it down into tasks!
  */
 export function buildSupervisorPrompt(context: SupervisorEpicContext): string {
   // Replace placeholder with actual agent ID in examples
-  const promptWithAgentId = SUPERVISOR_SYSTEM_PROMPT.replace(
-    /YOUR_AGENT_ID/g,
-    context.agentId
-  );
+  const promptWithAgentId = SUPERVISOR_SYSTEM_PROMPT.replace(/YOUR_AGENT_ID/g, context.agentId);
 
   return `${promptWithAgentId}
 

@@ -5,8 +5,8 @@
  * Supports macOS, Linux, and Windows.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
@@ -107,7 +107,10 @@ async function sendLinuxNotification(title: string, message: string): Promise<vo
       await execAsync(`zenity --notification --text='${escapedTitle}: ${escapedMessage}'`);
       console.log(`Linux notification sent via zenity: ${title}`);
     } catch {
-      console.error('Failed to send Linux notification (notify-send and zenity unavailable):', error);
+      console.error(
+        'Failed to send Linux notification (notify-send and zenity unavailable):',
+        error
+      );
       throw error;
     }
   }
@@ -214,7 +217,11 @@ async function playSound(soundFile?: string): Promise<void> {
 /**
  * Send a platform-specific push notification
  */
-async function sendPushNotification(title: string, message: string, soundEnabled: boolean): Promise<void> {
+async function sendPushNotification(
+  title: string,
+  message: string,
+  soundEnabled: boolean
+): Promise<void> {
   const platform = process.platform;
 
   switch (platform) {
@@ -277,11 +284,7 @@ export class NotificationService {
 
     try {
       // Send push notification
-      await sendPushNotification(
-        title,
-        message,
-        options?.playSound ?? this.config.soundEnabled
-      );
+      await sendPushNotification(title, message, options?.playSound ?? this.config.soundEnabled);
 
       // Play additional sound if enabled and not already played by notification
       if ((options?.playSound ?? this.config.soundEnabled) && process.platform === 'linux') {
@@ -331,7 +334,11 @@ export class NotificationService {
   /**
    * Send a critical error notification
    */
-  async notifyCriticalError(agentType: string, epicTitle?: string, details?: string): Promise<void> {
+  async notifyCriticalError(
+    agentType: string,
+    epicTitle?: string,
+    details?: string
+  ): Promise<void> {
     const message = epicTitle
       ? `${agentType} crashed\nEpic: ${epicTitle}\n${details || 'Check logs for details'}`
       : `${agentType} crashed\n${details || 'Check logs for details'}`;

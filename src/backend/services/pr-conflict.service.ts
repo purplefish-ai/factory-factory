@@ -4,11 +4,11 @@
  * Handles PR creation failures, merge conflicts, and rebase issues.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { TaskState } from '@prisma/client';
+import { decisionLogAccessor, mailAccessor, taskAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';
-import { taskAccessor, mailAccessor, decisionLogAccessor } from '../resource_accessors/index.js';
 
 const execAsync = promisify(exec);
 const logger = createLogger('pr-conflict');
@@ -99,9 +99,7 @@ export class PrConflictService {
 
         // Wait before retry with exponential backoff
         if (attempt < maxRetries) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * Math.pow(2, attempt))
-          );
+          await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
         }
       }
     }
@@ -133,10 +131,7 @@ export class PrConflictService {
   /**
    * Attempt a rebase with conflict detection
    */
-  async attemptRebase(
-    worktreePath: string,
-    baseBranch = 'main'
-  ): Promise<RebaseResult> {
+  async attemptRebase(worktreePath: string, baseBranch = 'main'): Promise<RebaseResult> {
     try {
       // Fetch latest changes
       await execAsync(`git fetch origin ${baseBranch}`, { cwd: worktreePath });
@@ -156,8 +151,7 @@ export class PrConflictService {
       const errorMsg = error instanceof Error ? error.message : String(error);
 
       // Check for conflicts
-      const hasConflicts =
-        errorMsg.includes('CONFLICT') || errorMsg.includes('could not apply');
+      const hasConflicts = errorMsg.includes('CONFLICT') || errorMsg.includes('could not apply');
 
       if (hasConflicts) {
         const conflicts = await this.getConflictedFiles(worktreePath);
@@ -165,15 +159,9 @@ export class PrConflictService {
         // Check if conflicts are simple enough to auto-resolve
         const simpleConflicts = conflicts.filter((c) => c.isSimple);
 
-        if (
-          simpleConflicts.length === conflicts.length &&
-          conflicts.length > 0
-        ) {
+        if (simpleConflicts.length === conflicts.length && conflicts.length > 0) {
           // Try auto-resolution
-          const autoResolved = await this.attemptAutoResolve(
-            worktreePath,
-            conflicts
-          );
+          const autoResolved = await this.attemptAutoResolve(worktreePath, conflicts);
 
           if (autoResolved) {
             return {
@@ -212,9 +200,7 @@ export class PrConflictService {
   /**
    * Get list of conflicted files
    */
-  private async getConflictedFiles(
-    worktreePath: string
-  ): Promise<MergeConflictInfo[]> {
+  private async getConflictedFiles(worktreePath: string): Promise<MergeConflictInfo[]> {
     try {
       const { stdout } = await execAsync('git diff --name-only --diff-filter=U', {
         cwd: worktreePath,
@@ -237,10 +223,7 @@ export class PrConflictService {
   /**
    * Analyze a conflicted file
    */
-  private async analyzeConflict(
-    worktreePath: string,
-    file: string
-  ): Promise<MergeConflictInfo> {
+  private async analyzeConflict(worktreePath: string, file: string): Promise<MergeConflictInfo> {
     try {
       const { stdout } = await execAsync(`git diff "${file}"`, {
         cwd: worktreePath,
@@ -403,8 +386,7 @@ export class PrConflictService {
     timeoutMinutes = 60
   ): Promise<boolean> {
     const now = new Date();
-    const elapsedMinutes =
-      (now.getTime() - prCreatedAt.getTime()) / (1000 * 60);
+    const elapsedMinutes = (now.getTime() - prCreatedAt.getTime()) / (1000 * 60);
 
     if (elapsedMinutes > timeoutMinutes) {
       const task = await taskAccessor.findById(taskId);

@@ -1,8 +1,8 @@
+import { AgentState, AgentType } from '@prisma/client';
 import { z } from 'zod';
-import { router, publicProcedure } from './trpc';
-import { agentAccessor } from '../resource_accessors/agent.accessor';
 import { readSessionOutput } from '../clients/terminal.client';
-import { AgentType, AgentState } from '@prisma/client';
+import { agentAccessor } from '../resource_accessors/agent.accessor';
+import { publicProcedure, router } from './trpc';
 
 const HEALTH_THRESHOLD_MINUTES = 5;
 
@@ -30,8 +30,7 @@ export const agentRouter = router({
           (now - agent.lastActiveAt.getTime()) / (60 * 1000)
         );
         const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-          agent.state !== AgentState.FAILED;
+          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
         return {
           ...agent,
           isHealthy,
@@ -41,29 +40,24 @@ export const agentRouter = router({
     }),
 
   // Get agent by ID
-  getById: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const agent = await agentAccessor.findById(input.id);
-      if (!agent) {
-        throw new Error(`Agent not found: ${input.id}`);
-      }
+  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+    const agent = await agentAccessor.findById(input.id);
+    if (!agent) {
+      throw new Error(`Agent not found: ${input.id}`);
+    }
 
-      // Calculate health status
-      const now = Date.now();
-      const minutesSinceHeartbeat = Math.floor(
-        (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-      );
-      const isHealthy =
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-        agent.state !== AgentState.FAILED;
+    // Calculate health status
+    const now = Date.now();
+    const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
+    const isHealthy =
+      minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
 
-      return {
-        ...agent,
-        isHealthy,
-        minutesSinceHeartbeat,
-      };
-    }),
+    return {
+      ...agent,
+      isHealthy,
+      minutesSinceHeartbeat,
+    };
+  }),
 
   // Get terminal output for an agent
   getTerminalOutput: publicProcedure
@@ -106,12 +100,9 @@ export const agentRouter = router({
     const now = Date.now();
 
     const withHealth = allAgents.map((agent) => {
-      const minutesSinceHeartbeat = Math.floor(
-        (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-      );
+      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
       const isHealthy =
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-        agent.state !== AgentState.FAILED;
+        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
       return {
         ...agent,
         isHealthy,
@@ -127,26 +118,21 @@ export const agentRouter = router({
   }),
 
   // Get agents for a specific epic (workers and supervisors)
-  listByEpic: publicProcedure
-    .input(z.object({ epicId: z.string() }))
-    .query(async ({ input }) => {
-      const agents = await agentAccessor.findAgentsByEpicId(input.epicId);
-      const now = Date.now();
+  listByEpic: publicProcedure.input(z.object({ epicId: z.string() })).query(async ({ input }) => {
+    const agents = await agentAccessor.findAgentsByEpicId(input.epicId);
+    const now = Date.now();
 
-      return agents.map((agent) => {
-        const minutesSinceHeartbeat = Math.floor(
-          (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-        );
-        const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-          agent.state !== AgentState.FAILED;
-        return {
-          ...agent,
-          isHealthy,
-          minutesSinceHeartbeat,
-        };
-      });
-    }),
+    return agents.map((agent) => {
+      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
+      const isHealthy =
+        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
+      return {
+        ...agent,
+        isHealthy,
+        minutesSinceHeartbeat,
+      };
+    });
+  }),
 
   // Get stats for dashboard
   getStats: publicProcedure.query(async () => {
@@ -173,13 +159,8 @@ export const agentRouter = router({
       byType[agent.type]++;
       byState[agent.state]++;
 
-      const minutesSinceHeartbeat = Math.floor(
-        (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-      );
-      if (
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-        agent.state !== AgentState.FAILED
-      ) {
+      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
+      if (minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED) {
         healthy++;
       } else {
         unhealthy++;

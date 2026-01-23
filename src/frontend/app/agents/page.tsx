@@ -152,9 +152,7 @@ export default function AgentsPage() {
               <p className="text-2xl font-bold text-red-600">{totalAgents - healthyAgents}</p>
             </div>
           </div>
-          <div className="text-sm text-gray-500">
-            Auto-refreshing every 2 seconds
-          </div>
+          <div className="text-sm text-gray-500">Auto-refreshing every 2 seconds</div>
         </div>
       </div>
 
@@ -171,11 +169,7 @@ export default function AgentsPage() {
         emptyText="No supervisor agents running"
       />
 
-      <AgentSection
-        title="Workers"
-        agents={workers}
-        emptyText="No worker agents running"
-      />
+      <AgentSection title="Workers" agents={workers} emptyText="No worker agents running" />
     </div>
   );
 }

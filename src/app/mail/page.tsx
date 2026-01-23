@@ -7,10 +7,11 @@ import { trpc } from '../../frontend/lib/trpc';
 export default function MailPage() {
   const [showComposeModal, setShowComposeModal] = useState(false);
 
-  const { data: mail, isLoading, refetch } = trpc.mail.listHumanInbox.useQuery(
-    { includeRead: true },
-    { refetchInterval: 5000 }
-  );
+  const {
+    data: mail,
+    isLoading,
+    refetch,
+  } = trpc.mail.listHumanInbox.useQuery({ includeRead: true }, { refetchInterval: 5000 });
 
   if (isLoading) {
     return (
@@ -29,9 +30,7 @@ export default function MailPage() {
           <h1 className="text-2xl font-bold text-gray-900">Mail Inbox</h1>
           <p className="text-gray-600 mt-1">
             Communication from agents
-            {unreadCount > 0 && (
-              <span className="ml-2 text-blue-600">({unreadCount} unread)</span>
-            )}
+            {unreadCount > 0 && <span className="ml-2 text-blue-600">({unreadCount} unread)</span>}
           </p>
         </div>
         <button
@@ -91,12 +90,18 @@ export default function MailPage() {
                       </p>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
-                      From: {(item as { fromAgent?: { type: string; id: string } }).fromAgent?.type || 'System'}{' '}
+                      From:{' '}
+                      {(item as { fromAgent?: { type: string; id: string } }).fromAgent?.type ||
+                        'System'}{' '}
                       {(item as { fromAgent?: { type: string; id: string } }).fromAgent?.id && (
-                        <span className="font-mono text-xs">({(item as { fromAgent?: { id: string } }).fromAgent?.id.slice(0, 8)}...)</span>
+                        <span className="font-mono text-xs">
+                          ({(item as { fromAgent?: { id: string } }).fromAgent?.id.slice(0, 8)}...)
+                        </span>
                       )}
                     </p>
-                    <p className="text-sm text-gray-400 truncate mt-1">{item.body.slice(0, 100)}...</p>
+                    <p className="text-sm text-gray-400 truncate mt-1">
+                      {item.body.slice(0, 100)}...
+                    </p>
                   </div>
                   <span className="text-xs text-gray-400 flex-shrink-0 ml-4">
                     {new Date(item.createdAt).toLocaleString()}

@@ -1,10 +1,10 @@
-import { router } from './trpc';
-import { epicRouter } from './epic.trpc';
-import { taskRouter } from './task.trpc';
-import { agentRouter } from './agent.trpc';
-import { mailRouter } from './mail.trpc';
-import { decisionLogRouter } from './decision-log.trpc';
 import { adminRouter } from './admin.trpc';
+import { agentRouter } from './agent.trpc';
+import { decisionLogRouter } from './decision-log.trpc';
+import { epicRouter } from './epic.trpc';
+import { mailRouter } from './mail.trpc';
+import { taskRouter } from './task.trpc';
+import { router } from './trpc';
 
 export const appRouter = router({
   epic: epicRouter,

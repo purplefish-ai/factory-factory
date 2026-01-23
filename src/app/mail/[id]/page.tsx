@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { use, useState } from 'react';
 import { trpc } from '../../../frontend/lib/trpc';
 import type { MailWithRelations } from '../../../frontend/lib/types';
 
@@ -78,9 +78,7 @@ export default function MailDetailPage({ params }: { params: Promise<{ id: strin
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{mail.subject}</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {new Date(mail.createdAt).toLocaleString()}
-          </p>
+          <p className="text-sm text-gray-500 mt-1">{new Date(mail.createdAt).toLocaleString()}</p>
         </div>
       </div>
 
@@ -165,7 +163,6 @@ export default function MailDetailPage({ params }: { params: Promise<{ id: strin
                     rows={4}
                     className="w-full border rounded-lg px-3 py-2"
                     placeholder="Your reply..."
-                    autoFocus
                   />
                 </div>
                 <div className="flex gap-3">
