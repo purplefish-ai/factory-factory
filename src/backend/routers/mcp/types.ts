@@ -1,4 +1,4 @@
-import { AgentType } from "@prisma/client";
+import type { AgentType } from "@prisma/client";
 
 /**
  * Context provided to MCP tool handlers

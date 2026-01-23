@@ -1,5 +1,5 @@
 import { Inngest, EventSchemas } from 'inngest';
-import { Events } from './events';
+import type { Events } from './events';
 
 export const inngest = new Inngest({
   id: 'factoryfactory',

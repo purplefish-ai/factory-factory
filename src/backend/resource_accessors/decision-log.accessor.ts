@@ -1,5 +1,5 @@
 import { prisma } from '../db';
-import { DecisionLog } from '@prisma/client';
+import type { DecisionLog } from '@prisma/client';
 
 export interface CreateDecisionLogInput {
   agentId: string;
@@ -123,6 +123,18 @@ export class DecisionLogAccessor {
    * Get recent logs across all agents
    */
   async findAllRecent(limit = 100): Promise<DecisionLog[]> {
+    return this.findRecent(limit);
+  }
+
+  /**
+   * List decision logs with optional filters
+   */
+  async list(options: { agentId?: string; limit?: number }): Promise<DecisionLog[]> {
+    const { agentId, limit = 100 } = options;
+
+    if (agentId) {
+      return this.findByAgentId(agentId, limit);
+    }
     return this.findRecent(limit);
   }
 }

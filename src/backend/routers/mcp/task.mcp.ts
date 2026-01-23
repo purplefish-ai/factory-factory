@@ -8,7 +8,8 @@ import {
   mailAccessor,
 } from '../../resource_accessors/index.js';
 import { githubClient } from '../../clients/index.js';
-import { McpToolContext, McpToolResponse, McpErrorCode } from './types.js';
+import type { McpToolContext, McpToolResponse} from './types.js';
+import { McpErrorCode } from './types.js';
 import {
   registerMcpTool,
   createSuccessResponse,
