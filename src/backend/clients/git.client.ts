@@ -113,7 +113,7 @@ export class GitClient {
 let _gitClient: GitClient | null = null;
 
 export const gitClient = new Proxy({} as GitClient, {
-  get(target, prop) {
+  get(_target, prop) {
     if (!_gitClient) {
       _gitClient = new GitClient();
     }

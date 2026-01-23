@@ -14,6 +14,7 @@ export interface UpdateAgentInput {
   currentEpicId?: string | null;
   currentTaskId?: string | null;
   tmuxSessionName?: string | null;
+  sessionId?: string | null;
   lastActiveAt?: Date;
 }
 
@@ -83,6 +84,16 @@ export class AgentAccessor {
   async findByType(type: AgentType): Promise<Agent[]> {
     return prisma.agent.findMany({
       where: { type },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  async findByEpicId(epicId: string): Promise<Agent | null> {
+    return prisma.agent.findFirst({
+      where: { currentEpicId: epicId },
       include: {
         currentEpic: true,
         assignedTasks: true,

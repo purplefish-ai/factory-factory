@@ -69,11 +69,10 @@ Last active: ${agent.lastActiveAt}
   // Send to human if no specific recipient found
   await mailAccessor.create({
     fromAgentId: agent.id,
-    toAgentId: recipientAgentId,
+    toAgentId: recipientAgentId ?? undefined,
     isForHuman: recipientAgentId === null,
     subject,
     body,
-    isRead: false,
   });
 }
 
@@ -106,10 +105,9 @@ This tool is marked as critical and requires immediate attention.
   // Always send critical errors to human
   await mailAccessor.create({
     fromAgentId: agent.id,
-    toAgentId: null,
+    toAgentId: undefined,
     isForHuman: true,
     subject,
     body,
-    isRead: false,
   });
 }

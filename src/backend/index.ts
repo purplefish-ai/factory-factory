@@ -2,8 +2,9 @@ import express from 'express';
 import { serve } from 'inngest/express';
 import { inngest } from './inngest/client';
 import { initializeMcpTools, executeMcpTool } from './routers/mcp/index.js';
-import { mailSentHandler } from './inngest/functions/index.js';
+import { mailSentHandler, taskCreatedHandler } from './inngest/functions/index.js';
 import { readSessionOutput, listTmuxSessions } from './clients/terminal.client.js';
+import { taskRouter } from './routers/api/task.router.js';
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
@@ -65,11 +66,14 @@ app.post('/mcp/execute', async (req, res) => {
   }
 });
 
+// Task API routes
+app.use('/api/tasks', taskRouter);
+
 app.use(
   '/api/inngest',
   serve({
     client: inngest,
-    functions: [mailSentHandler],
+    functions: [mailSentHandler, taskCreatedHandler],
   })
 );
 

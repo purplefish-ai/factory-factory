@@ -93,6 +93,7 @@ model Agent {
   currentEpicId     String?     @unique
   currentTaskId     String?
   tmuxSessionName   String?
+  sessionId         String?     // Claude Code CLI session ID for resume
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   lastActiveAt      DateTime    @default(now())

@@ -32,16 +32,16 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       "mcp__agent__get_status",
       "mcp__agent__get_task",
       "mcp__agent__get_epic",
-      "mcp__system__log_decision",
-      "mcp__task__update_status",
-      "mcp__task__add_comment",
+      "mcp__system__*",
+      "mcp__task__update_state",
+      "mcp__task__create_pr",
+      "mcp__task__get_pr_status",
+      "mcp__git__*",
     ],
     disallowed: [
       "mcp__supervisor__*",
       "mcp__orchestrator__*",
       "mcp__epic__*", // Workers cannot manage epics
-      "mcp__task__create", // Workers cannot create tasks
-      "mcp__task__assign", // Workers cannot assign tasks
     ],
   },
 };

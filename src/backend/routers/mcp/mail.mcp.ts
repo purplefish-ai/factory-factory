@@ -60,13 +60,13 @@ async function listInbox(
       unreadCount,
       mails: mails.map((mail) => ({
         id: mail.id,
-        fromAgentId: mail.fromAgentId,
-        fromAgentType: mail.fromAgent?.type,
+        fromAgentId: mail.fromAgentId ?? undefined,
+        fromAgentType: (mail as any).fromAgent?.type,
         subject: mail.subject,
         body: mail.body,
         isRead: mail.isRead,
         createdAt: mail.createdAt,
-        readAt: mail.readAt,
+        readAt: mail.readAt ?? undefined,
       })),
     });
   } catch (error) {
@@ -118,13 +118,13 @@ async function readMail(
 
     return createSuccessResponse({
       id: updatedMail.id,
-      fromAgentId: updatedMail.fromAgentId,
-      fromAgentType: updatedMail.fromAgent?.type,
+      fromAgentId: updatedMail.fromAgentId ?? undefined,
+      fromAgentType: (updatedMail as any).fromAgent?.type,
       subject: updatedMail.subject,
       body: updatedMail.body,
       isRead: updatedMail.isRead,
       createdAt: updatedMail.createdAt,
-      readAt: updatedMail.readAt,
+      readAt: updatedMail.readAt ?? undefined,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -178,7 +178,7 @@ async function sendMail(
       name: "mail.sent",
       data: {
         mailId: mail.id,
-        toAgentId: mail.toAgentId,
+        toAgentId: mail.toAgentId ?? undefined,
         isForHuman: mail.isForHuman,
         subject: mail.subject,
       },
@@ -241,7 +241,7 @@ async function replyMail(
     // Create reply mail
     const replyMail = await mailAccessor.create({
       fromAgentId: context.agentId,
-      toAgentId: recipientAgentId,
+      toAgentId: recipientAgentId ?? undefined,
       isForHuman,
       subject: replySubject,
       body,
@@ -252,7 +252,7 @@ async function replyMail(
       name: "mail.sent",
       data: {
         mailId: replyMail.id,
-        toAgentId: replyMail.toAgentId,
+        toAgentId: replyMail.toAgentId ?? undefined,
         isForHuman: replyMail.isForHuman,
         subject: replyMail.subject,
       },
