@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { trpc } from '../../../frontend/lib/trpc';
 import type { MailWithRelations } from '../../../frontend/lib/types';
 
-export default function MailDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function MailDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [showReply, setShowReply] = useState(false);
   const [replyBody, setReplyBody] = useState('');
