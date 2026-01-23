@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma/client';
+import { AgentState, AgentType } from '@prisma-gen/client';
 import { checkWorkerHealth, recoverWorker } from '../../agents/supervisor/health.js';
 import {
   agentAccessor,

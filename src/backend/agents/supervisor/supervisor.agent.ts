@@ -1,4 +1,4 @@
-import { AgentState, AgentType, EpicState } from '@prisma/client';
+import { AgentState, AgentType, EpicState } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { gitClient } from '../../clients/git.client.js';
 import {

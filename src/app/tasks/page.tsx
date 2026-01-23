@@ -1,6 +1,6 @@
 'use client';
 
-import { TaskState } from '@prisma/client';
+import { TaskState } from '@prisma-gen/browser';
 import Link from 'next/link';
 import { useState } from 'react';
 import { trpc } from '../../frontend/lib/trpc';

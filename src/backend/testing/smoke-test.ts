@@ -5,7 +5,7 @@
  * Verifies all core MCP infrastructure is working
  */
 
-import { AgentType } from '@prisma/client';
+import { AgentType } from '@prisma-gen/client';
 import { getRegisteredTools } from '../routers/mcp/index.js';
 import { checkToolPermissions } from '../routers/mcp/permissions.js';
 import { cleanupMockAgent, createMockAgent, sendMcpTool } from './mock-agent.js';

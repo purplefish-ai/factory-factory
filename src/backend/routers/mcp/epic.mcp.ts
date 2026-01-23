@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { AgentType, EpicState, TaskState } from '@prisma/client';
+import { AgentType, EpicState, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { startWorker } from '../../agents/worker/lifecycle.js';
 import { gitClient } from '../../clients/git.client.js';

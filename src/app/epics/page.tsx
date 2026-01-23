@@ -1,6 +1,6 @@
 'use client';
 
-import { EpicState } from '@prisma/client';
+import { EpicState } from '@prisma-gen/browser';
 import Link from 'next/link';
 import { useState } from 'react';
 import { trpc } from '../../frontend/lib/trpc';

@@ -1,5 +1,5 @@
-import type { Prisma, Task } from '@prisma/client';
-import { TaskState } from '@prisma/client';
+import type { Prisma, Task } from '@prisma-gen/client';
+import { TaskState } from '@prisma-gen/client';
 import { prisma } from '../db';
 
 export interface CreateTaskInput {

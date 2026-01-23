@@ -4,8 +4,8 @@
  * Provides admin operations for managing agents, tasks, epics, and system health.
  */
 
-import type { DecisionLog } from '@prisma/client';
-import { AgentState, AgentType, EpicState, TaskState } from '@prisma/client';
+import type { DecisionLog } from '@prisma-gen/client';
+import { AgentState, AgentType, EpicState, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { killSupervisorAndCleanup, recreateSupervisor } from '../agents/supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../agents/worker/lifecycle.js';

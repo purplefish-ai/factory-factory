@@ -6,7 +6,7 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { TaskState } from '@prisma/client';
+import { TaskState } from '@prisma-gen/client';
 import { decisionLogAccessor, mailAccessor, taskAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';
 

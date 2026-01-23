@@ -4,7 +4,7 @@
  * Handles crash loop detection, agent recovery, and system resilience.
  */
 
-import { AgentState, AgentType, EpicState, TaskState } from '@prisma/client';
+import { AgentState, AgentType, EpicState, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,

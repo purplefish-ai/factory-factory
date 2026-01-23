@@ -5,7 +5,7 @@
  * The supervisor periodically checks worker health and triggers recovery when needed.
  */
 
-import { AgentState, TaskState } from '@prisma/client';
+import { AgentState, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,

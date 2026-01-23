@@ -1,4 +1,4 @@
-import { AgentType } from '@prisma/client';
+import { AgentType } from '@prisma-gen/client';
 import { agentAccessor } from '../../resource_accessors/index.js';
 import {
   createSupervisor,

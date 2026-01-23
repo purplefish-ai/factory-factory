@@ -5,7 +5,7 @@
  * The orchestrator periodically checks supervisor health and triggers cascading recovery when needed.
  */
 
-import { AgentState, AgentType, TaskState } from '@prisma/client';
+import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,

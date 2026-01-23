@@ -1,4 +1,4 @@
-import { AgentType, TaskState } from '@prisma/client';
+import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { githubClient } from '../../clients/index.js';
 import {

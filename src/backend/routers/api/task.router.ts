@@ -1,4 +1,4 @@
-import { TaskState } from '@prisma/client';
+import { TaskState } from '@prisma-gen/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import {

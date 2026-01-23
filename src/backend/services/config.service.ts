@@ -5,7 +5,7 @@
  * Handles agent profiles, environment variables, and runtime configuration.
  */
 
-import type { AgentType } from '@prisma/client';
+import type { AgentType } from '@prisma-gen/client';
 import { createLogger } from './logger.service.js';
 
 const logger = createLogger('config');

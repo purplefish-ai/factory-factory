@@ -1,4 +1,4 @@
-import { EpicState } from '@prisma/client';
+import { EpicState } from '@prisma-gen/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import {

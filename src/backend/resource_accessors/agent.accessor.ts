@@ -1,5 +1,5 @@
-import type { Agent, Prisma } from '@prisma/client';
-import { AgentState, AgentType } from '@prisma/client';
+import type { Agent, Prisma } from '@prisma-gen/client';
+import { AgentState, AgentType } from '@prisma-gen/client';
 import { prisma } from '../db';
 
 export interface CreateAgentInput {

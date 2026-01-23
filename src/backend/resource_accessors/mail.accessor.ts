@@ -1,4 +1,4 @@
-import type { Mail, Prisma } from '@prisma/client';
+import type { Mail, Prisma } from '@prisma-gen/client';
 import { prisma } from '../db';
 
 export interface CreateMailInput {

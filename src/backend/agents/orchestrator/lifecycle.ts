@@ -8,7 +8,7 @@
  * - Get orchestrator status
  */
 
-import { AgentState, AgentType } from '@prisma/client';
+import { AgentState, AgentType } from '@prisma-gen/client';
 import { agentAccessor } from '../../resource_accessors/index.js';
 import {
   createOrchestrator,
