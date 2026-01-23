@@ -55,6 +55,75 @@ export class DecisionLogAccessor {
       where: { id },
     });
   }
+
+  /**
+   * Create an automatic decision log entry for MCP tool calls
+   */
+  async createAutomatic(
+    agentId: string,
+    toolName: string,
+    type: 'invocation' | 'result' | 'error',
+    data: unknown
+  ): Promise<DecisionLog> {
+    let decision: string;
+    let reasoning: string;
+    let context: string;
+
+    switch (type) {
+      case 'invocation':
+        decision = `Invoked tool: ${toolName}`;
+        reasoning = 'Automatic tool invocation log';
+        context = JSON.stringify(data, null, 2);
+        break;
+      case 'result':
+        decision = `Tool result: ${toolName}`;
+        reasoning = 'Automatic tool result log';
+        context = JSON.stringify(data, null, 2);
+        break;
+      case 'error':
+        decision = `Tool error: ${toolName}`;
+        reasoning = 'Automatic tool error log';
+        context = JSON.stringify(data, null, 2);
+        break;
+    }
+
+    return this.create({
+      agentId,
+      decision,
+      reasoning,
+      context,
+    });
+  }
+
+  /**
+   * Create a manual decision log entry for business logic
+   */
+  async createManual(
+    agentId: string,
+    title: string,
+    body: string
+  ): Promise<DecisionLog> {
+    return this.create({
+      agentId,
+      decision: title,
+      reasoning: body,
+      context: undefined,
+    });
+  }
+
+  /**
+   * Get recent logs for a specific agent
+   */
+  async findByAgentIdRecent(agentId: string, limit = 50): Promise<DecisionLog[]> {
+    return this.findByAgentId(agentId, limit);
+  }
+
+  /**
+   * Get recent logs across all agents
+   */
+  async findAllRecent(limit = 100): Promise<DecisionLog[]> {
+    return this.findRecent(limit);
+  }
 }
 
 export const decisionLogAccessor = new DecisionLogAccessor();

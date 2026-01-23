@@ -86,14 +86,20 @@ FactoryFactory/
 │   └── schema.prisma          # Database schema
 ├── src/
 │   ├── backend/
-│   │   ├── clients/           # Git, GitHub, Tmux clients
+│   │   ├── clients/           # Git, GitHub, Tmux, Terminal clients
 │   │   ├── inngest/           # Event-driven functions
+│   │   │   └── functions/     # Event handlers (mail.sent, etc.)
 │   │   ├── resource_accessors/# Database access layer
+│   │   ├── routers/
+│   │   │   └── mcp/          # MCP tool implementations
+│   │   ├── testing/           # Mock agent utilities
 │   │   ├── db.ts              # Prisma client
 │   │   └── index.ts           # Backend server
 │   └── frontend/
-│       └── app/               # Next.js App Router
-├── docs/                      # Documentation
+│       ├── app/               # Next.js App Router
+│       └── components/        # React components (tmux-terminal, etc.)
+├── docs/
+│   └── MCP_TOOLS.md          # MCP tools documentation
 ├── docker-compose.yml         # PostgreSQL setup
 └── package.json
 ```
@@ -172,10 +178,9 @@ Agents communicate via:
 - **Mail System** - Asynchronous messages between agents
 - **Inngest Events** - Event-driven triggers and workflows
 
-## Phase 0 Status
+## Implementation Status
 
-This is Phase 0: Foundation & Infrastructure. The following components are implemented:
-
+### Phase 0: Foundation & Infrastructure ✅
 - ✅ PostgreSQL database with Prisma
 - ✅ Resource accessors for all models
 - ✅ Git, GitHub, and Tmux clients
@@ -183,10 +188,71 @@ This is Phase 0: Foundation & Infrastructure. The following components are imple
 - ✅ Next.js frontend shell
 - ✅ Backend server with health check
 
+### Phase 1: MCP Infrastructure & Mail System ✅
+- ✅ MCP server with tool registry
+- ✅ Tool permission system (by agent type)
+- ✅ Mail communication tools (`mcp__mail__*`)
+- ✅ Agent introspection tools (`mcp__agent__*`)
+- ✅ System tools (`mcp__system__*`)
+- ✅ Decision logging infrastructure
+- ✅ Terminal integration for tmux viewing
+- ✅ Mock agent testing utilities
+- ✅ Inngest event handlers for mail
+
 **Not yet implemented**:
-- Agent logic and MCP integration (Phase 1)
+- Real agent implementation with Claude SDK (Phase 2)
 - Supervisor and orchestrator agents (Phase 2+)
 - Frontend UI for monitoring (Phase 3+)
+
+## MCP Tools
+
+Phase 1 introduces the MCP (Model Context Protocol) server for agent communication and tool execution.
+
+### Available Tools
+
+See [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) for complete documentation.
+
+**Mail Tools:**
+- `mcp__mail__list_inbox` - List inbox messages
+- `mcp__mail__read` - Read and mark mail as read
+- `mcp__mail__send` - Send mail to agents or humans
+- `mcp__mail__reply` - Reply to received mail
+
+**Agent Introspection Tools:**
+- `mcp__agent__get_status` - Get agent status and metadata
+- `mcp__agent__get_task` - Get current task (WORKER only)
+- `mcp__agent__get_epic` - Get current epic
+
+**System Tools:**
+- `mcp__system__log_decision` - Manually log decisions
+
+### Testing MCP Tools
+
+Run the test suite:
+
+```bash
+# Start the backend server
+npm run backend:dev
+
+# In another terminal, run tests
+tsx src/backend/testing/test-scenarios.ts
+```
+
+### Example: Send Mail via MCP
+
+```bash
+curl -X POST http://localhost:3001/mcp/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "agent-id-here",
+    "toolName": "mcp__mail__send",
+    "input": {
+      "toHuman": true,
+      "subject": "Test Mail",
+      "body": "This is a test message"
+    }
+  }'
+```
 
 ## Troubleshooting
 
