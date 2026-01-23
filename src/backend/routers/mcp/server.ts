@@ -1,18 +1,13 @@
-import { agentAccessor, decisionLogAccessor } from "../../resource_accessors/index.js";
-import { checkToolPermissions } from "./permissions.js";
-import type {
-  McpToolContext,
-  McpToolRegistryEntry,
-  McpToolResponse} from "./types.js";
-import {
-  McpErrorCode,
-} from "./types.js";
+import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/index.js';
 import {
   CRITICAL_TOOLS,
   escalateCriticalError,
   escalateToolFailure,
   isTransientError,
-} from "./errors.js";
+} from './errors.js';
+import { checkToolPermissions } from './permissions.js';
+import type { McpToolContext, McpToolRegistryEntry, McpToolResponse } from './types.js';
+import { McpErrorCode } from './types.js';
 
 /**
  * Global tool registry
@@ -99,19 +94,14 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
         success: false,
         error: {
           code: McpErrorCode.PERMISSION_DENIED,
-          message: permissionCheck.reason || "Permission denied",
+          message: permissionCheck.reason || 'Permission denied',
         },
         timestamp,
       };
     }
 
     // 4. Log tool invocation
-    await decisionLogAccessor.createAutomatic(
-      agentId,
-      toolName,
-      "invocation",
-      toolInput
-    );
+    await decisionLogAccessor.createAutomatic(agentId, toolName, 'invocation', toolInput);
 
     // 5. Execute tool with retry logic
     let lastError: Error | null = null;
@@ -121,12 +111,7 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
         const result = await toolEntry.handler(context, toolInput);
 
         // 6. Log tool result
-        await decisionLogAccessor.createAutomatic(
-          agentId,
-          toolName,
-          "result",
-          result
-        );
+        await decisionLogAccessor.createAutomatic(agentId, toolName, 'result', result);
 
         // 7. Update agent lastActiveAt on successful tool call
         await agentAccessor.update(agentId, {
@@ -150,10 +135,10 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
     }
 
     // 8. Handle error after retries exhausted
-    const error = lastError || new Error("Unknown error");
+    const error = lastError || new Error('Unknown error');
 
     // Log error
-    await decisionLogAccessor.createAutomatic(agentId, toolName, "error", {
+    await decisionLogAccessor.createAutomatic(agentId, toolName, 'error', {
       message: error.message,
       stack: error.stack,
     });
@@ -168,9 +153,7 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
     return {
       success: false,
       error: {
-        code: isTransientError(error)
-          ? McpErrorCode.TRANSIENT_ERROR
-          : McpErrorCode.INTERNAL_ERROR,
+        code: isTransientError(error) ? McpErrorCode.TRANSIENT_ERROR : McpErrorCode.INTERNAL_ERROR,
         message: error.message,
         details: {
           stack: error.stack,

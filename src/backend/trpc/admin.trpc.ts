@@ -4,25 +4,25 @@
  * Provides admin operations for managing agents, tasks, epics, and system health.
  */
 
-import { z } from 'zod';
 import type { DecisionLog } from '@prisma/client';
-import { AgentState, AgentType, TaskState, EpicState } from '@prisma/client';
-import { router, publicProcedure } from './trpc.js';
+import { AgentState, AgentType, EpicState, TaskState } from '@prisma/client';
+import { z } from 'zod';
+import { killSupervisorAndCleanup, recreateSupervisor } from '../agents/supervisor/lifecycle.js';
+import { killWorkerAndCleanup } from '../agents/worker/lifecycle.js';
 import {
   agentAccessor,
-  taskAccessor,
-  epicAccessor,
   decisionLogAccessor,
+  epicAccessor,
+  taskAccessor,
 } from '../resource_accessors/index.js';
-import { killWorkerAndCleanup } from '../agents/worker/lifecycle.js';
-import { killSupervisorAndCleanup, recreateSupervisor } from '../agents/supervisor/lifecycle.js';
 import {
-  crashRecoveryService,
-  worktreeService,
-  rateLimiter,
   configService,
+  crashRecoveryService,
   createLogger,
+  rateLimiter,
+  worktreeService,
 } from '../services/index.js';
+import { publicProcedure, router } from './trpc.js';
 
 const logger = createLogger('admin-trpc');
 

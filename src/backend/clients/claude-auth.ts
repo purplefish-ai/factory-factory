@@ -1,8 +1,8 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { exec } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
@@ -72,7 +72,7 @@ export async function validateClaudeSetup(): Promise<ClaudeAuthStatus> {
   if (!status.isInstalled) {
     status.errors.push(
       'Claude Code CLI is not installed or not in PATH. ' +
-      'Please install it: npm install -g @anthropic-ai/claude-code'
+        'Please install it: npm install -g @anthropic-ai/claude-code'
     );
   }
 
@@ -83,13 +83,13 @@ export async function validateClaudeSetup(): Promise<ClaudeAuthStatus> {
   if (!status.isAuthenticated) {
     status.errors.push(
       `Claude Code is not authenticated. Credentials not found at: ${status.credentialsPath}. ` +
-      'Please run: claude login'
+        'Please run: claude login'
     );
   }
 
   // Get version if installed
   if (status.isInstalled) {
-    status.version = await getClaudeVersion() ?? undefined;
+    status.version = (await getClaudeVersion()) ?? undefined;
   }
 
   return status;

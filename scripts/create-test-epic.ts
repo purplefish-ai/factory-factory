@@ -4,8 +4,8 @@
  * Create a test epic for Phase 2 validation
  */
 
-import { prisma } from '../src/backend/db.js';
 import { EpicState } from '@prisma/client';
+import { prisma } from '../src/backend/db.js';
 
 async function main() {
   console.log('Creating test epic...');
@@ -17,7 +17,8 @@ async function main() {
       linearIssueId: testLinearId,
       linearIssueUrl: `https://linear.app/test/${testLinearId}`,
       title: 'Phase 2 Test Epic: Add Hello World Feature',
-      description: 'Test epic for validating worker functionality in Phase 2. Workers will add simple endpoints to test the system.',
+      description:
+        'Test epic for validating worker functionality in Phase 2. Workers will add simple endpoints to test the system.',
       state: EpicState.ACTIVE,
     },
   });
@@ -33,7 +34,9 @@ async function main() {
   console.log('');
   console.log(`curl -X POST http://localhost:3001/api/tasks/create \\`);
   console.log(`  -H "Content-Type: application/json" \\`);
-  console.log(`  -d '{"epicId": "${epic.id}", "title": "Add GET /hello endpoint", "description": "Create a simple GET endpoint at /hello that returns {message: \"Hello World\"}"}'`);
+  console.log(
+    `  -d '{"epicId": "${epic.id}", "title": "Add GET /hello endpoint", "description": "Create a simple GET endpoint at /hello that returns {message: "Hello World"}"}'`
+  );
   console.log('');
 
   await prisma.$disconnect();

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { router, publicProcedure } from './trpc';
 import { decisionLogAccessor } from '../resource_accessors/decision-log.accessor';
+import { publicProcedure, router } from './trpc';
 
 export const decisionLogRouter = router({
   // List decision logs by agent
@@ -29,13 +29,11 @@ export const decisionLogRouter = router({
     }),
 
   // Get decision log by ID
-  getById: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const log = await decisionLogAccessor.findById(input.id);
-      if (!log) {
-        throw new Error(`Decision log not found: ${input.id}`);
-      }
-      return log;
-    }),
+  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+    const log = await decisionLogAccessor.findById(input.id);
+    if (!log) {
+      throw new Error(`Decision log not found: ${input.id}`);
+    }
+    return log;
+  }),
 });

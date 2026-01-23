@@ -4,17 +4,17 @@
  * Handles crash loop detection, agent recovery, and system resilience.
  */
 
-import { AgentState, AgentType, TaskState, EpicState } from '@prisma/client';
-import { createLogger } from './logger.service.js';
-import { configService } from './config.service.js';
-import { notificationService } from './notification.service.js';
+import { AgentState, AgentType, EpicState, TaskState } from '@prisma/client';
 import {
   agentAccessor,
-  taskAccessor,
+  decisionLogAccessor,
   epicAccessor,
   mailAccessor,
-  decisionLogAccessor,
+  taskAccessor,
 } from '../resource_accessors/index.js';
+import { configService } from './config.service.js';
+import { createLogger } from './logger.service.js';
+import { notificationService } from './notification.service.js';
 
 const logger = createLogger('crash-recovery');
 
@@ -63,21 +63,14 @@ export class CrashRecoveryService {
   /**
    * Record an agent crash
    */
-  recordCrash(
-    agentId: string,
-    agentType: AgentType,
-    epicId?: string,
-    taskId?: string
-  ): void {
+  recordCrash(agentId: string, agentType: AgentType, epicId?: string, taskId?: string): void {
     const now = Date.now();
     const existing = this.crashRecords.get(agentId);
 
     if (existing) {
       existing.timestamps.push(now);
       // Keep only recent crashes (last hour)
-      existing.timestamps = existing.timestamps.filter(
-        (ts) => now - ts < 3600000
-      );
+      existing.timestamps = existing.timestamps.filter((ts) => now - ts < 3600000);
     } else {
       this.crashRecords.set(agentId, {
         agentId,
@@ -109,9 +102,7 @@ export class CrashRecoveryService {
     }
 
     const now = Date.now();
-    const recentCrashes = record.timestamps.filter(
-      (ts) => now - ts < config.crashLoopThresholdMs
-    );
+    const recentCrashes = record.timestamps.filter((ts) => now - ts < config.crashLoopThresholdMs);
 
     return recentCrashes.length >= config.maxRapidCrashes;
   }
@@ -120,9 +111,7 @@ export class CrashRecoveryService {
    * Get all agents in crash loops
    */
   getCrashLoopAgents(): string[] {
-    return Array.from(this.crashRecords.keys()).filter((agentId) =>
-      this.isInCrashLoop(agentId)
-    );
+    return Array.from(this.crashRecords.keys()).filter((agentId) => this.isInCrashLoop(agentId));
   }
 
   /**
@@ -231,10 +220,7 @@ export class CrashRecoveryService {
   /**
    * Recover a crashed worker
    */
-  private async recoverWorker(
-    agentId: string,
-    taskId?: string
-  ): Promise<RecoveryResult> {
+  private async recoverWorker(agentId: string, taskId?: string): Promise<RecoveryResult> {
     if (!taskId) {
       logger.warn('Cannot recover worker without task ID', { agentId });
       return {
@@ -323,10 +309,7 @@ export class CrashRecoveryService {
   /**
    * Recover a crashed supervisor
    */
-  private async recoverSupervisor(
-    agentId: string,
-    epicId?: string
-  ): Promise<RecoveryResult> {
+  private async recoverSupervisor(agentId: string, epicId?: string): Promise<RecoveryResult> {
     if (!epicId) {
       logger.warn('Cannot recover supervisor without epic ID', { agentId });
       return {
@@ -462,9 +445,7 @@ export class CrashRecoveryService {
 
     // Get supervisor status
     const supervisors = await agentAccessor.findByType(AgentType.SUPERVISOR);
-    const healthySupervisors = supervisors.filter(
-      (s) => s.state !== AgentState.FAILED
-    );
+    const healthySupervisors = supervisors.filter((s) => s.state !== AgentState.FAILED);
 
     // Get worker status
     const workers = await agentAccessor.findByType(AgentType.WORKER);

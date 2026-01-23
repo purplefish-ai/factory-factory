@@ -1,5 +1,5 @@
-import { AgentType } from "@prisma/client";
-import type { AgentToolPermissions, PermissionCheckResult } from "./types.js";
+import { AgentType } from '@prisma/client';
+import type { AgentToolPermissions, PermissionCheckResult } from './types.js';
 
 /**
  * Tool permissions configuration for each agent type
@@ -7,42 +7,42 @@ import type { AgentToolPermissions, PermissionCheckResult } from "./types.js";
 export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
   // Supervisor can access all tools
   [AgentType.SUPERVISOR]: {
-    allowed: ["*"], // All tools
+    allowed: ['*'], // All tools
     disallowed: [], // Nothing blocked
   },
 
   // Orchestrator manages supervisors and system health
   [AgentType.ORCHESTRATOR]: {
     allowed: [
-      "mcp__mail__*",
-      "mcp__agent__*",
-      "mcp__system__*",
-      "mcp__task__*",
-      "mcp__epic__*",
-      "mcp__orchestrator__*", // Orchestrator-specific tools
+      'mcp__mail__*',
+      'mcp__agent__*',
+      'mcp__system__*',
+      'mcp__task__*',
+      'mcp__epic__*',
+      'mcp__orchestrator__*', // Orchestrator-specific tools
     ],
     disallowed: [
-      "mcp__supervisor__*", // Cannot use supervisor-only tools
+      'mcp__supervisor__*', // Cannot use supervisor-only tools
     ],
   },
 
   // Worker has limited permissions focused on task execution
   [AgentType.WORKER]: {
     allowed: [
-      "mcp__mail__*",
-      "mcp__agent__get_status",
-      "mcp__agent__get_task",
-      "mcp__agent__get_epic",
-      "mcp__system__*",
-      "mcp__task__update_state",
-      "mcp__task__create_pr",
-      "mcp__task__get_pr_status",
-      "mcp__git__*",
+      'mcp__mail__*',
+      'mcp__agent__get_status',
+      'mcp__agent__get_task',
+      'mcp__agent__get_epic',
+      'mcp__system__*',
+      'mcp__task__update_state',
+      'mcp__task__create_pr',
+      'mcp__task__get_pr_status',
+      'mcp__git__*',
     ],
     disallowed: [
-      "mcp__supervisor__*",
-      "mcp__orchestrator__*",
-      "mcp__epic__*", // Workers cannot manage epics
+      'mcp__supervisor__*',
+      'mcp__orchestrator__*',
+      'mcp__epic__*', // Workers cannot manage epics
     ],
   },
 };
@@ -56,9 +56,9 @@ export function matchPattern(toolName: string, pattern: string): boolean {
   // Convert wildcard pattern to regex
   // "*" matches any sequence of characters
   const regexPattern = pattern
-    .split("*")
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) // Escape special chars
-    .join(".*");
+    .split('*')
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) // Escape special chars
+    .join('.*');
 
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(toolName);

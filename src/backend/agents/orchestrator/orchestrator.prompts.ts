@@ -201,10 +201,7 @@ Now, begin monitoring and managing supervisors!
  */
 export function buildOrchestratorPrompt(context: OrchestratorContext): string {
   // Replace placeholder with actual agent ID in examples
-  const promptWithAgentId = ORCHESTRATOR_SYSTEM_PROMPT.replace(
-    /YOUR_AGENT_ID/g,
-    context.agentId
-  );
+  const promptWithAgentId = ORCHESTRATOR_SYSTEM_PROMPT.replace(/YOUR_AGENT_ID/g, context.agentId);
 
   return `${promptWithAgentId}
 

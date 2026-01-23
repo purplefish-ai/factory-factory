@@ -1,21 +1,9 @@
-import { z } from "zod";
-import { AgentType } from "@prisma/client";
-import {
-  agentAccessor,
-  taskAccessor,
-  epicAccessor,
-} from "../../resource_accessors/index.js";
-import type {
-  McpToolContext,
-  McpToolResponse} from "./types.js";
-import {
-  McpErrorCode,
-} from "./types.js";
-import {
-  registerMcpTool,
-  createSuccessResponse,
-  createErrorResponse,
-} from "./server.js";
+import { AgentType } from '@prisma/client';
+import { z } from 'zod';
+import { agentAccessor, epicAccessor, taskAccessor } from '../../resource_accessors/index.js';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
+import type { McpToolContext, McpToolResponse } from './types.js';
+import { McpErrorCode } from './types.js';
 
 // ============================================================================
 // Input Schemas
@@ -32,10 +20,7 @@ const GetEpicInputSchema = z.object({});
 /**
  * Get the current agent's status
  */
-async function getStatus(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function getStatus(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetStatusInputSchema.parse(input);
 
@@ -61,11 +46,7 @@ async function getStatus(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -74,10 +55,7 @@ async function getStatus(
 /**
  * Get the current agent's task (WORKER only)
  */
-async function getTask(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function getTask(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetTaskInputSchema.parse(input);
 
@@ -94,7 +72,7 @@ async function getTask(
     if (agent.type !== AgentType.WORKER) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        "Only WORKER agents can get task details"
+        'Only WORKER agents can get task details'
       );
     }
 
@@ -102,7 +80,7 @@ async function getTask(
     if (!agent.currentTaskId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        "Agent does not have a current task assigned"
+        'Agent does not have a current task assigned'
       );
     }
 
@@ -129,11 +107,7 @@ async function getTask(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -142,10 +116,7 @@ async function getTask(
 /**
  * Get the current agent's epic (SUPERVISOR or WORKER)
  */
-async function getEpic(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function getEpic(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetEpicInputSchema.parse(input);
 
@@ -166,24 +137,21 @@ async function getEpic(
     ) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        "Agent type does not have epic access"
+        'Agent type does not have epic access'
       );
     }
 
     let epicId: string | null = null;
 
     // Get epic ID based on agent type
-    if (
-      agent.type === AgentType.SUPERVISOR ||
-      agent.type === AgentType.ORCHESTRATOR
-    ) {
+    if (agent.type === AgentType.SUPERVISOR || agent.type === AgentType.ORCHESTRATOR) {
       epicId = agent.currentEpicId;
     } else if (agent.type === AgentType.WORKER) {
       // For workers, get epic via task
       if (!agent.currentTaskId) {
         return createErrorResponse(
           McpErrorCode.INVALID_AGENT_STATE,
-          "Worker does not have a current task assigned"
+          'Worker does not have a current task assigned'
         );
       }
 
@@ -201,7 +169,7 @@ async function getEpic(
     if (!epicId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        "Agent does not have a current epic"
+        'Agent does not have a current epic'
       );
     }
 
@@ -227,11 +195,7 @@ async function getEpic(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        "Invalid input",
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -243,21 +207,21 @@ async function getEpic(
 
 export function registerAgentTools(): void {
   registerMcpTool({
-    name: "mcp__agent__get_status",
+    name: 'mcp__agent__get_status',
     description: "Get the current agent's status and metadata",
     handler: getStatus,
     schema: GetStatusInputSchema,
   });
 
   registerMcpTool({
-    name: "mcp__agent__get_task",
+    name: 'mcp__agent__get_task',
     description: "Get the current agent's task details (WORKER only)",
     handler: getTask,
     schema: GetTaskInputSchema,
   });
 
   registerMcpTool({
-    name: "mcp__agent__get_epic",
+    name: 'mcp__agent__get_epic',
     description: "Get the current agent's epic details",
     handler: getEpic,
     schema: GetEpicInputSchema,

@@ -1,7 +1,7 @@
 'use client';
 
-import { use } from 'react';
 import Link from 'next/link';
+import { use } from 'react';
 import { trpc } from '../../../lib/trpc';
 
 const stateColors: Record<string, string> = {
@@ -25,14 +25,18 @@ const taskStateColors: Record<string, string> = {
 export default function EpicDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
-  const { data: epic, isLoading, error } = trpc.epic.getById.useQuery(
-    { id },
-    { refetchInterval: 5000 }
-  );
+  const {
+    data: epic,
+    isLoading,
+    error,
+  } = trpc.epic.getById.useQuery({ id }, { refetchInterval: 5000 });
 
   const { data: tasks } = trpc.task.listByEpic.useQuery({ epicId: id }, { refetchInterval: 5000 });
 
-  const { data: agents } = trpc.agent.listByEpic.useQuery({ epicId: id }, { refetchInterval: 2000 });
+  const { data: agents } = trpc.agent.listByEpic.useQuery(
+    { epicId: id },
+    { refetchInterval: 2000 }
+  );
 
   if (isLoading) {
     return (
@@ -107,7 +111,7 @@ export default function EpicDetailPage({ params }: { params: Promise<{ id: strin
       {/* Supervisor Info */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h2 className="text-lg font-semibold mb-3">Supervisor Agent</h2>
-        {agents && agents.find((a) => a.type === 'SUPERVISOR') ? (
+        {agents?.find((a) => a.type === 'SUPERVISOR') ? (
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">

@@ -1,6 +1,6 @@
-import { prisma } from '../db';
 import type { Agent, Prisma } from '@prisma/client';
-import { AgentType, AgentState } from '@prisma/client';
+import { AgentState, AgentType } from '@prisma/client';
+import { prisma } from '../db';
 
 export interface CreateAgentInput {
   type: AgentType;
@@ -201,12 +201,9 @@ export class AgentAccessor {
 
     const now = Date.now();
     return agents.map((agent) => {
-      const minutesSinceHeartbeat = Math.floor(
-        (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-      );
+      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
       const isHealthy =
-        minutesSinceHeartbeat < healthThresholdMinutes &&
-        agent.state !== AgentState.FAILED;
+        minutesSinceHeartbeat < healthThresholdMinutes && agent.state !== AgentState.FAILED;
       return {
         ...agent,
         isHealthy,

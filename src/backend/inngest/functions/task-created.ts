@@ -1,6 +1,11 @@
-import { inngest } from '../client.js';
 import { startWorker } from '../../agents/worker/lifecycle.js';
-import { decisionLogAccessor, taskAccessor, mailAccessor, agentAccessor } from '../../resource_accessors/index.js';
+import {
+  agentAccessor,
+  decisionLogAccessor,
+  mailAccessor,
+  taskAccessor,
+} from '../../resource_accessors/index.js';
+import { inngest } from '../client.js';
 
 /**
  * Handle task.created event by starting a worker agent
@@ -64,7 +69,8 @@ export const taskCreatedHandler = inngest.createFunction(
           await mailAccessor.create({
             toAgentId: supervisor.id,
             subject: `Failed to create worker for task: ${title}`,
-            body: `The system failed to automatically create a worker for task "${title}".\n\n` +
+            body:
+              `The system failed to automatically create a worker for task "${title}".\n\n` +
               `Task ID: ${taskId}\n` +
               `Error: ${errorMessage}\n\n` +
               `You may need to manually retry or investigate.`,
@@ -75,7 +81,8 @@ export const taskCreatedHandler = inngest.createFunction(
         await mailAccessor.create({
           isForHuman: true,
           subject: `Failed to create worker for task: ${title}`,
-          body: `The system failed to automatically create a worker for task "${title}".\n\n` +
+          body:
+            `The system failed to automatically create a worker for task "${title}".\n\n` +
             `Task ID: ${taskId}\n` +
             `Epic ID: ${epicId}\n` +
             `Error: ${errorMessage}\n\n` +

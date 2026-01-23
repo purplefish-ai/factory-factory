@@ -1,5 +1,5 @@
-import { prisma } from '../db';
 import type { DecisionLog } from '@prisma/client';
+import { prisma } from '../db';
 
 export interface CreateDecisionLogInput {
   agentId: string;

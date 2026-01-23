@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn } from 'node:child_process';
 
 /**
  * Terminal client for interacting with tmux sessions
@@ -11,9 +11,9 @@ import { spawn } from "child_process";
  */
 export async function tmuxSessionExists(sessionName: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const proc = spawn("tmux", ["has-session", "-t", sessionName]);
+    const proc = spawn('tmux', ['has-session', '-t', sessionName]);
 
-    proc.on("exit", (code) => {
+    proc.on('exit', (code) => {
       resolve(code === 0);
     });
   });
@@ -46,51 +46,46 @@ export async function attachToTmuxSession(sessionName: string): Promise<{
 /**
  * Read session output from tmux session buffer
  */
-export async function readSessionOutput(
-  sessionName: string,
-  lines = 100
-): Promise<string> {
+export async function readSessionOutput(sessionName: string, lines = 100): Promise<string> {
   return new Promise((resolve, reject) => {
     // Verify session exists
-    const hasSession = spawn("tmux", ["has-session", "-t", sessionName]);
+    const hasSession = spawn('tmux', ['has-session', '-t', sessionName]);
 
-    hasSession.on("exit", (code) => {
+    hasSession.on('exit', (code) => {
       if (code !== 0) {
         reject(new Error(`Tmux session '${sessionName}' does not exist`));
         return;
       }
 
       // Capture pane output
-      const capturePane = spawn("tmux", [
-        "capture-pane",
-        "-t",
+      const capturePane = spawn('tmux', [
+        'capture-pane',
+        '-t',
         sessionName,
-        "-p",
-        "-S",
+        '-p',
+        '-S',
         `-${lines}`,
       ]);
 
-      let output = "";
-      capturePane.stdout.on("data", (data) => {
+      let output = '';
+      capturePane.stdout.on('data', (data) => {
         output += data.toString();
       });
 
-      capturePane.on("exit", (exitCode) => {
+      capturePane.on('exit', (exitCode) => {
         if (exitCode === 0) {
           resolve(output);
         } else {
-          reject(
-            new Error(`Failed to capture pane output (exit code: ${exitCode})`)
-          );
+          reject(new Error(`Failed to capture pane output (exit code: ${exitCode})`));
         }
       });
 
-      capturePane.on("error", (error) => {
+      capturePane.on('error', (error) => {
         reject(error);
       });
     });
 
-    hasSession.on("error", (error) => {
+    hasSession.on('error', (error) => {
       reject(error);
     });
   });
@@ -103,29 +98,29 @@ export async function listTmuxSessions(): Promise<
   Array<{ name: string; created: string; attached: boolean }>
 > {
   return new Promise((resolve, reject) => {
-    const proc = spawn("tmux", [
-      "list-sessions",
-      "-F",
-      "#{session_name}|#{session_created}|#{session_attached}",
+    const proc = spawn('tmux', [
+      'list-sessions',
+      '-F',
+      '#{session_name}|#{session_created}|#{session_attached}',
     ]);
 
-    let output = "";
-    proc.stdout.on("data", (data) => {
+    let output = '';
+    proc.stdout.on('data', (data) => {
       output += data.toString();
     });
 
-    proc.on("exit", (code) => {
+    proc.on('exit', (code) => {
       if (code === 0) {
         const sessions = output
           .trim()
-          .split("\n")
+          .split('\n')
           .filter((line) => line.length > 0)
           .map((line) => {
-            const [name, created, attached] = line.split("|");
+            const [name, created, attached] = line.split('|');
             return {
               name,
               created,
-              attached: attached === "1",
+              attached: attached === '1',
             };
           });
         resolve(sessions);
@@ -135,7 +130,7 @@ export async function listTmuxSessions(): Promise<
       }
     });
 
-    proc.on("error", (error) => {
+    proc.on('error', (error) => {
       reject(error);
     });
   });
@@ -144,24 +139,19 @@ export async function listTmuxSessions(): Promise<
 /**
  * Send keys to a tmux session
  */
-export async function sendKeysToSession(
-  sessionName: string,
-  keys: string
-): Promise<void> {
+export async function sendKeysToSession(sessionName: string, keys: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("tmux", ["send-keys", "-t", sessionName, keys]);
+    const proc = spawn('tmux', ['send-keys', '-t', sessionName, keys]);
 
-    proc.on("exit", (code) => {
+    proc.on('exit', (code) => {
       if (code === 0) {
         resolve();
       } else {
-        reject(
-          new Error(`Failed to send keys to session (exit code: ${code})`)
-        );
+        reject(new Error(`Failed to send keys to session (exit code: ${code})`));
       }
     });
 
-    proc.on("error", (error) => {
+    proc.on('error', (error) => {
       reject(error);
     });
   });

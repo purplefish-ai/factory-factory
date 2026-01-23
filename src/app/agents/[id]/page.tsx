@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, use } from 'react';
 import Link from 'next/link';
-import { trpc } from '../../../frontend/lib/trpc';
+import { use, useState } from 'react';
 import { TmuxTerminal } from '../../../frontend/components/tmux-terminal';
+import { trpc } from '../../../frontend/lib/trpc';
 import type { AgentWithRelations } from '../../../frontend/lib/types';
 
 const stateColors: Record<string, string> = {

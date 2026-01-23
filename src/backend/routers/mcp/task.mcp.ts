@@ -1,21 +1,17 @@
-import { z } from 'zod';
 import { AgentType, TaskState } from '@prisma/client';
+import { z } from 'zod';
+import { githubClient } from '../../clients/index.js';
 import {
   agentAccessor,
-  taskAccessor,
-  epicAccessor,
   decisionLogAccessor,
+  epicAccessor,
   mailAccessor,
+  taskAccessor,
 } from '../../resource_accessors/index.js';
-import { githubClient } from '../../clients/index.js';
-import type { McpToolContext, McpToolResponse} from './types.js';
-import { McpErrorCode } from './types.js';
-import {
-  registerMcpTool,
-  createSuccessResponse,
-  createErrorResponse,
-} from './server.js';
 import { notificationService } from '../../services/notification.service.js';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
+import type { McpToolContext, McpToolResponse } from './types.js';
+import { McpErrorCode } from './types.js';
 
 // ============================================================================
 // Input Schemas
@@ -61,10 +57,7 @@ function isValidStateTransition(from: TaskState, to: TaskState): boolean {
 /**
  * Update task state (WORKER only)
  */
-async function updateState(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function updateState(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = UpdateStateInputSchema.parse(input);
 
@@ -115,8 +108,7 @@ async function updateState(
       state: validatedInput.state,
       failureReason: validatedInput.failureReason,
       completedAt:
-        validatedInput.state === TaskState.COMPLETED ||
-        validatedInput.state === TaskState.FAILED
+        validatedInput.state === TaskState.COMPLETED || validatedInput.state === TaskState.FAILED
           ? new Date()
           : null,
     });
@@ -141,11 +133,7 @@ async function updateState(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -154,10 +142,7 @@ async function updateState(
 /**
  * Create pull request for task (WORKER only)
  */
-async function createPR(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function createPR(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = CreatePRInputSchema.parse(input);
 
@@ -260,16 +245,11 @@ async function createPR(
     }
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(
-      context.agentId,
-      'mcp__task__create_pr',
-      'result',
-      {
-        taskId: task.id,
-        prUrl: prInfo.url,
-        prNumber: prInfo.number,
-      }
-    );
+    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__task__create_pr', 'result', {
+      taskId: task.id,
+      prUrl: prInfo.url,
+      prNumber: prInfo.number,
+    });
 
     // Send desktop notification for task completion
     try {
@@ -291,11 +271,7 @@ async function createPR(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -304,10 +280,7 @@ async function createPR(
 /**
  * Get PR status for task (WORKER only)
  */
-async function getPRStatus(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function getPRStatus(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetPRStatusInputSchema.parse(input);
 
@@ -347,10 +320,7 @@ async function getPRStatus(
 
     // Verify task has PR
     if (!task.prUrl) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a PR URL'
-      );
+      return createErrorResponse(McpErrorCode.INVALID_AGENT_STATE, 'Task does not have a PR URL');
     }
 
     // Get PR status
@@ -386,11 +356,7 @@ async function getPRStatus(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }

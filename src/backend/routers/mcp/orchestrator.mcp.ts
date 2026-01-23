@@ -1,21 +1,20 @@
+import { AgentState, AgentType, EpicState, TaskState } from '@prisma/client';
 import { z } from 'zod';
-import { AgentType, AgentState, TaskState, EpicState } from '@prisma/client';
+import {
+  killSupervisorAndCleanup,
+  startSupervisorForEpic,
+} from '../../agents/supervisor/lifecycle.js';
+import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
 import {
   agentAccessor,
-  epicAccessor,
-  taskAccessor,
   decisionLogAccessor,
+  epicAccessor,
   mailAccessor,
+  taskAccessor,
 } from '../../resource_accessors/index.js';
-import type { McpToolContext, McpToolResponse} from './types.js';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
+import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
-import {
-  registerMcpTool,
-  createSuccessResponse,
-  createErrorResponse,
-} from './server.js';
-import { startSupervisorForEpic, killSupervisorAndCleanup } from '../../agents/supervisor/lifecycle.js';
-import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
 
 // ============================================================================
 // Constants
@@ -55,10 +54,7 @@ const ListPendingEpicsInputSchema = z.object({});
  */
 async function verifyOrchestrator(
   context: McpToolContext
-): Promise<
-  | { success: true; agentId: string }
-  | { success: false; error: McpToolResponse }
-> {
+): Promise<{ success: true; agentId: string } | { success: false; error: McpToolResponse }> {
   const agent = await agentAccessor.findById(context.agentId);
   if (!agent) {
     return {
@@ -91,9 +87,7 @@ function calculateHealthStatus(lastActiveAt: Date): {
   minutesSinceHeartbeat: number;
 } {
   const now = Date.now();
-  const minutesSinceHeartbeat = Math.floor(
-    (now - lastActiveAt.getTime()) / (60 * 1000)
-  );
+  const minutesSinceHeartbeat = Math.floor((now - lastActiveAt.getTime()) / (60 * 1000));
   const isHealthy = minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES;
   return { isHealthy, minutesSinceHeartbeat };
 }
@@ -105,10 +99,7 @@ function calculateHealthStatus(lastActiveAt: Date): {
 /**
  * List all supervisors with health status (ORCHESTRATOR only)
  */
-async function listSupervisors(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function listSupervisors(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     ListSupervisorsInputSchema.parse(input);
 
@@ -127,9 +118,7 @@ async function listSupervisors(
     // Enrich with epic info
     const supervisorList = await Promise.all(
       supervisors.map(async (s) => {
-        const epic = s.currentEpicId
-          ? await epicAccessor.findById(s.currentEpicId)
-          : null;
+        const epic = s.currentEpicId ? await epicAccessor.findById(s.currentEpicId) : null;
         return {
           id: s.id,
           state: s.state,
@@ -167,11 +156,7 @@ async function listSupervisors(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -210,9 +195,7 @@ async function checkSupervisorHealth(
     }
 
     // Calculate health status
-    const { isHealthy, minutesSinceHeartbeat } = calculateHealthStatus(
-      supervisor.lastActiveAt
-    );
+    const { isHealthy, minutesSinceHeartbeat } = calculateHealthStatus(supervisor.lastActiveAt);
 
     // Get epic info
     const epic = supervisor.currentEpicId
@@ -245,11 +228,7 @@ async function checkSupervisorHealth(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -258,10 +237,7 @@ async function checkSupervisorHealth(
 /**
  * Create a new supervisor for an epic (ORCHESTRATOR only)
  */
-async function createSupervisor(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function createSupervisor(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = CreateSupervisorInputSchema.parse(input);
 
@@ -317,11 +293,7 @@ async function createSupervisor(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     // Re-throw other errors with context
     if (error instanceof Error) {
@@ -517,11 +489,7 @@ ${newSupervisorId ? 'The new supervisor will resume work on pending tasks.' : 'W
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -530,10 +498,7 @@ ${newSupervisorId ? 'The new supervisor will resume work on pending tasks.' : 'W
 /**
  * List epics that are pending (need supervisors) (ORCHESTRATOR only)
  */
-async function listPendingEpics(
-  context: McpToolContext,
-  input: unknown
-): Promise<McpToolResponse> {
+async function listPendingEpics(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     ListPendingEpicsInputSchema.parse(input);
 
@@ -585,11 +550,7 @@ async function listPendingEpics(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        'Invalid input',
-        error.errors
-      );
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
     }
     throw error;
   }
@@ -624,7 +585,8 @@ export function registerOrchestratorTools(): void {
 
   registerMcpTool({
     name: 'mcp__orchestrator__recover_supervisor',
-    description: 'Perform cascading recovery for a crashed supervisor: kill workers, reset tasks, recreate supervisor (ORCHESTRATOR only)',
+    description:
+      'Perform cascading recovery for a crashed supervisor: kill workers, reset tasks, recreate supervisor (ORCHESTRATOR only)',
     handler: recoverSupervisor,
     schema: RecoverSupervisorInputSchema,
   });

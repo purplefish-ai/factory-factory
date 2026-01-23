@@ -173,9 +173,13 @@ export class ValidationService {
     if (wordCount < EPIC_DESIGN_MIN_WORDS) {
       designQuality = 'insufficient';
       needsClarification = true;
-      clarificationQuestions.push('Can you provide more details about what this epic should accomplish?');
+      clarificationQuestions.push(
+        'Can you provide more details about what this epic should accomplish?'
+      );
       clarificationQuestions.push('What are the main features or changes needed?');
-      warnings.push(`Epic design is too brief (${wordCount} words, minimum ${EPIC_DESIGN_MIN_WORDS})`);
+      warnings.push(
+        `Epic design is too brief (${wordCount} words, minimum ${EPIC_DESIGN_MIN_WORDS})`
+      );
     } else if (wordCount < EPIC_DESIGN_ADEQUATE_WORDS) {
       designQuality = 'minimal';
       estimatedTaskCount = Math.max(1, Math.floor(wordCount / 15));
@@ -196,7 +200,11 @@ export class ValidationService {
       clarificationQuestions.push('Should tests be included for this feature?');
     }
 
-    if (!lowerDesc.includes('error') && !lowerDesc.includes('fail') && !lowerDesc.includes('exception')) {
+    if (
+      !lowerDesc.includes('error') &&
+      !lowerDesc.includes('fail') &&
+      !lowerDesc.includes('exception')
+    ) {
       clarificationQuestions.push('How should errors be handled?');
     }
 

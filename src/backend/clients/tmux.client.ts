@@ -1,5 +1,5 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
@@ -83,9 +83,8 @@ export class TmuxClient {
       return sessions;
     } catch (error) {
       if (
-        error instanceof Error &&
-        error.message.includes('no server running') ||
-        error instanceof Error && error.message.includes('failed to connect')
+        (error instanceof Error && error.message.includes('no server running')) ||
+        (error instanceof Error && error.message.includes('failed to connect'))
       ) {
         return [];
       }

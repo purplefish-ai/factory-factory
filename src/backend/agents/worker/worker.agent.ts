@@ -1,19 +1,19 @@
-import { AgentType, AgentState, TaskState } from '@prisma/client';
+import { AgentState, AgentType, TaskState } from '@prisma/client';
 import {
-  agentAccessor,
-  taskAccessor,
-  epicAccessor,
-  mailAccessor,
-} from '../../resource_accessors/index.js';
-import {
-  createWorkerSession,
-  sendMessage,
   captureOutput,
-  stopSession,
-  killSession,
+  createWorkerSession,
   getSessionStatus,
+  killSession,
+  sendMessage,
+  stopSession,
 } from '../../clients/claude-code.client.js';
 import { gitClient } from '../../clients/git.client.js';
+import {
+  agentAccessor,
+  epicAccessor,
+  mailAccessor,
+  taskAccessor,
+} from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
 import { buildWorkerPrompt } from './worker.prompts.js';
 
@@ -138,11 +138,7 @@ export async function createWorker(taskId: string): Promise<string> {
   });
 
   // Create Claude Code session in tmux
-  const sessionContext = await createWorkerSession(
-    agent.id,
-    systemPrompt,
-    worktreeInfo.path
-  );
+  const sessionContext = await createWorkerSession(agent.id, systemPrompt, worktreeInfo.path);
 
   // Update agent with session info
   await agentAccessor.update(agent.id, {
@@ -225,7 +221,9 @@ export async function runWorker(agentId: string): Promise<void> {
     await checkWorkerInbox(agentId);
   }, 10000); // Check every 10 seconds
 
-  console.log(`Worker ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`);
+  console.log(
+    `Worker ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`
+  );
 }
 
 /**
@@ -262,11 +260,7 @@ async function monitorWorker(agentId: string): Promise<void> {
           console.log(`Worker ${agentId}: Executing ${toolCall.toolName}`);
 
           // Execute tool via MCP
-          const result = await executeMcpTool(
-            agentId,
-            toolCall.toolName,
-            toolCall.toolInput
-          );
+          const result = await executeMcpTool(agentId, toolCall.toolName, toolCall.toolInput);
 
           // Format result for Claude
           const resultMessage = `Tool ${toolCall.toolName} result:\n${JSON.stringify(result, null, 2)}`;
@@ -448,7 +442,7 @@ export async function killWorker(agentId: string): Promise<void> {
   // Delete worktree if task exists
   if (agent.currentTaskId) {
     const task = await taskAccessor.findById(agent.currentTaskId);
-    if (task && task.worktreePath) {
+    if (task?.worktreePath) {
       const worktreeName = task.worktreePath.split('/').pop();
       if (worktreeName) {
         try {

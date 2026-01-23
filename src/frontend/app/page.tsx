@@ -297,7 +297,9 @@ export default function DashboardPage() {
                 className={`block hover:bg-gray-50 -mx-2 px-2 py-2 rounded ${!mail.isRead ? 'font-semibold' : ''}`}
               >
                 <p className="text-sm truncate">{mail.subject}</p>
-                <p className="text-xs text-gray-500">From: {(mail as { fromAgent?: { type: string } }).fromAgent?.type || 'Human'}</p>
+                <p className="text-xs text-gray-500">
+                  From: {(mail as { fromAgent?: { type: string } }).fromAgent?.type || 'Human'}
+                </p>
               </Link>
             </li>
           )}

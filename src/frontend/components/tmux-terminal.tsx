@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { trpc } from '../lib/trpc';
 
 interface TmuxTerminalProps {
@@ -9,11 +9,7 @@ interface TmuxTerminalProps {
   refreshInterval?: number;
 }
 
-export function TmuxTerminal({
-  sessionName,
-  agentId,
-  refreshInterval = 2000,
-}: TmuxTerminalProps) {
+export function TmuxTerminal({ sessionName, agentId, refreshInterval = 2000 }: TmuxTerminalProps) {
   const terminalRef = useRef<HTMLPreElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -27,7 +23,7 @@ export function TmuxTerminal({
     if (autoScroll && terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
-  }, [data?.output, autoScroll]);
+  }, [autoScroll]);
 
   // Handle scroll to detect if user scrolled up
   const handleScroll = () => {

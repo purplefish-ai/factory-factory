@@ -1,12 +1,12 @@
-import { AgentType, AgentState } from '@prisma/client';
-import { inngest } from '../client.js';
+import { AgentState, AgentType } from '@prisma/client';
+import { checkWorkerHealth, recoverWorker } from '../../agents/supervisor/health.js';
 import {
   agentAccessor,
   decisionLogAccessor,
   mailAccessor,
 } from '../../resource_accessors/index.js';
-import { checkWorkerHealth, recoverWorker } from '../../agents/supervisor/health.js';
 import { notificationService } from '../../services/notification.service.js';
+import { inngest } from '../client.js';
 
 /**
  * Supervisor Health Check Cron Job
@@ -69,7 +69,9 @@ export const supervisorCheckHandler = inngest.createFunction(
 
       for (const supervisor of activeSupervisors) {
         try {
-          console.log(`Checking workers for supervisor ${supervisor.id} (epic: ${supervisor.epicId})`);
+          console.log(
+            `Checking workers for supervisor ${supervisor.id} (epic: ${supervisor.epicId})`
+          );
 
           const { healthyWorkers, unhealthyWorkers } = await checkWorkerHealth(supervisor.id);
 
@@ -91,7 +93,9 @@ export const supervisorCheckHandler = inngest.createFunction(
 
               if (recoveryResult.success && recoveryResult.newWorkerId) {
                 recoveredWorkers.push(recoveryResult.newWorkerId);
-                console.log(`Recovered worker: ${unhealthy.workerId} -> ${recoveryResult.newWorkerId}`);
+                console.log(
+                  `Recovered worker: ${unhealthy.workerId} -> ${recoveryResult.newWorkerId}`
+                );
               } else if (recoveryResult.permanentFailure) {
                 failedRecoveries.push(unhealthy.workerId);
                 console.log(`Worker ${unhealthy.workerId} permanently failed after max attempts`);
@@ -140,7 +144,8 @@ export const supervisorCheckHandler = inngest.createFunction(
           await mailAccessor.create({
             isForHuman: true,
             subject: `Health check failed for supervisor ${supervisor.id}`,
-            body: `The cron job failed to check worker health for supervisor ${supervisor.id}.\n\n` +
+            body:
+              `The cron job failed to check worker health for supervisor ${supervisor.id}.\n\n` +
               `Epic ID: ${supervisor.epicId}\n` +
               `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
               `Manual investigation may be required.`,
@@ -158,7 +163,7 @@ export const supervisorCheckHandler = inngest.createFunction(
 
     console.log(
       `Supervisor check complete. Checked: ${activeSupervisors.length}, ` +
-      `Unhealthy workers: ${totalUnhealthy}, Recovered: ${totalRecovered}, Failed: ${totalFailed}`
+        `Unhealthy workers: ${totalUnhealthy}, Recovered: ${totalRecovered}, Failed: ${totalFailed}`
     );
 
     return {

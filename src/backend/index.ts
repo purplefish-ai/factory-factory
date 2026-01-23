@@ -1,23 +1,28 @@
+import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { serve } from 'inngest/express';
-import { createExpressMiddleware } from '@trpc/server/adapters/express';
+import { listTmuxSessions, readSessionOutput } from './clients/terminal.client.js';
+import { prisma } from './db.js';
 import { inngest } from './inngest/client';
-import { initializeMcpTools, executeMcpTool } from './routers/mcp/index.js';
 import {
-  mailSentHandler,
-  taskCreatedHandler,
-  epicCreatedHandler,
   agentCompletedHandler,
-  supervisorCheckHandler,
+  epicCreatedHandler,
+  mailSentHandler,
   orchestratorCheckHandler,
+  supervisorCheckHandler,
+  taskCreatedHandler,
 } from './inngest/functions/index.js';
-import { readSessionOutput, listTmuxSessions } from './clients/terminal.client.js';
-import { taskRouter } from './routers/api/task.router.js';
 import { epicRouter } from './routers/api/epic.router.js';
 import { orchestratorRouter } from './routers/api/orchestrator.router.js';
+import { taskRouter } from './routers/api/task.router.js';
+import { executeMcpTool, initializeMcpTools } from './routers/mcp/index.js';
+import {
+  configService,
+  crashRecoveryService,
+  createLogger,
+  rateLimiter,
+} from './services/index.js';
 import { appRouter, createContext } from './trpc/index.js';
-import { createLogger, crashRecoveryService, rateLimiter, configService } from './services/index.js';
-import { prisma } from './db.js';
 
 const logger = createLogger('server');
 const app = express();
@@ -35,7 +40,10 @@ app.use((req, res, next): void => {
     res.header('Access-Control-Allow-Origin', origin);
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+  );
   res.header('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') {

@@ -123,10 +123,7 @@ export class ClaudeClient {
   /**
    * Send a message to an agent and get response
    */
-  async sendMessage(
-    agentId: string,
-    message: string
-  ): Promise<Anthropic.Message> {
+  async sendMessage(agentId: string, message: string): Promise<Anthropic.Message> {
     const session = this.sessions.get(agentId);
     if (!session) {
       throw new Error(`Agent session not found: ${agentId}`);

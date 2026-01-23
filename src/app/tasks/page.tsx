@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
-import { trpc } from '../../frontend/lib/trpc';
 import { TaskState } from '@prisma/client';
+import Link from 'next/link';
 import { useState } from 'react';
+import { trpc } from '../../frontend/lib/trpc';
 
 const stateColors: Record<string, string> = {
   PENDING: 'bg-gray-100 text-gray-800',
@@ -62,7 +62,9 @@ export default function TasksPage() {
         {!tasks || tasks.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <p>No tasks found.</p>
-            <p className="text-sm mt-2">Tasks are created automatically when epics are processed.</p>
+            <p className="text-sm mt-2">
+              Tasks are created automatically when epics are processed.
+            </p>
           </div>
         ) : (
           <table className="w-full">

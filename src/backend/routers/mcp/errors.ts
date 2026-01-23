@@ -1,16 +1,16 @@
-import type { Agent } from "@prisma/client";
-import { mailAccessor } from "../../resource_accessors/index.js";
+import type { Agent } from '@prisma/client';
+import { mailAccessor } from '../../resource_accessors/index.js';
 
 /**
  * Tools that are critical for agent operation
  * Failures of these tools should be escalated immediately
  */
 export const CRITICAL_TOOLS = [
-  "mcp__mail__send",
-  "mcp__agent__get_task",
-  "mcp__agent__get_epic",
-  "mcp__task__update_status",
-  "mcp__epic__update_status",
+  'mcp__mail__send',
+  'mcp__agent__get_task',
+  'mcp__agent__get_epic',
+  'mcp__task__update_status',
+  'mcp__epic__update_status',
 ];
 
 /**
@@ -27,9 +27,7 @@ export function isTransientError(error: Error): boolean {
     /ENOTFOUND/i,
   ];
 
-  return transientPatterns.some((pattern) =>
-    pattern.test(error.message)
-  );
+  return transientPatterns.some((pattern) => pattern.test(error.message));
 }
 
 /**
@@ -43,11 +41,11 @@ export async function escalateToolFailure(
   // Determine recipient based on agent type
   const recipientAgentId: string | null = null;
 
-  if (agent.type === "WORKER") {
+  if (agent.type === 'WORKER') {
     // Workers escalate to their epic's orchestrator
     // This would require fetching the task -> epic -> orchestrator
     // For now, we'll send to human for simplicity
-  } else if (agent.type === "ORCHESTRATOR") {
+  } else if (agent.type === 'ORCHESTRATOR') {
     // Orchestrators escalate to supervisor
     // This would require finding the supervisor agent
   }
@@ -60,7 +58,7 @@ Agent ${agent.id} (${agent.type}) encountered a failure using tool '${toolName}'
 Error: ${error.message}
 
 Stack trace:
-${error.stack || "N/A"}
+${error.stack || 'N/A'}
 
 Agent state: ${agent.state}
 Last active: ${agent.lastActiveAt}
@@ -93,11 +91,11 @@ Agent ${agent.id} (${agent.type}) encountered a critical failure using tool '${t
 Error: ${error.message}
 
 Stack trace:
-${error.stack || "N/A"}
+${error.stack || 'N/A'}
 
 Agent state: ${agent.state}
-Current epic: ${agent.currentEpicId || "N/A"}
-Current task: ${agent.currentTaskId || "N/A"}
+Current epic: ${agent.currentEpicId || 'N/A'}
+Current task: ${agent.currentTaskId || 'N/A'}
 
 This tool is marked as critical and requires immediate attention.
   `.trim();

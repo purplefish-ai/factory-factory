@@ -89,7 +89,12 @@ export class Logger {
   /**
    * Format and output a log entry
    */
-  private log(level: LogLevel, message: string, context?: Record<string, unknown>, error?: Error): void {
+  private log(
+    level: LogLevel,
+    message: string,
+    context?: Record<string, unknown>,
+    error?: Error
+  ): void {
     if (!this.shouldLog(level)) {
       return;
     }
@@ -140,8 +145,8 @@ export class Logger {
   private prettyOutput(entry: LogEntry): void {
     const levelColors: Record<LogLevel, string> = {
       error: '\x1b[31m', // Red
-      warn: '\x1b[33m',  // Yellow
-      info: '\x1b[36m',  // Cyan
+      warn: '\x1b[33m', // Yellow
+      info: '\x1b[36m', // Cyan
       debug: '\x1b[37m', // White
     };
     const reset = '\x1b[0m';
@@ -178,7 +183,11 @@ export class Logger {
    */
   error(message: string, context?: Record<string, unknown>): void;
   error(message: string, error: Error, context?: Record<string, unknown>): void;
-  error(message: string, errorOrContext?: Error | Record<string, unknown>, context?: Record<string, unknown>): void {
+  error(
+    message: string,
+    errorOrContext?: Error | Record<string, unknown>,
+    context?: Record<string, unknown>
+  ): void {
     if (errorOrContext instanceof Error) {
       this.log('error', message, context, errorOrContext);
     } else {

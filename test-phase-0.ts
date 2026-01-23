@@ -1,5 +1,11 @@
-import { epicAccessor, taskAccessor, agentAccessor, mailAccessor, decisionLogAccessor } from './src/backend/resource_accessors';
-import { EpicState, TaskState, AgentType, AgentState } from '@prisma/client';
+import { AgentState, AgentType, EpicState, TaskState } from '@prisma/client';
+import {
+  agentAccessor,
+  decisionLogAccessor,
+  epicAccessor,
+  mailAccessor,
+  taskAccessor,
+} from './src/backend/resource_accessors';
 
 async function testPhase0() {
   console.log('🧪 Testing Phase 0 Implementation...\n');
