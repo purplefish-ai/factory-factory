@@ -23,10 +23,15 @@ export interface WorkerSessionContext {
 }
 
 // Agent execution profiles
+// All agent types use Claude Code CLI with OAuth authentication
 export const AGENT_PROFILES: Record<string, AgentExecutionProfile> = {
   WORKER: {
     model: process.env.WORKER_MODEL || 'claude-sonnet-4-5-20250929',
     permissions: 'skip', // Use --dangerously-skip-permissions
+  },
+  ORCHESTRATOR: {
+    model: process.env.ORCHESTRATOR_MODEL || 'claude-sonnet-4-5-20250929',
+    permissions: 'skip',
   },
   SUPERVISOR: {
     model: process.env.SUPERVISOR_MODEL || 'claude-sonnet-4-5-20250929',

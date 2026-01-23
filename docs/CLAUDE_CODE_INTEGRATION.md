@@ -2,23 +2,17 @@
 
 ## Overview
 
-FactoryFactory should integrate with **Claude Code** to allow users to authenticate with their Claude subscription instead of requiring API keys.
+FactoryFactory uses **Claude Code CLI** for all agent interactions. This means users authenticate with their Claude subscription via OAuth instead of requiring API keys.
 
-## How It Works
+## Architecture
 
-### Current Architecture (Phase 2)
 ```
-FactoryFactory → Anthropic SDK (@anthropic-ai/sdk) → Claude API
+FactoryFactory → Claude Code CLI (tmux sessions) → Claude API
                  ↑
-              API Key Required
+              User's logged-in session (OAuth, no API key needed!)
 ```
 
-### New Architecture (Claude Code Integration)
-```
-FactoryFactory → Claude Code (subprocess) → Claude API
-                 ↑
-              User's logged-in session (no API key needed!)
-```
+All agent types (Worker, Orchestrator, Supervisor) use Claude Code CLI instances running in tmux sessions. See `src/backend/clients/claude-code.client.ts` for the implementation.
 
 ## Claude Code Authentication Flow
 

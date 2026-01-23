@@ -22,7 +22,7 @@ Before setting up FactoryFactory, ensure you have the following installed:
 - **Docker and Docker Compose** - [Download](https://www.docker.com/products/docker-desktop)
 - **GitHub CLI (`gh`)** - [Installation guide](https://cli.github.com/)
 - **tmux** - Install via your package manager (e.g., `brew install tmux` on macOS)
-- **Anthropic API Key** - [Get your key](https://console.anthropic.com/)
+- **Claude Code CLI** - Install and authenticate with `claude` (uses OAuth, no API key needed)
 
 ## Quick Start
 
@@ -42,10 +42,11 @@ cp .env.example .env
 
 Edit `.env` and fill in the required values:
 - `DATABASE_URL` - PostgreSQL connection string (default works with Docker setup)
-- `ANTHROPIC_API_KEY` - Your Claude API key
 - `GIT_BASE_REPO_PATH` - Path to your test repository (e.g., `~/Programming/monorepo`)
 - `GIT_WORKTREE_BASE` - Directory for git worktrees (e.g., `/tmp/factoryfactory-worktrees`)
 - `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` - Generate these for local dev
+
+Note: No API key needed. FactoryFactory uses Claude Code CLI with OAuth authentication.
 
 ### 3. Start PostgreSQL
 
@@ -146,7 +147,6 @@ See `.env.example` for a complete list of environment variables with description
 ### Required Variables
 
 - `DATABASE_URL` - PostgreSQL connection string
-- `ANTHROPIC_API_KEY` - Claude API key
 - `GIT_BASE_REPO_PATH` - Path to your repository
 - `GIT_WORKTREE_BASE` - Base directory for worktrees
 

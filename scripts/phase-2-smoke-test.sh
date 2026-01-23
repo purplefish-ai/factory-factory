@@ -57,7 +57,7 @@ echo -e "${YELLOW}⚠${NC}  Manual check required: Verify server logs show MCP t
 echo ""
 echo "4. Checking required files exist..."
 REQUIRED_FILES=(
-    "src/backend/clients/claude.client.ts"
+    "src/backend/clients/claude-code.client.ts"
     "src/backend/agents/worker/worker.agent.ts"
     "src/backend/agents/worker/worker.prompts.ts"
     "src/backend/agents/worker/lifecycle.ts"
@@ -105,11 +105,11 @@ fi
 echo ""
 echo "6. Checking environment variables..."
 REQUIRED_ENV_VARS=(
-    "ANTHROPIC_API_KEY"
     "GIT_BASE_REPO_PATH"
     "GIT_WORKTREE_BASE"
     "DATABASE_URL"
 )
+# Note: ANTHROPIC_API_KEY no longer required - uses Claude Code CLI with OAuth
 
 ENV_VARS_SET=true
 if [ -f .env ]; then
