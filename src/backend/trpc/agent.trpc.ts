@@ -126,11 +126,11 @@ export const agentRouter = router({
     };
   }),
 
-  // Get workers for a specific epic
+  // Get agents for a specific epic (workers and supervisors)
   listByEpic: publicProcedure
     .input(z.object({ epicId: z.string() }))
     .query(async ({ input }) => {
-      const agents = await agentAccessor.findWorkersByEpicId(input.epicId);
+      const agents = await agentAccessor.findAgentsByEpicId(input.epicId);
       const now = Date.now();
 
       return agents.map((agent) => {

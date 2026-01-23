@@ -246,6 +246,36 @@ export class AgentAccessor {
       },
     });
   }
+
+  /**
+   * Find all agents for a specific epic (workers and supervisors)
+   */
+  async findAgentsByEpicId(epicId: string): Promise<Agent[]> {
+    return prisma.agent.findMany({
+      where: {
+        OR: [
+          // Workers assigned to tasks in this epic
+          {
+            type: AgentType.WORKER,
+            assignedTasks: {
+              some: {
+                epicId,
+              },
+            },
+          },
+          // Supervisor orchestrating this epic
+          {
+            type: AgentType.SUPERVISOR,
+            currentEpicId: epicId,
+          },
+        ],
+      },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+  }
 }
 
 export const agentAccessor = new AgentAccessor();
