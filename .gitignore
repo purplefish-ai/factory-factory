@@ -45,3 +45,6 @@ prisma/migrations/**/*.sql
 
 # Worktrees
 worktrees/
+
+# Prisma generated client
+prisma/generated/

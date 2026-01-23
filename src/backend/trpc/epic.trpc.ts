@@ -1,4 +1,4 @@
-import { EpicState } from '@prisma/client';
+import { EpicState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { inngest } from '../inngest/client';
 import { epicAccessor } from '../resource_accessors/epic.accessor';

@@ -1,4 +1,4 @@
-import { AgentType } from '@prisma/client';
+import { AgentType } from '@prisma-gen/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import {

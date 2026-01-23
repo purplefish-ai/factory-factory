@@ -1,4 +1,4 @@
-import type { AgentType } from '@prisma/client';
+import type { AgentType } from '@prisma-gen/client';
 import { agentAccessor } from '../resource_accessors/index.js';
 import { executeMcpTool } from '../routers/mcp/index.js';
 import type { McpToolResponse } from '../routers/mcp/types.js';

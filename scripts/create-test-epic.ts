@@ -4,7 +4,7 @@
  * Create a test epic for Phase 2 validation
  */
 
-import { EpicState } from '@prisma/client';
+import { EpicState } from '@prisma-gen/client';
 import { prisma } from '../src/backend/db.js';
 
 async function main() {

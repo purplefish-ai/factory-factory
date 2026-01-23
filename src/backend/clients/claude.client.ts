@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AgentType } from '@prisma/client';
+import type { AgentType } from '@prisma-gen/client';
 
 /**
  * Agent execution profile configuration

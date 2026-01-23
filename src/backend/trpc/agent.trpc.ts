@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma/client';
+import { AgentState, AgentType } from '@prisma-gen/client';
 import { z } from 'zod';
 import { readSessionOutput } from '../clients/terminal.client';
 import { agentAccessor } from '../resource_accessors/agent.accessor';

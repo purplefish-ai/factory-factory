@@ -1,4 +1,4 @@
-import { AgentState, AgentType, TaskState } from '@prisma/client';
+import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 import {
   captureOutput,
   createWorkerSession,

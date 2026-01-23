@@ -1,4 +1,4 @@
-import type { DecisionLog } from '@prisma/client';
+import type { DecisionLog } from '@prisma-gen/client';
 import { prisma } from '../db';
 
 export interface CreateDecisionLogInput {

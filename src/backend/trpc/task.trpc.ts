@@ -1,4 +1,4 @@
-import { TaskState } from '@prisma/client';
+import { TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { taskAccessor } from '../resource_accessors/task.accessor';
 import { publicProcedure, router } from './trpc';

@@ -1,4 +1,4 @@
-import { AgentType } from '@prisma/client';
+import { AgentType } from '@prisma-gen/client';
 import { z } from 'zod';
 import { agentAccessor, epicAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';

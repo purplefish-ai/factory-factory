@@ -8,7 +8,7 @@
  * There should only be ONE orchestrator instance running at a time.
  */
 
-import { AgentState, AgentType } from '@prisma/client';
+import { AgentState, AgentType } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';

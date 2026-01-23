@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { AgentType, TaskState } from '@prisma/client';
+import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import {
   agentAccessor,

@@ -1,4 +1,4 @@
-import { AgentType } from '@prisma/client';
+import { AgentType } from '@prisma-gen/client';
 import type { AgentToolPermissions, PermissionCheckResult } from './types.js';
 
 /**

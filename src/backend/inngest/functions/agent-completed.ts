@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma/client';
+import { AgentState, AgentType } from '@prisma-gen/client';
 import { killSupervisorAndCleanup } from '../../agents/supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
 import {
