@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { trpc } from '../lib/trpc';
+import { trpc } from '../frontend/lib/trpc';
 
 function StatCard({
   title,

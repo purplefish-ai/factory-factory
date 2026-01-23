@@ -1,5 +1,6 @@
 import express from 'express';
 import { serve } from 'inngest/express';
+import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { inngest } from './inngest/client';
 import { initializeMcpTools, executeMcpTool } from './routers/mcp/index.js';
 import {
@@ -14,6 +15,7 @@ import { readSessionOutput, listTmuxSessions } from './clients/terminal.client.j
 import { taskRouter } from './routers/api/task.router.js';
 import { epicRouter } from './routers/api/epic.router.js';
 import { orchestratorRouter } from './routers/api/orchestrator.router.js';
+import { appRouter, createContext } from './trpc/index.js';
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
@@ -99,6 +101,15 @@ app.use(
   })
 );
 
+// tRPC API endpoint
+app.use(
+  '/api/trpc',
+  createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  })
+);
+
 // Terminal API endpoints
 app.get('/api/terminal/sessions', async (_req, res) => {
   try {
@@ -131,4 +142,5 @@ app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Inngest endpoint: http://localhost:${PORT}/api/inngest`);
+  console.log(`tRPC endpoint: http://localhost:${PORT}/api/trpc`);
 });

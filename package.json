@@ -19,12 +19,17 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@prisma/client": "^5.22.0",
+    "@tanstack/react-query": "^5.90.20",
+    "@trpc/client": "^11.0.0",
+    "@trpc/react-query": "^11.0.0",
+    "@trpc/server": "^11.0.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "inngest": "^3.24.4",
     "next": "^14.2.23",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "superjson": "^2.2.6",
     "zod": "^3.24.1"
   },
   "devDependencies": {

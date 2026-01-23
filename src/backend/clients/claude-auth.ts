@@ -22,7 +22,7 @@ export async function isClaudeCodeInstalled(): Promise<boolean> {
     // Try both 'claude' and 'claude-code' commands
     await execAsync('which claude || which claude-code');
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -44,7 +44,7 @@ export async function getClaudeVersion(): Promise<string | null> {
   try {
     const { stdout } = await execAsync('claude --version 2>&1 || claude-code --version 2>&1');
     return stdout.trim();
-  } catch (error) {
+  } catch {
     return null;
   }
 }

@@ -177,7 +177,7 @@ Now, look at your task assignment below and begin working!
  */
 export function buildWorkerPrompt(context: WorkerTaskContext): string {
   // Replace placeholders with actual values
-  let prompt = WORKER_SYSTEM_PROMPT
+  const prompt = WORKER_SYSTEM_PROMPT
     .replace(/YOUR_AGENT_ID/g, context.agentId)
     .replace(/EPIC_BRANCH_NAME/g, context.epicBranchName)
     .replace(/SUPERVISOR_AGENT_ID/g, context.supervisorAgentId);

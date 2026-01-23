@@ -41,7 +41,7 @@ export async function escalateToolFailure(
   error: Error
 ): Promise<void> {
   // Determine recipient based on agent type
-  let recipientAgentId: string | null = null;
+  const recipientAgentId: string | null = null;
 
   if (agent.type === "WORKER") {
     // Workers escalate to their epic's orchestrator

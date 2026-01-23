@@ -98,7 +98,7 @@ export class GitClient {
     try {
       const { stdout } = await execAsync(`git -C "${this.baseRepoPath}" worktree list`);
       return stdout.includes(worktreePath);
-    } catch (error) {
+    } catch {
       return false;
     }
   }
