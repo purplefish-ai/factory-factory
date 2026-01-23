@@ -63,9 +63,19 @@ If not installed:
 - macOS: `brew install tmux`
 - Linux: `sudo apt-get install tmux` or `sudo yum install tmux`
 
-### Anthropic API Key
+### Claude Code CLI
 
-Get your API key from https://console.anthropic.com/
+FactoryFactory uses Claude Code CLI with OAuth authentication (no API key needed):
+
+```bash
+# Install Claude Code
+npm install -g @anthropic-ai/claude-code
+
+# Authenticate (one-time)
+claude
+```
+
+Follow the prompts to authenticate with your Claude account.
 
 ## Initial Setup
 
@@ -189,11 +199,10 @@ Already configured for local Docker setup:
 DATABASE_URL="postgresql://factoryfactory:factoryfactory_dev@localhost:5432/factoryfactory?schema=public"
 ```
 
-#### Anthropic API Key
-Get from https://console.anthropic.com/
-```env
-ANTHROPIC_API_KEY=sk-ant-api03-...
-```
+#### Claude Authentication
+
+No API key needed! FactoryFactory uses Claude Code CLI with OAuth.
+Run `claude` once to authenticate before starting the system.
 
 #### Git Repository Paths
 
