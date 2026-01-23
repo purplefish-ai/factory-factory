@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { trpc } from '../../lib/trpc';
-import { TaskState } from '@prisma/client';
+import { TaskState } from '../../../lib/prisma-enums';
 import { useState } from 'react';
 
 const stateColors: Record<string, string> = {
