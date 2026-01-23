@@ -1,5 +1,8 @@
 # FactoryFactory
 
+<img width="1908" height="757" alt="image" src="https://github.com/user-attachments/assets/55ed7a98-5cc3-4d87-b4a6-3c8c07242132" />
+
+
 FactoryFactory is an autonomous software development orchestration system that uses AI agents to manage and execute software development tasks from Linear issues.
 
 ## Overview
