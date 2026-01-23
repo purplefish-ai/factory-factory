@@ -101,13 +101,14 @@ export class DecisionLogAccessor {
   async createManual(
     agentId: string,
     title: string,
-    body: string
+    body: string,
+    context?: string
   ): Promise<DecisionLog> {
     return this.create({
       agentId,
       decision: title,
       reasoning: body,
-      context: undefined,
+      context,
     });
   }
 

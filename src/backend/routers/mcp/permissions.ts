@@ -11,7 +11,7 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
     disallowed: [], // Nothing blocked
   },
 
-  // Orchestrator has broad permissions but cannot create other orchestrators
+  // Orchestrator manages supervisors and system health
   [AgentType.ORCHESTRATOR]: {
     allowed: [
       "mcp__mail__*",
@@ -19,6 +19,7 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       "mcp__system__*",
       "mcp__task__*",
       "mcp__epic__*",
+      "mcp__orchestrator__*", // Orchestrator-specific tools
     ],
     disallowed: [
       "mcp__supervisor__*", // Cannot use supervisor-only tools

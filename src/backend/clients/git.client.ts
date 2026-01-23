@@ -36,7 +36,13 @@ export class GitClient {
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
-    const command = `git -C "${this.baseRepoPath}" worktree add -b "${branchName}" "${worktreePath}" "${baseBranch}"`;
+    // First, check if the branch already exists
+    const branchExists = await this.branchExists(branchName);
+
+    // Use different commands based on whether branch exists
+    const command = branchExists
+      ? `git -C "${this.baseRepoPath}" worktree add "${worktreePath}" "${branchName}"`
+      : `git -C "${this.baseRepoPath}" worktree add -b "${branchName}" "${worktreePath}" "${baseBranch}"`;
 
     try {
       await execAsync(command);
@@ -49,6 +55,18 @@ export class GitClient {
       throw new Error(
         `Failed to create worktree: ${error instanceof Error ? error.message : String(error)}`
       );
+    }
+  }
+
+  /**
+   * Check if a branch exists in the repository
+   */
+  async branchExists(branchName: string): Promise<boolean> {
+    try {
+      await execAsync(`git -C "${this.baseRepoPath}" rev-parse --verify "${branchName}"`);
+      return true;
+    } catch {
+      return false;
     }
   }
 

@@ -4,6 +4,7 @@ import { registerSystemTools } from "./system.mcp.js";
 import { registerTaskTools } from "./task.mcp.js";
 import { registerGitTools } from "./git.mcp.js";
 import { registerEpicTools } from "./epic.mcp.js";
+import { registerOrchestratorTools } from "./orchestrator.mcp.js";
 
 /**
  * Initialize and register all MCP tools
@@ -18,6 +19,7 @@ export function initializeMcpTools(): void {
   registerTaskTools();
   registerGitTools();
   registerEpicTools();
+  registerOrchestratorTools();
 
   console.log("MCP tools initialized successfully");
 }

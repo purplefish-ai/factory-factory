@@ -106,6 +106,146 @@ export class AgentAccessor {
       where: { id },
     });
   }
+
+  /**
+   * Update an agent's heartbeat (lastActiveAt) to now
+   */
+  async updateHeartbeat(id: string): Promise<Agent> {
+    return prisma.agent.update({
+      where: { id },
+      data: { lastActiveAt: new Date() },
+    });
+  }
+
+  /**
+   * Get agents whose last heartbeat is older than the specified number of minutes
+   */
+  async getAgentsSinceHeartbeat(minutes: number): Promise<Agent[]> {
+    const threshold = new Date(Date.now() - minutes * 60 * 1000);
+    return prisma.agent.findMany({
+      where: {
+        lastActiveAt: {
+          lt: threshold,
+        },
+      },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Get healthy agents of a specific type (heartbeat within threshold)
+   */
+  async getHealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
+    const threshold = new Date(Date.now() - minutes * 60 * 1000);
+    return prisma.agent.findMany({
+      where: {
+        type,
+        lastActiveAt: {
+          gte: threshold,
+        },
+        state: {
+          not: AgentState.FAILED,
+        },
+      },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Get unhealthy agents of a specific type (heartbeat older than threshold)
+   */
+  async getUnhealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
+    const threshold = new Date(Date.now() - minutes * 60 * 1000);
+    return prisma.agent.findMany({
+      where: {
+        type,
+        OR: [
+          {
+            lastActiveAt: {
+              lt: threshold,
+            },
+          },
+          {
+            state: AgentState.FAILED,
+          },
+        ],
+      },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Get all agents of a specific type with their health status
+   */
+  async getAgentsWithHealthStatus(
+    type: AgentType,
+    healthThresholdMinutes: number
+  ): Promise<Array<Agent & { isHealthy: boolean; minutesSinceHeartbeat: number }>> {
+    const agents = await prisma.agent.findMany({
+      where: { type },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+
+    const now = Date.now();
+    return agents.map((agent) => {
+      const minutesSinceHeartbeat = Math.floor(
+        (now - agent.lastActiveAt.getTime()) / (60 * 1000)
+      );
+      const isHealthy =
+        minutesSinceHeartbeat < healthThresholdMinutes &&
+        agent.state !== AgentState.FAILED;
+      return {
+        ...agent,
+        isHealthy,
+        minutesSinceHeartbeat,
+      };
+    });
+  }
+
+  /**
+   * Find agent by task ID (for workers)
+   */
+  async findByTaskId(taskId: string): Promise<Agent | null> {
+    return prisma.agent.findFirst({
+      where: { currentTaskId: taskId },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Find all workers for a specific epic
+   */
+  async findWorkersByEpicId(epicId: string): Promise<Agent[]> {
+    return prisma.agent.findMany({
+      where: {
+        type: AgentType.WORKER,
+        assignedTasks: {
+          some: {
+            epicId,
+          },
+        },
+      },
+      include: {
+        currentEpic: true,
+        assignedTasks: true,
+      },
+    });
+  }
 }
 
 export const agentAccessor = new AgentAccessor();

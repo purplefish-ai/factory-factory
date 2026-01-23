@@ -39,6 +39,11 @@ const RecreateWorkerSchema = z.object({
   taskId: z.string(),
 });
 
+const CancelTaskSchema = z.object({
+  taskId: z.string(),
+  reason: z.string().optional(),
+});
+
 // ============================================================================
 // Routes
 // ============================================================================
@@ -350,6 +355,86 @@ router.post('/recreate-worker', async (req, res) => {
     }
 
     console.error('Error recreating worker:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+  }
+});
+
+/**
+ * POST /api/tasks/cancel
+ * Cancel a task (mark as FAILED with reason)
+ */
+router.post('/cancel', async (req, res) => {
+  try {
+    const validatedInput = CancelTaskSchema.parse(req.body);
+
+    // Get task
+    const task = await taskAccessor.findById(validatedInput.taskId);
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'TASK_NOT_FOUND',
+          message: `Task with ID '${validatedInput.taskId}' not found`,
+        },
+      });
+    }
+
+    // Don't cancel already completed tasks
+    if (task.state === TaskState.COMPLETED) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_STATE',
+          message: `Task '${validatedInput.taskId}' is already completed`,
+        },
+      });
+    }
+
+    // Kill worker if assigned
+    if (task.assignedAgentId) {
+      try {
+        await killWorkerAndCleanup(task.assignedAgentId);
+      } catch (error) {
+        console.error(`Failed to kill worker ${task.assignedAgentId}:`, error);
+        // Continue anyway
+      }
+    }
+
+    // Mark task as FAILED
+    const updatedTask = await taskAccessor.update(validatedInput.taskId, {
+      state: TaskState.FAILED,
+      failureReason: validatedInput.reason || 'Cancelled by user/system',
+      assignedAgentId: null,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        taskId: updatedTask.id,
+        state: updatedTask.state,
+        failureReason: updatedTask.failureReason,
+        message: 'Task cancelled successfully',
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_INPUT',
+          message: 'Invalid input',
+          details: error.errors,
+        },
+      });
+    }
+
+    console.error('Error cancelling task:', error);
     return res.status(500).json({
       success: false,
       error: {

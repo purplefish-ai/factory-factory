@@ -8,6 +8,9 @@ import {
 } from './supervisor.agent.js';
 import { agentAccessor } from '../../resource_accessors/index.js';
 
+// Re-export runSupervisor so it can be used to start an existing supervisor
+export { runSupervisor };
+
 /**
  * Start a supervisor for an epic
  * Creates the supervisor agent, sets up environment, and starts execution

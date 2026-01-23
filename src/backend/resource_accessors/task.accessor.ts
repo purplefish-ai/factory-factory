@@ -16,6 +16,7 @@ export interface UpdateTaskInput {
   worktreePath?: string | null;
   branchName?: string | null;
   prUrl?: string | null;
+  attempts?: number;
   completedAt?: Date | null;
   failureReason?: string | null;
 }

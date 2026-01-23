@@ -6,6 +6,7 @@ import { mailSentHandler, taskCreatedHandler } from './inngest/functions/index.j
 import { readSessionOutput, listTmuxSessions } from './clients/terminal.client.js';
 import { taskRouter } from './routers/api/task.router.js';
 import { epicRouter } from './routers/api/epic.router.js';
+import { orchestratorRouter } from './routers/api/orchestrator.router.js';
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
@@ -72,6 +73,9 @@ app.use('/api/tasks', taskRouter);
 
 // Epic API routes
 app.use('/api/epics', epicRouter);
+
+// Orchestrator API routes
+app.use('/api/orchestrator', orchestratorRouter);
 
 app.use(
   '/api/inngest',

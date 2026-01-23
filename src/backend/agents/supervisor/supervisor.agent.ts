@@ -11,6 +11,7 @@ import {
 import { gitClient } from '../../clients/git.client.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
 import { buildSupervisorPrompt } from './supervisor.prompts.js';
+import { checkWorkerHealth, recoverWorker } from './health.js';
 
 /**
  * Supervisor agent context - tracks running supervisors
@@ -23,6 +24,7 @@ interface SupervisorContext {
   isRunning: boolean;
   monitoringInterval?: NodeJS.Timeout;
   inboxCheckInterval?: NodeJS.Timeout;
+  workerHealthCheckInterval?: NodeJS.Timeout;
   // Track what we've already notified about to avoid spam
   lastNotifiedMailIds: Set<string>;
   lastNotifiedReviewTaskIds: Set<string>;
@@ -248,6 +250,11 @@ export async function runSupervisor(agentId: string): Promise<void> {
     await checkSupervisorInbox(agentId);
   }, 30000); // Check every 30 seconds
 
+  // Start worker health check loop (7 minutes)
+  supervisorContext.workerHealthCheckInterval = setInterval(async () => {
+    await performWorkerHealthCheck(agentId);
+  }, 7 * 60 * 1000); // Check every 7 minutes
+
   console.log(`Supervisor ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`);
 }
 
@@ -435,6 +442,68 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
 }
 
 /**
+ * Perform worker health check
+ * Checks all workers for this supervisor's epic and triggers recovery for unhealthy ones
+ */
+async function performWorkerHealthCheck(agentId: string): Promise<void> {
+  const supervisorContext = activeSupervisors.get(agentId);
+  if (!supervisorContext || !supervisorContext.isRunning) {
+    return;
+  }
+
+  try {
+    console.log(`Supervisor ${agentId}: Performing worker health check...`);
+
+    const { healthyWorkers, unhealthyWorkers } = await checkWorkerHealth(agentId);
+
+    console.log(
+      `Supervisor ${agentId}: Worker health check complete. Healthy: ${healthyWorkers.length}, Unhealthy: ${unhealthyWorkers.length}`
+    );
+
+    // Trigger recovery for unhealthy workers
+    for (const unhealthy of unhealthyWorkers) {
+      console.log(
+        `Supervisor ${agentId}: Worker ${unhealthy.workerId} is unhealthy (${unhealthy.minutesSinceHeartbeat} minutes since heartbeat). Triggering recovery...`
+      );
+
+      try {
+        const result = await recoverWorker(unhealthy.workerId, unhealthy.taskId, agentId);
+
+        console.log(`Supervisor ${agentId}: Worker recovery result - ${result.message}`);
+
+        // Notify supervisor Claude about the recovery
+        if (result.permanentFailure) {
+          await sendSupervisorMessage(
+            agentId,
+            `[AUTOMATIC WORKER HEALTH CHECK] Worker permanently failed:\n` +
+              `- Task ID: ${unhealthy.taskId}\n` +
+              `- Old Worker: ${unhealthy.workerId}\n` +
+              `- Reason: Max recovery attempts (${result.attemptNumber}) reached\n\n` +
+              `The task has been marked as FAILED. You may need to manually investigate or mark it complete using mcp__epic__force_complete_task.`
+          );
+        } else if (result.success) {
+          await sendSupervisorMessage(
+            agentId,
+            `[AUTOMATIC WORKER HEALTH CHECK] Recovered unhealthy worker:\n` +
+              `- Task ID: ${unhealthy.taskId}\n` +
+              `- Old Worker: ${unhealthy.workerId}\n` +
+              `- New Worker: ${result.newWorkerId}\n` +
+              `- Recovery Attempt: ${result.attemptNumber}/5`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Supervisor ${agentId}: Failed to recover worker ${unhealthy.workerId}:`,
+          error
+        );
+      }
+    }
+  } catch (error) {
+    console.error(`Supervisor ${agentId}: Worker health check error:`, error);
+  }
+}
+
+/**
  * Handle supervisor completion (success or failure)
  * Exported for use by lifecycle management
  */
@@ -452,6 +521,9 @@ export async function handleSupervisorCompletion(agentId: string, reason: string
   }
   if (supervisorContext.inboxCheckInterval) {
     clearInterval(supervisorContext.inboxCheckInterval);
+  }
+  if (supervisorContext.workerHealthCheckInterval) {
+    clearInterval(supervisorContext.workerHealthCheckInterval);
   }
 
   supervisorContext.isRunning = false;
@@ -479,6 +551,9 @@ export async function stopSupervisor(agentId: string): Promise<void> {
   }
   if (supervisorContext.inboxCheckInterval) {
     clearInterval(supervisorContext.inboxCheckInterval);
+  }
+  if (supervisorContext.workerHealthCheckInterval) {
+    clearInterval(supervisorContext.workerHealthCheckInterval);
   }
 
   supervisorContext.isRunning = false;
