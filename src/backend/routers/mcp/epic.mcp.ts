@@ -878,8 +878,8 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
       isForHuman: true,
       subject: `Epic Complete: ${epic.title}`,
       body: prCreated
-        ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo!.url}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
-        : `The epic "${epic.title}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`,
+        ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo!.url}\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
+        : `The epic "${epic.title}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`,
     });
 
     // Log decision
