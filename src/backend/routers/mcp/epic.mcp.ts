@@ -19,6 +19,7 @@ import {
 } from './server.js';
 import { inngest } from '../../inngest/client.js';
 import { startWorker } from '../../agents/worker/lifecycle.js';
+import { notificationService } from '../../services/notification.service.js';
 
 // ============================================================================
 // Input Schemas
@@ -464,6 +465,19 @@ async function approveTask(
       }
     }
 
+    // Clean up the worker's tmux session since task is complete
+    let workerCleanedUp = false;
+    if (task.assignedAgentId) {
+      try {
+        const { killWorkerAndCleanup } = await import('../../agents/worker/lifecycle.js');
+        await killWorkerAndCleanup(task.assignedAgentId);
+        workerCleanedUp = true;
+        console.log(`Cleaned up worker ${task.assignedAgentId} after task approval`);
+      } catch (error) {
+        console.log(`Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
     // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
@@ -474,6 +488,7 @@ async function approveTask(
         branchName: task.branchName,
         mergeCommit: mergeResult.mergeCommit,
         rebaseRequestsSent: otherReviewTasks.length,
+        workerCleanedUp,
       }
     );
 
@@ -483,9 +498,10 @@ async function approveTask(
       mergeCommit: mergeResult.mergeCommit,
       merged: true,
       pushed,
+      workerCleanedUp,
       message: pushed
-        ? `Task approved. Branch merged into epic and pushed. ${otherReviewTasks.length} rebase requests sent.`
-        : `Task approved. Branch merged into epic locally (push skipped - no remote). ${otherReviewTasks.length} rebase requests sent.`,
+        ? `Task approved. Branch merged into epic and pushed. ${otherReviewTasks.length} rebase requests sent.${workerCleanedUp ? ' Worker cleaned up.' : ''}`
+        : `Task approved. Branch merged into epic locally (push skipped - no remote). ${otherReviewTasks.length} rebase requests sent.${workerCleanedUp ? ' Worker cleaned up.' : ''}`,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -881,6 +897,30 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
         workersCleanedUp: cleanedUpCount,
       }
     );
+
+    // Send desktop notification for epic completion
+    try {
+      await notificationService.notifyEpicComplete(
+        epic.title,
+        prInfo?.url || undefined
+      );
+    } catch (error) {
+      console.error('Failed to send epic completion notification:', error);
+      // Don't fail the operation if notification fails
+    }
+
+    // Fire agent.completed event for the supervisor
+    try {
+      await inngest.send({
+        name: 'agent.completed',
+        data: {
+          agentId: context.agentId,
+          epicId: epic.id,
+        },
+      });
+    } catch (error) {
+      console.log('Inngest event send failed (this is OK if Inngest dev server is not running):', error);
+    }
 
     return createSuccessResponse({
       epicId: epic.id,

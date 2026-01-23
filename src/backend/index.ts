@@ -2,7 +2,14 @@ import express from 'express';
 import { serve } from 'inngest/express';
 import { inngest } from './inngest/client';
 import { initializeMcpTools, executeMcpTool } from './routers/mcp/index.js';
-import { mailSentHandler, taskCreatedHandler } from './inngest/functions/index.js';
+import {
+  mailSentHandler,
+  taskCreatedHandler,
+  epicCreatedHandler,
+  agentCompletedHandler,
+  supervisorCheckHandler,
+  orchestratorCheckHandler,
+} from './inngest/functions/index.js';
 import { readSessionOutput, listTmuxSessions } from './clients/terminal.client.js';
 import { taskRouter } from './routers/api/task.router.js';
 import { epicRouter } from './routers/api/epic.router.js';
@@ -81,7 +88,14 @@ app.use(
   '/api/inngest',
   serve({
     client: inngest,
-    functions: [mailSentHandler, taskCreatedHandler],
+    functions: [
+      mailSentHandler,
+      taskCreatedHandler,
+      epicCreatedHandler,
+      agentCompletedHandler,
+      supervisorCheckHandler,
+      orchestratorCheckHandler,
+    ],
   })
 );
 

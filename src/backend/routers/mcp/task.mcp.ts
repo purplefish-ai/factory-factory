@@ -14,6 +14,7 @@ import {
   createSuccessResponse,
   createErrorResponse,
 } from './server.js';
+import { notificationService } from '../../services/notification.service.js';
 
 // ============================================================================
 // Input Schemas
@@ -268,6 +269,18 @@ async function createPR(
         prNumber: prInfo.number,
       }
     );
+
+    // Send desktop notification for task completion
+    try {
+      await notificationService.notifyTaskComplete(
+        task.title,
+        prInfo.url,
+        task.branchName || undefined
+      );
+    } catch (error) {
+      console.error('Failed to send task completion notification:', error);
+      // Don't fail the operation if notification fails
+    }
 
     return createSuccessResponse({
       taskId: updatedTask.id,
