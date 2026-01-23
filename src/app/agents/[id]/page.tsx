@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, use } from 'react';
 import Link from 'next/link';
 import { trpc } from '../../../frontend/lib/trpc';
 import { TmuxTerminal } from '../../../frontend/components/tmux-terminal';
@@ -13,8 +13,8 @@ const stateColors: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-800',
 };
 
-export default function AgentDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [showFullLogs, setShowFullLogs] = useState(false);
 
   const {

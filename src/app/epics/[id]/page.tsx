@@ -1,5 +1,6 @@
 'use client';
 
+import { use } from 'react';
 import Link from 'next/link';
 import { trpc } from '../../../frontend/lib/trpc';
 
@@ -21,8 +22,8 @@ const taskStateColors: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-800',
 };
 
-export default function EpicDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function EpicDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
 
   const { data: epic, isLoading, error } = trpc.epic.getById.useQuery(
     { id },
