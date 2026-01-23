@@ -10,9 +10,32 @@ import { taskAccessor, agentAccessor } from '../../resource_accessors/index.js';
 /**
  * Start a worker for a task
  * Creates the worker agent, sets up environment, and starts execution
+ * This function is idempotent - if a worker already exists for the task, it returns the existing ID
  */
 export async function startWorker(taskId: string): Promise<string> {
-  // Create worker
+  // Check if a worker already exists for this task
+  const task = await taskAccessor.findById(taskId);
+  if (!task) {
+    throw new Error(`Task with ID '${taskId}' not found`);
+  }
+
+  // If task already has an assigned agent, check if it's running
+  if (task.assignedAgentId) {
+    const existingAgent = await agentAccessor.findById(task.assignedAgentId);
+    if (existingAgent) {
+      console.log(`Worker ${task.assignedAgentId} already exists for task ${taskId}`);
+      // If worker exists but isn't running, try to run it
+      if (!isWorkerRunning(task.assignedAgentId)) {
+        console.log(`Starting existing worker ${task.assignedAgentId}...`);
+        runWorker(task.assignedAgentId).catch((error) => {
+          console.error(`Worker ${task.assignedAgentId} failed:`, error);
+        });
+      }
+      return task.assignedAgentId;
+    }
+  }
+
+  // Create new worker
   const agentId = await createWorker(taskId);
 
   console.log(`Starting worker ${agentId} for task ${taskId}...`);

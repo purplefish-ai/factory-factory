@@ -256,5 +256,11 @@ export class ClaudeClient {
   }
 }
 
-// Export singleton instance
-export const claudeClient = new ClaudeClient();
+// Note: This client uses API key authentication.
+// For OAuth-based authentication (recommended), use claude-code.client.ts instead.
+//
+// To use this client, create an instance explicitly:
+//   const client = new ClaudeClient();
+//   await client.initialize();
+//
+// The singleton pattern was removed to avoid requiring ANTHROPIC_API_KEY at module load time.

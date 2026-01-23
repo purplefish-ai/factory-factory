@@ -108,6 +108,112 @@ export class GitClient {
       );
     }
   }
+
+  /**
+   * Merge a branch into another branch within a worktree
+   * Used by supervisor to merge worker branches into epic branch
+   */
+  async mergeBranch(
+    worktreePath: string,
+    sourceBranch: string,
+    commitMessage?: string
+  ): Promise<{ success: boolean; mergeCommit: string }> {
+    try {
+      // Merge the source branch into the current branch
+      const mergeCommand = commitMessage
+        ? `git -C "${worktreePath}" merge "${sourceBranch}" -m "${commitMessage.replace(/"/g, '\\"')}"`
+        : `git -C "${worktreePath}" merge "${sourceBranch}"`;
+
+      await execAsync(mergeCommand);
+
+      // Get the merge commit SHA
+      const { stdout: commitSha } = await execAsync(
+        `git -C "${worktreePath}" rev-parse HEAD`
+      );
+
+      return {
+        success: true,
+        mergeCommit: commitSha.trim(),
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to merge branch ${sourceBranch}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Push a branch to origin
+   * Used by supervisor to push epic branch after merging
+   */
+  async pushBranch(worktreePath: string, branchName?: string): Promise<void> {
+    try {
+      const branch = branchName || 'HEAD';
+      await execAsync(`git -C "${worktreePath}" push origin ${branch}`);
+    } catch (error) {
+      throw new Error(
+        `Failed to push branch: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Push a branch to origin, setting upstream if needed
+   */
+  async pushBranchWithUpstream(worktreePath: string): Promise<void> {
+    try {
+      await execAsync(`git -C "${worktreePath}" push -u origin HEAD`);
+    } catch (error) {
+      throw new Error(
+        `Failed to push branch with upstream: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Fetch latest from origin
+   */
+  async fetch(worktreePath: string): Promise<void> {
+    try {
+      await execAsync(`git -C "${worktreePath}" fetch origin`);
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Get the current branch name
+   */
+  async getCurrentBranch(worktreePath: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync(
+        `git -C "${worktreePath}" rev-parse --abbrev-ref HEAD`
+      );
+      return stdout.trim();
+    } catch (error) {
+      throw new Error(
+        `Failed to get current branch: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Get the latest commit message
+   */
+  async getLatestCommitMessage(worktreePath: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync(
+        `git -C "${worktreePath}" log -1 --format=%s`
+      );
+      return stdout.trim();
+    } catch (error) {
+      throw new Error(
+        `Failed to get latest commit message: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
 }
 
 let _gitClient: GitClient | null = null;

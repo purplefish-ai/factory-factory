@@ -329,6 +329,198 @@ Get the current agent's epic details.
 
 ---
 
+## Epic Tools (Supervisor Only)
+
+These tools are available exclusively to SUPERVISOR agents for managing epics.
+
+### mcp__epic__create_task
+
+Create a new task for workers to execute.
+
+**Input:**
+```json
+{
+  "title": "Add user authentication",
+  "description": "Implement JWT-based auth with login/logout endpoints"
+}
+```
+
+**Output:**
+```json
+{
+  "taskId": "task-123",
+  "title": "Add user authentication",
+  "worktreeName": "task-abc12345-add-user-authentication",
+  "message": "Task created. A worker will be assigned automatically."
+}
+```
+
+**Side Effects:**
+- Creates task record in database
+- Fires `task.created` event (triggers worker creation)
+
+**Permissions:** SUPERVISOR only
+
+---
+
+### mcp__epic__list_tasks
+
+List all tasks for the supervisor's epic.
+
+**Input:**
+```json
+{
+  "state": "REVIEW"  // Optional filter by task state
+}
+```
+
+**Output:**
+```json
+{
+  "epicId": "epic-456",
+  "tasks": [...]
+}
+```
+
+**Permissions:** SUPERVISOR only
+
+---
+
+### mcp__epic__get_review_queue
+
+Get PRs pending review, ordered by submission time.
+
+**Input:**
+```json
+{}
+```
+
+**Output:**
+```json
+{
+  "epicId": "epic-456",
+  "queue": [
+    {
+      "position": 1,
+      "taskId": "task-123",
+      "title": "Add user auth",
+      "prUrl": "https://github.com/.../pull/1",
+      "submittedAt": "2026-01-22T..."
+    }
+  ]
+}
+```
+
+**Permissions:** SUPERVISOR only
+
+---
+
+### mcp__epic__approve_pr
+
+Approve and merge a PR into the epic branch.
+
+**Input:**
+```json
+{
+  "taskId": "task-123"
+}
+```
+
+**Output:**
+```json
+{
+  "taskId": "task-123",
+  "prUrl": "https://github.com/.../pull/1",
+  "merged": true,
+  "message": "PR merged successfully. 2 rebase requests sent."
+}
+```
+
+**Side Effects:**
+- Merges PR using `gh pr merge --squash --auto`
+- Updates task state to COMPLETED
+- Sends "Rebase Required" mail to workers with pending PRs
+
+**Permissions:** SUPERVISOR only
+
+---
+
+### mcp__epic__request_changes
+
+Request changes on a PR with detailed feedback.
+
+**Input:**
+```json
+{
+  "taskId": "task-123",
+  "feedback": "Please fix: 1) Missing error handling"
+}
+```
+
+**Output:**
+```json
+{
+  "taskId": "task-123",
+  "message": "Feedback sent to worker. Task returned to IN_PROGRESS."
+}
+```
+
+**Permissions:** SUPERVISOR only
+
+---
+
+### mcp__epic__read_file
+
+Read a file from a worker's worktree for code review.
+
+**Input:**
+```json
+{
+  "taskId": "task-123",
+  "filePath": "src/routes/auth.ts"
+}
+```
+
+**Output:**
+```json
+{
+  "taskId": "task-123",
+  "filePath": "src/routes/auth.ts",
+  "content": "import express from 'express';\n..."
+}
+```
+
+**Permissions:** SUPERVISOR only
+
+---
+
+### mcp__epic__create_epic_pr
+
+Create final PR from epic branch to main when all tasks are done.
+
+**Input:**
+```json
+{
+  "title": "[Epic] User Profile Feature",
+  "description": "Custom description..."
+}
+```
+
+**Output:**
+```json
+{
+  "epicId": "epic-456",
+  "prUrl": "https://github.com/.../pull/123",
+  "prNumber": 123,
+  "state": "COMPLETED",
+  "message": "Epic PR created successfully. Human review requested."
+}
+```
+
+**Permissions:** SUPERVISOR only
+
+---
+
 ## System Tools
 
 ### mcp__system__log_decision

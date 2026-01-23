@@ -3,6 +3,7 @@ import {
   agentAccessor,
   taskAccessor,
   epicAccessor,
+  mailAccessor,
 } from '../../resource_accessors/index.js';
 import {
   createWorkerSession,
@@ -26,6 +27,7 @@ interface WorkerContext {
   tmuxSessionName: string;
   isRunning: boolean;
   monitoringInterval?: NodeJS.Timeout;
+  inboxCheckInterval?: NodeJS.Timeout;
 }
 
 // In-memory store for active workers
@@ -89,6 +91,10 @@ export async function createWorker(taskId: string): Promise<string> {
     throw new Error(`Epic with ID '${task.epicId}' not found`);
   }
 
+  // Build epic branch name (matches supervisor's branch naming convention)
+  // Workers should branch from the epic branch so they have the latest merged code
+  const epicBranchName = `factoryfactory/epic-${epic.id.substring(0, 8)}`;
+
   // Create agent record
   const agent = await agentAccessor.create({
     type: AgentType.WORKER,
@@ -96,9 +102,9 @@ export async function createWorker(taskId: string): Promise<string> {
     currentTaskId: taskId,
   });
 
-  // Create git worktree for task (branching from main)
+  // Create git worktree for task (branching from epic branch, not main)
   const worktreeName = `task-${agent.id.substring(0, 8)}`;
-  const worktreeInfo = await gitClient.createWorktree(worktreeName, 'main');
+  const worktreeInfo = await gitClient.createWorktree(worktreeName, epicBranchName);
 
   // Update task with worktree info
   await taskAccessor.update(taskId, {
@@ -108,6 +114,15 @@ export async function createWorker(taskId: string): Promise<string> {
     state: TaskState.ASSIGNED,
   });
 
+  // Backend URL for API calls
+  const backendUrl = `http://localhost:${process.env.BACKEND_PORT || 3001}`;
+
+  // Find the supervisor for this epic
+  const supervisor = await agentAccessor.findByEpicId(epic.id);
+  if (!supervisor) {
+    throw new Error(`No supervisor found for epic ${epic.id}`);
+  }
+
   // Build system prompt with full context
   const systemPrompt = buildWorkerPrompt({
     taskId: task.id,
@@ -116,6 +131,10 @@ export async function createWorker(taskId: string): Promise<string> {
     epicTitle: epic.title,
     worktreePath: worktreeInfo.path,
     branchName: worktreeInfo.branchName,
+    agentId: agent.id,
+    backendUrl,
+    epicBranchName,
+    supervisorAgentId: supervisor.id,
   });
 
   // Create Claude Code session in tmux
@@ -201,6 +220,11 @@ export async function runWorker(agentId: string): Promise<void> {
     await monitorWorker(agentId);
   }, 5000); // Check every 5 seconds
 
+  // Start inbox check loop for rebase requests
+  workerContext.inboxCheckInterval = setInterval(async () => {
+    await checkWorkerInbox(agentId);
+  }, 10000); // Check every 10 seconds
+
   console.log(`Worker ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`);
 }
 
@@ -265,6 +289,72 @@ async function monitorWorker(agentId: string): Promise<void> {
 }
 
 /**
+ * Check worker inbox for supervisor messages (like rebase requests)
+ */
+async function checkWorkerInbox(agentId: string): Promise<void> {
+  const workerContext = activeWorkers.get(agentId);
+  if (!workerContext || !workerContext.isRunning) {
+    return;
+  }
+
+  try {
+    // Get unread mail for worker
+    const inbox = await mailAccessor.listInbox(agentId, false);
+
+    if (inbox.length > 0) {
+      console.log(`Worker ${agentId}: Found ${inbox.length} unread mail(s)`);
+
+      for (const mail of inbox) {
+        // Check for rebase request
+        if (mail.subject === 'Rebase Required') {
+          console.log(`Worker ${agentId}: Received rebase request`);
+
+          // Mark mail as read
+          await mailAccessor.markAsRead(mail.id);
+
+          // Get task info
+          const task = await taskAccessor.findById(workerContext.taskId);
+          if (task) {
+            // Notify Claude about the rebase request
+            await sendMessage(
+              agentId,
+              `⚠️ REBASE REQUIRED ⚠️\n\n${mail.body}\n\nPlease:\n1. Run 'git fetch origin' to get latest changes\n2. Run 'git rebase origin/<epic-branch-name>' to rebase your branch\n3. Resolve any conflicts if needed\n4. Force push with 'git push --force'\n5. Your PR will be automatically updated\n\nAfter rebasing, your PR will return to the review queue.`
+            );
+
+            // Update task state back to IN_PROGRESS so worker can continue
+            if (task.state === TaskState.BLOCKED) {
+              await taskAccessor.update(task.id, {
+                state: TaskState.IN_PROGRESS,
+              });
+            }
+          }
+        } else if (mail.subject === 'Changes Requested') {
+          console.log(`Worker ${agentId}: Received change request`);
+
+          // Mark mail as read
+          await mailAccessor.markAsRead(mail.id);
+
+          // Notify Claude about the requested changes
+          await sendMessage(
+            agentId,
+            `📝 CHANGES REQUESTED 📝\n\n${mail.body}\n\nPlease address the feedback above, then commit and push your changes. The PR will be re-reviewed once you're done.`
+          );
+        } else {
+          // Generic mail - just notify Claude
+          await mailAccessor.markAsRead(mail.id);
+          await sendMessage(
+            agentId,
+            `📬 New Message from ${mail.fromAgentId || 'supervisor'}:\n\nSubject: ${mail.subject}\n\n${mail.body}`
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Worker ${agentId}: Inbox check error:`, error);
+  }
+}
+
+/**
  * Handle worker completion (success or failure)
  */
 async function handleWorkerCompletion(agentId: string, reason: string): Promise<void> {
@@ -278,6 +368,9 @@ async function handleWorkerCompletion(agentId: string, reason: string): Promise<
   // Stop monitoring
   if (workerContext.monitoringInterval) {
     clearInterval(workerContext.monitoringInterval);
+  }
+  if (workerContext.inboxCheckInterval) {
+    clearInterval(workerContext.inboxCheckInterval);
   }
 
   workerContext.isRunning = false;
@@ -312,6 +405,9 @@ export async function stopWorker(agentId: string): Promise<void> {
   // Stop monitoring
   if (workerContext.monitoringInterval) {
     clearInterval(workerContext.monitoringInterval);
+  }
+  if (workerContext.inboxCheckInterval) {
+    clearInterval(workerContext.inboxCheckInterval);
   }
 
   workerContext.isRunning = false;
