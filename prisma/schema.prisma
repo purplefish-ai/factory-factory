@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum EpicState {
+  PLANNING       // Epic is being planned
+  IN_PROGRESS    // Epic is being worked on
+  BLOCKED        // Epic is blocked
+  COMPLETED      // Epic is completed
+  CANCELLED      // Epic was cancelled
+}
+
+enum TaskState {
+  PENDING        // Task is waiting to be picked up
+  ASSIGNED       // Task has been assigned to an agent
+  IN_PROGRESS    // Task is being worked on
+  REVIEW         // Task is waiting for review
+  BLOCKED        // Task is blocked
+  COMPLETED      // Task is completed
+  FAILED         // Task failed
+}
+
+enum AgentType {
+  SUPERVISOR     // High-level orchestrator
+  ORCHESTRATOR   // Epic-level manager
+  WORKER         // Task executor
+}
+
+enum AgentState {
+  IDLE           // Agent is idle
+  BUSY           // Agent is working
+  WAITING        // Agent is waiting for something
+  FAILED         // Agent encountered an error
+}
+
+// Models
+model Epic {
+  id                String      @id @default(cuid())
+  linearIssueId     String      @unique
+  linearIssueUrl    String
+  title             String
+  description       String?     @db.Text
+  state             EpicState   @default(PLANNING)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  completedAt       DateTime?
+
+  // Relations
+  tasks             Task[]
+  orchestratorAgent Agent?      @relation("EpicOrchestrator")
+
+  @@index([state])
+  @@index([linearIssueId])
+}
+
+model Task {
+  id                String      @id @default(cuid())
+  epicId            String
+  title             String
+  description       String?     @db.Text
+  state             TaskState   @default(PENDING)
+  assignedAgentId   String?
+  worktreePath      String?
+  branchName        String?
+  prUrl             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  completedAt       DateTime?
+  failureReason     String?     @db.Text
+
+  // Relations
+  epic              Epic        @relation(fields: [epicId], references: [id], onDelete: Cascade)
+  assignedAgent     Agent?      @relation("AssignedTasks", fields: [assignedAgentId], references: [id])
+
+  @@index([epicId])
+  @@index([state])
+  @@index([assignedAgentId])
+}
+
+model Agent {
+  id                String      @id @default(cuid())
+  type              AgentType
+  state             AgentState  @default(IDLE)
+  currentEpicId     String?     @unique
+  currentTaskId     String?
+  tmuxSessionName   String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  lastActiveAt      DateTime    @default(now())
+
+  // Relations
+  currentEpic       Epic?       @relation("EpicOrchestrator", fields: [currentEpicId], references: [id])
+  assignedTasks     Task[]      @relation("AssignedTasks")
+  mailReceived      Mail[]      @relation("ReceiverAgent")
+  mailSent          Mail[]      @relation("SenderAgent")
+  decisionLogs      DecisionLog[]
+
+  @@index([type])
+  @@index([state])
+  @@index([currentEpicId])
+}
+
+model Mail {
+  id                String      @id @default(cuid())
+  fromAgentId       String?
+  toAgentId         String?
+  isForHuman        Boolean     @default(false)
+  subject           String
+  body              String      @db.Text
+  isRead            Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+  readAt            DateTime?
+
+  // Relations
+  fromAgent         Agent?      @relation("SenderAgent", fields: [fromAgentId], references: [id])
+  toAgent           Agent?      @relation("ReceiverAgent", fields: [toAgentId], references: [id])
+
+  @@index([toAgentId, isRead])
+  @@index([isForHuman, isRead])
+  @@index([createdAt])
+}
+
+model DecisionLog {
+  id                String      @id @default(cuid())
+  agentId           String
+  decision          String      @db.Text
+  reasoning         String      @db.Text
+  context           String?     @db.Text
+  timestamp         DateTime    @default(now())
+
+  // Relations
+  agent             Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, timestamp])
+  @@index([timestamp])
+}
