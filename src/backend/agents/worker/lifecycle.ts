@@ -1,5 +1,6 @@
 import { agentAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import {
+  type CreateWorkerOptions,
   createWorker,
   isWorkerRunning,
   killWorker,
@@ -7,12 +8,17 @@ import {
   stopWorker,
 } from './worker.agent.js';
 
+export interface StartWorkerOptions extends CreateWorkerOptions {}
+
 /**
  * Start a worker for a task
  * Creates the worker agent, sets up environment, and starts execution
  * This function is idempotent - if a worker already exists for the task, it returns the existing ID
+ *
+ * @param taskId - The task to start a worker for
+ * @param options - Optional settings including resumeSessionId for crash recovery
  */
-export async function startWorker(taskId: string): Promise<string> {
+export async function startWorker(taskId: string, options?: StartWorkerOptions): Promise<string> {
   // Check if a worker already exists for this task
   const task = await taskAccessor.findById(taskId);
   if (!task) {
@@ -35,8 +41,8 @@ export async function startWorker(taskId: string): Promise<string> {
     }
   }
 
-  // Create new worker
-  const agentId = await createWorker(taskId);
+  // Create new worker (with optional resume session ID for crash recovery)
+  const agentId = await createWorker(taskId, options);
 
   console.log(`Starting worker ${agentId} for task ${taskId}...`);
 

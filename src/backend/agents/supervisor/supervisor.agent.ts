@@ -79,10 +79,19 @@ function getSupervisorTmuxSessionName(agentId: string): string {
   return `supervisor-${agentId}`;
 }
 
+export interface CreateSupervisorOptions {
+  /** If provided, resume an existing Claude session instead of starting fresh */
+  resumeSessionId?: string;
+}
+
 /**
  * Create a new supervisor agent for a top-level task (epic)
+ * If resumeSessionId is provided, the Claude session will resume with conversation history
  */
-export async function createSupervisor(taskId: string): Promise<string> {
+export async function createSupervisor(
+  taskId: string,
+  options?: CreateSupervisorOptions
+): Promise<string> {
   // Get top-level task (includes project relation)
   const topLevelTask = await taskAccessor.findById(taskId);
   if (!topLevelTask) {
@@ -136,9 +145,10 @@ export async function createSupervisor(taskId: string): Promise<string> {
   });
 
   // Create Claude Code session in tmux
-  // Note: We need to modify createWorkerSession to support supervisors
-  // For now, we use the same function but with supervisor tmux naming
-  const sessionContext = await createSupervisorSession(agent.id, systemPrompt, worktreeInfo.path);
+  // If resumeSessionId is provided, resume existing conversation instead of starting fresh
+  const sessionContext = await createSupervisorSession(agent.id, systemPrompt, worktreeInfo.path, {
+    resumeSessionId: options?.resumeSessionId,
+  });
 
   // Update agent with session info
   await agentAccessor.update(agent.id, {
@@ -159,11 +169,14 @@ export async function createSupervisor(taskId: string): Promise<string> {
 async function createSupervisorSession(
   agentId: string,
   systemPrompt: string,
-  workingDir: string
+  workingDir: string,
+  options?: { resumeSessionId?: string }
 ): Promise<{ sessionId: string; tmuxSessionName: string }> {
   // Use the worker session creator but with supervisor naming
-  // This is a workaround - ideally we'd have a generic session creator
-  const context = await createWorkerSession(agentId, systemPrompt, workingDir);
+  const context = await createWorkerSession(agentId, systemPrompt, workingDir, {
+    agentType: 'supervisor',
+    resumeSessionId: options?.resumeSessionId,
+  });
 
   // Rename tmux session to supervisor naming
   const supervisorTmuxName = getSupervisorTmuxSessionName(agentId);

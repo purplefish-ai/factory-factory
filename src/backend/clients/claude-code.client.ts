@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { promptFileManager } from '../agents/prompts/file-manager.js';
 import { requireClaudeSetup } from './claude-auth.js';
 import { tmuxClient } from './tmux.client.js';
@@ -31,9 +30,12 @@ export const AGENT_PROFILES: Record<string, AgentExecutionProfile> = {
 
 /**
  * Generate unique session ID for Claude Code
+ * Format: {agentType}-{agentId}-{timestamp}
+ * Examples: worker-abc123-1706123456, supervisor-def456-1706123789
  */
-export function generateSessionId(): string {
-  return uuidv4();
+export function generateSessionId(agentType: string, agentId: string): string {
+  const timestamp = Math.floor(Date.now() / 1000);
+  return `${agentType}-${agentId.substring(0, 8)}-${timestamp}`;
 }
 
 /**
@@ -43,19 +45,33 @@ function getTmuxSessionName(agentId: string): string {
   return `worker-${agentId}`;
 }
 
+export interface CreateWorkerSessionOptions {
+  agentId: string;
+  agentType: 'worker' | 'supervisor' | 'orchestrator';
+  systemPrompt: string;
+  workingDir: string;
+  /** If provided, resume an existing Claude session instead of starting new */
+  resumeSessionId?: string;
+}
+
 /**
  * Create new worker session with Claude Code CLI
+ * If resumeSessionId is provided, resumes the existing Claude conversation
  */
 export async function createWorkerSession(
   agentId: string,
   systemPrompt: string,
-  workingDir: string
+  workingDir: string,
+  options?: { agentType?: 'worker' | 'supervisor' | 'orchestrator'; resumeSessionId?: string }
 ): Promise<WorkerSessionContext> {
   // Verify Claude Code setup
   await requireClaudeSetup();
 
-  // Generate session ID
-  const sessionId = generateSessionId();
+  const agentType = options?.agentType ?? 'worker';
+  const resumeSessionId = options?.resumeSessionId;
+
+  // Generate new session ID or use the resume session ID
+  const sessionId = resumeSessionId ?? generateSessionId(agentType, agentId);
   const tmuxSessionName = getTmuxSessionName(agentId);
 
   // Write system prompt to temporary file
@@ -64,8 +80,10 @@ export async function createWorkerSession(
   // Get agent profile
   const profile = AGENT_PROFILES.WORKER;
 
-  // Build Claude CLI command
-  const claudeCommand = buildClaudeCommand(sessionId, systemPromptPath, workingDir, profile);
+  // Build Claude CLI command (resume mode if resumeSessionId provided)
+  const claudeCommand = resumeSessionId
+    ? buildResumeCommand(resumeSessionId, profile)
+    : buildClaudeCommand(sessionId, systemPromptPath, workingDir, profile);
 
   // Create tmux session (kill existing if needed)
   const exists = await tmuxClient.sessionExists(tmuxSessionName);

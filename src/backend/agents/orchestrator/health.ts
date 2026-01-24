@@ -147,11 +147,19 @@ async function resetTasksForTopLevelTask(
 
 /**
  * Create a new supervisor for a top-level task
+ * If resumeSessionId is provided, the new supervisor will resume the Claude conversation
  */
-async function createNewSupervisor(topLevelTaskId: string): Promise<string | null> {
+async function createNewSupervisor(
+  topLevelTaskId: string,
+  resumeSessionId?: string
+): Promise<string | null> {
   try {
-    const supervisorId = await startSupervisorForTask(topLevelTaskId);
-    console.log(`Created new supervisor ${supervisorId}`);
+    const supervisorId = await startSupervisorForTask(topLevelTaskId, {
+      resumeSessionId,
+    });
+    console.log(
+      `Created new supervisor ${supervisorId}${resumeSessionId ? ` (resuming session ${resumeSessionId})` : ''}`
+    );
     return supervisorId;
   } catch (error) {
     console.error(`Failed to create new supervisor for task ${topLevelTaskId}:`, error);
@@ -194,6 +202,14 @@ export async function recoverSupervisor(
   const orchestrator = await agentAccessor.findById(orchestratorId);
   const validOrchestratorId = orchestrator ? orchestratorId : undefined;
 
+  // Get the old session ID before killing the supervisor (for resume capability)
+  const oldSupervisor = await agentAccessor.findById(supervisorId);
+  const oldSessionId = oldSupervisor?.sessionId;
+
+  if (oldSessionId) {
+    console.log(`Supervisor ${supervisorId} has session ID ${oldSessionId}, will attempt resume`);
+  }
+
   console.log(`Starting cascading recovery for supervisor ${supervisorId} (task: ${task.title})`);
 
   // Phase 1: Kill workers
@@ -209,8 +225,9 @@ export async function recoverSupervisor(
     await resetTasksForTopLevelTask(taskId);
   console.log(`Reset ${resetTaskIds.length} tasks to PENDING`);
 
-  // Phase 4: Create new supervisor
-  const newSupervisorId = await createNewSupervisor(taskId);
+  // Phase 4: Create new supervisor with resume capability if old session ID exists
+  // This preserves conversation history and context from the crashed session
+  const newSupervisorId = await createNewSupervisor(taskId, oldSessionId ?? undefined);
 
   // Phase 5: Notify and log
   await mailAccessor.create({

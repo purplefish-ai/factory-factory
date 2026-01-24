@@ -77,10 +77,16 @@ function parseToolCallsFromOutput(output: string): ToolCall[] {
   return toolCalls;
 }
 
+export interface CreateWorkerOptions {
+  /** If provided, resume an existing Claude session instead of starting fresh */
+  resumeSessionId?: string;
+}
+
 /**
  * Create a new worker agent for a task
+ * If resumeSessionId is provided, the Claude session will resume with conversation history
  */
-export async function createWorker(taskId: string): Promise<string> {
+export async function createWorker(taskId: string, options?: CreateWorkerOptions): Promise<string> {
   // Get task
   const task = await taskAccessor.findById(taskId);
   if (!task) {
@@ -156,7 +162,11 @@ export async function createWorker(taskId: string): Promise<string> {
   });
 
   // Create Claude Code session in tmux
-  const sessionContext = await createWorkerSession(agent.id, systemPrompt, worktreeInfo.path);
+  // If resumeSessionId is provided, resume existing conversation instead of starting fresh
+  const sessionContext = await createWorkerSession(agent.id, systemPrompt, worktreeInfo.path, {
+    agentType: 'worker',
+    resumeSessionId: options?.resumeSessionId,
+  });
 
   // Update agent with session info
   await agentAccessor.update(agent.id, {
