@@ -14,7 +14,7 @@ Autonomous software development orchestration system that uses AI agents to exec
 
 ```bash
 # 1. Install
-npm install
+pnpm install
 
 # 2. Configure
 cp .env.example .env
@@ -24,10 +24,10 @@ cp .env.example .env
 docker-compose up -d
 
 # 4. Run migrations
-npm run db:migrate
+pnpm db:migrate
 
 # 5. Start all servers
-npm run dev:all
+pnpm dev:all
 
 # 6. Create a project
 # Open http://localhost:3000/projects/new
@@ -39,7 +39,7 @@ npm run dev:all
 - Frontend: http://localhost:3000
 - Backend: http://localhost:3001/health
 - Inngest: http://localhost:8288
-- Prisma Studio: `npm run db:studio`
+- Prisma Studio: `pnpm db:studio`
 
 ## Architecture
 
@@ -74,8 +74,8 @@ gh auth login
 
 **Prisma issues:**
 ```bash
-npx prisma migrate reset    # Reset database (destroys data)
-npm run db:generate         # Regenerate client
+pnpm exec prisma migrate reset    # Reset database (destroys data)
+pnpm db:generate                  # Regenerate client
 ```
 
 ## Documentation
