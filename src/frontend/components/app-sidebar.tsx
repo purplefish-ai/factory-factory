@@ -122,6 +122,7 @@ export function AppSidebar() {
 
   const globalNavItems = [{ href: '/admin', label: 'Admin', icon: Settings }];
 
+  // Show loading skeleton while checking for projects
   if (!hasCheckedProjects) {
     return (
       <Sidebar collapsible="none">
@@ -142,6 +143,11 @@ export function AppSidebar() {
         </SidebarContent>
       </Sidebar>
     );
+  }
+
+  // Hide sidebar when no projects exist - show onboarding flow
+  if (projects && projects.length === 0) {
+    return null;
   }
 
   return (
@@ -193,7 +199,7 @@ export function AppSidebar() {
                           <span>{item.label}</span>
                         </Link>
                       </SidebarMenuButton>
-                      {item.badge && item.badge > 0 && (
+                      {item.badge != null && item.badge > 0 && (
                         <SidebarMenuBadge>
                           <Badge variant="destructive" className="rounded-full px-1.5 py-0 text-xs">
                             {item.badge}
