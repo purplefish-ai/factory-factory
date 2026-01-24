@@ -11,7 +11,7 @@
     "build:frontend": "next build",
     "build:all": "npm run build:backend && npm run build:frontend",
     "start": "next start",
-    "start:backend": "node dist/backend/index.js",
+    "start:backend": "node dist/src/backend/index.js",
     "start:frontend": "next start",
     "start:all": "concurrently \"npm run start:frontend\" \"npm run start:backend\"",
     "lint": "biome lint .",
