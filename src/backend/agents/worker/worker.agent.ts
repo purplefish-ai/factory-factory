@@ -454,6 +454,7 @@ export async function stopWorker(agentId: string): Promise<void> {
 /**
  * Kill a worker agent and clean up resources
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex cleanup logic with multiple error handling paths
 export async function killWorker(agentId: string): Promise<void> {
   console.log(`Killing worker ${agentId}`);
 

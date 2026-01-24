@@ -18,7 +18,7 @@ export const taskRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
+    .query(({ input }) => {
       return taskAccessor.list(input);
     }),
 
@@ -32,7 +32,7 @@ export const taskRouter = router({
   }),
 
   // Get tasks by epic ID
-  listByEpic: publicProcedure.input(z.object({ epicId: z.string() })).query(async ({ input }) => {
+  listByEpic: publicProcedure.input(z.object({ epicId: z.string() })).query(({ input }) => {
     return taskAccessor.findByEpicId(input.epicId);
   }),
 
@@ -46,7 +46,7 @@ export const taskRouter = router({
         state: z.nativeEnum(TaskState).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(({ input }) => {
       const { id, ...updates } = input;
 
       // If completing, set completedAt

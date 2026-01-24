@@ -15,7 +15,7 @@ export interface UpdateMailInput {
 }
 
 export class MailAccessor {
-  async create(data: CreateMailInput): Promise<Mail> {
+  create(data: CreateMailInput): Promise<Mail> {
     return prisma.mail.create({
       data: {
         fromAgentId: data.fromAgentId,
@@ -27,7 +27,7 @@ export class MailAccessor {
     });
   }
 
-  async findById(id: string): Promise<Mail | null> {
+  findById(id: string): Promise<Mail | null> {
     return prisma.mail.findUnique({
       where: { id },
       include: {
@@ -37,7 +37,7 @@ export class MailAccessor {
     });
   }
 
-  async update(id: string, data: UpdateMailInput): Promise<Mail> {
+  update(id: string, data: UpdateMailInput): Promise<Mail> {
     const updateData: Prisma.MailUpdateInput = {
       isRead: data.isRead,
     };
@@ -54,7 +54,7 @@ export class MailAccessor {
     });
   }
 
-  async listInbox(agentId: string, includeRead = false): Promise<Mail[]> {
+  listInbox(agentId: string, includeRead = false): Promise<Mail[]> {
     const where: Prisma.MailWhereInput = {
       toAgentId: agentId,
     };
@@ -73,7 +73,7 @@ export class MailAccessor {
     });
   }
 
-  async listHumanInbox(includeRead = false, projectId?: string): Promise<Mail[]> {
+  listHumanInbox(includeRead = false, projectId?: string): Promise<Mail[]> {
     const where: Prisma.MailWhereInput = {
       isForHuman: true,
     };
@@ -101,7 +101,7 @@ export class MailAccessor {
     });
   }
 
-  async listAll(includeRead = true, projectId?: string): Promise<Mail[]> {
+  listAll(includeRead = true, projectId?: string): Promise<Mail[]> {
     const where: Prisma.MailWhereInput = {};
 
     if (!includeRead) {
@@ -138,11 +138,11 @@ export class MailAccessor {
     });
   }
 
-  async markAsRead(id: string): Promise<Mail> {
+  markAsRead(id: string): Promise<Mail> {
     return this.update(id, { isRead: true });
   }
 
-  async delete(id: string): Promise<Mail> {
+  delete(id: string): Promise<Mail> {
     return prisma.mail.delete({
       where: { id },
     });

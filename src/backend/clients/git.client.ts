@@ -232,6 +232,7 @@ export class GitClient {
  * Factory for creating project-specific GitClient instances.
  * Caches instances by repo+worktree path combination.
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: Factory pattern with caching is intentional for performance
 export class GitClientFactory {
   private static instances = new Map<string, GitClient>();
 

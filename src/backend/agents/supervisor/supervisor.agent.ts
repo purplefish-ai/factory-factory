@@ -281,7 +281,7 @@ async function sendSupervisorMessage(agentId: string, message: string): Promise<
 /**
  * Capture output from supervisor tmux session
  */
-async function captureSupervisorOutput(agentId: string, lines: number = 100): Promise<string> {
+function captureSupervisorOutput(agentId: string, lines: number = 100): Promise<string> {
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
   return tmuxClient.capturePane(tmuxSessionName, lines);
 }

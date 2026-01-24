@@ -117,7 +117,7 @@ export class CrashRecoveryService {
   /**
    * Handle agent crash with recovery logic
    */
-  async handleAgentCrash(
+  handleAgentCrash(
     agentId: string,
     agentType: AgentType,
     epicId?: string,
@@ -151,11 +151,11 @@ export class CrashRecoveryService {
         return this.recoverOrchestrator(agentId);
 
       default:
-        return {
+        return Promise.resolve({
           success: false,
           action: 'no_action',
           message: `Unknown agent type: ${agentType}`,
-        };
+        });
     }
   }
 

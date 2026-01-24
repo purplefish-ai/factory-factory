@@ -49,8 +49,8 @@ function IssuesList({ issues }: { issues: string[] }) {
 
   return (
     <ul className="space-y-2">
-      {issues.map((issue, i) => (
-        <li key={i} className="flex items-center gap-2 text-red-600">
+      {issues.map((issue) => (
+        <li key={issue} className="flex items-center gap-2 text-red-600">
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"

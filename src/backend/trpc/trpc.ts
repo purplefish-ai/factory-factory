@@ -2,11 +2,10 @@ import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 
 // Context for tRPC procedures
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export type Context = {};
+export type Context = Record<string, never>;
 
 export const createContext = (): Context => {
-  return {};
+  return {} as Context;
 };
 
 const t = initTRPC.context<Context>().create({

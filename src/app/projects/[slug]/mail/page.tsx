@@ -7,6 +7,7 @@ import { trpc } from '../../../../frontend/lib/trpc';
 
 type MailFilter = { type: 'all' } | { type: 'human' } | { type: 'agent'; agentId: string };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex UI logic is inherent to this mail page component
 export default function ProjectMailPage() {
   const params = useParams();
   const slug = params.slug as string;

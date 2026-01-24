@@ -68,7 +68,6 @@ export default function NewProjectPage() {
             onChange={(e) => setRepoPath(e.target.value)}
             className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
             placeholder="/Users/you/code/my-project"
-            autoFocus
           />
           <p className="text-xs text-gray-500 mt-2">
             Path to a git repository on your local machine. The project name will be derived from

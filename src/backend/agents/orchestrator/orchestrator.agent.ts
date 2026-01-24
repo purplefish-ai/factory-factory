@@ -251,7 +251,7 @@ async function sendOrchestratorMessage(agentId: string, message: string): Promis
 /**
  * Capture output from orchestrator tmux session
  */
-async function captureOrchestratorOutput(agentId: string, lines: number = 100): Promise<string> {
+function captureOrchestratorOutput(agentId: string, lines: number = 100): Promise<string> {
   const tmuxSessionName = getOrchestratorTmuxSessionName(agentId);
   return tmuxClient.capturePane(tmuxSessionName, lines);
 }

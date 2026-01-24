@@ -57,7 +57,7 @@ export const agentCompletedHandler = inngest.createFunction(
     }
 
     // Step 2: Handle completion based on agent type
-    const completionResult = await step.run('handle-completion', async () => {
+    const completionResult = await step.run('handle-completion', () => {
       switch (agentInfo.type) {
         case AgentType.WORKER:
           return handleWorkerCompletion(agentId, taskId, agentInfo.currentEpicId);
@@ -72,10 +72,10 @@ export const agentCompletedHandler = inngest.createFunction(
           return handleOrchestratorCompletion(agentId);
 
         default:
-          return {
+          return Promise.resolve({
             success: false,
             message: `Unknown agent type: ${agentInfo.type}`,
-          };
+          });
       }
     });
 

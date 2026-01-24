@@ -21,6 +21,15 @@
       "semicolons": "always"
     }
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on"
+        }
+      }
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -61,12 +70,13 @@
         "noConfusingVoidType": "error",
         "noEmptyBlockStatements": "error",
         "noMisleadingCharacterClass": "error",
-        "useAwait": "off",
+        "useAwait": "error",
         "useIterableCallbackReturn": "off",
-        "noArrayIndexKey": "off"
+        "noArrayIndexKey": "warn",
+        "noUnsafeDeclarationMerging": "error"
       },
       "complexity": {
-        "noBannedTypes": "off",
+        "noBannedTypes": "error",
         "noExcessiveCognitiveComplexity": "error",
         "noUselessThisAlias": "error",
         "noUselessTypeConstraint": "error",
@@ -84,7 +94,7 @@
       },
       "performance": {
         "noAccumulatingSpread": "error",
-        "noDelete": "warn"
+        "noDelete": "error"
       }
     }
   },

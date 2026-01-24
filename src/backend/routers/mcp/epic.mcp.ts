@@ -954,6 +954,7 @@ async function sendEpicCompletionNotifications(
  * Create PR from epic branch to main (SUPERVISOR only)
  * Also cleans up worker tmux sessions for completed tasks
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex multi-step workflow with error handling
 async function createEpicPR(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = CreateEpicPRInputSchema.parse(input);

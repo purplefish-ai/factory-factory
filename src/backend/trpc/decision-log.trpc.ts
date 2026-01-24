@@ -11,7 +11,7 @@ export const decisionLogRouter = router({
         limit: z.number().min(1).max(100).optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(({ input }) => {
       return decisionLogAccessor.findByAgentId(input.agentId, input.limit ?? 50);
     }),
 
@@ -25,7 +25,7 @@ export const decisionLogRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
+    .query(({ input }) => {
       return decisionLogAccessor.findRecent(input?.limit ?? 100, input?.projectId);
     }),
 

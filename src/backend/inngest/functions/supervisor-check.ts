@@ -176,7 +176,7 @@ export const supervisorCheckHandler = inngest.createFunction(
     }
 
     // Step 2: Check worker health for each supervisor
-    const results = await step.run('check-all-supervisors', async () => {
+    const results = await step.run('check-all-supervisors', () => {
       return Promise.all(activeSupervisors.map((supervisor) => checkSupervisorWorkers(supervisor)));
     });
 

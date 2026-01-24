@@ -131,7 +131,7 @@ app.get('/health/database', async (_req, res) => {
 /**
  * Inngest health check
  */
-app.get('/health/inngest', async (_req, res) => {
+app.get('/health/inngest', (_req, res) => {
   // Check if Inngest client is configured
   const hasEventKey = !!process.env.INNGEST_EVENT_KEY || configService.isDevelopment();
   const hasSigningKey = !!process.env.INNGEST_SIGNING_KEY || configService.isDevelopment();
