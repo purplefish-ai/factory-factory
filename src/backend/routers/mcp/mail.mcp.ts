@@ -1,9 +1,13 @@
+import type { Agent, Mail } from '@prisma-gen/client';
 import { z } from 'zod';
 import { inngest } from '../../inngest/client.js';
 import { mailAccessor } from '../../resource_accessors/index.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
+
+// Mail with included fromAgent relation
+type MailWithFromAgent = Mail & { fromAgent: Agent | null };
 
 // ============================================================================
 // Input Schemas
@@ -51,7 +55,7 @@ async function listInbox(context: McpToolContext, input: unknown): Promise<McpTo
       mails: mails.map((mail) => ({
         id: mail.id,
         fromAgentId: mail.fromAgentId ?? undefined,
-        fromAgentType: (mail as any).fromAgent?.type,
+        fromAgentType: (mail as MailWithFromAgent).fromAgent?.type,
         subject: mail.subject,
         body: mail.body,
         isRead: mail.isRead,
@@ -102,7 +106,7 @@ async function readMail(context: McpToolContext, input: unknown): Promise<McpToo
     return createSuccessResponse({
       id: updatedMail.id,
       fromAgentId: updatedMail.fromAgentId ?? undefined,
-      fromAgentType: (updatedMail as any).fromAgent?.type,
+      fromAgentType: (updatedMail as MailWithFromAgent).fromAgent?.type,
       subject: updatedMail.subject,
       body: updatedMail.body,
       isRead: updatedMail.isRead,
@@ -126,7 +130,7 @@ async function sendMail(context: McpToolContext, input: unknown): Promise<McpToo
     const { toAgentId, toHuman, subject, body } = parsed;
 
     // Validate: must specify either toAgentId or toHuman
-    if (!toAgentId && !toHuman) {
+    if (!(toAgentId || toHuman)) {
       return createErrorResponse(
         McpErrorCode.INVALID_INPUT,
         "Must specify either 'toAgentId' or 'toHuman: true'"

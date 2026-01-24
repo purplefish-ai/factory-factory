@@ -119,7 +119,7 @@ export function getAuthErrorMessage(status: ClaudeAuthStatus): string {
 export async function requireClaudeSetup(): Promise<void> {
   const status = await validateClaudeSetup();
 
-  if (!status.isInstalled || !status.isAuthenticated) {
+  if (!(status.isInstalled && status.isAuthenticated)) {
     const errorMessage = getAuthErrorMessage(status);
     throw new Error(errorMessage);
   }

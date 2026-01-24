@@ -70,7 +70,7 @@ export class CrashRecoveryService {
     if (existing) {
       existing.timestamps.push(now);
       // Keep only recent crashes (last hour)
-      existing.timestamps = existing.timestamps.filter((ts) => now - ts < 3600000);
+      existing.timestamps = existing.timestamps.filter((ts) => now - ts < 3_600_000);
     } else {
       this.crashRecords.set(agentId, {
         agentId,

@@ -1,5 +1,6 @@
 import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
+import type { PRInfo, PRStatus } from '../../clients/github.client.js';
 import { githubClient } from '../../clients/index.js';
 import {
   agentAccessor,
@@ -210,7 +211,7 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
 
     // Create PR
-    let prInfo;
+    let prInfo: PRInfo;
     try {
       prInfo = await githubClient.createPR(
         task.branchName,
@@ -324,7 +325,7 @@ async function getPRStatus(context: McpToolContext, input: unknown): Promise<Mcp
     }
 
     // Get PR status
-    let prStatus;
+    let prStatus: PRStatus;
     try {
       prStatus = await githubClient.getPRStatus(task.prUrl, task.worktreePath || undefined);
     } catch (error) {

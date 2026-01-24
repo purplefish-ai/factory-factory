@@ -128,7 +128,7 @@ export class GitHubClient {
     if (!match) {
       throw new Error(`Could not extract PR number from URL: ${url}`);
     }
-    return parseInt(match[1], 10);
+    return Number.parseInt(match[1], 10);
   }
 
   private escapeShellArg(arg: string): string {

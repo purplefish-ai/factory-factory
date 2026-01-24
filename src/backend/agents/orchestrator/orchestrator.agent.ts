@@ -185,7 +185,7 @@ export async function runOrchestrator(agentId: string): Promise<void> {
     throw new Error(`Agent '${agentId}' is not an ORCHESTRATOR`);
   }
 
-  if (!agent.sessionId || !agent.tmuxSessionName) {
+  if (!(agent.sessionId && agent.tmuxSessionName)) {
     throw new Error(`Agent '${agentId}' does not have a Claude session`);
   }
 
@@ -290,7 +290,7 @@ async function captureOrchestratorOutput(agentId: string, lines: number = 100): 
  * Monitor orchestrator output and handle tool calls
  */
 async function monitorOrchestrator(agentId: string): Promise<void> {
-  if (!activeOrchestrator || !activeOrchestrator.isRunning) {
+  if (!activeOrchestrator?.isRunning) {
     return;
   }
 
@@ -339,7 +339,7 @@ async function monitorOrchestrator(agentId: string): Promise<void> {
  * Triggers recovery for any unhealthy supervisors
  */
 async function performHealthCheck(agentId: string): Promise<void> {
-  if (!activeOrchestrator || !activeOrchestrator.isRunning) {
+  if (!activeOrchestrator?.isRunning) {
     return;
   }
 
@@ -400,7 +400,7 @@ async function performHealthCheck(agentId: string): Promise<void> {
  * Check for pending epics that need supervisors
  */
 async function checkForPendingEpics(agentId: string): Promise<void> {
-  if (!activeOrchestrator || !activeOrchestrator.isRunning) {
+  if (!activeOrchestrator?.isRunning) {
     return;
   }
 

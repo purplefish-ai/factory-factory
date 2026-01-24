@@ -38,7 +38,7 @@ export async function checkWorkerHealth(supervisorId: string): Promise<{
 }> {
   // Get supervisor
   const supervisor = await agentAccessor.findById(supervisorId);
-  if (!supervisor || !supervisor.currentEpicId) {
+  if (!supervisor?.currentEpicId) {
     throw new Error(`Supervisor ${supervisorId} not found or has no epic`);
   }
 

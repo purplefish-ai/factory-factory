@@ -153,8 +153,8 @@ function buildDefaultAgentProfiles(): Record<AgentType, AgentProfile> {
 function loadSystemConfig(): SystemConfig {
   const config: SystemConfig = {
     // Server settings
-    backendPort: parseInt(process.env.BACKEND_PORT || '3001', 10),
-    frontendPort: parseInt(process.env.FRONTEND_PORT || '3000', 10),
+    backendPort: Number.parseInt(process.env.BACKEND_PORT || '3001', 10),
+    frontendPort: Number.parseInt(process.env.FRONTEND_PORT || '3000', 10),
     nodeEnv: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
 
     // Database
@@ -171,19 +171,19 @@ function loadSystemConfig(): SystemConfig {
     defaultAgentProfiles: buildDefaultAgentProfiles(),
 
     // Health check settings
-    healthCheckIntervalMs: parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '300000', 10), // 5 minutes
-    agentHeartbeatThresholdMinutes: parseInt(
+    healthCheckIntervalMs: Number.parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '300000', 10), // 5 minutes
+    agentHeartbeatThresholdMinutes: Number.parseInt(
       process.env.AGENT_HEARTBEAT_THRESHOLD_MINUTES || '7',
       10
     ),
 
     // Crash recovery settings
-    maxWorkerAttempts: parseInt(process.env.MAX_WORKER_ATTEMPTS || '5', 10),
-    crashLoopThresholdMs: parseInt(process.env.CRASH_LOOP_THRESHOLD_MS || '60000', 10), // 1 minute
-    maxRapidCrashes: parseInt(process.env.MAX_RAPID_CRASHES || '3', 10),
+    maxWorkerAttempts: Number.parseInt(process.env.MAX_WORKER_ATTEMPTS || '5', 10),
+    crashLoopThresholdMs: Number.parseInt(process.env.CRASH_LOOP_THRESHOLD_MS || '60000', 10), // 1 minute
+    maxRapidCrashes: Number.parseInt(process.env.MAX_RAPID_CRASHES || '3', 10),
 
     // PR review settings
-    prReviewTimeoutMinutes: parseInt(process.env.PR_REVIEW_TIMEOUT_MINUTES || '60', 10),
+    prReviewTimeoutMinutes: Number.parseInt(process.env.PR_REVIEW_TIMEOUT_MINUTES || '60', 10),
 
     // Feature flags
     features: {

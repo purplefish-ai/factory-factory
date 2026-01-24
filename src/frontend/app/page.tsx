@@ -71,11 +71,11 @@ function AgentHealthIndicator({ healthy, unhealthy }: { healthy: number; unhealt
   return (
     <div className="flex gap-4">
       <span className="flex items-center gap-1">
-        <span className="w-3 h-3 rounded-full bg-green-500"></span>
+        <span className="w-3 h-3 rounded-full bg-green-500" />
         <span className="text-sm">Healthy: {healthy}</span>
       </span>
       <span className="flex items-center gap-1">
-        <span className="w-3 h-3 rounded-full bg-red-500"></span>
+        <span className="w-3 h-3 rounded-full bg-red-500" />
         <span className="text-sm">Unhealthy: {unhealthy}</span>
       </span>
     </div>

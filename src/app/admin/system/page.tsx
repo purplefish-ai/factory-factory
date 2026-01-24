@@ -120,7 +120,7 @@ export default function AdminSystemPage() {
               onChange={(e) =>
                 setRateLimits({
                   ...rateLimits,
-                  claudeRequestsPerMinute: parseInt(e.target.value, 10),
+                  claudeRequestsPerMinute: Number.parseInt(e.target.value, 10),
                 })
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -136,7 +136,7 @@ export default function AdminSystemPage() {
               onChange={(e) =>
                 setRateLimits({
                   ...rateLimits,
-                  claudeRequestsPerHour: parseInt(e.target.value, 10),
+                  claudeRequestsPerHour: Number.parseInt(e.target.value, 10),
                 })
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -150,7 +150,10 @@ export default function AdminSystemPage() {
               type="number"
               value={rateLimits.maxConcurrentWorkers}
               onChange={(e) =>
-                setRateLimits({ ...rateLimits, maxConcurrentWorkers: parseInt(e.target.value, 10) })
+                setRateLimits({
+                  ...rateLimits,
+                  maxConcurrentWorkers: Number.parseInt(e.target.value, 10),
+                })
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
@@ -165,7 +168,7 @@ export default function AdminSystemPage() {
               onChange={(e) =>
                 setRateLimits({
                   ...rateLimits,
-                  maxConcurrentSupervisors: parseInt(e.target.value, 10),
+                  maxConcurrentSupervisors: Number.parseInt(e.target.value, 10),
                 })
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -179,7 +182,10 @@ export default function AdminSystemPage() {
               type="number"
               value={rateLimits.maxConcurrentEpics}
               onChange={(e) =>
-                setRateLimits({ ...rateLimits, maxConcurrentEpics: parseInt(e.target.value, 10) })
+                setRateLimits({
+                  ...rateLimits,
+                  maxConcurrentEpics: Number.parseInt(e.target.value, 10),
+                })
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />

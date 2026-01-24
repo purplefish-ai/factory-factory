@@ -1,3 +1,4 @@
+import { createLogger } from '../../services/logger.service.js';
 import { registerAgentTools } from './agent.mcp.js';
 import { registerEpicTools } from './epic.mcp.js';
 import { registerGitTools } from './git.mcp.js';
@@ -6,11 +7,13 @@ import { registerOrchestratorTools } from './orchestrator.mcp.js';
 import { registerSystemTools } from './system.mcp.js';
 import { registerTaskTools } from './task.mcp.js';
 
+const logger = createLogger('mcp');
+
 /**
  * Initialize and register all MCP tools
  */
 export function initializeMcpTools(): void {
-  console.log('Initializing MCP tools...');
+  logger.info('Initializing MCP tools...');
 
   // Register all tool categories
   registerMailTools();
@@ -21,7 +24,7 @@ export function initializeMcpTools(): void {
   registerEpicTools();
   registerOrchestratorTools();
 
-  console.log('MCP tools initialized successfully');
+  logger.info('MCP tools initialized successfully');
 }
 
 export * from './errors.js';

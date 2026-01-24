@@ -69,12 +69,14 @@ export class TmuxClient {
       const sessions: TmuxSession[] = [];
 
       for (const line of stdout.trim().split('\n')) {
-        if (!line) continue;
+        if (!line) {
+          continue;
+        }
 
         const [name, windows, created, attached] = line.split(':');
         sessions.push({
           name,
-          windows: parseInt(windows, 10),
+          windows: Number.parseInt(windows, 10),
           created,
           attached: attached === '1',
         });

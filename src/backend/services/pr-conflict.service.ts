@@ -311,7 +311,9 @@ export class PrConflictService {
     conflictedFiles: string[]
   ): Promise<void> {
     const task = await taskAccessor.findById(taskId);
-    if (!task) return;
+    if (!task) {
+      return;
+    }
 
     // Mark task as blocked
     await taskAccessor.update(taskId, {
@@ -353,7 +355,9 @@ export class PrConflictService {
     error: string
   ): Promise<void> {
     const task = await taskAccessor.findById(taskId);
-    if (!task) return;
+    if (!task) {
+      return;
+    }
 
     // Log the failure
     await decisionLogAccessor.createManual(
@@ -390,7 +394,9 @@ export class PrConflictService {
 
     if (elapsedMinutes > timeoutMinutes) {
       const task = await taskAccessor.findById(taskId);
-      if (!task) return false;
+      if (!task) {
+        return false;
+      }
 
       // Send notification to human
       await mailAccessor.create({

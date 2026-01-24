@@ -81,7 +81,7 @@ export default function MailPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       {!item.isRead && (
-                        <span className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"></span>
+                        <span className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0" />
                       )}
                       <p
                         className={`text-sm truncate ${!item.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}
