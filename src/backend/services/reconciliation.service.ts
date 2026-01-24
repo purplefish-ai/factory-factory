@@ -343,11 +343,18 @@ class ReconciliationService {
       const worktreeInfo = await gitClient.createWorktree(worktreeName, project.defaultBranch);
       const branchName = worktreeInfo.branchName;
 
-      // Update task with infrastructure info
+      // Update task with branch info (worktreePath is stored on the supervisor agent)
       await taskAccessor.update(task.id, {
-        worktreePath,
         branchName,
       });
+
+      // Update supervisor agent with worktreePath
+      const supervisor = await agentAccessor.findSupervisorByTopLevelTaskId(task.id);
+      if (supervisor) {
+        await agentAccessor.update(supervisor.id, {
+          worktreePath,
+        });
+      }
 
       logger.info('Created top-level task infrastructure', {
         taskId: task.id,
@@ -481,9 +488,13 @@ class ReconciliationService {
       return this.createWorkerForOrphanedTask(task);
     }
 
-    // Ensure infrastructure for IN_PROGRESS tasks
-    if (task.state === TaskState.IN_PROGRESS && !(task.worktreePath && task.branchName)) {
-      await this.ensureLeafTaskInfrastructure(task);
+    // Ensure infrastructure for IN_PROGRESS tasks (check branchName on task, worktreePath on agent)
+    if (task.state === TaskState.IN_PROGRESS && !task.branchName) {
+      const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
+      // Update the agent with worktreePath if one exists
+      if (task.assignedAgentId) {
+        await agentAccessor.update(task.assignedAgentId, { worktreePath });
+      }
       await taskAccessor.markReconciled(task.id);
       return { workerCreated: false, infrastructureCreated: true };
     }
@@ -520,16 +531,17 @@ class ReconciliationService {
 
     logger.info('Creating worker for leaf task', { taskId: task.id, title: task.title });
 
-    // Create infrastructure FIRST to ensure consistency
-    await this.ensureLeafTaskInfrastructure(task);
-
-    // Create worker agent
+    // Create worker agent first
     const worker = await agentAccessor.create({
       type: AgentType.WORKER,
       currentTaskId: task.id,
       desiredExecutionState: DesiredExecutionState.ACTIVE,
       executionState: ExecutionState.IDLE,
     });
+
+    // Create infrastructure and update agent with worktreePath
+    const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
+    await agentAccessor.update(worker.id, { worktreePath });
 
     // Update task state and assign agent
     await taskAccessor.update(task.id, {
@@ -559,14 +571,7 @@ class ReconciliationService {
       title: task.title,
     });
 
-    let infrastructureCreated = false;
-
-    // Ensure infrastructure exists first
-    if (!(task.worktreePath && task.branchName)) {
-      await this.ensureLeafTaskInfrastructure(task);
-      infrastructureCreated = true;
-    }
-
+    // Create worker agent first
     const worker = await agentAccessor.create({
       type: AgentType.WORKER,
       currentTaskId: task.id,
@@ -574,13 +579,24 @@ class ReconciliationService {
       executionState: ExecutionState.IDLE,
     });
 
+    let infrastructureCreated = false;
+
+    // Ensure infrastructure exists and update agent with worktreePath
+    if (!task.branchName) {
+      const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
+      await agentAccessor.update(worker.id, { worktreePath });
+      infrastructureCreated = true;
+    }
+
     await taskAccessor.update(task.id, { assignedAgentId: worker.id });
     await taskAccessor.markReconciled(task.id);
 
     return { workerCreated: true, infrastructureCreated };
   }
 
-  private async ensureLeafTaskInfrastructure(task: TaskWithRelations | Task): Promise<void> {
+  private async ensureLeafTaskInfrastructure(
+    task: TaskWithRelations | Task
+  ): Promise<{ worktreePath: string; branchName: string }> {
     // Get full task with project if not already loaded
     const fullTask =
       'project' in task && task.project ? task : await taskAccessor.findById(task.id);
@@ -609,9 +625,8 @@ class ReconciliationService {
       const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch);
       const branchName = worktreeInfo.branchName;
 
-      // Update task
+      // Update task with branch info only (worktreePath is stored on agent)
       await taskAccessor.update(task.id, {
-        worktreePath,
         branchName,
       });
 
@@ -621,6 +636,8 @@ class ReconciliationService {
         branchName,
         baseBranch,
       });
+
+      return { worktreePath, branchName };
     } catch (error) {
       logger.error('Failed to create leaf task infrastructure', error as Error, {
         taskId: task.id,

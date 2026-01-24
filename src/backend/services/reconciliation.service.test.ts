@@ -460,21 +460,20 @@ describe('ReconciliationService', () => {
       });
     });
 
-    it('should create infrastructure for task with missing worktree', async () => {
+    it('should create infrastructure for task with missing branch', async () => {
       const taskMissingInfra = {
         ...createTask({
           id: 'no-infra-1',
           projectId: project.id,
           parentId: topLevelTask.id,
           state: TaskState.IN_PROGRESS,
-          worktreePath: null, // Missing!
           branchName: null, // Missing!
           assignedAgentId: 'some-worker',
         }),
         project,
         parent: topLevelTask,
         children: [],
-        assignedAgent: null,
+        assignedAgent: createAgent({ id: 'some-worker', worktreePath: null }), // Agent with no worktreePath
         supervisorAgent: null,
         dependsOn: [],
         dependents: [],
@@ -1100,7 +1099,7 @@ describe('ReconciliationService', () => {
           projectId: project.id,
           parentId: 'nonexistent-parent',
           state: TaskState.IN_PROGRESS,
-          worktreePath: null,
+          branchName: null, // Missing branch (worktreePath is now on Agent)
         }),
         project,
         parent: null,

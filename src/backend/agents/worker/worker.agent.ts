@@ -131,10 +131,9 @@ export async function createWorker(taskId: string, options?: CreateWorkerOptions
   const worktreeName = `task-${agent.id.substring(0, 8)}`;
   const worktreeInfo = await gitClient.createWorktree(worktreeName, topLevelBranchName);
 
-  // Update task with worktree info
+  // Update task with branch info (worktreePath is stored on agent)
   await taskAccessor.update(taskId, {
     assignedAgentId: agent.id,
-    worktreePath: worktreeInfo.path,
     branchName: worktreeInfo.branchName,
     state: TaskState.IN_PROGRESS,
   });
@@ -169,10 +168,11 @@ export async function createWorker(taskId: string, options?: CreateWorkerOptions
     resumeSessionId: options?.resumeSessionId,
   });
 
-  // Update agent with session info
+  // Update agent with session info and worktree path
   await agentAccessor.update(agent.id, {
     sessionId: sessionContext.sessionId,
     tmuxSessionName: sessionContext.tmuxSessionName,
+    worktreePath: worktreeInfo.path,
   });
 
   console.log(`Created worker ${agent.id} for task ${taskId}`);
@@ -467,11 +467,21 @@ export async function stopWorker(agentId: string): Promise<void> {
 }
 
 /**
- * Clean up worktree for a task if it exists
+ * Clean up worktree for an agent if it exists
  */
-async function cleanupTaskWorktree(taskId: string): Promise<void> {
-  const task = await taskAccessor.findById(taskId);
-  if (!(task?.worktreePath && task.parentId)) {
+async function cleanupAgentWorktree(agentId: string): Promise<void> {
+  const agent = await agentAccessor.findById(agentId);
+  if (!agent?.worktreePath) {
+    return;
+  }
+
+  // Get task to find the project
+  if (!agent.currentTaskId) {
+    return;
+  }
+
+  const task = await taskAccessor.findById(agent.currentTaskId);
+  if (!task?.parentId) {
     return;
   }
 
@@ -485,7 +495,7 @@ async function cleanupTaskWorktree(taskId: string): Promise<void> {
     worktreeBasePath: parentTask.project.worktreeBasePath,
   });
 
-  const worktreeName = task.worktreePath.split('/').pop();
+  const worktreeName = agent.worktreePath.split('/').pop();
   if (worktreeName) {
     try {
       await gitClient.deleteWorktree(worktreeName);
@@ -517,10 +527,8 @@ export async function killWorker(agentId: string): Promise<void> {
   // Kill Claude session and cleanup
   await killSession(agentId);
 
-  // Delete worktree if task exists
-  if (agent.currentTaskId) {
-    await cleanupTaskWorktree(agent.currentTaskId);
-  }
+  // Delete worktree for this agent
+  await cleanupAgentWorktree(agentId);
 
   // Remove from active workers
   activeWorkers.delete(agentId);

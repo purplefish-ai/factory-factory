@@ -40,7 +40,6 @@ export interface UpdateTaskInput {
   description?: string;
   state?: TaskState;
   assignedAgentId?: string | null;
-  worktreePath?: string | null;
   branchName?: string | null;
   prUrl?: string | null;
   attempts?: number;
@@ -422,7 +421,9 @@ export class TaskAccessor {
   /**
    * Get tasks in REVIEW state, ordered by submission time
    */
-  getReviewQueue(parentId: string): Promise<Task[]> {
+  getReviewQueue(
+    parentId: string
+  ): Promise<(Task & { assignedAgent: import('@prisma-gen/client').Agent | null })[]> {
     return prisma.task.findMany({
       where: {
         parentId,
@@ -577,13 +578,14 @@ export class TaskAccessor {
   }
 
   /**
-   * Find tasks with missing infrastructure (worktree, branch) that should have it
+   * Find tasks with missing infrastructure (branch) that should have it
+   * Note: worktreePath is now on Agent, so we only check branchName here
    */
   findTasksWithMissingInfrastructure(): Promise<TaskWithRelations[]> {
     return prisma.task.findMany({
       where: {
         state: TaskState.IN_PROGRESS,
-        OR: [{ worktreePath: null }, { branchName: null }],
+        branchName: null,
       },
       include: fullInclude,
     });
