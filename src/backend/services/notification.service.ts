@@ -59,10 +59,24 @@ function isQuietHours(config: NotificationConfig): boolean {
 }
 
 /**
- * Escape string for shell command
+ * Escape string for shell command (general use)
  */
 function escapeForShell(str: string): string {
   return str.replace(/'/g, "'\\''");
+}
+
+/**
+ * Escape and truncate string for osascript notifications
+ * osascript doesn't handle newlines well in notifications
+ */
+function escapeForOsascript(str: string): string {
+  // Replace newlines with spaces, escape single quotes, and truncate if too long
+  const cleaned = str
+    .replace(/[\r\n]+/g, ' ') // Replace newlines with spaces
+    .replace(/'/g, "'\\''") // Escape single quotes
+    .replace(/\\/g, '\\\\') // Escape backslashes
+    .slice(0, 200); // Truncate to reasonable length for notifications
+  return cleaned;
 }
 
 /**
@@ -73,8 +87,8 @@ async function sendMacOSNotification(
   message: string,
   soundEnabled: boolean
 ): Promise<void> {
-  const escapedTitle = escapeForShell(title);
-  const escapedMessage = escapeForShell(message);
+  const escapedTitle = escapeForOsascript(title);
+  const escapedMessage = escapeForOsascript(message);
 
   let script = `display notification '${escapedMessage}' with title '${escapedTitle}'`;
 
