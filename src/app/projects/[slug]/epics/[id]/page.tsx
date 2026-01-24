@@ -194,7 +194,7 @@ export default function EpicDetailPage() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-mono text-sm">{agent.id.slice(0, 8)}...</span>
                     <span
-                      className={`w-3 h-3 rounded-full ${agent.isHealthy ? 'bg-green-500' : 'bg-destructive'}`}
+                      className={`w-3 h-3 rounded-full ${agent.isHealthy ? 'bg-success' : 'bg-destructive'}`}
                       title={agent.isHealthy ? 'Healthy' : 'Unhealthy'}
                     />
                   </div>

@@ -6,21 +6,19 @@ import { trpc } from '../../../frontend/lib/trpc';
 
 function AgentStateIndicator({ state, isInCrashLoop }: { state: string; isInCrashLoop: boolean }) {
   const stateColors: Record<string, string> = {
-    IDLE: 'bg-gray-100 text-gray-800',
-    BUSY: 'bg-blue-100 text-blue-800',
-    WAITING: 'bg-yellow-100 text-yellow-800',
-    FAILED: 'bg-red-100 text-red-800',
+    IDLE: 'bg-muted text-muted-foreground',
+    BUSY: 'bg-info/15 text-info',
+    WAITING: 'bg-warning/15 text-warning-foreground',
+    FAILED: 'bg-destructive/15 text-destructive',
   };
 
   return (
     <div className="flex items-center gap-2">
-      <span
-        className={`px-2 py-1 rounded text-xs font-medium ${stateColors[state] || 'bg-gray-100'}`}
-      >
+      <span className={`px-2 py-1 rounded text-xs font-medium ${stateColors[state] || 'bg-muted'}`}>
         {state}
       </span>
       {isInCrashLoop && (
-        <span className="px-2 py-1 rounded text-xs font-medium bg-red-500 text-white">
+        <span className="px-2 py-1 rounded text-xs font-medium bg-destructive text-destructive-foreground">
           CRASH LOOP
         </span>
       )}
@@ -57,7 +55,7 @@ export default function AdminAgentsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-gray-500">Loading agents...</div>
+        <div className="animate-pulse text-muted-foreground">Loading agents...</div>
       </div>
     );
   }
@@ -70,12 +68,12 @@ export default function AdminAgentsPage() {
     <div className="space-y-8">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Agent Management</h1>
-          <p className="text-gray-600 mt-1">View and manage all running agents</p>
+          <h1 className="text-2xl font-bold text-foreground">Agent Management</h1>
+          <p className="text-muted-foreground mt-1">View and manage all running agents</p>
         </div>
         <Link
           href="/admin"
-          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80"
         >
           Back to Admin
         </Link>
@@ -83,55 +81,55 @@ export default function AdminAgentsPage() {
 
       {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <h3 className="text-sm font-medium text-gray-600">Total Agents</h3>
+        <div className="bg-card p-4 rounded-lg border">
+          <h3 className="text-sm font-medium text-muted-foreground">Total Agents</h3>
           <p className="text-2xl font-bold">{agents?.length || 0}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <h3 className="text-sm font-medium text-gray-600">Orchestrators</h3>
+        <div className="bg-card p-4 rounded-lg border">
+          <h3 className="text-sm font-medium text-muted-foreground">Orchestrators</h3>
           <p className="text-2xl font-bold">{orchestrators.length}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <h3 className="text-sm font-medium text-gray-600">Supervisors</h3>
+        <div className="bg-card p-4 rounded-lg border">
+          <h3 className="text-sm font-medium text-muted-foreground">Supervisors</h3>
           <p className="text-2xl font-bold">{supervisors.length}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <h3 className="text-sm font-medium text-gray-600">Workers</h3>
+        <div className="bg-card p-4 rounded-lg border">
+          <h3 className="text-sm font-medium text-muted-foreground">Workers</h3>
           <p className="text-2xl font-bold">{workers.length}</p>
         </div>
       </div>
 
       {/* Orchestrators */}
       {orchestrators.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
+        <div className="bg-card rounded-lg border overflow-hidden">
+          <div className="px-6 py-4 border-b border-border">
             <h2 className="text-lg font-semibold">Orchestrators</h2>
           </div>
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   State
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Last Active
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-border">
               {orchestrators.map((agent) => (
-                <tr key={agent.id} className="hover:bg-gray-50">
+                <tr key={agent.id} className="hover:bg-muted">
                   <td className="px-6 py-4 text-sm font-mono">{agent.id.slice(0, 8)}...</td>
                   <td className="px-6 py-4">
                     <AgentStateIndicator state={agent.state} isInCrashLoop={agent.isInCrashLoop} />
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
                     {new Date(agent.lastActiveAt).toLocaleString()}
                   </td>
                   <td className="px-6 py-4">
@@ -140,7 +138,7 @@ export default function AdminAgentsPage() {
                         <button
                           onClick={() => clearCrashRecords.mutate({ agentId: agent.id })}
                           disabled={clearCrashRecords.isPending}
-                          className="text-xs text-blue-600 hover:text-blue-800"
+                          className="text-xs text-primary hover:text-primary/80"
                         >
                           Clear Crash Records
                         </button>
@@ -155,43 +153,43 @@ export default function AdminAgentsPage() {
       )}
 
       {/* Supervisors */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="bg-card rounded-lg border overflow-hidden">
+        <div className="px-6 py-4 border-b border-border">
           <h2 className="text-lg font-semibold">Supervisors</h2>
         </div>
         {supervisors.length === 0 ? (
-          <div className="p-6 text-gray-500">No supervisors running</div>
+          <div className="p-6 text-muted-foreground">No supervisors running</div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   State
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Task
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Session
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Last Active
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-border">
               {supervisors.map((agent) => (
-                <tr key={agent.id} className="hover:bg-gray-50">
+                <tr key={agent.id} className="hover:bg-muted">
                   <td className="px-6 py-4 text-sm font-mono">
                     <Link
                       href={`/agents/${agent.id}`}
-                      className="text-blue-600 hover:text-blue-800"
+                      className="text-primary hover:text-primary/80"
                     >
                       {agent.id.slice(0, 8)}...
                     </Link>
@@ -203,18 +201,18 @@ export default function AdminAgentsPage() {
                     {agent.currentTaskId ? (
                       <Link
                         href={`/tasks/${agent.currentTaskId}`}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-primary hover:text-primary/80"
                       >
                         {agent.currentTaskId.slice(0, 8)}...
                       </Link>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-muted-foreground/50">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono text-gray-600">
+                  <td className="px-6 py-4 text-sm font-mono text-muted-foreground">
                     {agent.tmuxSessionName || '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
                     {new Date(agent.lastActiveAt).toLocaleString()}
                   </td>
                   <td className="px-6 py-4">
@@ -225,7 +223,7 @@ export default function AdminAgentsPage() {
                           restartAgent.mutate({ agentId: agent.id });
                         }}
                         disabled={restartAgent.isPending && selectedAgent === agent.id}
-                        className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                        className="text-xs px-2 py-1 bg-info/15 text-info rounded hover:bg-info/25"
                       >
                         Restart
                       </button>
@@ -235,7 +233,7 @@ export default function AdminAgentsPage() {
                           killAgent.mutate({ agentId: agent.id });
                         }}
                         disabled={killAgent.isPending && selectedAgent === agent.id}
-                        className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                        className="text-xs px-2 py-1 bg-destructive/15 text-destructive rounded hover:bg-destructive/25"
                       >
                         Kill
                       </button>
@@ -249,43 +247,43 @@ export default function AdminAgentsPage() {
       </div>
 
       {/* Workers */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="bg-card rounded-lg border overflow-hidden">
+        <div className="px-6 py-4 border-b border-border">
           <h2 className="text-lg font-semibold">Workers</h2>
         </div>
         {workers.length === 0 ? (
-          <div className="p-6 text-gray-500">No workers running</div>
+          <div className="p-6 text-muted-foreground">No workers running</div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   State
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Task
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Session
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Last Active
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-border">
               {workers.map((agent) => (
-                <tr key={agent.id} className="hover:bg-gray-50">
+                <tr key={agent.id} className="hover:bg-muted">
                   <td className="px-6 py-4 text-sm font-mono">
                     <Link
                       href={`/agents/${agent.id}`}
-                      className="text-blue-600 hover:text-blue-800"
+                      className="text-primary hover:text-primary/80"
                     >
                       {agent.id.slice(0, 8)}...
                     </Link>
@@ -297,18 +295,18 @@ export default function AdminAgentsPage() {
                     {agent.currentTaskId ? (
                       <Link
                         href={`/tasks/${agent.currentTaskId}`}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-primary hover:text-primary/80"
                       >
                         {agent.currentTaskId.slice(0, 8)}...
                       </Link>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-muted-foreground/50">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono text-gray-600">
+                  <td className="px-6 py-4 text-sm font-mono text-muted-foreground">
                     {agent.tmuxSessionName || '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
                     {new Date(agent.lastActiveAt).toLocaleString()}
                   </td>
                   <td className="px-6 py-4">
@@ -319,7 +317,7 @@ export default function AdminAgentsPage() {
                           restartAgent.mutate({ agentId: agent.id });
                         }}
                         disabled={restartAgent.isPending && selectedAgent === agent.id}
-                        className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                        className="text-xs px-2 py-1 bg-info/15 text-info rounded hover:bg-info/25"
                       >
                         Restart
                       </button>
@@ -329,7 +327,7 @@ export default function AdminAgentsPage() {
                           killAgent.mutate({ agentId: agent.id });
                         }}
                         disabled={killAgent.isPending && selectedAgent === agent.id}
-                        className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                        className="text-xs px-2 py-1 bg-destructive/15 text-destructive rounded hover:bg-destructive/25"
                       >
                         Kill
                       </button>
@@ -344,12 +342,12 @@ export default function AdminAgentsPage() {
 
       {/* Action Results */}
       {killAgent.data && (
-        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 p-4 rounded-lg shadow-lg">
+        <div className="fixed bottom-4 right-4 bg-success/10 border border-success/30 p-4 rounded-lg shadow-lg">
           {killAgent.data.message}
         </div>
       )}
       {restartAgent.data && (
-        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 p-4 rounded-lg shadow-lg">
+        <div className="fixed bottom-4 right-4 bg-success/10 border border-success/30 p-4 rounded-lg shadow-lg">
           {restartAgent.data.message}
           {restartAgent.data.newAgentId && (
             <p className="text-sm mt-1">New agent: {restartAgent.data.newAgentId}</p>

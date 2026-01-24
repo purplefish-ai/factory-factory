@@ -36,7 +36,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
@@ -44,7 +44,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   if (error || !project) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Project not found</p>
+        <p className="text-muted-foreground">Project not found</p>
       </div>
     );
   }
