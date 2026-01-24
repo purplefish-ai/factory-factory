@@ -18,12 +18,16 @@ export interface WorkerSessionContext {
 
 // Agent execution profiles
 export const AGENT_PROFILES: Record<string, AgentExecutionProfile> = {
-  WORKER: {
+  worker: {
     model: process.env.WORKER_MODEL || 'claude-sonnet-4-5-20250929',
     permissions: 'skip', // Use --dangerously-skip-permissions
   },
-  SUPERVISOR: {
+  supervisor: {
     model: process.env.SUPERVISOR_MODEL || 'claude-sonnet-4-5-20250929',
+    permissions: 'skip',
+  },
+  orchestrator: {
+    model: process.env.ORCHESTRATOR_MODEL || 'claude-sonnet-4-5-20250929',
     permissions: 'skip',
   },
 };
@@ -35,7 +39,9 @@ export const AGENT_PROFILES: Record<string, AgentExecutionProfile> = {
  */
 export function generateSessionId(agentType: string, agentId: string): string {
   const timestamp = Math.floor(Date.now() / 1000);
-  return `${agentType}-${agentId.substring(0, 8)}-${timestamp}`;
+  // Use first 8 chars of agentId, or full id if shorter (e.g., in tests)
+  const shortId = agentId.length >= 8 ? agentId.substring(0, 8) : agentId;
+  return `${agentType}-${shortId}-${timestamp}`;
 }
 
 /**
@@ -45,14 +51,7 @@ function getTmuxSessionName(agentId: string): string {
   return `worker-${agentId}`;
 }
 
-export interface CreateWorkerSessionOptions {
-  agentId: string;
-  agentType: 'worker' | 'supervisor' | 'orchestrator';
-  systemPrompt: string;
-  workingDir: string;
-  /** If provided, resume an existing Claude session instead of starting new */
-  resumeSessionId?: string;
-}
+export type AgentType = 'worker' | 'supervisor' | 'orchestrator';
 
 /**
  * Create new worker session with Claude Code CLI
@@ -62,7 +61,7 @@ export async function createWorkerSession(
   agentId: string,
   systemPrompt: string,
   workingDir: string,
-  options?: { agentType?: 'worker' | 'supervisor' | 'orchestrator'; resumeSessionId?: string }
+  options?: { agentType?: AgentType; resumeSessionId?: string }
 ): Promise<WorkerSessionContext> {
   // Verify Claude Code setup
   await requireClaudeSetup();
@@ -74,11 +73,14 @@ export async function createWorkerSession(
   const sessionId = resumeSessionId ?? generateSessionId(agentType, agentId);
   const tmuxSessionName = getTmuxSessionName(agentId);
 
-  // Write system prompt to temporary file
-  const systemPromptPath = promptFileManager.writePromptFile(agentId, systemPrompt);
+  // Get agent profile based on agent type
+  const profile = AGENT_PROFILES[agentType] ?? AGENT_PROFILES.worker;
 
-  // Get agent profile
-  const profile = AGENT_PROFILES.WORKER;
+  // Only write system prompt file for new sessions (not resume)
+  // Resume uses the existing conversation context
+  const systemPromptPath = resumeSessionId
+    ? ''
+    : promptFileManager.writePromptFile(agentId, systemPrompt);
 
   // Build Claude CLI command (resume mode if resumeSessionId provided)
   const claudeCommand = resumeSessionId
@@ -148,12 +150,13 @@ function buildClaudeCommand(
 export async function resumeSession(
   agentId: string,
   sessionId: string,
-  workingDir: string
+  workingDir: string,
+  agentType: AgentType = 'worker'
 ): Promise<WorkerSessionContext> {
   await requireClaudeSetup();
 
   const tmuxSessionName = getTmuxSessionName(agentId);
-  const profile = AGENT_PROFILES.WORKER;
+  const profile = AGENT_PROFILES[agentType] ?? AGENT_PROFILES.worker;
 
   // Check if tmux session exists
   const exists = await tmuxClient.sessionExists(tmuxSessionName);
