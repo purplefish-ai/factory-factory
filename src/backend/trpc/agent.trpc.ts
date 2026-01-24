@@ -1,3 +1,4 @@
+import type { Agent } from '@prisma-gen/client';
 import { AgentType, type DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { readSessionOutput } from '../clients/terminal.client';
@@ -6,6 +7,22 @@ import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
 const HEALTH_THRESHOLD_MINUTES = 5;
+
+/**
+ * Calculate health status for an agent based on heartbeat and execution state
+ */
+function calculateAgentHealth(agent: Agent): {
+  isHealthy: boolean;
+  minutesSinceHeartbeat: number;
+} {
+  const now = Date.now();
+  const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+  const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
+  const isHealthy =
+    minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
+    agent.executionState !== ExecutionState.CRASHED;
+  return { isHealthy, minutesSinceHeartbeat };
+}
 
 export const agentRouter = router({
   // List all agents with optional filtering (scoped to project from context)
@@ -28,19 +45,10 @@ export const agentRouter = router({
       });
 
       // Calculate health status for each agent
-      const now = Date.now();
-      return agents.map((agent) => {
-        const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
-        const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
-        const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-          agent.executionState !== ExecutionState.CRASHED;
-        return {
-          ...agent,
-          isHealthy,
-          minutesSinceHeartbeat,
-        };
-      });
+      return agents.map((agent) => ({
+        ...agent,
+        ...calculateAgentHealth(agent),
+      }));
     }),
 
   // Get agent by ID
@@ -50,18 +58,9 @@ export const agentRouter = router({
       throw new Error(`Agent not found: ${input.id}`);
     }
 
-    // Calculate health status
-    const now = Date.now();
-    const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
-    const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
-    const isHealthy =
-      minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-      agent.executionState !== ExecutionState.CRASHED;
-
     return {
       ...agent,
-      isHealthy,
-      minutesSinceHeartbeat,
+      ...calculateAgentHealth(agent),
     };
   }),
 
@@ -103,20 +102,11 @@ export const agentRouter = router({
   // Get agents grouped by type with health status (scoped to project from context)
   listGrouped: projectScopedProcedure.query(async ({ ctx }) => {
     const allAgents = await agentAccessor.list({ projectId: ctx.projectId });
-    const now = Date.now();
 
-    const withHealth = allAgents.map((agent) => {
-      const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
-      const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
-      const isHealthy =
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-        agent.executionState !== ExecutionState.CRASHED;
-      return {
-        ...agent,
-        isHealthy,
-        minutesSinceHeartbeat,
-      };
-    });
+    const withHealth = allAgents.map((agent) => ({
+      ...agent,
+      ...calculateAgentHealth(agent),
+    }));
 
     return {
       orchestrators: withHealth.filter((a) => a.type === AgentType.ORCHESTRATOR),
@@ -130,26 +120,16 @@ export const agentRouter = router({
     .input(z.object({ topLevelTaskId: z.string() }))
     .query(async ({ input }) => {
       const agents = await agentAccessor.findAgentsByTopLevelTaskId(input.topLevelTaskId);
-      const now = Date.now();
 
-      return agents.map((agent) => {
-        const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
-        const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
-        const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-          agent.executionState !== ExecutionState.CRASHED;
-        return {
-          ...agent,
-          isHealthy,
-          minutesSinceHeartbeat,
-        };
-      });
+      return agents.map((agent) => ({
+        ...agent,
+        ...calculateAgentHealth(agent),
+      }));
     }),
 
   // Get stats for dashboard (scoped to project from context)
   getStats: projectScopedProcedure.query(async ({ ctx }) => {
     const agents = await agentAccessor.list({ projectId: ctx.projectId });
-    const now = Date.now();
 
     let healthy = 0;
     let unhealthy = 0;
@@ -173,22 +153,18 @@ export const agentRouter = router({
       PAUSED: 0,
     };
 
-    agents.forEach((agent) => {
+    for (const agent of agents) {
       byType[agent.type]++;
       byExecutionState[agent.executionState]++;
       byDesiredState[agent.desiredExecutionState]++;
 
-      const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
-      const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
-      if (
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
-        agent.executionState !== ExecutionState.CRASHED
-      ) {
+      const { isHealthy } = calculateAgentHealth(agent);
+      if (isHealthy) {
         healthy++;
       } else {
         unhealthy++;
       }
-    });
+    }
 
     return {
       total: agents.length,

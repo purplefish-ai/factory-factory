@@ -366,7 +366,6 @@ class ReconciliationService {
   // Phase 3: Leaf Tasks (Workers + Infrastructure)
   // ============================================================================
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reconciliation function with necessary error handling
   private async reconcileLeafTasks(): Promise<{
     tasksReconciled: number;
     workersCreated: number;
@@ -379,44 +378,17 @@ class ReconciliationService {
     let infrastructureCreated = 0;
 
     try {
-      // Find leaf tasks that need workers
-      const tasksNeedingWorkers = await taskAccessor.findLeafTasksNeedingWorkers();
+      // Reconcile tasks that need workers
+      const workerResult = await this.reconcileTasksNeedingWorkers();
+      tasksReconciled += workerResult.tasksReconciled;
+      workersCreated += workerResult.workersCreated;
+      infrastructureCreated += workerResult.infrastructureCreated;
+      errors.push(...workerResult.errors);
 
-      for (const task of tasksNeedingWorkers) {
-        try {
-          const result = await this.reconcileSingleLeafTask(task);
-          tasksReconciled++;
-          if (result.workerCreated) {
-            workersCreated++;
-          }
-          if (result.infrastructureCreated) {
-            infrastructureCreated++;
-          }
-        } catch (error) {
-          errors.push({
-            entity: 'task',
-            id: task.id,
-            error: error instanceof Error ? error.message : String(error),
-            action: 'reconcile_leaf_task',
-          });
-        }
-      }
-
-      // Also check for tasks with missing infrastructure
-      const tasksWithMissingInfra = await taskAccessor.findTasksWithMissingInfrastructure();
-      for (const task of tasksWithMissingInfra) {
-        try {
-          await this.ensureLeafTaskInfrastructure(task);
-          infrastructureCreated++;
-        } catch (error) {
-          errors.push({
-            entity: 'task',
-            id: task.id,
-            error: error instanceof Error ? error.message : String(error),
-            action: 'create_infrastructure',
-          });
-        }
-      }
+      // Reconcile tasks with missing infrastructure
+      const infraResult = await this.reconcileTasksWithMissingInfrastructure();
+      infrastructureCreated += infraResult.infrastructureCreated;
+      errors.push(...infraResult.errors);
     } catch (error) {
       errors.push({
         entity: 'system',
@@ -429,101 +401,183 @@ class ReconciliationService {
     return { tasksReconciled, workersCreated, infrastructureCreated, errors };
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reconciliation function with necessary branching
+  private async reconcileTasksNeedingWorkers(): Promise<{
+    tasksReconciled: number;
+    workersCreated: number;
+    infrastructureCreated: number;
+    errors: ReconciliationResult['errors'];
+  }> {
+    const errors: ReconciliationResult['errors'] = [];
+    let tasksReconciled = 0;
+    let workersCreated = 0;
+    let infrastructureCreated = 0;
+
+    const tasksNeedingWorkers = await taskAccessor.findLeafTasksNeedingWorkers();
+
+    for (const task of tasksNeedingWorkers) {
+      try {
+        const result = await this.reconcileSingleLeafTask(task);
+        tasksReconciled++;
+        if (result.workerCreated) {
+          workersCreated++;
+        }
+        if (result.infrastructureCreated) {
+          infrastructureCreated++;
+        }
+      } catch (error) {
+        errors.push({
+          entity: 'task',
+          id: task.id,
+          error: error instanceof Error ? error.message : String(error),
+          action: 'reconcile_leaf_task',
+        });
+      }
+    }
+
+    return { tasksReconciled, workersCreated, infrastructureCreated, errors };
+  }
+
+  private async reconcileTasksWithMissingInfrastructure(): Promise<{
+    infrastructureCreated: number;
+    errors: ReconciliationResult['errors'];
+  }> {
+    const errors: ReconciliationResult['errors'] = [];
+    let infrastructureCreated = 0;
+
+    const tasksWithMissingInfra = await taskAccessor.findTasksWithMissingInfrastructure();
+
+    for (const task of tasksWithMissingInfra) {
+      try {
+        await this.ensureLeafTaskInfrastructure(task);
+        infrastructureCreated++;
+      } catch (error) {
+        errors.push({
+          entity: 'task',
+          id: task.id,
+          error: error instanceof Error ? error.message : String(error),
+          action: 'create_infrastructure',
+        });
+      }
+    }
+
+    return { infrastructureCreated, errors };
+  }
+
   private async reconcileSingleLeafTask(
     task: TaskWithRelations
   ): Promise<{ workerCreated: boolean; infrastructureCreated: boolean }> {
-    let workerCreated = false;
-    let infrastructureCreated = false;
-
-    // Check if task is blocked
-    const isBlocked = await taskAccessor.isBlocked(task.id);
-    if (isBlocked && task.state === TaskState.PENDING) {
-      // Task is blocked, update state if needed
-      await taskAccessor.update(task.id, { state: TaskState.BLOCKED });
-      return { workerCreated, infrastructureCreated };
+    // Handle blocked tasks
+    if (await this.handleBlockedTask(task)) {
+      return { workerCreated: false, infrastructureCreated: false };
     }
 
-    // If task is in PENDING and unblocked, transition to IN_PROGRESS and create worker
+    // Handle PENDING tasks that need workers
     if (task.state === TaskState.PENDING && !task.assignedAgentId) {
-      // Re-fetch task to check for race condition (another reconciler may have already assigned)
-      const freshTask = await taskAccessor.findById(task.id);
-      if (freshTask?.assignedAgentId) {
-        logger.debug('Task already has agent assigned (race condition avoided)', {
-          taskId: task.id,
-        });
-        return { workerCreated, infrastructureCreated };
-      }
-
-      logger.info('Creating worker for leaf task', { taskId: task.id, title: task.title });
-
-      // Create infrastructure FIRST (before state change) to ensure consistency
-      await this.ensureLeafTaskInfrastructure(task);
-      infrastructureCreated = true;
-
-      // Create worker agent
-      const worker = await agentAccessor.create({
-        type: AgentType.WORKER,
-        currentTaskId: task.id,
-        desiredExecutionState: DesiredExecutionState.ACTIVE,
-        executionState: ExecutionState.IDLE,
-      });
-      workerCreated = true;
-
-      // Update task state and assign agent
-      await taskAccessor.update(task.id, {
-        state: TaskState.IN_PROGRESS,
-        assignedAgentId: worker.id,
-      });
+      return this.createWorkerForPendingTask(task);
     }
 
-    // If task is IN_PROGRESS but has no worker, create one
+    // Handle IN_PROGRESS tasks that lost their worker
     if (task.state === TaskState.IN_PROGRESS && !task.assignedAgentId) {
-      // Re-fetch task to check for race condition
-      const freshTask = await taskAccessor.findById(task.id);
-      if (freshTask?.assignedAgentId) {
-        logger.debug('Task already has agent assigned (race condition avoided)', {
-          taskId: task.id,
-        });
-        return { workerCreated, infrastructureCreated };
-      }
-
-      logger.info('Creating missing worker for IN_PROGRESS task', {
-        taskId: task.id,
-        title: task.title,
-      });
-
-      // Ensure infrastructure exists first
-      if (!(task.worktreePath && task.branchName)) {
-        await this.ensureLeafTaskInfrastructure(task);
-        infrastructureCreated = true;
-      }
-
-      const worker = await agentAccessor.create({
-        type: AgentType.WORKER,
-        currentTaskId: task.id,
-        desiredExecutionState: DesiredExecutionState.ACTIVE,
-        executionState: ExecutionState.IDLE,
-      });
-      workerCreated = true;
-
-      await taskAccessor.update(task.id, {
-        assignedAgentId: worker.id,
-      });
+      return this.createWorkerForOrphanedTask(task);
     }
 
-    // Ensure infrastructure exists for IN_PROGRESS tasks (if not already created above)
-    if (
-      task.state === TaskState.IN_PROGRESS &&
-      !(task.worktreePath && task.branchName) &&
-      !infrastructureCreated
-    ) {
+    // Ensure infrastructure for IN_PROGRESS tasks
+    if (task.state === TaskState.IN_PROGRESS && !(task.worktreePath && task.branchName)) {
       await this.ensureLeafTaskInfrastructure(task);
-      infrastructureCreated = true;
+      await taskAccessor.markReconciled(task.id);
+      return { workerCreated: false, infrastructureCreated: true };
     }
 
     await taskAccessor.markReconciled(task.id);
-    return { workerCreated, infrastructureCreated };
+    return { workerCreated: false, infrastructureCreated: false };
+  }
+
+  /**
+   * Check if task is blocked and update state if needed.
+   * Returns true if task was handled (is blocked), false otherwise.
+   */
+  private async handleBlockedTask(task: TaskWithRelations): Promise<boolean> {
+    const isBlocked = await taskAccessor.isBlocked(task.id);
+    if (isBlocked && task.state === TaskState.PENDING) {
+      await taskAccessor.update(task.id, { state: TaskState.BLOCKED });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Create a worker for a PENDING task and transition it to IN_PROGRESS.
+   */
+  private async createWorkerForPendingTask(
+    task: TaskWithRelations
+  ): Promise<{ workerCreated: boolean; infrastructureCreated: boolean }> {
+    // Re-fetch task to check for race condition
+    const freshTask = await taskAccessor.findById(task.id);
+    if (freshTask?.assignedAgentId) {
+      logger.debug('Task already has agent assigned (race condition avoided)', { taskId: task.id });
+      return { workerCreated: false, infrastructureCreated: false };
+    }
+
+    logger.info('Creating worker for leaf task', { taskId: task.id, title: task.title });
+
+    // Create infrastructure FIRST to ensure consistency
+    await this.ensureLeafTaskInfrastructure(task);
+
+    // Create worker agent
+    const worker = await agentAccessor.create({
+      type: AgentType.WORKER,
+      currentTaskId: task.id,
+      desiredExecutionState: DesiredExecutionState.ACTIVE,
+      executionState: ExecutionState.IDLE,
+    });
+
+    // Update task state and assign agent
+    await taskAccessor.update(task.id, {
+      state: TaskState.IN_PROGRESS,
+      assignedAgentId: worker.id,
+    });
+
+    await taskAccessor.markReconciled(task.id);
+    return { workerCreated: true, infrastructureCreated: true };
+  }
+
+  /**
+   * Create a worker for an IN_PROGRESS task that has no assigned agent.
+   */
+  private async createWorkerForOrphanedTask(
+    task: TaskWithRelations
+  ): Promise<{ workerCreated: boolean; infrastructureCreated: boolean }> {
+    // Re-fetch task to check for race condition
+    const freshTask = await taskAccessor.findById(task.id);
+    if (freshTask?.assignedAgentId) {
+      logger.debug('Task already has agent assigned (race condition avoided)', { taskId: task.id });
+      return { workerCreated: false, infrastructureCreated: false };
+    }
+
+    logger.info('Creating missing worker for IN_PROGRESS task', {
+      taskId: task.id,
+      title: task.title,
+    });
+
+    let infrastructureCreated = false;
+
+    // Ensure infrastructure exists first
+    if (!(task.worktreePath && task.branchName)) {
+      await this.ensureLeafTaskInfrastructure(task);
+      infrastructureCreated = true;
+    }
+
+    const worker = await agentAccessor.create({
+      type: AgentType.WORKER,
+      currentTaskId: task.id,
+      desiredExecutionState: DesiredExecutionState.ACTIVE,
+      executionState: ExecutionState.IDLE,
+    });
+
+    await taskAccessor.update(task.id, { assignedAgentId: worker.id });
+    await taskAccessor.markReconciled(task.id);
+
+    return { workerCreated: true, infrastructureCreated };
   }
 
   private async ensureLeafTaskInfrastructure(task: TaskWithRelations | Task): Promise<void> {
@@ -635,35 +689,66 @@ class ReconciliationService {
       desiredExecutionState,
     });
 
-    // Handle state transitions
-    if (desiredExecutionState === DesiredExecutionState.ACTIVE) {
-      if (executionState === ExecutionState.IDLE || executionState === ExecutionState.CRASHED) {
-        // Need to start the agent
-        // Note: Actual agent starting is handled by the agent lifecycle module
-        // The reconciler just sets the state, the lifecycle module watches for this
-        await agentAccessor.update(id, {
-          executionState: ExecutionState.ACTIVE,
-        });
-        logger.info('Agent marked for activation', { agentId: id });
-      }
-    } else if (desiredExecutionState === DesiredExecutionState.IDLE) {
-      if (executionState === ExecutionState.ACTIVE || executionState === ExecutionState.PAUSED) {
-        // Need to stop the agent
-        await agentAccessor.update(id, {
-          executionState: ExecutionState.IDLE,
-        });
-        logger.info('Agent marked for deactivation', { agentId: id });
-      }
-    } else if (desiredExecutionState === DesiredExecutionState.PAUSED) {
-      if (executionState === ExecutionState.ACTIVE) {
-        await agentAccessor.update(id, {
-          executionState: ExecutionState.PAUSED,
-        });
-        logger.info('Agent marked as paused', { agentId: id });
-      }
-    }
-
+    // Apply the appropriate state transition
+    await this.applyAgentStateTransition(id, executionState, desiredExecutionState);
     await agentAccessor.markReconciled(id);
+  }
+
+  /**
+   * Apply the appropriate state transition based on desired state.
+   * Note: Actual agent starting/stopping is handled by the agent lifecycle module.
+   * The reconciler just sets the state, the lifecycle module watches for this.
+   */
+  private async applyAgentStateTransition(
+    agentId: string,
+    actual: ExecutionState,
+    desired: DesiredExecutionState
+  ): Promise<void> {
+    switch (desired) {
+      case DesiredExecutionState.ACTIVE:
+        await this.transitionToActive(agentId, actual);
+        break;
+      case DesiredExecutionState.IDLE:
+        await this.transitionToIdle(agentId, actual);
+        break;
+      case DesiredExecutionState.PAUSED:
+        await this.transitionToPaused(agentId, actual);
+        break;
+    }
+  }
+
+  private async transitionToActive(agentId: string, actual: ExecutionState): Promise<void> {
+    if (
+      actual === ExecutionState.IDLE ||
+      actual === ExecutionState.CRASHED ||
+      actual === ExecutionState.PAUSED
+    ) {
+      await agentAccessor.update(agentId, { executionState: ExecutionState.ACTIVE });
+      const action =
+        actual === ExecutionState.PAUSED ? 'resumed from paused state' : 'marked for activation';
+      logger.info(`Agent ${action}`, { agentId });
+    }
+  }
+
+  private async transitionToIdle(agentId: string, actual: ExecutionState): Promise<void> {
+    if (
+      actual === ExecutionState.ACTIVE ||
+      actual === ExecutionState.PAUSED ||
+      actual === ExecutionState.CRASHED
+    ) {
+      await agentAccessor.update(agentId, { executionState: ExecutionState.IDLE });
+      logger.info('Agent marked for deactivation', { agentId });
+    }
+  }
+
+  private async transitionToPaused(agentId: string, actual: ExecutionState): Promise<void> {
+    if (actual === ExecutionState.ACTIVE) {
+      await agentAccessor.update(agentId, { executionState: ExecutionState.PAUSED });
+      logger.info('Agent marked as paused', { agentId });
+    } else if (actual === ExecutionState.IDLE) {
+      // Can't pause an idle agent - it needs to be active first
+      logger.debug('Cannot pause idle agent, skipping', { agentId });
+    }
   }
 
   private statesMatch(actual: ExecutionState, desired: DesiredExecutionState): boolean {
