@@ -1,3 +1,4 @@
+@import '@xterm/xterm/css/xterm.css';
 @import 'tailwindcss';
 
 :root {
@@ -14,4 +15,23 @@ body {
       rgb(var(--background-end-rgb))
     )
     rgb(var(--background-start-rgb));
+}
+
+/* xterm.js terminal styling */
+.terminal-container {
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+  padding: 8px;
+}
+
+.terminal-container .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.terminal-container .xterm-screen {
+  height: 100% !important;
 }

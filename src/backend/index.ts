@@ -1,7 +1,13 @@
+import { createServer } from 'node:http';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { serve } from 'inngest/express';
-import { listTmuxSessions, readSessionOutput } from './clients/terminal.client.js';
+import { WebSocketServer } from 'ws';
+import {
+  listTmuxSessions,
+  readSessionOutput,
+  tmuxSessionExists,
+} from './clients/terminal.client.js';
 import { prisma } from './db.js';
 import { inngest } from './inngest/client';
 import {
@@ -23,10 +29,16 @@ import {
   rateLimiter,
 } from './services/index.js';
 import { appRouter, createContext } from './trpc/index.js';
+import * as ptyManager from './websocket/pty-manager.js';
+import { connectionParamsSchema } from './websocket/schemas.js';
 
 const logger = createLogger('server');
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
+
+// Create HTTP server and WebSocket server
+const server = createServer(app);
+const wss = new WebSocketServer({ noServer: true });
 
 // CORS configuration
 const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS?.split(',') || [
@@ -382,10 +394,96 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // ============================================================================
+// WebSocket Terminal Handler
+// ============================================================================
+
+// Handle WebSocket upgrade requests for /terminal path
+server.on('upgrade', async (request, socket, head) => {
+  const url = new URL(request.url || '', `http://${request.headers.host}`);
+
+  // Only handle /terminal path
+  if (url.pathname !== '/terminal') {
+    socket.destroy();
+    return;
+  }
+
+  try {
+    // Parse and validate connection parameters
+    const params = connectionParamsSchema.safeParse({
+      session: url.searchParams.get('session'),
+      cols: url.searchParams.get('cols'),
+      rows: url.searchParams.get('rows'),
+    });
+
+    if (!params.success) {
+      logger.warn('Invalid terminal connection parameters', {
+        issues: params.error.issues,
+      });
+      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const { session, cols, rows } = params.data;
+
+    // Verify tmux session exists
+    const sessionExists = await tmuxSessionExists(session);
+    if (!sessionExists) {
+      logger.warn('Tmux session not found', { session });
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // Complete the WebSocket handshake
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      logger.info('WebSocket connection established', { session, cols, rows });
+
+      // Attach PTY to the tmux session
+      const result = ptyManager.attach(session, ws, cols, rows);
+
+      if (!result.success) {
+        ws.send(JSON.stringify({ type: 'error', message: result.error }));
+        ws.close(1008, result.error);
+        return;
+      }
+
+      // Handle incoming messages
+      ws.on('message', (data) => {
+        const message = data.toString();
+        ptyManager.handleMessage(ws, message);
+      });
+
+      // Handle connection close
+      ws.on('close', () => {
+        logger.info('WebSocket connection closed', { session });
+        ptyManager.cleanup(ws);
+      });
+
+      // Handle connection errors
+      ws.on('error', (error) => {
+        logger.error('WebSocket error', error);
+        ptyManager.cleanup(ws);
+      });
+    });
+  } catch (error) {
+    logger.error('Error handling WebSocket upgrade', error as Error);
+    socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+    socket.destroy();
+  }
+});
+
+// WebSocket connection stats endpoint
+app.get('/api/terminal/stats', (_req, res) => {
+  const stats = ptyManager.getStats();
+  res.json(stats);
+});
+
+// ============================================================================
 // Server Startup
 // ============================================================================
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   logger.info('Backend server started', {
     port: PORT,
     environment: configService.getEnvironment(),
@@ -395,17 +493,24 @@ app.listen(PORT, () => {
   console.log(`Health check (all): http://localhost:${PORT}/health/all`);
   console.log(`Inngest endpoint: http://localhost:${PORT}/api/inngest`);
   console.log(`tRPC endpoint: http://localhost:${PORT}/api/trpc`);
+  console.log(`WebSocket terminal: ws://localhost:${PORT}/terminal`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  ptyManager.cleanupAll();
+  wss.close();
+  server.close();
   await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
+  ptyManager.cleanupAll();
+  wss.close();
+  server.close();
   await prisma.$disconnect();
   process.exit(0);
 });
