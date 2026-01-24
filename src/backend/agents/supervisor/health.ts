@@ -5,7 +5,7 @@
  * The supervisor periodically checks worker health and triggers recovery when needed.
  */
 
-import { AgentState, TaskState } from '@prisma-gen/client';
+import { ExecutionState, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,
@@ -46,9 +46,7 @@ export async function checkWorkerHealth(supervisorId: string): Promise<{
 
   // Get all child tasks for this top-level task that are in progress
   const tasks = await taskAccessor.findByParentId(topLevelTaskId);
-  const activeTasks = tasks.filter(
-    (t) => t.state === TaskState.IN_PROGRESS || t.state === TaskState.ASSIGNED
-  );
+  const activeTasks = tasks.filter((t) => t.state === TaskState.IN_PROGRESS);
 
   const healthyWorkers: string[] = [];
   const unhealthyWorkers: Array<{
@@ -69,11 +67,12 @@ export async function checkWorkerHealth(supervisorId: string): Promise<{
       continue;
     }
 
-    const minutesSinceHeartbeat = Math.floor((now - worker.lastActiveAt.getTime()) / (60 * 1000));
+    const heartbeatTime = worker.lastHeartbeat ?? worker.createdAt;
+    const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
 
     if (
       minutesSinceHeartbeat >= WORKER_HEALTH_THRESHOLD_MINUTES ||
-      worker.state === AgentState.FAILED
+      worker.executionState === ExecutionState.CRASHED
     ) {
       unhealthyWorkers.push({
         workerId: worker.id,
@@ -134,9 +133,9 @@ export async function recoverWorker(
       failureReason: `Worker crashed ${MAX_WORKER_ATTEMPTS} times. Last worker ID: ${workerId}`,
     });
 
-    // Mark worker as failed
+    // Mark worker as crashed
     await agentAccessor.update(workerId, {
-      state: AgentState.FAILED,
+      executionState: ExecutionState.CRASHED,
     });
 
     // Send mail to supervisor
@@ -187,9 +186,9 @@ export async function recoverWorker(
     // Continue anyway
   }
 
-  // Mark old worker as failed
+  // Mark old worker as crashed
   await agentAccessor.update(workerId, {
-    state: AgentState.FAILED,
+    executionState: ExecutionState.CRASHED,
   });
 
   // Update task with attempt count and set back to IN_PROGRESS

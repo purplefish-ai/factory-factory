@@ -77,16 +77,13 @@ const ForceCompleteTaskInputSchema = z.object({
  */
 function isValidStateTransition(from: TaskState, to: TaskState): boolean {
   const validTransitions: Record<TaskState, TaskState[]> = {
-    [TaskState.PLANNING]: [TaskState.PLANNED, TaskState.CANCELLED],
-    [TaskState.PLANNED]: [TaskState.IN_PROGRESS, TaskState.CANCELLED],
-    [TaskState.PENDING]: [TaskState.ASSIGNED, TaskState.IN_PROGRESS, TaskState.BLOCKED],
-    [TaskState.ASSIGNED]: [TaskState.IN_PROGRESS, TaskState.PENDING],
+    [TaskState.PENDING]: [TaskState.IN_PROGRESS, TaskState.BLOCKED, TaskState.FAILED],
+    [TaskState.PLANNING]: [TaskState.IN_PROGRESS, TaskState.FAILED],
     [TaskState.IN_PROGRESS]: [TaskState.REVIEW, TaskState.BLOCKED, TaskState.FAILED],
     [TaskState.REVIEW]: [TaskState.COMPLETED, TaskState.IN_PROGRESS, TaskState.BLOCKED],
     [TaskState.BLOCKED]: [TaskState.IN_PROGRESS, TaskState.FAILED, TaskState.PENDING],
     [TaskState.COMPLETED]: [],
     [TaskState.FAILED]: [TaskState.IN_PROGRESS, TaskState.PENDING],
-    [TaskState.CANCELLED]: [],
   };
 
   return validTransitions[from]?.includes(to) ?? false;

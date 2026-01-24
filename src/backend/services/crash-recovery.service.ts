@@ -4,7 +4,7 @@
  * Handles crash loop detection, agent recovery, and system resilience.
  */
 
-import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
+import { AgentType, ExecutionState, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,
@@ -181,9 +181,9 @@ class CrashRecoveryService {
       taskId,
     });
 
-    // Mark agent as failed
+    // Mark agent as crashed
     await agentAccessor.update(agentId, {
-      state: AgentState.FAILED,
+      executionState: ExecutionState.CRASHED,
     });
 
     // Handle task/top-level task state
@@ -255,7 +255,7 @@ class CrashRecoveryService {
       });
 
       await agentAccessor.update(agentId, {
-        state: AgentState.FAILED,
+        executionState: ExecutionState.CRASHED,
       });
 
       // Notify human
@@ -277,9 +277,9 @@ class CrashRecoveryService {
       };
     }
 
-    // Mark old worker as failed
+    // Mark old worker as crashed
     await agentAccessor.update(agentId, {
-      state: AgentState.FAILED,
+      executionState: ExecutionState.CRASHED,
     });
 
     // Reset task for new worker
@@ -335,28 +335,25 @@ class CrashRecoveryService {
       };
     }
 
-    // Mark old supervisor as failed
+    // Mark old supervisor as crashed
     await agentAccessor.update(agentId, {
-      state: AgentState.FAILED,
+      executionState: ExecutionState.CRASHED,
       currentTaskId: null,
     });
 
     // Mark all active workers for this top-level task as needing recovery
     const tasks = await taskAccessor.list({ parentId: topLevelTaskId });
     for (const task of tasks) {
-      if (
-        task.assignedAgentId &&
-        (task.state === TaskState.IN_PROGRESS || task.state === TaskState.ASSIGNED)
-      ) {
+      if (task.assignedAgentId && task.state === TaskState.IN_PROGRESS) {
         // Mark worker's task as pending for reassignment
         await taskAccessor.update(task.id, {
           state: TaskState.PENDING,
           assignedAgentId: null,
         });
 
-        // Mark worker as failed
+        // Mark worker as crashed
         await agentAccessor.update(task.assignedAgentId, {
-          state: AgentState.FAILED,
+          executionState: ExecutionState.CRASHED,
         });
       }
     }
@@ -395,9 +392,9 @@ class CrashRecoveryService {
    * Recover the orchestrator
    */
   private async recoverOrchestrator(agentId: string): Promise<RecoveryResult> {
-    // Mark old orchestrator as failed
+    // Mark old orchestrator as crashed
     await agentAccessor.update(agentId, {
-      state: AgentState.FAILED,
+      executionState: ExecutionState.CRASHED,
     });
 
     // Notify human - orchestrator recovery is critical
@@ -442,7 +439,7 @@ class CrashRecoveryService {
     // Get orchestrator status
     const orchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
     const activeOrchestrator = orchestrators.find(
-      (o) => o.state === AgentState.BUSY || o.state === AgentState.IDLE
+      (o) => o.executionState === ExecutionState.ACTIVE || o.executionState === ExecutionState.IDLE
     );
     const orchestratorHealthy = !!activeOrchestrator;
 
@@ -452,11 +449,13 @@ class CrashRecoveryService {
 
     // Get supervisor status
     const supervisors = await agentAccessor.findByType(AgentType.SUPERVISOR);
-    const healthySupervisors = supervisors.filter((s) => s.state !== AgentState.FAILED);
+    const healthySupervisors = supervisors.filter(
+      (s) => s.executionState !== ExecutionState.CRASHED
+    );
 
     // Get worker status
     const workers = await agentAccessor.findByType(AgentType.WORKER);
-    const healthyWorkers = workers.filter((w) => w.state !== AgentState.FAILED);
+    const healthyWorkers = workers.filter((w) => w.executionState !== ExecutionState.CRASHED);
 
     // Get crash loop agents
     const crashLoopAgents = this.getCrashLoopAgents();

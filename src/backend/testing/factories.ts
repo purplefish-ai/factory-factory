@@ -1,5 +1,5 @@
 import type { Agent, Mail, Project, Task } from '@prisma-gen/client';
-import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
+import { AgentType, DesiredExecutionState, ExecutionState, TaskState } from '@prisma-gen/client';
 
 let idCounter = 0;
 
@@ -52,6 +52,8 @@ export interface TaskOverrides {
   prUrl?: string | null;
   attempts?: number;
   failureReason?: string | null;
+  lastReconcileAt?: Date | null;
+  reconcileFailures?: object[];
   createdAt?: Date;
   updatedAt?: Date;
   completedAt?: Date | null;
@@ -79,6 +81,8 @@ export function createTask(overrides: TaskOverrides = {}): Task {
     prUrl: overrides.prUrl ?? null,
     attempts: overrides.attempts ?? 0,
     failureReason: overrides.failureReason ?? null,
+    lastReconcileAt: overrides.lastReconcileAt ?? null,
+    reconcileFailures: overrides.reconcileFailures ?? [],
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
     completedAt: overrides.completedAt ?? null,
@@ -88,13 +92,16 @@ export function createTask(overrides: TaskOverrides = {}): Task {
 export interface AgentOverrides {
   id?: string;
   type?: AgentType;
-  state?: AgentState;
+  executionState?: ExecutionState;
+  desiredExecutionState?: DesiredExecutionState;
   currentTaskId?: string | null;
   tmuxSessionName?: string | null;
   sessionId?: string | null;
+  lastHeartbeat?: Date | null;
+  lastReconcileAt?: Date | null;
+  reconcileFailures?: object[];
   createdAt?: Date;
   updatedAt?: Date;
-  lastActiveAt?: Date;
 }
 
 export function createAgent(overrides: AgentOverrides = {}): Agent {
@@ -103,13 +110,16 @@ export function createAgent(overrides: AgentOverrides = {}): Agent {
   return {
     id,
     type: overrides.type ?? AgentType.WORKER,
-    state: overrides.state ?? AgentState.IDLE,
+    executionState: overrides.executionState ?? ExecutionState.IDLE,
+    desiredExecutionState: overrides.desiredExecutionState ?? DesiredExecutionState.IDLE,
     currentTaskId: overrides.currentTaskId ?? null,
     tmuxSessionName: overrides.tmuxSessionName ?? null,
     sessionId: overrides.sessionId ?? null,
+    lastHeartbeat: overrides.lastHeartbeat ?? now,
+    lastReconcileAt: overrides.lastReconcileAt ?? null,
+    reconcileFailures: overrides.reconcileFailures ?? [],
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
-    lastActiveAt: overrides.lastActiveAt ?? now,
   };
 }
 

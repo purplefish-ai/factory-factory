@@ -130,7 +130,7 @@ async function executeWithRetry<TInput, TOutput>(
       const context: McpToolContext = { agentId };
       const result = await toolEntry.handler(context, toolInput);
       await decisionLogAccessor.createAutomatic(agentId, toolName, 'result', result);
-      await agentAccessor.update(agentId, { lastActiveAt: new Date() });
+      await agentAccessor.update(agentId, { lastHeartbeat: new Date() });
       return { success: true, result: result as McpToolResponse<TOutput> };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));

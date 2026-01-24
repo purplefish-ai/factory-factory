@@ -168,16 +168,13 @@ export const taskRouter = router({
 
       // Initialize all TaskState values for completeness
       const byState: Record<TaskState, number> = {
-        [TaskState.PLANNING]: 0,
-        [TaskState.PLANNED]: 0,
         [TaskState.PENDING]: 0,
-        [TaskState.ASSIGNED]: 0,
+        [TaskState.PLANNING]: 0,
         [TaskState.IN_PROGRESS]: 0,
         [TaskState.REVIEW]: 0,
         [TaskState.BLOCKED]: 0,
         [TaskState.COMPLETED]: 0,
         [TaskState.FAILED]: 0,
-        [TaskState.CANCELLED]: 0,
       };
 
       for (const task of tasks) {

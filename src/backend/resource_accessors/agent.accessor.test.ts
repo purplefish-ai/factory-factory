@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgent, createTask } from '../testing/factories';
 
@@ -38,10 +38,10 @@ describe('AgentAccessor', () => {
   });
 
   describe('create', () => {
-    it('should create an agent with IDLE state by default', async () => {
+    it('should create an agent with IDLE execution state by default', async () => {
       const expectedAgent = createAgent({
         type: AgentType.WORKER,
-        state: AgentState.IDLE,
+        executionState: ExecutionState.IDLE,
       });
 
       mockPrisma.agent.create.mockResolvedValue(expectedAgent);
@@ -53,34 +53,35 @@ describe('AgentAccessor', () => {
       expect(mockPrisma.agent.create).toHaveBeenCalledWith({
         data: {
           type: AgentType.WORKER,
-          state: AgentState.IDLE,
+          executionState: ExecutionState.IDLE,
+          desiredExecutionState: DesiredExecutionState.IDLE,
           currentTaskId: undefined,
           tmuxSessionName: undefined,
         },
       });
-      expect(result.state).toBe(AgentState.IDLE);
+      expect(result.executionState).toBe(ExecutionState.IDLE);
     });
 
-    it('should create agent with provided state', async () => {
+    it('should create agent with provided execution state', async () => {
       const expectedAgent = createAgent({
         type: AgentType.SUPERVISOR,
-        state: AgentState.BUSY,
+        executionState: ExecutionState.ACTIVE,
       });
 
       mockPrisma.agent.create.mockResolvedValue(expectedAgent);
 
       const result = await agentAccessor.create({
         type: AgentType.SUPERVISOR,
-        state: AgentState.BUSY,
+        executionState: ExecutionState.ACTIVE,
       });
 
       expect(mockPrisma.agent.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: AgentType.SUPERVISOR,
-          state: AgentState.BUSY,
+          executionState: ExecutionState.ACTIVE,
         }),
       });
-      expect(result.state).toBe(AgentState.BUSY);
+      expect(result.executionState).toBe(ExecutionState.ACTIVE);
     });
 
     it('should create agent with currentTaskId', async () => {
@@ -134,32 +135,32 @@ describe('AgentAccessor', () => {
   });
 
   describe('update', () => {
-    it('should update agent state', async () => {
-      const agent = createAgent({ state: AgentState.IDLE });
-      const updatedAgent = { ...agent, state: AgentState.BUSY };
+    it('should update agent execution state', async () => {
+      const agent = createAgent({ executionState: ExecutionState.IDLE });
+      const updatedAgent = { ...agent, executionState: ExecutionState.ACTIVE };
       mockPrisma.agent.update.mockResolvedValue(updatedAgent);
 
       const result = await agentAccessor.update(agent.id, {
-        state: AgentState.BUSY,
+        executionState: ExecutionState.ACTIVE,
       });
 
       expect(mockPrisma.agent.update).toHaveBeenCalledWith({
         where: { id: agent.id },
-        data: { state: AgentState.BUSY },
+        data: { executionState: ExecutionState.ACTIVE },
       });
-      expect(result.state).toBe(AgentState.BUSY);
+      expect(result.executionState).toBe(ExecutionState.ACTIVE);
     });
 
-    it('should update lastActiveAt', async () => {
+    it('should update lastHeartbeat', async () => {
       const agent = createAgent();
       const newTime = new Date();
-      mockPrisma.agent.update.mockResolvedValue({ ...agent, lastActiveAt: newTime });
+      mockPrisma.agent.update.mockResolvedValue({ ...agent, lastHeartbeat: newTime });
 
-      await agentAccessor.update(agent.id, { lastActiveAt: newTime });
+      await agentAccessor.update(agent.id, { lastHeartbeat: newTime });
 
       expect(mockPrisma.agent.update).toHaveBeenCalledWith({
         where: { id: agent.id },
-        data: { lastActiveAt: newTime },
+        data: { lastHeartbeat: newTime },
       });
     });
   });
@@ -193,13 +194,13 @@ describe('AgentAccessor', () => {
       });
     });
 
-    it('should filter by state', async () => {
+    it('should filter by execution state', async () => {
       mockPrisma.agent.findMany.mockResolvedValue([]);
 
-      await agentAccessor.list({ state: AgentState.BUSY });
+      await agentAccessor.list({ executionState: ExecutionState.ACTIVE });
 
       expect(mockPrisma.agent.findMany).toHaveBeenCalledWith({
-        where: expect.objectContaining({ state: AgentState.BUSY }),
+        where: expect.objectContaining({ executionState: ExecutionState.ACTIVE }),
         take: undefined,
         skip: undefined,
         orderBy: { createdAt: 'desc' },
@@ -295,7 +296,7 @@ describe('AgentAccessor', () => {
 
   describe('heartbeat and health', () => {
     describe('updateHeartbeat', () => {
-      it('should update lastActiveAt to now', async () => {
+      it('should update lastHeartbeat to now', async () => {
         const agent = createAgent();
         mockPrisma.agent.update.mockResolvedValue(agent);
 
@@ -303,7 +304,7 @@ describe('AgentAccessor', () => {
 
         expect(mockPrisma.agent.update).toHaveBeenCalledWith({
           where: { id: agent.id },
-          data: { lastActiveAt: expect.any(Date) },
+          data: { lastHeartbeat: expect.any(Date) },
         });
       });
     });
@@ -317,7 +318,7 @@ describe('AgentAccessor', () => {
 
         expect(mockPrisma.agent.findMany).toHaveBeenCalledWith({
           where: {
-            lastActiveAt: {
+            lastHeartbeat: {
               lt: expect.any(Date),
             },
           },
@@ -328,10 +329,10 @@ describe('AgentAccessor', () => {
     });
 
     describe('getHealthyAgents', () => {
-      it('should return agents with recent heartbeat and not FAILED', async () => {
+      it('should return agents with recent heartbeat and not CRASHED', async () => {
         const healthyAgents = [
-          createAgent({ state: AgentState.BUSY }),
-          createAgent({ state: AgentState.IDLE }),
+          createAgent({ executionState: ExecutionState.ACTIVE }),
+          createAgent({ executionState: ExecutionState.IDLE }),
         ];
         mockPrisma.agent.findMany.mockResolvedValue(healthyAgents);
 
@@ -340,11 +341,11 @@ describe('AgentAccessor', () => {
         expect(mockPrisma.agent.findMany).toHaveBeenCalledWith({
           where: {
             type: AgentType.WORKER,
-            lastActiveAt: {
+            lastHeartbeat: {
               gte: expect.any(Date),
             },
-            state: {
-              not: AgentState.FAILED,
+            executionState: {
+              not: ExecutionState.CRASHED,
             },
           },
           include: expect.any(Object),
@@ -354,8 +355,8 @@ describe('AgentAccessor', () => {
     });
 
     describe('getUnhealthyAgents', () => {
-      it('should return agents with old heartbeat or FAILED state', async () => {
-        const unhealthyAgents = [createAgent({ state: AgentState.FAILED })];
+      it('should return agents with old heartbeat or CRASHED state', async () => {
+        const unhealthyAgents = [createAgent({ executionState: ExecutionState.CRASHED })];
         mockPrisma.agent.findMany.mockResolvedValue(unhealthyAgents);
 
         const result = await agentAccessor.getUnhealthyAgents(AgentType.WORKER, 10);
@@ -363,7 +364,10 @@ describe('AgentAccessor', () => {
         expect(mockPrisma.agent.findMany).toHaveBeenCalledWith({
           where: {
             type: AgentType.WORKER,
-            OR: [{ lastActiveAt: { lt: expect.any(Date) } }, { state: AgentState.FAILED }],
+            OR: [
+              { lastHeartbeat: { lt: expect.any(Date) } },
+              { executionState: ExecutionState.CRASHED },
+            ],
           },
           include: expect.any(Object),
         });
@@ -378,9 +382,9 @@ describe('AgentAccessor', () => {
         const oldTime = new Date(now - 30 * 60 * 1000);
 
         const agents = [
-          createAgent({ state: AgentState.BUSY, lastActiveAt: recentTime }),
-          createAgent({ state: AgentState.FAILED, lastActiveAt: recentTime }),
-          createAgent({ state: AgentState.IDLE, lastActiveAt: oldTime }),
+          createAgent({ executionState: ExecutionState.ACTIVE, lastHeartbeat: recentTime }),
+          createAgent({ executionState: ExecutionState.CRASHED, lastHeartbeat: recentTime }),
+          createAgent({ executionState: ExecutionState.IDLE, lastHeartbeat: oldTime }),
         ];
         mockPrisma.agent.findMany.mockResolvedValue(agents);
 
@@ -467,27 +471,35 @@ describe('AgentAccessor', () => {
 });
 
 describe('Agent Lifecycle', () => {
-  describe('agent state transitions', () => {
-    it('agents should start in IDLE state', () => {
+  describe('agent execution state transitions', () => {
+    it('agents should start in IDLE execution state', () => {
       const agent = createAgent();
-      expect(agent.state).toBe(AgentState.IDLE);
+      expect(agent.executionState).toBe(ExecutionState.IDLE);
     });
 
-    it('valid transitions: IDLE -> BUSY -> WAITING/IDLE', () => {
+    it('valid transitions: IDLE -> ACTIVE -> PAUSED/IDLE', () => {
       const validTransitions = {
-        [AgentState.IDLE]: [AgentState.BUSY],
-        [AgentState.BUSY]: [AgentState.WAITING, AgentState.IDLE, AgentState.FAILED],
-        [AgentState.WAITING]: [AgentState.BUSY, AgentState.IDLE, AgentState.FAILED],
-        [AgentState.FAILED]: [],
+        [ExecutionState.IDLE]: [ExecutionState.ACTIVE],
+        [ExecutionState.ACTIVE]: [
+          ExecutionState.PAUSED,
+          ExecutionState.IDLE,
+          ExecutionState.CRASHED,
+        ],
+        [ExecutionState.PAUSED]: [
+          ExecutionState.ACTIVE,
+          ExecutionState.IDLE,
+          ExecutionState.CRASHED,
+        ],
+        [ExecutionState.CRASHED]: [],
       };
 
-      expect(validTransitions[AgentState.IDLE]).toContain(AgentState.BUSY);
-      expect(validTransitions[AgentState.BUSY]).toContain(AgentState.WAITING);
+      expect(validTransitions[ExecutionState.IDLE]).toContain(ExecutionState.ACTIVE);
+      expect(validTransitions[ExecutionState.ACTIVE]).toContain(ExecutionState.PAUSED);
     });
 
-    it('FAILED is a terminal state', () => {
-      const failedAgent = createAgent({ state: AgentState.FAILED });
-      expect(failedAgent.state).toBe(AgentState.FAILED);
+    it('CRASHED is a terminal state', () => {
+      const failedAgent = createAgent({ executionState: ExecutionState.CRASHED });
+      expect(failedAgent.executionState).toBe(ExecutionState.CRASHED);
     });
   });
 

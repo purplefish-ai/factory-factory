@@ -14,6 +14,11 @@ export { createLogger } from './logger.service.js';
 export { notificationService } from './notification.service.js';
 // Rate limiter service
 export { rateLimiter } from './rate-limiter.service.js';
+// Reconciliation service
+export {
+  type ReconciliationResult,
+  reconciliationService,
+} from './reconciliation.service.js';
 // Worktree service
 export {
   type CleanupResult,

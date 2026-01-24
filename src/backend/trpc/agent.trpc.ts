@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, type DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { readSessionOutput } from '../clients/terminal.client';
 import { agentAccessor } from '../resource_accessors/agent.accessor';
@@ -14,7 +14,7 @@ export const agentRouter = router({
       z
         .object({
           type: z.nativeEnum(AgentType).optional(),
-          state: z.nativeEnum(AgentState).optional(),
+          executionState: z.nativeEnum(ExecutionState).optional(),
           topLevelTaskId: z.string().optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
@@ -30,11 +30,11 @@ export const agentRouter = router({
       // Calculate health status for each agent
       const now = Date.now();
       return agents.map((agent) => {
-        const minutesSinceHeartbeat = Math.floor(
-          (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-        );
+        const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+        const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
         const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
+          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
+          agent.executionState !== ExecutionState.CRASHED;
         return {
           ...agent,
           isHealthy,
@@ -52,9 +52,11 @@ export const agentRouter = router({
 
     // Calculate health status
     const now = Date.now();
-    const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
+    const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+    const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
     const isHealthy =
-      minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
+      minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
+      agent.executionState !== ExecutionState.CRASHED;
 
     return {
       ...agent,
@@ -104,9 +106,11 @@ export const agentRouter = router({
     const now = Date.now();
 
     const withHealth = allAgents.map((agent) => {
-      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
+      const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+      const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
       const isHealthy =
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
+        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
+        agent.executionState !== ExecutionState.CRASHED;
       return {
         ...agent,
         isHealthy,
@@ -129,11 +133,11 @@ export const agentRouter = router({
       const now = Date.now();
 
       return agents.map((agent) => {
-        const minutesSinceHeartbeat = Math.floor(
-          (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-        );
+        const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+        const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
         const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
+          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
+          agent.executionState !== ExecutionState.CRASHED;
         return {
           ...agent,
           isHealthy,
@@ -156,19 +160,30 @@ export const agentRouter = router({
       WORKER: 0,
     };
 
-    const byState: Record<AgentState, number> = {
+    const byExecutionState: Record<ExecutionState, number> = {
       IDLE: 0,
-      BUSY: 0,
-      WAITING: 0,
-      FAILED: 0,
+      ACTIVE: 0,
+      PAUSED: 0,
+      CRASHED: 0,
+    };
+
+    const byDesiredState: Record<DesiredExecutionState, number> = {
+      IDLE: 0,
+      ACTIVE: 0,
+      PAUSED: 0,
     };
 
     agents.forEach((agent) => {
       byType[agent.type]++;
-      byState[agent.state]++;
+      byExecutionState[agent.executionState]++;
+      byDesiredState[agent.desiredExecutionState]++;
 
-      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
-      if (minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED) {
+      const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+      const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
+      if (
+        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
+        agent.executionState !== ExecutionState.CRASHED
+      ) {
         healthy++;
       } else {
         unhealthy++;
@@ -180,7 +195,8 @@ export const agentRouter = router({
       healthy,
       unhealthy,
       byType,
-      byState,
+      byExecutionState,
+      byDesiredState,
     };
   }),
 });

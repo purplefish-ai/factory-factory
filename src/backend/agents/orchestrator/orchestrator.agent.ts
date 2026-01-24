@@ -8,7 +8,7 @@
  * There should only be ONE orchestrator instance running at a time.
  */
 
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { tmuxClient } from '../../clients/tmux.client.js';
 import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/index.js';
@@ -105,7 +105,9 @@ function getOrchestratorTmuxSessionName(agentId: string): string {
 export async function createOrchestrator(): Promise<string> {
   // Check if orchestrator already exists
   const existingOrchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-  const activeOrchestrators = existingOrchestrators.filter((o) => o.state !== AgentState.FAILED);
+  const activeOrchestrators = existingOrchestrators.filter(
+    (o) => o.executionState !== ExecutionState.CRASHED
+  );
 
   if (activeOrchestrators.length > 0) {
     throw new Error(
@@ -116,7 +118,8 @@ export async function createOrchestrator(): Promise<string> {
   // Create agent record
   const agent = await agentAccessor.create({
     type: AgentType.ORCHESTRATOR,
-    state: AgentState.IDLE,
+    executionState: ExecutionState.IDLE,
+    desiredExecutionState: DesiredExecutionState.IDLE,
   });
 
   // Build system prompt
@@ -208,7 +211,7 @@ export async function runOrchestrator(agentId: string): Promise<void> {
 
   // Update agent state
   await agentAccessor.update(agentId, {
-    state: AgentState.BUSY,
+    executionState: ExecutionState.ACTIVE,
   });
 
   console.log(`Starting orchestrator ${agentId}`);
@@ -462,7 +465,7 @@ export async function stopOrchestrator(agentId: string): Promise<void> {
 
   // Update agent state
   await agentAccessor.update(agentId, {
-    state: AgentState.IDLE,
+    executionState: ExecutionState.IDLE,
   });
 
   console.log(`Orchestrator ${agentId} stopped`);

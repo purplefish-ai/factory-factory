@@ -81,4 +81,19 @@ export type Events = {
       timestamp: number;
     };
   };
+  /**
+   * Triggered to run a reconciliation cycle.
+   * Can be triggered immediately after state changes or periodically via cron.
+   */
+  'reconcile.requested': {
+    data: {
+      /** Optional: specific task ID to reconcile */
+      taskId?: string;
+      /** Optional: specific agent ID to reconcile */
+      agentId?: string;
+      /** Source of the reconciliation request */
+      source: 'cron' | 'event' | 'manual';
+      timestamp: number;
+    };
+  };
 };

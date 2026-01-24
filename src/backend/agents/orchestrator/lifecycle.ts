@@ -8,7 +8,7 @@
  * - Get orchestrator status
  */
 
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, ExecutionState } from '@prisma-gen/client';
 import { agentAccessor } from '../../resource_accessors/index.js';
 import {
   createOrchestrator,
@@ -20,7 +20,7 @@ import {
 } from './orchestrator.agent.js';
 
 /**
- * Kill an unhealthy orchestrator and mark it as failed
+ * Kill an unhealthy orchestrator and mark it as crashed
  */
 async function killUnhealthyOrchestrator(orchestratorId: string): Promise<void> {
   try {
@@ -28,11 +28,11 @@ async function killUnhealthyOrchestrator(orchestratorId: string): Promise<void> 
   } catch (error) {
     console.error(`Failed to kill unhealthy orchestrator ${orchestratorId}:`, error);
   }
-  await agentAccessor.update(orchestratorId, { state: AgentState.FAILED });
+  await agentAccessor.update(orchestratorId, { executionState: ExecutionState.CRASHED });
 }
 
 /**
- * Try to run an existing orchestrator, kill and mark failed if unsuccessful
+ * Try to run an existing orchestrator, kill and mark crashed if unsuccessful
  */
 async function tryRunExistingOrchestrator(orchestratorId: string): Promise<boolean> {
   console.log(`Starting existing orchestrator ${orchestratorId}...`);
@@ -43,7 +43,7 @@ async function tryRunExistingOrchestrator(orchestratorId: string): Promise<boole
     console.error(`Failed to run existing orchestrator ${orchestratorId}:`, error);
     try {
       await killOrchestrator(orchestratorId);
-      await agentAccessor.update(orchestratorId, { state: AgentState.FAILED });
+      await agentAccessor.update(orchestratorId, { executionState: ExecutionState.CRASHED });
     } catch (killError) {
       console.error(`Failed to kill orchestrator ${orchestratorId}:`, killError);
     }
@@ -56,7 +56,8 @@ async function tryRunExistingOrchestrator(orchestratorId: string): Promise<boole
  */
 async function handleExistingOrchestrator(orchestrator: {
   id: string;
-  lastActiveAt: Date;
+  lastHeartbeat: Date | null;
+  createdAt: Date;
 }): Promise<string | null> {
   // Already running in our process
   if (isOrchestratorRunning(orchestrator.id)) {
@@ -64,10 +65,9 @@ async function handleExistingOrchestrator(orchestrator: {
     return orchestrator.id;
   }
 
-  // Check health
-  const minutesSinceHeartbeat = Math.floor(
-    (Date.now() - orchestrator.lastActiveAt.getTime()) / (60 * 1000)
-  );
+  // Check health using lastHeartbeat or createdAt as fallback
+  const heartbeatTime = orchestrator.lastHeartbeat ?? orchestrator.createdAt;
+  const minutesSinceHeartbeat = Math.floor((Date.now() - heartbeatTime.getTime()) / (60 * 1000));
 
   if (minutesSinceHeartbeat >= 2) {
     console.log(
@@ -93,7 +93,9 @@ async function handleExistingOrchestrator(orchestrator: {
  */
 export async function startOrchestrator(): Promise<string> {
   const existingOrchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-  const activeOrchestrators = existingOrchestrators.filter((o) => o.state !== AgentState.FAILED);
+  const activeOrchestrators = existingOrchestrators.filter(
+    (o) => o.executionState !== ExecutionState.CRASHED
+  );
 
   if (activeOrchestrators.length > 0) {
     const result = await handleExistingOrchestrator(activeOrchestrators[0]);
@@ -146,7 +148,9 @@ export async function getOrchestrator(): Promise<string | null> {
 
   // Then check database
   const orchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-  const activeOrchestrators = orchestrators.filter((o) => o.state !== AgentState.FAILED);
+  const activeOrchestrators = orchestrators.filter(
+    (o) => o.executionState !== ExecutionState.CRASHED
+  );
 
   if (activeOrchestrators.length > 0) {
     return activeOrchestrators[0].id;
@@ -161,9 +165,9 @@ export async function getOrchestrator(): Promise<string | null> {
 export async function getOrchestratorStatus(agentId: string): Promise<{
   agentId: string;
   isRunning: boolean;
-  agentState: string;
+  executionState: string;
   tmuxSession: string | null;
-  lastActiveAt: Date;
+  lastHeartbeat: Date | null;
   minutesSinceHeartbeat: number;
 }> {
   const agent = await agentAccessor.findById(agentId);
@@ -176,14 +180,15 @@ export async function getOrchestratorStatus(agentId: string): Promise<{
   }
 
   const now = Date.now();
-  const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
+  const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+  const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
 
   return {
     agentId: agent.id,
     isRunning: isOrchestratorRunning(agentId),
-    agentState: agent.state,
+    executionState: agent.executionState,
     tmuxSession: agent.tmuxSessionName,
-    lastActiveAt: agent.lastActiveAt,
+    lastHeartbeat: agent.lastHeartbeat,
     minutesSinceHeartbeat,
   };
 }

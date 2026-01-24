@@ -7,9 +7,9 @@ import { trpc } from '../../../frontend/lib/trpc';
 function AgentStateIndicator({ state, isInCrashLoop }: { state: string; isInCrashLoop: boolean }) {
   const stateColors: Record<string, string> = {
     IDLE: 'bg-muted text-muted-foreground',
-    BUSY: 'bg-info/15 text-info',
-    WAITING: 'bg-warning/15 text-warning-foreground',
-    FAILED: 'bg-destructive/15 text-destructive',
+    ACTIVE: 'bg-info/15 text-info',
+    PAUSED: 'bg-warning/15 text-warning-foreground',
+    CRASHED: 'bg-destructive/15 text-destructive',
   };
 
   return (
@@ -127,10 +127,13 @@ export default function AdminAgentsPage() {
                 <tr key={agent.id} className="hover:bg-muted">
                   <td className="px-6 py-4 text-sm font-mono">{agent.id.slice(0, 8)}...</td>
                   <td className="px-6 py-4">
-                    <AgentStateIndicator state={agent.state} isInCrashLoop={agent.isInCrashLoop} />
+                    <AgentStateIndicator
+                      state={agent.executionState}
+                      isInCrashLoop={agent.isInCrashLoop}
+                    />
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {new Date(agent.lastActiveAt).toLocaleString()}
+                    {agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString() : 'Never'}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
@@ -195,7 +198,10 @@ export default function AdminAgentsPage() {
                     </Link>
                   </td>
                   <td className="px-6 py-4">
-                    <AgentStateIndicator state={agent.state} isInCrashLoop={agent.isInCrashLoop} />
+                    <AgentStateIndicator
+                      state={agent.executionState}
+                      isInCrashLoop={agent.isInCrashLoop}
+                    />
                   </td>
                   <td className="px-6 py-4 text-sm">
                     {agent.currentTaskId ? (
@@ -213,7 +219,7 @@ export default function AdminAgentsPage() {
                     {agent.tmuxSessionName || '-'}
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {new Date(agent.lastActiveAt).toLocaleString()}
+                    {agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString() : 'Never'}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
@@ -289,7 +295,10 @@ export default function AdminAgentsPage() {
                     </Link>
                   </td>
                   <td className="px-6 py-4">
-                    <AgentStateIndicator state={agent.state} isInCrashLoop={agent.isInCrashLoop} />
+                    <AgentStateIndicator
+                      state={agent.executionState}
+                      isInCrashLoop={agent.isInCrashLoop}
+                    />
                   </td>
                   <td className="px-6 py-4 text-sm">
                     {agent.currentTaskId ? (
@@ -307,7 +316,7 @@ export default function AdminAgentsPage() {
                     {agent.tmuxSessionName || '-'}
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {new Date(agent.lastActiveAt).toLocaleString()}
+                    {agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString() : 'Never'}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">

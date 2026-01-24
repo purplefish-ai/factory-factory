@@ -354,7 +354,7 @@ function ComposeForm({ onSent }: { onSent: () => void }) {
           <SelectContent>
             {agents?.map((agent) => (
               <SelectItem key={agent.id} value={agent.id}>
-                {agent.type} - {agent.id.slice(0, 8)}... ({agent.state})
+                {agent.type} - {agent.id.slice(0, 8)}... ({agent.executionState})
               </SelectItem>
             ))}
           </SelectContent>
