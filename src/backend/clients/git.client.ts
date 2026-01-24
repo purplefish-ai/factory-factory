@@ -1,9 +1,6 @@
-import { exec } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { gitCommand, gitCommandC } from '../lib/shell.js';
 
 export interface GitWorktreeInfo {
   name: string;
@@ -41,13 +38,13 @@ export class GitClient {
     // First, check if the branch already exists
     const branchExists = await this.branchExists(branchName);
 
-    // Use different commands based on whether branch exists
-    const command = branchExists
-      ? `git -C "${this.baseRepoPath}" worktree add "${worktreePath}" "${branchName}"`
-      : `git -C "${this.baseRepoPath}" worktree add -b "${branchName}" "${worktreePath}" "${baseBranch}"`;
+    // Use spawn with array args (safe - no shell interpretation)
+    const args = branchExists
+      ? ['worktree', 'add', worktreePath, branchName]
+      : ['worktree', 'add', '-b', branchName, worktreePath, baseBranch];
 
     try {
-      await execAsync(command);
+      await gitCommandC(this.baseRepoPath, args);
       return {
         name,
         path: worktreePath,
@@ -65,7 +62,7 @@ export class GitClient {
    */
   async branchExists(branchName: string): Promise<boolean> {
     try {
-      await execAsync(`git -C "${this.baseRepoPath}" rev-parse --verify "${branchName}"`);
+      await gitCommandC(this.baseRepoPath, ['rev-parse', '--verify', branchName]);
       return true;
     } catch {
       return false;
@@ -75,10 +72,8 @@ export class GitClient {
   async deleteWorktree(name: string): Promise<void> {
     const worktreePath = this.getWorktreePath(name);
 
-    const removeCommand = `git -C "${this.baseRepoPath}" worktree remove "${worktreePath}" --force`;
-
     try {
-      await execAsync(removeCommand);
+      await gitCommandC(this.baseRepoPath, ['worktree', 'remove', worktreePath, '--force']);
     } catch (error) {
       throw new Error(
         `Failed to delete worktree: ${error instanceof Error ? error.message : String(error)}`
@@ -98,7 +93,7 @@ export class GitClient {
     const worktreePath = this.getWorktreePath(name);
 
     try {
-      const { stdout } = await execAsync(`git -C "${this.baseRepoPath}" worktree list`);
+      const { stdout } = await gitCommandC(this.baseRepoPath, ['worktree', 'list']);
       return stdout.includes(worktreePath);
     } catch {
       return false;
@@ -107,7 +102,7 @@ export class GitClient {
 
   async listWorktrees(): Promise<string[]> {
     try {
-      const { stdout } = await execAsync(`git -C "${this.baseRepoPath}" worktree list --porcelain`);
+      const { stdout } = await gitCommandC(this.baseRepoPath, ['worktree', 'list', '--porcelain']);
       const worktrees: string[] = [];
       const lines = stdout.split('\n');
 
@@ -139,15 +134,15 @@ export class GitClient {
     commitMessage?: string
   ): Promise<{ success: boolean; mergeCommit: string }> {
     try {
-      // Merge the source branch into the current branch
-      const mergeCommand = commitMessage
-        ? `git -C "${worktreePath}" merge "${sourceBranch}" -m "${commitMessage.replace(/"/g, '\\"')}"`
-        : `git -C "${worktreePath}" merge "${sourceBranch}"`;
+      // Merge the source branch into the current branch using spawn (safe - no shell)
+      const mergeArgs = commitMessage
+        ? ['merge', sourceBranch, '-m', commitMessage]
+        : ['merge', sourceBranch];
 
-      await execAsync(mergeCommand);
+      await gitCommand(mergeArgs, worktreePath);
 
       // Get the merge commit SHA
-      const { stdout: commitSha } = await execAsync(`git -C "${worktreePath}" rev-parse HEAD`);
+      const { stdout: commitSha } = await gitCommand(['rev-parse', 'HEAD'], worktreePath);
 
       return {
         success: true,
@@ -167,7 +162,7 @@ export class GitClient {
   async pushBranch(worktreePath: string, branchName?: string): Promise<void> {
     try {
       const branch = branchName || 'HEAD';
-      await execAsync(`git -C "${worktreePath}" push origin ${branch}`);
+      await gitCommand(['push', 'origin', branch], worktreePath);
     } catch (error) {
       throw new Error(
         `Failed to push branch: ${error instanceof Error ? error.message : String(error)}`
@@ -180,7 +175,7 @@ export class GitClient {
    */
   async pushBranchWithUpstream(worktreePath: string): Promise<void> {
     try {
-      await execAsync(`git -C "${worktreePath}" push -u origin HEAD`);
+      await gitCommand(['push', '-u', 'origin', 'HEAD'], worktreePath);
     } catch (error) {
       throw new Error(
         `Failed to push branch with upstream: ${error instanceof Error ? error.message : String(error)}`
@@ -193,7 +188,7 @@ export class GitClient {
    */
   async fetch(worktreePath: string): Promise<void> {
     try {
-      await execAsync(`git -C "${worktreePath}" fetch origin`);
+      await gitCommand(['fetch', 'origin'], worktreePath);
     } catch (error) {
       throw new Error(`Failed to fetch: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -204,7 +199,7 @@ export class GitClient {
    */
   async getCurrentBranch(worktreePath: string): Promise<string> {
     try {
-      const { stdout } = await execAsync(`git -C "${worktreePath}" rev-parse --abbrev-ref HEAD`);
+      const { stdout } = await gitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
       return stdout.trim();
     } catch (error) {
       throw new Error(
@@ -218,7 +213,7 @@ export class GitClient {
    */
   async getLatestCommitMessage(worktreePath: string): Promise<string> {
     try {
-      const { stdout } = await execAsync(`git -C "${worktreePath}" log -1 --format=%s`);
+      const { stdout } = await gitCommand(['log', '-1', '--format=%s'], worktreePath);
       return stdout.trim();
     } catch (error) {
       throw new Error(

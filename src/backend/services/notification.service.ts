@@ -5,10 +5,7 @@
  * Supports macOS, Linux, and Windows.
  */
 
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/shell.js';
 
 /**
  * Notification configuration
@@ -59,54 +56,15 @@ function isQuietHours(config: NotificationConfig): boolean {
 }
 
 /**
- * Escape string for shell command (general use)
+ * Send macOS notification using osascript (local wrapper for platform-specific logic)
  */
-function escapeForShell(str: string): string {
-  return str.replace(/'/g, "'\\''");
-}
-
-/**
- * Escape and truncate string for osascript notifications.
- * The script is passed via: osascript -e 'display notification "..." with title "..."'
- * Using single quotes for the shell command prevents backtick/$ interpretation.
- * We use double quotes for AppleScript strings (inside the single-quoted shell arg).
- *
- * Escaping layers:
- * 1. Shell single quotes: ' -> '\'' (end quote, escaped quote, start quote)
- * 2. AppleScript double quotes: " -> \"
- * 3. AppleScript backslashes: \ -> \\
- */
-function escapeForOsascript(str: string): string {
-  const cleaned = str
-    .replace(/[\r\n]+/g, ' ') // Replace newlines with spaces
-    .replace(/\\/g, '\\\\') // Escape backslashes for AppleScript
-    .replace(/"/g, '\\"') // Escape double quotes for AppleScript strings
-    .replace(/'/g, "'\\''") // Escape single quotes for shell
-    .slice(0, 200); // Truncate to reasonable length for notifications
-  return cleaned;
-}
-
-/**
- * Send macOS notification using osascript
- */
-async function sendMacOSNotification(
+async function sendMacOSNotificationLocal(
   title: string,
   message: string,
   soundEnabled: boolean
 ): Promise<void> {
-  const escapedTitle = escapeForOsascript(title);
-  const escapedMessage = escapeForOsascript(message);
-
-  // Use single quotes for shell to prevent backtick/$ interpretation
-  // Use double quotes for AppleScript strings
-  let script = `display notification "${escapedMessage}" with title "${escapedTitle}"`;
-
-  if (soundEnabled) {
-    script += ` sound name "Glass"`;
-  }
-
   try {
-    await execAsync(`osascript -e '${script}'`);
+    await sendMacNotification(title, message, soundEnabled ? 'Glass' : undefined);
     console.log(`macOS notification sent: ${title}`);
   } catch (error) {
     console.error('Failed to send macOS notification:', error);
@@ -115,19 +73,16 @@ async function sendMacOSNotification(
 }
 
 /**
- * Send Linux notification using notify-send
+ * Send Linux notification using notify-send (local wrapper for platform-specific logic)
  */
-async function sendLinuxNotification(title: string, message: string): Promise<void> {
-  const escapedTitle = escapeForShell(title);
-  const escapedMessage = escapeForShell(message);
-
+async function sendLinuxNotificationLocal(title: string, message: string): Promise<void> {
   try {
-    await execAsync(`notify-send '${escapedTitle}' '${escapedMessage}'`);
+    await sendLinuxNotification(title, message);
     console.log(`Linux notification sent: ${title}`);
   } catch (error) {
     // Try alternative tools if notify-send is not available
     try {
-      await execAsync(`zenity --notification --text='${escapedTitle}: ${escapedMessage}'`);
+      await execCommand('zenity', ['--notification', `--text=${title}: ${message}`]);
       console.log(`Linux notification sent via zenity: ${title}`);
     } catch {
       console.error(
@@ -143,6 +98,7 @@ async function sendLinuxNotification(title: string, message: string): Promise<vo
  * Send Windows notification using PowerShell
  */
 async function sendWindowsNotification(title: string, message: string): Promise<void> {
+  // Escape for PowerShell single quotes
   const escapedTitle = title.replace(/'/g, "''");
   const escapedMessage = message.replace(/'/g, "''");
 
@@ -166,10 +122,11 @@ async function sendWindowsNotification(title: string, message: string): Promise<
     $xml.LoadXml($template)
     $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
     [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("FactoryFactory").Show($toast)
-  `;
+  `.replace(/\n/g, ' ');
 
   try {
-    await execAsync(`powershell -Command "${psScript.replace(/\n/g, ' ')}"`);
+    // Use spawn with array args for safety
+    await execCommand('powershell', ['-Command', psScript]);
     console.log(`Windows notification sent: ${title}`);
   } catch (error) {
     console.error('Failed to send Windows notification:', error);
@@ -186,29 +143,21 @@ async function playSound(soundFile?: string): Promise<void> {
   try {
     switch (platform) {
       case 'darwin': {
-        // macOS: Use afplay
-        if (soundFile) {
-          await execAsync(`afplay '${escapeForShell(soundFile)}'`);
-        } else {
-          // Use system sound
-          await execAsync(`afplay /System/Library/Sounds/Glass.aiff`);
-        }
+        // macOS: Use afplay with spawn (safe)
+        const file = soundFile || '/System/Library/Sounds/Glass.aiff';
+        await execCommand('afplay', [file]);
         break;
       }
 
       case 'linux': {
         // Linux: Try paplay first (PulseAudio), then aplay (ALSA)
-        if (soundFile) {
-          try {
-            await execAsync(`paplay '${escapeForShell(soundFile)}'`);
-          } catch {
-            await execAsync(`aplay '${escapeForShell(soundFile)}'`);
-          }
-        } else {
-          // Try to use system sound
-          try {
-            await execAsync(`paplay /usr/share/sounds/freedesktop/stereo/complete.oga`);
-          } catch {
+        const file = soundFile || '/usr/share/sounds/freedesktop/stereo/complete.oga';
+        try {
+          await execCommand('paplay', [file]);
+        } catch {
+          if (soundFile) {
+            await execCommand('aplay', [file]);
+          } else {
             console.log('No system sound available on Linux');
           }
         }
@@ -216,14 +165,19 @@ async function playSound(soundFile?: string): Promise<void> {
       }
 
       case 'win32': {
-        // Windows: Use PowerShell SoundPlayer
+        // Windows: Use PowerShell SoundPlayer with spawn (safe)
         if (soundFile) {
-          await execAsync(
-            `powershell -Command "(New-Object Media.SoundPlayer '${soundFile.replace(/'/g, "''")}').PlaySync()"`
-          );
+          const escapedPath = soundFile.replace(/'/g, "''");
+          await execCommand('powershell', [
+            '-Command',
+            `(New-Object Media.SoundPlayer '${escapedPath}').PlaySync()`,
+          ]);
         } else {
           // Use system sound
-          await execAsync(`powershell -Command "[System.Media.SystemSounds]::Asterisk.Play()"`);
+          await execCommand('powershell', [
+            '-Command',
+            '[System.Media.SystemSounds]::Asterisk.Play()',
+          ]);
         }
         break;
       }
@@ -249,11 +203,11 @@ async function sendPushNotification(
 
   switch (platform) {
     case 'darwin':
-      await sendMacOSNotification(title, message, soundEnabled);
+      await sendMacOSNotificationLocal(title, message, soundEnabled);
       break;
 
     case 'linux':
-      await sendLinuxNotification(title, message);
+      await sendLinuxNotificationLocal(title, message);
       break;
 
     case 'win32':

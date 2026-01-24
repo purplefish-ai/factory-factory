@@ -4,13 +4,11 @@
  * Handles PR creation failures, merge conflicts, and rebase issues.
  */
 
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { TaskState } from '@prisma-gen/client';
+import { execCommand, gitCommand, validateBranchName } from '../lib/shell.js';
 import { decisionLogAccessor, mailAccessor, taskAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';
 
-const execAsync = promisify(exec);
 const logger = createLogger('pr-conflict');
 
 /**
@@ -58,23 +56,37 @@ export class PrConflictService {
     baseBranch = 'main',
     maxRetries = 3
   ): Promise<PrCreationResult> {
+    // Validate branch names
+    const validatedBranch = validateBranchName(branchName);
+    const validatedBase = validateBranchName(baseBranch);
+
     let lastError: string | undefined;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Push the branch first
-        await execAsync(`git push -u origin ${branchName}`, {
-          cwd: worktreePath,
-        });
+        // Push the branch first using spawn (safe - array args)
+        await gitCommand(['push', '-u', 'origin', validatedBranch], worktreePath);
 
-        // Create the PR using gh CLI
-        const { stdout } = await execAsync(
-          `gh pr create --base ${baseBranch} --head ${branchName} --title "${this.escapeBash(title)}" --body "${this.escapeBash(body)}"`,
+        // Create the PR using gh CLI with spawn (safe - no shell escaping needed)
+        const result = await execCommand(
+          'gh',
+          [
+            'pr',
+            'create',
+            '--base',
+            validatedBase,
+            '--head',
+            validatedBranch,
+            '--title',
+            title,
+            '--body',
+            body,
+          ],
           { cwd: worktreePath }
         );
 
-        const prUrl = stdout.trim();
-        logger.info('PR created successfully', { prUrl, branchName, attempt });
+        const prUrl = result.stdout.trim();
+        logger.info('PR created successfully', { prUrl, branchName: validatedBranch, attempt });
 
         return {
           success: true,
@@ -84,7 +96,7 @@ export class PrConflictService {
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
         logger.warn(`PR creation attempt ${attempt} failed`, {
-          branchName,
+          branchName: validatedBranch,
           error: lastError,
         });
 
@@ -132,14 +144,16 @@ export class PrConflictService {
    * Attempt a rebase with conflict detection
    */
   async attemptRebase(worktreePath: string, baseBranch = 'main'): Promise<RebaseResult> {
+    const validatedBase = validateBranchName(baseBranch);
+
     try {
-      // Fetch latest changes
-      await execAsync(`git fetch origin ${baseBranch}`, { cwd: worktreePath });
+      // Fetch latest changes using spawn (safe)
+      await gitCommand(['fetch', 'origin', validatedBase], worktreePath);
 
-      // Attempt rebase
-      await execAsync(`git rebase origin/${baseBranch}`, { cwd: worktreePath });
+      // Attempt rebase using spawn (safe)
+      await gitCommand(['rebase', `origin/${validatedBase}`], worktreePath);
 
-      logger.info('Rebase succeeded', { worktreePath, baseBranch });
+      logger.info('Rebase succeeded', { worktreePath, baseBranch: validatedBase });
 
       return {
         success: true,
@@ -202,9 +216,7 @@ export class PrConflictService {
    */
   private async getConflictedFiles(worktreePath: string): Promise<MergeConflictInfo[]> {
     try {
-      const { stdout } = await execAsync('git diff --name-only --diff-filter=U', {
-        cwd: worktreePath,
-      });
+      const { stdout } = await gitCommand(['diff', '--name-only', '--diff-filter=U'], worktreePath);
 
       const files = stdout.trim().split('\n').filter(Boolean);
       const conflicts: MergeConflictInfo[] = [];
@@ -225,9 +237,7 @@ export class PrConflictService {
    */
   private async analyzeConflict(worktreePath: string, file: string): Promise<MergeConflictInfo> {
     try {
-      const { stdout } = await execAsync(`git diff "${file}"`, {
-        cwd: worktreePath,
-      });
+      const { stdout } = await gitCommand(['diff', file], worktreePath);
 
       // Count conflict markers
       const conflictMarkers = (stdout.match(/<<<<<<< HEAD/g) || []).length;
@@ -265,15 +275,13 @@ export class PrConflictService {
           return false;
         }
 
-        // Accept ours for simple conflicts
-        await execAsync(`git checkout --ours "${conflict.file}"`, {
-          cwd: worktreePath,
-        });
-        await execAsync(`git add "${conflict.file}"`, { cwd: worktreePath });
+        // Accept ours for simple conflicts using spawn (safe)
+        await gitCommand(['checkout', '--ours', conflict.file], worktreePath);
+        await gitCommand(['add', conflict.file], worktreePath);
       }
 
       // Continue the rebase
-      await execAsync('git rebase --continue', { cwd: worktreePath });
+      await gitCommand(['rebase', '--continue'], worktreePath);
 
       logger.info('Auto-resolved conflicts', {
         files: conflicts.map((c) => c.file),
@@ -293,7 +301,7 @@ export class PrConflictService {
    */
   async abortRebase(worktreePath: string): Promise<void> {
     try {
-      await execAsync('git rebase --abort', { cwd: worktreePath });
+      await gitCommand(['rebase', '--abort'], worktreePath);
       logger.info('Rebase aborted', { worktreePath });
     } catch (error) {
       logger.warn('Failed to abort rebase', {
@@ -415,13 +423,6 @@ export class PrConflictService {
     }
 
     return false;
-  }
-
-  /**
-   * Escape string for bash command
-   */
-  private escapeBash(str: string): string {
-    return str.replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   }
 }
 
