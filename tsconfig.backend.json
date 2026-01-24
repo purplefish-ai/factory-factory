@@ -4,12 +4,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "noEmit": false
   },
-  "include": ["src/backend/**/*"],
+  "include": ["src/backend/**/*", "prisma/generated/**/*"],
   "exclude": ["node_modules", ".next", "dist"]
 }
