@@ -7,13 +7,7 @@ import { trpc } from '../../../frontend/lib/trpc';
 
 export default function NewProjectPage() {
   const router = useRouter();
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
   const [repoPath, setRepoPath] = useState('');
-  const [worktreeBasePath, setWorktreeBasePath] = useState('');
-  const [defaultBranch, setDefaultBranch] = useState('main');
-  const [githubOwner, setGithubOwner] = useState('');
-  const [githubRepo, setGithubRepo] = useState('');
   const [error, setError] = useState('');
 
   const createProject = trpc.project.create.useMutation({
@@ -25,50 +19,16 @@ export default function NewProjectPage() {
     },
   });
 
-  // Auto-generate slug from name
-  const handleNameChange = (value: string) => {
-    setName(value);
-    // Generate slug: lowercase, replace spaces with hyphens, remove special chars
-    const generatedSlug = value
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-]/g, '');
-    setSlug(generatedSlug);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (!name.trim()) {
-      setError('Name is required');
-      return;
-    }
-
-    if (!slug.trim()) {
-      setError('Slug is required');
-      return;
-    }
 
     if (!repoPath.trim()) {
       setError('Repository path is required');
       return;
     }
 
-    if (!worktreeBasePath.trim()) {
-      setError('Worktree base path is required');
-      return;
-    }
-
-    createProject.mutate({
-      name,
-      slug,
-      repoPath,
-      worktreeBasePath,
-      defaultBranch: defaultBranch || 'main',
-      githubOwner: githubOwner || undefined,
-      githubRepo: githubRepo || undefined,
-    });
+    createProject.mutate({ repoPath });
   };
 
   return (
@@ -85,8 +45,8 @@ export default function NewProjectPage() {
           </svg>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Create New Project</h1>
-          <p className="text-gray-600 mt-1">Add a new repository to manage</p>
+          <h1 className="text-2xl font-bold text-gray-900">Add Project</h1>
+          <p className="text-gray-600 mt-1">Add a repository to manage with FactoryFactory</p>
         </div>
       </div>
 
@@ -98,39 +58,8 @@ export default function NewProjectPage() {
         )}
 
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-            Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id="name"
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="My Project"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
-            Slug <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id="slug"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-            placeholder="my-project"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            URL-friendly identifier (lowercase letters, numbers, and hyphens only)
-          </p>
-        </div>
-
-        <div>
           <label htmlFor="repoPath" className="block text-sm font-medium text-gray-700 mb-1">
-            Repository Path <span className="text-red-500">*</span>
+            Repository Path
           </label>
           <input
             type="text"
@@ -139,76 +68,12 @@ export default function NewProjectPage() {
             onChange={(e) => setRepoPath(e.target.value)}
             className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
             placeholder="/Users/you/code/my-project"
+            autoFocus
           />
-          <p className="text-xs text-gray-500 mt-1">
-            Absolute path to the git repository on your local machine
+          <p className="text-xs text-gray-500 mt-2">
+            Path to a git repository on your local machine. The project name will be derived from
+            the directory name.
           </p>
-        </div>
-
-        <div>
-          <label
-            htmlFor="worktreeBasePath"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Worktree Base Path <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id="worktreeBasePath"
-            value={worktreeBasePath}
-            onChange={(e) => setWorktreeBasePath(e.target.value)}
-            className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-            placeholder="/tmp/factoryfactory-worktrees/my-project"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Directory where git worktrees will be created for this project
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor="defaultBranch" className="block text-sm font-medium text-gray-700 mb-1">
-            Default Branch
-          </label>
-          <input
-            type="text"
-            id="defaultBranch"
-            value={defaultBranch}
-            onChange={(e) => setDefaultBranch(e.target.value)}
-            className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-            placeholder="main"
-          />
-        </div>
-
-        <div className="border-t pt-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-4">GitHub Integration (Optional)</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="githubOwner" className="block text-sm font-medium text-gray-700 mb-1">
-                GitHub Owner
-              </label>
-              <input
-                type="text"
-                id="githubOwner"
-                value={githubOwner}
-                onChange={(e) => setGithubOwner(e.target.value)}
-                className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="your-org"
-              />
-            </div>
-            <div>
-              <label htmlFor="githubRepo" className="block text-sm font-medium text-gray-700 mb-1">
-                GitHub Repo
-              </label>
-              <input
-                type="text"
-                id="githubRepo"
-                value={githubRepo}
-                onChange={(e) => setGithubRepo(e.target.value)}
-                className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="my-project"
-              />
-            </div>
-          </div>
         </div>
 
         <div className="flex justify-end gap-4">
@@ -223,7 +88,7 @@ export default function NewProjectPage() {
             disabled={createProject.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {createProject.isPending ? 'Creating...' : 'Create Project'}
+            {createProject.isPending ? 'Adding...' : 'Add Project'}
           </button>
         </div>
       </form>

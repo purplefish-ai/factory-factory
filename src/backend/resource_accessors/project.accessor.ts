@@ -1,5 +1,6 @@
 import { exec } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Prisma, Project } from '@prisma-gen/client';
 import { prisma } from '../db.js';
@@ -11,20 +12,14 @@ export type ProjectWithEpics = Prisma.ProjectGetPayload<{
   include: { epics: true };
 }>;
 
+// Simplified input - only repoPath is required
 export interface CreateProjectInput {
-  name: string;
-  slug: string;
   repoPath: string;
-  worktreeBasePath: string;
-  defaultBranch?: string;
-  githubOwner?: string;
-  githubRepo?: string;
 }
 
 export interface UpdateProjectInput {
   name?: string;
   repoPath?: string;
-  worktreeBasePath?: string;
   defaultBranch?: string;
   githubOwner?: string;
   githubRepo?: string;
@@ -37,17 +32,67 @@ export interface ListProjectsFilters {
   offset?: number;
 }
 
+/**
+ * Derive project name from repository path.
+ * Uses the last directory component of the path.
+ */
+function deriveNameFromPath(repoPath: string): string {
+  const basename = path.basename(repoPath);
+  // Convert kebab-case or snake_case to Title Case
+  return basename.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Derive slug from repository path.
+ * Uses the last directory component, lowercased and sanitized.
+ */
+function deriveSlugFromPath(repoPath: string): string {
+  return path
+    .basename(repoPath)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Get the worktree base directory from environment.
+ */
+function getWorktreeBaseDir(): string {
+  const baseDir = process.env.WORKTREE_BASE_DIR;
+  if (!baseDir) {
+    throw new Error(
+      'WORKTREE_BASE_DIR environment variable is required. ' +
+        'Set it to the base directory for project worktrees.'
+    );
+  }
+  return baseDir;
+}
+
+/**
+ * Compute the worktree path for a project.
+ */
+function computeWorktreePath(slug: string): string {
+  return path.join(getWorktreeBaseDir(), slug);
+}
+
 export class ProjectAccessor {
+  /**
+   * Create a new project from a repository path.
+   * Name, slug, and worktree path are auto-derived.
+   */
   async create(data: CreateProjectInput): Promise<Project> {
+    const name = deriveNameFromPath(data.repoPath);
+    const slug = deriveSlugFromPath(data.repoPath);
+    const worktreeBasePath = computeWorktreePath(slug);
+
     return prisma.project.create({
       data: {
-        name: data.name,
-        slug: data.slug,
+        name,
+        slug,
         repoPath: data.repoPath,
-        worktreeBasePath: data.worktreeBasePath,
-        defaultBranch: data.defaultBranch ?? 'main',
-        githubOwner: data.githubOwner,
-        githubRepo: data.githubRepo,
+        worktreeBasePath,
+        defaultBranch: 'main',
       },
     });
   }
@@ -142,25 +187,6 @@ export class ProjectAccessor {
         return { valid: false, error: error.message };
       }
       return { valid: false, error: 'Unknown error' };
-    }
-  }
-
-  /**
-   * Validate that a worktree base path is writable.
-   */
-  async validateWorktreeBasePath(
-    worktreeBasePath: string
-  ): Promise<{ valid: boolean; error?: string }> {
-    try {
-      // Check if path exists and is writable (or parent is writable for creation)
-      await access(worktreeBasePath, constants.W_OK);
-      return { valid: true };
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('ENOENT')) {
-        // Path doesn't exist, that's OK - it will be created
-        return { valid: true };
-      }
-      return { valid: false, error: 'Worktree base path is not writable' };
     }
   }
 }

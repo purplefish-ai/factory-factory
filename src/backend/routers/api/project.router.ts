@@ -8,23 +8,14 @@ const router = Router();
 // Input Schemas
 // ============================================================================
 
+// Simplified - only repoPath required, name/slug/worktree derived automatically
 const CreateProjectSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  slug: z
-    .string()
-    .min(1, 'Slug is required')
-    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
   repoPath: z.string().min(1, 'Repository path is required'),
-  worktreeBasePath: z.string().min(1, 'Worktree base path is required'),
-  defaultBranch: z.string().optional(),
-  githubOwner: z.string().optional(),
-  githubRepo: z.string().optional(),
 });
 
 const UpdateProjectSchema = z.object({
   name: z.string().min(1).optional(),
   repoPath: z.string().min(1).optional(),
-  worktreeBasePath: z.string().min(1).optional(),
   defaultBranch: z.string().optional(),
   githubOwner: z.string().optional(),
   githubRepo: z.string().optional(),
@@ -36,7 +27,7 @@ const UpdateProjectSchema = z.object({
 
 /**
  * POST /api/projects/create
- * Create a new project
+ * Create a new project (only repoPath required - name/slug/worktree derived)
  */
 router.post('/create', async (req, res) => {
   try {
@@ -54,29 +45,9 @@ router.post('/create', async (req, res) => {
       });
     }
 
-    // Validate worktree base path
-    const worktreeValidation = await projectAccessor.validateWorktreeBasePath(
-      validatedInput.worktreeBasePath
-    );
-    if (!worktreeValidation.valid) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'INVALID_WORKTREE_PATH',
-          message: `Invalid worktree base path: ${worktreeValidation.error}`,
-        },
-      });
-    }
-
-    // Create project
+    // Create project - name/slug/worktree derived from repoPath
     const project = await projectAccessor.create({
-      name: validatedInput.name,
-      slug: validatedInput.slug,
       repoPath: validatedInput.repoPath,
-      worktreeBasePath: validatedInput.worktreeBasePath,
-      defaultBranch: validatedInput.defaultBranch,
-      githubOwner: validatedInput.githubOwner,
-      githubRepo: validatedInput.githubRepo,
     });
 
     return res.status(201).json({
@@ -236,22 +207,6 @@ router.put('/:projectId', async (req, res) => {
       }
     }
 
-    // Validate new worktree base path if provided
-    if (validatedInput.worktreeBasePath) {
-      const worktreeValidation = await projectAccessor.validateWorktreeBasePath(
-        validatedInput.worktreeBasePath
-      );
-      if (!worktreeValidation.valid) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: 'INVALID_WORKTREE_PATH',
-            message: `Invalid worktree base path: ${worktreeValidation.error}`,
-          },
-        });
-      }
-    }
-
     const project = await projectAccessor.update(projectId, validatedInput);
 
     return res.status(200).json({
@@ -333,7 +288,7 @@ router.delete('/:projectId', async (req, res) => {
 
 /**
  * POST /api/projects/:projectId/validate
- * Validate project paths
+ * Validate project repository path
  */
 router.post('/:projectId/validate', async (req, res) => {
   try {
@@ -351,9 +306,6 @@ router.post('/:projectId/validate', async (req, res) => {
     }
 
     const repoValidation = await projectAccessor.validateRepoPath(project.repoPath);
-    const worktreeValidation = await projectAccessor.validateWorktreeBasePath(
-      project.worktreeBasePath
-    );
 
     return res.status(200).json({
       success: true,
@@ -362,11 +314,6 @@ router.post('/:projectId/validate', async (req, res) => {
           valid: repoValidation.valid,
           error: repoValidation.error,
         },
-        worktreeBasePath: {
-          valid: worktreeValidation.valid,
-          error: worktreeValidation.error,
-        },
-        allValid: repoValidation.valid && worktreeValidation.valid,
       },
     });
   } catch (error) {
