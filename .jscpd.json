@@ -1,0 +1,18 @@
+{
+  "threshold": 0,
+  "reporters": ["console", "consoleFull"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.next/**",
+    "**/prisma/generated/**",
+    "**/coverage/**",
+    "**/*.min.js",
+    "**/*.d.ts"
+  ],
+  "absolute": true,
+  "gitignore": true,
+  "minLines": 5,
+  "minTokens": 50,
+  "format": ["typescript", "tsx"]
+}
