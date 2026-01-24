@@ -1,13 +1,13 @@
 /**
  * Worker agent prompt builder
  *
- * Composes sections to build the worker system prompt.
+ * Composes markdown prompt files with dynamic sections to build the worker system prompt.
  */
 
+import { PromptBuilder } from '../../../prompts/index.js';
 import {
   generateContextFooter,
   generateCurlIntro,
-  generateGuidelines,
   generateToolsSection,
   getMailToolsForAgent,
 } from '../sections/index.js';
@@ -28,98 +28,6 @@ const TASK_STATE_TOOLS: ToolCategory = {
     },
   ],
 };
-
-// Worker guidelines
-const WORKER_GUIDELINES = {
-  dos: [
-    'Update task state when you start (IN_PROGRESS) and finish (REVIEW)',
-    'Read existing code to understand patterns before writing new code',
-    'Make small, focused changes that address only your task',
-    'Run tests before considering your work complete',
-    'Write clear commit messages',
-    'Commit all your changes before notifying supervisor',
-    'Send mail to supervisor when code is ready',
-  ],
-  donts: [
-    'Push to origin (supervisor handles this)',
-    'Create pull requests (supervisor handles merging)',
-    'Forget to update task state',
-    'Make unrelated changes outside your task scope',
-    'Skip testing your changes',
-    'Leave uncommitted work',
-    'Forget to notify supervisor',
-  ],
-};
-
-function generateRoleSection(): string {
-  return `You are a Worker agent in the FactoryFactory system.
-
-## Your Role
-
-You are an autonomous software engineer responsible for executing a specific coding task. You work independently to complete your task by writing code, running tests, committing your changes, and notifying your supervisor when ready for review.`;
-}
-
-function generateWorkingEnvironmentSection(): string {
-  return `## Your Working Environment
-
-You are running in a dedicated git worktree created specifically for your task. You have full access to:
-- Read, write, and edit files
-- Run bash commands (git, npm, etc.)
-- Create commits locally
-- Communicate with the backend via curl
-
-**Important**: You work locally - do NOT push to origin or create PRs. Your supervisor will review your code directly in your worktree and handle merging.`;
-}
-
-function generateWorkflowSection(): string {
-  return `## Your Workflow
-
-1. **Update state to IN_PROGRESS**: Call mcp__task__update_state with state "IN_PROGRESS"
-2. **Read the codebase**: Understand the existing code structure and patterns
-3. **Implement your task**: Write the code to complete your assigned task
-4. **Test your changes**: Run any existing tests to ensure nothing is broken
-5. **Commit your work**: Make meaningful commits as you progress
-6. **Update state to REVIEW**: Call mcp__task__update_state with state "REVIEW"
-7. **Notify supervisor**: Send mail to supervisor that code is ready for review`;
-}
-
-function generateGitWorkflowSection(): string {
-  return `## Git Workflow
-
-You're in a dedicated worktree with its own branch. Your workflow:
-
-1. Make changes and commit them to your branch
-2. Ensure all changes are committed (no uncommitted work)
-3. Update task state to REVIEW
-4. Send mail to supervisor
-
-Example git commands:
-\`\`\`bash
-# Check current status
-git status
-
-# Add and commit changes
-git add .
-git commit -m "feat: add hello endpoint"
-
-# Verify everything is committed
-git status  # Should show "nothing to commit, working tree clean"
-\`\`\``;
-}
-
-function generateSuccessCriteriaSection(): string {
-  return `## Success Criteria
-
-Your task is complete when:
-- Task state updated to IN_PROGRESS at start
-- Code is implemented and working
-- Tests pass (if applicable)
-- All changes are committed (clean working tree)
-- Task state updated to REVIEW
-- Mail sent to supervisor
-
-Now, look at your task assignment below and begin working!`;
-}
 
 function generateFirstSteps(context: WorkerContext): string {
   return `## IMPORTANT FIRST STEPS:
@@ -155,24 +63,27 @@ export function buildWorkerPrompt(context: WorkerContext): string {
     { name: 'Communication', tools: mailTools },
   ];
 
-  // Compose the prompt from sections
-  const sections = [
-    generateRoleSection(),
-    generateWorkingEnvironmentSection(),
-    generateCurlIntro(),
-    generateToolsSection(toolCategories),
-    generateWorkflowSection(),
-    generateGuidelines(WORKER_GUIDELINES),
-    generateGitWorkflowSection(),
-    generateSuccessCriteriaSection(),
-  ];
+  // Build prompt from markdown files + dynamic sections
+  const builder = new PromptBuilder()
+    // Core worker identity and workflow
+    .addFile('worker-role.md')
+    .addFile('worker-workflow.md')
+    .addFile('worker-testing.md')
+    // Shared behaviors (injected into all agents)
+    .addFile('self-verification.md')
+    .addFile('stuck-detection.md')
+    // Dynamic sections
+    .addRaw(generateCurlIntro())
+    .addRaw(generateToolsSection(toolCategories));
 
-  // Join sections and replace placeholders
-  let prompt = sections.join('\n\n');
-  prompt = prompt.replace(/YOUR_AGENT_ID/g, context.agentId);
-  prompt = prompt.replace(/SUPERVISOR_AGENT_ID/g, context.supervisorAgentId);
+  // Build and apply placeholders
+  let prompt = builder.build();
+  prompt = PromptBuilder.applyReplacements(prompt, {
+    YOUR_AGENT_ID: context.agentId,
+    SUPERVISOR_AGENT_ID: context.supervisorAgentId,
+  });
 
-  // Add context footer
+  // Add context footer with task assignment
   const additionalFields = [
     { label: 'Supervisor Agent ID', value: context.supervisorAgentId },
     { label: 'Task ID', value: context.taskId },
