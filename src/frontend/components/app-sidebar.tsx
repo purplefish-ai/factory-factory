@@ -193,7 +193,7 @@ export function AppSidebar() {
                           <span>{item.label}</span>
                         </Link>
                       </SidebarMenuButton>
-                      {item.badge && item.badge > 0 && (
+                      {item.badge != null && item.badge > 0 && (
                         <SidebarMenuBadge>
                           <Badge variant="destructive" className="rounded-full px-1.5 py-0 text-xs">
                             {item.badge}
