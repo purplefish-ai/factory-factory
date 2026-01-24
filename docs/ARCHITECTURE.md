@@ -17,9 +17,9 @@ This document describes the high-level architecture of FactoryFactory, an autono
 
 FactoryFactory orchestrates multiple AI agents to autonomously implement software features. The system:
 
-1. Accepts high-level feature descriptions ("epics")
-2. Breaks them down into implementable tasks
-3. Assigns AI agents to implement each task
+1. Accepts high-level feature descriptions (top-level tasks, linked to Linear issues)
+2. Breaks them down into implementable subtasks
+3. Assigns AI agents to implement each subtask
 4. Creates pull requests for review
 5. Manages the merge process
 
@@ -41,13 +41,13 @@ FactoryFactory orchestrates multiple AI agents to autonomously implement softwar
 │  │                    Agent Layer          │                    │  │
 │  │  ┌────────────┐  ┌─────────────┐  ┌────┴─────┐              │  │
 │  │  │Orchestrator│─>│ Supervisor  │─>│  Worker  │              │  │
-│  │  │  (System)  │  │   (Epic)    │  │  (Task)  │              │  │
+│  │  │  (System)  │  │(Top-level)  │  │(Subtask) │              │  │
 │  │  └────────────┘  └─────────────┘  └──────────┘              │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                   │
 │  ┌────────────┐    ┌────────────┐    ┌────────────┐              │
 │  │ PostgreSQL │    │    Git     │    │   Claude   │              │
-│  │  Database  │    │ Worktrees  │    │    API     │              │
+│  │  Database  │    │ Worktrees  │    │    Code    │              │
 │  └────────────┘    └────────────┘    └────────────┘              │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -66,7 +66,7 @@ FactoryFactory orchestrates multiple AI agents to autonomously implement softwar
           │                  │                  │
    ┌──────┴──────┐    ┌──────┴──────┐    ┌──────┴──────┐
    │ Supervisor  │    │ Supervisor  │    │ Supervisor  │
-   │  (Epic A)   │    │  (Epic B)   │    │  (Epic C)   │
+   │  (Task A)   │    │  (Task B)   │    │  (Task C)   │
    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
           │                  │                  │
     ┌─────┼─────┐      ┌─────┼─────┐      ┌─────┼─────┐
@@ -82,7 +82,7 @@ FactoryFactory orchestrates multiple AI agents to autonomously implement softwar
 - System-wide health monitoring
 - Supervisor lifecycle management
 - Escalation handling for critical issues
-- Resource allocation across epics
+- Resource allocation across top-level tasks
 
 **Runs:** One per system
 **Model:** Configurable (default: sonnet)
@@ -91,82 +91,124 @@ FactoryFactory orchestrates multiple AI agents to autonomously implement softwar
 ### Supervisor Agent
 
 **Responsibilities:**
-- Epic-level planning and breakdown
-- Task creation and prioritization
+- Top-level task planning and breakdown
+- Subtask creation and prioritization
 - Worker health monitoring
 - PR review coordination
 - Merge conflict resolution
-- Epic completion management
+- Task completion management
 
-**Runs:** One per active epic
+**Runs:** One per active top-level task
 **Model:** Configurable (default: sonnet)
 **Permissions:** Relaxed mode
 
 ### Worker Agent
 
 **Responsibilities:**
-- Task implementation
+- Subtask implementation
 - Code writing and testing
 - PR creation
 - Rebase handling when requested
 - Status reporting to supervisor
 
-**Runs:** One per active task
+**Runs:** One per active subtask
 **Model:** Configurable (default: sonnet)
 **Permissions:** Yolo mode (autonomous execution)
 
 ## Core Components
 
-### Frontend (Next.js 14)
+### Frontend (Next.js 16)
+
+All routes are project-scoped under `/projects/[slug]/...`.
+
+> **Note:** The `epics/` directories are a historical naming artifact. The data model now uses a unified "Task" model where top-level tasks (parentId = null) were formerly called "Epics". The UI routes retain the old naming for URL stability.
 
 ```
 src/app/
-├── page.tsx              # Dashboard
-├── epics/                # Epic management UI
-├── tasks/                # Task views
-├── agents/               # Agent monitoring
-├── mail/                 # Agent communication
-├── logs/                 # Decision log viewer
-└── admin/                # Admin dashboard
+├── page.tsx                    # Dashboard
+├── projects/
+│   ├── page.tsx                # Project list
+│   ├── new/page.tsx            # Create project
+│   └── [slug]/
+│       ├── layout.tsx          # Project layout
+│       ├── epics/              # Top-level tasks (historical naming)
+│       │   ├── page.tsx        # List top-level tasks
+│       │   ├── new/page.tsx    # Create top-level task
+│       │   └── [id]/page.tsx   # View top-level task
+│       ├── tasks/page.tsx      # Subtasks view
+│       ├── mail/               # Project mail
+│       │   ├── page.tsx
+│       │   └── [id]/page.tsx
+│       └── logs/page.tsx       # Project decision logs
+└── admin/                      # Admin dashboard
+    ├── page.tsx
+    ├── agents/page.tsx
+    └── system/page.tsx
 ```
 
 ### Backend (Express + tRPC)
 
 ```
 src/backend/
-├── index.ts              # Express server entry
-├── trpc/                 # tRPC routers
-│   ├── epic.trpc.ts
-│   ├── task.trpc.ts
-│   ├── agent.trpc.ts
-│   ├── mail.trpc.ts
-│   ├── admin.trpc.ts
-│   └── decision-log.trpc.ts
+├── index.ts                    # Express server entry
+├── trpc/                       # tRPC routers
+│   ├── task.trpc.ts            # Task operations (top-level and subtasks)
+│   ├── agent.trpc.ts           # Agent management
+│   ├── mail.trpc.ts            # Mail system
+│   ├── project.trpc.ts         # Project management
+│   ├── admin.trpc.ts           # Admin operations
+│   ├── decision-log.trpc.ts    # Decision logging
+│   └── procedures/             # Shared procedures
+│       ├── project-scoped.ts
+│       └── top-level-task-scoped.ts
 ├── routers/
-│   ├── api/              # REST endpoints
-│   └── mcp/              # MCP tool handlers
+│   ├── api/                    # REST endpoints
+│   └── mcp/                    # MCP tool handlers
 ├── agents/
-│   ├── orchestrator/     # Orchestrator implementation
-│   ├── supervisor/       # Supervisor implementation
-│   └── worker/           # Worker implementation
-├── services/             # Business logic services
-├── resource_accessors/   # Database access layer
-├── clients/              # External API clients
-└── inngest/              # Event handlers
+│   ├── orchestrator/           # Orchestrator implementation
+│   │   ├── orchestrator.agent.ts
+│   │   ├── health.ts
+│   │   └── lifecycle.ts
+│   ├── supervisor/             # Supervisor implementation
+│   │   ├── supervisor.agent.ts
+│   │   ├── health.ts
+│   │   └── lifecycle.ts
+│   ├── worker/                 # Worker implementation
+│   │   ├── worker.agent.ts
+│   │   └── lifecycle.ts
+│   └── prompts/                # Agent prompt builders
+│       ├── builders/
+│       └── sections/
+├── services/                   # Business logic services
+├── resource_accessors/         # Database access layer
+├── clients/                    # External API clients
+└── inngest/                    # Event handlers
 ```
 
 ### Services Layer
 
 ```
 services/
-├── logger.service.ts         # Structured logging
-├── rate-limiter.service.ts   # API rate limiting
-├── config.service.ts         # Configuration management
-├── validation.service.ts     # Input validation
-├── crash-recovery.service.ts # Agent crash handling
-├── worktree.service.ts       # Git worktree management
-├── pr-conflict.service.ts    # PR/merge conflict handling
-└── notification.service.ts   # Desktop notifications
+├── logger.service.ts           # Structured logging
+├── rate-limiter.service.ts     # API rate limiting
+├── config.service.ts           # Configuration management
+├── validation.service.ts       # Input validation
+├── crash-recovery.service.ts   # Agent crash handling
+├── worktree.service.ts         # Git worktree management
+├── pr-conflict.service.ts      # PR/merge conflict handling
+└── notification.service.ts     # Desktop notifications
+```
+
+### Clients Layer
+
+```
+clients/
+├── claude-code.client.ts       # Claude Code CLI interaction
+├── claude-auth.ts              # Claude authentication
+├── git.client.ts               # Git operations
+├── github.client.ts            # GitHub API
+├── tmux.client.ts              # tmux session management
+└── terminal.client.ts          # Terminal/PTY handling
 ```
 
 ## Event-Driven Architecture
@@ -186,8 +228,8 @@ FactoryFactory uses Inngest for reliable event processing:
 
 | Event | Trigger | Handler Action |
 |-------|---------|----------------|
-| `epic.created` | New epic created | Start supervisor agent |
-| `task.created` | New task created | Start worker agent |
+| `task.top_level.created` | New top-level task created | Start supervisor agent |
+| `task.created` | New subtask created | Start worker agent |
 | `mail.sent` | Mail message sent | Deliver to recipient |
 | `agent.completed` | Agent finishes | Update state, cleanup |
 | `supervisor.check` | Periodic (5 min) | Health check supervisors |
@@ -196,18 +238,18 @@ FactoryFactory uses Inngest for reliable event processing:
 ### Event Flow Example
 
 ```
-Epic Created
+Top-level Task Created
      │
      ▼
-┌─────────────────┐
-│ epic.created    │
-│ event fired     │
-└────────┬────────┘
+┌─────────────────────┐
+│ task.top_level      │
+│ .created fired      │
+└────────┬────────────┘
          │
          ▼
 ┌─────────────────┐     ┌─────────────────┐
 │ Create          │────>│ Supervisor      │
-│ Supervisor      │     │ Analyzes Epic   │
+│ Supervisor      │     │ Analyzes Task   │
 └─────────────────┘     └────────┬────────┘
                                  │
          ┌───────────────────────┼───────────────────────┐
@@ -215,7 +257,7 @@ Epic Created
          ▼                       ▼                       ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │ task.created    │     │ task.created    │     │ task.created    │
-│ (Task 1)        │     │ (Task 2)        │     │ (Task 3)        │
+│ (Subtask 1)     │     │ (Subtask 2)     │     │ (Subtask 3)     │
 └────────┬────────┘     └────────┬────────┘     └────────┬────────┘
          │                       │                       │
          ▼                       ▼                       ▼
@@ -292,39 +334,60 @@ Worker 2 completes → PR created ────────┤
 
 ## Database Schema
 
+### Unified Task Model
+
+The system uses a unified Task model where top-level tasks (formerly "Epics") and subtasks are both represented in the same table, differentiated by the `parentId` field:
+
+- **Top-level tasks**: `parentId = null`, linked to Linear issues
+- **Subtasks**: `parentId` references parent task
+
 ### Entity Relationship Diagram
 
 ```
+┌─────────────┐
+│   Project   │
+│             │
+│ id          │
+│ name        │
+│ slug        │
+│ repoPath    │
+│ worktreePath│
+└──────┬──────┘
+       │
+       │ has many
+       ▼
 ┌─────────────┐         ┌─────────────┐
-│    Epic     │────────<│    Task     │
-│             │         │             │
-│ id          │         │ id          │
-│ title       │         │ title       │
-│ description │         │ description │
-│ state       │         │ state       │
-│ linearIssue │         │ epicId      │
-└──────┬──────┘         │ assignedId  │
-       │                │ branchName  │
-       │                │ prUrl       │
-       │                │ attempts    │
-       │                └──────┬──────┘
-       │                       │
-       ▼                       ▼
-┌─────────────┐         ┌─────────────┐
-│    Agent    │<────────│  (assigned) │
-│             │         └─────────────┘
+│    Task     │────────<│    Task     │
+│             │ parent  │  (subtask)  │
+│ id          │         └─────────────┘
+│ projectId   │
+│ parentId    │ (null = top-level)
+│ title       │
+│ description │
+│ state       │
+│ linearIssue │ (top-level only)
+│ assignedId  │
+│ branchName  │
+│ prUrl       │
+│ attempts    │
+└──────┬──────┘
+       │
+       │ assigned to
+       ▼
+┌─────────────┐
+│    Agent    │
+│             │
 │ id          │
 │ type        │         ┌─────────────┐
 │ state       │────────>│ DecisionLog │
-│ currentEpic │         │             │
-│ currentTask │         │ id          │
-│ tmuxSession │         │ agentId     │
+│ currentTask │         │             │
+│ tmuxSession │         │ id          │
+│ sessionId   │         │ agentId     │
 │ lastActive  │         │ decision    │
 └──────┬──────┘         │ reasoning   │
        │                │ context     │
        │                │ timestamp   │
        │                └─────────────┘
-       │
        ▼
 ┌─────────────┐
 │    Mail     │
@@ -337,20 +400,28 @@ Worker 2 completes → PR created ────────┤
 │ body        │
 │ isRead      │
 └─────────────┘
+
+┌─────────────────┐
+│ TaskDependency  │
+│                 │
+│ id              │
+│ taskId          │ (the blocked task)
+│ dependsOnId     │ (the blocking task)
+└─────────────────┘
 ```
 
 ### State Machines
 
-**Epic States:**
+**Task States (Parent/Top-level):**
 ```
-PLANNING → IN_PROGRESS → COMPLETED
-              ↓              ↑
-           BLOCKED ──────────┘
+PLANNING → PLANNED → (children execute) → COMPLETED
+              ↓                               ↑
+           BLOCKED ───────────────────────────┘
               ↓
           CANCELLED
 ```
 
-**Task States:**
+**Task States (Leaf/Subtask):**
 ```
 PENDING → ASSIGNED → IN_PROGRESS → REVIEW → COMPLETED
              ↓           ↓            ↓
@@ -370,14 +441,15 @@ IDLE ←→ BUSY ←→ WAITING
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| Frontend | Next.js 14 | React-based UI |
-| Styling | Tailwind CSS | Utility-first CSS |
+| Frontend | Next.js 16 | React-based UI |
+| Styling | Tailwind CSS v4 | Utility-first CSS |
+| Components | shadcn/ui | Component library |
 | API | tRPC | Type-safe API calls |
 | Backend | Express.js | HTTP server |
 | Events | Inngest | Event processing |
 | Database | PostgreSQL | Persistent storage |
 | ORM | Prisma | Database access |
-| AI | Claude (Anthropic) | Agent intelligence |
+| AI | Claude Code CLI | Agent intelligence |
 | Process | tmux | Agent terminals |
 | VCS | Git | Version control |
 
@@ -393,7 +465,7 @@ IDLE ←→ BUSY ←→ WAITING
 - Simplifies conflict resolution (only binary: with main)
 - Makes rebase cascades predictable
 
-**Trade-off:** Slower epic completion, but more reliable.
+**Trade-off:** Slower task completion, but more reliable.
 
 ### 2. Three-Tier Agent Hierarchy
 
@@ -401,11 +473,21 @@ IDLE ←→ BUSY ←→ WAITING
 
 **Rationale:**
 - Clear separation of concerns
-- Supervisors can be specialized per epic
+- Supervisors can be specialized per top-level task
 - Workers are stateless and replaceable
-- Failure isolation (worker crash doesn't affect other epics)
+- Failure isolation (worker crash doesn't affect other tasks)
 
-### 3. Event-Driven Architecture
+### 3. Unified Task Model
+
+**Decision:** Use a single Task model with parent-child relationships instead of separate Epic/Task models.
+
+**Rationale:**
+- Simpler data model
+- Consistent handling of all task types
+- Easier to add task nesting in the future
+- Cleaner API surface
+
+### 4. Event-Driven Architecture
 
 **Decision:** Use Inngest for all async operations.
 
@@ -415,9 +497,9 @@ IDLE ←→ BUSY ←→ WAITING
 - Easy to add new event handlers
 - Decouples components
 
-### 4. Git Worktrees per Task
+### 5. Git Worktrees per Task
 
-**Decision:** Each task works in its own git worktree.
+**Decision:** Each subtask works in its own git worktree.
 
 **Rationale:**
 - Parallel implementation without conflicts
@@ -425,7 +507,7 @@ IDLE ←→ BUSY ←→ WAITING
 - Clean separation of concerns
 - Easy cleanup
 
-### 5. Mail System for Communication
+### 6. Mail System for Communication
 
 **Decision:** Internal mail for human-agent and agent-agent communication.
 
@@ -435,7 +517,7 @@ IDLE ←→ BUSY ←→ WAITING
 - Clear audit trail
 - Human can participate naturally
 
-### 6. Decision Logging
+### 7. Decision Logging
 
 **Decision:** Log all agent decisions with reasoning.
 
