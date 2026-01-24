@@ -50,8 +50,6 @@ export interface TaskOverrides {
   title?: string;
   description?: string | null;
   state?: TaskState;
-  linearIssueId?: string | null;
-  linearIssueUrl?: string | null;
   assignedAgentId?: string | null;
   worktreePath?: string | null;
   branchName?: string | null;
@@ -79,8 +77,6 @@ export function createTask(overrides: TaskOverrides = {}): Task {
     title: overrides.title ?? `Test Task ${id}`,
     description: overrides.description ?? null,
     state: overrides.state ?? defaultState,
-    linearIssueId: overrides.linearIssueId ?? null,
-    linearIssueUrl: overrides.linearIssueUrl ?? null,
     assignedAgentId: overrides.assignedAgentId ?? null,
     worktreePath: overrides.worktreePath ?? null,
     branchName: overrides.branchName ?? null,

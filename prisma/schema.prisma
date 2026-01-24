@@ -71,10 +71,6 @@ model Task {
   description       String?     @db.Text
   state             TaskState   @default(PENDING)
 
-  // Linear integration (only for top-level tasks)
-  linearIssueId     String?     @unique
-  linearIssueUrl    String?
-
   // Execution tracking (for leaf tasks)
   assignedAgentId   String?
   worktreePath      String?
@@ -102,7 +98,6 @@ model Task {
   @@index([projectId])
   @@index([parentId])
   @@index([state])
-  @@index([linearIssueId])
   @@index([assignedAgentId])
 }
 

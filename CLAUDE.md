@@ -15,7 +15,7 @@ pnpm build:all     # Build for production
 
 ## Architecture
 
-Three-tier agent hierarchy that processes Linear issues:
+Three-tier agent hierarchy:
 
 ```
 Orchestrator (1 per system) → monitors health, manages supervisors
