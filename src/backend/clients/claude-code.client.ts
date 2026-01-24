@@ -124,9 +124,9 @@ export async function createWorkerSession(
 
   // Send Claude command to tmux session using atomic pattern for cross-platform reliability
   // Uses set-buffer + paste-buffer + send-keys Enter to handle special characters and different tmux versions
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
-  await execAsync(`sh -c '${cmdStr}' sh "${claudeCommand.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
-
+  // Pass the command via environment variable to avoid shell escaping issues
+  const cmdStr = `tmux set-buffer -- "$TMUX_MESSAGE" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
+  await execAsync(`sh -c '${cmdStr}'`, { env: { ...process.env, TMUX_MESSAGE: claudeCommand } });
 
   // Wait a moment for Claude to initialize
   await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -193,9 +193,9 @@ export async function resumeSession(
   const resumeCommand = buildResumeCommand(sessionId, profile);
 
   // Send resume command to tmux using atomic pattern for cross-platform reliability
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
-  await execAsync(`sh -c '${cmdStr}' sh "${resumeCommand.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
-
+  // Pass the command via environment variable to avoid shell escaping issues
+  const cmdStr = `tmux set-buffer -- "$TMUX_MESSAGE" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
+  await execAsync(`sh -c '${cmdStr}'`, { env: { ...process.env, TMUX_MESSAGE: resumeCommand } });
 
   return {
     agentId,
@@ -244,10 +244,10 @@ export async function sendMessage(agentId: string, message: string): Promise<voi
 
   // Use atomic command chaining pattern from multiclaude:
   // set-buffer (load text) -> paste-buffer (insert to pane) -> send-keys Enter (submit)
-  // The text is passed as $1 to sh -c to avoid shell escaping issues
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
+  // Pass the message via environment variable to avoid shell escaping issues
+  const cmdStr = `tmux set-buffer -- "$TMUX_MESSAGE" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
 
-  await execAsync(`sh -c '${cmdStr}' sh "${message.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
+  await execAsync(`sh -c '${cmdStr}'`, { env: { ...process.env, TMUX_MESSAGE: message } });
 }
 
 /**

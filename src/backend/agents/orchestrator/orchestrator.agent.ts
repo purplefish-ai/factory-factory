@@ -258,9 +258,9 @@ async function sendOrchestratorMessage(agentId: string, message: string): Promis
     throw new Error(`Tmux session ${tmuxSessionName} does not exist`);
   }
 
-  // Atomic message sending
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
-  await execAsync(`sh -c '${cmdStr}' sh "${message.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
+  // Atomic message sending - pass message via env var to avoid escaping issues
+  const cmdStr = `tmux set-buffer -- "$TMUX_MESSAGE" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
+  await execAsync(`sh -c '${cmdStr}'`, { env: { ...process.env, TMUX_MESSAGE: message } });
 }
 
 /**
