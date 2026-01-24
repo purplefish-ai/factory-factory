@@ -604,10 +604,106 @@ async function runReconciliation() {
 }
 ```
 
-## State Transitions
+## Events as State Updates (Not Actions)
 
-### Current: Event-Driven (Fragile)
+A key architectural principle: **events should only update database state, not perform actions**. The reconciler observes state and performs actions.
 
+### Current: Events Trigger Actions (Complex, Fragile)
+
+```
+task.top_level.created event
+         ↓
+    Inngest handler
+         ↓
+    createSupervisor()
+         ├── Create Agent record
+         ├── Create git worktree
+         ├── Create tmux session
+         ├── Start Claude Code
+         └── Update task state
+
+Problem: Handler does 5+ things. If any fails, partial state.
+Problem: If handler fails entirely, nothing happens.
+Problem: Complex retry/recovery logic in handler.
+```
+
+### Proposed: Events Update State, Reconciler Acts (Simple, Robust)
+
+```
+task.top_level.created event
+         ↓
+    Inngest handler (SIMPLE)
+         └── task.state = IN_PROGRESS
+             task.needsAgent = true
+
+         ... later (within 30s) ...
+
+    Reconciler observes
+         ├── Task needs agent? Create Agent record
+         ├── Task needs worktree? Create worktree
+         ├── Agent should run? Start session
+         └── All idempotent, all self-healing
+
+Benefit: Handler is one DB update (fast, reliable)
+Benefit: If handler fails, retry is trivial
+Benefit: If reconciler fails, next cycle catches it
+Benefit: All complex logic in one place
+```
+
+### Event Handler Examples
+
+**Before (imperative, complex):**
+```typescript
+// task-created.ts - current
+async function taskCreatedHandler({ event }) {
+  const task = await taskAccessor.findById(event.data.taskId);
+
+  // All this logic in the event handler:
+  const agent = await agentAccessor.create({ type: 'WORKER', ... });
+  const worktree = await gitClient.createWorktree(...);
+  await taskAccessor.update(task.id, {
+    worktreePath: worktree.path,
+    assignedAgentId: agent.id,
+    state: 'ASSIGNED'
+  });
+  await startClaudeSession(agent, worktree);
+  // ... more imperative steps
+}
+```
+
+**After (declarative, simple):**
+```typescript
+// task-created.ts - proposed
+async function taskCreatedHandler({ event }) {
+  // Just update desired state - that's it
+  await taskAccessor.update(event.data.taskId, {
+    state: 'IN_PROGRESS'  // Reconciler will provision everything
+  });
+}
+
+// All the "how" logic moves to reconciler
+```
+
+### What Events Become
+
+| Event | Current Handler | Proposed Handler |
+|-------|-----------------|------------------|
+| `task.top_level.created` | Creates supervisor, worktree, session | `task.state = IN_PROGRESS` |
+| `task.created` | Creates worker, worktree, session | `task.state = IN_PROGRESS` |
+| `agent.completed` | Cleanup, notifications, state updates | `agent.desiredState = IDLE` |
+| `mail.sent` | Triggers notifications | (reconciler handles notifications) |
+
+### Benefits of This Separation
+
+1. **Handlers become trivial** - One DB update, hard to fail
+2. **Retries are simple** - Idempotent state update
+3. **Single source of truth** - Reconciler is the only thing that "does stuff"
+4. **Easier testing** - Test reconciler logic in isolation
+5. **Self-healing by default** - Reconciler always converges to desired state
+
+### State Transitions Summary
+
+**Current: Event-Driven (Fragile)**
 ```
 Task created → Inngest event → Worker created → MCP tool → PR created
                     ↓
@@ -616,14 +712,15 @@ Task created → Inngest event → Worker created → MCP tool → PR created
               Task stuck with no PR
 ```
 
-### Proposed: Level-Triggered (Self-Healing)
-
+**Proposed: Level-Triggered (Self-Healing)**
 ```
-Task created → State: ASSIGNED → Reconciler sees "needs PR" → Creates PR
-                                         ↓
-                                 (PR deleted somehow?)
-                                         ↓
-                                 Reconciler sees "needs PR" → Creates PR again
+Task created → Event → DB updated (state: IN_PROGRESS)
+                              ↓
+                    Reconciler sees "needs PR" → Creates PR
+                              ↓
+                      (PR deleted somehow?)
+                              ↓
+                    Reconciler sees "needs PR" → Creates PR again
 ```
 
 ## Simplifying MCP Tools
@@ -655,42 +752,69 @@ With reconciliation handling infrastructure, MCP tools become simpler:
 
 ## Implementation Plan
 
-### Phase 1: Infrastructure Reconciliation
+### Phase 1: Reconciliation Foundation
 
-1. Add `draftPrUrl` field to Task model
-2. Create reconciliation service with checks for:
-   - Worktree exists
-   - Branch exists
-   - Draft PR exists
-3. Create Inngest cron job (every 30s)
-4. Add remediation functions for each check
+1. Add new fields to Task model (`draftPrUrl`, `infraStatus`)
+2. Add new fields to Agent model (`executionState`, `desiredExecutionState`)
+3. Create reconciliation service with two loops:
+   - Task infrastructure reconciliation
+   - Agent execution reconciliation
+4. Create Inngest cron job (every 30s)
 5. Add failure tracking and alerting
 
-### Phase 2: Pre-Provisioning
+### Phase 2: Simplify Event Handlers
 
-1. When task transitions PENDING → ASSIGNED:
+1. Refactor `task.top_level.created` handler:
+   - Before: Creates supervisor, worktree, session
+   - After: Just sets `task.state = IN_PROGRESS`
+2. Refactor `task.created` handler:
+   - Before: Creates worker, worktree, session
+   - After: Just sets `task.state = IN_PROGRESS`
+3. Move all creation logic to reconciler
+4. Event handlers become single DB updates
+
+### Phase 3: Infrastructure Pre-Provisioning
+
+1. Reconciler creates infrastructure when task enters IN_PROGRESS:
    - Create worktree
    - Create branch
    - Create draft PR
-   - All done by reconciler, not MCP tools
 2. Remove `mcp__task__create_pr` (replaced by `mcp__task__signal_ready`)
 3. Worker just works in pre-provisioned environment
 
-### Phase 3: State Reconciliation
+### Phase 4: Agent Lifecycle via Reconciler
 
-1. Reconciler also manages state transitions based on reality:
-   - Commits pushed + signal_ready received → REVIEW
+1. Reconciler manages agent sessions:
+   - Starts sessions when `desiredExecutionState = ACTIVE`
+   - Stops sessions when `desiredExecutionState = PAUSED`
+   - Restarts crashed sessions
+2. Remove agent creation from event handlers
+3. Reconciler assigns agents to tasks that need them
+
+### Phase 5: State Reconciliation
+
+1. Reconciler manages state transitions based on reality:
+   - `signal_ready` received → REVIEW
    - PR merged → COMPLETED
    - Repeated failures → BLOCKED
 2. Remove `mcp__task__update_state` (reconciler manages state)
 
-### Phase 4: Rebase Handling
+### Phase 6: Rebase Handling
 
 1. When a PR is merged to epic branch:
    - Reconciler detects other tasks need rebase
    - Reconciler executes rebase (not worker via MCP)
    - If conflicts, task → BLOCKED, alert worker
 2. Remove `mcp__git__rebase` from worker tools
+
+### Migration Strategy
+
+To avoid big-bang migration:
+
+1. **Add reconciler alongside existing handlers** - Both can coexist
+2. **Reconciler fills gaps** - If handler fails, reconciler catches it
+3. **Gradually simplify handlers** - One at a time
+4. **Remove redundant handler logic** - Once reconciler is proven
 
 ## Database Changes
 
