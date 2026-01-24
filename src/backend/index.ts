@@ -55,7 +55,7 @@ app.use((req, res, next): void => {
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Project-Id, X-Epic-Id'
   );
   res.header('Access-Control-Allow-Credentials', 'true');
 

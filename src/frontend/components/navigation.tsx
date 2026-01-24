@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { trpc } from '../lib/trpc';
+import { setProjectContext, trpc } from '../lib/trpc';
 
 // Key for storing selected project in localStorage
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
@@ -106,13 +106,17 @@ export function Navigation() {
   // Get the selected project's ID for scoped queries
   const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
 
-  const { data: unreadCount } = trpc.mail.getUnreadCount.useQuery(
-    { projectId: selectedProjectId },
-    {
-      refetchInterval: 5000,
-      enabled: !!selectedProjectId,
+  // Set project context for tRPC headers when selectedProjectId changes
+  useEffect(() => {
+    if (selectedProjectId) {
+      setProjectContext(selectedProjectId);
     }
-  );
+  }, [selectedProjectId]);
+
+  const { data: unreadCount } = trpc.mail.getUnreadCount.useQuery(undefined, {
+    refetchInterval: 5000,
+    enabled: !!selectedProjectId,
+  });
 
   // Get project slug from URL or localStorage
   useEffect(() => {

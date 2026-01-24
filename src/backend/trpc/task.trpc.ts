@@ -1,15 +1,15 @@
 import { TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { taskAccessor } from '../resource_accessors/task.accessor';
+import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
 export const taskRouter = router({
-  // List all tasks with optional filtering
-  list: publicProcedure
+  // List all tasks with optional filtering (scoped to project from context)
+  list: projectScopedProcedure
     .input(
       z
         .object({
-          projectId: z.string().optional(),
           epicId: z.string().optional(),
           state: z.nativeEnum(TaskState).optional(),
           assignedAgentId: z.string().optional(),
@@ -18,8 +18,11 @@ export const taskRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
-      return taskAccessor.list(input);
+    .query(async ({ ctx, input }) => {
+      return taskAccessor.list({
+        ...input,
+        projectId: ctx.projectId,
+      });
     }),
 
   // Get task by ID
@@ -58,9 +61,9 @@ export const taskRouter = router({
       return taskAccessor.update(id, updateData);
     }),
 
-  // Get summary stats for dashboard
-  getStats: publicProcedure.query(async () => {
-    const tasks = await taskAccessor.list();
+  // Get summary stats for dashboard (scoped to project from context)
+  getStats: projectScopedProcedure.query(async ({ ctx }) => {
+    const tasks = await taskAccessor.list({ projectId: ctx.projectId });
 
     const byState: Record<TaskState, number> = {
       PENDING: 0,

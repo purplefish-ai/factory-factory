@@ -2,23 +2,26 @@ import { EpicState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { inngest } from '../inngest/client';
 import { epicAccessor } from '../resource_accessors/epic.accessor';
+import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
 export const epicRouter = router({
-  // List all epics with optional filtering
-  list: publicProcedure
+  // List all epics with optional filtering (scoped to project from context)
+  list: projectScopedProcedure
     .input(
       z
         .object({
-          projectId: z.string().optional(),
           state: z.nativeEnum(EpicState).optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
         })
         .optional()
     )
-    .query(async ({ input }) => {
-      return epicAccessor.list(input);
+    .query(async ({ ctx, input }) => {
+      return epicAccessor.list({
+        ...input,
+        projectId: ctx.projectId,
+      });
     }),
 
   // Get epic by ID
@@ -30,11 +33,10 @@ export const epicRouter = router({
     return epic;
   }),
 
-  // Create a new epic
-  create: publicProcedure
+  // Create a new epic (scoped to project from context)
+  create: projectScopedProcedure
     .input(
       z.object({
-        projectId: z.string().min(1, 'Project ID is required'),
         title: z.string().min(1),
         description: z.string().optional(),
         design: z.string().optional(),
@@ -42,13 +44,13 @@ export const epicRouter = router({
         linearIssueUrl: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       // Generate a local ID if Linear integration not used
       const linearIssueId = input.linearIssueId || `local-${Date.now()}`;
       const linearIssueUrl = input.linearIssueUrl || '';
 
       const epic = await epicAccessor.create({
-        projectId: input.projectId,
+        projectId: ctx.projectId,
         linearIssueId,
         linearIssueUrl,
         title: input.title,
@@ -109,9 +111,9 @@ export const epicRouter = router({
     return epicAccessor.delete(input.id);
   }),
 
-  // Get summary stats for dashboard
-  getStats: publicProcedure.query(async () => {
-    const epics = await epicAccessor.list();
+  // Get summary stats for dashboard (scoped to project from context)
+  getStats: projectScopedProcedure.query(async ({ ctx }) => {
+    const epics = await epicAccessor.list({ projectId: ctx.projectId });
 
     const byState: Record<EpicState, number> = {
       PLANNING: 0,

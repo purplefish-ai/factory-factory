@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { decisionLogAccessor } from '../resource_accessors/decision-log.accessor';
+import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
 export const decisionLogRouter = router({
@@ -15,18 +16,17 @@ export const decisionLogRouter = router({
       return decisionLogAccessor.findByAgentId(input.agentId, input.limit ?? 50);
     }),
 
-  // List recent decision logs across all agents
-  listRecent: publicProcedure
+  // List recent decision logs across all agents (scoped to project from context)
+  listRecent: projectScopedProcedure
     .input(
       z
         .object({
           limit: z.number().min(1).max(100).optional(),
-          projectId: z.string().optional(),
         })
         .optional()
     )
-    .query(async ({ input }) => {
-      return decisionLogAccessor.findRecent(input?.limit ?? 100, input?.projectId);
+    .query(async ({ ctx, input }) => {
+      return decisionLogAccessor.findRecent(input?.limit ?? 100, ctx.projectId);
     }),
 
   // Get decision log by ID

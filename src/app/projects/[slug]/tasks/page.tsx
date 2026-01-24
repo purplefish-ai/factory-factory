@@ -25,7 +25,6 @@ export default function ProjectTasksPage() {
 
   const { data: tasks, isLoading } = trpc.task.list.useQuery(
     {
-      projectId: project?.id,
       state: stateFilter ? (stateFilter as TaskState) : undefined,
     },
     { enabled: !!project?.id, refetchInterval: 5000 }

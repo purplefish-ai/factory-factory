@@ -23,7 +23,6 @@ export default function ProjectEpicsPage() {
 
   const { data: epics, isLoading } = trpc.epic.list.useQuery(
     {
-      projectId: project?.id,
       state: stateFilter ? (stateFilter as EpicState) : undefined,
     },
     { enabled: !!project?.id, refetchInterval: 5000 }
