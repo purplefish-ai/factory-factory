@@ -32,7 +32,8 @@ describe('WorktreeService', () => {
   afterEach(() => {
     // Restore original env
     if (originalEnv === undefined) {
-      process.env.GIT_WORKTREE_BASE = undefined;
+      // biome-ignore lint/performance/noDelete: assigning undefined to process.env sets it to the string "undefined", delete is required to actually unset
+      delete process.env.GIT_WORKTREE_BASE;
     } else {
       process.env.GIT_WORKTREE_BASE = originalEnv;
     }
@@ -176,7 +177,8 @@ branch factoryfactory/task-abc12345
 
     it('should recognize worktrees under /factoryfactory/worktrees/ pattern', async () => {
       // Clear env to test fallback pattern
-      process.env.GIT_WORKTREE_BASE = undefined;
+      // biome-ignore lint/performance/noDelete: assigning undefined to process.env sets it to the string "undefined", delete is required to actually unset
+      delete process.env.GIT_WORKTREE_BASE;
 
       mockGitCommand.mockResolvedValue({
         stdout: `worktree /test/repo
