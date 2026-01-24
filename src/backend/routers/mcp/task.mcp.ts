@@ -11,7 +11,11 @@ import {
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
+import { createLogger } from '../../services/index.js';
 import { notificationService } from '../../services/notification.service.js';
+
+const logger = createLogger('task-mcp');
+
 import {
   getSubtaskWorktreeName,
   getTopLevelTaskBranchName,
@@ -127,12 +131,13 @@ async function cleanupWorker(agentId: string | null): Promise<boolean> {
 
   try {
     await killWorkerAndCleanup(agentId);
-    console.log(`Cleaned up worker ${agentId} after task approval`);
+    logger.info('Cleaned up worker after task approval', { agentId });
     return true;
   } catch (error) {
-    console.log(
-      `Note: Could not clean up worker ${agentId}: ${error instanceof Error ? error.message : String(error)}`
-    );
+    logger.debug('Could not clean up worker (non-critical)', {
+      agentId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }
@@ -294,9 +299,9 @@ async function tryPushTopLevelBranch(
     await gitClient.pushBranchWithUpstream(topLevelWorktreePath);
     return true;
   } catch (error) {
-    console.log(
-      `Note: Could not push top-level branch (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
-    );
+    logger.debug('Could not push top-level branch (OK for local testing)', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }
@@ -354,14 +359,15 @@ async function cleanupAllWorkers(tasks: { assignedAgentId: string | null }[]): P
         await killWorkerAndCleanup(task.assignedAgentId);
         count++;
       } catch (error) {
-        console.log(
-          `Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`
-        );
+        logger.debug('Could not clean up worker (non-critical)', {
+          agentId: task.assignedAgentId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   }
 
-  console.log(`Cleaned up ${count} worker session(s)`);
+  logger.info('Cleaned up worker sessions', { count });
   return count;
 }
 
@@ -384,9 +390,10 @@ async function attemptCreatePR(
     );
     return { prInfo, created: true };
   } catch (error) {
-    console.log(
-      `Note: Could not create PR (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
-    );
+    logger.debug('Could not create PR (OK for local testing)', {
+      branchName,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { prInfo: null, created: false };
   }
 }
@@ -402,7 +409,7 @@ async function sendTopLevelCompletionNotifications(
   try {
     await notificationService.notifyEpicComplete(topLevelTask.title, prUrl || undefined);
   } catch (error) {
-    console.error('Failed to send top-level task completion notification:', error);
+    logger.warn('Failed to send top-level task completion notification', { error });
   }
 
   try {
@@ -411,10 +418,7 @@ async function sendTopLevelCompletionNotifications(
       data: { agentId: context.agentId, taskId: topLevelTask.id },
     });
   } catch (error) {
-    console.log(
-      'Inngest event send failed (this is OK if Inngest dev server is not running):',
-      error
-    );
+    logger.debug('Inngest event send failed (OK if dev server not running)', { error });
   }
 }
 
@@ -692,7 +696,7 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
     notificationService
       .notifyTaskComplete(task.title, prInfo.url, task.branchName)
       .catch((error) => {
-        console.error('Failed to send task completion notification:', error);
+        logger.warn('Failed to send task completion notification', { error });
       });
 
     return createSuccessResponse({
@@ -847,7 +851,7 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
         },
       });
     } catch (error) {
-      console.log('Inngest event send failed (non-critical):', error);
+      logger.debug('Inngest event send failed (non-critical)', { error });
     }
 
     // Start worker directly for immediate feedback. Inngest event is for observability only.
@@ -855,9 +859,9 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
     let workerId: string | null = null;
     try {
       workerId = await startWorker(task.id);
-      console.log(`Started worker ${workerId} for task ${task.id}`);
+      logger.info('Started worker for task', { workerId, taskId: task.id });
     } catch (error) {
-      console.error(`Failed to start worker for task ${task.id}:`, error);
+      logger.error('Failed to start worker for task', { taskId: task.id, error });
       // Don't fail the task creation if worker fails to start
       // The worker can be started manually later
     }

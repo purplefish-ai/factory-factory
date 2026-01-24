@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { execCommand } from '../lib/shell.js';
 
 export interface PRInfo {
   url: string;
@@ -17,10 +14,29 @@ export interface PRStatus {
   reviewDecision: string | null;
 }
 
+/**
+ * Execute a gh CLI command with consistent error handling
+ */
+async function runGhCommand(args: string[], operation: string, repoPath?: string): Promise<string> {
+  const fullArgs = repoPath ? ['-C', repoPath, ...args] : args;
+
+  try {
+    const { stdout, code } = await execCommand('gh', fullArgs);
+    if (code !== 0) {
+      throw new Error(`gh ${args[0]} exited with code ${code}`);
+    }
+    return stdout;
+  } catch (error) {
+    throw new Error(
+      `Failed to ${operation}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
 class GitHubClient {
   async checkInstalled(): Promise<boolean> {
     try {
-      await execAsync('gh --version');
+      await execCommand('gh', ['--version']);
       return true;
     } catch {
       return false;
@@ -29,7 +45,7 @@ class GitHubClient {
 
   async checkAuthenticated(): Promise<boolean> {
     try {
-      const { stdout } = await execAsync('gh auth status');
+      const { stdout } = await execCommand('gh', ['auth', 'status']);
       return stdout.includes('Logged in');
     } catch {
       return false;
@@ -43,84 +59,59 @@ class GitHubClient {
     description: string,
     repoPath?: string
   ): Promise<PRInfo> {
-    const cwd = repoPath ? `-C "${repoPath}"` : '';
-    const command = `gh ${cwd} pr create --base "${to}" --head "${from}" --title "${this.escapeShellArg(
-      title
-    )}" --body "${this.escapeShellArg(description)}"`;
+    const args = [
+      'pr',
+      'create',
+      '--base',
+      to,
+      '--head',
+      from,
+      '--title',
+      title,
+      '--body',
+      description,
+    ];
+    const stdout = await runGhCommand(args, 'create PR', repoPath);
+    const url = stdout.trim();
 
-    try {
-      const { stdout } = await execAsync(command, repoPath ? { cwd: repoPath } : undefined);
-      const url = stdout.toString().trim();
-
-      const prNumber = this.extractPRNumber(url);
-
-      return {
-        url,
-        number: prNumber,
-        state: 'OPEN',
-        title,
-      };
-    } catch (error) {
-      throw new Error(
-        `Failed to create PR: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    return {
+      url,
+      number: this.extractPRNumber(url),
+      state: 'OPEN',
+      title,
+    };
   }
 
   async getPRStatus(prUrl: string, repoPath?: string): Promise<PRStatus> {
-    const cwd = repoPath ? `-C "${repoPath}"` : '';
-    const command = `gh ${cwd} pr view "${prUrl}" --json state,isDraft,mergeable,reviewDecision`;
+    const args = ['pr', 'view', prUrl, '--json', 'state,isDraft,mergeable,reviewDecision'];
+    const stdout = await runGhCommand(args, 'get PR status', repoPath);
+    const data = JSON.parse(stdout);
 
-    try {
-      const { stdout } = await execAsync(command, repoPath ? { cwd: repoPath } : undefined);
-      const data = JSON.parse(stdout.toString());
-
-      return {
-        state: data.state,
-        isDraft: data.isDraft,
-        mergeable: data.mergeable,
-        reviewDecision: data.reviewDecision,
-      };
-    } catch (error) {
-      throw new Error(
-        `Failed to get PR status: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    return {
+      state: data.state,
+      isDraft: data.isDraft,
+      mergeable: data.mergeable,
+      reviewDecision: data.reviewDecision,
+    };
   }
 
   async mergePR(prUrl: string, repoPath?: string): Promise<string> {
-    const cwd = repoPath ? `-C "${repoPath}"` : '';
-    const command = `gh ${cwd} pr merge "${prUrl}" --squash --auto`;
-
-    try {
-      const { stdout } = await execAsync(command, repoPath ? { cwd: repoPath } : undefined);
-      return stdout.toString().trim();
-    } catch (error) {
-      throw new Error(
-        `Failed to merge PR: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    const args = ['pr', 'merge', prUrl, '--squash', '--auto'];
+    const stdout = await runGhCommand(args, 'merge PR', repoPath);
+    return stdout.trim();
   }
 
   async getPRInfo(prUrl: string, repoPath?: string): Promise<PRInfo> {
-    const cwd = repoPath ? `-C "${repoPath}"` : '';
-    const command = `gh ${cwd} pr view "${prUrl}" --json number,state,title,url`;
+    const args = ['pr', 'view', prUrl, '--json', 'number,state,title,url'];
+    const stdout = await runGhCommand(args, 'get PR info', repoPath);
+    const data = JSON.parse(stdout);
 
-    try {
-      const { stdout } = await execAsync(command, repoPath ? { cwd: repoPath } : undefined);
-      const data = JSON.parse(stdout.toString());
-
-      return {
-        url: data.url,
-        number: data.number,
-        state: data.state,
-        title: data.title,
-      };
-    } catch (error) {
-      throw new Error(
-        `Failed to get PR info: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    return {
+      url: data.url,
+      number: data.number,
+      state: data.state,
+      title: data.title,
+    };
   }
 
   private extractPRNumber(url: string): number {
@@ -129,10 +120,6 @@ class GitHubClient {
       throw new Error(`Could not extract PR number from URL: ${url}`);
     }
     return Number.parseInt(match[1], 10);
-  }
-
-  private escapeShellArg(arg: string): string {
-    return arg.replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
   }
 }
 
