@@ -807,15 +807,6 @@ With reconciliation handling infrastructure, MCP tools become simpler:
    - If conflicts, task → BLOCKED, alert worker
 2. Remove `mcp__git__rebase` from worker tools
 
-### Migration Strategy
-
-To avoid big-bang migration:
-
-1. **Add reconciler alongside existing handlers** - Both can coexist
-2. **Reconciler fills gaps** - If handler fails, reconciler catches it
-3. **Gradually simplify handlers** - One at a time
-4. **Remove redundant handler logic** - Once reconciler is proven
-
 ## Database Changes
 
 ### Task Model (About the Work)
