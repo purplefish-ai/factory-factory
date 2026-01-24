@@ -1,6 +1,18 @@
 'use client';
 
+import { Archive, Plus } from 'lucide-react';
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { trpc } from '../../frontend/lib/trpc';
 
 export default function ProjectsPage() {
@@ -18,8 +30,9 @@ export default function ProjectsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-gray-500">Loading projects...</div>
+      <div className="flex items-center justify-center h-full gap-2">
+        <Spinner className="size-5" />
+        <span className="text-muted-foreground">Loading projects...</span>
       </div>
     );
   }
@@ -28,88 +41,89 @@ export default function ProjectsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-          <p className="text-gray-600 mt-1">Manage your repositories</p>
+          <h1 className="text-2xl font-bold text-foreground">Projects</h1>
+          <p className="text-muted-foreground mt-1">Manage your repositories</p>
         </div>
-        <Link
-          href="/projects/new"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Project
-        </Link>
+        <Button asChild>
+          <Link href="/projects/new">
+            <Plus className="size-5" />
+            New Project
+          </Link>
+        </Button>
       </div>
 
       {/* Project List */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-card rounded-lg shadow-sm overflow-hidden border">
         {!projects || projects.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-muted-foreground">
             <p>No projects found.</p>
             <Link
               href="/projects/new"
-              className="text-blue-600 hover:text-blue-800 mt-2 inline-block"
+              className="text-primary hover:text-primary/80 mt-2 inline-block"
             >
               Create your first project
             </Link>
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Repository Path
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Default Branch
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Epics
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Repository Path</TableHead>
+                <TableHead>Default Branch</TableHead>
+                <TableHead>Epics</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {projects.map((project) => (
-                <tr key={project.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
+                <TableRow key={project.id}>
+                  <TableCell>
                     <div>
-                      <div className="font-medium text-gray-900">{project.name}</div>
-                      <div className="text-sm text-gray-500">{project.slug}</div>
+                      <div className="font-medium text-foreground">{project.name}</div>
+                      <div className="text-sm text-muted-foreground">{project.slug}</div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <code className="text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="font-mono text-xs">
                       {project.repoPath}
-                    </code>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{project.defaultBranch}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {project.defaultBranch}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
                     {'_count' in project ? (project._count as { epics: number }).epics : '-'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => {
                         if (confirm('Are you sure you want to archive this project?')) {
                           archiveMutation.mutate({ id: project.id });
                         }
                       }}
-                      className="text-red-600 hover:text-red-800 text-sm"
                       disabled={archiveMutation.isPending}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
-                      {archiveMutation.isPending ? 'Archiving...' : 'Archive'}
-                    </button>
-                  </td>
-                </tr>
+                      {archiveMutation.isPending ? (
+                        <>
+                          <Spinner className="size-4" />
+                          Archiving...
+                        </>
+                      ) : (
+                        <>
+                          <Archive className="size-4" />
+                          Archive
+                        </>
+                      )}
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>
