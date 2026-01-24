@@ -17,9 +17,13 @@ export default function AdminSystemPage() {
   const { data: apiUsage } = trpc.admin.getApiUsageByAgent.useQuery(undefined, {
     refetchInterval: 5000,
   });
-  const { data: stats } = trpc.admin.getSystemStats.useQuery();
+  const { data: stats, refetch: refetchStats } = trpc.admin.getSystemStats.useQuery();
 
-  const updateRateLimits = trpc.admin.updateRateLimits.useMutation();
+  const updateRateLimits = trpc.admin.updateRateLimits.useMutation({
+    onSuccess: () => {
+      refetchStats();
+    },
+  });
 
   const handleSaveRateLimits = () => {
     updateRateLimits.mutate(rateLimits);

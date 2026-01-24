@@ -140,7 +140,60 @@ export class WorktreeService {
   }
 
   /**
-   * Check a single worktree for orphan status
+   * Get the configured worktree base path from environment.
+   * Falls back to common patterns if not set.
+   */
+  private getWorktreeBasePath(): string | undefined {
+    return process.env.GIT_WORKTREE_BASE;
+  }
+
+  /**
+   * Check if a worktree path is under a known system-managed location.
+   * Checks against GIT_WORKTREE_BASE or common factoryfactory patterns.
+   */
+  private isSystemWorktreePath(worktreePath: string): boolean {
+    const worktreeBase = this.getWorktreeBasePath();
+
+    // Check if path is under the configured worktree base
+    if (worktreeBase && worktreePath.startsWith(worktreeBase)) {
+      return true;
+    }
+
+    // Check for common factoryfactory worktree path patterns
+    // These are the default locations used by the system
+    if (
+      worktreePath.includes('/factoryfactory/worktrees/') ||
+      worktreePath.includes('/factoryfactory-worktrees/')
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a worktree was created by this system.
+   * Requires BOTH:
+   * 1. Branch name has factoryfactory/ prefix
+   * 2. Path is under a known worktree base directory
+   *
+   * This defense-in-depth approach prevents accidentally managing worktrees
+   * that happen to have similar branch names but are in different locations.
+   */
+  private isSystemWorktree(worktree: WorktreeInfo): boolean {
+    const hasBranchPrefix =
+      worktree.branch.startsWith('factoryfactory/') ||
+      worktree.branch.startsWith('refs/heads/factoryfactory/');
+
+    const hasSystemPath = this.isSystemWorktreePath(worktree.path);
+
+    return hasBranchPrefix && hasSystemPath;
+  }
+
+  /**
+   * Check a single worktree for orphan status.
+   * Only worktrees created by this system (with factoryfactory/ prefix) are checked.
+   * External worktrees (developer worktrees, other tools) are ignored entirely.
    */
   private async checkWorktreeOrphan(worktree: WorktreeInfo): Promise<{
     isOrphaned: boolean;
@@ -148,6 +201,12 @@ export class WorktreeService {
     taskId?: string;
     topLevelTaskId?: string;
   }> {
+    // Only check worktrees created by this system - external worktrees are
+    // never considered orphaned. The 'reason' field is ignored when isOrphaned is false.
+    if (!this.isSystemWorktree(worktree)) {
+      return { isOrphaned: false, reason: 'unknown' };
+    }
+
     const taskMatch = worktree.branch.match(/task-([a-zA-Z0-9]+)/);
     const topLevelMatch = worktree.branch.match(/top-level-([a-zA-Z0-9]+)/);
 
@@ -167,6 +226,7 @@ export class WorktreeService {
       }
     }
 
+    // System worktree with unrecognized naming pattern - mark as orphaned
     if (!(taskMatch || topLevelMatch)) {
       return { isOrphaned: true, reason: 'unknown' };
     }
