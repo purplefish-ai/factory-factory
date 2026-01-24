@@ -31,6 +31,8 @@ jobs:
   dead-code:
     name: Dead Code Check
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
     steps:
       - uses: actions/checkout@v4
 
