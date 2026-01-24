@@ -307,8 +307,16 @@ export default function AdminDashboardPage() {
     },
   });
 
-  const cleanupWorktrees = trpc.admin.cleanupWorktrees.useMutation();
-  const resetApiStats = trpc.admin.resetApiUsageStats.useMutation();
+  const cleanupWorktrees = trpc.admin.cleanupWorktrees.useMutation({
+    onSuccess: () => {
+      refetch();
+    },
+  });
+  const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
+    onSuccess: () => {
+      refetch();
+    },
+  });
 
   if (isLoading) {
     return <Loading message="Loading admin dashboard..." />;
