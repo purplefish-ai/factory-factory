@@ -62,14 +62,20 @@ export function attach(
   const clampedRows = Math.max(TERMINAL_LIMITS.MIN_ROWS, Math.min(TERMINAL_LIMITS.MAX_ROWS, rows));
 
   try {
-    // Spawn PTY attached to tmux session
-    const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', sessionName], {
+    // Ensure PATH includes common binary locations for tmux
+    const envPath = process.env.PATH || '';
+    const additionalPaths = ['/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin'];
+    const fullPath = [...new Set([...envPath.split(':'), ...additionalPaths])].join(':');
+
+    // Spawn PTY attached to tmux session using /usr/bin/env for better portability
+    const ptyProcess = pty.spawn('/usr/bin/env', ['tmux', 'attach-session', '-t', sessionName], {
       name: 'xterm-256color',
       cols: clampedCols,
       rows: clampedRows,
       cwd: process.env.HOME || '/',
       env: {
         ...process.env,
+        PATH: fullPath,
         TERM: 'xterm-256color',
       },
     });

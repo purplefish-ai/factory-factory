@@ -31,6 +31,7 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const lastDimensionsRef = useRef<TerminalDimensions>(DEFAULT_DIMENSIONS);
 
   // State
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -108,12 +109,10 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
       };
 
       ws.onclose = () => {
-        if (status !== 'error') {
-          setStatus('disconnected');
-        }
+        setStatus((current) => (current === 'error' ? 'error' : 'disconnected'));
       };
     },
-    [effectiveSession, status]
+    [effectiveSession]
   );
 
   // Initialize xterm.js
@@ -207,13 +206,16 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
     };
   }, [send, terminalReady]);
 
-  // Connect when terminal is ready
+  // Connect when terminal is ready (reconnects if session changes)
   useEffect(() => {
     if (!terminalReady) {
       return;
     }
 
-    connect(dimensions.cols, dimensions.rows);
+    // Use current terminal dimensions for initial connection
+    const cols = xtermRef.current?.cols ?? DEFAULT_DIMENSIONS.cols;
+    const rows = xtermRef.current?.rows ?? DEFAULT_DIMENSIONS.rows;
+    connect(cols, rows);
 
     return () => {
       if (wsRef.current) {
@@ -221,7 +223,7 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
         wsRef.current = null;
       }
     };
-  }, [terminalReady, connect, dimensions.cols, dimensions.rows]);
+  }, [terminalReady, connect]);
 
   // Set up ResizeObserver for dynamic sizing
   useEffect(() => {
@@ -239,7 +241,9 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
           };
 
           // Only send resize if dimensions actually changed
-          if (newDims.cols !== dimensions.cols || newDims.rows !== dimensions.rows) {
+          const lastDims = lastDimensionsRef.current;
+          if (newDims.cols !== lastDims.cols || newDims.rows !== lastDims.rows) {
+            lastDimensionsRef.current = newDims;
             setDimensions(newDims);
             sendResize(newDims.cols, newDims.rows);
           }
@@ -254,7 +258,7 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
     return () => {
       resizeObserver.disconnect();
     };
-  }, [terminalReady, dimensions.cols, dimensions.rows, sendResize]);
+  }, [terminalReady, sendResize]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -275,8 +279,10 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
     if (xtermRef.current) {
       xtermRef.current.clear();
     }
-    connect(dimensions.cols, dimensions.rows);
-  }, [connect, dimensions.cols, dimensions.rows]);
+    const cols = xtermRef.current?.cols ?? DEFAULT_DIMENSIONS.cols;
+    const rows = xtermRef.current?.rows ?? DEFAULT_DIMENSIONS.rows;
+    connect(cols, rows);
+  }, [connect]);
 
   // Status indicator component
   const StatusIndicator = () => {
