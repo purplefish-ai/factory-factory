@@ -4,7 +4,7 @@ interface LogoIconProps {
   className?: string;
 }
 
-export function LogoIcon({ className }: LogoIconProps) {
+function LogoIcon({ className }: LogoIconProps) {
   return (
     <svg
       viewBox="0 0 80 80"
@@ -42,7 +42,7 @@ interface LogoTextProps {
   className?: string;
 }
 
-export function LogoText({ className }: LogoTextProps) {
+function LogoText({ className }: LogoTextProps) {
   return (
     <span className={cn('tracking-tight uppercase', className)}>
       <span className="font-light">Factory</span>

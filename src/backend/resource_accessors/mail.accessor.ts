@@ -1,7 +1,7 @@
 import type { Mail, Prisma } from '@prisma-gen/client';
 import { prisma } from '../db';
 
-export interface CreateMailInput {
+interface CreateMailInput {
   fromAgentId?: string;
   toAgentId?: string;
   isForHuman?: boolean;
@@ -9,12 +9,12 @@ export interface CreateMailInput {
   body: string;
 }
 
-export interface UpdateMailInput {
+interface UpdateMailInput {
   isRead?: boolean;
   readAt?: Date | null;
 }
 
-export class MailAccessor {
+class MailAccessor {
   create(data: CreateMailInput): Promise<Mail> {
     return prisma.mail.create({
       data: {

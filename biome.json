@@ -36,6 +36,7 @@
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
         "noUnusedPrivateClassMembers": "error",
+        "noUnusedFunctionParameters": "error",
         "useExhaustiveDependencies": "error",
         "useHookAtTopLevel": "error"
       },

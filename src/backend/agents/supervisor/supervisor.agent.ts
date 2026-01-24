@@ -493,37 +493,6 @@ async function performWorkerHealthCheck(agentId: string): Promise<void> {
 }
 
 /**
- * Handle supervisor completion (success or failure)
- * Exported for use by lifecycle management
- */
-export async function handleSupervisorCompletion(agentId: string, reason: string): Promise<void> {
-  const supervisorContext = activeSupervisors.get(agentId);
-  if (!supervisorContext) {
-    return;
-  }
-
-  console.log(`Supervisor ${agentId} completed: ${reason}`);
-
-  // Stop monitoring
-  if (supervisorContext.monitoringInterval) {
-    clearInterval(supervisorContext.monitoringInterval);
-  }
-  if (supervisorContext.inboxCheckInterval) {
-    clearInterval(supervisorContext.inboxCheckInterval);
-  }
-  if (supervisorContext.workerHealthCheckInterval) {
-    clearInterval(supervisorContext.workerHealthCheckInterval);
-  }
-
-  supervisorContext.isRunning = false;
-
-  // Update agent state
-  await agentAccessor.update(agentId, {
-    state: AgentState.IDLE,
-  });
-}
-
-/**
  * Stop a running supervisor agent gracefully
  */
 export async function stopSupervisor(agentId: string): Promise<void> {
@@ -615,13 +584,6 @@ export async function killSupervisor(agentId: string): Promise<void> {
   activeSupervisors.delete(agentId);
 
   console.log(`Supervisor ${agentId} killed and cleaned up`);
-}
-
-/**
- * Get list of active supervisors
- */
-export function getActiveSupervisors(): SupervisorContext[] {
-  return Array.from(activeSupervisors.values());
 }
 
 /**

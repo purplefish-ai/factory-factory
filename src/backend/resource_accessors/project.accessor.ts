@@ -35,16 +35,16 @@ function execCommand(command: string, args: string[]): Promise<{ stdout: string;
 }
 
 // Type for Project with tasks relation included
-export type ProjectWithTasks = Prisma.ProjectGetPayload<{
+type ProjectWithTasks = Prisma.ProjectGetPayload<{
   include: { tasks: true };
 }>;
 
 // Simplified input - only repoPath is required
-export interface CreateProjectInput {
+interface CreateProjectInput {
   repoPath: string;
 }
 
-export interface UpdateProjectInput {
+interface UpdateProjectInput {
   name?: string;
   repoPath?: string;
   defaultBranch?: string;
@@ -53,7 +53,7 @@ export interface UpdateProjectInput {
   isArchived?: boolean;
 }
 
-export interface ListProjectsFilters {
+interface ListProjectsFilters {
   isArchived?: boolean;
   limit?: number;
   offset?: number;
@@ -103,7 +103,7 @@ function computeWorktreePath(slug: string): string {
   return path.join(getWorktreeBaseDir(), slug);
 }
 
-export class ProjectAccessor {
+class ProjectAccessor {
   /**
    * Create a new project from a repository path.
    * Name, slug, and worktree path are auto-derived.

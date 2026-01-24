@@ -13,7 +13,7 @@ const logger = createLogger('config');
 /**
  * Permission modes for agents
  */
-export type PermissionMode = 'strict' | 'relaxed' | 'yolo';
+type PermissionMode = 'strict' | 'relaxed' | 'yolo';
 
 /**
  * Agent execution profile
@@ -28,7 +28,7 @@ export interface AgentProfile {
 /**
  * System configuration
  */
-export interface SystemConfig {
+interface SystemConfig {
   // Server settings
   backendPort: number;
   frontendPort: number;
@@ -193,7 +193,7 @@ function loadSystemConfig(): SystemConfig {
 /**
  * Configuration Service class
  */
-export class ConfigService {
+class ConfigService {
   private config: SystemConfig;
   private agentProfileOverrides: Map<string, Partial<AgentProfile>> = new Map();
 

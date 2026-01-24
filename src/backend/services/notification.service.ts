@@ -10,7 +10,7 @@ import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/
 /**
  * Notification configuration
  */
-export interface NotificationConfig {
+interface NotificationConfig {
   soundEnabled: boolean;
   pushEnabled: boolean;
   soundFile?: string;
@@ -222,7 +222,7 @@ async function sendPushNotification(
 /**
  * NotificationService class - main interface for sending notifications
  */
-export class NotificationService {
+class NotificationService {
   private config: NotificationConfig;
 
   constructor(config?: Partial<NotificationConfig>) {

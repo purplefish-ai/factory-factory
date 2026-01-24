@@ -122,19 +122,3 @@ export async function getWorkerStatus(agentId: string): Promise<{
     tmuxSession: agent.tmuxSessionName,
   };
 }
-
-/**
- * List all workers for a task
- */
-export async function listWorkersForTask(taskId: string): Promise<string[]> {
-  const task = await taskAccessor.findById(taskId);
-  if (!task) {
-    throw new Error(`Task with ID '${taskId}' not found`);
-  }
-
-  if (!task.assignedAgentId) {
-    return [];
-  }
-
-  return [task.assignedAgentId];
-}

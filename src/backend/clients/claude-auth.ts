@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
-export interface ClaudeAuthStatus {
+interface ClaudeAuthStatus {
   isInstalled: boolean;
   isAuthenticated: boolean;
   version?: string;
@@ -17,7 +17,7 @@ export interface ClaudeAuthStatus {
 /**
  * Check if Claude Code CLI is installed and available in PATH
  */
-export async function isClaudeCodeInstalled(): Promise<boolean> {
+async function isClaudeCodeInstalled(): Promise<boolean> {
   try {
     // Try both 'claude' and 'claude-code' commands
     await execAsync('which claude || which claude-code');
@@ -32,7 +32,7 @@ export async function isClaudeCodeInstalled(): Promise<boolean> {
  * Looks for ~/.claude.json (the main Claude config/auth file)
  * This is where Claude Code stores authentication after `claude login`
  */
-export function isClaudeAuthenticated(): boolean {
+function isClaudeAuthenticated(): boolean {
   const credentialsPath = path.join(os.homedir(), '.claude.json');
   return fs.existsSync(credentialsPath);
 }
@@ -40,7 +40,7 @@ export function isClaudeAuthenticated(): boolean {
 /**
  * Get Claude Code CLI version
  */
-export async function getClaudeVersion(): Promise<string | null> {
+async function getClaudeVersion(): Promise<string | null> {
   try {
     const { stdout } = await execAsync('claude --version 2>&1 || claude-code --version 2>&1');
     return stdout.trim();
@@ -52,7 +52,7 @@ export async function getClaudeVersion(): Promise<string | null> {
 /**
  * Get the path to Claude credentials file
  */
-export function getCredentialsPath(): string {
+function getCredentialsPath(): string {
   return path.join(os.homedir(), '.claude.json');
 }
 
@@ -60,7 +60,7 @@ export function getCredentialsPath(): string {
  * Validate complete Claude Code setup
  * Returns detailed status for all checks
  */
-export async function validateClaudeSetup(): Promise<ClaudeAuthStatus> {
+async function validateClaudeSetup(): Promise<ClaudeAuthStatus> {
   const status: ClaudeAuthStatus = {
     isInstalled: false,
     isAuthenticated: false,
@@ -98,7 +98,7 @@ export async function validateClaudeSetup(): Promise<ClaudeAuthStatus> {
 /**
  * Get helpful error message for authentication issues
  */
-export function getAuthErrorMessage(status: ClaudeAuthStatus): string {
+function getAuthErrorMessage(status: ClaudeAuthStatus): string {
   if (status.errors.length === 0) {
     return '';
   }

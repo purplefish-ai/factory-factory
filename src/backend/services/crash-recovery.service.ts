@@ -31,7 +31,7 @@ interface CrashRecord {
 /**
  * Recovery result
  */
-export interface RecoveryResult {
+interface RecoveryResult {
   success: boolean;
   action: 'recovered' | 'marked_failed' | 'crash_loop' | 'no_action';
   message: string;
@@ -56,7 +56,7 @@ export interface SystemHealthStatus {
 /**
  * CrashRecoveryService class
  */
-export class CrashRecoveryService {
+class CrashRecoveryService {
   private crashRecords: Map<string, CrashRecord> = new Map();
 
   /**

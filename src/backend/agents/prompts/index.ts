@@ -15,16 +15,14 @@ export {
 } from './builders/index.js';
 
 // File management
-export { PromptFileManager, promptFileManager } from './file-manager.js';
+export { promptFileManager } from './file-manager.js';
 // Sections (for advanced usage)
 export {
   generateContextFooter,
   generateCurlIntro,
   generateGuidelines,
-  generateToolDoc,
   generateToolsSection,
   getMailToolsForAgent,
-  MAIL_TOOLS,
 } from './sections/index.js';
 // Types
 export type {

@@ -32,11 +32,6 @@ export async function sendMcpTool<TInput = unknown, TOutput = unknown>(
 }
 
 /**
- * Get MCP tool response (alias for sendMcpTool)
- */
-export const getMcpToolResponse = sendMcpTool;
-
-/**
  * Cleanup mock agent and related data
  */
 export async function cleanupMockAgent(agentId: string): Promise<void> {
