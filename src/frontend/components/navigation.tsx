@@ -113,40 +113,40 @@ export function Navigation() {
   // Don't show loading state for project guard - just render
   if (!hasCheckedProjects) {
     return (
-      <nav className="w-64 bg-gray-900 text-white flex flex-col">
-        <div className="p-4 border-b border-gray-700">
+      <nav className="w-64 bg-sidebar text-sidebar-foreground flex flex-col">
+        <div className="p-4 border-b border-sidebar-border">
           <h1 className="text-xl font-bold">FactoryFactory</h1>
-          <p className="text-xs text-gray-400 mt-1">Loading...</p>
+          <p className="text-xs text-muted-foreground mt-1">Loading...</p>
         </div>
       </nav>
     );
   }
 
   return (
-    <nav className="w-64 bg-gray-900 text-white flex flex-col">
-      <div className="p-4 border-b border-gray-700">
+    <nav className="w-64 bg-sidebar text-sidebar-foreground flex flex-col">
+      <div className="p-4 border-b border-sidebar-border">
         <h1 className="text-xl font-bold">FactoryFactory</h1>
-        <p className="text-xs text-gray-400 mt-1">Autonomous Dev System</p>
+        <p className="text-xs text-muted-foreground mt-1">Autonomous Dev System</p>
 
         {/* Project Selector */}
         {projects && projects.length > 0 && (
           <div className="mt-3">
-            <label htmlFor="project-select" className="text-xs text-gray-400 block mb-1">
+            <label htmlFor="project-select" className="text-xs text-muted-foreground block mb-1">
               Project
             </label>
             <Select value={selectedProjectSlug} onValueChange={handleProjectChange}>
               <SelectTrigger
                 id="project-select"
-                className="w-full bg-gray-800 border-gray-700 text-white focus:ring-blue-500 focus:border-blue-500"
+                className="w-full bg-sidebar-accent border-sidebar-border text-sidebar-foreground focus:ring-sidebar-ring focus:border-sidebar-ring"
               >
                 <SelectValue placeholder="Select a project" />
               </SelectTrigger>
-              <SelectContent className="bg-gray-800 border-gray-700">
+              <SelectContent className="bg-sidebar-accent border-sidebar-border">
                 {projects.map((project) => (
                   <SelectItem
                     key={project.id}
                     value={project.slug}
-                    className="text-white focus:bg-gray-700 focus:text-white"
+                    className="text-sidebar-foreground focus:bg-sidebar focus:text-sidebar-foreground"
                   >
                     {project.name}
                   </SelectItem>
@@ -155,7 +155,7 @@ export function Navigation() {
             </Select>
             <Link
               href="/projects"
-              className="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block"
+              className="text-xs text-sidebar-primary hover:text-sidebar-primary/80 mt-1 inline-block"
             >
               Manage projects
             </Link>
@@ -172,8 +172,8 @@ export function Navigation() {
               <Button
                 variant="ghost"
                 asChild
-                className={`w-full justify-start gap-3 px-4 py-3 h-auto rounded-none text-white hover:bg-gray-800 hover:text-white ${
-                  isActive ? 'bg-gray-800 border-l-4 border-blue-500' : ''
+                className={`w-full justify-start gap-3 px-4 py-3 h-auto rounded-none text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground ${
+                  isActive ? 'bg-sidebar-accent border-l-4 border-sidebar-primary' : ''
                 }`}
               >
                 <Link href={item.href}>
@@ -193,7 +193,7 @@ export function Navigation() {
         {/* Separator */}
         {projectNavItems.length > 0 && (
           <li className="my-2 mx-4">
-            <Separator className="bg-gray-700" />
+            <Separator className="bg-sidebar-border" />
           </li>
         )}
 
@@ -205,8 +205,8 @@ export function Navigation() {
               <Button
                 variant="ghost"
                 asChild
-                className={`w-full justify-start gap-3 px-4 py-3 h-auto rounded-none text-white hover:bg-gray-800 hover:text-white ${
-                  isActive ? 'bg-gray-800 border-l-4 border-blue-500' : ''
+                className={`w-full justify-start gap-3 px-4 py-3 h-auto rounded-none text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground ${
+                  isActive ? 'bg-sidebar-accent border-l-4 border-sidebar-primary' : ''
                 }`}
               >
                 <Link href={item.href}>
@@ -219,7 +219,7 @@ export function Navigation() {
         })}
       </ul>
 
-      <div className="p-4 border-t border-gray-700 text-xs text-gray-400">
+      <div className="p-4 border-t border-sidebar-border text-xs text-muted-foreground">
         <p>Phase 7: Production Ready</p>
       </div>
     </nav>
