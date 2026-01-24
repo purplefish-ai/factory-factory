@@ -304,9 +304,7 @@ Get the current agent's epic details.
 **Output:**
 ```json
 {
-  "id": "epic-456",
-  "linearIssueId": "LIN-123",
-  "linearIssueUrl": "https://linear.app/...",
+  "id": "task-456",
   "title": "User Management System",
   "description": "Complete overhaul of user management",
   "state": "IN_PROGRESS",

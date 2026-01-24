@@ -33,8 +33,6 @@ const CreateTaskSchema = z.object({
   parentId: z.string().nullable().optional(), // null or undefined = top-level task
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
-  linearIssueId: z.string().optional(), // Optional for manual creation of top-level tasks
-  linearIssueUrl: z.string().optional(),
 });
 
 const StartWorkerSchema = z.object({
@@ -116,22 +114,6 @@ async function resolveProjectId(
 }
 
 /**
- * Generate linear issue metadata for top-level tasks
- */
-function generateLinearIssueMetadata(
-  input: CreateTaskInput,
-  isTopLevel: boolean
-): { linearIssueId?: string; linearIssueUrl?: string } {
-  if (!isTopLevel) {
-    return {};
-  }
-  const linearIssueId = input.linearIssueId || `manual-${Date.now()}`;
-  // Empty string for manually created tasks - no real Linear URL
-  const linearIssueUrl = input.linearIssueUrl || '';
-  return { linearIssueId, linearIssueUrl };
-}
-
-/**
  * Fire task creation event
  */
 async function fireTaskCreatedEvent(
@@ -145,7 +127,6 @@ async function fireTaskCreatedEvent(
         name: 'task.top_level.created',
         data: {
           taskId: task.id,
-          linearIssueId: task.linearIssueId || '',
           title: task.title,
         },
       });
@@ -267,7 +248,6 @@ router.get('/list', async (req, res) => {
           parentId: t.parentId,
           title: t.title,
           state: t.state,
-          linearIssueId: t.linearIssueId,
           assignedAgentId: t.assignedAgentId,
           prUrl: t.prUrl,
           createdAt: t.createdAt,
@@ -305,17 +285,12 @@ router.post('/create', async (req, res) => {
       });
     }
 
-    // Generate linear issue metadata for top-level tasks
-    const linearMetadata = generateLinearIssueMetadata(validatedInput, isTopLevel);
-
     // Create task
     const task = await taskAccessor.create({
       projectId: projectResult.projectId,
       parentId: isTopLevel ? null : validatedInput.parentId,
       title: validatedInput.title,
       description: validatedInput.description,
-      linearIssueId: linearMetadata.linearIssueId,
-      linearIssueUrl: linearMetadata.linearIssueUrl,
       state: isTopLevel ? TaskState.PLANNING : TaskState.PENDING,
     });
 
@@ -330,7 +305,6 @@ router.post('/create', async (req, res) => {
         title: task.title,
         description: task.description,
         state: task.state,
-        linearIssueId: task.linearIssueId,
         createdAt: task.createdAt,
       },
     });
@@ -384,8 +358,6 @@ router.get('/status/:taskId', async (req, res) => {
       title: task.title,
       description: task.description,
       state: task.state,
-      linearIssueId: task.linearIssueId,
-      linearIssueUrl: task.linearIssueUrl,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       completedAt: task.completedAt,

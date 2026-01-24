@@ -435,40 +435,6 @@ export class ValidationService {
       similarTasks: similarTasks.sort((a, b) => b.similarity - a.similarity).slice(0, 3),
     };
   }
-
-  /**
-   * Validate Linear issue URL
-   */
-  validateLinearIssueUrl(url: string): ValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    const sanitized = sanitizeString(url);
-
-    if (!sanitized) {
-      // URL is optional
-      return { isValid: true, errors, warnings };
-    }
-
-    // Check if it looks like a Linear URL
-    if (!sanitized.startsWith('https://linear.app/')) {
-      warnings.push('URL does not appear to be a Linear issue URL');
-    }
-
-    // Basic URL validation
-    try {
-      new URL(sanitized);
-    } catch {
-      errors.push('Invalid URL format');
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-      sanitized: { url: sanitized },
-    };
-  }
 }
 
 // Export singleton instance

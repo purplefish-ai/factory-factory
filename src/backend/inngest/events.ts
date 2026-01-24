@@ -1,12 +1,11 @@
 export type Events = {
   /**
    * Triggered when a top-level task (formerly "Epic") is created.
-   * Top-level tasks have parentId = null and linearIssueId/linearIssueUrl fields.
+   * Top-level tasks have parentId = null.
    */
   'task.top_level.created': {
     data: {
       taskId: string;
-      linearIssueId: string;
       title: string;
     };
   };

@@ -2,7 +2,6 @@ import { TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { inngest } from '../inngest/client.js';
 import { taskAccessor } from '../resource_accessors/task.accessor.js';
-import { generateLocalIssueId } from '../routers/mcp/helpers.js';
 import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc.js';
 
@@ -12,7 +11,6 @@ import { publicProcedure, router } from './trpc.js';
 async function sendTaskCreatedEvent(task: {
   id: string;
   parentId: string | null;
-  linearIssueId: string | null;
   title: string;
 }): Promise<void> {
   try {
@@ -21,7 +19,6 @@ async function sendTaskCreatedEvent(task: {
         name: 'task.top_level.created',
         data: {
           taskId: task.id,
-          linearIssueId: task.linearIssueId || '',
           title: task.title,
         },
       });
@@ -31,7 +28,6 @@ async function sendTaskCreatedEvent(task: {
         data: {
           taskId: task.id,
           parentId: task.parentId,
-          linearIssueId: task.linearIssueId || '',
           title: task.title,
         },
       });
@@ -87,22 +83,14 @@ export const taskRouter = router({
         description: z.string().optional(),
         design: z.string().optional(),
         parentId: z.string().nullable().optional(),
-        linearIssueId: z.string().optional(),
-        linearIssueUrl: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const isTopLevel = input.parentId === null || input.parentId === undefined;
 
-      // Generate a local ID if Linear integration not used
-      const linearIssueId = input.linearIssueId || generateLocalIssueId();
-      const linearIssueUrl = input.linearIssueUrl || '';
-
       const task = await taskAccessor.create({
         projectId: ctx.projectId,
         parentId: input.parentId || null,
-        linearIssueId,
-        linearIssueUrl,
         title: input.title,
         description: input.description
           ? `${input.description}\n\n---\n\n${input.design || ''}`

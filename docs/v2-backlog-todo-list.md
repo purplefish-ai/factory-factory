@@ -159,7 +159,7 @@ await prisma.epic.updateMany({
 
 **Proposed Solution**:
 - Allow customizable branch naming patterns
-- Support Linear-style naming (`<team>/<issue-number>-<slug>`)
+- Support team-style naming (`<team>/<issue-number>-<slug>`)
 - Validate branch names don't conflict
 
 ---
@@ -215,13 +215,7 @@ await prisma.epic.updateMany({
 - Manage rebase cascades
 - Task assignment and prioritization
 
-### Phase 4: Linear Integration
-- Sync epics from Linear
-- Update Linear issues when tasks complete
-- Two-way sync for status updates
-- Comment synchronization
-
-### Phase 5: Advanced Git Workflows
+### Phase 4: Advanced Git Workflows
 - Stacked PRs support
 - Auto-merge when approved
 - Conflict resolution strategies

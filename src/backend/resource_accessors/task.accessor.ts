@@ -32,8 +32,6 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   state?: TaskState;
-  linearIssueId?: string;
-  linearIssueUrl?: string;
 }
 
 export interface UpdateTaskInput {
@@ -93,8 +91,6 @@ export class TaskAccessor {
         title: data.title,
         description: data.description,
         state: data.state ?? defaultState,
-        linearIssueId: data.linearIssueId,
-        linearIssueUrl: data.linearIssueUrl,
       },
       include: fullInclude,
     });
@@ -103,13 +99,6 @@ export class TaskAccessor {
   findById(id: string): Promise<TaskWithRelations | null> {
     return prisma.task.findUnique({
       where: { id },
-      include: fullInclude,
-    });
-  }
-
-  findByLinearIssueId(linearIssueId: string): Promise<TaskWithRelations | null> {
-    return prisma.task.findUnique({
-      where: { linearIssueId },
       include: fullInclude,
     });
   }

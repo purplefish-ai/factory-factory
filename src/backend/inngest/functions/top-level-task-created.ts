@@ -6,7 +6,7 @@ import { inngest } from '../client.js';
  * Handle task.top_level.created event by starting a supervisor agent
  *
  * This is the entry point for full automation:
- * 1. Top-level task is created (by human or via Linear)
+ * 1. Top-level task is created (by human via UI)
  * 2. This handler fires automatically
  * 3. Supervisor is created for the top-level task
  * 4. Supervisor breaks down the task into subtasks
@@ -20,11 +20,9 @@ export const topLevelTaskCreatedHandler = inngest.createFunction(
   },
   { event: 'task.top_level.created' },
   async ({ event, step }) => {
-    const { taskId, linearIssueId, title } = event.data;
+    const { taskId, title } = event.data;
 
-    console.log(
-      `Top-level task created event received for task ${taskId} (Linear: ${linearIssueId})`
-    );
+    console.log(`Top-level task created event received for task ${taskId}`);
 
     // Step 1: Verify top-level task exists and is ready for supervisor
     const topLevelTask = await step.run('verify-top-level-task', async () => {
@@ -55,7 +53,7 @@ export const topLevelTaskCreatedHandler = inngest.createFunction(
           agentId,
           `Supervisor created for top-level task "${title}"`,
           `Automatic supervisor creation triggered by task.top_level.created event`,
-          JSON.stringify({ taskId, linearIssueId, title })
+          JSON.stringify({ taskId, title })
         );
 
         return {
@@ -74,7 +72,6 @@ export const topLevelTaskCreatedHandler = inngest.createFunction(
           body:
             `The system failed to automatically create a supervisor for top-level task "${title}".\n\n` +
             `Task ID: ${taskId}\n` +
-            `Linear Issue: ${linearIssueId}\n` +
             `Error: ${errorMessage}\n\n` +
             `Manual intervention may be required.`,
         });
