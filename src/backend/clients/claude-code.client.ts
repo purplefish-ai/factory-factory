@@ -1,7 +1,5 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
+import { promptFileManager } from '../agents/prompts/file-manager.js';
 import { requireClaudeSetup } from './claude-auth.js';
 import { tmuxClient } from './tmux.client.js';
 
@@ -61,8 +59,7 @@ export async function createWorkerSession(
   const tmuxSessionName = getTmuxSessionName(agentId);
 
   // Write system prompt to temporary file
-  const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
-  fs.writeFileSync(systemPromptPath, systemPrompt, 'utf-8');
+  const systemPromptPath = promptFileManager.writePromptFile(agentId, systemPrompt);
 
   // Get agent profile
   const profile = AGENT_PROFILES.WORKER;
@@ -258,11 +255,8 @@ export async function killSession(agentId: string): Promise<void> {
   // Kill tmux session
   await tmuxClient.killSession(tmuxSessionName);
 
-  // Cleanup system prompt file if it exists
-  const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
-  if (fs.existsSync(systemPromptPath)) {
-    fs.unlinkSync(systemPromptPath);
-  }
+  // Cleanup system prompt file
+  promptFileManager.deletePromptFile(agentId);
 }
 
 /**

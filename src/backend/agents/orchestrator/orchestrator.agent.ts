@@ -8,21 +8,19 @@
  * There should only be ONE orchestrator instance running at a time.
  */
 
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { AgentState, AgentType } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { tmuxClient } from '../../clients/tmux.client.js';
 import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
+import { buildOrchestratorPrompt } from '../prompts/builders/orchestrator.builder.js';
+import { promptFileManager } from '../prompts/file-manager.js';
 import { startSupervisorForEpic } from '../supervisor/lifecycle.js';
 import {
   checkSupervisorHealth,
   getPendingEpicsNeedingSupervisors,
   recoverSupervisor,
 } from './health.js';
-import { buildOrchestratorPrompt } from './orchestrator.prompts.js';
 
 /**
  * Orchestrator agent context - tracks the running orchestrator
@@ -494,12 +492,7 @@ export async function killOrchestrator(agentId: string): Promise<void> {
   }
 
   // Clean up system prompt file
-  const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
-  try {
-    fs.unlinkSync(systemPromptPath);
-  } catch {
-    // File may not exist
-  }
+  promptFileManager.deletePromptFile(agentId);
 
   // Clear active orchestrator reference
   if (activeOrchestrator && activeOrchestrator.agentId === agentId) {
