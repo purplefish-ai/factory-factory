@@ -1,5 +1,10 @@
 # FactoryFactory Design Document
 
+> **Note:** This document contains the original design. Some sections are outdated:
+> - **Orchestrator tools** (`mcp__orchestrator__*`) have been removed - functionality moved to the reconciler service
+> - **Tool permissions** have been updated - see `src/backend/routers/mcp/permissions.ts`
+> - For current architecture, see `docs/WORKFLOW.md` and `docs/RECONCILIATION_DESIGN.md`
+
 ## Overview
 
 FactoryFactory is an autonomous multi-agent software development system that uses LLM-powered agents to collaboratively build software. Agents work in isolated git worktrees and communicate via an internal mail system, with all interactive work happening in dedicated tmux sessions.

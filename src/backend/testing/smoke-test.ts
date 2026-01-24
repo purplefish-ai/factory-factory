@@ -43,19 +43,15 @@ if (!workerPermission.allowed) {
   process.exit(1);
 }
 
-const workerOrchestratorPermission = checkToolPermissions(
-  AgentType.WORKER,
-  'mcp__orchestrator__create_task'
-);
-if (workerOrchestratorPermission.allowed) {
-  console.error('   ❌ Worker should NOT be able to use orchestrator tools');
+// Workers should not be able to use supervisor-only tools
+const workerTaskCreatePermission = checkToolPermissions(AgentType.WORKER, 'mcp__task__create');
+if (workerTaskCreatePermission.allowed) {
+  console.error('   ❌ Worker should NOT be able to use supervisor-only tools');
   process.exit(1);
 }
 
-const supervisorPermission = checkToolPermissions(
-  AgentType.SUPERVISOR,
-  'mcp__orchestrator__create_task'
-);
+// Supervisors should be able to use all tools
+const supervisorPermission = checkToolPermissions(AgentType.SUPERVISOR, 'mcp__task__create');
 if (!supervisorPermission.allowed) {
   console.error('   ❌ Supervisor should be able to use all tools');
   process.exit(1);

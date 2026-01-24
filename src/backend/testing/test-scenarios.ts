@@ -90,8 +90,11 @@ async function testPermissions(): Promise<void> {
   await runTestScenario('Permission System', async (createAgent) => {
     const workerId = await createAgent(AgentType.WORKER);
 
-    // Worker tries to use a non-existent orchestrator tool
-    const result = await sendMcpTool(workerId, 'mcp__orchestrator__create_task', {});
+    // Worker tries to use a supervisor-only tool (mcp__task__create)
+    const result = await sendMcpTool(workerId, 'mcp__task__create', {
+      title: 'Test Task',
+      description: 'Should be denied',
+    });
 
     if (result.success) {
       throw new Error('Expected permission denial, but tool succeeded');
@@ -101,7 +104,7 @@ async function testPermissions(): Promise<void> {
       throw new Error(`Expected PERMISSION_DENIED error, got ${result.error.code}`);
     }
 
-    console.log('✓ Permission correctly denied for worker using orchestrator tool');
+    console.log('✓ Permission correctly denied for worker using supervisor-only tool');
   });
 }
 
