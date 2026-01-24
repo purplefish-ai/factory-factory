@@ -455,7 +455,11 @@ class ReconciliationService {
 
     for (const task of tasksWithMissingInfra) {
       try {
-        await this.ensureLeafTaskInfrastructure(task);
+        const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
+        // Update the agent with worktreePath if one exists
+        if (task.assignedAgentId) {
+          await agentAccessor.update(task.assignedAgentId, { worktreePath });
+        }
         infrastructureCreated++;
       } catch (error) {
         errors.push({
