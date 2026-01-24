@@ -1,32 +1,10 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { escapeShellArg, execShell, tmuxCommand, validateSessionName } from '../lib/shell.js';
 
 export interface TmuxSession {
   name: string;
   windows: number;
   created: string;
   attached: boolean;
-}
-
-/**
- * Validate tmux session name to prevent injection
- * Session names should only contain alphanumeric chars, underscores, and dashes
- */
-function validateSessionName(name: string): string {
-  if (!/^[\w-]+$/.test(name)) {
-    throw new Error(`Invalid tmux session name: ${name}`);
-  }
-  return name;
-}
-
-/**
- * Escape a string for safe use in shell commands
- * Uses single quotes and escapes any embedded single quotes
- */
-function shellEscape(str: string): string {
-  return `'${str.replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -40,19 +18,14 @@ export class TmuxClient {
     this.socketPath = process.env.TMUX_SOCKET_PATH;
   }
 
-  private getSocketArg(): string {
-    return this.socketPath ? `-S "${this.socketPath}"` : '';
-  }
-
   /**
    * Check if a tmux session exists
    */
   async sessionExists(sessionName: string): Promise<boolean> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
 
     try {
-      await execAsync(`tmux ${socketArg} has-session -t ${validatedName} 2>/dev/null`);
+      await tmuxCommand(['has-session', '-t', validatedName], this.socketPath);
       return true;
     } catch {
       return false;
@@ -64,11 +37,15 @@ export class TmuxClient {
    */
   async createSession(sessionName: string, workingDir?: string): Promise<string> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
-    const dirArg = workingDir ? `-c ${shellEscape(workingDir)}` : '';
+
+    // Build args array for spawn (safe)
+    const args = ['new-session', '-d', '-s', validatedName];
+    if (workingDir) {
+      args.push('-c', workingDir);
+    }
 
     try {
-      await execAsync(`tmux ${socketArg} new-session -d -s ${validatedName} ${dirArg}`);
+      await tmuxCommand(args, this.socketPath);
       return validatedName;
     } catch (error) {
       throw new Error(
@@ -82,10 +59,9 @@ export class TmuxClient {
    */
   async killSession(sessionName: string): Promise<void> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
 
     try {
-      await execAsync(`tmux ${socketArg} kill-session -t ${validatedName}`);
+      await tmuxCommand(['kill-session', '-t', validatedName], this.socketPath);
     } catch (error) {
       throw new Error(
         `Failed to kill tmux session: ${error instanceof Error ? error.message : String(error)}`
@@ -99,10 +75,9 @@ export class TmuxClient {
   async renameSession(oldName: string, newName: string): Promise<void> {
     const validatedOld = validateSessionName(oldName);
     const validatedNew = validateSessionName(newName);
-    const socketArg = this.getSocketArg();
 
     try {
-      await execAsync(`tmux ${socketArg} rename-session -t ${validatedOld} ${validatedNew}`);
+      await tmuxCommand(['rename-session', '-t', validatedOld, validatedNew], this.socketPath);
     } catch (error) {
       throw new Error(
         `Failed to rename tmux session: ${error instanceof Error ? error.message : String(error)}`
@@ -114,11 +89,10 @@ export class TmuxClient {
    * List all tmux sessions
    */
   async listSessions(): Promise<TmuxSession[]> {
-    const socketArg = this.getSocketArg();
-    const command = `tmux ${socketArg} list-sessions -F "#{session_name}:#{session_windows}:#{session_created}:#{session_attached}"`;
+    const format = '#{session_name}:#{session_windows}:#{session_created}:#{session_attached}';
 
     try {
-      const { stdout } = await execAsync(command);
+      const { stdout } = await tmuxCommand(['list-sessions', '-F', format], this.socketPath);
       const sessions: TmuxSession[] = [];
 
       for (const line of stdout.trim().split('\n')) {
@@ -164,7 +138,6 @@ export class TmuxClient {
    */
   async sendMessage(sessionName: string, message: string): Promise<void> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
 
     // Check session exists
     const exists = await this.sessionExists(validatedName);
@@ -172,13 +145,16 @@ export class TmuxClient {
       throw new Error(`Tmux session ${validatedName} does not exist`);
     }
 
+    // Build tmux socket args
+    const socketArgs = this.socketPath ? `-S ${escapeShellArg(this.socketPath)}` : '';
+
     // Use atomic command chaining pattern:
     // set-buffer (load text) -> paste-buffer (insert to pane) -> send-keys Enter (submit)
     // Pass the message via environment variable to avoid shell escaping issues
-    const cmdStr = `tmux ${socketArg} set-buffer -- "$TMUX_MESSAGE" && tmux ${socketArg} paste-buffer -t ${validatedName} && tmux ${socketArg} send-keys -t ${validatedName} Enter`;
+    const cmdStr = `tmux ${socketArgs} set-buffer -- "$TMUX_MESSAGE" && tmux ${socketArgs} paste-buffer -t ${validatedName} && tmux ${socketArgs} send-keys -t ${validatedName} Enter`;
 
     try {
-      await execAsync(`sh -c '${cmdStr}'`, { env: { ...process.env, TMUX_MESSAGE: message } });
+      await execShell(`sh -c '${cmdStr}'`, { env: { ...process.env, TMUX_MESSAGE: message } });
     } catch (error) {
       throw new Error(
         `Failed to send message to tmux session: ${error instanceof Error ? error.message : String(error)}`
@@ -193,10 +169,9 @@ export class TmuxClient {
    */
   async sendKeys(sessionName: string, keys: string): Promise<void> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
 
     try {
-      await execAsync(`tmux ${socketArg} send-keys -t ${validatedName} ${keys}`);
+      await tmuxCommand(['send-keys', '-t', validatedName, keys], this.socketPath);
     } catch (error) {
       throw new Error(
         `Failed to send keys to tmux session: ${error instanceof Error ? error.message : String(error)}`
@@ -216,7 +191,6 @@ export class TmuxClient {
    */
   async capturePane(sessionName: string, lines = 100): Promise<string> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
 
     // Check session exists
     const exists = await this.sessionExists(validatedName);
@@ -225,8 +199,9 @@ export class TmuxClient {
     }
 
     try {
-      const { stdout } = await execAsync(
-        `tmux ${socketArg} capture-pane -t ${validatedName} -p -S -${lines}`
+      const { stdout } = await tmuxCommand(
+        ['capture-pane', '-t', validatedName, '-p', '-S', `-${lines}`],
+        this.socketPath
       );
       return stdout;
     } catch (error) {
@@ -241,15 +216,15 @@ export class TmuxClient {
    */
   async setEnvironment(sessionName: string, varName: string, value?: string): Promise<void> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
 
     try {
       if (value === undefined) {
         // Unset the variable with -r flag
-        await execAsync(`tmux ${socketArg} set-environment -t ${validatedName} -r ${varName}`);
+        await tmuxCommand(['set-environment', '-t', validatedName, '-r', varName], this.socketPath);
       } else {
-        await execAsync(
-          `tmux ${socketArg} set-environment -t ${validatedName} ${varName} ${shellEscape(value)}`
+        await tmuxCommand(
+          ['set-environment', '-t', validatedName, varName, value],
+          this.socketPath
         );
       }
     } catch (error) {
@@ -264,11 +239,11 @@ export class TmuxClient {
    */
   async getPaneCommand(sessionName: string): Promise<string> {
     const validatedName = validateSessionName(sessionName);
-    const socketArg = this.getSocketArg();
 
     try {
-      const { stdout } = await execAsync(
-        `tmux ${socketArg} list-panes -t ${validatedName} -F "#{pane_current_command}"`
+      const { stdout } = await tmuxCommand(
+        ['list-panes', '-t', validatedName, '-F', '#{pane_current_command}'],
+        this.socketPath
       );
       return stdout.trim();
     } catch (error) {

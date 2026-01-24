@@ -4,13 +4,12 @@
  * Handles git worktree cleanup, orphan detection, and management.
  */
 
-import { exec } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
-import { promisify } from 'node:util';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { gitCommand, validateBranchName } from '../lib/shell.js';
 import { epicAccessor, taskAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';
 
-const execAsync = promisify(exec);
 const logger = createLogger('worktree');
 
 /**
@@ -77,14 +76,12 @@ export class WorktreeService {
    */
   async listWorktrees(): Promise<WorktreeInfo[]> {
     try {
-      const { stdout } = await execAsync('git worktree list --porcelain', {
-        cwd: this.repoPath,
-      });
+      const result = await gitCommand(['worktree', 'list', '--porcelain'], this.repoPath);
 
       const worktrees: WorktreeInfo[] = [];
       let current: Partial<WorktreeInfo> = {};
 
-      for (const line of stdout.split('\n')) {
+      for (const line of result.stdout.split('\n')) {
         if (line === '') {
           if (current.path) {
             worktrees.push(current as WorktreeInfo);
@@ -211,11 +208,11 @@ export class WorktreeService {
         return true; // Already gone
       }
 
-      // Use git worktree remove
-      const forceFlag = force ? '--force' : '';
-      await execAsync(`git worktree remove ${forceFlag} "${worktreePath}"`, {
-        cwd: this.repoPath,
-      });
+      // Use git worktree remove with spawn (safe - array args)
+      const args = force
+        ? ['worktree', 'remove', '--force', worktreePath]
+        : ['worktree', 'remove', worktreePath];
+      await gitCommand(args, this.repoPath);
 
       logger.info('Worktree removed', { path: worktreePath });
       return true;
@@ -228,7 +225,7 @@ export class WorktreeService {
       if (force) {
         try {
           rmSync(worktreePath, { recursive: true, force: true });
-          await execAsync('git worktree prune', { cwd: this.repoPath });
+          await gitCommand(['worktree', 'prune'], this.repoPath);
           logger.info('Worktree force removed', { path: worktreePath });
           return true;
         } catch (forceError) {
@@ -281,7 +278,7 @@ export class WorktreeService {
    */
   async pruneWorktrees(): Promise<void> {
     try {
-      await execAsync('git worktree prune', { cwd: this.repoPath });
+      await gitCommand(['worktree', 'prune'], this.repoPath);
       logger.info('Worktrees pruned');
     } catch (error) {
       logger.error('Failed to prune worktrees', error as Error);
@@ -322,20 +319,27 @@ export class WorktreeService {
   ): Promise<string> {
     const worktreePath = `/tmp/factoryfactory/worktrees/${epicId}/${taskId}`;
 
-    try {
-      // Ensure parent directory exists
-      await execAsync(`mkdir -p $(dirname "${worktreePath}")`);
+    // Validate branch names to prevent injection
+    const validatedBranch = validateBranchName(branchName);
+    const validatedBaseBranch = validateBranchName(baseBranch);
 
-      // Create the worktree
-      await execAsync(`git worktree add -b ${branchName} "${worktreePath}" ${baseBranch}`, {
-        cwd: this.repoPath,
-      });
+    try {
+      // SECURITY FIX: Use Node.js path.dirname() instead of shell command substitution
+      // The old code `mkdir -p $(dirname "${worktreePath}")` was vulnerable to command injection
+      // if epicId or taskId contained malicious characters like $() or backticks
+      mkdirSync(dirname(worktreePath), { recursive: true });
+
+      // Create the worktree using spawn with array args (safe - no shell interpretation)
+      await gitCommand(
+        ['worktree', 'add', '-b', validatedBranch, worktreePath, validatedBaseBranch],
+        this.repoPath
+      );
 
       logger.info('Worktree created', {
         taskId,
         epicId,
         path: worktreePath,
-        branch: branchName,
+        branch: validatedBranch,
       });
 
       return worktreePath;

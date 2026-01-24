@@ -1,7 +1,6 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
+import { gitCommand } from '../../lib/shell.js';
 import {
   agentAccessor,
   decisionLogAccessor,
@@ -11,8 +10,6 @@ import {
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
-
-const execAsync = promisify(exec);
 
 // ============================================================================
 // Input Schemas
@@ -152,10 +149,12 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
 
     let diffStats: string;
     try {
-      const { stdout } = await execAsync(
-        `git -C "${task.worktreePath}" diff --stat ${epicBranchName}...HEAD`
+      // Using spawn with array args (safe - no shell interpretation)
+      const result = await gitCommand(
+        ['diff', '--stat', `${epicBranchName}...HEAD`],
+        task.worktreePath
       );
-      diffStats = stdout;
+      diffStats = result.stdout;
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -165,10 +164,8 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
 
     let diffContent: string;
     try {
-      const { stdout } = await execAsync(
-        `git -C "${task.worktreePath}" diff ${epicBranchName}...HEAD`
-      );
-      diffContent = stdout;
+      const result = await gitCommand(['diff', `${epicBranchName}...HEAD`], task.worktreePath);
+      diffContent = result.stdout;
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -213,23 +210,21 @@ async function attemptRebase(
   epicBranchName: string
 ): Promise<{ success: boolean; error: string; conflictFiles: string[] }> {
   try {
-    await execAsync(`git -C "${worktreePath}" rebase ${epicBranchName}`);
+    await gitCommand(['rebase', epicBranchName], worktreePath);
     return { success: true, error: '', conflictFiles: [] };
   } catch (error) {
     const rebaseError = error instanceof Error ? error.message : String(error);
     let conflictFiles: string[] = [];
 
     try {
-      const { stdout } = await execAsync(
-        `git -C "${worktreePath}" diff --name-only --diff-filter=U`
-      );
+      const { stdout } = await gitCommand(['diff', '--name-only', '--diff-filter=U'], worktreePath);
       conflictFiles = stdout.split('\n').filter((line) => line.trim().length > 0);
     } catch {
       // Ignore error getting conflict files
     }
 
     try {
-      await execAsync(`git -C "${worktreePath}" rebase --abort`);
+      await gitCommand(['rebase', '--abort'], worktreePath);
     } catch {
       // Ignore abort error
     }
@@ -262,7 +257,8 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
 
     try {
-      await execAsync(`git -C "${task.worktreePath}" fetch origin ${epicBranchName}`);
+      // Fetch using spawn (safe)
+      await gitCommand(['fetch', 'origin', epicBranchName], task.worktreePath);
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -293,8 +289,10 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     }
 
     try {
-      await execAsync(
-        `git -C "${task.worktreePath}" push --force-with-lease origin ${task.branchName}`
+      // Push using spawn (safe)
+      await gitCommand(
+        ['push', '--force-with-lease', 'origin', task.branchName],
+        task.worktreePath
       );
     } catch (error) {
       return createErrorResponse(
