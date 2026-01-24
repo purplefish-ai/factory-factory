@@ -10,7 +10,7 @@ import { inngest } from '../client.js';
 /**
  * Handle task.created event by starting a worker agent
  *
- * This handler is triggered when a supervisor creates a task for an epic.
+ * This handler is triggered when a supervisor creates a subtask under a top-level task.
  * It automatically creates and starts a worker agent to implement the task.
  */
 export const taskCreatedHandler = inngest.createFunction(
@@ -21,11 +21,11 @@ export const taskCreatedHandler = inngest.createFunction(
   },
   { event: 'task.created' },
   async ({ event, step }) => {
-    const { taskId, epicId, title } = event.data;
+    const { taskId, parentId, title } = event.data;
 
-    console.log(`Task created event received for task ${taskId} (epic: ${epicId})`);
+    console.log(`Task created event received for task ${taskId} (parent: ${parentId})`);
 
-    // Step 1: Verify task exists
+    // Step 1: Verify task exists and get its details
     const task = await step.run('verify-task', async () => {
       const task = await taskAccessor.findById(taskId);
       if (!task) {
@@ -34,11 +34,29 @@ export const taskCreatedHandler = inngest.createFunction(
       return {
         id: task.id,
         title: task.title,
-        epicId: task.epicId,
+        parentId: task.parentId,
       };
     });
 
-    // Step 2: Start worker for the task
+    // Step 2: Check if task is blocked by dependencies
+    const isBlocked = await step.run('check-dependencies', () => {
+      return taskAccessor.isBlocked(taskId);
+    });
+
+    if (isBlocked) {
+      console.log(`Task ${taskId} is blocked by dependencies, skipping worker creation`);
+      return {
+        success: true,
+        taskId,
+        taskTitle: task.title,
+        parentId: task.parentId,
+        agentId: null,
+        message: `Task ${taskId} is blocked by dependencies, worker will be created when unblocked`,
+        blocked: true,
+      };
+    }
+
+    // Step 3: Start worker for the task
     const workerResult = await step.run('start-worker', async () => {
       try {
         const agentId = await startWorker(taskId);
@@ -49,7 +67,7 @@ export const taskCreatedHandler = inngest.createFunction(
           agentId,
           `Worker created for task "${title}"`,
           `Automatic worker creation triggered by task.created event`,
-          JSON.stringify({ taskId, epicId, title })
+          JSON.stringify({ taskId, parentId, title })
         );
 
         return {
@@ -61,8 +79,11 @@ export const taskCreatedHandler = inngest.createFunction(
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`Failed to start worker for task ${taskId}:`, error);
 
-        // Try to find the supervisor for this epic to notify them
-        const supervisor = await agentAccessor.findByEpicId(epicId);
+        // Try to find the top-level task to get the supervisor
+        const topLevelTask = await taskAccessor.getTopLevelParent(taskId);
+        const supervisor = topLevelTask
+          ? await agentAccessor.findSupervisorByTopLevelTaskId(topLevelTask.id)
+          : null;
 
         if (supervisor) {
           // Notify supervisor about the failure
@@ -84,7 +105,7 @@ export const taskCreatedHandler = inngest.createFunction(
           body:
             `The system failed to automatically create a worker for task "${title}".\n\n` +
             `Task ID: ${taskId}\n` +
-            `Epic ID: ${epicId}\n` +
+            `Parent ID: ${parentId}\n` +
             `Error: ${errorMessage}\n\n` +
             `Manual intervention may be required.`,
         });
@@ -97,9 +118,10 @@ export const taskCreatedHandler = inngest.createFunction(
       success: workerResult.success,
       taskId,
       taskTitle: task.title,
-      epicId: task.epicId,
+      parentId: task.parentId,
       agentId: workerResult.agentId,
       message: workerResult.message,
+      blocked: false,
     };
   }
 );

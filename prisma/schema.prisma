@@ -11,22 +11,22 @@ datasource db {
 }
 
 // Enums
-enum EpicState {
-  PLANNING       // Epic is being planned
-  IN_PROGRESS    // Epic is being worked on
-  BLOCKED        // Epic is blocked
-  COMPLETED      // Epic is completed
-  CANCELLED      // Epic was cancelled
-}
-
 enum TaskState {
-  PENDING        // Task is waiting to be picked up
-  ASSIGNED       // Task has been assigned to an agent
-  IN_PROGRESS    // Task is being worked on
-  REVIEW         // Task is waiting for review
-  BLOCKED        // Task is blocked
-  COMPLETED      // Task is completed
+  // Parent task states (for tasks with children)
+  PLANNING       // Task is being planned/broken down
+  PLANNED        // Subtasks created, ready for execution
+
+  // Leaf task states (for implementable tasks)
+  PENDING        // Task waiting to be picked up
+  ASSIGNED       // Task assigned to an agent
+  IN_PROGRESS    // Task being worked on
+  REVIEW         // Task waiting for review
+
+  // Terminal states (any task)
+  COMPLETED      // Task completed successfully
+  BLOCKED        // Task is blocked (dependencies or external)
   FAILED         // Task failed
+  CANCELLED      // Task was cancelled
 }
 
 enum AgentType {
@@ -57,65 +57,75 @@ model Project {
   updatedAt         DateTime    @updatedAt
 
   // Relations
-  epics             Epic[]
+  tasks             Task[]
 
   @@index([slug])
   @@index([isArchived])
 }
 
-model Epic {
+model Task {
   id                String      @id @default(cuid())
   projectId         String
-  linearIssueId     String      @unique
-  linearIssueUrl    String
+  parentId          String?     // null = top-level (was "Epic")
   title             String
   description       String?     @db.Text
-  state             EpicState   @default(PLANNING)
+  state             TaskState   @default(PENDING)
+
+  // Linear integration (only for top-level tasks)
+  linearIssueId     String?     @unique
+  linearIssueUrl    String?
+
+  // Execution tracking (for leaf tasks)
+  assignedAgentId   String?
+  worktreePath      String?
+  branchName        String?
+  prUrl             String?
+  attempts          Int         @default(0)
+  failureReason     String?     @db.Text
+
+  // Timestamps
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   completedAt       DateTime?
 
   // Relations
   project           Project     @relation(fields: [projectId], references: [id])
-  tasks             Task[]
-  orchestratorAgent Agent?      @relation("EpicOrchestrator")
+  parent            Task?       @relation("TaskHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children          Task[]      @relation("TaskHierarchy")
+  assignedAgent     Agent?      @relation("AssignedTasks", fields: [assignedAgentId], references: [id])
+  supervisorAgent   Agent?      @relation("SupervisorTask")
 
+  // Dependencies
+  dependsOn         TaskDependency[] @relation("DependentTask")
+  dependents        TaskDependency[] @relation("DependsOnTask")
+
+  @@index([projectId])
+  @@index([parentId])
   @@index([state])
   @@index([linearIssueId])
-  @@index([projectId])
+  @@index([assignedAgentId])
 }
 
-model Task {
+model TaskDependency {
   id                String      @id @default(cuid())
-  epicId            String
-  title             String
-  description       String?     @db.Text
-  state             TaskState   @default(PENDING)
-  assignedAgentId   String?
-  worktreePath      String?
-  branchName        String?
-  prUrl             String?
-  attempts          Int         @default(0)  // Number of worker recovery attempts
+  taskId            String      // The task that has the dependency (is blocked)
+  dependsOnId       String      // The task it depends on
   createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  completedAt       DateTime?
-  failureReason     String?     @db.Text
 
   // Relations
-  epic              Epic        @relation(fields: [epicId], references: [id], onDelete: Cascade)
-  assignedAgent     Agent?      @relation("AssignedTasks", fields: [assignedAgentId], references: [id])
+  task              Task        @relation("DependentTask", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn         Task        @relation("DependsOnTask", fields: [dependsOnId], references: [id], onDelete: Cascade)
 
-  @@index([epicId])
-  @@index([state])
-  @@index([assignedAgentId])
+  @@unique([taskId, dependsOnId])
+  @@index([taskId])
+  @@index([dependsOnId])
 }
 
 model Agent {
   id                String      @id @default(cuid())
   type              AgentType
   state             AgentState  @default(IDLE)
-  currentEpicId     String?     @unique
-  currentTaskId     String?
+  currentTaskId     String?     @unique  // For both supervisors (top-level) and workers (leaf)
   tmuxSessionName   String?
   sessionId         String?     // Claude Code CLI session ID for resume
   createdAt         DateTime    @default(now())
@@ -123,7 +133,7 @@ model Agent {
   lastActiveAt      DateTime    @default(now())
 
   // Relations
-  currentEpic       Epic?       @relation("EpicOrchestrator", fields: [currentEpicId], references: [id])
+  currentTask       Task?       @relation("SupervisorTask", fields: [currentTaskId], references: [id])
   assignedTasks     Task[]      @relation("AssignedTasks")
   mailReceived      Mail[]      @relation("ReceiverAgent")
   mailSent          Mail[]      @relation("SenderAgent")
@@ -131,7 +141,7 @@ model Agent {
 
   @@index([type])
   @@index([state])
-  @@index([currentEpicId])
+  @@index([currentTaskId])
 }
 
 model Mail {

@@ -34,9 +34,9 @@ function execCommand(command: string, args: string[]): Promise<{ stdout: string;
   });
 }
 
-// Type for Project with epics relation included
-export type ProjectWithEpics = Prisma.ProjectGetPayload<{
-  include: { epics: true };
+// Type for Project with tasks relation included
+export type ProjectWithTasks = Prisma.ProjectGetPayload<{
+  include: { tasks: true };
 }>;
 
 // Simplified input - only repoPath is required
@@ -149,11 +149,12 @@ export class ProjectAccessor {
     throw new Error(`Unable to create project: too many projects with similar names`);
   }
 
-  findById(id: string): Promise<ProjectWithEpics | null> {
+  findById(id: string): Promise<ProjectWithTasks | null> {
     return prisma.project.findUnique({
       where: { id },
       include: {
-        epics: {
+        tasks: {
+          where: { parentId: null }, // Only top-level tasks (epics)
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
@@ -161,11 +162,12 @@ export class ProjectAccessor {
     });
   }
 
-  findBySlug(slug: string): Promise<ProjectWithEpics | null> {
+  findBySlug(slug: string): Promise<ProjectWithTasks | null> {
     return prisma.project.findUnique({
       where: { slug },
       include: {
-        epics: {
+        tasks: {
+          where: { parentId: null }, // Only top-level tasks (epics)
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
@@ -194,7 +196,7 @@ export class ProjectAccessor {
       orderBy: { updatedAt: 'desc' },
       include: {
         _count: {
-          select: { epics: true },
+          select: { tasks: true },
         },
       },
     });

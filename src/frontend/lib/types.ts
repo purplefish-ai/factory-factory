@@ -7,11 +7,6 @@ export interface AgentRelation {
   state: string;
 }
 
-export interface EpicRelation {
-  id: string;
-  title: string;
-}
-
 export interface TaskRelation {
   id: string;
   title: string;
@@ -39,9 +34,8 @@ export interface AgentWithRelations {
   state: string;
   tmuxSessionName: string | null;
   lastActiveAt: Date;
-  currentEpicId: string | null;
   currentTaskId: string | null;
-  currentEpic?: EpicRelation | null;
+  currentTask?: TaskRelation | null;
   assignedTasks?: TaskRelation[];
   isHealthy?: boolean;
   minutesSinceHeartbeat?: number;
@@ -53,7 +47,7 @@ export interface TaskWithRelations {
   title: string;
   description: string | null;
   state: string;
-  epicId: string;
+  parentId: string | null;
   assignedAgentId: string | null;
   branchName: string | null;
   worktreePath: string | null;
@@ -61,7 +55,7 @@ export interface TaskWithRelations {
   attempts: number;
   failureReason: string | null;
   createdAt: Date;
-  epic?: EpicRelation | null;
+  parent?: TaskRelation | null;
   assignedAgent?: AgentRelation | null;
 }
 

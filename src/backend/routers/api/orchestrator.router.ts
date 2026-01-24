@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import {
   checkSupervisorHealth,
-  getPendingEpicsNeedingSupervisors,
+  getPendingTopLevelTasksNeedingSupervisors,
   getSupervisorHealthSummary,
   recoverSupervisor,
 } from '../../agents/orchestrator/health.js';
@@ -240,21 +240,21 @@ router.get('/supervisors', async (_req, res) => {
 
 /**
  * GET /api/orchestrator/pending-epics
- * List epics that need supervisors
+ * List top-level tasks that need supervisors
  */
 router.get('/pending-epics', async (_req, res) => {
   try {
-    const pendingEpics = await getPendingEpicsNeedingSupervisors();
+    const pendingTasks = await getPendingTopLevelTasksNeedingSupervisors();
 
     return res.status(200).json({
       success: true,
       data: {
-        pendingEpics,
-        count: pendingEpics.length,
+        pendingEpics: pendingTasks, // Keep response field name for backward compatibility
+        count: pendingTasks.length,
       },
     });
   } catch (error) {
-    console.error('Error listing pending epics:', error);
+    console.error('Error listing pending top-level tasks:', error);
     return res.status(500).json({
       success: false,
       error: {
@@ -432,12 +432,12 @@ router.post('/recover/supervisor', async (req, res) => {
       });
     }
 
-    if (!supervisor.currentEpicId) {
+    if (!supervisor.currentTaskId) {
       return res.status(400).json({
         success: false,
         error: {
           code: 'INVALID_STATE',
-          message: `Supervisor '${validatedInput.supervisorId}' has no epic assigned`,
+          message: `Supervisor '${validatedInput.supervisorId}' has no top-level task assigned`,
         },
       });
     }
@@ -456,7 +456,7 @@ router.post('/recover/supervisor', async (req, res) => {
 
     const result = await recoverSupervisor(
       validatedInput.supervisorId,
-      supervisor.currentEpicId,
+      supervisor.currentTaskId,
       orchestratorId
     );
 

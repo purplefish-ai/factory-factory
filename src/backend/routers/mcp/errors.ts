@@ -94,7 +94,6 @@ Stack trace:
 ${error.stack || 'N/A'}
 
 Agent state: ${agent.state}
-Current epic: ${agent.currentEpicId || 'N/A'}
 Current task: ${agent.currentTaskId || 'N/A'}
 
 This tool is marked as critical and requires immediate attention.

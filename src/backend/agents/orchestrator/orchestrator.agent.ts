@@ -15,10 +15,10 @@ import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/ind
 import { executeMcpTool } from '../../routers/mcp/server.js';
 import { buildOrchestratorPrompt } from '../prompts/builders/orchestrator.builder.js';
 import { promptFileManager } from '../prompts/file-manager.js';
-import { startSupervisorForEpic } from '../supervisor/lifecycle.js';
+import { startSupervisorForTask } from '../supervisor/lifecycle.js';
 import {
   checkSupervisorHealth,
-  getPendingEpicsNeedingSupervisors,
+  getPendingTopLevelTasksNeedingSupervisors,
   recoverSupervisor,
 } from './health.js';
 
@@ -232,7 +232,7 @@ export async function runOrchestrator(agentId: string): Promise<void> {
 
   // Start epic check loop (check for pending epics)
   orchestratorContext.epicCheckInterval = setInterval(async () => {
-    await checkForPendingEpics(agentId);
+    await checkForPendingTopLevelTasks(agentId);
   }, EPIC_CHECK_INTERVAL_MS);
 
   console.log(
@@ -329,7 +329,7 @@ async function performHealthCheck(agentId: string): Promise<void> {
       );
 
       try {
-        const result = await recoverSupervisor(unhealthy.supervisorId, unhealthy.epicId, agentId);
+        const result = await recoverSupervisor(unhealthy.supervisorId, unhealthy.taskId, agentId);
 
         console.log(`Orchestrator ${agentId}: Recovery result - ${result.message}`);
 
@@ -337,7 +337,7 @@ async function performHealthCheck(agentId: string): Promise<void> {
         await sendOrchestratorMessage(
           agentId,
           `[AUTOMATIC HEALTH CHECK] Recovered unhealthy supervisor:\n` +
-            `- Epic: ${unhealthy.epicTitle}\n` +
+            `- Task: ${unhealthy.taskTitle}\n` +
             `- Old Supervisor: ${unhealthy.supervisorId}\n` +
             `- New Supervisor: ${result.newSupervisorId || 'FAILED'}\n` +
             `- Workers killed: ${result.workersKilled}\n` +
@@ -367,60 +367,60 @@ async function performHealthCheck(agentId: string): Promise<void> {
 }
 
 /**
- * Check for pending epics that need supervisors
+ * Check for pending top-level tasks that need supervisors
  */
-async function checkForPendingEpics(agentId: string): Promise<void> {
+async function checkForPendingTopLevelTasks(agentId: string): Promise<void> {
   if (!activeOrchestrator?.isRunning) {
     return;
   }
 
   try {
-    const pendingEpics = await getPendingEpicsNeedingSupervisors();
+    const pendingTasks = await getPendingTopLevelTasksNeedingSupervisors();
 
-    if (pendingEpics.length > 0) {
+    if (pendingTasks.length > 0) {
       console.log(
-        `Orchestrator ${agentId}: Found ${pendingEpics.length} pending epic(s) needing supervisors`
+        `Orchestrator ${agentId}: Found ${pendingTasks.length} pending top-level task(s) needing supervisors`
       );
 
-      // Create supervisors for pending epics
-      for (const epic of pendingEpics) {
+      // Create supervisors for pending tasks
+      for (const task of pendingTasks) {
         console.log(
-          `Orchestrator ${agentId}: Creating supervisor for epic "${epic.title}" (${epic.epicId})`
+          `Orchestrator ${agentId}: Creating supervisor for task "${task.title}" (${task.taskId})`
         );
 
         try {
-          const supervisorId = await startSupervisorForEpic(epic.epicId);
+          const supervisorId = await startSupervisorForTask(task.taskId);
 
           console.log(
-            `Orchestrator ${agentId}: Created supervisor ${supervisorId} for epic ${epic.epicId}`
+            `Orchestrator ${agentId}: Created supervisor ${supervisorId} for task ${task.taskId}`
           );
 
           // Notify Claude about the new supervisor
           await sendOrchestratorMessage(
             agentId,
-            `[AUTOMATIC EPIC CHECK] Created supervisor for new epic:\n` +
-              `- Epic: ${epic.title}\n` +
-              `- Epic ID: ${epic.epicId}\n` +
+            `[AUTOMATIC TASK CHECK] Created supervisor for new task:\n` +
+              `- Task: ${task.title}\n` +
+              `- Task ID: ${task.taskId}\n` +
               `- Supervisor ID: ${supervisorId}`
           );
 
           // Log decision
           await decisionLogAccessor.createManual(
             agentId,
-            `Created supervisor for pending epic`,
-            `Epic "${epic.title}" was in PLANNING state without a supervisor`,
-            JSON.stringify({ epicId: epic.epicId, supervisorId })
+            `Created supervisor for pending task`,
+            `Task "${task.title}" was in PLANNING state without a supervisor`,
+            JSON.stringify({ taskId: task.taskId, supervisorId })
           );
         } catch (error) {
           console.error(
-            `Orchestrator ${agentId}: Failed to create supervisor for epic ${epic.epicId}:`,
+            `Orchestrator ${agentId}: Failed to create supervisor for task ${task.taskId}:`,
             error
           );
         }
       }
     }
   } catch (error) {
-    console.error(`Orchestrator ${agentId}: Epic check error:`, error);
+    console.error(`Orchestrator ${agentId}: Task check error:`, error);
   }
 }
 

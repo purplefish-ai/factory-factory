@@ -25,7 +25,7 @@ const WORKER_HEALTH_THRESHOLD_MINUTES = 7;
 const MAX_WORKER_ATTEMPTS = 5;
 
 /**
- * Check health of all workers for a supervisor's epic
+ * Check health of all workers for a supervisor's top-level task
  * Returns list of unhealthy workers
  */
 export async function checkWorkerHealth(supervisorId: string): Promise<{
@@ -38,14 +38,14 @@ export async function checkWorkerHealth(supervisorId: string): Promise<{
 }> {
   // Get supervisor
   const supervisor = await agentAccessor.findById(supervisorId);
-  if (!supervisor?.currentEpicId) {
-    throw new Error(`Supervisor ${supervisorId} not found or has no epic`);
+  if (!supervisor?.currentTaskId) {
+    throw new Error(`Supervisor ${supervisorId} not found or has no task`);
   }
 
-  const epicId = supervisor.currentEpicId;
+  const topLevelTaskId = supervisor.currentTaskId;
 
-  // Get all tasks for this epic that are in progress
-  const tasks = await taskAccessor.list({ epicId });
+  // Get all child tasks for this top-level task that are in progress
+  const tasks = await taskAccessor.findByParentId(topLevelTaskId);
   const activeTasks = tasks.filter(
     (t) => t.state === TaskState.IN_PROGRESS || t.state === TaskState.ASSIGNED
   );
@@ -118,7 +118,7 @@ export async function recoverWorker(
 
   // Get supervisor - if it doesn't exist, we can't use it as fromAgentId
   const supervisor = await agentAccessor.findById(supervisorId);
-  const epicId = supervisor?.currentEpicId;
+  const topLevelTaskId = supervisor?.currentTaskId;
   // Only use supervisorId for mail if the supervisor exists in the database
   const validSupervisorId = supervisor ? supervisorId : undefined;
 
@@ -152,7 +152,7 @@ export async function recoverWorker(
       fromAgentId: validSupervisorId,
       isForHuman: true,
       subject: `Task Permanently Failed: ${task.title}`,
-      body: `The task "${task.title}" has failed after ${MAX_WORKER_ATTEMPTS} worker recovery attempts.\n\nTask ID: ${taskId}\nEpic ID: ${epicId || 'unknown'}\n\nManual intervention may be required.`,
+      body: `The task "${task.title}" has failed after ${MAX_WORKER_ATTEMPTS} worker recovery attempts.\n\nTask ID: ${taskId}\nTop-level Task ID: ${topLevelTaskId || 'unknown'}\n\nManual intervention may be required.`,
     });
 
     // Log decision
@@ -259,9 +259,9 @@ export async function sendWorkerHealthCheck(
 }
 
 /**
- * Get health summary for all workers in an epic
+ * Get health summary for all workers in a top-level task
  */
-export async function getWorkerHealthSummary(epicId: string): Promise<{
+export async function getWorkerHealthSummary(topLevelTaskId: string): Promise<{
   totalWorkers: number;
   healthyWorkers: number;
   unhealthyWorkers: number;
@@ -274,7 +274,7 @@ export async function getWorkerHealthSummary(epicId: string): Promise<{
     minutesSinceHeartbeat: number;
   }>;
 }> {
-  const tasks = await taskAccessor.list({ epicId });
+  const tasks = await taskAccessor.findByParentId(topLevelTaskId);
   const now = Date.now();
 
   const workers: Array<{

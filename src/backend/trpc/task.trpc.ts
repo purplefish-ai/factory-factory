@@ -1,6 +1,6 @@
 import { TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
-import { taskAccessor } from '../resource_accessors/task.accessor';
+import { taskAccessor } from '../resource_accessors/task.accessor.js';
 import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
@@ -10,9 +10,10 @@ export const taskRouter = router({
     .input(
       z
         .object({
-          epicId: z.string().optional(),
+          parentId: z.string().nullable().optional(),
           state: z.nativeEnum(TaskState).optional(),
           assignedAgentId: z.string().optional(),
+          isTopLevel: z.boolean().optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
         })
@@ -34,9 +35,9 @@ export const taskRouter = router({
     return task;
   }),
 
-  // Get tasks by epic ID
-  listByEpic: publicProcedure.input(z.object({ epicId: z.string() })).query(({ input }) => {
-    return taskAccessor.findByEpicId(input.epicId);
+  // Get tasks by parent ID (children of a task)
+  listByParent: publicProcedure.input(z.object({ parentId: z.string() })).query(({ input }) => {
+    return taskAccessor.findByParentId(input.parentId);
   }),
 
   // Update a task (admin use)
@@ -66,6 +67,8 @@ export const taskRouter = router({
     const tasks = await taskAccessor.list({ projectId: ctx.projectId });
 
     const byState: Record<TaskState, number> = {
+      PLANNING: 0,
+      PLANNED: 0,
       PENDING: 0,
       ASSIGNED: 0,
       IN_PROGRESS: 0,
@@ -73,6 +76,7 @@ export const taskRouter = router({
       BLOCKED: 0,
       COMPLETED: 0,
       FAILED: 0,
+      CANCELLED: 0,
     };
 
     tasks.forEach((task) => {

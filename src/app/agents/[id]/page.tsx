@@ -48,22 +48,22 @@ function AgentDetailsCard({ agent }: { agent: AgentWithRelations }) {
 }
 
 function RelatedResourcesCard({ agent }: { agent: AgentWithRelations }) {
-  const hasEpic = !!agent.currentEpic;
+  const hasTask = !!agent.currentTask;
   const hasTasks = agent.assignedTasks && agent.assignedTasks.length > 0;
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
       <h2 className="text-lg font-semibold mb-4">Related Resources</h2>
       <dl className="space-y-3">
-        {hasEpic && (
+        {hasTask && (
           <div>
-            <dt className="text-sm text-gray-500">Current Epic</dt>
+            <dt className="text-sm text-gray-500">Current Task</dt>
             <dd>
               <Link
-                href={`/epics/${agent.currentEpic?.id}`}
+                href={`/tasks/${agent.currentTask?.id}`}
                 className="text-blue-600 hover:text-blue-800"
               >
-                {agent.currentEpic?.title}
+                {agent.currentTask?.title}
               </Link>
             </dd>
           </div>
@@ -84,7 +84,7 @@ function RelatedResourcesCard({ agent }: { agent: AgentWithRelations }) {
             </dd>
           </div>
         )}
-        {!(hasEpic || hasTasks) && <p className="text-gray-500 text-sm">No related resources</p>}
+        {!(hasTask || hasTasks) && <p className="text-gray-500 text-sm">No related resources</p>}
       </dl>
     </div>
   );

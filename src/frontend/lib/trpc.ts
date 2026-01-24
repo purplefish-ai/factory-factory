@@ -21,15 +21,15 @@ const getBaseUrl = () => {
  * Set via setProjectContext() and automatically included in tRPC request headers.
  */
 let currentProjectId: string | undefined;
-let currentEpicId: string | undefined;
+let currentTaskId: string | undefined;
 
-export function setProjectContext(projectId?: string, epicId?: string) {
+export function setProjectContext(projectId?: string, taskId?: string) {
   currentProjectId = projectId;
-  currentEpicId = epicId;
+  currentTaskId = taskId;
 }
 
 export function getProjectContext() {
-  return { projectId: currentProjectId, epicId: currentEpicId };
+  return { projectId: currentProjectId, taskId: currentTaskId };
 }
 
 export const trpcClient = trpc.createClient({
@@ -42,8 +42,8 @@ export const trpcClient = trpc.createClient({
         if (currentProjectId) {
           headers['X-Project-Id'] = currentProjectId;
         }
-        if (currentEpicId) {
-          headers['X-Epic-Id'] = currentEpicId;
+        if (currentTaskId) {
+          headers['X-Task-Id'] = currentTaskId;
         }
         return headers;
       },

@@ -14,7 +14,7 @@ export default function TaskDetailRedirect() {
 
   useEffect(() => {
     if (!isLoading && task) {
-      router.replace(`/projects/${task.epic.project.slug}/tasks/${id}`);
+      router.replace(`/projects/${task.project.slug}/tasks/${id}`);
     }
   }, [isLoading, task, id, router]);
 

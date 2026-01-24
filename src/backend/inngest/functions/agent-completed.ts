@@ -4,7 +4,6 @@ import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
@@ -16,7 +15,7 @@ import { inngest } from '../client.js';
  * This handler is triggered when an agent completes its work (success or failure).
  * It handles cleanup and notifications based on agent type:
  * - WORKER: Log completion, clean up tmux session, notify supervisor
- * - SUPERVISOR: Log completion, clean up tmux session, notify human of epic completion
+ * - SUPERVISOR: Log completion, clean up tmux session, notify human of top-level task completion
  * - ORCHESTRATOR: Log (orchestrator runs indefinitely, so this is rare)
  */
 export const agentCompletedHandler = inngest.createFunction(
@@ -27,7 +26,7 @@ export const agentCompletedHandler = inngest.createFunction(
   },
   { event: 'agent.completed' },
   async ({ event, step }) => {
-    const { agentId, taskId, epicId } = event.data;
+    const { agentId, taskId, topLevelTaskId } = event.data;
 
     console.log(`Agent completed event received for agent ${agentId}`);
 
@@ -42,7 +41,6 @@ export const agentCompletedHandler = inngest.createFunction(
         id: agent.id,
         type: agent.type,
         state: agent.state,
-        currentEpicId: agent.currentEpicId,
         currentTaskId: agent.currentTaskId,
         tmuxSessionName: agent.tmuxSessionName,
       };
@@ -61,12 +59,12 @@ export const agentCompletedHandler = inngest.createFunction(
     const completionResult = await step.run('handle-completion', async () => {
       switch (agentInfo.type) {
         case AgentType.WORKER:
-          return handleWorkerCompletion(agentId, taskId, agentInfo.currentEpicId);
+          return handleWorkerCompletion(agentId, taskId);
 
         case AgentType.SUPERVISOR:
           return handleSupervisorCompletion(
             agentId,
-            epicId || agentInfo.currentEpicId || undefined
+            topLevelTaskId || agentInfo.currentTaskId || undefined
           );
 
         case AgentType.ORCHESTRATOR:
@@ -106,22 +104,24 @@ export const agentCompletedHandler = inngest.createFunction(
  */
 async function handleWorkerCompletion(
   agentId: string,
-  taskId: string | undefined,
-  epicId: string | null
+  taskId: string | undefined
 ): Promise<{ success: boolean; message: string }> {
   try {
     // Get task info if available
     let taskTitle = 'Unknown task';
     let supervisorId: string | undefined;
+    let topLevelTaskId: string | undefined;
 
     if (taskId) {
       const task = await taskAccessor.findById(taskId);
       if (task) {
         taskTitle = task.title;
 
-        // Find supervisor for this epic
-        if (task.epicId) {
-          const supervisor = await agentAccessor.findByEpicId(task.epicId);
+        // Find the top-level task to get the supervisor
+        const topLevelTask = await taskAccessor.getTopLevelParent(taskId);
+        if (topLevelTask) {
+          topLevelTaskId = topLevelTask.id;
+          const supervisor = await agentAccessor.findSupervisorByTopLevelTaskId(topLevelTask.id);
           supervisorId = supervisor?.id;
         }
       }
@@ -132,7 +132,7 @@ async function handleWorkerCompletion(
       agentId,
       `Worker completed task "${taskTitle}"`,
       `Worker agent completed work on task`,
-      JSON.stringify({ taskId, epicId })
+      JSON.stringify({ taskId, topLevelTaskId })
     );
 
     // Clean up worker tmux session
@@ -174,25 +174,25 @@ async function handleWorkerCompletion(
  */
 async function handleSupervisorCompletion(
   agentId: string,
-  epicId: string | undefined
+  topLevelTaskId: string | undefined
 ): Promise<{ success: boolean; message: string }> {
   try {
-    // Get epic info if available
-    let epicTitle = 'Unknown epic';
+    // Get top-level task info if available
+    let taskTitle = 'Unknown task';
 
-    if (epicId) {
-      const epic = await epicAccessor.findById(epicId);
-      if (epic) {
-        epicTitle = epic.title;
+    if (topLevelTaskId) {
+      const task = await taskAccessor.findById(topLevelTaskId);
+      if (task) {
+        taskTitle = task.title;
       }
     }
 
     // Log completion
     await decisionLogAccessor.createManual(
       agentId,
-      `Supervisor completed epic "${epicTitle}"`,
-      `Supervisor agent completed work on epic`,
-      JSON.stringify({ epicId })
+      `Supervisor completed top-level task "${taskTitle}"`,
+      `Supervisor agent completed work on top-level task`,
+      JSON.stringify({ topLevelTaskId })
     );
 
     // Clean up supervisor tmux session
@@ -203,16 +203,16 @@ async function handleSupervisorCompletion(
       console.warn(`Could not clean up supervisor ${agentId}:`, error);
     }
 
-    // Notify human about epic completion
+    // Notify human about top-level task completion
     await mailAccessor.create({
       fromAgentId: agentId,
       isForHuman: true,
-      subject: `Epic completed: ${epicTitle}`,
+      subject: `Top-level task completed: ${taskTitle}`,
       body:
-        `The supervisor has completed work on epic "${epicTitle}".\n\n` +
-        `Epic ID: ${epicId}\n` +
+        `The supervisor has completed work on top-level task "${taskTitle}".\n\n` +
+        `Task ID: ${topLevelTaskId}\n` +
         `Supervisor ID: ${agentId}\n\n` +
-        `The epic should now be ready for your review. Check the epic PR for the final changes.`,
+        `The task should now be ready for your review. Check the PR for the final changes.`,
     });
 
     return {

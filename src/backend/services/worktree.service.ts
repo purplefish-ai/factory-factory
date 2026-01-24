@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { gitCommand, validateBranchName } from '../lib/shell.js';
-import { epicAccessor, taskAccessor } from '../resource_accessors/index.js';
+import { taskAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';
 
 const logger = createLogger('worktree');
@@ -114,22 +114,22 @@ export class WorktreeService {
       return { isOrphaned: true, reason: 'no_task' };
     }
     if (task.state === 'COMPLETED' || task.state === 'FAILED') {
-      return { isOrphaned: true, reason: 'completed_task', epicId: task.epicId };
+      return { isOrphaned: true, reason: 'completed_task', epicId: task.parentId || undefined };
     }
     return { isOrphaned: false, reason: 'unknown' };
   }
 
   /**
-   * Check if an epic-based worktree is orphaned
+   * Check if a top-level task (epic)-based worktree is orphaned
    */
-  private async checkEpicOrphan(
-    epicId: string
+  private async checkTopLevelTaskOrphan(
+    taskId: string
   ): Promise<{ isOrphaned: boolean; reason: OrphanedWorktree['reason'] }> {
-    const epic = await epicAccessor.findById(epicId);
-    if (!epic) {
+    const task = await taskAccessor.findById(taskId);
+    if (!task) {
       return { isOrphaned: true, reason: 'deleted_epic' };
     }
-    if (epic.state === 'COMPLETED' || epic.state === 'CANCELLED') {
+    if (task.state === 'COMPLETED' || task.state === 'CANCELLED') {
       return { isOrphaned: true, reason: 'deleted_epic' };
     }
     return { isOrphaned: false, reason: 'unknown' };
@@ -157,7 +157,7 @@ export class WorktreeService {
 
     if (epicMatch) {
       const epicId = epicMatch[1];
-      const result = await this.checkEpicOrphan(epicId);
+      const result = await this.checkTopLevelTaskOrphan(epicId);
       if (result.isOrphaned) {
         return { ...result, epicId };
       }

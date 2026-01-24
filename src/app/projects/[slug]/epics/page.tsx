@@ -1,6 +1,6 @@
 'use client';
 
-import { EpicState } from '@prisma-gen/browser';
+import { TaskState } from '@prisma-gen/browser';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -8,22 +8,27 @@ import { trpc } from '../../../../frontend/lib/trpc';
 
 const stateColors: Record<string, string> = {
   PLANNING: 'bg-gray-100 text-gray-800',
+  PLANNED: 'bg-gray-200 text-gray-800',
+  PENDING: 'bg-yellow-100 text-yellow-800',
+  ASSIGNED: 'bg-blue-50 text-blue-700',
   IN_PROGRESS: 'bg-blue-100 text-blue-800',
+  REVIEW: 'bg-purple-100 text-purple-800',
   BLOCKED: 'bg-red-100 text-red-800',
   COMPLETED: 'bg-green-100 text-green-800',
+  FAILED: 'bg-red-200 text-red-900',
   CANCELLED: 'bg-gray-100 text-gray-500',
 };
 
 export default function ProjectEpicsPage() {
   const params = useParams();
   const slug = params.slug as string;
-  const [stateFilter, setStateFilter] = useState<EpicState | ''>('');
+  const [stateFilter, setStateFilter] = useState<TaskState | ''>('');
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
 
   const { data: epics, isLoading } = trpc.epic.list.useQuery(
     {
-      state: stateFilter ? (stateFilter as EpicState) : undefined,
+      state: stateFilter ? (stateFilter as TaskState) : undefined,
     },
     { enabled: !!project?.id, refetchInterval: 5000 }
   );
@@ -60,11 +65,11 @@ export default function ProjectEpicsPage() {
           <label className="text-sm font-medium text-gray-700">Filter by state:</label>
           <select
             value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value as EpicState | '')}
+            onChange={(e) => setStateFilter(e.target.value as TaskState | '')}
             className="border rounded-lg px-3 py-2 text-sm"
           >
             <option value="">All States</option>
-            {Object.values(EpicState).map((state) => (
+            {Object.values(TaskState).map((state) => (
               <option key={state} value={state}>
                 {state}
               </option>

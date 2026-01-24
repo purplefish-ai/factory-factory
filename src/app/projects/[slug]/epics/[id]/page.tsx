@@ -33,10 +33,13 @@ export default function EpicDetailPage() {
     error,
   } = trpc.epic.getById.useQuery({ id }, { refetchInterval: 5000 });
 
-  const { data: tasks } = trpc.task.listByEpic.useQuery({ epicId: id }, { refetchInterval: 5000 });
+  const { data: tasks } = trpc.task.listByParent.useQuery(
+    { parentId: id },
+    { refetchInterval: 5000 }
+  );
 
-  const { data: agents } = trpc.agent.listByEpic.useQuery(
-    { epicId: id },
+  const { data: agents } = trpc.agent.listByTopLevelTask.useQuery(
+    { topLevelTaskId: id },
     { refetchInterval: 2000 }
   );
 

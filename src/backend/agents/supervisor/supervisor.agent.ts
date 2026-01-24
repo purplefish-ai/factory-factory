@@ -1,13 +1,8 @@
-import { AgentState, AgentType, EpicState } from '@prisma-gen/client';
+import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { GitClientFactory } from '../../clients/git.client.js';
 import { tmuxClient } from '../../clients/tmux.client.js';
-import {
-  agentAccessor,
-  epicAccessor,
-  mailAccessor,
-  taskAccessor,
-} from '../../resource_accessors/index.js';
+import { agentAccessor, mailAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
 import { buildSupervisorPrompt } from '../prompts/builders/supervisor.builder.js';
 import { promptFileManager } from '../prompts/file-manager.js';
@@ -18,7 +13,7 @@ import { checkWorkerHealth, recoverWorker } from './health.js';
  */
 interface SupervisorContext {
   agentId: string;
-  epicId: string;
+  topLevelTaskId: string;
   sessionId: string;
   tmuxSessionName: string;
   isRunning: boolean;
@@ -84,32 +79,32 @@ function getSupervisorTmuxSessionName(agentId: string): string {
 }
 
 /**
- * Create a new supervisor agent for an epic
+ * Create a new supervisor agent for a top-level task (epic)
  */
-export async function createSupervisor(epicId: string): Promise<string> {
-  // Get epic (includes project relation)
-  const epic = await epicAccessor.findById(epicId);
-  if (!epic) {
-    throw new Error(`Epic with ID '${epicId}' not found`);
+export async function createSupervisor(taskId: string): Promise<string> {
+  // Get top-level task (includes project relation)
+  const topLevelTask = await taskAccessor.findById(taskId);
+  if (!topLevelTask) {
+    throw new Error(`Task with ID '${taskId}' not found`);
   }
 
-  // Get project for this epic
-  const project = epic.project;
+  // Get project for this task
+  const project = topLevelTask.project;
   if (!project) {
-    throw new Error(`Epic '${epicId}' does not have an associated project`);
+    throw new Error(`Task '${taskId}' does not have an associated project`);
   }
 
-  // Check if epic already has a supervisor
-  const existingSupervisor = await agentAccessor.findByEpicId(epicId);
+  // Check if task already has a supervisor
+  const existingSupervisor = await agentAccessor.findByTopLevelTaskId(taskId);
   if (existingSupervisor) {
-    throw new Error(`Epic '${epicId}' already has a supervisor agent (${existingSupervisor.id})`);
+    throw new Error(`Task '${taskId}' already has a supervisor agent (${existingSupervisor.id})`);
   }
 
   // Create agent record
   const agent = await agentAccessor.create({
     type: AgentType.SUPERVISOR,
     state: AgentState.IDLE,
-    currentEpicId: epicId,
+    currentTaskId: taskId,
   });
 
   // Get project-specific GitClient
@@ -118,22 +113,22 @@ export async function createSupervisor(epicId: string): Promise<string> {
     worktreeBasePath: project.worktreeBasePath,
   });
 
-  // Create git worktree for epic (branching from project's default branch)
-  const worktreeName = `epic-${epic.id.substring(0, 8)}`;
+  // Create git worktree for task (branching from project's default branch)
+  const worktreeName = `epic-${topLevelTask.id.substring(0, 8)}`;
   const worktreeInfo = await gitClient.createWorktree(worktreeName, project.defaultBranch);
 
-  // Update epic state to IN_PROGRESS
-  await epicAccessor.update(epicId, {
-    state: EpicState.IN_PROGRESS,
+  // Update task state to IN_PROGRESS
+  await taskAccessor.update(taskId, {
+    state: TaskState.IN_PROGRESS,
   });
 
   // Build system prompt with full context
   const backendUrl = `http://localhost:${process.env.BACKEND_PORT || 3001}`;
   const systemPrompt = buildSupervisorPrompt({
-    epicId: epic.id,
-    epicTitle: epic.title,
-    epicDescription: epic.description || 'No description provided',
-    epicBranchName: worktreeInfo.branchName,
+    taskId: topLevelTask.id,
+    taskTitle: topLevelTask.title,
+    taskDescription: topLevelTask.description || 'No description provided',
+    taskBranchName: worktreeInfo.branchName,
     worktreePath: worktreeInfo.path,
     agentId: agent.id,
     backendUrl,
@@ -150,7 +145,7 @@ export async function createSupervisor(epicId: string): Promise<string> {
     tmuxSessionName: sessionContext.tmuxSessionName,
   });
 
-  console.log(`Created supervisor ${agent.id} for epic ${epicId}`);
+  console.log(`Created supervisor ${agent.id} for task ${taskId}`);
   console.log(`Tmux session: ${sessionContext.tmuxSessionName}`);
   console.log(`Session ID: ${sessionContext.sessionId}`);
 
@@ -197,18 +192,18 @@ export async function runSupervisor(agentId: string): Promise<void> {
     throw new Error(`Agent '${agentId}' is not a SUPERVISOR`);
   }
 
-  if (!agent.currentEpicId) {
-    throw new Error(`Agent '${agentId}' does not have an epic assigned`);
+  if (!agent.currentTaskId) {
+    throw new Error(`Agent '${agentId}' does not have a task assigned`);
   }
 
   if (!(agent.sessionId && agent.tmuxSessionName)) {
     throw new Error(`Agent '${agentId}' does not have a Claude session`);
   }
 
-  // Get epic
-  const epic = await epicAccessor.findById(agent.currentEpicId);
-  if (!epic) {
-    throw new Error(`Epic with ID '${agent.currentEpicId}' not found`);
+  // Get task
+  const topLevelTask = await taskAccessor.findById(agent.currentTaskId);
+  if (!topLevelTask) {
+    throw new Error(`Task with ID '${agent.currentTaskId}' not found`);
   }
 
   // Check if already running
@@ -219,7 +214,7 @@ export async function runSupervisor(agentId: string): Promise<void> {
   // Mark supervisor as running
   const supervisorContext: SupervisorContext = {
     agentId,
-    epicId: epic.id,
+    topLevelTaskId: topLevelTask.id,
     sessionId: agent.sessionId,
     tmuxSessionName: agent.tmuxSessionName,
     isRunning: true,
@@ -370,7 +365,7 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
     }
 
     // Also check task status and prompt supervisor if there are tasks ready for review
-    const tasks = await taskAccessor.list({ epicId: supervisorContext.epicId });
+    const tasks = await taskAccessor.list({ parentId: supervisorContext.topLevelTaskId });
     const reviewTasks = tasks.filter((t) => t.state === 'REVIEW');
     const completedTasks = tasks.filter((t) => t.state === 'COMPLETED');
     const failedTasks = tasks.filter((t) => t.state === 'FAILED');
@@ -582,15 +577,15 @@ export async function killSupervisor(agentId: string): Promise<void> {
     // Session may not exist
   }
 
-  // Delete worktree if epic exists
-  if (agent.currentEpicId) {
-    const epic = await epicAccessor.findById(agent.currentEpicId);
-    if (epic?.project) {
+  // Delete worktree if task exists
+  if (agent.currentTaskId) {
+    const topLevelTask = await taskAccessor.findById(agent.currentTaskId);
+    if (topLevelTask?.project) {
       const gitClient = GitClientFactory.forProject({
-        repoPath: epic.project.repoPath,
-        worktreeBasePath: epic.project.worktreeBasePath,
+        repoPath: topLevelTask.project.repoPath,
+        worktreeBasePath: topLevelTask.project.worktreeBasePath,
       });
-      const worktreeName = `epic-${agent.currentEpicId.substring(0, 8)}`;
+      const worktreeName = `epic-${agent.currentTaskId.substring(0, 8)}`;
       try {
         await gitClient.deleteWorktree(worktreeName);
       } catch {

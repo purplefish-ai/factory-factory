@@ -4,11 +4,10 @@
  * Handles crash loop detection, agent recovery, and system resilience.
  */
 
-import { AgentState, AgentType, EpicState, TaskState } from '@prisma-gen/client';
+import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   mailAccessor,
   taskAccessor,
 } from '../resource_accessors/index.js';
@@ -191,15 +190,15 @@ export class CrashRecoveryService {
     }
 
     if (epicId && agentType === AgentType.SUPERVISOR) {
-      await epicAccessor.update(epicId, {
-        state: EpicState.BLOCKED,
+      await taskAccessor.update(epicId, {
+        state: TaskState.BLOCKED,
       });
     }
 
     // Send notification
     await notificationService.notifyCriticalError(
       agentType,
-      epicId ? (await epicAccessor.findById(epicId))?.title : undefined,
+      epicId ? (await taskAccessor.findById(epicId))?.title : undefined,
       `Agent ${agentId} entered crash loop and has been marked as failed`
     );
 
@@ -258,7 +257,7 @@ export class CrashRecoveryService {
       await mailAccessor.create({
         isForHuman: true,
         subject: `Task Failed: ${task.title}`,
-        body: `Task "${task.title}" has failed after ${config.maxWorkerAttempts} worker recovery attempts.\n\nTask ID: ${taskId}\nEpic ID: ${task.epicId}\n\nManual intervention required.`,
+        body: `Task "${task.title}" has failed after ${config.maxWorkerAttempts} worker recovery attempts.\n\nTask ID: ${taskId}\nParent Task ID: ${task.parentId || 'N/A'}\n\nManual intervention required.`,
       });
 
       await notificationService.notifyTaskFailed(
@@ -309,33 +308,36 @@ export class CrashRecoveryService {
   /**
    * Recover a crashed supervisor
    */
-  private async recoverSupervisor(agentId: string, epicId?: string): Promise<RecoveryResult> {
-    if (!epicId) {
-      logger.warn('Cannot recover supervisor without epic ID', { agentId });
+  private async recoverSupervisor(
+    agentId: string,
+    topLevelTaskId?: string
+  ): Promise<RecoveryResult> {
+    if (!topLevelTaskId) {
+      logger.warn('Cannot recover supervisor without top-level task ID', { agentId });
       return {
         success: false,
         action: 'no_action',
-        message: 'No epic ID provided for supervisor recovery',
+        message: 'No top-level task ID provided for supervisor recovery',
       };
     }
 
-    const epic = await epicAccessor.findById(epicId);
-    if (!epic) {
+    const topLevelTask = await taskAccessor.findById(topLevelTaskId);
+    if (!topLevelTask) {
       return {
         success: false,
         action: 'no_action',
-        message: `Epic ${epicId} not found`,
+        message: `Top-level task ${topLevelTaskId} not found`,
       };
     }
 
     // Mark old supervisor as failed
     await agentAccessor.update(agentId, {
       state: AgentState.FAILED,
-      currentEpicId: null,
+      currentTaskId: null,
     });
 
-    // Mark all active workers for this epic as needing recovery
-    const tasks = await taskAccessor.list({ epicId });
+    // Mark all active workers for this top-level task as needing recovery
+    const tasks = await taskAccessor.list({ parentId: topLevelTaskId });
     for (const task of tasks) {
       if (
         task.assignedAgentId &&
@@ -354,33 +356,33 @@ export class CrashRecoveryService {
       }
     }
 
-    // Update epic state
-    await epicAccessor.update(epicId, {
-      state: EpicState.IN_PROGRESS, // Keep in progress for new supervisor
+    // Update top-level task state
+    await taskAccessor.update(topLevelTaskId, {
+      state: TaskState.IN_PROGRESS, // Keep in progress for new supervisor
     });
 
     // Notify human
     await mailAccessor.create({
       isForHuman: true,
-      subject: `Supervisor Crashed: ${epic.title}`,
-      body: `The supervisor for epic "${epic.title}" has crashed.\n\nEpic ID: ${epicId}\n\nA new supervisor needs to be started. Active workers have been reset.`,
+      subject: `Supervisor Crashed: ${topLevelTask.title}`,
+      body: `The supervisor for task "${topLevelTask.title}" has crashed.\n\nTask ID: ${topLevelTaskId}\n\nA new supervisor needs to be started. Active workers have been reset.`,
     });
 
     await notificationService.notifyCriticalError(
       'Supervisor',
-      epic.title,
+      topLevelTask.title,
       'Supervisor crashed - new supervisor needed'
     );
 
     logger.info('Supervisor recovery initiated', {
       oldSupervisorId: agentId,
-      epicId,
+      topLevelTaskId,
     });
 
     return {
       success: true,
       action: 'recovered',
-      message: 'Supervisor marked as failed, epic ready for new supervisor',
+      message: 'Supervisor marked as failed, top-level task ready for new supervisor',
     };
   }
 

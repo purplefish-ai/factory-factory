@@ -172,7 +172,7 @@ export default function AdminAgentsPage() {
                   State
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Epic
+                  Task
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Session
@@ -200,12 +200,12 @@ export default function AdminAgentsPage() {
                     <AgentStateIndicator state={agent.state} isInCrashLoop={agent.isInCrashLoop} />
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    {agent.currentEpicId ? (
+                    {agent.currentTaskId ? (
                       <Link
-                        href={`/epics/${agent.currentEpicId}`}
+                        href={`/tasks/${agent.currentTaskId}`}
                         className="text-blue-600 hover:text-blue-800"
                       >
-                        {agent.currentEpicId.slice(0, 8)}...
+                        {agent.currentTaskId.slice(0, 8)}...
                       </Link>
                     ) : (
                       <span className="text-gray-400">-</span>

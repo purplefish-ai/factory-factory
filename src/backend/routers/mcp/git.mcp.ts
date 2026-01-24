@@ -4,7 +4,6 @@ import { gitCommand } from '../../lib/shell.js';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
@@ -29,7 +28,7 @@ const RebaseInputSchema = z.object({});
 async function verifyWorkerWithTask(context: McpToolContext): Promise<
   | {
       success: true;
-      task: { id: string; worktreePath: string; branchName: string; epicId: string };
+      task: { id: string; worktreePath: string; branchName: string; parentId: string | null };
     }
   | { success: false; error: McpToolResponse }
 > {
@@ -101,7 +100,7 @@ async function verifyWorkerWithTask(context: McpToolContext): Promise<
       id: task.id,
       worktreePath: task.worktreePath,
       branchName: task.branchName,
-      epicId: task.epicId,
+      parentId: task.parentId,
     },
   };
 }
@@ -125,7 +124,7 @@ function parseDiffStats(diffStats: string): {
 }
 
 /**
- * Get diff between task branch and epic branch (WORKER only)
+ * Get diff between task branch and parent task (epic) branch (WORKER only)
  */
 async function getDiff(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
@@ -137,15 +136,22 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     }
     const { task } = verification;
 
-    const epic = await epicAccessor.findById(task.epicId);
-    if (!epic) {
+    if (!task.parentId) {
       return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${task.epicId}' not found`
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a parent task (epic)'
       );
     }
 
-    const epicBranchName = `factoryfactory/epic-${epic.id}`;
+    const parentTask = await taskAccessor.findById(task.parentId);
+    if (!parentTask) {
+      return createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Parent task (epic) with ID '${task.parentId}' not found`
+      );
+    }
+
+    const epicBranchName = `factoryfactory/epic-${parentTask.id}`;
 
     let diffStats: string;
     try {
@@ -234,7 +240,7 @@ async function attemptRebase(
 }
 
 /**
- * Rebase task branch onto epic branch (WORKER only)
+ * Rebase task branch onto parent task (epic) branch (WORKER only)
  */
 async function rebase(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
@@ -246,15 +252,22 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     }
     const { task } = verification;
 
-    const epic = await epicAccessor.findById(task.epicId);
-    if (!epic) {
+    if (!task.parentId) {
       return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${task.epicId}' not found`
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a parent task (epic)'
       );
     }
 
-    const epicBranchName = `factoryfactory/epic-${epic.id}`;
+    const parentTask = await taskAccessor.findById(task.parentId);
+    if (!parentTask) {
+      return createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Parent task (epic) with ID '${task.parentId}' not found`
+      );
+    }
+
+    const epicBranchName = `factoryfactory/epic-${parentTask.id}`;
 
     try {
       // Fetch using spawn (safe)

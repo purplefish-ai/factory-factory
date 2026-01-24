@@ -121,22 +121,26 @@ export const agentRouter = router({
     };
   }),
 
-  // Get agents for a specific epic (workers and supervisors)
-  listByEpic: publicProcedure.input(z.object({ epicId: z.string() })).query(async ({ input }) => {
-    const agents = await agentAccessor.findAgentsByEpicId(input.epicId);
-    const now = Date.now();
+  // Get agents for a specific top-level task (workers and supervisors)
+  listByTopLevelTask: publicProcedure
+    .input(z.object({ topLevelTaskId: z.string() }))
+    .query(async ({ input }) => {
+      const agents = await agentAccessor.findAgentsByTopLevelTaskId(input.topLevelTaskId);
+      const now = Date.now();
 
-    return agents.map((agent) => {
-      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
-      const isHealthy =
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
-      return {
-        ...agent,
-        isHealthy,
-        minutesSinceHeartbeat,
-      };
-    });
-  }),
+      return agents.map((agent) => {
+        const minutesSinceHeartbeat = Math.floor(
+          (now - agent.lastActiveAt.getTime()) / (60 * 1000)
+        );
+        const isHealthy =
+          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
+        return {
+          ...agent,
+          isHealthy,
+          minutesSinceHeartbeat,
+        };
+      });
+    }),
 
   // Get stats for dashboard (scoped to project from context)
   getStats: projectScopedProcedure.query(async ({ ctx }) => {

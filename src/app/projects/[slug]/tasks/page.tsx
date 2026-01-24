@@ -109,12 +109,12 @@ export default function ProjectTasksPage() {
                     </Link>
                   </td>
                   <td className="px-6 py-4">
-                    {(task as { epic?: { title: string } }).epic && (
+                    {task.parent && (
                       <Link
-                        href={`/projects/${slug}/epics/${task.epicId}`}
+                        href={`/projects/${slug}/epics/${task.parentId}`}
                         className="text-sm text-blue-600 hover:text-blue-800"
                       >
-                        {(task as { epic?: { title: string } }).epic?.title.slice(0, 30)}...
+                        {task.parent.title.slice(0, 30)}...
                       </Link>
                     )}
                   </td>

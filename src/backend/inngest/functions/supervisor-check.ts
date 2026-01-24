@@ -10,14 +10,15 @@ import { inngest } from '../client.js';
 
 interface SupervisorInfo {
   id: string;
-  epicId: string;
+  /** ID of the top-level task the supervisor is managing */
+  topLevelTaskId: string;
   state: string;
   lastActiveAt: string;
 }
 
 interface WorkerHealthResult {
   supervisorId: string;
-  epicId: string;
+  topLevelTaskId: string;
   healthyCount: number;
   unhealthyCount: number;
   recoveredWorkers: string[];
@@ -75,7 +76,9 @@ async function recoverUnhealthyWorkers(
  */
 async function checkSupervisorWorkers(supervisor: SupervisorInfo): Promise<WorkerHealthResult> {
   try {
-    console.log(`Checking workers for supervisor ${supervisor.id} (epic: ${supervisor.epicId})`);
+    console.log(
+      `Checking workers for supervisor ${supervisor.id} (top-level task: ${supervisor.topLevelTaskId})`
+    );
 
     const { healthyWorkers, unhealthyWorkers } = await checkWorkerHealth(supervisor.id);
     const { recovered, failed } = await recoverUnhealthyWorkers(unhealthyWorkers, supervisor.id);
@@ -96,7 +99,7 @@ async function checkSupervisorWorkers(supervisor: SupervisorInfo): Promise<Worke
 
     return {
       supervisorId: supervisor.id,
-      epicId: supervisor.epicId,
+      topLevelTaskId: supervisor.topLevelTaskId,
       healthyCount: healthyWorkers.length,
       unhealthyCount: unhealthyWorkers.length,
       recoveredWorkers: recovered,
@@ -110,14 +113,14 @@ async function checkSupervisorWorkers(supervisor: SupervisorInfo): Promise<Worke
       subject: `Health check failed for supervisor ${supervisor.id}`,
       body:
         `The cron job failed to check worker health for supervisor ${supervisor.id}.\n\n` +
-        `Epic ID: ${supervisor.epicId}\n` +
+        `Top-level Task ID: ${supervisor.topLevelTaskId}\n` +
         `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
         `Manual investigation may be required.`,
     });
 
     return {
       supervisorId: supervisor.id,
-      epicId: supervisor.epicId,
+      topLevelTaskId: supervisor.topLevelTaskId,
       healthyCount: 0,
       unhealthyCount: 0,
       recoveredWorkers: [],
@@ -149,17 +152,17 @@ export const supervisorCheckHandler = inngest.createFunction(
     const activeSupervisors = await step.run('get-active-supervisors', async () => {
       const supervisors = await agentAccessor.findByType(AgentType.SUPERVISOR);
 
-      // Filter to only active (non-failed) supervisors with epics
+      // Filter to only active (non-failed) supervisors with top-level tasks
       const active = supervisors.filter(
-        (s): s is typeof s & { currentEpicId: string } =>
-          s.state !== AgentState.FAILED && s.currentEpicId !== null
+        (s): s is typeof s & { currentTaskId: string } =>
+          s.state !== AgentState.FAILED && s.currentTaskId !== null
       );
 
       console.log(`Found ${active.length} active supervisor(s)`);
 
       return active.map((s) => ({
         id: s.id,
-        epicId: s.currentEpicId,
+        topLevelTaskId: s.currentTaskId,
         state: s.state,
         lastActiveAt: s.lastActiveAt.toISOString(),
       }));

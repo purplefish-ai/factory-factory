@@ -12,14 +12,14 @@ import {
 export { runSupervisor };
 
 /**
- * Start a supervisor for an epic
+ * Start a supervisor for a top-level task
  * Creates the supervisor agent, sets up environment, and starts execution
  */
-export async function startSupervisorForEpic(epicId: string): Promise<string> {
+export async function startSupervisorForTask(taskId: string): Promise<string> {
   // Create supervisor
-  const agentId = await createSupervisor(epicId);
+  const agentId = await createSupervisor(taskId);
 
-  console.log(`Starting supervisor ${agentId} for epic ${epicId}...`);
+  console.log(`Starting supervisor ${agentId} for task ${taskId}...`);
 
   // Run supervisor in background (don't await)
   runSupervisor(agentId).catch((error) => {
@@ -52,11 +52,11 @@ export async function killSupervisorAndCleanup(agentId: string): Promise<void> {
 /**
  * Recreate a crashed or failed supervisor
  */
-export async function recreateSupervisor(epicId: string): Promise<string> {
-  console.log(`Recreating supervisor for epic ${epicId}...`);
+export async function recreateSupervisor(taskId: string): Promise<string> {
+  console.log(`Recreating supervisor for task ${taskId}...`);
 
-  // Find existing supervisor agent for this epic
-  const existingSupervisor = await agentAccessor.findByEpicId(epicId);
+  // Find existing supervisor agent for this task
+  const existingSupervisor = await agentAccessor.findByTaskId(taskId);
 
   if (existingSupervisor) {
     // Clean up old supervisor
@@ -66,14 +66,14 @@ export async function recreateSupervisor(epicId: string): Promise<string> {
       console.error(`Failed to clean up old supervisor ${existingSupervisor.id}:`, error);
     }
 
-    // Remove the epic association so we can create a new supervisor
+    // Remove the task association so we can create a new supervisor
     await agentAccessor.update(existingSupervisor.id, {
-      currentEpicId: null,
+      currentTaskId: null,
     });
   }
 
   // Create new supervisor
-  return startSupervisorForEpic(epicId);
+  return startSupervisorForTask(taskId);
 }
 
 /**
@@ -83,7 +83,7 @@ export async function getSupervisorStatus(agentId: string): Promise<{
   agentId: string;
   isRunning: boolean;
   agentState: string;
-  epicId: string | null;
+  taskId: string | null;
   tmuxSession: string | null;
 }> {
   const agent = await agentAccessor.findById(agentId);
@@ -95,16 +95,16 @@ export async function getSupervisorStatus(agentId: string): Promise<{
     agentId: agent.id,
     isRunning: isSupervisorRunning(agentId),
     agentState: agent.state,
-    epicId: agent.currentEpicId,
+    taskId: agent.currentTaskId,
     tmuxSession: agent.tmuxSessionName,
   };
 }
 
 /**
- * Get supervisor for epic
+ * Get supervisor for a top-level task
  */
-export async function getSupervisorForEpic(epicId: string): Promise<string | null> {
-  const supervisor = await agentAccessor.findByEpicId(epicId);
+export async function getSupervisorForTask(taskId: string): Promise<string | null> {
+  const supervisor = await agentAccessor.findByTaskId(taskId);
   return supervisor?.id || null;
 }
 
@@ -114,7 +114,7 @@ export async function getSupervisorForEpic(epicId: string): Promise<string | nul
 export async function listAllSupervisors(): Promise<
   Array<{
     agentId: string;
-    epicId: string | null;
+    taskId: string | null;
     state: string;
     isRunning: boolean;
   }>
@@ -123,7 +123,7 @@ export async function listAllSupervisors(): Promise<
 
   return supervisors.map((s) => ({
     agentId: s.id,
-    epicId: s.currentEpicId,
+    taskId: s.currentTaskId,
     state: s.state,
     isRunning: isSupervisorRunning(s.id),
   }));

@@ -5,16 +5,11 @@
  */
 
 import type { DecisionLog } from '@prisma-gen/client';
-import { AgentState, AgentType, EpicState, TaskState } from '@prisma-gen/client';
+import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { killSupervisorAndCleanup, recreateSupervisor } from '../agents/supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../agents/worker/lifecycle.js';
-import {
-  agentAccessor,
-  decisionLogAccessor,
-  epicAccessor,
-  taskAccessor,
-} from '../resource_accessors/index.js';
+import { agentAccessor, decisionLogAccessor, taskAccessor } from '../resource_accessors/index.js';
 import {
   configService,
   crashRecoveryService,
@@ -85,8 +80,8 @@ export const adminRouter = router({
 
       logger.info('Restarting agent', { agentId: input.agentId, type: agent.type });
 
-      if (agent.type === AgentType.SUPERVISOR && agent.currentEpicId) {
-        const newAgentId = await recreateSupervisor(agent.currentEpicId);
+      if (agent.type === AgentType.SUPERVISOR && agent.currentTaskId) {
+        const newAgentId = await recreateSupervisor(agent.currentTaskId);
         return {
           success: true,
           newAgentId,
@@ -173,7 +168,7 @@ export const adminRouter = router({
     }),
 
   /**
-   * Reset an epic to IN_PROGRESS state
+   * Reset a top-level task (epic) to IN_PROGRESS state
    */
   resetEpic: publicProcedure
     .input(
@@ -183,23 +178,28 @@ export const adminRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const epic = await epicAccessor.findById(input.epicId);
-      if (!epic) {
-        throw new Error(`Epic ${input.epicId} not found`);
+      const task = await taskAccessor.findById(input.epicId);
+      if (!task) {
+        throw new Error(`Top-level task (epic) ${input.epicId} not found`);
+      }
+
+      // Verify it's a top-level task
+      if (task.parentId !== null) {
+        throw new Error(`Task ${input.epicId} is not a top-level task (epic)`);
       }
 
       logger.info('Resetting epic', { epicId: input.epicId });
 
-      await epicAccessor.update(input.epicId, {
-        state: EpicState.IN_PROGRESS,
+      await taskAccessor.update(input.epicId, {
+        state: TaskState.IN_PROGRESS,
         completedAt: null,
       });
 
       if (input.resetTasks) {
-        const tasks = await taskAccessor.list({ epicId: input.epicId });
-        for (const task of tasks) {
-          if (task.state === TaskState.FAILED || task.state === TaskState.BLOCKED) {
-            await taskAccessor.update(task.id, {
+        const childTasks = await taskAccessor.findByParentId(input.epicId);
+        for (const childTask of childTasks) {
+          if (childTask.state === TaskState.FAILED || childTask.state === TaskState.BLOCKED) {
+            await taskAccessor.update(childTask.id, {
               state: TaskState.PENDING,
               assignedAgentId: null,
               failureReason: null,
@@ -210,7 +210,7 @@ export const adminRouter = router({
 
       return {
         success: true,
-        message: `Epic ${input.epicId} reset to IN_PROGRESS`,
+        message: `Top-level task (epic) ${input.epicId} reset to IN_PROGRESS`,
       };
     }),
 
@@ -224,28 +224,32 @@ export const adminRouter = router({
     const worktreeStats = await worktreeService.getWorktreeStats();
     const config = configService.getSystemConfig();
 
-    // Get epic and task counts
-    const epics = await epicAccessor.list();
-    const tasks = await taskAccessor.list({});
+    // Get top-level tasks (epics) and all tasks
+    const topLevelTasks = await taskAccessor.list({ isTopLevel: true });
+    const allTasks = await taskAccessor.list({});
 
     const epicStats = {
-      total: epics.length,
-      planning: epics.filter((e) => e.state === EpicState.PLANNING).length,
-      inProgress: epics.filter((e) => e.state === EpicState.IN_PROGRESS).length,
-      completed: epics.filter((e) => e.state === EpicState.COMPLETED).length,
-      blocked: epics.filter((e) => e.state === EpicState.BLOCKED).length,
-      cancelled: epics.filter((e) => e.state === EpicState.CANCELLED).length,
+      total: topLevelTasks.length,
+      planning: topLevelTasks.filter((t) => t.state === TaskState.PLANNING).length,
+      planned: topLevelTasks.filter((t) => t.state === TaskState.PLANNED).length,
+      inProgress: topLevelTasks.filter((t) => t.state === TaskState.IN_PROGRESS).length,
+      completed: topLevelTasks.filter((t) => t.state === TaskState.COMPLETED).length,
+      blocked: topLevelTasks.filter((t) => t.state === TaskState.BLOCKED).length,
+      cancelled: topLevelTasks.filter((t) => t.state === TaskState.CANCELLED).length,
     };
 
     const taskStats = {
-      total: tasks.length,
-      pending: tasks.filter((t) => t.state === TaskState.PENDING).length,
-      assigned: tasks.filter((t) => t.state === TaskState.ASSIGNED).length,
-      inProgress: tasks.filter((t) => t.state === TaskState.IN_PROGRESS).length,
-      review: tasks.filter((t) => t.state === TaskState.REVIEW).length,
-      completed: tasks.filter((t) => t.state === TaskState.COMPLETED).length,
-      failed: tasks.filter((t) => t.state === TaskState.FAILED).length,
-      blocked: tasks.filter((t) => t.state === TaskState.BLOCKED).length,
+      total: allTasks.length,
+      planning: allTasks.filter((t) => t.state === TaskState.PLANNING).length,
+      planned: allTasks.filter((t) => t.state === TaskState.PLANNED).length,
+      pending: allTasks.filter((t) => t.state === TaskState.PENDING).length,
+      assigned: allTasks.filter((t) => t.state === TaskState.ASSIGNED).length,
+      inProgress: allTasks.filter((t) => t.state === TaskState.IN_PROGRESS).length,
+      review: allTasks.filter((t) => t.state === TaskState.REVIEW).length,
+      completed: allTasks.filter((t) => t.state === TaskState.COMPLETED).length,
+      failed: allTasks.filter((t) => t.state === TaskState.FAILED).length,
+      blocked: allTasks.filter((t) => t.state === TaskState.BLOCKED).length,
+      cancelled: allTasks.filter((t) => t.state === TaskState.CANCELLED).length,
     };
 
     return {
@@ -378,7 +382,6 @@ export const adminRouter = router({
       id: agent.id,
       type: agent.type,
       state: agent.state,
-      currentEpicId: agent.currentEpicId,
       currentTaskId: agent.currentTaskId,
       tmuxSessionName: agent.tmuxSessionName,
       lastActiveAt: agent.lastActiveAt.toISOString(),

@@ -1,14 +1,13 @@
-import { AgentState, AgentType, EpicState, TaskState } from '@prisma-gen/client';
+import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import {
   killSupervisorAndCleanup,
-  startSupervisorForEpic,
+  startSupervisorForTask,
 } from '../../agents/supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
@@ -36,7 +35,7 @@ const CheckSupervisorHealthInputSchema = z.object({
 });
 
 const CreateSupervisorInputSchema = z.object({
-  epicId: z.string().min(1, 'Epic ID is required'),
+  taskId: z.string().min(1, 'Task ID is required'),
 });
 
 const RecoverSupervisorInputSchema = z.object({
@@ -94,8 +93,8 @@ function calculateHealthStatus(lastActiveAt: Date): {
 
 interface SupervisorForRecovery {
   id: string;
-  epicId: string;
-  epicTitle: string;
+  taskId: string;
+  taskTitle: string;
 }
 
 /**
@@ -127,38 +126,38 @@ async function validateSupervisorForRecovery(
     };
   }
 
-  if (!supervisor.currentEpicId) {
+  if (!supervisor.currentTaskId) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        `Supervisor '${supervisorId}' has no epic assigned`
+        `Supervisor '${supervisorId}' has no task assigned`
       ),
     };
   }
 
-  const epic = await epicAccessor.findById(supervisor.currentEpicId);
-  if (!epic) {
+  const task = await taskAccessor.findById(supervisor.currentTaskId);
+  if (!task) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${supervisor.currentEpicId}' not found`
+        `Task with ID '${supervisor.currentTaskId}' not found`
       ),
     };
   }
 
   return {
     success: true,
-    data: { id: supervisor.id, epicId: supervisor.currentEpicId, epicTitle: epic.title },
+    data: { id: supervisor.id, taskId: supervisor.currentTaskId, taskTitle: task.title },
   };
 }
 
 /**
- * Kill all workers for an epic and mark them as FAILED
+ * Kill all workers for a top-level task and mark them as FAILED
  */
-async function killEpicWorkers(epicId: string): Promise<string[]> {
-  const workers = await agentAccessor.findWorkersByEpicId(epicId);
+async function killTaskWorkers(taskId: string): Promise<string[]> {
+  const workers = await agentAccessor.findWorkersByTopLevelTaskId(taskId);
   const killedWorkers: string[] = [];
 
   for (const worker of workers) {
@@ -177,10 +176,10 @@ async function killEpicWorkers(epicId: string): Promise<string[]> {
 /**
  * Reset non-terminal tasks to PENDING state
  */
-async function resetEpicTasks(
-  epicId: string
+async function resetTopLevelTaskSubtasks(
+  taskId: string
 ): Promise<{ resetTasks: string[]; totalTasks: number }> {
-  const tasks = await taskAccessor.list({ epicId });
+  const tasks = await taskAccessor.list({ parentId: taskId });
   const resetTasks: string[] = [];
 
   for (const task of tasks) {
@@ -195,13 +194,13 @@ async function resetEpicTasks(
 }
 
 /**
- * Try to create a new supervisor for an epic
+ * Try to create a new supervisor for a task
  */
-async function tryCreateNewSupervisor(epicId: string): Promise<string | null> {
+async function tryCreateNewSupervisor(taskId: string): Promise<string | null> {
   try {
-    return await startSupervisorForEpic(epicId);
+    return await startSupervisorForTask(taskId);
   } catch (error) {
-    console.error(`Failed to create new supervisor for epic ${epicId}:`, error);
+    console.error(`Failed to create new supervisor for task ${taskId}:`, error);
     return null;
   }
 }
@@ -229,16 +228,16 @@ async function listSupervisors(context: McpToolContext, input: unknown): Promise
       HEALTH_THRESHOLD_MINUTES
     );
 
-    // Enrich with epic info
+    // Enrich with task info
     const supervisorList = await Promise.all(
       supervisors.map(async (s) => {
-        const epic = s.currentEpicId ? await epicAccessor.findById(s.currentEpicId) : null;
+        const task = s.currentTaskId ? await taskAccessor.findById(s.currentTaskId) : null;
         return {
           id: s.id,
           state: s.state,
-          epicId: s.currentEpicId,
-          epicTitle: epic?.title || null,
-          epicState: epic?.state || null,
+          taskId: s.currentTaskId,
+          taskTitle: task?.title || null,
+          taskState: task?.state || null,
           tmuxSessionName: s.tmuxSessionName,
           isHealthy: s.isHealthy,
           minutesSinceHeartbeat: s.minutesSinceHeartbeat,
@@ -311,9 +310,9 @@ async function checkSupervisorHealth(
     // Calculate health status
     const { isHealthy, minutesSinceHeartbeat } = calculateHealthStatus(supervisor.lastActiveAt);
 
-    // Get epic info
-    const epic = supervisor.currentEpicId
-      ? await epicAccessor.findById(supervisor.currentEpicId)
+    // Get task info
+    const task = supervisor.currentTaskId
+      ? await taskAccessor.findById(supervisor.currentTaskId)
       : null;
 
     // Log decision
@@ -335,8 +334,8 @@ async function checkSupervisorHealth(
       minutesSinceHeartbeat,
       lastActiveAt: supervisor.lastActiveAt,
       state: supervisor.state,
-      epicId: supervisor.currentEpicId,
-      epicTitle: epic?.title || null,
+      taskId: supervisor.currentTaskId,
+      taskTitle: task?.title || null,
       tmuxSessionName: supervisor.tmuxSessionName,
       healthThresholdMinutes: HEALTH_THRESHOLD_MINUTES,
     });
@@ -349,7 +348,7 @@ async function checkSupervisorHealth(
 }
 
 /**
- * Create a new supervisor for an epic (ORCHESTRATOR only)
+ * Create a new supervisor for a task (ORCHESTRATOR only)
  */
 async function createSupervisor(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
@@ -361,26 +360,26 @@ async function createSupervisor(context: McpToolContext, input: unknown): Promis
       return verification.error;
     }
 
-    // Check epic exists
-    const epic = await epicAccessor.findById(validatedInput.epicId);
-    if (!epic) {
+    // Check task exists
+    const task = await taskAccessor.findById(validatedInput.taskId);
+    if (!task) {
       return createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${validatedInput.epicId}' not found`
+        `Task with ID '${validatedInput.taskId}' not found`
       );
     }
 
-    // Check if epic already has a supervisor
-    const existingSupervisor = await agentAccessor.findByEpicId(validatedInput.epicId);
+    // Check if task already has a supervisor
+    const existingSupervisor = await agentAccessor.findByTopLevelTaskId(validatedInput.taskId);
     if (existingSupervisor) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        `Epic '${validatedInput.epicId}' already has a supervisor (${existingSupervisor.id})`
+        `Task '${validatedInput.taskId}' already has a supervisor (${existingSupervisor.id})`
       );
     }
 
     // Create and start supervisor
-    const supervisorId = await startSupervisorForEpic(validatedInput.epicId);
+    const supervisorId = await startSupervisorForTask(validatedInput.taskId);
 
     // Get supervisor details
     const supervisor = await agentAccessor.findById(supervisorId);
@@ -392,18 +391,18 @@ async function createSupervisor(context: McpToolContext, input: unknown): Promis
       'result',
       {
         supervisorId,
-        epicId: validatedInput.epicId,
-        epicTitle: epic.title,
+        taskId: validatedInput.taskId,
+        taskTitle: task.title,
         tmuxSessionName: supervisor?.tmuxSessionName,
       }
     );
 
     return createSuccessResponse({
       supervisorId,
-      epicId: validatedInput.epicId,
-      epicTitle: epic.title,
+      taskId: validatedInput.taskId,
+      taskTitle: task.title,
       tmuxSessionName: supervisor?.tmuxSessionName,
-      message: `Supervisor ${supervisorId} created for epic: ${epic.title}`,
+      message: `Supervisor ${supervisorId} created for task: ${task.title}`,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -423,9 +422,9 @@ async function createSupervisor(context: McpToolContext, input: unknown): Promis
 /**
  * Recover a crashed supervisor with cascading worker cleanup (ORCHESTRATOR only)
  * This performs the full cascading recovery:
- * 1. Kill all workers for the epic
+ * 1. Kill all workers for the task
  * 2. Kill the supervisor
- * 3. Reset task states (non-completed tasks back to PENDING)
+ * 3. Reset subtask states (non-completed tasks back to PENDING)
  * 4. Create new supervisor
  * 5. Notify human
  */
@@ -445,10 +444,10 @@ async function recoverSupervisor(
     if (!supervisorValidation.success) {
       return supervisorValidation.error;
     }
-    const { id: oldSupervisorId, epicId, epicTitle } = supervisorValidation.data;
+    const { id: oldSupervisorId, taskId, taskTitle } = supervisorValidation.data;
 
     // Phase 1: Kill all workers
-    const killedWorkers = await killEpicWorkers(epicId);
+    const killedWorkers = await killTaskWorkers(taskId);
 
     // Phase 2: Kill the supervisor
     try {
@@ -456,13 +455,13 @@ async function recoverSupervisor(
     } catch (error) {
       console.error(`Failed to kill supervisor ${oldSupervisorId}:`, error);
     }
-    await agentAccessor.update(oldSupervisorId, { state: AgentState.FAILED, currentEpicId: null });
+    await agentAccessor.update(oldSupervisorId, { state: AgentState.FAILED, currentTaskId: null });
 
-    // Phase 3: Reset task states
-    const { resetTasks, totalTasks } = await resetEpicTasks(epicId);
+    // Phase 3: Reset subtask states
+    const { resetTasks, totalTasks } = await resetTopLevelTaskSubtasks(taskId);
 
     // Phase 4: Create new supervisor
-    const newSupervisorId = await tryCreateNewSupervisor(epicId);
+    const newSupervisorId = await tryCreateNewSupervisor(taskId);
 
     // Phase 5: Notify human
     const newSupervisorStatus = newSupervisorId || 'FAILED TO CREATE';
@@ -473,17 +472,17 @@ async function recoverSupervisor(
     await mailAccessor.create({
       fromAgentId: context.agentId,
       isForHuman: true,
-      subject: `Supervisor Crashed - Epic: ${epicTitle}`,
+      subject: `Supervisor Crashed - Task: ${taskTitle}`,
       body: `A supervisor crash was detected and recovery was performed.
 
-**Epic**: ${epicTitle} (${epicId})
+**Task**: ${taskTitle} (${taskId})
 **Old Supervisor**: ${oldSupervisorId}
 **New Supervisor**: ${newSupervisorStatus}
 
 **Recovery Summary**:
 - Workers killed: ${killedWorkers.length}
-- Tasks reset to PENDING: ${resetTasks.length}
-- Tasks kept (COMPLETED/FAILED): ${totalTasks - resetTasks.length}
+- Subtasks reset to PENDING: ${resetTasks.length}
+- Subtasks kept (COMPLETED/FAILED): ${totalTasks - resetTasks.length}
 
 ${resumeMessage}`,
     });
@@ -495,8 +494,8 @@ ${resumeMessage}`,
       {
         oldSupervisorId,
         newSupervisorId,
-        epicId,
-        epicTitle,
+        taskId,
+        taskTitle,
         workersKilled: killedWorkers.length,
         tasksReset: resetTasks.length,
         recoverySuccess: !!newSupervisorId,
@@ -506,18 +505,18 @@ ${resumeMessage}`,
     if (!newSupervisorId) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
-        'Recovery partially failed: workers killed and tasks reset, but new supervisor creation failed. Manual intervention required.'
+        'Recovery partially failed: workers killed and subtasks reset, but new supervisor creation failed. Manual intervention required.'
       );
     }
 
     return createSuccessResponse({
       oldSupervisorId,
       newSupervisorId,
-      epicId,
-      epicTitle,
+      taskId,
+      taskTitle,
       workersKilled: killedWorkers.length,
       tasksReset: resetTasks.length,
-      message: `Supervisor recovered. ${killedWorkers.length} workers killed, ${resetTasks.length} tasks reset. New supervisor ${newSupervisorId} created.`,
+      message: `Supervisor recovered. ${killedWorkers.length} workers killed, ${resetTasks.length} subtasks reset. New supervisor ${newSupervisorId} created.`,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -528,9 +527,12 @@ ${resumeMessage}`,
 }
 
 /**
- * List epics that are pending (need supervisors) (ORCHESTRATOR only)
+ * List top-level tasks that are pending (need supervisors) (ORCHESTRATOR only)
  */
-async function listPendingEpics(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+async function listPendingTopLevelTasks(
+  context: McpToolContext,
+  input: unknown
+): Promise<McpToolResponse> {
   try {
     ListPendingEpicsInputSchema.parse(input);
 
@@ -540,30 +542,30 @@ async function listPendingEpics(context: McpToolContext, input: unknown): Promis
       return verification.error;
     }
 
-    // Get all epics
-    const epics = await epicAccessor.list();
+    // Get all top-level tasks
+    const topLevelTasks = await taskAccessor.list({ isTopLevel: true });
 
-    // Filter to epics in PLANNING state without supervisors
-    const pendingEpics = await Promise.all(
-      epics
-        .filter((e) => e.state === EpicState.PLANNING)
-        .map(async (epic) => {
-          const supervisor = await agentAccessor.findByEpicId(epic.id);
+    // Filter to tasks in PLANNING state without supervisors
+    const pendingTasks = await Promise.all(
+      topLevelTasks
+        .filter((t) => t.state === TaskState.PLANNING)
+        .map(async (task) => {
+          const supervisor = await agentAccessor.findByTopLevelTaskId(task.id);
           return {
-            epic,
+            task,
             hasSupervisor: !!supervisor,
           };
         })
     );
 
-    const epicsNeedingSupervisors = pendingEpics
+    const tasksNeedingSupervisors = pendingTasks
       .filter((p) => !p.hasSupervisor)
       .map((p) => ({
-        id: p.epic.id,
-        title: p.epic.title,
-        description: p.epic.description,
-        linearIssueId: p.epic.linearIssueId,
-        createdAt: p.epic.createdAt,
+        id: p.task.id,
+        title: p.task.title,
+        description: p.task.description,
+        linearIssueId: p.task.linearIssueId,
+        createdAt: p.task.createdAt,
       }));
 
     // Log decision
@@ -572,13 +574,13 @@ async function listPendingEpics(context: McpToolContext, input: unknown): Promis
       'mcp__orchestrator__list_pending_epics',
       'result',
       {
-        totalPendingEpics: epicsNeedingSupervisors.length,
+        totalPendingTasks: tasksNeedingSupervisors.length,
       }
     );
 
     return createSuccessResponse({
-      pendingEpics: epicsNeedingSupervisors,
-      count: epicsNeedingSupervisors.length,
+      pendingEpics: tasksNeedingSupervisors,
+      count: tasksNeedingSupervisors.length,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -610,7 +612,7 @@ export function registerOrchestratorTools(): void {
 
   registerMcpTool({
     name: 'mcp__orchestrator__create_supervisor',
-    description: 'Create a new supervisor for an epic (ORCHESTRATOR only)',
+    description: 'Create a new supervisor for a task (ORCHESTRATOR only)',
     handler: createSupervisor,
     schema: CreateSupervisorInputSchema,
   });
@@ -623,11 +625,11 @@ export function registerOrchestratorTools(): void {
     schema: RecoverSupervisorInputSchema,
   });
 
-  // Epic Management
+  // Task Management
   registerMcpTool({
     name: 'mcp__orchestrator__list_pending_epics',
-    description: 'List epics in PLANNING state that need supervisors (ORCHESTRATOR only)',
-    handler: listPendingEpics,
+    description: 'List top-level tasks in PLANNING state that need supervisors (ORCHESTRATOR only)',
+    handler: listPendingTopLevelTasks,
     schema: ListPendingEpicsInputSchema,
   });
 }

@@ -8,12 +8,7 @@ import {
   stopSession,
 } from '../../clients/claude-code.client.js';
 import { GitClientFactory } from '../../clients/git.client.js';
-import {
-  agentAccessor,
-  epicAccessor,
-  mailAccessor,
-  taskAccessor,
-} from '../../resource_accessors/index.js';
+import { agentAccessor, mailAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
 import { buildWorkerPrompt } from '../prompts/builders/worker.builder.js';
 
@@ -87,21 +82,25 @@ export async function createWorker(taskId: string): Promise<string> {
     throw new Error(`Task with ID '${taskId}' not found`);
   }
 
-  // Get epic (includes project relation)
-  const epic = await epicAccessor.findById(task.epicId);
-  if (!epic) {
-    throw new Error(`Epic with ID '${task.epicId}' not found`);
+  if (!task.parentId) {
+    throw new Error(`Task '${taskId}' does not have a parent task (epic)`);
   }
 
-  // Get project for this epic
-  const project = epic.project;
+  // Get parent task (epic) - includes project relation
+  const parentTask = await taskAccessor.findById(task.parentId);
+  if (!parentTask) {
+    throw new Error(`Parent task (epic) with ID '${task.parentId}' not found`);
+  }
+
+  // Get project for this task
+  const project = parentTask.project;
   if (!project) {
-    throw new Error(`Epic '${task.epicId}' does not have an associated project`);
+    throw new Error(`Parent task '${task.parentId}' does not have an associated project`);
   }
 
   // Build epic branch name (matches supervisor's branch naming convention)
   // Workers should branch from the epic branch so they have the latest merged code
-  const epicBranchName = `factoryfactory/epic-${epic.id.substring(0, 8)}`;
+  const epicBranchName = `factoryfactory/epic-${parentTask.id.substring(0, 8)}`;
 
   // Create agent record
   const agent = await agentAccessor.create({
@@ -131,10 +130,10 @@ export async function createWorker(taskId: string): Promise<string> {
   // Backend URL for API calls
   const backendUrl = `http://localhost:${process.env.BACKEND_PORT || 3001}`;
 
-  // Find the supervisor for this epic
-  const supervisor = await agentAccessor.findByEpicId(epic.id);
+  // Find the supervisor for this parent task (epic)
+  const supervisor = await agentAccessor.findByTopLevelTaskId(parentTask.id);
   if (!supervisor) {
-    throw new Error(`No supervisor found for epic ${epic.id}`);
+    throw new Error(`No supervisor found for parent task ${parentTask.id}`);
   }
 
   // Build system prompt with full context
@@ -142,12 +141,12 @@ export async function createWorker(taskId: string): Promise<string> {
     taskId: task.id,
     taskTitle: task.title,
     taskDescription: task.description || 'No description provided',
-    epicTitle: epic.title,
+    parentTaskTitle: parentTask.title,
+    parentTaskBranchName: epicBranchName,
     worktreePath: worktreeInfo.path,
     branchName: worktreeInfo.branchName,
     agentId: agent.id,
     backendUrl,
-    epicBranchName,
     supervisorAgentId: supervisor.id,
   });
 
@@ -456,18 +455,18 @@ export async function stopWorker(agentId: string): Promise<void> {
  */
 async function cleanupTaskWorktree(taskId: string): Promise<void> {
   const task = await taskAccessor.findById(taskId);
-  if (!task?.worktreePath) {
+  if (!(task?.worktreePath && task.parentId)) {
     return;
   }
 
-  const epic = await epicAccessor.findById(task.epicId);
-  if (!epic?.project) {
+  const parentTask = await taskAccessor.findById(task.parentId);
+  if (!parentTask?.project) {
     return;
   }
 
   const gitClient = GitClientFactory.forProject({
-    repoPath: epic.project.repoPath,
-    worktreeBasePath: epic.project.worktreeBasePath,
+    repoPath: parentTask.project.repoPath,
+    worktreeBasePath: parentTask.project.worktreeBasePath,
   });
 
   const worktreeName = task.worktreePath.split('/').pop();

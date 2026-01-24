@@ -1,21 +1,31 @@
 export type Events = {
-  'epic.created': {
+  /**
+   * Triggered when a top-level task (formerly "Epic") is created.
+   * Top-level tasks have parentId = null and linearIssueId/linearIssueUrl fields.
+   */
+  'task.top_level.created': {
     data: {
-      epicId: string;
+      taskId: string;
       linearIssueId: string;
       title: string;
     };
   };
-  'epic.updated': {
+  /**
+   * Triggered when a top-level task's state changes.
+   */
+  'task.top_level.updated': {
     data: {
-      epicId: string;
+      taskId: string;
       state: string;
     };
   };
+  /**
+   * Triggered when a subtask is created (task with a parent).
+   */
   'task.created': {
     data: {
       taskId: string;
-      epicId: string;
+      parentId: string;
       title: string;
     };
   };
@@ -48,7 +58,8 @@ export type Events = {
     data: {
       agentId: string;
       taskId?: string;
-      epicId?: string;
+      /** ID of the top-level task (formerly epicId) */
+      topLevelTaskId?: string;
     };
   };
   'mail.sent': {
@@ -66,7 +77,8 @@ export type Events = {
   };
   'orchestrator.check': {
     data: {
-      epicId?: string;
+      /** ID of the top-level task (formerly epicId) */
+      topLevelTaskId?: string;
       timestamp: number;
     };
   };
