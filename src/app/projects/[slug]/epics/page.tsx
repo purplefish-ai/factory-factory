@@ -1,22 +1,14 @@
 'use client';
 
-import type { Task } from '@prisma-gen/browser';
-import { TaskState } from '@prisma-gen/browser';
+import type { Task, TaskState } from '@prisma-gen/browser';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -27,20 +19,8 @@ import {
 } from '@/components/ui/table';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { StateFilter, stateVariants } from '@/frontend/components/state-filter';
 import { trpc } from '../../../../frontend/lib/trpc';
-
-const stateVariants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  PLANNING: 'secondary',
-  PLANNED: 'secondary',
-  PENDING: 'outline',
-  ASSIGNED: 'default',
-  IN_PROGRESS: 'default',
-  REVIEW: 'default',
-  BLOCKED: 'destructive',
-  COMPLETED: 'secondary',
-  FAILED: 'destructive',
-  CANCELLED: 'outline',
-};
 
 export default function ProjectEpicsPage() {
   const params = useParams();
@@ -72,26 +52,7 @@ export default function ProjectEpicsPage() {
         </Button>
       </PageHeader>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-4 items-center">
-            <label className="text-sm font-medium">Filter by state:</label>
-            <Select value={stateFilter} onValueChange={setStateFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All States" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All States</SelectItem>
-                {Object.values(TaskState).map((state) => (
-                  <SelectItem key={state} value={state}>
-                    {state}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <StateFilter value={stateFilter} onChange={setStateFilter} />
 
       <Card>
         {!topLevelTasks || topLevelTasks.length === 0 ? (

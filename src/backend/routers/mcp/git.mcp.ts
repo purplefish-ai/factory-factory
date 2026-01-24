@@ -3,12 +3,12 @@ import * as path from 'node:path';
 import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { gitCommand } from '../../lib/shell.js';
+import { decisionLogAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import {
-  agentAccessor,
-  decisionLogAccessor,
-  taskAccessor,
-} from '../../resource_accessors/index.js';
-import { getTopLevelTaskBranchName, verifySupervisorWithTopLevelTask } from './helpers.js';
+  getTopLevelTaskBranchName,
+  verifyAgent,
+  verifySupervisorWithTopLevelTask,
+} from './helpers.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
@@ -40,44 +40,29 @@ async function verifyWorkerWithTask(context: McpToolContext): Promise<
     }
   | { success: false; error: McpToolResponse }
 > {
-  const agent = await agentAccessor.findById(context.agentId);
-  if (!agent) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.AGENT_NOT_FOUND,
-        `Agent with ID '${context.agentId}' not found`
-      ),
-    };
+  // Verify agent type and task assignment
+  const agentResult = await verifyAgent(context, {
+    requiredType: AgentType.WORKER,
+    typeErrorMessage: 'Only WORKER agents can use git tools',
+    requireTask: true,
+    taskErrorMessage: 'Agent does not have a current task assigned',
+  });
+
+  if (!agentResult.success) {
+    return agentResult;
   }
 
-  if (agent.type !== AgentType.WORKER) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Only WORKER agents can use git tools'
-      ),
-    };
-  }
+  // currentTaskId is guaranteed by requireTask: true
+  const currentTaskId = agentResult.currentTaskId as string;
 
-  if (!agent.currentTaskId) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Agent does not have a current task assigned'
-      ),
-    };
-  }
-
-  const task = await taskAccessor.findById(agent.currentTaskId);
+  // Fetch and validate task details
+  const task = await taskAccessor.findById(currentTaskId);
   if (!task) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Task with ID '${agent.currentTaskId}' not found`
+        `Task with ID '${currentTaskId}' not found`
       ),
     };
   }

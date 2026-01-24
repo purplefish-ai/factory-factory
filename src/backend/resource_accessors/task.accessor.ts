@@ -1,6 +1,7 @@
 import type { Prisma, Task, TaskDependency } from '@prisma-gen/client';
 import { TaskState } from '@prisma-gen/client';
 import { prisma } from '../db.js';
+import { appendReconcileFailure } from '../lib/reconcile-failures.js';
 
 // Type for Task with all relations included
 export type TaskWithRelations = Prisma.TaskGetPayload<{
@@ -564,15 +565,7 @@ export class TaskAccessor {
    */
   async recordReconcileFailure(id: string, error: string, action: string): Promise<Task> {
     const task = await prisma.task.findUnique({ where: { id } });
-    const existingFailures = (task?.reconcileFailures as unknown[]) ?? [];
-    const newFailure = {
-      timestamp: new Date().toISOString(),
-      error,
-      action,
-    };
-
-    // Keep last 10 failures
-    const failures = [...existingFailures, newFailure].slice(-10) as object[];
+    const failures = appendReconcileFailure(task?.reconcileFailures as unknown[], error, action);
 
     return prisma.task.update({
       where: { id },
