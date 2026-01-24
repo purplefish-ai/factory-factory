@@ -12,6 +12,12 @@ import {
   taskAccessor,
 } from '../../resource_accessors/index.js';
 import { notificationService } from '../../services/notification.service.js';
+import {
+  getSubtaskWorktreeName,
+  getTopLevelTaskBranchName,
+  getTopLevelTaskWorktreeName,
+  verifySupervisorWithTopLevelTask,
+} from './helpers.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
@@ -84,61 +90,6 @@ function isValidStateTransition(from: TaskState, to: TaskState): boolean {
   };
 
   return validTransitions[from]?.includes(to) ?? false;
-}
-
-/**
- * Verify agent is a SUPERVISOR with a top-level task assigned
- */
-async function verifySupervisorWithTopLevelTask(
-  context: McpToolContext
-): Promise<
-  | { success: true; agentId: string; topLevelTaskId: string }
-  | { success: false; error: McpToolResponse }
-> {
-  const agent = await agentAccessor.findById(context.agentId);
-  if (!agent) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.AGENT_NOT_FOUND,
-        `Agent with ID '${context.agentId}' not found`
-      ),
-    };
-  }
-
-  if (agent.type !== AgentType.SUPERVISOR) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Only SUPERVISOR agents can use these task management tools'
-      ),
-    };
-  }
-
-  if (!agent.currentTaskId) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Supervisor does not have a top-level task assigned'
-      ),
-    };
-  }
-
-  return { success: true, agentId: agent.id, topLevelTaskId: agent.currentTaskId };
-}
-
-/**
- * Generate worktree name for a task
- */
-function generateWorktreeName(taskId: string, title: string): string {
-  const sanitizedTitle = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .substring(0, 30)
-    .replace(/-+$/, '');
-  return `task-${taskId.substring(0, 8)}-${sanitizedTitle}`;
 }
 
 /**
@@ -297,8 +248,7 @@ async function getTopLevelTaskForApproval(
     worktreeBasePath: project.worktreeBasePath,
   });
 
-  // Uses "epic-" prefix for backward compatibility with existing worktrees
-  const topLevelWorktreeName = `epic-${topLevelTask.id.substring(0, 8)}`;
+  const topLevelWorktreeName = getTopLevelTaskWorktreeName(topLevelTask.id);
   return {
     success: true,
     topLevelTask: {
@@ -703,8 +653,8 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
     }
     const { task, topLevelTask, agentId } = validation.data;
 
-    // Branch targets the top-level task's branch (what was formerly "epic branch")
-    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
+    // Branch targets the top-level task's branch
+    const topLevelBranchName = getTopLevelTaskBranchName(topLevelTask.id);
 
     let prInfo: PRInfo;
     try {
@@ -881,7 +831,7 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
     });
 
     // Generate worktree name
-    const worktreeName = generateWorktreeName(task.id, validatedInput.title);
+    const worktreeName = getSubtaskWorktreeName(task.id, validatedInput.title);
 
     // Log decision
     await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__task__create', 'result', {
@@ -902,13 +852,11 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
         },
       });
     } catch (error) {
-      console.log(
-        'Inngest event send failed (this is OK if Inngest dev server is not running):',
-        error
-      );
+      console.log('Inngest event send failed (non-critical):', error);
     }
 
-    // Start worker directly (don't wait for Inngest)
+    // Start worker directly for immediate feedback. Inngest event is for observability only.
+    // The Inngest function should check if worker already exists to avoid duplicates.
     let workerId: string | null = null;
     try {
       workerId = await startWorker(task.id);
@@ -1080,7 +1028,7 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
     );
     await taskAccessor.update(task.id, { state: TaskState.COMPLETED, completedAt: new Date() });
 
-    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
+    const topLevelBranchName = getTopLevelTaskBranchName(topLevelTask.id);
     const rebaseRequestsSent = await sendRebaseRequests(
       context,
       verification.topLevelTaskId,
@@ -1309,9 +1257,8 @@ async function createFinalPR(context: McpToolContext, input: unknown): Promise<M
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
-    // Uses "epic-" prefix for backward compatibility with existing worktrees
-    const worktreePath = gitClient.getWorktreePath(`epic-${topLevelTask.id.substring(0, 8)}`);
+    const topLevelBranchName = getTopLevelTaskBranchName(topLevelTask.id);
+    const worktreePath = gitClient.getWorktreePath(getTopLevelTaskWorktreeName(topLevelTask.id));
     const completedTasks = subtasks.filter((t) => t.state === TaskState.COMPLETED);
     const failedTasks = subtasks.filter((t) => t.state === TaskState.FAILED);
     const prTitle = validatedInput.title || `[Task] ${topLevelTask.title}`;

@@ -149,8 +149,7 @@ export class WorktreeService {
     topLevelTaskId?: string;
   }> {
     const taskMatch = worktree.branch.match(/task-([a-zA-Z0-9]+)/);
-    // Matches "epic-" prefix for backward compatibility with existing worktrees
-    const epicMatch = worktree.branch.match(/epic-([a-zA-Z0-9]+)/);
+    const topLevelMatch = worktree.branch.match(/top-level-([a-zA-Z0-9]+)/);
 
     if (taskMatch) {
       const taskId = taskMatch[1];
@@ -160,15 +159,15 @@ export class WorktreeService {
       }
     }
 
-    if (epicMatch) {
-      const topLevelTaskId = epicMatch[1];
+    if (topLevelMatch) {
+      const topLevelTaskId = topLevelMatch[1];
       const result = await this.checkTopLevelTaskOrphan(topLevelTaskId);
       if (result.isOrphaned) {
         return { ...result, topLevelTaskId };
       }
     }
 
-    if (!(taskMatch || epicMatch)) {
+    if (!(taskMatch || topLevelMatch)) {
       return { isOrphaned: true, reason: 'unknown' };
     }
 

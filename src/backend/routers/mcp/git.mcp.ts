@@ -8,6 +8,7 @@ import {
   decisionLogAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
+import { getTopLevelTaskBranchName, verifySupervisorWithTopLevelTask } from './helpers.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
@@ -28,49 +29,6 @@ const ReadWorktreeFileInputSchema = z.object({
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Verify agent is a SUPERVISOR with a top-level task assigned
- */
-async function verifySupervisorWithTopLevelTask(
-  context: McpToolContext
-): Promise<
-  | { success: true; agentId: string; topLevelTaskId: string }
-  | { success: false; error: McpToolResponse }
-> {
-  const agent = await agentAccessor.findById(context.agentId);
-  if (!agent) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.AGENT_NOT_FOUND,
-        `Agent with ID '${context.agentId}' not found`
-      ),
-    };
-  }
-
-  if (agent.type !== AgentType.SUPERVISOR) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Only SUPERVISOR agents can use this tool'
-      ),
-    };
-  }
-
-  if (!agent.currentTaskId) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Supervisor does not have a top-level task assigned'
-      ),
-    };
-  }
-
-  return { success: true, agentId: agent.id, topLevelTaskId: agent.currentTaskId };
-}
 
 /**
  * Verify worker agent and get task context
@@ -201,7 +159,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
       );
     }
 
-    const topLevelBranchName = `factoryfactory/task-${parentTask.id.substring(0, 8)}`;
+    const topLevelBranchName = getTopLevelTaskBranchName(parentTask.id);
 
     let diffStats: string;
     try {
@@ -317,7 +275,7 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
       );
     }
 
-    const topLevelBranchName = `factoryfactory/task-${parentTask.id.substring(0, 8)}`;
+    const topLevelBranchName = getTopLevelTaskBranchName(parentTask.id);
 
     try {
       // Fetch using spawn (safe)

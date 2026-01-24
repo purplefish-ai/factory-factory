@@ -3,6 +3,7 @@ import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { GitClientFactory } from '../../clients/git.client.js';
 import { tmuxClient } from '../../clients/tmux.client.js';
 import { agentAccessor, mailAccessor, taskAccessor } from '../../resource_accessors/index.js';
+import { getTopLevelTaskWorktreeName } from '../../routers/mcp/helpers.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
 import { buildSupervisorPrompt } from '../prompts/builders/supervisor.builder.js';
 import { promptFileManager } from '../prompts/file-manager.js';
@@ -114,8 +115,7 @@ export async function createSupervisor(taskId: string): Promise<string> {
   });
 
   // Create git worktree for task (branching from project's default branch)
-  // Uses "epic-" prefix for backward compatibility with existing worktrees
-  const worktreeName = `epic-${topLevelTask.id.substring(0, 8)}`;
+  const worktreeName = getTopLevelTaskWorktreeName(topLevelTask.id);
   const worktreeInfo = await gitClient.createWorktree(worktreeName, project.defaultBranch);
 
   // Update task state to IN_PROGRESS
@@ -586,8 +586,7 @@ export async function killSupervisor(agentId: string): Promise<void> {
         repoPath: topLevelTask.project.repoPath,
         worktreeBasePath: topLevelTask.project.worktreeBasePath,
       });
-      // Uses "epic-" prefix for backward compatibility with existing worktrees
-      const worktreeName = `epic-${agent.currentTaskId.substring(0, 8)}`;
+      const worktreeName = getTopLevelTaskWorktreeName(agent.currentTaskId);
       try {
         await gitClient.deleteWorktree(worktreeName);
       } catch {

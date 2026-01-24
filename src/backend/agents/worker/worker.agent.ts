@@ -318,7 +318,7 @@ async function handleRebaseRequest(
 
   await sendMessage(
     agentId,
-    `⚠️ REBASE REQUIRED ⚠️\n\n${mail.body}\n\nPlease:\n1. Run 'git fetch origin' to get latest changes\n2. Run 'git rebase origin/<epic-branch-name>' to rebase your branch\n3. Resolve any conflicts if needed\n4. Force push with 'git push --force'\n5. Your PR will be automatically updated\n\nAfter rebasing, your PR will return to the review queue.`
+    `⚠️ REBASE REQUIRED ⚠️\n\n${mail.body}\n\nPlease:\n1. Run 'git fetch origin' to get latest changes\n2. Run 'git rebase origin/<top-level-branch-name>' to rebase your branch\n3. Resolve any conflicts if needed\n4. Force push with 'git push --force'\n5. Your PR will be automatically updated\n\nAfter rebasing, your PR will return to the review queue.`
   );
 
   if (task.state === TaskState.BLOCKED) {

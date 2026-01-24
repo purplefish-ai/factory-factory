@@ -2,8 +2,44 @@ import { TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { inngest } from '../inngest/client.js';
 import { taskAccessor } from '../resource_accessors/task.accessor.js';
+import { generateLocalIssueId } from '../routers/mcp/helpers.js';
 import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc.js';
+
+/**
+ * Send Inngest event for task creation (fire-and-forget with error handling)
+ */
+async function sendTaskCreatedEvent(task: {
+  id: string;
+  parentId: string | null;
+  linearIssueId: string | null;
+  title: string;
+}): Promise<void> {
+  try {
+    if (task.parentId === null) {
+      await inngest.send({
+        name: 'task.top_level.created',
+        data: {
+          taskId: task.id,
+          linearIssueId: task.linearIssueId || '',
+          title: task.title,
+        },
+      });
+    } else {
+      await inngest.send({
+        name: 'task.created',
+        data: {
+          taskId: task.id,
+          parentId: task.parentId,
+          linearIssueId: task.linearIssueId || '',
+          title: task.title,
+        },
+      });
+    }
+  } catch (error) {
+    console.log('Inngest event send failed (non-critical):', error);
+  }
+}
 
 export const taskRouter = router({
   // List all tasks with optional filtering (scoped to project from context)
@@ -59,7 +95,7 @@ export const taskRouter = router({
       const isTopLevel = input.parentId === null || input.parentId === undefined;
 
       // Generate a local ID if Linear integration not used
-      const linearIssueId = input.linearIssueId || `local-${Date.now()}`;
+      const linearIssueId = input.linearIssueId || generateLocalIssueId();
       const linearIssueUrl = input.linearIssueUrl || '';
 
       const task = await taskAccessor.create({
@@ -75,26 +111,7 @@ export const taskRouter = router({
       });
 
       // Fire appropriate event based on task type
-      if (isTopLevel) {
-        await inngest.send({
-          name: 'task.top_level.created',
-          data: {
-            taskId: task.id,
-            linearIssueId: task.linearIssueId || '',
-            title: task.title,
-          },
-        });
-      } else if (task.parentId) {
-        await inngest.send({
-          name: 'task.created',
-          data: {
-            taskId: task.id,
-            parentId: task.parentId,
-            linearIssueId: task.linearIssueId || '',
-            title: task.title,
-          },
-        });
-      }
+      await sendTaskCreatedEvent(task);
 
       return task;
     }),
@@ -123,13 +140,17 @@ export const taskRouter = router({
 
       // Fire task.top_level.updated event if this is a top-level task
       if (task.parentId === null) {
-        await inngest.send({
-          name: 'task.top_level.updated',
-          data: {
-            taskId: task.id,
-            state: task.state,
-          },
-        });
+        try {
+          await inngest.send({
+            name: 'task.top_level.updated',
+            data: {
+              taskId: task.id,
+              state: task.state,
+            },
+          });
+        } catch (error) {
+          console.log('Inngest event send failed (non-critical):', error);
+        }
       }
 
       return task;
