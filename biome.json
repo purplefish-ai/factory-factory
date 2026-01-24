@@ -67,7 +67,7 @@
       },
       "complexity": {
         "noBannedTypes": "off",
-        "noExcessiveCognitiveComplexity": "warn",
+        "noExcessiveCognitiveComplexity": "error",
         "noUselessThisAlias": "error",
         "noUselessTypeConstraint": "error",
         "useFlatMap": "error",

@@ -1,3 +1,4 @@
+import type { Agent, AgentType } from '@prisma-gen/client';
 import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/index.js';
 import {
   CRITICAL_TOOLS,
@@ -50,6 +51,133 @@ const MAX_RETRIES = 3;
  */
 const RETRY_DELAY_MS = 1000;
 
+interface ToolExecutionContext {
+  agent: Agent;
+  toolEntry: McpToolRegistryEntry;
+}
+
+/**
+ * Validate tool execution prerequisites
+ */
+async function validateToolExecution(
+  agentId: string,
+  toolName: string,
+  timestamp: Date
+): Promise<
+  { success: true; context: ToolExecutionContext } | { success: false; response: McpToolResponse }
+> {
+  const agent = await agentAccessor.findById(agentId);
+  if (!agent) {
+    return {
+      success: false,
+      response: {
+        success: false,
+        error: {
+          code: McpErrorCode.AGENT_NOT_FOUND,
+          message: `Agent with ID '${agentId}' not found`,
+        },
+        timestamp,
+      },
+    };
+  }
+
+  const toolEntry = getTool(toolName);
+  if (!toolEntry) {
+    return {
+      success: false,
+      response: {
+        success: false,
+        error: {
+          code: McpErrorCode.TOOL_NOT_FOUND,
+          message: `Tool '${toolName}' not found in registry`,
+        },
+        timestamp,
+      },
+    };
+  }
+
+  const permissionCheck = checkToolPermissions(agent.type as AgentType, toolName);
+  if (!permissionCheck.allowed) {
+    return {
+      success: false,
+      response: {
+        success: false,
+        error: {
+          code: McpErrorCode.PERMISSION_DENIED,
+          message: permissionCheck.reason || 'Permission denied',
+        },
+        timestamp,
+      },
+    };
+  }
+
+  return { success: true, context: { agent, toolEntry } };
+}
+
+/**
+ * Execute tool with retry logic
+ */
+async function executeWithRetry<TInput, TOutput>(
+  agentId: string,
+  toolName: string,
+  toolEntry: McpToolRegistryEntry,
+  toolInput: TInput
+): Promise<{ success: true; result: McpToolResponse<TOutput> } | { success: false; error: Error }> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const context: McpToolContext = { agentId };
+      const result = await toolEntry.handler(context, toolInput);
+      await decisionLogAccessor.createAutomatic(agentId, toolName, 'result', result);
+      await agentAccessor.update(agentId, { lastActiveAt: new Date() });
+      return { success: true, result: result as McpToolResponse<TOutput> };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (!isTransientError(lastError)) {
+        break;
+      }
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  return { success: false, error: lastError || new Error('Unknown error') };
+}
+
+/**
+ * Handle tool execution failure
+ */
+async function handleToolFailure(
+  agent: Agent,
+  agentId: string,
+  toolName: string,
+  error: Error,
+  timestamp: Date
+): Promise<McpToolResponse> {
+  await decisionLogAccessor.createAutomatic(agentId, toolName, 'error', {
+    message: error.message,
+    stack: error.stack,
+  });
+
+  if (CRITICAL_TOOLS.includes(toolName)) {
+    await escalateCriticalError(agent, toolName, error);
+  } else {
+    await escalateToolFailure(agent, toolName, error);
+  }
+
+  return {
+    success: false,
+    error: {
+      code: isTransientError(error) ? McpErrorCode.TRANSIENT_ERROR : McpErrorCode.INTERNAL_ERROR,
+      message: error.message,
+      details: { stack: error.stack },
+    },
+    timestamp,
+  };
+}
+
 /**
  * Execute an MCP tool with full lifecycle management
  */
@@ -61,117 +189,39 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
   const timestamp = new Date();
 
   try {
-    // 1. Fetch agent from database
-    const agent = await agentAccessor.findById(agentId);
-    if (!agent) {
-      return {
-        success: false,
-        error: {
-          code: McpErrorCode.AGENT_NOT_FOUND,
-          message: `Agent with ID '${agentId}' not found`,
-        },
-        timestamp,
-      };
+    const validation = await validateToolExecution(agentId, toolName, timestamp);
+    if (!validation.success) {
+      return validation.response as McpToolResponse<TOutput>;
     }
+    const { agent, toolEntry } = validation.context;
 
-    // 2. Check if tool exists
-    const toolEntry = getTool(toolName);
-    if (!toolEntry) {
-      return {
-        success: false,
-        error: {
-          code: McpErrorCode.TOOL_NOT_FOUND,
-          message: `Tool '${toolName}' not found in registry`,
-        },
-        timestamp,
-      };
-    }
-
-    // 3. Check tool permissions
-    const permissionCheck = checkToolPermissions(agent.type, toolName);
-    if (!permissionCheck.allowed) {
-      return {
-        success: false,
-        error: {
-          code: McpErrorCode.PERMISSION_DENIED,
-          message: permissionCheck.reason || 'Permission denied',
-        },
-        timestamp,
-      };
-    }
-
-    // 4. Log tool invocation
     await decisionLogAccessor.createAutomatic(agentId, toolName, 'invocation', toolInput);
 
-    // 5. Execute tool with retry logic
-    let lastError: Error | null = null;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      try {
-        const context: McpToolContext = { agentId };
-        const result = await toolEntry.handler(context, toolInput);
-
-        // 6. Log tool result
-        await decisionLogAccessor.createAutomatic(agentId, toolName, 'result', result);
-
-        // 7. Update agent lastActiveAt on successful tool call
-        await agentAccessor.update(agentId, {
-          lastActiveAt: new Date(),
-        });
-
-        return result as McpToolResponse<TOutput>;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        // Only retry on transient errors
-        if (!isTransientError(lastError)) {
-          break;
-        }
-
-        // Wait before retrying
-        if (attempt < MAX_RETRIES - 1) {
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-        }
-      }
+    const execution = await executeWithRetry<TInput, TOutput>(
+      agentId,
+      toolName,
+      toolEntry,
+      toolInput
+    );
+    if (execution.success) {
+      return execution.result;
     }
 
-    // 8. Handle error after retries exhausted
-    const error = lastError || new Error('Unknown error');
-
-    // Log error
-    await decisionLogAccessor.createAutomatic(agentId, toolName, 'error', {
-      message: error.message,
-      stack: error.stack,
-    });
-
-    // Escalate based on criticality
-    if (CRITICAL_TOOLS.includes(toolName)) {
-      await escalateCriticalError(agent, toolName, error);
-    } else {
-      await escalateToolFailure(agent, toolName, error);
-    }
-
-    return {
-      success: false,
-      error: {
-        code: isTransientError(error) ? McpErrorCode.TRANSIENT_ERROR : McpErrorCode.INTERNAL_ERROR,
-        message: error.message,
-        details: {
-          stack: error.stack,
-        },
-      },
-      timestamp,
-    };
+    return (await handleToolFailure(
+      agent,
+      agentId,
+      toolName,
+      execution.error,
+      timestamp
+    )) as McpToolResponse<TOutput>;
   } catch (error) {
-    // Catch-all for unexpected errors in the execution pipeline
     const err = error instanceof Error ? error : new Error(String(error));
     return {
       success: false,
       error: {
         code: McpErrorCode.INTERNAL_ERROR,
         message: `Unexpected error executing tool: ${err.message}`,
-        details: {
-          stack: err.stack,
-        },
+        details: { stack: err.stack },
       },
       timestamp,
     };

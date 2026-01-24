@@ -72,6 +72,95 @@ export async function checkSupervisorHealth(_orchestratorId: string): Promise<{
 }
 
 /**
+ * Kill all workers for an epic and mark them as failed
+ */
+async function killWorkersForEpic(epicId: string): Promise<string[]> {
+  const workers = await agentAccessor.findWorkersByEpicId(epicId);
+  const killedWorkerIds: string[] = [];
+
+  for (const worker of workers) {
+    try {
+      await killWorkerAndCleanup(worker.id);
+      killedWorkerIds.push(worker.id);
+    } catch (error) {
+      console.error(`Failed to kill worker ${worker.id}:`, error);
+    }
+
+    try {
+      await agentAccessor.update(worker.id, { state: AgentState.FAILED });
+    } catch (error) {
+      console.error(`Failed to update worker ${worker.id} state:`, error);
+    }
+  }
+
+  return killedWorkerIds;
+}
+
+/**
+ * Kill a supervisor and mark it as failed
+ */
+async function killSupervisor(supervisorId: string): Promise<void> {
+  try {
+    await killSupervisorAndCleanup(supervisorId);
+  } catch (error) {
+    console.error(`Failed to kill supervisor ${supervisorId}:`, error);
+  }
+
+  try {
+    await agentAccessor.update(supervisorId, {
+      state: AgentState.FAILED,
+      currentEpicId: null,
+    });
+  } catch (error) {
+    console.error(`Failed to update supervisor ${supervisorId} state:`, error);
+  }
+}
+
+/**
+ * Reset non-terminal tasks to PENDING state
+ */
+async function resetTasksForEpic(
+  epicId: string
+): Promise<{ resetIds: string[]; totalCount: number }> {
+  const tasks = await taskAccessor.list({ epicId });
+  const resetTaskIds: string[] = [];
+
+  for (const task of tasks) {
+    if (task.state === TaskState.COMPLETED || task.state === TaskState.FAILED) {
+      continue;
+    }
+
+    try {
+      await taskAccessor.update(task.id, {
+        state: TaskState.PENDING,
+        assignedAgentId: null,
+        attempts: 0,
+        failureReason: null,
+      });
+      resetTaskIds.push(task.id);
+    } catch (error) {
+      console.error(`Failed to reset task ${task.id}:`, error);
+    }
+  }
+
+  return { resetIds: resetTaskIds, totalCount: tasks.length };
+}
+
+/**
+ * Create a new supervisor for an epic
+ */
+async function createNewSupervisor(epicId: string): Promise<string | null> {
+  try {
+    const supervisorId = await startSupervisorForEpic(epicId);
+    console.log(`Created new supervisor ${supervisorId}`);
+    return supervisorId;
+  } catch (error) {
+    console.error(`Failed to create new supervisor for epic ${epicId}:`, error);
+    return null;
+  }
+}
+
+/**
  * Perform cascading recovery for a crashed supervisor
  *
  * This performs the full cascading recovery:
@@ -97,112 +186,29 @@ export async function recoverSupervisor(
   tasksReset: number;
   message: string;
 }> {
-  // Get epic for notifications
   const epic = await epicAccessor.findById(epicId);
   if (!epic) {
-    return {
-      success: false,
-      workersKilled: 0,
-      tasksReset: 0,
-      message: `Epic ${epicId} not found`,
-    };
+    return { success: false, workersKilled: 0, tasksReset: 0, message: `Epic ${epicId} not found` };
   }
 
   console.log(`Starting cascading recovery for supervisor ${supervisorId} (epic: ${epic.title})`);
 
-  // ========================================================================
-  // Phase 1: Kill all workers for this epic
-  // ========================================================================
-  const workers = await agentAccessor.findWorkersByEpicId(epicId);
-  const killedWorkerIds: string[] = [];
-
-  for (const worker of workers) {
-    try {
-      await killWorkerAndCleanup(worker.id);
-      killedWorkerIds.push(worker.id);
-    } catch (error) {
-      console.error(`Failed to kill worker ${worker.id}:`, error);
-      // Continue with other workers
-    }
-
-    // Mark worker as FAILED
-    try {
-      await agentAccessor.update(worker.id, {
-        state: AgentState.FAILED,
-      });
-    } catch (error) {
-      console.error(`Failed to update worker ${worker.id} state:`, error);
-    }
-  }
-
+  // Phase 1: Kill workers
+  const killedWorkerIds = await killWorkersForEpic(epicId);
   console.log(`Killed ${killedWorkerIds.length} workers`);
 
-  // ========================================================================
-  // Phase 2: Kill the supervisor
-  // ========================================================================
-  try {
-    await killSupervisorAndCleanup(supervisorId);
-  } catch (error) {
-    console.error(`Failed to kill supervisor ${supervisorId}:`, error);
-    // Continue anyway
-  }
-
-  // Mark supervisor as FAILED and clear its epic assignment
-  // (this allows a new supervisor to be created for the epic)
-  try {
-    await agentAccessor.update(supervisorId, {
-      state: AgentState.FAILED,
-      currentEpicId: null,
-    });
-  } catch (error) {
-    console.error(`Failed to update supervisor ${supervisorId} state:`, error);
-  }
-
+  // Phase 2: Kill supervisor
+  await killSupervisor(supervisorId);
   console.log(`Killed supervisor ${supervisorId}`);
 
-  // ========================================================================
-  // Phase 3: Reset task states
-  // ========================================================================
-  const tasks = await taskAccessor.list({ epicId });
-  const resetTaskIds: string[] = [];
-
-  for (const task of tasks) {
-    // Keep COMPLETED and FAILED tasks as-is
-    if (task.state === TaskState.COMPLETED || task.state === TaskState.FAILED) {
-      continue;
-    }
-
-    // Reset all other states (PENDING_REVIEW, NEEDS_REBASE, IN_PROGRESS, APPROVED, BLOCKED, ASSIGNED, REVIEW) to PENDING
-    try {
-      await taskAccessor.update(task.id, {
-        state: TaskState.PENDING,
-        assignedAgentId: null, // Clear worker assignment
-        attempts: 0, // Reset attempt counter for cascading recovery
-        failureReason: null,
-      });
-      resetTaskIds.push(task.id);
-    } catch (error) {
-      console.error(`Failed to reset task ${task.id}:`, error);
-    }
-  }
-
+  // Phase 3: Reset tasks
+  const { resetIds: resetTaskIds, totalCount: totalTasks } = await resetTasksForEpic(epicId);
   console.log(`Reset ${resetTaskIds.length} tasks to PENDING`);
 
-  // ========================================================================
   // Phase 4: Create new supervisor
-  // ========================================================================
-  let newSupervisorId: string | null = null;
-  try {
-    newSupervisorId = await startSupervisorForEpic(epicId);
-    console.log(`Created new supervisor ${newSupervisorId}`);
-  } catch (error) {
-    console.error(`Failed to create new supervisor for epic ${epicId}:`, error);
-    // Continue to notification phase even if supervisor creation fails
-  }
+  const newSupervisorId = await createNewSupervisor(epicId);
 
-  // ========================================================================
-  // Phase 5: Notify human
-  // ========================================================================
+  // Phase 5: Notify and log
   await mailAccessor.create({
     fromAgentId: orchestratorId,
     isForHuman: true,
@@ -217,7 +223,7 @@ export async function recoverSupervisor(
 - New Supervisor: ${newSupervisorId || 'FAILED TO CREATE'}
 - Workers killed: ${killedWorkerIds.length}
 - Tasks reset to PENDING: ${resetTaskIds.length}
-- Tasks kept (COMPLETED/FAILED): ${tasks.length - resetTaskIds.length}
+- Tasks kept (COMPLETED/FAILED): ${totalTasks - resetTaskIds.length}
 
 ${
   newSupervisorId
@@ -226,7 +232,6 @@ ${
 }`,
   });
 
-  // Log decision
   await decisionLogAccessor.createManual(
     orchestratorId,
     `Supervisor crashed - cascading recovery performed`,

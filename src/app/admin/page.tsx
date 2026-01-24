@@ -65,6 +65,222 @@ function IssuesList({ issues }: { issues: string[] }) {
   );
 }
 
+function SummaryRow({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: number;
+  className?: string;
+}) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-gray-600">{label}</span>
+      <span className={`font-medium ${className || ''}`}>{value}</span>
+    </div>
+  );
+}
+
+function EpicsSummary({
+  epics,
+}: {
+  epics?: {
+    total: number;
+    planning: number;
+    inProgress: number;
+    completed: number;
+    blocked: number;
+  };
+}) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h2 className="text-lg font-semibold mb-4">Epics Summary</h2>
+      <div className="space-y-2">
+        <SummaryRow label="Total" value={epics?.total || 0} />
+        <SummaryRow label="Planning" value={epics?.planning || 0} />
+        <SummaryRow label="In Progress" value={epics?.inProgress || 0} />
+        <SummaryRow label="Completed" value={epics?.completed || 0} className="text-green-600" />
+        <SummaryRow label="Blocked" value={epics?.blocked || 0} className="text-red-600" />
+      </div>
+    </div>
+  );
+}
+
+function TasksSummary({
+  tasks,
+}: {
+  tasks?: {
+    total: number;
+    pending: number;
+    inProgress: number;
+    review: number;
+    completed: number;
+    failed: number;
+  };
+}) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h2 className="text-lg font-semibold mb-4">Tasks Summary</h2>
+      <div className="space-y-2">
+        <SummaryRow label="Total" value={tasks?.total || 0} />
+        <SummaryRow label="Pending" value={tasks?.pending || 0} />
+        <SummaryRow label="In Progress" value={tasks?.inProgress || 0} />
+        <SummaryRow label="In Review" value={tasks?.review || 0} className="text-purple-600" />
+        <SummaryRow label="Completed" value={tasks?.completed || 0} className="text-green-600" />
+        <SummaryRow label="Failed" value={tasks?.failed || 0} className="text-red-600" />
+      </div>
+    </div>
+  );
+}
+
+function WorktreesByReason({ byReason }: { byReason?: Record<string, number> }) {
+  const hasReasons = byReason && Object.keys(byReason).length > 0;
+  return (
+    <div className="bg-white p-6 rounded-lg border border-gray-200">
+      <h3 className="text-sm font-medium text-gray-600">By Reason</h3>
+      <div className="mt-2 space-y-1 text-sm">
+        {hasReasons ? (
+          Object.entries(byReason).map(([reason, count]) => (
+            <div key={reason} className="flex justify-between">
+              <span className="text-gray-600">{reason}</span>
+              <span className="font-medium">{count}</span>
+            </div>
+          ))
+        ) : (
+          <span className="text-gray-500">None</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function getEnabledFeatures(features?: Record<string, boolean>): string {
+  if (!features) {
+    return 'none';
+  }
+  const enabled = Object.entries(features)
+    .filter(([, isEnabled]) => isEnabled)
+    .map(([feature]) => feature);
+  return enabled.length > 0 ? enabled.join(', ') : 'none';
+}
+
+interface HealthData {
+  isHealthy: boolean;
+  databaseConnected: boolean;
+  orchestratorHealthy: boolean;
+  crashLoopAgents?: string[];
+  issues?: string[];
+}
+
+function SystemHealthSection({ health }: { health?: HealthData }) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h2 className="text-lg font-semibold mb-4">System Health</h2>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <StatCard
+          title="Overall Status"
+          value={health?.isHealthy ? 'Healthy' : 'Degraded'}
+          status={health?.isHealthy ? 'ok' : 'error'}
+        />
+        <StatCard
+          title="Database"
+          value={health?.databaseConnected ? 'Connected' : 'Disconnected'}
+          status={health?.databaseConnected ? 'ok' : 'error'}
+        />
+        <StatCard
+          title="Orchestrator"
+          value={health?.orchestratorHealthy ? 'Running' : 'Stopped'}
+          status={health?.orchestratorHealthy ? 'ok' : 'warning'}
+        />
+        <StatCard
+          title="Crash Loops"
+          value={health?.crashLoopAgents?.length || 0}
+          status={health?.crashLoopAgents?.length ? 'error' : 'ok'}
+        />
+      </div>
+      <h3 className="font-medium mb-2">Issues</h3>
+      <IssuesList issues={health?.issues || []} />
+    </div>
+  );
+}
+
+interface ApiUsageData {
+  requestsLastMinute: number;
+  requestsLastHour: number;
+  totalRequests: number;
+  queueDepth: number;
+  isRateLimited: boolean;
+}
+
+function ApiUsageSection({
+  apiUsage,
+  onReset,
+  isResetting,
+}: {
+  apiUsage?: ApiUsageData;
+  onReset: () => void;
+  isResetting: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold">API Usage</h2>
+        <button
+          onClick={onReset}
+          disabled={isResetting}
+          className="text-sm text-blue-600 hover:text-blue-800"
+        >
+          Reset Stats
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="Requests/min"
+          value={apiUsage?.requestsLastMinute || 0}
+          status={apiUsage?.isRateLimited ? 'warning' : 'ok'}
+        />
+        <StatCard title="Requests/hour" value={apiUsage?.requestsLastHour || 0} />
+        <StatCard title="Total Requests" value={apiUsage?.totalRequests || 0} />
+        <StatCard
+          title="Queue Depth"
+          value={apiUsage?.queueDepth || 0}
+          status={apiUsage?.queueDepth && apiUsage.queueDepth > 10 ? 'warning' : 'ok'}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface ConcurrencyData {
+  activeWorkers: number;
+  activeSupervisors: number;
+  activeEpics: number;
+  limits: { maxWorkers: number; maxSupervisors: number; maxEpics: number };
+}
+
+function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h2 className="text-lg font-semibold mb-4">Concurrency</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard
+          title="Active Workers"
+          value={`${concurrency?.activeWorkers || 0} / ${concurrency?.limits?.maxWorkers || 0}`}
+        />
+        <StatCard
+          title="Active Supervisors"
+          value={`${concurrency?.activeSupervisors || 0} / ${concurrency?.limits?.maxSupervisors || 0}`}
+        />
+        <StatCard
+          title="Active Epics"
+          value={`${concurrency?.activeEpics || 0} / ${concurrency?.limits?.maxEpics || 0}`}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const {
     data: stats,
@@ -109,140 +325,20 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* System Health */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-lg font-semibold mb-4">System Health</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="Overall Status"
-            value={stats?.health.isHealthy ? 'Healthy' : 'Degraded'}
-            status={stats?.health.isHealthy ? 'ok' : 'error'}
-          />
-          <StatCard
-            title="Database"
-            value={stats?.health.databaseConnected ? 'Connected' : 'Disconnected'}
-            status={stats?.health.databaseConnected ? 'ok' : 'error'}
-          />
-          <StatCard
-            title="Orchestrator"
-            value={stats?.health.orchestratorHealthy ? 'Running' : 'Stopped'}
-            status={stats?.health.orchestratorHealthy ? 'ok' : 'warning'}
-          />
-          <StatCard
-            title="Crash Loops"
-            value={stats?.health.crashLoopAgents?.length || 0}
-            status={stats?.health.crashLoopAgents?.length ? 'error' : 'ok'}
-          />
-        </div>
+      <SystemHealthSection health={stats?.health} />
 
-        <h3 className="font-medium mb-2">Issues</h3>
-        <IssuesList issues={stats?.health.issues || []} />
-      </div>
+      <ApiUsageSection
+        apiUsage={stats?.apiUsage}
+        onReset={() => resetApiStats.mutate()}
+        isResetting={resetApiStats.isPending}
+      />
 
-      {/* API Usage */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">API Usage</h2>
-          <button
-            onClick={() => resetApiStats.mutate()}
-            disabled={resetApiStats.isPending}
-            className="text-sm text-blue-600 hover:text-blue-800"
-          >
-            Reset Stats
-          </button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard
-            title="Requests/min"
-            value={stats?.apiUsage.requestsLastMinute || 0}
-            status={stats?.apiUsage.isRateLimited ? 'warning' : 'ok'}
-          />
-          <StatCard title="Requests/hour" value={stats?.apiUsage.requestsLastHour || 0} />
-          <StatCard title="Total Requests" value={stats?.apiUsage.totalRequests || 0} />
-          <StatCard
-            title="Queue Depth"
-            value={stats?.apiUsage.queueDepth || 0}
-            status={stats?.apiUsage.queueDepth && stats.apiUsage.queueDepth > 10 ? 'warning' : 'ok'}
-          />
-        </div>
-      </div>
-
-      {/* Concurrency */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-lg font-semibold mb-4">Concurrency</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard
-            title="Active Workers"
-            value={`${stats?.concurrency.activeWorkers || 0} / ${stats?.concurrency.limits.maxWorkers || 0}`}
-          />
-          <StatCard
-            title="Active Supervisors"
-            value={`${stats?.concurrency.activeSupervisors || 0} / ${stats?.concurrency.limits.maxSupervisors || 0}`}
-          />
-          <StatCard
-            title="Active Epics"
-            value={`${stats?.concurrency.activeEpics || 0} / ${stats?.concurrency.limits.maxEpics || 0}`}
-          />
-        </div>
-      </div>
+      <ConcurrencySection concurrency={stats?.concurrency} />
 
       {/* Epics & Tasks Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Epics Summary</h2>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total</span>
-              <span className="font-medium">{stats?.epics.total || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Planning</span>
-              <span className="font-medium">{stats?.epics.planning || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">In Progress</span>
-              <span className="font-medium">{stats?.epics.inProgress || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Completed</span>
-              <span className="font-medium text-green-600">{stats?.epics.completed || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Blocked</span>
-              <span className="font-medium text-red-600">{stats?.epics.blocked || 0}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Tasks Summary</h2>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total</span>
-              <span className="font-medium">{stats?.tasks.total || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Pending</span>
-              <span className="font-medium">{stats?.tasks.pending || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">In Progress</span>
-              <span className="font-medium">{stats?.tasks.inProgress || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">In Review</span>
-              <span className="font-medium text-purple-600">{stats?.tasks.review || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Completed</span>
-              <span className="font-medium text-green-600">{stats?.tasks.completed || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Failed</span>
-              <span className="font-medium text-red-600">{stats?.tasks.failed || 0}</span>
-            </div>
-          </div>
-        </div>
+        <EpicsSummary epics={stats?.epics} />
+        <TasksSummary tasks={stats?.tasks} />
       </div>
 
       {/* Worktrees */}
@@ -264,22 +360,7 @@ export default function AdminDashboardPage() {
             value={stats?.worktrees.orphaned || 0}
             status={stats?.worktrees.orphaned ? 'warning' : 'ok'}
           />
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <h3 className="text-sm font-medium text-gray-600">By Reason</h3>
-            <div className="mt-2 space-y-1 text-sm">
-              {stats?.worktrees.byReason &&
-                Object.entries(stats.worktrees.byReason).map(([reason, count]) => (
-                  <div key={reason} className="flex justify-between">
-                    <span className="text-gray-600">{reason}</span>
-                    <span className="font-medium">{count}</span>
-                  </div>
-                ))}
-              {(!stats?.worktrees.byReason ||
-                Object.keys(stats.worktrees.byReason).length === 0) && (
-                <span className="text-gray-500">None</span>
-              )}
-            </div>
-          </div>
+          <WorktreesByReason byReason={stats?.worktrees.byReason} />
         </div>
         {cleanupWorktrees.data && (
           <div className="mt-4 p-3 bg-green-50 rounded-lg text-green-700 text-sm">
@@ -317,13 +398,7 @@ export default function AdminDashboardPage() {
       {/* Environment Info */}
       <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
         <span className="font-medium">Environment:</span> {stats?.environment || 'unknown'} |{' '}
-        <span className="font-medium">Features:</span>{' '}
-        {(stats?.features &&
-          Object.entries(stats.features)
-            .filter(([, enabled]) => enabled)
-            .map(([feature]) => feature)
-            .join(', ')) ||
-          'none'}
+        <span className="font-medium">Features:</span> {getEnabledFeatures(stats?.features)}
       </div>
     </div>
   );

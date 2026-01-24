@@ -27,47 +27,119 @@ const RebaseInputSchema = z.object({});
 // ============================================================================
 
 /**
+ * Verify worker agent and get task context
+ */
+async function verifyWorkerWithTask(context: McpToolContext): Promise<
+  | {
+      success: true;
+      task: { id: string; worktreePath: string; branchName: string; epicId: string };
+    }
+  | { success: false; error: McpToolResponse }
+> {
+  const agent = await agentAccessor.findById(context.agentId);
+  if (!agent) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.AGENT_NOT_FOUND,
+        `Agent with ID '${context.agentId}' not found`
+      ),
+    };
+  }
+
+  if (agent.type !== AgentType.WORKER) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.PERMISSION_DENIED,
+        'Only WORKER agents can use git tools'
+      ),
+    };
+  }
+
+  if (!agent.currentTaskId) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Agent does not have a current task assigned'
+      ),
+    };
+  }
+
+  const task = await taskAccessor.findById(agent.currentTaskId);
+  if (!task) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Task with ID '${agent.currentTaskId}' not found`
+      ),
+    };
+  }
+
+  if (!task.worktreePath) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a worktree path'
+      ),
+    };
+  }
+
+  if (!task.branchName) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a branch name'
+      ),
+    };
+  }
+
+  return {
+    success: true,
+    task: {
+      id: task.id,
+      worktreePath: task.worktreePath,
+      branchName: task.branchName,
+      epicId: task.epicId,
+    },
+  };
+}
+
+/**
+ * Parse diff stats output
+ */
+function parseDiffStats(diffStats: string): {
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+} {
+  const statsMatch = diffStats.match(
+    /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
+  );
+  return {
+    filesChanged: statsMatch ? Number.parseInt(statsMatch[1], 10) : 0,
+    insertions: statsMatch?.[2] ? Number.parseInt(statsMatch[2], 10) : 0,
+    deletions: statsMatch?.[3] ? Number.parseInt(statsMatch[3], 10) : 0,
+  };
+}
+
+/**
  * Get diff between task branch and epic branch (WORKER only)
  */
 async function getDiff(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetDiffInputSchema.parse(input);
 
-    // Get agent
-    const agent = await agentAccessor.findById(context.agentId);
-    if (!agent) {
-      return createErrorResponse(
-        McpErrorCode.AGENT_NOT_FOUND,
-        `Agent with ID '${context.agentId}' not found`
-      );
+    const verification = await verifyWorkerWithTask(context);
+    if (!verification.success) {
+      return verification.error;
     }
+    const { task } = verification;
 
-    // Verify agent is WORKER
-    if (agent.type !== AgentType.WORKER) {
-      return createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Only WORKER agents can get git diff'
-      );
-    }
-
-    // Verify agent has a task
-    if (!agent.currentTaskId) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Agent does not have a current task assigned'
-      );
-    }
-
-    // Get task
-    const task = await taskAccessor.findById(agent.currentTaskId);
-    if (!task) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Task with ID '${agent.currentTaskId}' not found`
-      );
-    }
-
-    // Get epic
     const epic = await epicAccessor.findById(task.epicId);
     if (!epic) {
       return createErrorResponse(
@@ -76,32 +148,14 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
       );
     }
 
-    // Verify task has worktree
-    if (!task.worktreePath) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a worktree path'
-      );
-    }
-
-    // Verify task has branch
-    if (!task.branchName) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a branch name'
-      );
-    }
-
-    // Get epic branch name
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
 
-    // Get diff stats
     let diffStats: string;
     try {
-      const { stdout: statsOutput } = await execAsync(
+      const { stdout } = await execAsync(
         `git -C "${task.worktreePath}" diff --stat ${epicBranchName}...HEAD`
       );
-      diffStats = statsOutput;
+      diffStats = stdout;
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -109,13 +163,12 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
       );
     }
 
-    // Get full diff
     let diffContent: string;
     try {
-      const { stdout: diffOutput } = await execAsync(
+      const { stdout } = await execAsync(
         `git -C "${task.worktreePath}" diff ${epicBranchName}...HEAD`
       );
-      diffContent = diffOutput;
+      diffContent = stdout;
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -123,15 +176,8 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
       );
     }
 
-    // Parse stats to get files changed, insertions, deletions
-    const statsMatch = diffStats.match(
-      /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
-    );
-    const filesChanged = statsMatch ? Number.parseInt(statsMatch[1], 10) : 0;
-    const insertions = statsMatch?.[2] ? Number.parseInt(statsMatch[2], 10) : 0;
-    const deletions = statsMatch?.[3] ? Number.parseInt(statsMatch[3], 10) : 0;
+    const { filesChanged, insertions, deletions } = parseDiffStats(diffStats);
 
-    // Log decision
     await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__get_diff', 'result', {
       taskId: task.id,
       epicBranch: epicBranchName,
@@ -160,44 +206,51 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
 }
 
 /**
+ * Attempt to rebase and return result
+ */
+async function attemptRebase(
+  worktreePath: string,
+  epicBranchName: string
+): Promise<{ success: boolean; error: string; conflictFiles: string[] }> {
+  try {
+    await execAsync(`git -C "${worktreePath}" rebase ${epicBranchName}`);
+    return { success: true, error: '', conflictFiles: [] };
+  } catch (error) {
+    const rebaseError = error instanceof Error ? error.message : String(error);
+    let conflictFiles: string[] = [];
+
+    try {
+      const { stdout } = await execAsync(
+        `git -C "${worktreePath}" diff --name-only --diff-filter=U`
+      );
+      conflictFiles = stdout.split('\n').filter((line) => line.trim().length > 0);
+    } catch {
+      // Ignore error getting conflict files
+    }
+
+    try {
+      await execAsync(`git -C "${worktreePath}" rebase --abort`);
+    } catch {
+      // Ignore abort error
+    }
+
+    return { success: false, error: rebaseError, conflictFiles };
+  }
+}
+
+/**
  * Rebase task branch onto epic branch (WORKER only)
  */
 async function rebase(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     RebaseInputSchema.parse(input);
 
-    // Get agent
-    const agent = await agentAccessor.findById(context.agentId);
-    if (!agent) {
-      return createErrorResponse(
-        McpErrorCode.AGENT_NOT_FOUND,
-        `Agent with ID '${context.agentId}' not found`
-      );
+    const verification = await verifyWorkerWithTask(context);
+    if (!verification.success) {
+      return verification.error;
     }
+    const { task } = verification;
 
-    // Verify agent is WORKER
-    if (agent.type !== AgentType.WORKER) {
-      return createErrorResponse(McpErrorCode.PERMISSION_DENIED, 'Only WORKER agents can rebase');
-    }
-
-    // Verify agent has a task
-    if (!agent.currentTaskId) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Agent does not have a current task assigned'
-      );
-    }
-
-    // Get task
-    const task = await taskAccessor.findById(agent.currentTaskId);
-    if (!task) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Task with ID '${agent.currentTaskId}' not found`
-      );
-    }
-
-    // Get epic
     const epic = await epicAccessor.findById(task.epicId);
     if (!epic) {
       return createErrorResponse(
@@ -206,26 +259,8 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
       );
     }
 
-    // Verify task has worktree
-    if (!task.worktreePath) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a worktree path'
-      );
-    }
-
-    // Verify task has branch
-    if (!task.branchName) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a branch name'
-      );
-    }
-
-    // Get epic branch name
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
 
-    // Fetch latest changes
     try {
       await execAsync(`git -C "${task.worktreePath}" fetch origin ${epicBranchName}`);
     } catch (error) {
@@ -235,58 +270,28 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
       );
     }
 
-    // Attempt rebase
-    let rebaseSuccess = true;
-    let rebaseError = '';
-    let conflictFiles: string[] = [];
+    const rebaseResult = await attemptRebase(task.worktreePath, epicBranchName);
 
-    try {
-      await execAsync(`git -C "${task.worktreePath}" rebase ${epicBranchName}`);
-    } catch (error) {
-      rebaseSuccess = false;
-      rebaseError = error instanceof Error ? error.message : String(error);
-
-      // Check for conflicts
-      try {
-        const { stdout } = await execAsync(
-          `git -C "${task.worktreePath}" diff --name-only --diff-filter=U`
-        );
-        conflictFiles = stdout.split('\n').filter((line) => line.trim().length > 0);
-      } catch {
-        // Ignore error getting conflict files
-      }
-
-      // Abort the rebase
-      try {
-        await execAsync(`git -C "${task.worktreePath}" rebase --abort`);
-      } catch {
-        // Ignore abort error
-      }
-    }
-
-    if (!rebaseSuccess) {
-      // Update task state to BLOCKED
+    if (!rebaseResult.success) {
       await taskAccessor.update(task.id, {
         state: TaskState.BLOCKED,
-        failureReason: `Rebase conflicts: ${conflictFiles.join(', ')}`,
+        failureReason: `Rebase conflicts: ${rebaseResult.conflictFiles.join(', ')}`,
       });
 
-      // Log decision
       await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__rebase', 'error', {
         taskId: task.id,
         epicBranch: epicBranchName,
         taskBranch: task.branchName,
-        conflictFiles,
-        error: rebaseError,
+        conflictFiles: rebaseResult.conflictFiles,
+        error: rebaseResult.error,
       });
 
       return createErrorResponse(McpErrorCode.INTERNAL_ERROR, 'Rebase failed with conflicts', {
-        conflictFiles,
-        error: rebaseError,
+        conflictFiles: rebaseResult.conflictFiles,
+        error: rebaseResult.error,
       });
     }
 
-    // Force push rebased branch
     try {
       await execAsync(
         `git -C "${task.worktreePath}" push --force-with-lease origin ${task.branchName}`
@@ -298,7 +303,6 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
       );
     }
 
-    // Log decision
     await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__rebase', 'result', {
       taskId: task.id,
       epicBranch: epicBranchName,

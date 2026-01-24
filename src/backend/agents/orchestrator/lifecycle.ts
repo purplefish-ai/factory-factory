@@ -20,6 +20,69 @@ import {
 } from './orchestrator.agent.js';
 
 /**
+ * Kill an unhealthy orchestrator and mark it as failed
+ */
+async function killUnhealthyOrchestrator(orchestratorId: string): Promise<void> {
+  try {
+    await killOrchestrator(orchestratorId);
+  } catch (error) {
+    console.error(`Failed to kill unhealthy orchestrator ${orchestratorId}:`, error);
+  }
+  await agentAccessor.update(orchestratorId, { state: AgentState.FAILED });
+}
+
+/**
+ * Try to run an existing orchestrator, kill and mark failed if unsuccessful
+ */
+async function tryRunExistingOrchestrator(orchestratorId: string): Promise<boolean> {
+  console.log(`Starting existing orchestrator ${orchestratorId}...`);
+  try {
+    await runOrchestrator(orchestratorId);
+    return true;
+  } catch (error) {
+    console.error(`Failed to run existing orchestrator ${orchestratorId}:`, error);
+    try {
+      await killOrchestrator(orchestratorId);
+      await agentAccessor.update(orchestratorId, { state: AgentState.FAILED });
+    } catch (killError) {
+      console.error(`Failed to kill orchestrator ${orchestratorId}:`, killError);
+    }
+    return false;
+  }
+}
+
+/**
+ * Handle an existing active orchestrator - returns its ID if successfully started, null otherwise
+ */
+async function handleExistingOrchestrator(orchestrator: {
+  id: string;
+  lastActiveAt: Date;
+}): Promise<string | null> {
+  // Already running in our process
+  if (isOrchestratorRunning(orchestrator.id)) {
+    console.log(`Orchestrator ${orchestrator.id} is already running`);
+    return orchestrator.id;
+  }
+
+  // Check health
+  const minutesSinceHeartbeat = Math.floor(
+    (Date.now() - orchestrator.lastActiveAt.getTime()) / (60 * 1000)
+  );
+
+  if (minutesSinceHeartbeat >= 2) {
+    console.log(
+      `Orchestrator ${orchestrator.id} is unhealthy (${minutesSinceHeartbeat} min since heartbeat). Killing and recreating...`
+    );
+    await killUnhealthyOrchestrator(orchestrator.id);
+    return null;
+  }
+
+  // Try to run existing healthy orchestrator
+  const started = await tryRunExistingOrchestrator(orchestrator.id);
+  return started ? orchestrator.id : null;
+}
+
+/**
  * Start the orchestrator
  *
  * This function ensures there is exactly one orchestrator running.
@@ -29,60 +92,13 @@ import {
  * If no orchestrator exists, create a new one
  */
 export async function startOrchestrator(): Promise<string> {
-  // Check for existing orchestrators
   const existingOrchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-
-  // Find active (non-failed) orchestrators
   const activeOrchestrators = existingOrchestrators.filter((o) => o.state !== AgentState.FAILED);
 
-  // If there's an active orchestrator, check if it's running
   if (activeOrchestrators.length > 0) {
-    const orchestrator = activeOrchestrators[0];
-
-    // Check if it's actually running in our process
-    if (isOrchestratorRunning(orchestrator.id)) {
-      console.log(`Orchestrator ${orchestrator.id} is already running`);
-      return orchestrator.id;
-    }
-
-    // Check health - if unhealthy, kill and recreate
-    const now = Date.now();
-    const minutesSinceHeartbeat = Math.floor(
-      (now - orchestrator.lastActiveAt.getTime()) / (60 * 1000)
-    );
-
-    if (minutesSinceHeartbeat >= 2) {
-      console.log(
-        `Orchestrator ${orchestrator.id} is unhealthy (${minutesSinceHeartbeat} min since heartbeat). Killing and recreating...`
-      );
-      try {
-        await killOrchestrator(orchestrator.id);
-      } catch (error) {
-        console.error(`Failed to kill unhealthy orchestrator ${orchestrator.id}:`, error);
-      }
-
-      // Mark as failed
-      await agentAccessor.update(orchestrator.id, {
-        state: AgentState.FAILED,
-      });
-    } else {
-      // Orchestrator exists but isn't running in our process - try to run it
-      console.log(`Starting existing orchestrator ${orchestrator.id}...`);
-      try {
-        await runOrchestrator(orchestrator.id);
-        return orchestrator.id;
-      } catch (error) {
-        console.error(`Failed to run existing orchestrator ${orchestrator.id}:`, error);
-        // Kill it and create a new one
-        try {
-          await killOrchestrator(orchestrator.id);
-          await agentAccessor.update(orchestrator.id, {
-            state: AgentState.FAILED,
-          });
-        } catch (killError) {
-          console.error(`Failed to kill orchestrator ${orchestrator.id}:`, killError);
-        }
-      }
+    const result = await handleExistingOrchestrator(activeOrchestrators[0]);
+    if (result) {
+      return result;
     }
   }
 

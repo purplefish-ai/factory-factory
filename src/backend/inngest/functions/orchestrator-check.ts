@@ -13,6 +13,179 @@ import {
 import { notificationService } from '../../services/notification.service.js';
 import { inngest } from '../client.js';
 
+interface RecoveryResult {
+  supervisorId: string;
+  epicId: string;
+  epicTitle: string;
+  success: boolean;
+  newSupervisorId?: string;
+  workersKilled: number;
+  tasksReset: number;
+  message: string;
+}
+
+interface UnhealthySupervisor {
+  supervisorId: string;
+  epicId: string;
+  epicTitle: string;
+  minutesSinceHeartbeat: number;
+}
+
+/**
+ * Recover unhealthy supervisors and return results
+ */
+async function recoverUnhealthySupervisors(
+  unhealthySupervisors: UnhealthySupervisor[],
+  orchestratorId: string
+): Promise<RecoveryResult[]> {
+  const results: RecoveryResult[] = [];
+
+  for (const unhealthy of unhealthySupervisors) {
+    console.log(
+      `Supervisor ${unhealthy.supervisorId} is unhealthy (${unhealthy.minutesSinceHeartbeat} minutes since heartbeat)`
+    );
+
+    const result = await attemptSupervisorRecovery(unhealthy, orchestratorId);
+    results.push(result);
+  }
+
+  return results;
+}
+
+/**
+ * Attempt to recover a single unhealthy supervisor
+ */
+interface PendingEpic {
+  epicId: string;
+  title: string;
+}
+
+interface NewSupervisorResult {
+  epicId: string;
+  epicTitle: string;
+  supervisorId: string | null;
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Create supervisors for pending epics
+ */
+async function createSupervisorsForPendingEpics(
+  pendingEpics: PendingEpic[],
+  orchestratorId: string | null
+): Promise<NewSupervisorResult[]> {
+  const results: NewSupervisorResult[] = [];
+
+  for (const epic of pendingEpics) {
+    const result = await createSupervisorForEpic(epic, orchestratorId);
+    results.push(result);
+  }
+
+  return results;
+}
+
+/**
+ * Create a supervisor for a single pending epic
+ */
+async function createSupervisorForEpic(
+  epic: PendingEpic,
+  orchestratorId: string | null
+): Promise<NewSupervisorResult> {
+  try {
+    const supervisorId = await startSupervisorForEpic(epic.epicId);
+    console.log(`Created supervisor ${supervisorId} for epic ${epic.epicId}`);
+
+    if (orchestratorId) {
+      await decisionLogAccessor.createManual(
+        orchestratorId,
+        `Cron job: Created supervisor for pending epic "${epic.title}"`,
+        `Epic was in PLANNING state without a supervisor`,
+        JSON.stringify({ epicId: epic.epicId, supervisorId })
+      );
+    }
+
+    return { epicId: epic.epicId, epicTitle: epic.title, supervisorId, success: true };
+  } catch (error) {
+    console.error(`Failed to create supervisor for epic ${epic.epicId}:`, error);
+
+    await mailAccessor.create({
+      isForHuman: true,
+      subject: `Failed to create supervisor for epic: ${epic.title}`,
+      body:
+        `The cron job failed to create a supervisor for epic "${epic.title}".\n\n` +
+        `Epic ID: ${epic.epicId}\n` +
+        `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
+        `Manual intervention may be required.`,
+    });
+
+    return {
+      epicId: epic.epicId,
+      epicTitle: epic.title,
+      supervisorId: null,
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Attempt to recover a single unhealthy supervisor
+ */
+async function attemptSupervisorRecovery(
+  unhealthy: UnhealthySupervisor,
+  orchestratorId: string
+): Promise<RecoveryResult> {
+  try {
+    const recoveryResult = await recoverSupervisor(
+      unhealthy.supervisorId,
+      unhealthy.epicId,
+      orchestratorId
+    );
+
+    await notificationService.notifyCriticalError(
+      'Supervisor',
+      unhealthy.epicTitle,
+      recoveryResult.success
+        ? `Recovered successfully. New supervisor: ${recoveryResult.newSupervisorId}`
+        : `Recovery failed: ${recoveryResult.message}`
+    );
+
+    if (recoveryResult.success) {
+      console.log(
+        `Recovered supervisor: ${unhealthy.supervisorId} -> ${recoveryResult.newSupervisorId}`
+      );
+    } else {
+      console.log(`Failed to recover supervisor ${unhealthy.supervisorId}`);
+    }
+
+    return {
+      supervisorId: unhealthy.supervisorId,
+      epicId: unhealthy.epicId,
+      epicTitle: unhealthy.epicTitle,
+      ...recoveryResult,
+    };
+  } catch (error) {
+    console.error(`Failed to recover supervisor ${unhealthy.supervisorId}:`, error);
+
+    await notificationService.notifyCriticalError(
+      'Supervisor',
+      unhealthy.epicTitle,
+      `Recovery failed with error: ${error instanceof Error ? error.message : String(error)}`
+    );
+
+    return {
+      supervisorId: unhealthy.supervisorId,
+      epicId: unhealthy.epicId,
+      epicTitle: unhealthy.epicTitle,
+      success: false,
+      workersKilled: 0,
+      tasksReset: 0,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 /**
  * Orchestrator Health Check Cron Job
  *
@@ -64,74 +237,10 @@ export const orchestratorCheckHandler = inngest.createFunction(
         `Supervisor health: ${healthySupervisors.length} healthy, ${unhealthySupervisors.length} unhealthy`
       );
 
-      const recoveryResults: Array<{
-        supervisorId: string;
-        epicId: string;
-        epicTitle: string;
-        success: boolean;
-        newSupervisorId?: string;
-        workersKilled: number;
-        tasksReset: number;
-        message: string;
-      }> = [];
-
-      // Recover unhealthy supervisors
-      for (const unhealthy of unhealthySupervisors) {
-        console.log(
-          `Supervisor ${unhealthy.supervisorId} is unhealthy (${unhealthy.minutesSinceHeartbeat} minutes since heartbeat)`
-        );
-
-        try {
-          const recoveryResult = await recoverSupervisor(
-            unhealthy.supervisorId,
-            unhealthy.epicId,
-            orchestratorId
-          );
-
-          recoveryResults.push({
-            supervisorId: unhealthy.supervisorId,
-            epicId: unhealthy.epicId,
-            epicTitle: unhealthy.epicTitle,
-            ...recoveryResult,
-          });
-
-          // Send notification for supervisor crash
-          await notificationService.notifyCriticalError(
-            'Supervisor',
-            unhealthy.epicTitle,
-            recoveryResult.success
-              ? `Recovered successfully. New supervisor: ${recoveryResult.newSupervisorId}`
-              : `Recovery failed: ${recoveryResult.message}`
-          );
-
-          if (recoveryResult.success) {
-            console.log(
-              `Recovered supervisor: ${unhealthy.supervisorId} -> ${recoveryResult.newSupervisorId}`
-            );
-          } else {
-            console.log(`Failed to recover supervisor ${unhealthy.supervisorId}`);
-          }
-        } catch (error) {
-          console.error(`Failed to recover supervisor ${unhealthy.supervisorId}:`, error);
-
-          recoveryResults.push({
-            supervisorId: unhealthy.supervisorId,
-            epicId: unhealthy.epicId,
-            epicTitle: unhealthy.epicTitle,
-            success: false,
-            workersKilled: 0,
-            tasksReset: 0,
-            message: error instanceof Error ? error.message : String(error),
-          });
-
-          // Send critical error notification
-          await notificationService.notifyCriticalError(
-            'Supervisor',
-            unhealthy.epicTitle,
-            `Recovery failed with error: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      }
+      const recoveryResults = await recoverUnhealthySupervisors(
+        unhealthySupervisors,
+        orchestratorId
+      );
 
       // Log health check if there were any unhealthy supervisors
       if (unhealthySupervisors.length > 0 && orchestrator) {
@@ -164,58 +273,10 @@ export const orchestratorCheckHandler = inngest.createFunction(
 
       console.log(`Found ${pendingEpics.length} pending epic(s) needing supervisors`);
 
-      const newSupervisors: Array<{
-        epicId: string;
-        epicTitle: string;
-        supervisorId: string | null;
-        success: boolean;
-        error?: string;
-      }> = [];
-
-      for (const epic of pendingEpics) {
-        try {
-          const supervisorId = await startSupervisorForEpic(epic.epicId);
-          console.log(`Created supervisor ${supervisorId} for epic ${epic.epicId}`);
-
-          newSupervisors.push({
-            epicId: epic.epicId,
-            epicTitle: epic.title,
-            supervisorId,
-            success: true,
-          });
-
-          // Log decision
-          if (orchestrator) {
-            await decisionLogAccessor.createManual(
-              orchestrator.id,
-              `Cron job: Created supervisor for pending epic "${epic.title}"`,
-              `Epic was in PLANNING state without a supervisor`,
-              JSON.stringify({ epicId: epic.epicId, supervisorId })
-            );
-          }
-        } catch (error) {
-          console.error(`Failed to create supervisor for epic ${epic.epicId}:`, error);
-
-          newSupervisors.push({
-            epicId: epic.epicId,
-            epicTitle: epic.title,
-            supervisorId: null,
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-          });
-
-          // Notify human about failure
-          await mailAccessor.create({
-            isForHuman: true,
-            subject: `Failed to create supervisor for epic: ${epic.title}`,
-            body:
-              `The cron job failed to create a supervisor for epic "${epic.title}".\n\n` +
-              `Epic ID: ${epic.epicId}\n` +
-              `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
-              `Manual intervention may be required.`,
-          });
-        }
-      }
+      const newSupervisors = await createSupervisorsForPendingEpics(
+        pendingEpics,
+        orchestrator?.id || null
+      );
 
       return {
         pendingEpicsProcessed: pendingEpics.length,
