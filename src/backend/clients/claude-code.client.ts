@@ -1,32 +1,9 @@
-import { exec } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { promisify } from 'node:util';
 import { v4 as uuidv4 } from 'uuid';
 import { requireClaudeSetup } from './claude-auth.js';
-
-const execAsync = promisify(exec);
-
-/**
- * Escape a string for safe use in shell commands
- * Uses single quotes and escapes any embedded single quotes
- */
-function shellEscape(str: string): string {
-  // Replace single quotes with '\'' (end quote, escaped quote, start quote)
-  return `'${str.replace(/'/g, "'\\''")}'`;
-}
-
-/**
- * Validate tmux session name to prevent injection
- * Session names should only contain alphanumeric chars, underscores, and dashes
- */
-function validateSessionName(name: string): string {
-  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-    throw new Error(`Invalid tmux session name: ${name}`);
-  }
-  return name;
-}
+import { tmuxClient } from './tmux.client.js';
 
 export interface AgentExecutionProfile {
   model?: string;
@@ -69,20 +46,6 @@ function getTmuxSessionName(agentId: string): string {
 }
 
 /**
- * Check if tmux session exists
- */
-async function tmuxSessionExists(sessionName: string): Promise<boolean> {
-  try {
-    // Session name should already be validated, but check again for safety
-    const validatedName = validateSessionName(sessionName);
-    await execAsync(`tmux has-session -t ${validatedName} 2>/dev/null`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Create new worker session with Claude Code CLI
  */
 export async function createWorkerSession(
@@ -95,7 +58,7 @@ export async function createWorkerSession(
 
   // Generate session ID
   const sessionId = generateSessionId();
-  const tmuxSessionName = validateSessionName(getTmuxSessionName(agentId));
+  const tmuxSessionName = getTmuxSessionName(agentId);
 
   // Write system prompt to temporary file
   const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
@@ -107,26 +70,20 @@ export async function createWorkerSession(
   // Build Claude CLI command
   const claudeCommand = buildClaudeCommand(sessionId, systemPromptPath, workingDir, profile);
 
-  // Create tmux session
-  const exists = await tmuxSessionExists(tmuxSessionName);
+  // Create tmux session (kill existing if needed)
+  const exists = await tmuxClient.sessionExists(tmuxSessionName);
   if (exists) {
-    // Kill existing session
-    await execAsync(`tmux kill-session -t ${tmuxSessionName}`);
+    await tmuxClient.killSession(tmuxSessionName);
   }
 
-  // Create new tmux session running Claude
-  // Use -d flag to create detached session
-  // Use shell escaping for workingDir to prevent command injection
-  await execAsync(`tmux new-session -d -s ${tmuxSessionName} -c ${shellEscape(workingDir)}`);
+  // Create new tmux session
+  await tmuxClient.createSession(tmuxSessionName, workingDir);
 
   // Remove ANTHROPIC_API_KEY from environment (force OAuth)
-  await execAsync(`tmux set-environment -t ${tmuxSessionName} -r ANTHROPIC_API_KEY`);
+  await tmuxClient.setEnvironment(tmuxSessionName, 'ANTHROPIC_API_KEY');
 
-  // Send Claude command to tmux session using atomic pattern for cross-platform reliability
-  // Uses set-buffer + paste-buffer + send-keys Enter to handle special characters and different tmux versions
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
-  await execAsync(`sh -c '${cmdStr}' sh "${claudeCommand.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
-
+  // Send Claude command to tmux session
+  await tmuxClient.sendMessage(tmuxSessionName, claudeCommand);
 
   // Wait a moment for Claude to initialize
   await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -180,11 +137,11 @@ export async function resumeSession(
 ): Promise<WorkerSessionContext> {
   await requireClaudeSetup();
 
-  const tmuxSessionName = validateSessionName(getTmuxSessionName(agentId));
+  const tmuxSessionName = getTmuxSessionName(agentId);
   const profile = AGENT_PROFILES.WORKER;
 
   // Check if tmux session exists
-  const exists = await tmuxSessionExists(tmuxSessionName);
+  const exists = await tmuxClient.sessionExists(tmuxSessionName);
   if (!exists) {
     throw new Error(`Tmux session ${tmuxSessionName} does not exist. Cannot resume.`);
   }
@@ -192,10 +149,8 @@ export async function resumeSession(
   // Build resume command
   const resumeCommand = buildResumeCommand(sessionId, profile);
 
-  // Send resume command to tmux using atomic pattern for cross-platform reliability
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
-  await execAsync(`sh -c '${cmdStr}' sh "${resumeCommand.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
-
+  // Send resume command to tmux
+  await tmuxClient.sendMessage(tmuxSessionName, resumeCommand);
 
   return {
     agentId,
@@ -230,24 +185,10 @@ function buildResumeCommand(sessionId: string, profile: AgentExecutionProfile): 
 
 /**
  * Send message to Claude via tmux
- * Uses atomic set-buffer + paste-buffer + send-keys Enter pattern
- * This prevents race conditions and handles all text correctly
  */
 export async function sendMessage(agentId: string, message: string): Promise<void> {
-  const tmuxSessionName = validateSessionName(getTmuxSessionName(agentId));
-
-  // Check session exists
-  const exists = await tmuxSessionExists(tmuxSessionName);
-  if (!exists) {
-    throw new Error(`Tmux session ${tmuxSessionName} does not exist`);
-  }
-
-  // Use atomic command chaining pattern from multiclaude:
-  // set-buffer (load text) -> paste-buffer (insert to pane) -> send-keys Enter (submit)
-  // The text is passed as $1 to sh -c to avoid shell escaping issues
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
-
-  await execAsync(`sh -c '${cmdStr}' sh "${message.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
+  const tmuxSessionName = getTmuxSessionName(agentId);
+  await tmuxClient.sendMessage(tmuxSessionName, message);
 }
 
 /**
@@ -255,17 +196,8 @@ export async function sendMessage(agentId: string, message: string): Promise<voi
  * Returns last N lines of visible content
  */
 export async function captureOutput(agentId: string, lines: number = 100): Promise<string> {
-  const tmuxSessionName = validateSessionName(getTmuxSessionName(agentId));
-
-  const exists = await tmuxSessionExists(tmuxSessionName);
-  if (!exists) {
-    throw new Error(`Tmux session ${tmuxSessionName} does not exist`);
-  }
-
-  // Capture pane content
-  const { stdout } = await execAsync(`tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`);
-
-  return stdout;
+  const tmuxSessionName = getTmuxSessionName(agentId);
+  return tmuxClient.capturePane(tmuxSessionName, lines);
 }
 
 /**
@@ -275,23 +207,17 @@ export async function getSessionStatus(agentId: string): Promise<{
   exists: boolean;
   running: boolean;
 }> {
-  const tmuxSessionName = validateSessionName(getTmuxSessionName(agentId));
+  const tmuxSessionName = getTmuxSessionName(agentId);
 
-  const exists = await tmuxSessionExists(tmuxSessionName);
+  const exists = await tmuxClient.sessionExists(tmuxSessionName);
   if (!exists) {
     return { exists: false, running: false };
   }
 
   // Check if any process is running (not just shell prompt)
-  // This is a heuristic - we check if there's activity
   try {
-    const { stdout } = await execAsync(
-      `tmux list-panes -t ${tmuxSessionName} -F "#{pane_current_command}"`
-    );
-
-    const command = stdout.trim();
+    const command = await tmuxClient.getPaneCommand(tmuxSessionName);
     const running = command !== 'bash' && command !== 'zsh' && command !== 'sh';
-
     return { exists: true, running };
   } catch {
     return { exists: false, running: false };
@@ -303,15 +229,15 @@ export async function getSessionStatus(agentId: string): Promise<{
  * Sends Ctrl+C to the tmux session
  */
 export async function stopSession(agentId: string): Promise<void> {
-  const tmuxSessionName = validateSessionName(getTmuxSessionName(agentId));
+  const tmuxSessionName = getTmuxSessionName(agentId);
 
-  const exists = await tmuxSessionExists(tmuxSessionName);
+  const exists = await tmuxClient.sessionExists(tmuxSessionName);
   if (!exists) {
     return; // Already stopped
   }
 
   // Send Ctrl+C to interrupt Claude
-  await execAsync(`tmux send-keys -t ${tmuxSessionName} C-c`);
+  await tmuxClient.sendInterrupt(tmuxSessionName);
 
   // Wait a moment
   await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -322,15 +248,15 @@ export async function stopSession(agentId: string): Promise<void> {
  * Use this for force cleanup
  */
 export async function killSession(agentId: string): Promise<void> {
-  const tmuxSessionName = validateSessionName(getTmuxSessionName(agentId));
+  const tmuxSessionName = getTmuxSessionName(agentId);
 
-  const exists = await tmuxSessionExists(tmuxSessionName);
+  const exists = await tmuxClient.sessionExists(tmuxSessionName);
   if (!exists) {
     return;
   }
 
   // Kill tmux session
-  await execAsync(`tmux kill-session -t ${tmuxSessionName}`);
+  await tmuxClient.killSession(tmuxSessionName);
 
   // Cleanup system prompt file if it exists
   const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
@@ -343,11 +269,5 @@ export async function killSession(agentId: string): Promise<void> {
  * List all worker tmux sessions
  */
 export async function listWorkerSessions(): Promise<string[]> {
-  try {
-    const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}"');
-    const sessions = stdout.trim().split('\n');
-    return sessions.filter((name) => name.startsWith('worker-'));
-  } catch {
-    return []; // No sessions
-  }
+  return tmuxClient.listSessionsByPrefix('worker-');
 }

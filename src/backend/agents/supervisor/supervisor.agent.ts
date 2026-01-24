@@ -1,6 +1,10 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { AgentState, AgentType, EpicState } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { gitClient } from '../../clients/git.client.js';
+import { tmuxClient } from '../../clients/tmux.client.js';
 import {
   agentAccessor,
   epicAccessor,
@@ -158,10 +162,7 @@ async function createSupervisorSession(
   // Rename tmux session to supervisor naming
   const supervisorTmuxName = getSupervisorTmuxSessionName(agentId);
   try {
-    const { exec } = await import('node:child_process');
-    const { promisify } = await import('node:util');
-    const execAsync = promisify(exec);
-    await execAsync(`tmux rename-session -t ${context.tmuxSessionName} ${supervisorTmuxName}`);
+    await tmuxClient.renameSession(context.tmuxSessionName, supervisorTmuxName);
   } catch (error) {
     console.warn(`Could not rename tmux session: ${error}`);
   }
@@ -264,22 +265,7 @@ export async function runSupervisor(agentId: string): Promise<void> {
  */
 async function sendSupervisorMessage(agentId: string, message: string): Promise<void> {
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-
-  // Use the same atomic pattern as worker
-  const { exec } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const execAsync = promisify(exec);
-
-  // Check session exists
-  try {
-    await execAsync(`tmux has-session -t ${tmuxSessionName} 2>/dev/null`);
-  } catch {
-    throw new Error(`Tmux session ${tmuxSessionName} does not exist`);
-  }
-
-  // Atomic message sending
-  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
-  await execAsync(`sh -c '${cmdStr}' sh "${message.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
+  await tmuxClient.sendMessage(tmuxSessionName, message);
 }
 
 /**
@@ -287,22 +273,7 @@ async function sendSupervisorMessage(agentId: string, message: string): Promise<
  */
 async function captureSupervisorOutput(agentId: string, lines: number = 100): Promise<string> {
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-
-  const { exec } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const execAsync = promisify(exec);
-
-  // Check session exists
-  try {
-    await execAsync(`tmux has-session -t ${tmuxSessionName} 2>/dev/null`);
-  } catch {
-    throw new Error(`Tmux session ${tmuxSessionName} does not exist`);
-  }
-
-  // Capture pane content
-  const { stdout } = await execAsync(`tmux capture-pane -t ${tmuxSessionName} -p -S -${lines}`);
-
-  return stdout;
+  return tmuxClient.capturePane(tmuxSessionName, lines);
 }
 
 /**
@@ -559,12 +530,8 @@ export async function stopSupervisor(agentId: string): Promise<void> {
 
   // Stop Claude session
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  const { exec } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const execAsync = promisify(exec);
-
   try {
-    await execAsync(`tmux send-keys -t ${tmuxSessionName} C-c`);
+    await tmuxClient.sendInterrupt(tmuxSessionName);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   } catch {
     // Session may not exist
@@ -599,12 +566,8 @@ export async function killSupervisor(agentId: string): Promise<void> {
 
   // Kill tmux session
   const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  const { exec } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const execAsync = promisify(exec);
-
   try {
-    await execAsync(`tmux kill-session -t ${tmuxSessionName}`);
+    await tmuxClient.killSession(tmuxSessionName);
   } catch {
     // Session may not exist
   }
@@ -620,12 +583,9 @@ export async function killSupervisor(agentId: string): Promise<void> {
   }
 
   // Clean up system prompt file
-  const { promises: fs } = await import('node:fs');
-  const path = await import('node:path');
-  const os = await import('node:os');
   const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
   try {
-    await fs.unlink(systemPromptPath);
+    fs.unlinkSync(systemPromptPath);
   } catch {
     // File may not exist
   }
