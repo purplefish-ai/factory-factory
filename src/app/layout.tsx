@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Navigation } from '../frontend/components/navigation';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { AppSidebar } from '../frontend/components/app-sidebar';
 import { TRPCProvider } from '../frontend/lib/providers';
 
 export const metadata: Metadata = {
@@ -11,12 +12,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50">
+      <body className="min-h-screen bg-background">
         <TRPCProvider>
-          <div className="flex h-screen">
-            <Navigation />
-            <main className="flex-1 overflow-auto p-6">{children}</main>
-          </div>
+          <SidebarProvider>
+            <AppSidebar />
+            <SidebarInset className="p-6">{children}</SidebarInset>
+          </SidebarProvider>
         </TRPCProvider>
       </body>
     </html>

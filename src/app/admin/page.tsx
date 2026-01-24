@@ -6,6 +6,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loading } from '@/frontend/components/loading';
+import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../frontend/lib/trpc';
 
 function StatCard({
@@ -309,24 +311,16 @@ export default function AdminDashboardPage() {
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation();
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-muted-foreground">Loading admin dashboard...</div>
-      </div>
-    );
+    return <Loading message="Loading admin dashboard..." />;
   }
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground mt-1">System monitoring and management</p>
-        </div>
+      <PageHeader title="Admin Dashboard" description="System monitoring and management">
         <Button onClick={() => triggerHealthCheck.mutate()} disabled={triggerHealthCheck.isPending}>
           {triggerHealthCheck.isPending ? 'Checking...' : 'Run Health Check'}
         </Button>
-      </div>
+      </PageHeader>
 
       <SystemHealthSection health={stats?.health} />
 

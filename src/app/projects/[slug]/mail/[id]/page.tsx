@@ -1,8 +1,16 @@
 'use client';
 
+import { ArrowLeft, Reply } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Loading } from '@/frontend/components/loading';
 import { trpc } from '../../../../../frontend/lib/trpc';
 import type { MailWithRelations } from '../../../../../frontend/lib/types';
 
@@ -21,7 +29,6 @@ export default function ProjectMailDetailPage() {
     error: fetchError,
   } = trpc.mail.getById.useQuery({ id }, { refetchInterval: false });
 
-  // Cast to include relations
   const mail = mailData as MailWithRelations | undefined;
 
   const replyMutation = trpc.mail.reply.useMutation({
@@ -34,20 +41,16 @@ export default function ProjectMailDetailPage() {
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-gray-500">Loading mail...</div>
-      </div>
-    );
+    return <Loading message="Loading mail..." />;
   }
 
   if (fetchError || !mail) {
     return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <p className="text-red-600 mb-4">Mail not found</p>
-        <Link href={`/projects/${slug}/mail`} className="text-blue-600 hover:text-blue-800">
-          Back to inbox
-        </Link>
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <p className="text-destructive">Mail not found</p>
+        <Button variant="outline" asChild>
+          <Link href={`/projects/${slug}/mail`}>Back to inbox</Link>
+        </Button>
       </div>
     );
   }
@@ -66,36 +69,30 @@ export default function ProjectMailDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href={`/projects/${slug}/mail`} className="text-gray-500 hover:text-gray-700">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10 19l-7-7m0 0l7-7m-7 7h18"
-            />
-          </svg>
-        </Link>
+        <Button variant="ghost" size="icon" asChild>
+          <Link href={`/projects/${slug}/mail`}>
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+        </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{mail.subject}</h1>
-          <p className="text-sm text-gray-500 mt-1">{new Date(mail.createdAt).toLocaleString()}</p>
+          <h1 className="text-2xl font-bold tracking-tight">{mail.subject}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {new Date(mail.createdAt).toLocaleString()}
+          </p>
         </div>
       </div>
 
-      {/* Mail Content */}
-      <div className="bg-white rounded-lg shadow-sm">
-        {/* From/To */}
-        <div className="p-4 border-b">
+      <Card>
+        <CardHeader className="border-b">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
                 <span className="font-medium">From:</span>{' '}
                 {mail.fromAgent ? (
                   <Link
                     href={`/projects/${slug}/agents/${mail.fromAgent.id}`}
-                    className="text-blue-600 hover:text-blue-800"
+                    className="text-primary hover:underline"
                   >
                     {mail.fromAgent.type} ({mail.fromAgent.id.slice(0, 8)}...)
                   </Link>
@@ -104,112 +101,89 @@ export default function ProjectMailDetailPage() {
                 )}
               </p>
               {mail.toAgent && (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   <span className="font-medium">To:</span>{' '}
                   <Link
                     href={`/projects/${slug}/agents/${mail.toAgent.id}`}
-                    className="text-blue-600 hover:text-blue-800"
+                    className="text-primary hover:underline"
                   >
                     {mail.toAgent.type} ({mail.toAgent.id.slice(0, 8)}...)
                   </Link>
                 </p>
               )}
             </div>
-            <div className="text-sm text-gray-500">
-              {mail.isRead ? (
-                <span className="text-green-600">Read</span>
-              ) : (
-                <span className="text-blue-600 font-medium">Unread</span>
-              )}
-            </div>
+            <Badge variant={mail.isRead ? 'secondary' : 'default'}>
+              {mail.isRead ? 'Read' : 'Unread'}
+            </Badge>
           </div>
-        </div>
+        </CardHeader>
 
-        {/* Body */}
-        <div className="p-6">
-          <pre className="whitespace-pre-wrap text-gray-700 font-sans">{mail.body}</pre>
-        </div>
+        <CardContent className="pt-6">
+          <pre className="whitespace-pre-wrap font-sans">{mail.body}</pre>
+        </CardContent>
 
-        {/* Actions */}
         {mail.fromAgent && (
-          <div className="p-4 border-t bg-gray-50">
+          <CardFooter className="border-t bg-muted/50">
             {!showReply ? (
-              <button
-                onClick={() => setShowReply(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-                  />
-                </svg>
+              <Button onClick={() => setShowReply(true)}>
+                <Reply className="h-4 w-4 mr-2" />
                 Reply
-              </button>
+              </Button>
             ) : (
-              <form onSubmit={handleReply} className="space-y-4">
+              <form onSubmit={handleReply} className="w-full space-y-4">
                 {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">
-                    {error}
-                  </div>
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reply to {mail.fromAgent.type}
-                  </label>
-                  <textarea
+                <div className="space-y-2">
+                  <Label>Reply to {mail.fromAgent.type}</Label>
+                  <Textarea
                     value={replyBody}
                     onChange={(e) => setReplyBody(e.target.value)}
                     rows={4}
-                    className="w-full border rounded-lg px-3 py-2"
                     placeholder="Your reply..."
                   />
                 </div>
                 <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={replyMutation.isPending}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                  >
+                  <Button type="submit" disabled={replyMutation.isPending}>
                     {replyMutation.isPending ? 'Sending...' : 'Send Reply'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="outline"
                     onClick={() => {
                       setShowReply(false);
                       setReplyBody('');
                       setError('');
                     }}
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </form>
             )}
-          </div>
+          </CardFooter>
         )}
-      </div>
+      </Card>
 
-      {/* Related Agent Info */}
       {mail.fromAgent && (
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <h3 className="font-medium mb-2">Sender Agent</h3>
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              <p>Type: {mail.fromAgent.type}</p>
-              <p>State: {mail.fromAgent.state}</p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Sender Agent</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>Type: {mail.fromAgent.type}</p>
+                <p>State: {mail.fromAgent.state}</p>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/projects/${slug}/agents/${mail.fromAgent.id}`}>View Agent</Link>
+              </Button>
             </div>
-            <Link
-              href={`/projects/${slug}/agents/${mail.fromAgent.id}`}
-              className="text-blue-600 hover:text-blue-800 text-sm"
-            >
-              View Agent
-            </Link>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
