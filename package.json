@@ -29,7 +29,8 @@
     "backend:dev": "tsx watch src/backend/index.ts",
     "inngest:dev": "inngest-cli dev",
     "health": "curl -s http://localhost:3001/health | jq",
-    "health:all": "curl -s http://localhost:3001/health/all | jq"
+    "health:all": "curl -s http://localhost:3001/health/all | jq",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

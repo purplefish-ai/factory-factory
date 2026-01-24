@@ -1,33 +1,30 @@
-import { existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import * as pty from 'node-pty';
 import type { WebSocket } from 'ws';
 import { createLogger } from '../services/index.js';
 import { TERMINAL_LIMITS, terminalMessageSchema } from './schemas.js';
 
-// Find tmux binary - check common locations
-function findTmuxPath(): string {
-  const tmuxPaths = [
-    '/opt/homebrew/bin/tmux', // macOS ARM (Homebrew)
-    '/usr/local/bin/tmux', // macOS Intel (Homebrew)
-    '/usr/bin/tmux', // Linux
-  ];
+const logger = createLogger('pty-manager');
 
-  for (const path of tmuxPaths) {
-    if (existsSync(path)) {
-      return path;
+// Find tmux binary using 'which' command
+function findTmuxPath(): string {
+  try {
+    const result = execSync('which tmux', { encoding: 'utf-8' }).trim();
+    if (result) {
+      logger.info('Found tmux binary via which', { path: result });
+      return result;
     }
+  } catch {
+    logger.warn('Failed to find tmux via which command');
   }
 
-  // Fallback to PATH lookup (may not work with node-pty)
-  return 'tmux';
+  // Fallback to common locations
+  const fallbackPath = '/opt/homebrew/bin/tmux';
+  logger.info('Using fallback tmux path', { path: fallbackPath });
+  return fallbackPath;
 }
 
 const TMUX_PATH = findTmuxPath();
-
-const logger = createLogger('pty-manager');
-
-// Log the tmux path on module load
-logger.info('Using tmux binary', { path: TMUX_PATH });
 
 // Connection limits
 const MAX_CONNECTIONS_PER_SESSION = 5;
@@ -86,6 +83,13 @@ export function attach(
   const clampedRows = Math.max(TERMINAL_LIMITS.MIN_ROWS, Math.min(TERMINAL_LIMITS.MAX_ROWS, rows));
 
   try {
+    logger.debug('Spawning PTY', {
+      tmuxPath: TMUX_PATH,
+      sessionName,
+      cols: clampedCols,
+      rows: clampedRows,
+    });
+
     // Spawn PTY attached to tmux session
     const ptyProcess = pty.spawn(TMUX_PATH, ['attach-session', '-t', sessionName], {
       name: 'xterm-256color',
