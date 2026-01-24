@@ -26,9 +26,9 @@ export interface WorktreeInfo {
  * Orphaned worktree information
  */
 export interface OrphanedWorktree extends WorktreeInfo {
-  reason: 'no_task' | 'deleted_epic' | 'completed_task' | 'unknown';
+  reason: 'no_task' | 'deleted_top_level_task' | 'completed_task' | 'unknown';
   taskId?: string;
-  epicId?: string;
+  topLevelTaskId?: string;
 }
 
 /**
@@ -108,29 +108,33 @@ export class WorktreeService {
    */
   private async checkTaskOrphan(
     taskId: string
-  ): Promise<{ isOrphaned: boolean; reason: OrphanedWorktree['reason']; epicId?: string }> {
+  ): Promise<{ isOrphaned: boolean; reason: OrphanedWorktree['reason']; topLevelTaskId?: string }> {
     const task = await taskAccessor.findById(taskId);
     if (!task) {
       return { isOrphaned: true, reason: 'no_task' };
     }
     if (task.state === 'COMPLETED' || task.state === 'FAILED') {
-      return { isOrphaned: true, reason: 'completed_task', epicId: task.parentId || undefined };
+      return {
+        isOrphaned: true,
+        reason: 'completed_task',
+        topLevelTaskId: task.parentId || undefined,
+      };
     }
     return { isOrphaned: false, reason: 'unknown' };
   }
 
   /**
-   * Check if a top-level task (epic)-based worktree is orphaned
+   * Check if a top-level task-based worktree is orphaned
    */
   private async checkTopLevelTaskOrphan(
     taskId: string
   ): Promise<{ isOrphaned: boolean; reason: OrphanedWorktree['reason'] }> {
     const task = await taskAccessor.findById(taskId);
     if (!task) {
-      return { isOrphaned: true, reason: 'deleted_epic' };
+      return { isOrphaned: true, reason: 'deleted_top_level_task' };
     }
     if (task.state === 'COMPLETED' || task.state === 'CANCELLED') {
-      return { isOrphaned: true, reason: 'deleted_epic' };
+      return { isOrphaned: true, reason: 'deleted_top_level_task' };
     }
     return { isOrphaned: false, reason: 'unknown' };
   }
@@ -142,7 +146,7 @@ export class WorktreeService {
     isOrphaned: boolean;
     reason: OrphanedWorktree['reason'];
     taskId?: string;
-    epicId?: string;
+    topLevelTaskId?: string;
   }> {
     const taskMatch = worktree.branch.match(/task-([a-zA-Z0-9]+)/);
     const epicMatch = worktree.branch.match(/epic-([a-zA-Z0-9]+)/);
@@ -151,15 +155,15 @@ export class WorktreeService {
       const taskId = taskMatch[1];
       const result = await this.checkTaskOrphan(taskId);
       if (result.isOrphaned) {
-        return { ...result, taskId, epicId: result.epicId };
+        return { ...result, taskId, topLevelTaskId: result.topLevelTaskId };
       }
     }
 
     if (epicMatch) {
-      const epicId = epicMatch[1];
-      const result = await this.checkTopLevelTaskOrphan(epicId);
+      const topLevelTaskId = epicMatch[1];
+      const result = await this.checkTopLevelTaskOrphan(topLevelTaskId);
       if (result.isOrphaned) {
-        return { ...result, epicId };
+        return { ...result, topLevelTaskId };
       }
     }
 
@@ -188,7 +192,7 @@ export class WorktreeService {
           ...worktree,
           reason: result.reason,
           taskId: result.taskId,
-          epicId: result.epicId,
+          topLevelTaskId: result.topLevelTaskId,
         });
       }
     }
@@ -313,11 +317,11 @@ export class WorktreeService {
    */
   async createWorktreeForTask(
     taskId: string,
-    epicId: string,
+    topLevelTaskId: string,
     branchName: string,
     baseBranch = 'main'
   ): Promise<string> {
-    const worktreePath = `/tmp/factoryfactory/worktrees/${epicId}/${taskId}`;
+    const worktreePath = `/tmp/factoryfactory/worktrees/${topLevelTaskId}/${taskId}`;
 
     // Validate branch names to prevent injection
     const validatedBranch = validateBranchName(branchName);
@@ -337,7 +341,7 @@ export class WorktreeService {
 
       logger.info('Worktree created', {
         taskId,
-        epicId,
+        topLevelTaskId,
         path: worktreePath,
         branch: validatedBranch,
       });
@@ -346,7 +350,7 @@ export class WorktreeService {
     } catch (error) {
       logger.error('Failed to create worktree', error as Error, {
         taskId,
-        epicId,
+        topLevelTaskId,
         branchName,
       });
       throw error;

@@ -10,7 +10,6 @@ export const CRITICAL_TOOLS = [
   'mcp__agent__get_task',
   'mcp__agent__get_top_level_task',
   'mcp__task__update_status',
-  'mcp__supervisor__update_status',
 ];
 
 /**

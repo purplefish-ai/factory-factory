@@ -1,5 +1,6 @@
 'use client';
 
+import type { Task } from '@prisma-gen/browser';
 import { TaskState } from '@prisma-gen/browser';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -26,9 +27,10 @@ export default function ProjectEpicsPage() {
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
 
-  const { data: epics, isLoading } = trpc.epic.list.useQuery(
+  const { data: topLevelTasks, isLoading } = trpc.task.list.useQuery(
     {
       state: stateFilter ? (stateFilter as TaskState) : undefined,
+      isTopLevel: true,
     },
     { enabled: !!project?.id, refetchInterval: 5000 }
   );
@@ -80,7 +82,7 @@ export default function ProjectEpicsPage() {
 
       {/* Epic List */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {!epics || epics.length === 0 ? (
+        {!topLevelTasks || topLevelTasks.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <p>No epics found.</p>
             <Link
@@ -112,37 +114,37 @@ export default function ProjectEpicsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {epics.map((epic) => (
-                <tr key={epic.id} className="hover:bg-gray-50">
+              {topLevelTasks.map((task: Task & { children?: unknown[] }) => (
+                <tr key={task.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <Link
-                      href={`/projects/${slug}/epics/${epic.id}`}
+                      href={`/projects/${slug}/epics/${task.id}`}
                       className="text-gray-900 font-medium hover:text-blue-600"
                     >
-                      {epic.title}
+                      {task.title}
                     </Link>
-                    {epic.description && (
+                    {task.description && (
                       <p className="text-sm text-gray-500 truncate max-w-md">
-                        {epic.description.slice(0, 100)}...
+                        {task.description.slice(0, 100)}...
                       </p>
                     )}
                   </td>
                   <td className="px-6 py-4">
                     <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${stateColors[epic.state]}`}
+                      className={`px-2 py-1 rounded text-xs font-medium ${stateColors[task.state]}`}
                     >
-                      {epic.state}
+                      {task.state}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {(epic as { tasks?: unknown[] }).tasks?.length ?? 0} tasks
+                    {task.children?.length ?? 0} tasks
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(epic.createdAt).toLocaleDateString()}
+                    {new Date(task.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Link
-                      href={`/projects/${slug}/epics/${epic.id}`}
+                      href={`/projects/${slug}/epics/${task.id}`}
                       className="text-blue-600 hover:text-blue-800 text-sm"
                     >
                       View

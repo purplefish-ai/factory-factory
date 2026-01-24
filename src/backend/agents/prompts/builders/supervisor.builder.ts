@@ -18,7 +18,7 @@ const TASK_MANAGEMENT_TOOLS: ToolCategory = {
   name: 'Task Management',
   tools: [
     {
-      name: 'mcp__supervisor__create_task',
+      name: 'mcp__task__create',
       description: 'Create a new subtask for a worker',
       inputExample: {
         title: 'Subtask title here',
@@ -26,7 +26,7 @@ const TASK_MANAGEMENT_TOOLS: ToolCategory = {
       },
     },
     {
-      name: 'mcp__supervisor__list_tasks',
+      name: 'mcp__task__list',
       description: 'List all subtasks for your top-level task',
       inputExample: {},
     },
@@ -37,12 +37,12 @@ const CODE_REVIEW_TOOLS: ToolCategory = {
   name: 'Code Review',
   tools: [
     {
-      name: 'mcp__supervisor__get_review_queue',
+      name: 'mcp__task__get_review_queue',
       description: 'Get subtasks ready for review ordered by submission time',
       inputExample: {},
     },
     {
-      name: 'mcp__supervisor__read_file',
+      name: 'mcp__git__read_worktree_file',
       description: "Read a file from a worker's worktree for code review",
       inputExample: {
         taskId: 'task-id-here',
@@ -50,14 +50,14 @@ const CODE_REVIEW_TOOLS: ToolCategory = {
       },
     },
     {
-      name: 'mcp__supervisor__approve_task',
+      name: 'mcp__task__approve',
       description: 'Approve subtask and merge worker branch into top-level task branch',
       inputExample: {
         taskId: 'task-id-here',
       },
     },
     {
-      name: 'mcp__supervisor__request_changes',
+      name: 'mcp__task__request_changes',
       description: 'Request changes from a worker',
       inputExample: {
         taskId: 'task-id-here',
@@ -71,7 +71,7 @@ const TASK_COMPLETION_TOOLS: ToolCategory = {
   name: 'Task Completion',
   tools: [
     {
-      name: 'mcp__supervisor__create_epic_pr',
+      name: 'mcp__task__create_final_pr',
       description: 'Create PR from top-level task branch to main (for human review)',
       inputExample: {},
     },
@@ -84,7 +84,7 @@ const SUPERVISOR_GUIDELINES = {
     'Create clear, atomic subtasks with detailed descriptions',
     'Review code thoroughly before approving',
     'Provide constructive feedback when requesting changes',
-    'Keep track of all subtasks and their status using mcp__supervisor__list_tasks',
+    'Keep track of all subtasks and their status using mcp__task__list',
     'Review subtasks in submission order (first in, first reviewed)',
   ],
   donts: [
@@ -117,7 +117,7 @@ function generateWorkingEnvironmentSection(): string {
 
 You are running in a dedicated git worktree for the top-level task branch. Workers create their own worktrees branching from main. When you approve a subtask, the worker's branch is merged into your top-level task branch.
 
-**Important**: There are no PRs between you and workers. Workers commit locally, you review their code directly using mcp__task__read_file, and when approved, you merge their branch into the top-level task branch. Only the final top-level-task-to-main submission creates a PR for human review.`;
+**Important**: There are no PRs between you and workers. Workers commit locally, you review their code directly using mcp__git__read_worktree_file, and when approved, you merge their branch into the top-level task branch. Only the final top-level-task-to-main submission creates a PR for human review.`;
 }
 
 function generateWorkflowSection(): string {
@@ -137,15 +137,15 @@ function generateWorkflowSection(): string {
 ### Phase 3: Code Review
 1. Review subtasks one at a time in submission order
 2. For each subtask ready for review:
-   - Read the key files using mcp__task__read_file
+   - Read the key files using mcp__git__read_worktree_file
    - Check that the implementation matches the subtask requirements
-   - Either approve (mcp__task__approve_subtask) or request changes (mcp__task__request_changes)
+   - Either approve (mcp__task__approve) or request changes (mcp__task__request_changes)
 3. When you approve, the worker's branch is merged into your top-level task branch and pushed
 4. Other workers with pending reviews will be notified to rebase
 
 ### Phase 4: Task Completion
 1. When all subtasks are COMPLETED, create the final PR
-2. Use mcp__task__create_task_pr to create PR from top-level task branch to main
+2. Use mcp__task__create_final_pr to create PR from top-level task branch to main
 3. A human will review the final PR`;
 }
 

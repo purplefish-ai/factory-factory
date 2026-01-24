@@ -56,7 +56,7 @@ const RunSupervisorSchema = z.object({
 });
 
 const RecreateSupervisorSchema = z.object({
-  epicId: z.string(),
+  taskId: z.string(),
 });
 
 // ============================================================================
@@ -239,17 +239,17 @@ router.get('/supervisors', async (_req, res) => {
 });
 
 /**
- * GET /api/orchestrator/pending-epics
+ * GET /api/orchestrator/pending-top-level-tasks
  * List top-level tasks that need supervisors
  */
-router.get('/pending-epics', async (_req, res) => {
+router.get('/pending-top-level-tasks', async (_req, res) => {
   try {
     const pendingTasks = await getPendingTopLevelTasksNeedingSupervisors();
 
     return res.status(200).json({
       success: true,
       data: {
-        pendingEpics: pendingTasks, // Keep response field name for backward compatibility
+        pendingTopLevelTasks: pendingTasks,
         count: pendingTasks.length,
       },
     });
@@ -410,7 +410,7 @@ router.post('/recover/supervisor', async (req, res) => {
   try {
     const validatedInput = TriggerSupervisorRecoverySchema.parse(req.body);
 
-    // Get supervisor to find epicId
+    // Get supervisor to find taskId
     const supervisor = await agentAccessor.findById(validatedInput.supervisorId);
     if (!supervisor) {
       return res.status(404).json({
@@ -553,18 +553,18 @@ router.post('/supervisor/run', async (req, res) => {
 
 /**
  * POST /api/orchestrator/supervisor/recreate
- * Recreate a supervisor for an epic (kills existing and creates new)
+ * Recreate a supervisor for a top-level task (kills existing and creates new)
  */
 router.post('/supervisor/recreate', async (req, res) => {
   try {
     const validatedInput = RecreateSupervisorSchema.parse(req.body);
 
-    const newSupervisorId = await recreateSupervisor(validatedInput.epicId);
+    const newSupervisorId = await recreateSupervisor(validatedInput.taskId);
 
     return res.status(200).json({
       success: true,
       data: {
-        epicId: validatedInput.epicId,
+        taskId: validatedInput.taskId,
         supervisorId: newSupervisorId,
         message: 'Supervisor recreated successfully',
       },
