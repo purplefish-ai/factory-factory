@@ -1,6 +1,7 @@
 import type { Agent, Prisma } from '@prisma-gen/client';
 import { AgentState, AgentType } from '@prisma-gen/client';
 import { prisma } from '../db.js';
+import { taskAccessor } from './task.accessor.js';
 
 export interface CreateAgentInput {
   type: AgentType;
@@ -240,19 +241,23 @@ export class AgentAccessor {
   /**
    * Find all workers for a specific top-level task (formerly "epic")
    * Workers are assigned to leaf tasks that are descendants of the top-level task
+   * Supports arbitrary nesting depth by getting all descendant task IDs first
    */
-  findWorkersByTopLevelTaskId(topLevelTaskId: string): Promise<Agent[]> {
+  async findWorkersByTopLevelTaskId(topLevelTaskId: string): Promise<Agent[]> {
+    // Get all descendant tasks (supports arbitrary nesting)
+    const descendants = await taskAccessor.getDescendants(topLevelTaskId);
+    const descendantIds = descendants.map((t) => t.id);
+
+    if (descendantIds.length === 0) {
+      return [];
+    }
+
     return prisma.agent.findMany({
       where: {
         type: AgentType.WORKER,
         assignedTasks: {
           some: {
-            OR: [
-              // Direct children of the top-level task
-              { parentId: topLevelTaskId },
-              // Or the task's parent is under the top-level task (nested)
-              { parent: { parentId: topLevelTaskId } },
-            ],
+            id: { in: descendantIds },
           },
         },
       },
@@ -265,20 +270,29 @@ export class AgentAccessor {
 
   /**
    * Find all agents (workers and supervisors) for a specific top-level task
+   * Supports arbitrary nesting depth by getting all descendant task IDs first
    */
-  findAgentsByTopLevelTaskId(topLevelTaskId: string): Promise<Agent[]> {
+  async findAgentsByTopLevelTaskId(topLevelTaskId: string): Promise<Agent[]> {
+    // Get all descendant tasks (supports arbitrary nesting)
+    const descendants = await taskAccessor.getDescendants(topLevelTaskId);
+    const descendantIds = descendants.map((t) => t.id);
+
     return prisma.agent.findMany({
       where: {
         OR: [
           // Workers assigned to tasks under this top-level task
-          {
-            type: AgentType.WORKER,
-            assignedTasks: {
-              some: {
-                OR: [{ parentId: topLevelTaskId }, { parent: { parentId: topLevelTaskId } }],
-              },
-            },
-          },
+          ...(descendantIds.length > 0
+            ? [
+                {
+                  type: AgentType.WORKER,
+                  assignedTasks: {
+                    some: {
+                      id: { in: descendantIds },
+                    },
+                  },
+                },
+              ]
+            : []),
           // Supervisor managing this top-level task
           {
             type: AgentType.SUPERVISOR,

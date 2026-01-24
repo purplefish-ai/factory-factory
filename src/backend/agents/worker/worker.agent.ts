@@ -8,7 +8,12 @@ import {
   stopSession,
 } from '../../clients/claude-code.client.js';
 import { GitClientFactory } from '../../clients/git.client.js';
-import { agentAccessor, mailAccessor, taskAccessor } from '../../resource_accessors/index.js';
+import {
+  agentAccessor,
+  mailAccessor,
+  projectAccessor,
+  taskAccessor,
+} from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
 import { buildWorkerPrompt } from '../prompts/builders/worker.builder.js';
 
@@ -83,24 +88,24 @@ export async function createWorker(taskId: string): Promise<string> {
   }
 
   if (!task.parentId) {
-    throw new Error(`Task '${taskId}' does not have a parent task (epic)`);
+    throw new Error(`Task '${taskId}' does not have a parent task`);
   }
 
-  // Get parent task (epic) - includes project relation
-  const parentTask = await taskAccessor.findById(task.parentId);
-  if (!parentTask) {
-    throw new Error(`Parent task (epic) with ID '${task.parentId}' not found`);
+  // Get the top-level task (root of the hierarchy) - this is what supervisors manage
+  const topLevelTask = await taskAccessor.getTopLevelParent(taskId);
+  if (!topLevelTask) {
+    throw new Error(`Could not find top-level task for task '${taskId}'`);
   }
 
-  // Get project for this task
-  const project = parentTask.project;
+  // Get project for this task using projectId
+  const project = await projectAccessor.findById(topLevelTask.projectId);
   if (!project) {
-    throw new Error(`Parent task '${task.parentId}' does not have an associated project`);
+    throw new Error(`Project with ID '${topLevelTask.projectId}' not found`);
   }
 
   // Build epic branch name (matches supervisor's branch naming convention)
   // Workers should branch from the epic branch so they have the latest merged code
-  const epicBranchName = `factoryfactory/epic-${parentTask.id.substring(0, 8)}`;
+  const epicBranchName = `factoryfactory/epic-${topLevelTask.id.substring(0, 8)}`;
 
   // Create agent record
   const agent = await agentAccessor.create({
@@ -130,10 +135,10 @@ export async function createWorker(taskId: string): Promise<string> {
   // Backend URL for API calls
   const backendUrl = `http://localhost:${process.env.BACKEND_PORT || 3001}`;
 
-  // Find the supervisor for this parent task (epic)
-  const supervisor = await agentAccessor.findByTopLevelTaskId(parentTask.id);
+  // Find the supervisor for the top-level task
+  const supervisor = await agentAccessor.findByTopLevelTaskId(topLevelTask.id);
   if (!supervisor) {
-    throw new Error(`No supervisor found for parent task ${parentTask.id}`);
+    throw new Error(`No supervisor found for top-level task ${topLevelTask.id}`);
   }
 
   // Build system prompt with full context
@@ -141,7 +146,7 @@ export async function createWorker(taskId: string): Promise<string> {
     taskId: task.id,
     taskTitle: task.title,
     taskDescription: task.description || 'No description provided',
-    parentTaskTitle: parentTask.title,
+    parentTaskTitle: topLevelTask.title,
     parentTaskBranchName: epicBranchName,
     worktreePath: worktreeInfo.path,
     branchName: worktreeInfo.branchName,
