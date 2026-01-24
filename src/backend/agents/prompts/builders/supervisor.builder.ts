@@ -99,6 +99,7 @@ export function buildSupervisorPrompt(context: SupervisorContext): string {
     .addFile('supervisor-review.md')
     .addFile('supervisor-merge.md')
     .addFile('supervisor-escalation.md')
+    .addFile('worker-management.md')
     // Shared behaviors (injected into all agents)
     .addFile('self-verification.md')
     .addFile('stuck-detection.md')
