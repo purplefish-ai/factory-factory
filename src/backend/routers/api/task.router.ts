@@ -108,7 +108,7 @@ router.post('/create', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -166,7 +166,7 @@ router.post('/start-worker', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -266,7 +266,7 @@ router.post('/stop-worker', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -306,7 +306,7 @@ router.post('/kill-worker', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -349,7 +349,7 @@ router.post('/recreate-worker', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -429,7 +429,7 @@ router.post('/cancel', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }

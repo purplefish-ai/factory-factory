@@ -33,7 +33,7 @@ async function logDecision(context: McpToolContext, input: unknown): Promise<Mcp
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }

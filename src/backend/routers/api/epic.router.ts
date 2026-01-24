@@ -101,7 +101,7 @@ router.post('/create', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -171,7 +171,7 @@ router.post('/start-supervisor', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -351,7 +351,7 @@ router.post('/stop-supervisor', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -391,7 +391,7 @@ router.post('/kill-supervisor', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -434,7 +434,7 @@ router.post('/recreate-supervisor', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }

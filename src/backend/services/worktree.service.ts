@@ -141,9 +141,7 @@ export class WorktreeService {
   /**
    * Check a single worktree for orphan status
    */
-  private async checkWorktreeOrphan(
-    worktree: WorktreeInfo
-  ): Promise<{
+  private async checkWorktreeOrphan(worktree: WorktreeInfo): Promise<{
     isOrphaned: boolean;
     reason: OrphanedWorktree['reason'];
     taskId?: string;

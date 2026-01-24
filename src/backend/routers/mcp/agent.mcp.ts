@@ -46,7 +46,7 @@ async function getStatus(context: McpToolContext, input: unknown): Promise<McpTo
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -107,7 +107,7 @@ async function getTask(context: McpToolContext, input: unknown): Promise<McpTool
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -195,7 +195,7 @@ async function getEpic(context: McpToolContext, input: unknown): Promise<McpTool
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }

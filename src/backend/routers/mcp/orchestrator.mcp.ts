@@ -270,7 +270,7 @@ async function listSupervisors(context: McpToolContext, input: unknown): Promise
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -342,7 +342,7 @@ async function checkSupervisorHealth(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -407,7 +407,7 @@ async function createSupervisor(context: McpToolContext, input: unknown): Promis
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     // Re-throw other errors with context
     if (error instanceof Error) {
@@ -521,7 +521,7 @@ ${resumeMessage}`,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -582,7 +582,7 @@ async function listPendingEpics(context: McpToolContext, input: unknown): Promis
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }

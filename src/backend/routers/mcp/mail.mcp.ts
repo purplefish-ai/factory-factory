@@ -65,7 +65,7 @@ async function listInbox(context: McpToolContext, input: unknown): Promise<McpTo
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -115,7 +115,7 @@ async function readMail(context: McpToolContext, input: unknown): Promise<McpToo
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -170,7 +170,7 @@ async function sendMail(context: McpToolContext, input: unknown): Promise<McpToo
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }
@@ -237,7 +237,7 @@ async function replyMail(context: McpToolContext, input: unknown): Promise<McpTo
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.errors);
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
     }
     throw error;
   }

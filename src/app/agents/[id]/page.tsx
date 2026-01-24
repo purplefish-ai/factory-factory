@@ -94,7 +94,7 @@ interface DecisionLog {
   id: string;
   decision: string;
   reasoning: string;
-  context?: string;
+  context: string | null;
   timestamp: Date;
 }
 
