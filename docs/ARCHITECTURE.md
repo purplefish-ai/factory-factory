@@ -17,7 +17,7 @@ This document describes the high-level architecture of FactoryFactory, an autono
 
 FactoryFactory orchestrates multiple AI agents to autonomously implement software features. The system:
 
-1. Accepts high-level feature descriptions (top-level tasks, linked to Linear issues)
+1. Accepts high-level feature descriptions (top-level tasks)
 2. Breaks them down into implementable subtasks
 3. Assigns AI agents to implement each subtask
 4. Creates pull requests for review
@@ -338,7 +338,7 @@ Worker 2 completes → PR created ────────┤
 
 The system uses a unified Task model where top-level tasks (formerly "Epics") and subtasks are both represented in the same table, differentiated by the `parentId` field:
 
-- **Top-level tasks**: `parentId = null`, linked to Linear issues
+- **Top-level tasks**: `parentId = null`
 - **Subtasks**: `parentId` references parent task
 
 ### Entity Relationship Diagram
@@ -365,7 +365,6 @@ The system uses a unified Task model where top-level tasks (formerly "Epics") an
 │ title       │
 │ description │
 │ state       │
-│ linearIssue │ (top-level only)
 │ assignedId  │
 │ branchName  │
 │ prUrl       │

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, ExternalLink, Terminal } from 'lucide-react';
+import { ArrowLeft, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
@@ -87,14 +87,6 @@ export default function EpicDetailPage() {
             </div>
           </div>
         </div>
-        {topLevelTask.linearIssueUrl && (
-          <Button variant="outline" size="sm" asChild>
-            <a href={topLevelTask.linearIssueUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              View in Linear
-            </a>
-          </Button>
-        )}
       </div>
 
       {topLevelTask.description && (

@@ -168,8 +168,6 @@ async function getTopLevelTask(context: McpToolContext, input: unknown): Promise
       title: topLevelTask.title,
       description: topLevelTask.description,
       state: topLevelTask.state,
-      linearIssueId: topLevelTask.linearIssueId,
-      linearIssueUrl: topLevelTask.linearIssueUrl,
       createdAt: topLevelTask.createdAt,
       updatedAt: topLevelTask.updatedAt,
       completedAt: topLevelTask.completedAt,

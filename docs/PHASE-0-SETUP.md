@@ -300,21 +300,32 @@ Create a test script `test-prisma.ts`:
 
 ```typescript
 import { prisma } from './src/backend/db';
-import { EpicState } from '@prisma/client';
+import { TaskState } from '@prisma/client';
 
 async function test() {
-  const epic = await prisma.epic.create({
+  // First create a project
+  const project = await prisma.project.create({
     data: {
-      linearIssueId: 'TEST-1',
-      linearIssueUrl: 'https://linear.app/test/issue/TEST-1',
-      title: 'Test Epic',
-      state: EpicState.PLANNING,
+      name: 'Test Project',
+      slug: 'test-project',
+      repoPath: '/tmp/test-repo',
+      worktreeBasePath: '/tmp/worktrees',
     },
   });
 
-  console.log('Created epic:', epic);
+  // Create a top-level task (parentId = null)
+  const task = await prisma.task.create({
+    data: {
+      projectId: project.id,
+      title: 'Test Top-Level Task',
+      state: TaskState.PLANNING,
+    },
+  });
 
-  await prisma.epic.delete({ where: { id: epic.id } });
+  console.log('Created task:', task);
+
+  await prisma.task.delete({ where: { id: task.id } });
+  await prisma.project.delete({ where: { id: project.id } });
   console.log('Test passed!');
 }
 
@@ -396,24 +407,33 @@ npx tsx test-tmux.ts
 Create a test script `test-accessors.ts`:
 
 ```typescript
-import { epicAccessor, taskAccessor, agentAccessor } from './src/backend/resource_accessors';
-import { EpicState, TaskState, AgentType } from '@prisma/client';
+import { projectAccessor, taskAccessor, agentAccessor } from './src/backend/resource_accessors';
+import { TaskState, AgentType } from '@prisma/client';
 
 async function test() {
-  // Create epic
-  const epic = await epicAccessor.create({
-    linearIssueId: 'TEST-2',
-    linearIssueUrl: 'https://linear.app/test/issue/TEST-2',
-    title: 'Test Epic',
+  // Create project
+  const project = await projectAccessor.create({
+    name: 'Test Project',
+    slug: 'test-project-' + Date.now(),
+    repoPath: '/tmp/test-repo',
+    worktreeBasePath: '/tmp/worktrees',
   });
-  console.log('Created epic:', epic.id);
+  console.log('Created project:', project.id);
 
-  // Create task
-  const task = await taskAccessor.create({
-    epicId: epic.id,
-    title: 'Test Task',
+  // Create top-level task
+  const topLevelTask = await taskAccessor.create({
+    projectId: project.id,
+    title: 'Test Top-Level Task',
   });
-  console.log('Created task:', task.id);
+  console.log('Created top-level task:', topLevelTask.id);
+
+  // Create subtask
+  const subtask = await taskAccessor.create({
+    projectId: project.id,
+    parentId: topLevelTask.id,
+    title: 'Test Subtask',
+  });
+  console.log('Created subtask:', subtask.id);
 
   // Create agent
   const agent = await agentAccessor.create({
@@ -422,8 +442,9 @@ async function test() {
   console.log('Created agent:', agent.id);
 
   // Cleanup
-  await taskAccessor.delete(task.id);
-  await epicAccessor.delete(epic.id);
+  await taskAccessor.delete(subtask.id);
+  await taskAccessor.delete(topLevelTask.id);
+  await projectAccessor.delete(project.id);
   await agentAccessor.delete(agent.id);
 
   console.log('Test passed!');

@@ -75,10 +75,3 @@ export function getSubtaskWorktreeName(taskId: string, title: string): string {
     .replace(/-+$/, '');
   return `task-${taskId.substring(0, 8)}-${sanitizedTitle}`;
 }
-
-/**
- * Generate a local issue ID for tasks not linked to Linear
- */
-export function generateLocalIssueId(): string {
-  return `local-${Date.now()}`;
-}

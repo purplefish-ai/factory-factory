@@ -2,11 +2,10 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "src/app/**/*.{ts,tsx}",
-    "scripts/**/*.ts",
     "src/backend/testing/smoke-test.ts",
     "src/backend/testing/test-scenarios.ts"
   ],
-  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
+  "project": ["src/**/*.{ts,tsx}"],
   "paths": {
     "@/*": ["src/*"],
     "@prisma-gen/*": ["prisma/generated/*"]

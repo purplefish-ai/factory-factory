@@ -81,7 +81,7 @@ ls src/backend/inngest/functions/task-created.ts
    npx prisma migrate dev
    ```
 
-3. **Create a test epic** (via database or Linear)
+3. **Create a test epic** (via database or UI)
    ```sql
    -- Example SQL to insert test epic
    INSERT INTO "Epic" (id, title, description, state, "createdAt", "updatedAt")

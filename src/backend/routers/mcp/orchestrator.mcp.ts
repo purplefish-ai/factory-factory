@@ -564,7 +564,6 @@ async function listPendingTopLevelTasks(
         id: p.task.id,
         title: p.task.title,
         description: p.task.description,
-        linearIssueId: p.task.linearIssueId,
         createdAt: p.task.createdAt,
       }));
 
