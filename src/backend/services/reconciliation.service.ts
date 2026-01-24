@@ -492,7 +492,8 @@ class ReconciliationService {
       return this.createWorkerForOrphanedTask(task);
     }
 
-    // Ensure infrastructure for IN_PROGRESS tasks (check branchName on task, worktreePath on agent)
+    // Ensure infrastructure for IN_PROGRESS tasks missing branchName
+    // (worktreePath on agent will be set when infrastructure is created)
     if (task.state === TaskState.IN_PROGRESS && !task.branchName) {
       const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
       // Update the agent with worktreePath if one exists
@@ -543,18 +544,28 @@ class ReconciliationService {
       executionState: ExecutionState.IDLE,
     });
 
-    // Create infrastructure and update agent with worktreePath
-    const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
-    await agentAccessor.update(worker.id, { worktreePath });
+    try {
+      // Create infrastructure and update agent with worktreePath
+      const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
+      await agentAccessor.update(worker.id, { worktreePath });
 
-    // Update task state and assign agent
-    await taskAccessor.update(task.id, {
-      state: TaskState.IN_PROGRESS,
-      assignedAgentId: worker.id,
-    });
+      // Update task state and assign agent
+      await taskAccessor.update(task.id, {
+        state: TaskState.IN_PROGRESS,
+        assignedAgentId: worker.id,
+      });
 
-    await taskAccessor.markReconciled(task.id);
-    return { workerCreated: true, infrastructureCreated: true };
+      await taskAccessor.markReconciled(task.id);
+      return { workerCreated: true, infrastructureCreated: true };
+    } catch (error) {
+      // Clean up orphaned agent if infrastructure creation fails
+      logger.error('Infrastructure creation failed, cleaning up agent', error as Error, {
+        taskId: task.id,
+        agentId: worker.id,
+      });
+      await agentAccessor.delete(worker.id);
+      throw error;
+    }
   }
 
   /**
@@ -583,19 +594,29 @@ class ReconciliationService {
       executionState: ExecutionState.IDLE,
     });
 
-    let infrastructureCreated = false;
+    try {
+      let infrastructureCreated = false;
 
-    // Ensure infrastructure exists and update agent with worktreePath
-    if (!task.branchName) {
-      const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
-      await agentAccessor.update(worker.id, { worktreePath });
-      infrastructureCreated = true;
+      // Ensure infrastructure exists and update agent with worktreePath
+      if (!task.branchName) {
+        const { worktreePath } = await this.ensureLeafTaskInfrastructure(task);
+        await agentAccessor.update(worker.id, { worktreePath });
+        infrastructureCreated = true;
+      }
+
+      await taskAccessor.update(task.id, { assignedAgentId: worker.id });
+      await taskAccessor.markReconciled(task.id);
+
+      return { workerCreated: true, infrastructureCreated };
+    } catch (error) {
+      // Clean up orphaned agent if infrastructure creation fails
+      logger.error('Failed to set up orphaned task worker, cleaning up agent', error as Error, {
+        taskId: task.id,
+        agentId: worker.id,
+      });
+      await agentAccessor.delete(worker.id);
+      throw error;
     }
-
-    await taskAccessor.update(task.id, { assignedAgentId: worker.id });
-    await taskAccessor.markReconciled(task.id);
-
-    return { workerCreated: true, infrastructureCreated };
   }
 
   private async ensureLeafTaskInfrastructure(
