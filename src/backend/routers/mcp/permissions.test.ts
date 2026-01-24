@@ -64,6 +64,8 @@ describe('checkToolPermissions', () => {
   });
 
   describe('ORCHESTRATOR permissions', () => {
+    // NOTE: Orchestrator-specific tools were removed - functionality moved to reconciler service
+
     it('should allow mail tools for orchestrators', () => {
       const result = checkToolPermissions(AgentType.ORCHESTRATOR, 'mcp__mail__send');
       expect(result.allowed).toBe(true);
@@ -79,17 +81,9 @@ describe('checkToolPermissions', () => {
       expect(result.allowed).toBe(true);
     });
 
-    it('should allow task tools for orchestrators', () => {
+    it('should deny task tools for orchestrators', () => {
       const result = checkToolPermissions(AgentType.ORCHESTRATOR, 'mcp__task__list');
-      expect(result.allowed).toBe(true);
-    });
-
-    it('should allow orchestrator-specific tools for orchestrators', () => {
-      const result = checkToolPermissions(
-        AgentType.ORCHESTRATOR,
-        'mcp__orchestrator__health_check'
-      );
-      expect(result.allowed).toBe(true);
+      expect(result.allowed).toBe(false);
     });
 
     it('should deny git tools for orchestrators', () => {
@@ -135,8 +129,9 @@ describe('checkToolPermissions', () => {
       expect(result.allowed).toBe(false);
     });
 
-    it('should deny orchestrator tools for workers', () => {
-      const result = checkToolPermissions(AgentType.WORKER, 'mcp__orchestrator__restart');
+    it('should deny unknown tools for workers', () => {
+      // Orchestrator tools no longer exist, but any unknown tool should be denied
+      const result = checkToolPermissions(AgentType.WORKER, 'mcp__unknown__restart');
       expect(result.allowed).toBe(false);
     });
 
@@ -175,14 +170,18 @@ describe('AGENT_TOOL_PERMISSIONS configuration', () => {
   });
 
   describe('ORCHESTRATOR', () => {
-    it('should have orchestrator-specific tools allowed', () => {
-      expect(AGENT_TOOL_PERMISSIONS[AgentType.ORCHESTRATOR].allowed).toContain(
-        'mcp__orchestrator__*'
-      );
-    });
+    // NOTE: Orchestrator-specific tools were removed - functionality moved to reconciler service
 
     it('should have mail tools allowed', () => {
       expect(AGENT_TOOL_PERMISSIONS[AgentType.ORCHESTRATOR].allowed).toContain('mcp__mail__*');
+    });
+
+    it('should have agent tools allowed', () => {
+      expect(AGENT_TOOL_PERMISSIONS[AgentType.ORCHESTRATOR].allowed).toContain('mcp__agent__*');
+    });
+
+    it('should have system tools allowed', () => {
+      expect(AGENT_TOOL_PERMISSIONS[AgentType.ORCHESTRATOR].allowed).toContain('mcp__system__*');
     });
   });
 
@@ -198,7 +197,7 @@ describe('AGENT_TOOL_PERMISSIONS configuration', () => {
       const disallowed = AGENT_TOOL_PERMISSIONS[AgentType.WORKER].disallowed;
       expect(disallowed).toContain('mcp__task__create');
       expect(disallowed).toContain('mcp__task__approve');
-      expect(disallowed).toContain('mcp__orchestrator__*');
+      expect(disallowed).toContain('mcp__git__read_worktree_file');
     });
   });
 });

@@ -1,5 +1,11 @@
 # Phase 4: Orchestrator & Health Monitoring
 
+> **Note:** This phase document is partially outdated. The orchestrator MCP tools (`mcp__orchestrator__*`)
+> have been removed - all supervisor lifecycle management is now handled by the **reconciliation service**.
+> See `docs/WORKFLOW.md` and `docs/RECONCILIATION_DESIGN.md` for the current architecture.
+>
+> The reconciler handles: crash detection, supervisor creation, worker creation, and automatic recovery.
+
 ## Overview
 Implement the Orchestrator agent to manage multiple supervisors, heartbeat-based health monitoring, crash detection, and automatic recovery (including cascading worker recovery when supervisors crash).
 

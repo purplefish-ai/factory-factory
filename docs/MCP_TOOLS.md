@@ -1,5 +1,12 @@
 # MCP Tools Documentation
 
+> **Note:** This document is outdated. Key changes:
+> - **Orchestrator tools** (`mcp__orchestrator__*`) have been removed - functionality moved to the reconciler service
+> - **Epic tools** renamed to **Task tools** (`mcp__task__*`)
+> - **Tool permissions** have been updated - see `src/backend/routers/mcp/permissions.ts`
+> - For current tool list, see the source files in `src/backend/routers/mcp/*.mcp.ts`
+> - For current architecture, see `docs/WORKFLOW.md`
+
 This document describes all available MCP (Model Context Protocol) tools that agents can use to interact with the system.
 
 ## Overview

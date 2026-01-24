@@ -12,6 +12,16 @@ Orchestrator (1 per system) → monitors health, manages supervisors
             └── Worker (1 per subtask) → implements in isolated git worktree
 ```
 
+### Reconciliation-Based Architecture
+
+The system uses a **level-triggered, declarative state management approach**:
+
+- **Events update state** - Inngest events and MCP tool calls modify database state
+- **Reconciler acts on mismatches** - A reconciliation loop compares desired vs actual state and remediates
+- **Self-healing** - Crashed agents, orphaned tasks, and missing infrastructure are automatically recovered
+
+This is simpler and more robust than pure event-driven architecture. See [Reconciliation](#reconciliation) for details.
+
 ## Complete Workflow
 
 ### 1. Epic Creation
@@ -33,21 +43,29 @@ Orchestrator (1 per system) → monitors health, manages supervisors
 
 ### 2. Supervisor Creation
 
-**Trigger:** Inngest handler `topLevelTaskCreatedHandler`
+**Trigger:** Reconciler detects top-level task in PLANNING state without a supervisor
 
 **Flow:**
-1. Verify task exists and has `parentId = null`
-2. Create Agent record (type: `SUPERVISOR`)
-3. Create git worktree branching from project's default branch
-   - Branch: `factoryfactory/top-level-{taskId:8}`
-4. Start Claude Code session in tmux
-5. Update task state: `PLANNING → IN_PROGRESS`
-6. Start monitoring loops:
+1. Human creates task → Inngest fires `task.top_level.created`
+2. Handler triggers reconciliation via `reconcile.requested` event
+3. **Reconciler runs** (Phase 2: Top-Level Tasks):
+   - Finds tasks with `parentId = null` in PLANNING state without supervisor
+   - Creates Agent record (type: `SUPERVISOR`, `desiredExecutionState: ACTIVE`)
+   - Calls `createTopLevelTaskInfrastructure()`:
+     - Creates git worktree branching from project's default branch
+     - Branch: `factoryfactory/top-level-{taskId:8}`
+4. **Reconciler runs** (Phase 4: Agent States):
+   - Detects `desiredExecutionState: ACTIVE` but `executionState: IDLE`
+   - Calls `transitionToActive()` → starts Claude Code session in tmux
+5. Task state: `PLANNING → IN_PROGRESS`
+6. Supervisor starts monitoring loops (JavaScript `setInterval` callbacks):
    - 5-second: monitor Claude output, parse/execute tool calls
    - 30-second: check inbox, notify about review queue
    - 7-minute: worker health checks
 
 **Key Files:**
+- Reconciler: `src/backend/services/reconciliation.service.ts`
+- Inngest trigger: `src/backend/inngest/functions/reconciliation.ts`
 - Handler: `src/backend/inngest/functions/top-level-task-created.ts`
 - Lifecycle: `src/backend/agents/supervisor/lifecycle.ts`
 - Agent: `src/backend/agents/supervisor/supervisor.agent.ts`
@@ -66,7 +84,7 @@ Orchestrator (1 per system) → monitors health, manages supervisors
    - Subtasks are atomic and independently implementable
 4. For each subtask created:
    - Task record created with `parentId: epicId`, `state: PENDING`
-   - `startWorker(taskId)` called immediately
+   - **Worker started immediately** via direct `startWorker(taskId)` call (no Inngest event)
 
 **Planning Guidelines:**
 - 2-5 subtasks per epic (balance granularity vs coordination overhead)
@@ -81,18 +99,24 @@ Orchestrator (1 per system) → monitors health, manages supervisors
 
 ### 4. Worker Execution
 
-**Trigger:** Called directly from `mcp__task__create` → `startWorker()`
+**Trigger:** Direct call from `mcp__task__create` → `startWorker(taskId)`
 
 **Flow:**
-1. Create Agent record (type: `WORKER`)
-2. Create git worktree branching from **epic branch** (not main!)
-   - Branch: `factoryfactory/task-{agentId:8}`
-   - This ensures workers have latest merged code
-3. Update task: `state: ASSIGNED`, set `worktreePath`, `branchName`, `assignedAgentId`
-4. Start Claude Code session in tmux
-5. Start monitoring loops:
+1. `startWorker()` creates Agent record (type: `WORKER`, `desiredExecutionState: ACTIVE`)
+2. Triggers reconciliation via `reconcile.requested` event
+3. **Reconciler runs** (Phase 3: Leaf Tasks):
+   - Detects task in PENDING state with missing infrastructure
+   - Creates git worktree branching from **epic branch** (not main!)
+     - Branch: `factoryfactory/task-{taskId:8}`
+     - This ensures workers have latest merged code
+   - Updates task: set `worktreePath`, `branchName`, `assignedAgentId`
+4. **Reconciler runs** (Phase 4: Agent States):
+   - Detects `desiredExecutionState: ACTIVE` but `executionState: IDLE`
+   - Calls `transitionToActive()` → starts Claude Code session in tmux
+5. Task state: `PENDING → IN_PROGRESS`
+6. Worker starts monitoring loops (JavaScript `setInterval` callbacks):
    - 5-second: monitor output, execute tool calls
-   - 30-second: check inbox for supervisor messages
+   - 10-second: check inbox for supervisor messages (rebase requests, feedback)
 
 **Worker Implementation Phase:**
 1. Worker reads task description via `mcp__agent__get_task`
@@ -102,12 +126,14 @@ Orchestrator (1 per system) → monitors health, manages supervisors
    - Creates PR from worker branch → epic branch
    - Updates task state: `IN_PROGRESS → REVIEW`
    - Sends mail to supervisor
+   - Fires desktop notification
 
 **Worker MCP Tools:**
 | Tool | Purpose |
 |------|---------|
 | `mcp__task__update_state` | Transition task state |
 | `mcp__task__create_pr` | Submit work for review |
+| `mcp__task__get_pr_status` | Check PR mergability/review status |
 | `mcp__git__get_diff` | View changes |
 | `mcp__git__rebase` | Rebase onto updated epic branch |
 | `mcp__mail__*` | Communication with supervisor |
@@ -116,6 +142,7 @@ Orchestrator (1 per system) → monitors health, manages supervisors
 - Agent: `src/backend/agents/worker/worker.agent.ts`
 - Lifecycle: `src/backend/agents/worker/lifecycle.ts`
 - Permissions: `src/backend/routers/mcp/permissions.ts`
+- Reconciler: `src/backend/services/reconciliation.service.ts`
 
 ---
 
@@ -124,34 +151,50 @@ Orchestrator (1 per system) → monitors health, manages supervisors
 **Actor:** Supervisor agent monitoring review queue
 
 **Flow:**
-1. Every 30 seconds, supervisor checks `taskAccessor.getReviewQueue()`
-2. Tasks in REVIEW state returned in FIFO order (by `updatedAt`)
-3. Supervisor prompted when new tasks appear in queue
-4. For each task, supervisor can:
+1. Every 30 seconds, supervisor's inbox check loop runs
+2. Calls `taskAccessor.getReviewQueue()` - returns tasks in REVIEW state (FIFO by `updatedAt`)
+3. When NEW tasks appear in queue, supervisor is prompted: "NEW TASKS READY FOR REVIEW"
+4. Supervisor can list queue with `mcp__task__get_review_queue`
+5. For each task, supervisor can:
 
 **APPROVE** (`mcp__task__approve`):
 ```
-1. Merge worker branch INTO epic branch
-2. Push epic branch to origin
-3. Mark task: REVIEW → COMPLETED
-4. Clean up worker session
-5. For OTHER tasks still in REVIEW:
+1. Validate task is in REVIEW state
+2. Merge worker branch INTO epic branch (git merge)
+3. Push epic branch to origin
+4. Mark task: REVIEW → COMPLETED
+5. Clean up worker session (set desiredExecutionState: IDLE)
+6. For ALL OTHER tasks still in REVIEW:
    - Set state to BLOCKED
    - Send rebase request mail to workers
+   - Workers must rebase against updated epic branch
 ```
 
 **REQUEST CHANGES** (`mcp__task__request_changes`):
 ```
-1. Send feedback mail to worker
+1. Send feedback mail to worker with specific feedback
 2. Mark task: REVIEW → IN_PROGRESS
-3. Worker continues work
+3. Worker receives mail via 10-second inbox check
+4. Worker continues work and resubmits
 ```
 
 **Sequential Merge Strategy:**
 - Only ONE merge happens at a time
-- Other pending reviews are BLOCKED
+- After merge, ALL other pending reviews are BLOCKED
 - Blocked workers must rebase: `git fetch && git rebase origin/{epicBranch}`
 - This prevents complex merge conflicts
+- Workers are notified via mail to rebase and resubmit
+
+**Supervisor MCP Tools:**
+| Tool | Purpose |
+|------|---------|
+| `mcp__task__create` | Create subtasks (starts worker immediately) |
+| `mcp__task__list` | List all subtasks with optional state filter |
+| `mcp__task__get_review_queue` | Get tasks in REVIEW state (FIFO order) |
+| `mcp__task__approve` | Merge worker branch, mark completed |
+| `mcp__task__request_changes` | Send feedback, move back to IN_PROGRESS |
+| `mcp__task__force_complete` | Manual completion (for conflict recovery) |
+| `mcp__task__create_final_pr` | Create PR from epic → main |
 
 **Key Files:**
 - Review queue: `src/backend/resource_accessors/task.accessor.ts`
@@ -221,14 +264,16 @@ Orchestrator (1 per system) → monitors health, manages supervisors
 ```
 main
   │
-  └── factoryfactory/top-level-{epicId}     ← Epic branch (supervisor's worktree)
+  └── factoryfactory/top-level-{epicId:8}   ← Epic branch (supervisor's worktree)
         │
-        ├── factoryfactory/task-{agentId1}  ← Worker 1 branch
-        ├── factoryfactory/task-{agentId2}  ← Worker 2 branch
-        └── factoryfactory/task-{agentId3}  ← Worker 3 branch
+        ├── factoryfactory/task-{taskId1:8} ← Worker 1 branch
+        ├── factoryfactory/task-{taskId2:8} ← Worker 2 branch
+        └── factoryfactory/task-{taskId3:8} ← Worker 3 branch
 
 Worker PRs target: epic branch
 Final PR targets: main
+
+Note: {:8} indicates first 8 characters of the ID are used
 ```
 
 ---
@@ -257,6 +302,18 @@ PENDING → IN_PROGRESS → REVIEW → COMPLETED
 ```
 
 Note: `IN_PROGRESS` does NOT imply an agent is actively running. The task could be in progress with the agent paused (deferred work).
+
+**Valid State Transitions:**
+
+| From State | Allowed Transitions |
+|------------|---------------------|
+| PENDING | IN_PROGRESS, BLOCKED, FAILED |
+| PLANNING | IN_PROGRESS, FAILED |
+| IN_PROGRESS | REVIEW, BLOCKED, FAILED |
+| REVIEW | COMPLETED, IN_PROGRESS, BLOCKED |
+| BLOCKED | IN_PROGRESS, FAILED, PENDING |
+| COMPLETED | *(terminal state)* |
+| FAILED | IN_PROGRESS, PENDING *(can retry)* |
 
 ### Agent Execution States (About the Executor)
 
@@ -288,10 +345,96 @@ The reconciler compares `desiredExecutionState` vs `executionState` and remediat
 | Task State | Agent Desired | Agent Actual | Meaning |
 |------------|---------------|--------------|---------|
 | IN_PROGRESS | ACTIVE | ACTIVE | Normal: work happening |
-| IN_PROGRESS | ACTIVE | CRASHED | Problem: needs restart |
+| IN_PROGRESS | ACTIVE | CRASHED | Problem: reconciler will restart |
 | IN_PROGRESS | PAUSED | PAUSED | Deferred: paused overnight |
 | REVIEW | IDLE | IDLE | Normal: awaiting review |
 | BLOCKED | PAUSED | PAUSED | Waiting on dependency |
+
+---
+
+## Reconciliation
+
+The reconciler is the core state management mechanism. It runs as a four-phase loop that ensures reality matches desired state.
+
+### Triggering
+
+**Hybrid triggering** - both periodic and event-driven:
+
+- **Cron:** Every 30 seconds via Inngest (`reconciliation/cron`)
+- **Events:** `reconcile.requested` event with optional `taskId`/`agentId` for targeted reconciliation
+- **Fallback:** If Inngest not running, reconciliation runs directly
+
+### Four-Phase Reconciliation Loop
+
+**Phase 1 - Crash Detection:**
+```
+Find agents where:
+  - executionState = ACTIVE
+  - lastHeartbeat > threshold (configurable, default from settings)
+Mark as CRASHED, log recovery attempt
+```
+
+**Phase 2 - Top-Level Tasks:**
+```
+Find tasks where:
+  - parentId = null (is epic)
+  - state = PLANNING
+  - no supervisor agent assigned
+Create supervisor agent with desiredExecutionState: ACTIVE
+Create git worktree infrastructure
+```
+
+**Phase 3 - Leaf Tasks:**
+```
+Find tasks where:
+  - parentId != null (is subtask)
+  - state = PENDING
+  - missing infrastructure (no worktree, no branch)
+Create worker agent if needed
+Create git worktree branching from epic branch
+Update task with infrastructure paths
+```
+
+**Phase 4 - Agent States:**
+```
+For each agent, compare desiredExecutionState vs executionState:
+  - ACTIVE desired + (IDLE|CRASHED|PAUSED) actual → transitionToActive()
+  - IDLE desired + (ACTIVE|PAUSED|CRASHED) actual → transitionToIdle()
+  - PAUSED desired + ACTIVE actual → transitionToPaused()
+```
+
+### Infrastructure Tracking
+
+Tasks and agents track infrastructure state:
+
+**Task Fields:**
+- `worktreePath` - Path to git worktree
+- `branchName` - Git branch name
+- `prUrl` - GitHub PR URL
+- `assignedAgentId` - Worker agent ID
+- `lastReconcileAt` - Last reconciliation timestamp
+- `reconcileFailures` - JSON array of reconciliation errors
+
+**Agent Fields:**
+- `currentTaskId` - Associated task
+- `tmuxSessionName` - Tmux session name (e.g., `supervisor-{id}`)
+- `sessionId` - Claude Code CLI session ID (for resume on crash)
+- `lastHeartbeat` - Last agent heartbeat
+- `executionState` / `desiredExecutionState` - State pair for reconciliation
+
+### Self-Healing Behavior
+
+The reconciler automatically handles:
+
+1. **Crashed agents** - Detected via stale heartbeat, restarted with session resume
+2. **Orphaned tasks** - Tasks without assigned agents get agents created
+3. **Missing infrastructure** - Worktrees/branches created if missing
+4. **State drift** - Any mismatch between desired and actual state is remediated
+
+**Key Files:**
+- Reconciler: `src/backend/services/reconciliation.service.ts`
+- Inngest functions: `src/backend/inngest/functions/reconciliation.ts`
+- Design doc: `docs/RECONCILIATION_DESIGN.md`
 
 ---
 
@@ -320,26 +463,43 @@ The reconciler compares `desiredExecutionState` vs `executionState` and remediat
 ## Error Handling & Recovery
 
 ### Worker Failure
-1. Supervisor health check detects unhealthy worker (every 7 minutes)
-2. Recovery attempted (up to max retries)
-3. If permanent failure:
+
+**Detection (two mechanisms):**
+1. **Reconciler crash detection** - Phase 1 checks for stale heartbeats (every 30 seconds)
+2. **Supervisor health check** - 7-minute loop detects unhealthy workers
+
+**Recovery Flow:**
+1. Agent marked as `executionState: CRASHED`
+2. Reconciler detects mismatch (`desired: ACTIVE`, `actual: CRASHED`)
+3. `transitionToActive()` called with session resume (preserves context)
+4. If recovery fails repeatedly:
    - Desktop notification to human
    - Mail to supervisor
    - Task marked FAILED
+   - Reconcile failures logged to `task.reconcileFailures`
 
 ### Supervisor Failure
-1. Orchestrator health check detects unhealthy supervisor
-2. Crash loop detection (multiple crashes within 1 hour)
-3. Recovery with session resumption (preserves context)
+
+**Detection:**
+1. Reconciler crash detection via stale heartbeat
+2. Orchestrator health check (if running)
+
+**Recovery Flow:**
+1. Agent marked as `executionState: CRASHED`
+2. Reconciler restarts with session resume
+3. Crash loop detection (multiple crashes within 1 hour)
 4. If crash loop detected:
    - Critical error notification (bypasses quiet hours)
    - System marked unhealthy
 
 ### Conflict Resolution
-1. Git merge attempted automatically
-2. If conflicts occur, merge fails
-3. Supervisor must manually resolve using `mcp__task__force_complete`
-4. Manual resolution in epic branch worktree, then force complete
+
+1. Git merge attempted automatically during `mcp__task__approve`
+2. If conflicts occur, merge fails with error
+3. Supervisor options:
+   - Request changes from worker to fix conflicts
+   - Manually resolve in epic branch worktree
+   - Use `mcp__task__force_complete` to mark task done after manual fix
 
 ---
 
@@ -347,16 +507,35 @@ The reconciler compares `desiredExecutionState` vs `executionState` and remediat
 
 | Component | Location |
 |-----------|----------|
+| **Data Layer** | |
 | Database schema | `prisma/schema.prisma` |
 | Task accessor | `src/backend/resource_accessors/task.accessor.ts` |
 | Agent accessor | `src/backend/resource_accessors/agent.accessor.ts` |
 | Mail accessor | `src/backend/resource_accessors/mail.accessor.ts` |
-| Inngest events | `src/backend/inngest/events.ts` |
-| Inngest handlers | `src/backend/inngest/functions/*.ts` |
+| **Reconciliation** | |
+| Reconciler service | `src/backend/services/reconciliation.service.ts` |
+| Inngest reconciliation | `src/backend/inngest/functions/reconciliation.ts` |
+| Design doc | `docs/RECONCILIATION_DESIGN.md` |
+| **Agent System** | |
 | Supervisor agent | `src/backend/agents/supervisor/supervisor.agent.ts` |
+| Supervisor lifecycle | `src/backend/agents/supervisor/lifecycle.ts` |
 | Worker agent | `src/backend/agents/worker/worker.agent.ts` |
-| MCP tools | `src/backend/routers/mcp/*.ts` |
+| Worker lifecycle | `src/backend/agents/worker/lifecycle.ts` |
+| **MCP Tools** | |
+| Task tools | `src/backend/routers/mcp/task.mcp.ts` |
+| Git tools | `src/backend/routers/mcp/git.mcp.ts` |
+| Mail tools | `src/backend/routers/mcp/mail.mcp.ts` |
+| Agent tools | `src/backend/routers/mcp/agent.mcp.ts` |
+| Permissions | `src/backend/routers/mcp/permissions.ts` |
+| **Inngest Events** | |
+| Event definitions | `src/backend/inngest/events.ts` |
+| Top-level task created | `src/backend/inngest/functions/top-level-task-created.ts` |
+| Task created | `src/backend/inngest/functions/task-created.ts` |
+| Agent completed | `src/backend/inngest/functions/agent-completed.ts` |
+| **Clients & Services** | |
 | Git client | `src/backend/clients/git.client.ts` |
 | GitHub client | `src/backend/clients/github.client.ts` |
 | Notification service | `src/backend/services/notification.service.ts` |
-| Prompts | `prompts/*.md` |
+| **Prompts** | |
+| Supervisor prompts | `prompts/supervisor-*.md` |
+| Worker prompts | `prompts/worker-*.md` |

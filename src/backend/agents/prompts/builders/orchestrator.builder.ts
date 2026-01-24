@@ -2,6 +2,11 @@
  * Orchestrator agent prompt builder
  *
  * Composes markdown prompt files with dynamic sections to build the orchestrator system prompt.
+ *
+ * NOTE: Orchestrator tools have been removed - all supervisor lifecycle management
+ * is now handled by the reconciliation service. The orchestrator's role is now passive:
+ * it monitors system health and can communicate via mail, but doesn't directly
+ * manage supervisors. See docs/WORKFLOW.md and docs/RECONCILIATION_DESIGN.md.
  */
 
 import { PromptBuilder } from '../../../prompts/index.js';
@@ -13,61 +18,14 @@ import {
 } from '../sections/index.js';
 import type { OrchestratorContext, ToolCategory } from '../types.js';
 
-// Orchestrator-specific tool definitions
-const SUPERVISOR_MANAGEMENT_TOOLS: ToolCategory = {
-  name: 'Supervisor Management',
-  tools: [
-    {
-      name: 'mcp__orchestrator__list_supervisors',
-      description: 'List all supervisors with health status',
-      inputExample: {},
-    },
-    {
-      name: 'mcp__orchestrator__check_supervisor_health',
-      description: 'Check health of a specific supervisor',
-      inputExample: {
-        supervisorId: 'supervisor-agent-id',
-      },
-    },
-    {
-      name: 'mcp__orchestrator__create_supervisor',
-      description: 'Create a new supervisor for a top-level task',
-      inputExample: {
-        taskId: 'task-id-here',
-      },
-    },
-    {
-      name: 'mcp__orchestrator__recover_supervisor',
-      description: 'Trigger cascading recovery for crashed supervisor',
-      inputExample: {
-        supervisorId: 'supervisor-agent-id',
-      },
-    },
-  ],
-};
-
-const TASK_MANAGEMENT_TOOLS: ToolCategory = {
-  name: 'Task Management',
-  tools: [
-    {
-      name: 'mcp__task__list_pending',
-      description: 'List top-level tasks that need supervisors',
-      inputExample: {},
-    },
-  ],
-};
-
 /**
  * Build the complete orchestrator system prompt
  */
 export function buildOrchestratorPrompt(context: OrchestratorContext): string {
-  // Build tools section with orchestrator-specific tools
+  // Build tools section - orchestrator now only has mail and agent tools
+  // (supervisor management moved to reconciler service)
   const mailTools = getMailToolsForAgent('orchestrator');
-  const toolCategories: ToolCategory[] = [
-    SUPERVISOR_MANAGEMENT_TOOLS,
-    TASK_MANAGEMENT_TOOLS,
-    { name: 'Communication', tools: mailTools },
-  ];
+  const toolCategories: ToolCategory[] = [{ name: 'Communication', tools: mailTools }];
 
   // Build prompt from markdown files + dynamic sections
   const builder = new PromptBuilder()
@@ -86,8 +44,9 @@ export function buildOrchestratorPrompt(context: OrchestratorContext): string {
     YOUR_AGENT_ID: context.agentId,
   });
 
-  // Add context footer (orchestrator has minimal additional context)
-  const closingMessage = `You are the Orchestrator. Begin by checking for any pending top-level tasks that need supervisors, then start monitoring supervisor health.`;
+  // Add context footer
+  // NOTE: Orchestrator role is now passive - reconciler handles supervisor lifecycle
+  const closingMessage = `You are the Orchestrator. The reconciliation service automatically manages supervisor lifecycle (creation, health monitoring, recovery). Your role is to observe system health and communicate with humans when intervention is needed.`;
 
   const footer = generateContextFooter(context, [], closingMessage);
 

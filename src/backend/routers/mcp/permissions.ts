@@ -11,15 +11,10 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
     disallowed: [], // Nothing blocked
   },
 
-  // Orchestrator manages supervisors and system health
+  // Orchestrator - functionality moved to reconciler service
+  // Orchestrator can still send mail and check agent status, but has no special tools
   [AgentType.ORCHESTRATOR]: {
-    allowed: [
-      'mcp__mail__*',
-      'mcp__agent__*',
-      'mcp__system__*',
-      'mcp__task__*',
-      'mcp__orchestrator__*', // Orchestrator-specific tools
-    ],
+    allowed: ['mcp__mail__*', 'mcp__agent__*', 'mcp__system__*'],
     disallowed: [],
   },
 
@@ -37,7 +32,6 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       'mcp__git__*',
     ],
     disallowed: [
-      'mcp__orchestrator__*',
       // Supervisor-only task management tools
       'mcp__task__create',
       'mcp__task__approve',
