@@ -33,51 +33,51 @@ export default function AdminSystemPage() {
     <div className="space-y-8">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
-          <p className="text-gray-600 mt-1">Configure system behavior and limits</p>
+          <h1 className="text-2xl font-bold text-foreground">System Settings</h1>
+          <p className="text-muted-foreground mt-1">Configure system behavior and limits</p>
         </div>
         <Link
           href="/admin"
-          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80"
         >
           Back to Admin
         </Link>
       </div>
 
       {/* Agent Profiles */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-card rounded-lg border p-4">
         <h2 className="text-lg font-semibold mb-4">Agent Profiles</h2>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-sm text-muted-foreground mb-4">
           Agent models and permissions can be configured via environment variables.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {profiles?.profiles &&
             Object.entries(profiles.profiles).map(([type, profile]) => (
-              <div key={type} className="border border-gray-200 rounded-lg p-4">
+              <div key={type} className="border border-border rounded-lg p-4">
                 <h3 className="font-medium text-lg mb-2">{type}</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Model:</span>
+                    <span className="text-muted-foreground">Model:</span>
                     <span className="font-mono text-xs">
                       {profile.model.split('-').slice(-2).join('-')}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Permission Mode:</span>
+                    <span className="text-muted-foreground">Permission Mode:</span>
                     <span
                       className={`px-2 py-0.5 rounded text-xs ${
                         profile.permissionMode === 'yolo'
-                          ? 'bg-yellow-100 text-yellow-800'
+                          ? 'bg-warning/15 text-warning-foreground'
                           : profile.permissionMode === 'relaxed'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-info/15 text-info'
+                            : 'bg-muted text-muted-foreground'
                       }`}
                     >
                       {profile.permissionMode}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Max Tokens:</span>
+                    <span className="text-muted-foreground">Max Tokens:</span>
                     <span>{profile.maxTokens.toLocaleString()}</span>
                   </div>
                 </div>
@@ -85,7 +85,7 @@ export default function AdminSystemPage() {
             ))}
         </div>
 
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm">
+        <div className="mt-4 p-4 bg-muted rounded-lg text-sm">
           <h4 className="font-medium mb-2">Environment Variables</h4>
           <ul className="space-y-1 font-mono text-xs">
             <li>
@@ -111,11 +111,11 @@ export default function AdminSystemPage() {
       </div>
 
       {/* Rate Limits */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-card rounded-lg border p-4">
         <h2 className="text-lg font-semibold mb-4">Rate Limits</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Claude Requests/min
             </label>
             <input
@@ -127,11 +127,11 @@ export default function AdminSystemPage() {
                   claudeRequestsPerMinute: Number.parseInt(e.target.value, 10),
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Claude Requests/hour
             </label>
             <input
@@ -143,11 +143,11 @@ export default function AdminSystemPage() {
                   claudeRequestsPerHour: Number.parseInt(e.target.value, 10),
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Max Concurrent Workers
             </label>
             <input
@@ -159,11 +159,11 @@ export default function AdminSystemPage() {
                   maxConcurrentWorkers: Number.parseInt(e.target.value, 10),
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Max Concurrent Supervisors
             </label>
             <input
@@ -175,11 +175,11 @@ export default function AdminSystemPage() {
                   maxConcurrentSupervisors: Number.parseInt(e.target.value, 10),
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Max Concurrent Epics
             </label>
             <input
@@ -191,7 +191,7 @@ export default function AdminSystemPage() {
                   maxConcurrentEpics: Number.parseInt(e.target.value, 10),
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
         </div>
@@ -199,33 +199,31 @@ export default function AdminSystemPage() {
           <button
             onClick={handleSaveRateLimits}
             disabled={updateRateLimits.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
           >
             {updateRateLimits.isPending ? 'Saving...' : 'Save Rate Limits'}
           </button>
-          {updateRateLimits.data && (
-            <span className="ml-4 text-green-600">Saved successfully!</span>
-          )}
+          {updateRateLimits.data && <span className="ml-4 text-success">Saved successfully!</span>}
         </div>
       </div>
 
       {/* API Usage by Agent */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-card rounded-lg border p-4">
         <h2 className="text-lg font-semibold mb-4">API Usage by Agent</h2>
         {apiUsage?.byAgent && Object.keys(apiUsage.byAgent).length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                     Agent ID
                   </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase">
                     Requests
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {Object.entries(apiUsage.byAgent)
                   .sort(([, a], [, b]) => (b as number) - (a as number))
                   .slice(0, 20)
@@ -239,27 +237,27 @@ export default function AdminSystemPage() {
             </table>
           </div>
         ) : (
-          <p className="text-gray-500">No API usage data yet</p>
+          <p className="text-muted-foreground">No API usage data yet</p>
         )}
       </div>
 
       {/* API Usage by Top-Level Task */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-card rounded-lg border p-4">
         <h2 className="text-lg font-semibold mb-4">API Usage by Top-Level Task</h2>
         {apiUsage?.byTopLevelTask && Object.keys(apiUsage.byTopLevelTask).length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                     Task ID
                   </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase">
                     Requests
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {Object.entries(apiUsage.byTopLevelTask)
                   .sort(([, a], [, b]) => (b as number) - (a as number))
                   .map(([topLevelTaskId, count]) => (
@@ -267,7 +265,7 @@ export default function AdminSystemPage() {
                       <td className="px-4 py-2 text-sm">
                         <Link
                           href={`/tasks/${topLevelTaskId}`}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="text-primary hover:text-primary/80"
                         >
                           {topLevelTaskId}
                         </Link>
@@ -279,39 +277,39 @@ export default function AdminSystemPage() {
             </table>
           </div>
         ) : (
-          <p className="text-gray-500">No API usage data yet</p>
+          <p className="text-muted-foreground">No API usage data yet</p>
         )}
       </div>
 
       {/* Feature Flags */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-card rounded-lg border p-4">
         <h2 className="text-lg font-semibold mb-4">Feature Flags</h2>
         <div className="space-y-3">
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+          <div className="flex items-center justify-between py-2 border-b border-border">
             <div>
               <span className="font-medium">Authentication</span>
-              <p className="text-sm text-gray-500">Require authentication for all routes</p>
+              <p className="text-sm text-muted-foreground">Require authentication for all routes</p>
             </div>
             <span
               className={`px-2 py-1 rounded text-xs ${
                 stats?.features?.authentication
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-success/15 text-success'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
               {stats?.features?.authentication ? 'Enabled' : 'Disabled'}
             </span>
           </div>
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+          <div className="flex items-center justify-between py-2 border-b border-border">
             <div>
               <span className="font-medium">Metrics</span>
-              <p className="text-sm text-gray-500">Export Prometheus metrics</p>
+              <p className="text-sm text-muted-foreground">Export Prometheus metrics</p>
             </div>
             <span
               className={`px-2 py-1 rounded text-xs ${
                 stats?.features?.metrics
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-success/15 text-success'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
               {stats?.features?.metrics ? 'Enabled' : 'Disabled'}
@@ -320,33 +318,33 @@ export default function AdminSystemPage() {
           <div className="flex items-center justify-between py-2">
             <div>
               <span className="font-medium">Error Tracking</span>
-              <p className="text-sm text-gray-500">Send errors to tracking service</p>
+              <p className="text-sm text-muted-foreground">Send errors to tracking service</p>
             </div>
             <span
               className={`px-2 py-1 rounded text-xs ${
                 stats?.features?.errorTracking
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-success/15 text-success'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
               {stats?.features?.errorTracking ? 'Enabled' : 'Disabled'}
             </span>
           </div>
         </div>
-        <p className="text-sm text-gray-500 mt-4">
+        <p className="text-sm text-muted-foreground mt-4">
           Feature flags are configured via environment variables:
           <code className="ml-2 font-mono text-xs">FEATURE_AUTHENTICATION=true</code>
         </p>
       </div>
 
       {/* Available Models */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-card rounded-lg border p-4">
         <h2 className="text-lg font-semibold mb-4">Available Models</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {profiles?.availableModels?.map((m) => (
-            <div key={m.alias} className="border border-gray-200 rounded-lg p-3">
+            <div key={m.alias} className="border border-border rounded-lg p-3">
               <span className="font-medium">{m.alias}</span>
-              <p className="text-xs font-mono text-gray-500 mt-1">{m.model}</p>
+              <p className="text-xs font-mono text-muted-foreground mt-1">{m.model}</p>
             </div>
           ))}
         </div>

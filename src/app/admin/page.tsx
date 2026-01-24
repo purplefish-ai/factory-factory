@@ -22,9 +22,9 @@ function StatCard({
   status?: 'ok' | 'warning' | 'error';
 }) {
   const statusColors = {
-    ok: 'border-l-green-500',
-    warning: 'border-l-yellow-500',
-    error: 'border-l-red-500',
+    ok: 'border-l-success',
+    warning: 'border-l-warning',
+    error: 'border-l-destructive',
   };
 
   return (
@@ -45,7 +45,7 @@ function StatCard({
 function IssuesList({ issues }: { issues: string[] }) {
   if (issues.length === 0) {
     return (
-      <div className="text-green-600 flex items-center gap-2">
+      <div className="text-success flex items-center gap-2">
         <CheckCircle2 className="w-5 h-5" />
         No issues detected
       </div>
@@ -55,7 +55,7 @@ function IssuesList({ issues }: { issues: string[] }) {
   return (
     <ul className="space-y-2">
       {issues.map((issue) => (
-        <li key={issue} className="flex items-center gap-2 text-red-600">
+        <li key={issue} className="flex items-center gap-2 text-destructive">
           <XCircle className="w-5 h-5" />
           {issue}
         </li>
@@ -101,8 +101,8 @@ function EpicsSummary({
         <SummaryRow label="Total" value={epics?.total || 0} />
         <SummaryRow label="Planning" value={epics?.planning || 0} />
         <SummaryRow label="In Progress" value={epics?.inProgress || 0} />
-        <SummaryRow label="Completed" value={epics?.completed || 0} className="text-green-600" />
-        <SummaryRow label="Blocked" value={epics?.blocked || 0} className="text-red-600" />
+        <SummaryRow label="Completed" value={epics?.completed || 0} className="text-success" />
+        <SummaryRow label="Blocked" value={epics?.blocked || 0} className="text-destructive" />
       </CardContent>
     </Card>
   );
@@ -129,9 +129,9 @@ function TasksSummary({
         <SummaryRow label="Total" value={tasks?.total || 0} />
         <SummaryRow label="Pending" value={tasks?.pending || 0} />
         <SummaryRow label="In Progress" value={tasks?.inProgress || 0} />
-        <SummaryRow label="In Review" value={tasks?.review || 0} className="text-purple-600" />
-        <SummaryRow label="Completed" value={tasks?.completed || 0} className="text-green-600" />
-        <SummaryRow label="Failed" value={tasks?.failed || 0} className="text-red-600" />
+        <SummaryRow label="In Review" value={tasks?.review || 0} className="text-info" />
+        <SummaryRow label="Completed" value={tasks?.completed || 0} className="text-success" />
+        <SummaryRow label="Failed" value={tasks?.failed || 0} className="text-destructive" />
       </CardContent>
     </Card>
   );
@@ -323,7 +323,7 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader title="Admin Dashboard" description="System monitoring and management">
         <Button onClick={() => triggerHealthCheck.mutate()} disabled={triggerHealthCheck.isPending}>
           {triggerHealthCheck.isPending ? 'Checking...' : 'Run Health Check'}
@@ -341,7 +341,7 @@ export default function AdminDashboardPage() {
       <ConcurrencySection concurrency={stats?.concurrency} />
 
       {/* Epics & Tasks Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <EpicsSummary epics={stats?.epics} />
         <TasksSummary tasks={stats?.tasks} />
       </div>
@@ -370,7 +370,7 @@ export default function AdminDashboardPage() {
             <WorktreesByReason byReason={stats?.worktrees.byReason} />
           </div>
           {cleanupWorktrees.data && (
-            <Alert className="mt-4 border-green-200 bg-green-50 text-green-700">
+            <Alert className="mt-4 border-success/30 bg-success/10 text-success">
               <CheckCircle2 className="h-4 w-4" />
               <AlertDescription>
                 Cleaned {cleanupWorktrees.data.cleaned} worktrees. {cleanupWorktrees.data.failed}{' '}
