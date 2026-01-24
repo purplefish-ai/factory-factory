@@ -1,8 +1,23 @@
 'use client';
 
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Loading } from '@/frontend/components/loading';
+import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../../../frontend/lib/trpc';
 import type { DecisionLogWithRelations } from '../../../../frontend/lib/types';
 
@@ -10,10 +25,9 @@ export default function ProjectLogsPage() {
   const params = useParams();
   const slug = params.slug as string;
 
-  const [agentFilter, setAgentFilter] = useState('');
+  const [agentFilter, setAgentFilter] = useState<string>('all');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
-  // Get project for filtering
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
 
   const { data: logsData, isLoading } = trpc.decisionLog.listRecent.useQuery(
@@ -21,123 +35,126 @@ export default function ProjectLogsPage() {
     { enabled: !!project?.id, refetchInterval: 5000 }
   );
 
-  // Cast to include relations
   const logs = logsData as DecisionLogWithRelations[] | undefined;
 
   const { data: agents } = trpc.agent.list.useQuery({}, { enabled: !!project?.id });
 
   const filteredLogs = logs?.filter((log) => {
-    if (!agentFilter) {
+    if (agentFilter === 'all') {
       return true;
     }
     return log.agentId === agentFilter;
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-gray-500">Loading logs...</div>
-      </div>
-    );
+    return <Loading message="Loading logs..." />;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Decision Logs</h1>
-        <p className="text-gray-600 mt-1">Audit trail of all agent decisions</p>
-      </div>
+      <PageHeader title="Decision Logs" description="Audit trail of all agent decisions" />
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <div className="flex gap-4 items-center">
-          <label className="text-sm font-medium text-gray-700">Filter by agent:</label>
-          <select
-            value={agentFilter}
-            onChange={(e) => setAgentFilter(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">All Agents</option>
-            {agents?.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.type} - {agent.id.slice(0, 8)}...
-              </option>
-            ))}
-          </select>
-          {agentFilter && (
-            <button
-              onClick={() => setAgentFilter('')}
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              Clear filter
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Logs List */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {!filteredLogs || filteredLogs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <p>No decision logs found</p>
-            {agentFilter && (
-              <button
-                onClick={() => setAgentFilter('')}
-                className="text-blue-600 hover:text-blue-800 mt-2"
-              >
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-4 items-center">
+            <label className="text-sm font-medium">Filter by agent:</label>
+            <Select value={agentFilter} onValueChange={setAgentFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All Agents" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                {agents?.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.type} - {agent.id.slice(0, 8)}...
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {agentFilter !== 'all' && (
+              <Button variant="ghost" size="sm" onClick={() => setAgentFilter('all')}>
                 Clear filter
-              </button>
+              </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        {!filteredLogs || filteredLogs.length === 0 ? (
+          <Empty className="py-12">
+            <EmptyHeader>
+              <EmptyTitle>No decision logs found</EmptyTitle>
+              <EmptyDescription>
+                {agentFilter !== 'all'
+                  ? 'Try clearing the filter to see all logs.'
+                  : 'Logs will appear here as agents make decisions.'}
+              </EmptyDescription>
+            </EmptyHeader>
+            {agentFilter !== 'all' && (
+              <Button variant="outline" onClick={() => setAgentFilter('all')}>
+                Clear filter
+              </Button>
+            )}
+          </Empty>
         ) : (
           <div className="divide-y">
             {filteredLogs.map((log) => (
-              <div key={log.id} className="p-4 hover:bg-gray-50">
+              <div key={log.id} className="p-4 hover:bg-muted/50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       {log.agent && (
-                        <Link
-                          href={`/projects/${slug}/agents/${log.agentId}`}
-                          className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600 hover:bg-gray-200"
-                        >
-                          {log.agent.type}
+                        <Link href={`/projects/${slug}/agents/${log.agentId}`}>
+                          <Badge variant="secondary" className="hover:bg-secondary/80">
+                            {log.agent.type}
+                          </Badge>
                         </Link>
                       )}
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-muted-foreground">
                         {new Date(log.timestamp).toLocaleString()}
                       </span>
                     </div>
-                    <p className="font-medium text-gray-900">{log.decision}</p>
-                    <p className="text-sm text-gray-600 mt-1">{log.reasoning}</p>
+                    <p className="font-medium">{log.decision}</p>
+                    <p className="text-sm text-muted-foreground mt-1">{log.reasoning}</p>
                     {log.context && (
-                      <div className="mt-2">
-                        <button
-                          onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
-                          className="text-xs text-blue-600 hover:text-blue-800"
-                        >
-                          {expandedLogId === log.id ? 'Hide context' : 'Show context'}
-                        </button>
-                        {expandedLogId === log.id && (
-                          <pre className="mt-2 text-xs bg-gray-50 p-3 rounded overflow-x-auto max-h-64">
+                      <Collapsible
+                        open={expandedLogId === log.id}
+                        onOpenChange={(open) => setExpandedLogId(open ? log.id : null)}
+                        className="mt-2"
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-auto p-0 text-xs">
+                            {expandedLogId === log.id ? (
+                              <>
+                                <ChevronDown className="h-3 w-3 mr-1" />
+                                Hide context
+                              </>
+                            ) : (
+                              <>
+                                <ChevronRight className="h-3 w-3 mr-1" />
+                                Show context
+                              </>
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <pre className="mt-2 text-xs bg-muted p-3 rounded overflow-x-auto max-h-64">
                             {log.context}
                           </pre>
-                        )}
-                      </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </div>
-                  <Link
-                    href={`/projects/${slug}/agents/${log.agentId}`}
-                    className="text-sm text-blue-600 hover:text-blue-800 ml-4"
-                  >
-                    View Agent
-                  </Link>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={`/projects/${slug}/agents/${log.agentId}`}>View Agent</Link>
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

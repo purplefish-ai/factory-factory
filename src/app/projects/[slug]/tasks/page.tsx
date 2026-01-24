@@ -4,167 +4,165 @@ import { TaskState } from '@prisma-gen/browser';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Loading } from '@/frontend/components/loading';
+import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../../../frontend/lib/trpc';
 
-const stateColors: Record<string, string> = {
-  PENDING: 'bg-gray-100 text-gray-800',
-  ASSIGNED: 'bg-yellow-100 text-yellow-800',
-  IN_PROGRESS: 'bg-blue-100 text-blue-800',
-  REVIEW: 'bg-purple-100 text-purple-800',
-  BLOCKED: 'bg-red-100 text-red-800',
-  COMPLETED: 'bg-green-100 text-green-800',
-  FAILED: 'bg-red-100 text-red-800',
+const stateVariants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  PENDING: 'outline',
+  ASSIGNED: 'default',
+  IN_PROGRESS: 'default',
+  REVIEW: 'default',
+  BLOCKED: 'destructive',
+  COMPLETED: 'secondary',
+  FAILED: 'destructive',
 };
 
 export default function ProjectTasksPage() {
   const params = useParams();
   const slug = params.slug as string;
-  const [stateFilter, setStateFilter] = useState<TaskState | ''>('');
+  const [stateFilter, setStateFilter] = useState<string>('all');
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
 
   const { data: tasks, isLoading } = trpc.task.list.useQuery(
     {
-      state: stateFilter ? (stateFilter as TaskState) : undefined,
+      state: stateFilter !== 'all' ? (stateFilter as TaskState) : undefined,
     },
     { enabled: !!project?.id, refetchInterval: 5000 }
   );
 
   if (isLoading || !project) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-gray-500">Loading tasks...</div>
-      </div>
-    );
+    return <Loading message="Loading tasks..." />;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Tasks</h1>
-        <p className="text-gray-600 mt-1">{project.name}</p>
-      </div>
+      <PageHeader title="Tasks" description={project.name} />
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <div className="flex gap-4 items-center">
-          <label className="text-sm font-medium text-gray-700">Filter by state:</label>
-          <select
-            value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value as TaskState | '')}
-            className="border rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">All States</option>
-            {Object.values(TaskState).map((state) => (
-              <option key={state} value={state}>
-                {state}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Task List */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {!tasks || tasks.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <p>No tasks found.</p>
-            <p className="text-sm mt-2">
-              Tasks are created automatically when epics are processed.
-            </p>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-4 items-center">
+            <label className="text-sm font-medium">Filter by state:</label>
+            <Select value={stateFilter} onValueChange={setStateFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All States" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All States</SelectItem>
+                {Object.values(TaskState).map((state) => (
+                  <SelectItem key={state} value={state}>
+                    {state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        {!tasks || tasks.length === 0 ? (
+          <Empty className="py-12">
+            <EmptyHeader>
+              <EmptyTitle>No tasks found</EmptyTitle>
+              <EmptyDescription>
+                Tasks are created automatically when epics are processed.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Title
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Epic
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  State
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Worker
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  PR
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Epic</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>Worker</TableHead>
+                <TableHead>PR</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {tasks.map((task) => (
-                <tr key={task.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
+                <TableRow key={task.id}>
+                  <TableCell>
                     <Link
                       href={`/projects/${slug}/tasks/${task.id}`}
-                      className="text-gray-900 font-medium hover:text-blue-600"
+                      className="font-medium hover:underline"
                     >
                       {task.title}
                     </Link>
-                  </td>
-                  <td className="px-6 py-4">
+                  </TableCell>
+                  <TableCell>
                     {task.parent && (
                       <Link
                         href={`/projects/${slug}/epics/${task.parentId}`}
-                        className="text-sm text-blue-600 hover:text-blue-800"
+                        className="text-sm text-primary hover:underline"
                       >
                         {task.parent.title.slice(0, 30)}...
                       </Link>
                     )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${stateColors[task.state]}`}
-                    >
-                      {task.state}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={stateVariants[task.state] || 'default'}>{task.state}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
                     {task.assignedAgentId ? (
                       <Link
                         href={`/projects/${slug}/agents/${task.assignedAgentId}`}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-primary hover:underline"
                       >
                         View Worker
                       </Link>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span>-</span>
                     )}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
+                  </TableCell>
+                  <TableCell>
                     {task.prUrl ? (
                       <a
                         href={task.prUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-primary hover:underline"
                       >
                         View PR
                       </a>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-muted-foreground">-</span>
                     )}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <Link
-                      href={`/projects/${slug}/tasks/${task.id}`}
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >
-                      Details
-                    </Link>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/projects/${slug}/tasks/${task.id}`}>Details</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
