@@ -1,4 +1,8 @@
-# FactoryFactory
+# FACTORY FACTORY
+
+<p align="center">
+  <img src="public/logo.svg" alt="Factory Factory Logo" width="80" height="80">
+</p>
 
 Autonomous software development orchestration system that uses AI agents to execute tasks from Linear issues.
 

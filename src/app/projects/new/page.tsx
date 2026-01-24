@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Logo } from '../../../frontend/components/logo';
 import { trpc } from '../../../frontend/lib/trpc';
 
 export default function NewProjectPage() {
@@ -46,9 +47,9 @@ export default function NewProjectPage() {
     return (
       <div className="flex min-h-[80vh] items-center justify-center">
         <div className="w-full max-w-lg space-y-8">
-          <div className="text-center space-y-2">
-            <h1 className="text-4xl font-bold tracking-tight">FactoryFactory</h1>
-            <p className="text-lg text-muted-foreground">
+          <div className="flex flex-col items-center space-y-4">
+            <Logo iconClassName="size-16" textClassName="text-2xl" className="flex-col gap-3" />
+            <p className="text-muted-foreground">
               Autonomous software development orchestration system
             </p>
           </div>
@@ -61,7 +62,7 @@ export default function NewProjectPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
                   <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
@@ -98,7 +99,7 @@ export default function NewProjectPage() {
 
   // Normal view when projects already exist
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/projects">
@@ -121,7 +122,7 @@ export default function NewProjectPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>

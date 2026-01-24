@@ -1,0 +1,26 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- White background -->
+  <rect width="32" height="32" rx="6" fill="white"/>
+  <!-- Outer square: scaled to fit -->
+  <rect
+    x="4"
+    y="4"
+    width="24"
+    height="24"
+    stroke="#1a1a1a"
+    stroke-width="2.5"
+    fill="none"
+    rx="1"
+  />
+  <!-- Inner square: concentric -->
+  <rect
+    x="8"
+    y="8"
+    width="16"
+    height="16"
+    stroke="#1a1a1a"
+    stroke-width="2.5"
+    fill="none"
+    rx="1"
+  />
+</svg>
