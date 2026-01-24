@@ -14,13 +14,7 @@ export default function EpicDetailRedirect() {
 
   useEffect(() => {
     if (!isLoading && epic) {
-      const project = (epic as { project?: { slug: string } }).project;
-      if (project?.slug) {
-        router.replace(`/projects/${project.slug}/epics/${id}`);
-      } else {
-        // Epic has no project, redirect to projects list
-        router.replace('/projects');
-      }
+      router.replace(`/projects/${epic.project.slug}/epics/${id}`);
     }
   }, [isLoading, epic, id, router]);
 

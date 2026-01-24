@@ -19,10 +19,7 @@ export default function ProjectMailPage() {
   const projectId = project?.id;
 
   // Fetch agents for filter dropdown (scoped to project)
-  const { data: agents } = trpc.agent.list.useQuery(
-    { projectId },
-    { enabled: !!projectId }
-  );
+  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
 
   // Conditional mail queries based on filter - all scoped to project
   const allMailQuery = trpc.mail.listAll.useQuery(
@@ -309,10 +306,7 @@ function ComposeModal({
   const [body, setBody] = useState('');
   const [error, setError] = useState('');
 
-  const { data: agents } = trpc.agent.list.useQuery(
-    { projectId },
-    { enabled: !!projectId }
-  );
+  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
 
   const sendMail = trpc.mail.sendToAgent.useMutation({
     onSuccess: () => {

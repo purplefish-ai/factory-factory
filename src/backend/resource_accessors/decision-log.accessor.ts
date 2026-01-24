@@ -141,7 +141,11 @@ export class DecisionLogAccessor {
   /**
    * List decision logs with optional filters
    */
-  async list(options: { agentId?: string; projectId?: string; limit?: number }): Promise<DecisionLog[]> {
+  async list(options: {
+    agentId?: string;
+    projectId?: string;
+    limit?: number;
+  }): Promise<DecisionLog[]> {
     const { agentId, projectId, limit = 100 } = options;
 
     if (agentId) {

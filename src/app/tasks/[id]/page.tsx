@@ -14,13 +14,7 @@ export default function TaskDetailRedirect() {
 
   useEffect(() => {
     if (!isLoading && task) {
-      const epic = (task as { epic?: { project?: { slug: string } } }).epic;
-      if (epic?.project?.slug) {
-        router.replace(`/projects/${epic.project.slug}/tasks/${id}`);
-      } else {
-        // Task has no project, redirect to projects list
-        router.replace('/projects');
-      }
+      router.replace(`/projects/${task.epic.project.slug}/tasks/${id}`);
     }
   }, [isLoading, task, id, router]);
 

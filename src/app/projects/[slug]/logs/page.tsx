@@ -25,10 +25,7 @@ export default function ProjectLogsPage() {
   // Cast to include relations
   const logs = logsData as DecisionLogWithRelations[] | undefined;
 
-  const { data: agents } = trpc.agent.list.useQuery(
-    { projectId },
-    { enabled: !!projectId }
-  );
+  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
 
   const filteredLogs = logs?.filter((log) => {
     if (!agentFilter) {

@@ -164,9 +164,7 @@ export function Navigation() {
       ]
     : [];
 
-  const globalNavItems = [
-    { href: '/admin', label: 'Admin', icon: 'settings' },
-  ];
+  const globalNavItems = [{ href: '/admin', label: 'Admin', icon: 'settings' }];
 
   // Don't show loading state for project guard - just render
   if (!hasCheckedProjects) {
