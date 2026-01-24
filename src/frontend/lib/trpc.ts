@@ -1,10 +1,11 @@
 'use client';
 
+import type { CreateTRPCReact } from '@trpc/react-query';
 import { createTRPCReact, httpBatchLink } from '@trpc/react-query';
 import superjson from 'superjson';
 import type { AppRouter } from '../../backend/trpc';
 
-export const trpc = createTRPCReact<AppRouter>();
+export const trpc: CreateTRPCReact<AppRouter, unknown> = createTRPCReact<AppRouter>();
 
 const getBaseUrl = () => {
   if (typeof window !== 'undefined') {

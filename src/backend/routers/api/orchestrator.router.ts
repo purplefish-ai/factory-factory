@@ -158,7 +158,7 @@ router.post('/stop', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -198,7 +198,7 @@ router.post('/kill', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -289,7 +289,7 @@ router.post('/health-check/workers', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -345,7 +345,7 @@ router.post('/health-check/supervisors', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -386,7 +386,7 @@ router.post('/recover/worker', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -471,7 +471,7 @@ router.post('/recover/supervisor', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -535,7 +535,7 @@ router.post('/supervisor/run', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
@@ -576,7 +576,7 @@ router.post('/supervisor/recreate', async (req, res) => {
         error: {
           code: 'INVALID_INPUT',
           message: 'Invalid input',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }
