@@ -41,9 +41,6 @@ export interface SystemConfig {
   inngestEventKey?: string;
   inngestSigningKey?: string;
 
-  // Claude API
-  anthropicApiKey: string;
-
   // Agent defaults
   defaultAgentProfiles: Record<AgentType, AgentProfile>;
 
@@ -164,9 +161,6 @@ function loadSystemConfig(): SystemConfig {
     inngestEventKey: process.env.INNGEST_EVENT_KEY,
     inngestSigningKey: process.env.INNGEST_SIGNING_KEY,
 
-    // Claude API
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
-
     // Agent defaults
     defaultAgentProfiles: buildDefaultAgentProfiles(),
 
@@ -214,10 +208,6 @@ export class ConfigService {
   private validateConfig(): void {
     const warnings: string[] = [];
     const errors: string[] = [];
-
-    if (!this.config.anthropicApiKey) {
-      errors.push('ANTHROPIC_API_KEY is not set');
-    }
 
     if (!this.config.databaseUrl) {
       errors.push('DATABASE_URL is not set');

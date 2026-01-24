@@ -8,7 +8,7 @@ Autonomous software development orchestration system that uses AI agents to exec
 - **Docker** (for PostgreSQL)
 - **GitHub CLI (`gh`)** - authenticated
 - **tmux**
-- **Anthropic API Key**
+- **Claude Code** - authenticated via `claude login`
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ npm install
 
 # 2. Configure
 cp .env.example .env
-# Edit .env: set ANTHROPIC_API_KEY, GIT_BASE_REPO_PATH, GIT_WORKTREE_BASE
+# Edit .env: set GIT_BASE_REPO_PATH, GIT_WORKTREE_BASE
 
 # 3. Start PostgreSQL
 docker-compose up -d

@@ -69,10 +69,10 @@ ls src/backend/inngest/functions/task-created.ts
    ```bash
    cp .env.example .env
    # Edit .env and fill in:
-   # - ANTHROPIC_API_KEY
    # - GIT_BASE_REPO_PATH (path to test repo)
    # - GIT_WORKTREE_BASE (temp directory for worktrees)
    # - DATABASE_URL
+   # Note: No ANTHROPIC_API_KEY needed - uses OAuth via `claude login`
    ```
 
 2. **Database running and migrated**
@@ -255,7 +255,7 @@ From PHASE-2.md, verify all of these:
 ## Troubleshooting
 
 ### Worker doesn't start
-- Check `ANTHROPIC_API_KEY` is set correctly
+- Check Claude is authenticated: `claude login`
 - Check backend logs for errors
 - Verify database connection
 - Check tmux is installed: `which tmux`

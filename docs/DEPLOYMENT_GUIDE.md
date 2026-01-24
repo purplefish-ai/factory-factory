@@ -59,8 +59,9 @@ nano .env
 Required variables for development:
 ```env
 DATABASE_URL="postgresql://factoryfactory:factoryfactory_dev@localhost:5432/factoryfactory"
-ANTHROPIC_API_KEY="your-api-key"
 ```
+
+Note: No API key needed - Claude uses OAuth via `claude login`.
 
 ### 4. Start PostgreSQL
 
@@ -126,10 +127,11 @@ npm run build:backend
 ```env
 NODE_ENV=production
 DATABASE_URL="postgresql://user:password@production-db:5432/factoryfactory"
-ANTHROPIC_API_KEY="your-production-api-key"
 INNGEST_EVENT_KEY="your-inngest-event-key"
 INNGEST_SIGNING_KEY="your-inngest-signing-key"
 ```
+
+Note: No API key needed - Claude uses OAuth via `claude login`.
 
 #### 3. Run Migrations
 
@@ -183,11 +185,12 @@ Create a `.env` file with production values:
 
 ```env
 NODE_ENV=production
-ANTHROPIC_API_KEY=your-production-key
 INNGEST_EVENT_KEY=your-inngest-key
 INNGEST_SIGNING_KEY=your-inngest-signing-key
 POSTGRES_PASSWORD=secure-password-here
 ```
+
+Note: No API key needed - Claude uses OAuth via `claude login`.
 
 #### 3. Start Services
 
@@ -214,7 +217,8 @@ docker-compose exec backend npm run db:migrate:deploy
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
-| `ANTHROPIC_API_KEY` | Claude API key | `sk-ant-...` |
+
+Note: No `ANTHROPIC_API_KEY` needed - Claude uses OAuth authentication via `claude login`.
 
 ### Optional Environment Variables
 

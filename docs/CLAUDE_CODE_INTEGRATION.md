@@ -64,20 +64,13 @@ export class ClaudeCodeClient extends EventEmitter {
 
   /**
    * Start Claude Code subprocess
-   * @param options.disableApiKey - If true, removes ANTHROPIC_API_KEY from env
+   * Uses OAuth authentication via `claude login`
    */
   async startClaudeCode(options: {
-    disableApiKey?: boolean;
     model?: string;
     workingDirectory?: string;
   }): Promise<void> {
     const env = { ...process.env };
-
-    // Remove API key if user wants to use their Claude subscription
-    if (options.disableApiKey) {
-      delete env.ANTHROPIC_API_KEY;
-      console.log('Using Claude subscription (API key disabled)');
-    }
 
     // Spawn Claude Code
     this.process = spawn('claude-code', [], {
@@ -239,17 +232,11 @@ interface UserSettings {
 ### Environment Variables
 
 ```bash
-# User's choice
-USE_CLAUDE_SUBSCRIPTION=true  # Use Claude Code with subscription
-# OR
-USE_CLAUDE_SUBSCRIPTION=false # Use API key (pay-as-you-go)
-
 # Optional: Path to Claude Code
 CLAUDE_CODE_PATH=/usr/local/bin/claude-code
-
-# Fallback API key (if subscription fails)
-ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
+
+Note: Claude uses OAuth authentication via `claude login`. No API key needed.
 
 ## Worker Agent Update
 
