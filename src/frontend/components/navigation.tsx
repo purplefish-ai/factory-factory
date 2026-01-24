@@ -1,22 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { trpc } from '../lib/trpc';
 
-const navItems = [
-  { href: '/', label: 'Dashboard', icon: 'home' },
-  { href: '/epics', label: 'Epics', icon: 'folder' },
-  { href: '/tasks', label: 'Tasks', icon: 'list' },
-  { href: '/agents', label: 'Agents', icon: 'cpu' },
-  { href: '/mail', label: 'Mail', icon: 'mail' },
-  { href: '/logs', label: 'Logs', icon: 'terminal' },
-  { href: '/admin', label: 'Admin', icon: 'settings' },
-];
-
 // Key for storing selected project in localStorage
-const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project';
+const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
 const icons: Record<string, React.ReactNode> = {
   home: (
@@ -97,9 +87,17 @@ const icons: Record<string, React.ReactNode> = {
   ),
 };
 
+// Extract project slug from URL if on a project-scoped page
+function getProjectSlugFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/projects\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
 export function Navigation() {
   const pathname = usePathname();
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const router = useRouter();
+  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('');
+  const [hasCheckedProjects, setHasCheckedProjects] = useState(false);
 
   const { data: unreadCount } = trpc.mail.getUnreadCount.useQuery(undefined, {
     refetchInterval: 5000,
@@ -109,29 +107,71 @@ export function Navigation() {
     isArchived: false,
   });
 
-  // Load selected project from localStorage on mount
+  // Get project slug from URL or localStorage
   useEffect(() => {
-    const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
-    if (stored) {
-      setSelectedProjectId(stored);
+    const slugFromPath = getProjectSlugFromPath(pathname);
+    if (slugFromPath && slugFromPath !== 'new') {
+      setSelectedProjectSlug(slugFromPath);
+      localStorage.setItem(SELECTED_PROJECT_KEY, slugFromPath);
+    } else {
+      const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
+      if (stored) {
+        setSelectedProjectSlug(stored);
+      }
     }
-  }, []);
+  }, [pathname]);
 
-  // Auto-select first project if none selected and projects exist
+  // Auto-select first project if none selected
   useEffect(() => {
-    if (!selectedProjectId && projects && projects.length > 0) {
-      const firstProjectId = projects[0].id;
-      setSelectedProjectId(firstProjectId);
-      localStorage.setItem(SELECTED_PROJECT_KEY, firstProjectId);
-    }
-  }, [selectedProjectId, projects]);
+    if (!projectsLoading && projects) {
+      setHasCheckedProjects(true);
 
-  const handleProjectChange = (projectId: string) => {
-    setSelectedProjectId(projectId);
-    localStorage.setItem(SELECTED_PROJECT_KEY, projectId);
-    // Refresh the page to reload data for new project
-    window.location.reload();
+      if (projects.length === 0) {
+        // No projects exist - redirect to create one (unless already there)
+        if (!pathname.startsWith('/projects/new')) {
+          router.push('/projects/new');
+        }
+      } else if (!selectedProjectSlug) {
+        // No project selected, select the first one
+        const firstSlug = projects[0].slug;
+        setSelectedProjectSlug(firstSlug);
+        localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
+      }
+    }
+  }, [projectsLoading, projects, selectedProjectSlug, pathname, router]);
+
+  const handleProjectChange = (slug: string) => {
+    setSelectedProjectSlug(slug);
+    localStorage.setItem(SELECTED_PROJECT_KEY, slug);
+    // Navigate to the new project's epics page
+    router.push(`/projects/${slug}/epics`);
   };
+
+  // Build nav items with project-scoped URLs
+  const projectNavItems = selectedProjectSlug
+    ? [
+        { href: `/projects/${selectedProjectSlug}/epics`, label: 'Epics', icon: 'folder' },
+        { href: `/projects/${selectedProjectSlug}/tasks`, label: 'Tasks', icon: 'list' },
+      ]
+    : [];
+
+  const globalNavItems = [
+    { href: '/mail', label: 'Mail', icon: 'mail' },
+    { href: '/logs', label: 'Logs', icon: 'terminal' },
+    { href: '/admin', label: 'Admin', icon: 'settings' },
+  ];
+
+  // Don't show loading state for project guard - just render
+  if (!hasCheckedProjects) {
+    return (
+      <nav className="w-64 bg-gray-900 text-white flex flex-col">
+        <div className="p-4 border-b border-gray-700">
+          <h1 className="text-xl font-bold">FactoryFactory</h1>
+          <p className="text-xs text-gray-400 mt-1">Loading...</p>
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <nav className="w-64 bg-gray-900 text-white flex flex-col">
@@ -140,40 +180,57 @@ export function Navigation() {
         <p className="text-xs text-gray-400 mt-1">Autonomous Dev System</p>
 
         {/* Project Selector */}
-        <div className="mt-3">
-          <label htmlFor="project-select" className="text-xs text-gray-400 block mb-1">
-            Project
-          </label>
-          <select
-            id="project-select"
-            value={selectedProjectId}
-            onChange={(e) => handleProjectChange(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            disabled={projectsLoading}
-          >
-            {projectsLoading ? (
-              <option>Loading...</option>
-            ) : projects && projects.length > 0 ? (
-              projects.map((project) => (
-                <option key={project.id} value={project.id}>
+        {projects && projects.length > 0 && (
+          <div className="mt-3">
+            <label htmlFor="project-select" className="text-xs text-gray-400 block mb-1">
+              Project
+            </label>
+            <select
+              id="project-select"
+              value={selectedProjectSlug}
+              onChange={(e) => handleProjectChange(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.slug}>
                   {project.name}
                 </option>
-              ))
-            ) : (
-              <option value="">No projects</option>
-            )}
-          </select>
-          <Link
-            href="/projects"
-            className="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block"
-          >
-            Manage projects
-          </Link>
-        </div>
+              ))}
+            </select>
+            <Link
+              href="/projects"
+              className="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block"
+            >
+              Manage projects
+            </Link>
+          </div>
+        )}
       </div>
 
       <ul className="flex-1 py-4">
-        {navItems.map((item) => {
+        {/* Project-scoped navigation */}
+        {projectNavItems.map((item) => {
+          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-800 transition-colors ${
+                  isActive ? 'bg-gray-800 border-l-4 border-blue-500' : ''
+                }`}
+              >
+                {icons[item.icon]}
+                <span>{item.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+
+        {/* Separator */}
+        {projectNavItems.length > 0 && <li className="my-2 mx-4 border-t border-gray-700" />}
+
+        {/* Global navigation */}
+        {globalNavItems.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
             <li key={item.href}>

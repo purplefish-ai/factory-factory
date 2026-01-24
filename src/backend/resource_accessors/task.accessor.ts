@@ -23,6 +23,7 @@ export interface UpdateTaskInput {
 }
 
 export interface ListTasksFilters {
+  projectId?: string;
   epicId?: string;
   state?: TaskState;
   assignedAgentId?: string;
@@ -46,7 +47,11 @@ export class TaskAccessor {
     return prisma.task.findUnique({
       where: { id },
       include: {
-        epic: true,
+        epic: {
+          include: {
+            project: true,
+          },
+        },
         assignedAgent: true,
       },
     });
@@ -62,6 +67,9 @@ export class TaskAccessor {
   async list(filters?: ListTasksFilters): Promise<Task[]> {
     const where: Prisma.TaskWhereInput = {};
 
+    if (filters?.projectId) {
+      where.epic = { projectId: filters.projectId };
+    }
     if (filters?.epicId) {
       where.epicId = filters.epicId;
     }
