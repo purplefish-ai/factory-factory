@@ -149,6 +149,7 @@ export class WorktreeService {
     topLevelTaskId?: string;
   }> {
     const taskMatch = worktree.branch.match(/task-([a-zA-Z0-9]+)/);
+    // Matches "epic-" prefix for backward compatibility with existing worktrees
     const epicMatch = worktree.branch.match(/epic-([a-zA-Z0-9]+)/);
 
     if (taskMatch) {

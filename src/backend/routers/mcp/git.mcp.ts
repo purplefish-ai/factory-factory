@@ -189,7 +189,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     if (!task.parentId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a parent task (epic)'
+        'Task does not have a parent task'
       );
     }
 
@@ -197,11 +197,11 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     if (!parentTask) {
       return createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Parent task (epic) with ID '${task.parentId}' not found`
+        `Parent task with ID '${task.parentId}' not found`
       );
     }
 
-    const topLevelBranchName = `factoryfactory/task-${parentTask.id}`;
+    const topLevelBranchName = `factoryfactory/task-${parentTask.id.substring(0, 8)}`;
 
     let diffStats: string;
     try {
@@ -305,7 +305,7 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     if (!task.parentId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a parent task (epic)'
+        'Task does not have a parent task'
       );
     }
 
@@ -313,11 +313,11 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     if (!parentTask) {
       return createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Parent task (epic) with ID '${task.parentId}' not found`
+        `Parent task with ID '${task.parentId}' not found`
       );
     }
 
-    const topLevelBranchName = `factoryfactory/task-${parentTask.id}`;
+    const topLevelBranchName = `factoryfactory/task-${parentTask.id.substring(0, 8)}`;
 
     try {
       // Fetch using spawn (safe)

@@ -114,6 +114,7 @@ export async function createSupervisor(taskId: string): Promise<string> {
   });
 
   // Create git worktree for task (branching from project's default branch)
+  // Uses "epic-" prefix for backward compatibility with existing worktrees
   const worktreeName = `epic-${topLevelTask.id.substring(0, 8)}`;
   const worktreeInfo = await gitClient.createWorktree(worktreeName, project.defaultBranch);
 
@@ -585,6 +586,7 @@ export async function killSupervisor(agentId: string): Promise<void> {
         repoPath: topLevelTask.project.repoPath,
         worktreeBasePath: topLevelTask.project.worktreeBasePath,
       });
+      // Uses "epic-" prefix for backward compatibility with existing worktrees
       const worktreeName = `epic-${agent.currentTaskId.substring(0, 8)}`;
       try {
         await gitClient.deleteWorktree(worktreeName);

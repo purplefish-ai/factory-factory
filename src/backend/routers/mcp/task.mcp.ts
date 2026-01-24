@@ -297,6 +297,7 @@ async function getTopLevelTaskForApproval(
     worktreeBasePath: project.worktreeBasePath,
   });
 
+  // Uses "epic-" prefix for backward compatibility with existing worktrees
   const topLevelWorktreeName = `epic-${topLevelTask.id.substring(0, 8)}`;
   return {
     success: true,
@@ -703,7 +704,7 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
     const { task, topLevelTask, agentId } = validation.data;
 
     // Branch targets the top-level task's branch (what was formerly "epic branch")
-    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id}`;
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
 
     let prInfo: PRInfo;
     try {
@@ -1308,7 +1309,8 @@ async function createFinalPR(context: McpToolContext, input: unknown): Promise<M
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id}`;
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
+    // Uses "epic-" prefix for backward compatibility with existing worktrees
     const worktreePath = gitClient.getWorktreePath(`epic-${topLevelTask.id.substring(0, 8)}`);
     const completedTasks = subtasks.filter((t) => t.state === TaskState.COMPLETED);
     const failedTasks = subtasks.filter((t) => t.state === TaskState.FAILED);

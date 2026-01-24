@@ -126,7 +126,8 @@ function generateLinearIssueMetadata(
     return {};
   }
   const linearIssueId = input.linearIssueId || `manual-${Date.now()}`;
-  const linearIssueUrl = input.linearIssueUrl || `https://linear.app/manual/${linearIssueId}`;
+  // Empty string for manually created tasks - no real Linear URL
+  const linearIssueUrl = input.linearIssueUrl || '';
   return { linearIssueId, linearIssueUrl };
 }
 
