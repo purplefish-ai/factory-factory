@@ -10,7 +10,9 @@ export default function RootRedirect() {
   const { data: projects, isLoading, error } = trpc.project.list.useQuery({ isArchived: false });
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading) {
+      return;
+    }
 
     // On error, redirect to projects page where error can be shown properly
     if (error) {

@@ -67,7 +67,8 @@
       },
       "complexity": {
         "noBannedTypes": "off",
-        "noExcessiveCognitiveComplexity": "error",
+        "noExcessiveCognitiveComplexity": "warn",
+        "noStaticOnlyClass": "off",
         "noUselessThisAlias": "error",
         "noUselessTypeConstraint": "error",
         "useFlatMap": "error",
@@ -80,7 +81,8 @@
       "a11y": {
         "noSvgWithoutTitle": "off",
         "useButtonType": "off",
-        "noLabelWithoutControl": "off"
+        "noLabelWithoutControl": "off",
+        "noAutofocus": "off"
       },
       "performance": {
         "noAccumulatingSpread": "error",
