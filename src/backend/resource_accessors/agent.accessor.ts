@@ -22,6 +22,7 @@ export interface UpdateAgentInput {
 export interface ListAgentsFilters {
   type?: AgentType;
   state?: AgentState;
+  projectId?: string;
   limit?: number;
   offset?: number;
 }
@@ -68,6 +69,12 @@ export class AgentAccessor {
     }
     if (filters?.state) {
       where.state = filters.state;
+    }
+    // Filter by project via currentEpic → projectId
+    if (filters?.projectId) {
+      where.currentEpic = {
+        projectId: filters.projectId,
+      };
     }
 
     return prisma.agent.findMany({

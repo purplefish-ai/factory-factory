@@ -152,12 +152,12 @@ export function Navigation() {
     ? [
         { href: `/projects/${selectedProjectSlug}/epics`, label: 'Epics', icon: 'folder' },
         { href: `/projects/${selectedProjectSlug}/tasks`, label: 'Tasks', icon: 'list' },
+        { href: `/projects/${selectedProjectSlug}/mail`, label: 'Mail', icon: 'mail' },
+        { href: `/projects/${selectedProjectSlug}/logs`, label: 'Logs', icon: 'terminal' },
       ]
     : [];
 
   const globalNavItems = [
-    { href: '/mail', label: 'Mail', icon: 'mail' },
-    { href: '/logs', label: 'Logs', icon: 'terminal' },
     { href: '/admin', label: 'Admin', icon: 'settings' },
   ];
 
@@ -221,6 +221,11 @@ export function Navigation() {
               >
                 {icons[item.icon]}
                 <span>{item.label}</span>
+                {item.icon === 'mail' && unreadCount && unreadCount.count > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {unreadCount.count}
+                  </span>
+                )}
               </Link>
             </li>
           );
@@ -242,11 +247,6 @@ export function Navigation() {
               >
                 {icons[item.icon]}
                 <span>{item.label}</span>
-                {item.href === '/mail' && unreadCount && unreadCount.count > 0 && (
-                  <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    {unreadCount.count}
-                  </span>
-                )}
               </Link>
             </li>
           );
