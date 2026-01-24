@@ -38,7 +38,8 @@
     "test:coverage": "vitest run --coverage",
     "knip": "knip --include files,dependencies,unlisted",
     "knip:all": "knip",
-    "knip:fix": "knip --fix"
+    "knip:fix": "knip --fix",
+    "cpd": "jscpd src"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -135,6 +136,7 @@
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "inngest-cli": "^1.16.1",
+    "jscpd": "^4.0.7",
     "knip": "^5.82.1",
     "lint-staged": "^16.2.7",
     "postcss": "^8.5.6",

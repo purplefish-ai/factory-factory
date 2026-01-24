@@ -1,6 +1,7 @@
 import type { Agent, Prisma } from '@prisma-gen/client';
 import { AgentType, DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { prisma } from '../db.js';
+import { appendReconcileFailure } from '../lib/reconcile-failures.js';
 import { taskAccessor } from './task.accessor.js';
 
 interface CreateAgentInput {
@@ -440,15 +441,7 @@ class AgentAccessor {
    */
   async recordReconcileFailure(id: string, error: string, action: string): Promise<Agent> {
     const agent = await prisma.agent.findUnique({ where: { id } });
-    const existingFailures = (agent?.reconcileFailures as unknown[]) ?? [];
-    const newFailure = {
-      timestamp: new Date().toISOString(),
-      error,
-      action,
-    };
-
-    // Keep last 10 failures
-    const failures = [...existingFailures, newFailure].slice(-10) as object[];
+    const failures = appendReconcileFailure(agent?.reconcileFailures as unknown[], error, action);
 
     return prisma.agent.update({
       where: { id },

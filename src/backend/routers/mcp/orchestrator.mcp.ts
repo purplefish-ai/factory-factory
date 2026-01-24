@@ -11,6 +11,7 @@ import {
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
+import { verifyAgent } from './helpers.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
@@ -54,28 +55,16 @@ const ListPendingTopLevelTasksInputSchema = z.object({});
 async function verifyOrchestrator(
   context: McpToolContext
 ): Promise<{ success: true; agentId: string } | { success: false; error: McpToolResponse }> {
-  const agent = await agentAccessor.findById(context.agentId);
-  if (!agent) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.AGENT_NOT_FOUND,
-        `Agent with ID '${context.agentId}' not found`
-      ),
-    };
+  const result = await verifyAgent(context, {
+    requiredType: AgentType.ORCHESTRATOR,
+    typeErrorMessage: 'Only ORCHESTRATOR agents can use orchestrator tools',
+  });
+
+  if (!result.success) {
+    return result;
   }
 
-  if (agent.type !== AgentType.ORCHESTRATOR) {
-    return {
-      success: false,
-      error: createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Only ORCHESTRATOR agents can use orchestrator tools'
-      ),
-    };
-  }
-
-  return { success: true, agentId: agent.id };
+  return { success: true, agentId: result.agent.id };
 }
 
 /**
