@@ -15,7 +15,7 @@ import {
   taskAccessor,
 } from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
-import { buildWorkerPrompt } from './worker.prompts.js';
+import { buildWorkerPrompt } from '../prompts/builders/worker.builder.js';
 
 /**
  * Worker agent context - tracks running workers

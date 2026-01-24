@@ -1,6 +1,3 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { AgentState, AgentType, EpicState } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { gitClient } from '../../clients/git.client.js';
@@ -12,8 +9,9 @@ import {
   taskAccessor,
 } from '../../resource_accessors/index.js';
 import { executeMcpTool } from '../../routers/mcp/server.js';
+import { buildSupervisorPrompt } from '../prompts/builders/supervisor.builder.js';
+import { promptFileManager } from '../prompts/file-manager.js';
 import { checkWorkerHealth, recoverWorker } from './health.js';
-import { buildSupervisorPrompt } from './supervisor.prompts.js';
 
 /**
  * Supervisor agent context - tracks running supervisors
@@ -583,12 +581,7 @@ export async function killSupervisor(agentId: string): Promise<void> {
   }
 
   // Clean up system prompt file
-  const systemPromptPath = path.join(os.tmpdir(), `factoryfactory-prompt-${agentId}.txt`);
-  try {
-    fs.unlinkSync(systemPromptPath);
-  } catch {
-    // File may not exist
-  }
+  promptFileManager.deletePromptFile(agentId);
 
   // Remove from active supervisors
   activeSupervisors.delete(agentId);
