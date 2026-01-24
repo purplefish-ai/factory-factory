@@ -1,0 +1,3 @@
+`await import($_)` as $import where {
+  register_diagnostic(span=$import, message="Do not use 'await import()'. Use static imports instead. If you have circular dependencies, extract shared code to a separate module.")
+}

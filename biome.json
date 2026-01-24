@@ -99,6 +99,7 @@
       }
     }
   },
+  "plugins": ["biome-rules/no-await-import.grit"],
   "overrides": [
     {
       "includes": ["src/backend/**/*.ts", "scripts/**/*.ts", "test-*.ts"],
