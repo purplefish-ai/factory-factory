@@ -312,6 +312,202 @@ async function getReviewQueue(context: McpToolContext, input: unknown): Promise<
 }
 
 /**
+ * Send rebase requests to other workers in review
+ */
+async function sendRebaseRequests(
+  context: McpToolContext,
+  epicId: string,
+  excludeTaskId: string,
+  epicBranchName: string
+): Promise<number> {
+  const otherReviewTasks = await taskAccessor.list({ epicId, state: TaskState.REVIEW });
+  let count = 0;
+
+  for (const reviewTask of otherReviewTasks) {
+    if (reviewTask.id !== excludeTaskId && reviewTask.assignedAgentId) {
+      await taskAccessor.update(reviewTask.id, { state: TaskState.BLOCKED });
+      await mailAccessor.create({
+        fromAgentId: context.agentId,
+        toAgentId: reviewTask.assignedAgentId,
+        subject: 'Rebase Required',
+        body: `Another task has been merged into the epic branch. Please rebase your branch against the epic branch before I can review your code.\n\nTask: ${reviewTask.title}\nEpic branch: ${epicBranchName}\n\nRun: git fetch origin && git rebase origin/${epicBranchName}`,
+      });
+      count++;
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Clean up worker after task completion
+ */
+async function cleanupWorker(agentId: string | null): Promise<boolean> {
+  if (!agentId) {
+    return false;
+  }
+
+  try {
+    const { killWorkerAndCleanup } = await import('../../agents/worker/lifecycle.js');
+    await killWorkerAndCleanup(agentId);
+    console.log(`Cleaned up worker ${agentId} after task approval`);
+    return true;
+  } catch (error) {
+    console.log(
+      `Note: Could not clean up worker ${agentId}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return false;
+  }
+}
+
+interface TaskForApproval {
+  id: string;
+  title: string;
+  branchName: string;
+  assignedAgentId: string | null;
+}
+
+interface EpicForApproval {
+  id: string;
+  epicId: string;
+  epicWorktreePath: string;
+}
+
+/**
+ * Validate task is ready for approval
+ */
+async function validateTaskForApproval(
+  taskId: string,
+  epicId: string
+): Promise<{ success: true; task: TaskForApproval } | { success: false; error: McpToolResponse }> {
+  const task = await taskAccessor.findById(taskId);
+  if (!task) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Task with ID '${taskId}' not found`
+      ),
+    };
+  }
+  if (task.epicId !== epicId) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.PERMISSION_DENIED,
+        'Task does not belong to this epic'
+      ),
+    };
+  }
+  if (task.state !== TaskState.REVIEW) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        `Task is in state ${task.state}, expected REVIEW`
+      ),
+    };
+  }
+  if (!task.branchName) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a branch name'
+      ),
+    };
+  }
+  return {
+    success: true,
+    task: {
+      id: task.id,
+      title: task.title,
+      branchName: task.branchName,
+      assignedAgentId: task.assignedAgentId,
+    },
+  };
+}
+
+/**
+ * Get epic and worktree path for approval
+ */
+async function getEpicForApproval(
+  epicId: string
+): Promise<{ success: true; epic: EpicForApproval } | { success: false; error: McpToolResponse }> {
+  const epic = await epicAccessor.findById(epicId);
+  if (!epic) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Epic with ID '${epicId}' not found`
+      ),
+    };
+  }
+  const epicWorktreeName = `epic-${epic.id.substring(0, 8)}`;
+  return {
+    success: true,
+    epic: { id: epic.id, epicId, epicWorktreePath: gitClient.getWorktreePath(epicWorktreeName) },
+  };
+}
+
+/**
+ * Merge a task branch into the epic worktree
+ */
+async function mergeTaskBranch(
+  epicWorktreePath: string,
+  branchName: string,
+  taskTitle: string
+): Promise<{ success: true; mergeCommit: string } | { success: false; error: McpToolResponse }> {
+  try {
+    const result = await gitClient.mergeBranch(
+      epicWorktreePath,
+      branchName,
+      `Merge task: ${taskTitle}`
+    );
+    return { success: true, mergeCommit: result.mergeCommit };
+  } catch (error) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INTERNAL_ERROR,
+        `Failed to merge branch ${branchName}: ${error instanceof Error ? error.message : String(error)}`
+      ),
+    };
+  }
+}
+
+/**
+ * Try to push the epic branch, returns whether push succeeded
+ */
+async function tryPushEpicBranch(epicWorktreePath: string): Promise<boolean> {
+  try {
+    await gitClient.pushBranchWithUpstream(epicWorktreePath);
+    return true;
+  } catch (error) {
+    console.log(
+      `Note: Could not push epic branch (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
+    );
+    return false;
+  }
+}
+
+/**
+ * Build the approval result message
+ */
+function buildApprovalMessage(
+  pushed: boolean,
+  rebaseRequestsSent: number,
+  workerCleanedUp: boolean
+): string {
+  const pushStatus = pushed
+    ? 'merged into epic and pushed'
+    : 'merged into epic locally (push skipped - no remote)';
+  const workerStatus = workerCleanedUp ? ' Worker cleaned up.' : '';
+  return `Task approved. Branch ${pushStatus}. ${rebaseRequestsSent} rebase requests sent.${workerStatus}`;
+}
+
+/**
  * Approve a task and merge worker's branch into epic branch (SUPERVISOR only)
  * This does a git merge locally, then pushes the epic branch to origin.
  */
@@ -319,133 +515,43 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
   try {
     const validatedInput = ApproveTaskInputSchema.parse(input);
 
-    // Verify supervisor has epic
     const verification = await verifySupervisorWithEpic(context);
     if (!verification.success) {
       return verification.error;
     }
 
-    // Get task
-    const task = await taskAccessor.findById(validatedInput.taskId);
-    if (!task) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Task with ID '${validatedInput.taskId}' not found`
-      );
+    const taskValidation = await validateTaskForApproval(
+      validatedInput.taskId,
+      verification.epicId
+    );
+    if (!taskValidation.success) {
+      return taskValidation.error;
+    }
+    const task = taskValidation.task;
+
+    const epicValidation = await getEpicForApproval(verification.epicId);
+    if (!epicValidation.success) {
+      return epicValidation.error;
+    }
+    const { epic } = epicValidation;
+
+    const mergeResult = await mergeTaskBranch(epic.epicWorktreePath, task.branchName, task.title);
+    if (!mergeResult.success) {
+      return mergeResult.error;
     }
 
-    // Verify task belongs to this epic
-    if (task.epicId !== verification.epicId) {
-      return createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Task does not belong to this epic'
-      );
-    }
+    const pushed = await tryPushEpicBranch(epic.epicWorktreePath);
+    await taskAccessor.update(task.id, { state: TaskState.COMPLETED, completedAt: new Date() });
 
-    // Verify task is in REVIEW state
-    if (task.state !== TaskState.REVIEW) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        `Task is in state ${task.state}, expected REVIEW`
-      );
-    }
-
-    // Verify task has a branch
-    if (!task.branchName) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a branch name'
-      );
-    }
-
-    // Get epic for worktree path
-    const epic = await epicAccessor.findById(verification.epicId);
-    if (!epic) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${verification.epicId}' not found`
-      );
-    }
-
-    // Get the epic worktree path
-    const epicWorktreeName = `epic-${epic.id.substring(0, 8)}`;
-    const epicWorktreePath = gitClient.getWorktreePath(epicWorktreeName);
-
-    // Merge the worker's branch into the epic branch
-    let mergeResult: { success: boolean; mergeCommit: string };
-    try {
-      mergeResult = await gitClient.mergeBranch(
-        epicWorktreePath,
-        task.branchName,
-        `Merge task: ${task.title}`
-      );
-    } catch (error) {
-      return createErrorResponse(
-        McpErrorCode.INTERNAL_ERROR,
-        `Failed to merge branch ${task.branchName}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-
-    // Push the epic branch to origin (optional - may fail if no remote configured)
-    let pushed = false;
-    try {
-      await gitClient.pushBranchWithUpstream(epicWorktreePath);
-      pushed = true;
-    } catch (error) {
-      console.log(
-        `Note: Could not push epic branch (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-
-    // Update task state to COMPLETED
-    await taskAccessor.update(task.id, {
-      state: TaskState.COMPLETED,
-      completedAt: new Date(),
-    });
-
-    // Find all other tasks in REVIEW state and notify them to rebase
-    const otherReviewTasks = await taskAccessor.list({
-      epicId: verification.epicId,
-      state: TaskState.REVIEW,
-    });
-
-    // Get epic branch name for rebase instructions
     const epicBranchName = `factoryfactory/epic-${epic.id.substring(0, 8)}`;
+    const rebaseRequestsSent = await sendRebaseRequests(
+      context,
+      verification.epicId,
+      task.id,
+      epicBranchName
+    );
+    const workerCleanedUp = await cleanupWorker(task.assignedAgentId);
 
-    // Send rebase request mail to each worker
-    for (const reviewTask of otherReviewTasks) {
-      if (reviewTask.id !== task.id && reviewTask.assignedAgentId) {
-        // Update task state to indicate rebase needed
-        await taskAccessor.update(reviewTask.id, {
-          state: TaskState.BLOCKED, // Use BLOCKED to indicate rebase needed
-        });
-
-        // Send mail to worker
-        await mailAccessor.create({
-          fromAgentId: context.agentId,
-          toAgentId: reviewTask.assignedAgentId,
-          subject: 'Rebase Required',
-          body: `Another task has been merged into the epic branch. Please rebase your branch against the epic branch before I can review your code.\n\nTask: ${reviewTask.title}\nEpic branch: ${epicBranchName}\n\nRun: git fetch origin && git rebase origin/${epicBranchName}`,
-        });
-      }
-    }
-
-    // Clean up the worker's tmux session since task is complete
-    let workerCleanedUp = false;
-    if (task.assignedAgentId) {
-      try {
-        const { killWorkerAndCleanup } = await import('../../agents/worker/lifecycle.js');
-        await killWorkerAndCleanup(task.assignedAgentId);
-        workerCleanedUp = true;
-        console.log(`Cleaned up worker ${task.assignedAgentId} after task approval`);
-      } catch (error) {
-        console.log(
-          `Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-
-    // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
       'mcp__epic__approve_task',
@@ -454,7 +560,7 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
         taskId: task.id,
         branchName: task.branchName,
         mergeCommit: mergeResult.mergeCommit,
-        rebaseRequestsSent: otherReviewTasks.length,
+        rebaseRequestsSent,
         workerCleanedUp,
       }
     );
@@ -466,9 +572,7 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
       merged: true,
       pushed,
       workerCleanedUp,
-      message: pushed
-        ? `Task approved. Branch merged into epic and pushed. ${otherReviewTasks.length} rebase requests sent.${workerCleanedUp ? ' Worker cleaned up.' : ''}`
-        : `Task approved. Branch merged into epic locally (push skipped - no remote). ${otherReviewTasks.length} rebase requests sent.${workerCleanedUp ? ' Worker cleaned up.' : ''}`,
+      message: buildApprovalMessage(pushed, rebaseRequestsSent, workerCleanedUp),
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -713,6 +817,109 @@ async function forceCompleteTask(
 }
 
 /**
+ * Generate PR description for epic completion
+ */
+function generateEpicPRDescription(
+  epic: { title: string; description: string | null },
+  completedTasks: { title: string }[],
+  failedTasks: { title: string; failureReason: string | null }[]
+): string {
+  const failedSection =
+    failedTasks.length > 0
+      ? `## Failed Tasks (${failedTasks.length})\n${failedTasks.map((t) => `- ❌ ${t.title}: ${t.failureReason || 'No reason'}`).join('\n')}`
+      : '';
+
+  return `## Epic: ${epic.title}
+
+${epic.description || 'No description provided.'}
+
+## Completed Tasks (${completedTasks.length})
+${completedTasks.map((t) => `- ✅ ${t.title}`).join('\n')}
+
+${failedSection}
+
+---
+*This PR was created by the FactoryFactory Supervisor agent.*`;
+}
+
+/**
+ * Cleanup workers for all tasks
+ */
+async function cleanupAllWorkers(tasks: { assignedAgentId: string | null }[]): Promise<number> {
+  const { killWorkerAndCleanup } = await import('../../agents/worker/lifecycle.js');
+  let count = 0;
+
+  for (const task of tasks) {
+    if (task.assignedAgentId) {
+      try {
+        await killWorkerAndCleanup(task.assignedAgentId);
+        count++;
+      } catch (error) {
+        console.log(
+          `Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  }
+
+  console.log(`Cleaned up ${count} worker session(s)`);
+  return count;
+}
+
+/**
+ * Attempt to create PR on GitHub
+ */
+async function attemptCreatePR(
+  branchName: string,
+  title: string,
+  description: string,
+  worktreePath: string
+): Promise<{ prInfo: { url: string; number: number } | null; created: boolean }> {
+  try {
+    const prInfo = await githubClient.createPR(
+      branchName,
+      'main',
+      title,
+      description,
+      worktreePath
+    );
+    return { prInfo, created: true };
+  } catch (error) {
+    console.log(
+      `Note: Could not create PR (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
+    );
+    return { prInfo: null, created: false };
+  }
+}
+
+/**
+ * Send notifications after epic completion
+ */
+async function sendEpicCompletionNotifications(
+  context: McpToolContext,
+  epic: { id: string; title: string },
+  prUrl: string | null
+): Promise<void> {
+  try {
+    await notificationService.notifyEpicComplete(epic.title, prUrl || undefined);
+  } catch (error) {
+    console.error('Failed to send epic completion notification:', error);
+  }
+
+  try {
+    await inngest.send({
+      name: 'agent.completed',
+      data: { agentId: context.agentId, epicId: epic.id },
+    });
+  } catch (error) {
+    console.log(
+      'Inngest event send failed (this is OK if Inngest dev server is not running):',
+      error
+    );
+  }
+}
+
+/**
  * Create PR from epic branch to main (SUPERVISOR only)
  * Also cleans up worker tmux sessions for completed tasks
  */
@@ -720,13 +927,11 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
   try {
     const validatedInput = CreateEpicPRInputSchema.parse(input);
 
-    // Verify supervisor has epic
     const verification = await verifySupervisorWithEpic(context);
     if (!verification.success) {
       return verification.error;
     }
 
-    // Get epic
     const epic = await epicAccessor.findById(verification.epicId);
     if (!epic) {
       return createErrorResponse(
@@ -735,7 +940,6 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       );
     }
 
-    // Check all tasks are completed or failed
     const tasks = await taskAccessor.list({ epicId: epic.id });
     const incompleteTasks = tasks.filter(
       (t) => t.state !== TaskState.COMPLETED && t.state !== TaskState.FAILED
@@ -748,84 +952,35 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       );
     }
 
-    // Get epic branch name
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
-
-    // Get worktree path from git client
-    const worktreeName = `epic-${epic.id.substring(0, 8)}`;
-    const worktreePath = gitClient.getWorktreePath(worktreeName);
-
-    // Create PR title and description
-    const prTitle = validatedInput.title || `[Epic] ${epic.title}`;
+    const worktreePath = gitClient.getWorktreePath(`epic-${epic.id.substring(0, 8)}`);
     const completedTasks = tasks.filter((t) => t.state === TaskState.COMPLETED);
     const failedTasks = tasks.filter((t) => t.state === TaskState.FAILED);
-
+    const prTitle = validatedInput.title || `[Epic] ${epic.title}`;
     const prDescription =
-      validatedInput.description ||
-      `## Epic: ${epic.title}
+      validatedInput.description || generateEpicPRDescription(epic, completedTasks, failedTasks);
 
-${epic.description || 'No description provided.'}
+    const { prInfo, created: prCreated } = await attemptCreatePR(
+      epicBranchName,
+      prTitle,
+      prDescription,
+      worktreePath
+    );
 
-## Completed Tasks (${completedTasks.length})
-${completedTasks.map((t) => `- ✅ ${t.title}`).join('\n')}
+    const cleanedUpCount = await cleanupAllWorkers(tasks);
+    await epicAccessor.update(epic.id, { state: EpicState.COMPLETED, completedAt: new Date() });
 
-${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTasks.map((t) => `- ❌ ${t.title}: ${t.failureReason || 'No reason'}`).join('\n')}` : ''}
+    const mailBody = prCreated
+      ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo?.url}\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
+      : `The epic "${epic.title}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`;
 
----
-*This PR was created by the FactoryFactory Supervisor agent.*`;
-
-    // Try to create PR (may fail if no remote configured)
-    let prInfo: { url: string; number: number } | null = null;
-    let prCreated = false;
-    try {
-      prInfo = await githubClient.createPR(
-        epicBranchName,
-        'main',
-        prTitle,
-        prDescription,
-        worktreePath
-      );
-      prCreated = true;
-    } catch (error) {
-      console.log(
-        `Note: Could not create PR (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-
-    // Clean up worker tmux sessions for all tasks
-    const { killWorkerAndCleanup } = await import('../../agents/worker/lifecycle.js');
-    let cleanedUpCount = 0;
-    for (const task of tasks) {
-      if (task.assignedAgentId) {
-        try {
-          await killWorkerAndCleanup(task.assignedAgentId);
-          cleanedUpCount++;
-        } catch (error) {
-          console.log(
-            `Note: Could not clean up worker ${task.assignedAgentId}: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      }
-    }
-    console.log(`Cleaned up ${cleanedUpCount} worker session(s)`);
-
-    // Update epic state
-    await epicAccessor.update(epic.id, {
-      state: EpicState.COMPLETED,
-      completedAt: new Date(),
-    });
-
-    // Send mail to human inbox
     await mailAccessor.create({
       fromAgentId: context.agentId,
       isForHuman: true,
       subject: `Epic Complete: ${epic.title}`,
-      body: prCreated
-        ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo?.url}\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
-        : `The epic "${epic.title}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`,
+      body: mailBody,
     });
 
-    // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
       'mcp__epic__create_epic_pr',
@@ -841,29 +996,7 @@ ${failedTasks.length > 0 ? `## Failed Tasks (${failedTasks.length})\n${failedTas
       }
     );
 
-    // Send desktop notification for epic completion
-    try {
-      await notificationService.notifyEpicComplete(epic.title, prInfo?.url || undefined);
-    } catch (error) {
-      console.error('Failed to send epic completion notification:', error);
-      // Don't fail the operation if notification fails
-    }
-
-    // Fire agent.completed event for the supervisor
-    try {
-      await inngest.send({
-        name: 'agent.completed',
-        data: {
-          agentId: context.agentId,
-          epicId: epic.id,
-        },
-      });
-    } catch (error) {
-      console.log(
-        'Inngest event send failed (this is OK if Inngest dev server is not running):',
-        error
-      );
-    }
+    await sendEpicCompletionNotifications(context, epic, prInfo?.url || null);
 
     return createSuccessResponse({
       epicId: epic.id,

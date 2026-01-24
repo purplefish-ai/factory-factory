@@ -92,6 +92,120 @@ function calculateHealthStatus(lastActiveAt: Date): {
   return { isHealthy, minutesSinceHeartbeat };
 }
 
+interface SupervisorForRecovery {
+  id: string;
+  epicId: string;
+  epicTitle: string;
+}
+
+/**
+ * Validate supervisor exists and can be recovered
+ */
+async function validateSupervisorForRecovery(
+  supervisorId: string
+): Promise<
+  { success: true; data: SupervisorForRecovery } | { success: false; error: McpToolResponse }
+> {
+  const supervisor = await agentAccessor.findById(supervisorId);
+  if (!supervisor) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Supervisor with ID '${supervisorId}' not found`
+      ),
+    };
+  }
+
+  if (supervisor.type !== AgentType.SUPERVISOR) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_INPUT,
+        `Agent '${supervisorId}' is not a SUPERVISOR`
+      ),
+    };
+  }
+
+  if (!supervisor.currentEpicId) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        `Supervisor '${supervisorId}' has no epic assigned`
+      ),
+    };
+  }
+
+  const epic = await epicAccessor.findById(supervisor.currentEpicId);
+  if (!epic) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Epic with ID '${supervisor.currentEpicId}' not found`
+      ),
+    };
+  }
+
+  return {
+    success: true,
+    data: { id: supervisor.id, epicId: supervisor.currentEpicId, epicTitle: epic.title },
+  };
+}
+
+/**
+ * Kill all workers for an epic and mark them as FAILED
+ */
+async function killEpicWorkers(epicId: string): Promise<string[]> {
+  const workers = await agentAccessor.findWorkersByEpicId(epicId);
+  const killedWorkers: string[] = [];
+
+  for (const worker of workers) {
+    try {
+      await killWorkerAndCleanup(worker.id);
+      killedWorkers.push(worker.id);
+    } catch (error) {
+      console.error(`Failed to kill worker ${worker.id}:`, error);
+    }
+    await agentAccessor.update(worker.id, { state: AgentState.FAILED });
+  }
+
+  return killedWorkers;
+}
+
+/**
+ * Reset non-terminal tasks to PENDING state
+ */
+async function resetEpicTasks(
+  epicId: string
+): Promise<{ resetTasks: string[]; totalTasks: number }> {
+  const tasks = await taskAccessor.list({ epicId });
+  const resetTasks: string[] = [];
+
+  for (const task of tasks) {
+    if (task.state === TaskState.COMPLETED || task.state === TaskState.FAILED) {
+      continue;
+    }
+    await taskAccessor.update(task.id, { state: TaskState.PENDING, assignedAgentId: null });
+    resetTasks.push(task.id);
+  }
+
+  return { resetTasks, totalTasks: tasks.length };
+}
+
+/**
+ * Try to create a new supervisor for an epic
+ */
+async function tryCreateNewSupervisor(epicId: string): Promise<string | null> {
+  try {
+    return await startSupervisorForEpic(epicId);
+  } catch (error) {
+    console.error(`Failed to create new supervisor for epic ${epicId}:`, error);
+    return null;
+  }
+}
+
 // ============================================================================
 // Tool Implementations
 // ============================================================================
@@ -322,149 +436,67 @@ async function recoverSupervisor(
   try {
     const validatedInput = RecoverSupervisorInputSchema.parse(input);
 
-    // Verify orchestrator
     const verification = await verifyOrchestrator(context);
     if (!verification.success) {
       return verification.error;
     }
 
-    // Get supervisor
-    const supervisor = await agentAccessor.findById(validatedInput.supervisorId);
-    if (!supervisor) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Supervisor with ID '${validatedInput.supervisorId}' not found`
-      );
+    const supervisorValidation = await validateSupervisorForRecovery(validatedInput.supervisorId);
+    if (!supervisorValidation.success) {
+      return supervisorValidation.error;
     }
+    const { id: oldSupervisorId, epicId, epicTitle } = supervisorValidation.data;
 
-    if (supervisor.type !== AgentType.SUPERVISOR) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_INPUT,
-        `Agent '${validatedInput.supervisorId}' is not a SUPERVISOR`
-      );
-    }
+    // Phase 1: Kill all workers
+    const killedWorkers = await killEpicWorkers(epicId);
 
-    if (!supervisor.currentEpicId) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        `Supervisor '${validatedInput.supervisorId}' has no epic assigned`
-      );
-    }
-
-    const epicId = supervisor.currentEpicId;
-
-    // Get epic
-    const epic = await epicAccessor.findById(epicId);
-    if (!epic) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${epicId}' not found`
-      );
-    }
-
-    // ========================================================================
-    // Phase 1: Kill all workers for this epic
-    // ========================================================================
-    const workers = await agentAccessor.findWorkersByEpicId(epicId);
-    const killedWorkers: string[] = [];
-
-    for (const worker of workers) {
-      try {
-        await killWorkerAndCleanup(worker.id);
-        killedWorkers.push(worker.id);
-      } catch (error) {
-        console.error(`Failed to kill worker ${worker.id}:`, error);
-        // Continue with other workers
-      }
-
-      // Mark worker as FAILED
-      await agentAccessor.update(worker.id, {
-        state: AgentState.FAILED,
-      });
-    }
-
-    // ========================================================================
     // Phase 2: Kill the supervisor
-    // ========================================================================
     try {
-      await killSupervisorAndCleanup(supervisor.id);
+      await killSupervisorAndCleanup(oldSupervisorId);
     } catch (error) {
-      console.error(`Failed to kill supervisor ${supervisor.id}:`, error);
-      // Continue anyway
+      console.error(`Failed to kill supervisor ${oldSupervisorId}:`, error);
     }
+    await agentAccessor.update(oldSupervisorId, { state: AgentState.FAILED, currentEpicId: null });
 
-    // Mark supervisor as FAILED and clear its epic assignment
-    // (this allows a new supervisor to be created for the epic)
-    await agentAccessor.update(supervisor.id, {
-      state: AgentState.FAILED,
-      currentEpicId: null,
-    });
-
-    // ========================================================================
     // Phase 3: Reset task states
-    // ========================================================================
-    const tasks = await taskAccessor.list({ epicId });
-    const resetTasks: string[] = [];
+    const { resetTasks, totalTasks } = await resetEpicTasks(epicId);
 
-    for (const task of tasks) {
-      // Keep COMPLETED and FAILED tasks as-is
-      if (task.state === TaskState.COMPLETED || task.state === TaskState.FAILED) {
-        continue;
-      }
-
-      // Reset all other states to PENDING
-      await taskAccessor.update(task.id, {
-        state: TaskState.PENDING,
-        assignedAgentId: null,
-      });
-      resetTasks.push(task.id);
-    }
-
-    // ========================================================================
     // Phase 4: Create new supervisor
-    // ========================================================================
-    // First, clear the epic's supervisor relation by setting currentEpicId to null on the old supervisor
-    // The old supervisor is already marked as FAILED and the unique constraint should be released
+    const newSupervisorId = await tryCreateNewSupervisor(epicId);
 
-    let newSupervisorId: string | null = null;
-    try {
-      newSupervisorId = await startSupervisorForEpic(epicId);
-    } catch (error) {
-      console.error(`Failed to create new supervisor for epic ${epicId}:`, error);
-      // Continue to notification phase even if supervisor creation fails
-    }
-
-    // ========================================================================
     // Phase 5: Notify human
-    // ========================================================================
+    const newSupervisorStatus = newSupervisorId || 'FAILED TO CREATE';
+    const resumeMessage = newSupervisorId
+      ? 'The new supervisor will resume work on pending tasks.'
+      : 'WARNING: Failed to create new supervisor. Manual intervention required.';
+
     await mailAccessor.create({
       fromAgentId: context.agentId,
       isForHuman: true,
-      subject: `Supervisor Crashed - Epic: ${epic.title}`,
+      subject: `Supervisor Crashed - Epic: ${epicTitle}`,
       body: `A supervisor crash was detected and recovery was performed.
 
-**Epic**: ${epic.title} (${epicId})
-**Old Supervisor**: ${supervisor.id}
-**New Supervisor**: ${newSupervisorId || 'FAILED TO CREATE'}
+**Epic**: ${epicTitle} (${epicId})
+**Old Supervisor**: ${oldSupervisorId}
+**New Supervisor**: ${newSupervisorStatus}
 
 **Recovery Summary**:
 - Workers killed: ${killedWorkers.length}
 - Tasks reset to PENDING: ${resetTasks.length}
-- Tasks kept (COMPLETED/FAILED): ${tasks.length - resetTasks.length}
+- Tasks kept (COMPLETED/FAILED): ${totalTasks - resetTasks.length}
 
-${newSupervisorId ? 'The new supervisor will resume work on pending tasks.' : 'WARNING: Failed to create new supervisor. Manual intervention required.'}`,
+${resumeMessage}`,
     });
 
-    // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
       'mcp__orchestrator__recover_supervisor',
       'result',
       {
-        oldSupervisorId: supervisor.id,
+        oldSupervisorId,
         newSupervisorId,
         epicId,
-        epicTitle: epic.title,
+        epicTitle,
         workersKilled: killedWorkers.length,
         tasksReset: resetTasks.length,
         recoverySuccess: !!newSupervisorId,
@@ -474,15 +506,15 @@ ${newSupervisorId ? 'The new supervisor will resume work on pending tasks.' : 'W
     if (!newSupervisorId) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
-        `Recovery partially failed: workers killed and tasks reset, but new supervisor creation failed. Manual intervention required.`
+        'Recovery partially failed: workers killed and tasks reset, but new supervisor creation failed. Manual intervention required.'
       );
     }
 
     return createSuccessResponse({
-      oldSupervisorId: supervisor.id,
+      oldSupervisorId,
       newSupervisorId,
       epicId,
-      epicTitle: epic.title,
+      epicTitle,
       workersKilled: killedWorkers.length,
       tasksReset: resetTasks.length,
       message: `Supervisor recovered. ${killedWorkers.length} workers killed, ${resetTasks.length} tasks reset. New supervisor ${newSupervisorId} created.`,

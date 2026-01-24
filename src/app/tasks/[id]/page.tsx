@@ -14,6 +14,127 @@ const stateColors: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-800',
 };
 
+interface AgentInfo {
+  id: string;
+  state: string;
+  isHealthy: boolean;
+  minutesSinceHeartbeat: number;
+}
+
+function WorkerInfoCard({
+  agent,
+  task,
+}: {
+  agent: AgentInfo | undefined;
+  task: { assignedAgentId: string | null; branchName: string | null; worktreePath: string | null };
+}) {
+  const renderAgentDetails = () => {
+    if (!task.assignedAgentId) {
+      return <p className="text-gray-500 text-sm">No worker assigned yet</p>;
+    }
+    if (!agent) {
+      return <p className="text-gray-500 text-sm">Loading worker info...</p>;
+    }
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">
+              Agent ID: <span className="font-mono">{agent.id}</span>
+            </p>
+            <p className="text-sm text-gray-600">State: {agent.state}</p>
+            <p className="text-sm text-gray-600">
+              Health:{' '}
+              <span className={agent.isHealthy ? 'text-green-600' : 'text-red-600'}>
+                {agent.isHealthy ? 'Healthy' : 'Unhealthy'}
+              </span>
+              <span className="text-gray-500 ml-2">
+                ({agent.minutesSinceHeartbeat}m since last heartbeat)
+              </span>
+            </p>
+          </div>
+          <Link
+            href={`/agents/${agent.id}`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            View Terminal
+          </Link>
+        </div>
+
+        {task.branchName && (
+          <div className="pt-4 border-t">
+            <p className="text-sm text-gray-600">
+              Branch: <span className="font-mono">{task.branchName}</span>
+            </p>
+            {task.worktreePath && (
+              <p className="text-sm text-gray-600">
+                Worktree: <span className="font-mono text-xs">{task.worktreePath}</span>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h2 className="text-lg font-semibold mb-4">Worker Agent</h2>
+      {renderAgentDetails()}
+    </div>
+  );
+}
+
+interface DecisionLogEntry {
+  id: string;
+  decision: string;
+  timestamp: Date;
+}
+
+function RecentActivitySection({
+  logs,
+  assignedAgentId,
+}: {
+  logs: DecisionLogEntry[] | undefined;
+  assignedAgentId: string | null;
+}) {
+  if (!logs || logs.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold">Recent Activity</h2>
+        {assignedAgentId && (
+          <Link
+            href={`/logs?agentId=${assignedAgentId}`}
+            className="text-blue-600 hover:text-blue-800 text-sm"
+          >
+            View all logs
+          </Link>
+        )}
+      </div>
+      <div className="space-y-3">
+        {logs.slice(0, 5).map((log) => (
+          <div key={log.id} className="border-l-2 border-gray-200 pl-4 py-2">
+            <p className="font-medium text-sm">{log.decision}</p>
+            <p className="text-xs text-gray-500 mt-1">{new Date(log.timestamp).toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
@@ -57,6 +178,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       </div>
     );
   }
+
+  const taskWithEpic = task as { epic?: { title: string } } & typeof task;
 
   return (
     <div className="space-y-6">
@@ -109,12 +232,12 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* Epic Link */}
-      {(task as { epic?: { title: string } }).epic && (
+      {taskWithEpic.epic && (
         <div className="bg-white rounded-lg shadow-sm p-4">
           <p className="text-sm text-gray-600">
             Part of epic:{' '}
             <Link href={`/epics/${task.epicId}`} className="text-blue-600 hover:text-blue-800">
-              {(task as { epic?: { title: string } }).epic?.title}
+              {taskWithEpic.epic.title}
             </Link>
           </p>
         </div>
@@ -141,89 +264,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* Worker Info */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-lg font-semibold mb-4">Worker Agent</h2>
-        {agent ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">
-                  Agent ID: <span className="font-mono">{agent.id}</span>
-                </p>
-                <p className="text-sm text-gray-600">State: {agent.state}</p>
-                <p className="text-sm text-gray-600">
-                  Health:{' '}
-                  <span className={agent.isHealthy ? 'text-green-600' : 'text-red-600'}>
-                    {agent.isHealthy ? 'Healthy' : 'Unhealthy'}
-                  </span>
-                  <span className="text-gray-500 ml-2">
-                    ({agent.minutesSinceHeartbeat}m since last heartbeat)
-                  </span>
-                </p>
-              </div>
-              <Link
-                href={`/agents/${agent.id}`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-                View Terminal
-              </Link>
-            </div>
-
-            {/* Branch & Worktree Info */}
-            {task.branchName && (
-              <div className="pt-4 border-t">
-                <p className="text-sm text-gray-600">
-                  Branch: <span className="font-mono">{task.branchName}</span>
-                </p>
-                {task.worktreePath && (
-                  <p className="text-sm text-gray-600">
-                    Worktree: <span className="font-mono text-xs">{task.worktreePath}</span>
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        ) : task.assignedAgentId ? (
-          <p className="text-gray-500 text-sm">Loading worker info...</p>
-        ) : (
-          <p className="text-gray-500 text-sm">No worker assigned yet</p>
-        )}
-      </div>
+      <WorkerInfoCard agent={agent} task={task} />
 
       {/* Recent Decision Logs */}
-      {logs && logs.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Recent Activity</h2>
-            {task.assignedAgentId && (
-              <Link
-                href={`/logs?agentId=${task.assignedAgentId}`}
-                className="text-blue-600 hover:text-blue-800 text-sm"
-              >
-                View all logs
-              </Link>
-            )}
-          </div>
-          <div className="space-y-3">
-            {logs.slice(0, 5).map((log) => (
-              <div key={log.id} className="border-l-2 border-gray-200 pl-4 py-2">
-                <p className="font-medium text-sm">{log.decision}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {new Date(log.timestamp).toLocaleString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <RecentActivitySection logs={logs} assignedAgentId={task.assignedAgentId} />
     </div>
   );
 }

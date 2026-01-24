@@ -46,6 +46,23 @@ export interface CleanupResult {
 }
 
 /**
+ * Parse a single line from git worktree --porcelain output
+ */
+function parseWorktreeLine(line: string, current: Partial<WorktreeInfo>): void {
+  if (line.startsWith('worktree ')) {
+    current.path = line.substring(9);
+  } else if (line.startsWith('HEAD ')) {
+    current.commit = line.substring(5);
+  } else if (line.startsWith('branch ')) {
+    current.branch = line.substring(7);
+    current.isDetached = false;
+  } else if (line === 'detached') {
+    current.isDetached = true;
+    current.branch = 'detached';
+  }
+}
+
+/**
  * WorktreeService class
  */
 export class WorktreeService {
@@ -68,25 +85,16 @@ export class WorktreeService {
       let current: Partial<WorktreeInfo> = {};
 
       for (const line of stdout.split('\n')) {
-        if (line.startsWith('worktree ')) {
-          current.path = line.substring(9);
-        } else if (line.startsWith('HEAD ')) {
-          current.commit = line.substring(5);
-        } else if (line.startsWith('branch ')) {
-          current.branch = line.substring(7);
-          current.isDetached = false;
-        } else if (line === 'detached') {
-          current.isDetached = true;
-          current.branch = 'detached';
-        } else if (line === '') {
+        if (line === '') {
           if (current.path) {
             worktrees.push(current as WorktreeInfo);
           }
           current = {};
+        } else {
+          parseWorktreeLine(line, current);
         }
       }
 
-      // Don't forget the last entry
       if (current.path) {
         worktrees.push(current as WorktreeInfo);
       }
@@ -99,6 +107,75 @@ export class WorktreeService {
   }
 
   /**
+   * Check if a task-based worktree is orphaned
+   */
+  private async checkTaskOrphan(
+    taskId: string
+  ): Promise<{ isOrphaned: boolean; reason: OrphanedWorktree['reason']; epicId?: string }> {
+    const task = await taskAccessor.findById(taskId);
+    if (!task) {
+      return { isOrphaned: true, reason: 'no_task' };
+    }
+    if (task.state === 'COMPLETED' || task.state === 'FAILED') {
+      return { isOrphaned: true, reason: 'completed_task', epicId: task.epicId };
+    }
+    return { isOrphaned: false, reason: 'unknown' };
+  }
+
+  /**
+   * Check if an epic-based worktree is orphaned
+   */
+  private async checkEpicOrphan(
+    epicId: string
+  ): Promise<{ isOrphaned: boolean; reason: OrphanedWorktree['reason'] }> {
+    const epic = await epicAccessor.findById(epicId);
+    if (!epic) {
+      return { isOrphaned: true, reason: 'deleted_epic' };
+    }
+    if (epic.state === 'COMPLETED' || epic.state === 'CANCELLED') {
+      return { isOrphaned: true, reason: 'deleted_epic' };
+    }
+    return { isOrphaned: false, reason: 'unknown' };
+  }
+
+  /**
+   * Check a single worktree for orphan status
+   */
+  private async checkWorktreeOrphan(
+    worktree: WorktreeInfo
+  ): Promise<{
+    isOrphaned: boolean;
+    reason: OrphanedWorktree['reason'];
+    taskId?: string;
+    epicId?: string;
+  }> {
+    const taskMatch = worktree.branch.match(/task-([a-zA-Z0-9]+)/);
+    const epicMatch = worktree.branch.match(/epic-([a-zA-Z0-9]+)/);
+
+    if (taskMatch) {
+      const taskId = taskMatch[1];
+      const result = await this.checkTaskOrphan(taskId);
+      if (result.isOrphaned) {
+        return { ...result, taskId, epicId: result.epicId };
+      }
+    }
+
+    if (epicMatch) {
+      const epicId = epicMatch[1];
+      const result = await this.checkEpicOrphan(epicId);
+      if (result.isOrphaned) {
+        return { ...result, epicId };
+      }
+    }
+
+    if (!(taskMatch || epicMatch)) {
+      return { isOrphaned: true, reason: 'unknown' };
+    }
+
+    return { isOrphaned: false, reason: 'unknown' };
+  }
+
+  /**
    * Find orphaned worktrees (worktrees without corresponding tasks)
    */
   async findOrphanedWorktrees(): Promise<OrphanedWorktree[]> {
@@ -106,61 +183,17 @@ export class WorktreeService {
     const orphaned: OrphanedWorktree[] = [];
 
     for (const worktree of worktrees) {
-      // Skip the main worktree
       if (worktree.path === this.repoPath) {
         continue;
       }
 
-      // Try to extract task ID from branch name
-      // Expected format: task-{taskId} or epic-{epicId}/task-{taskId}
-      const taskMatch = worktree.branch.match(/task-([a-zA-Z0-9]+)/);
-      const epicMatch = worktree.branch.match(/epic-([a-zA-Z0-9]+)/);
-
-      let isOrphaned = false;
-      let reason: OrphanedWorktree['reason'] = 'unknown';
-      let taskId: string | undefined;
-      let epicId: string | undefined;
-
-      if (taskMatch) {
-        taskId = taskMatch[1];
-        const task = await taskAccessor.findById(taskId);
-
-        if (!task) {
-          isOrphaned = true;
-          reason = 'no_task';
-        } else if (task.state === 'COMPLETED' || task.state === 'FAILED') {
-          isOrphaned = true;
-          reason = 'completed_task';
-          epicId = task.epicId;
-        }
-      }
-
-      if (epicMatch && !isOrphaned) {
-        epicId = epicMatch[1];
-        const epic = await epicAccessor.findById(epicId);
-
-        if (!epic) {
-          isOrphaned = true;
-          reason = 'deleted_epic';
-        } else if (epic.state === 'COMPLETED' || epic.state === 'CANCELLED') {
-          isOrphaned = true;
-          reason = 'deleted_epic';
-        }
-      }
-
-      // If we couldn't identify the worktree, check if it's old
-      if (!(taskMatch || epicMatch)) {
-        // Mark unidentified worktrees as potentially orphaned
-        isOrphaned = true;
-        reason = 'unknown';
-      }
-
-      if (isOrphaned) {
+      const result = await this.checkWorktreeOrphan(worktree);
+      if (result.isOrphaned) {
         orphaned.push({
           ...worktree,
-          reason,
-          taskId,
-          epicId,
+          reason: result.reason,
+          taskId: result.taskId,
+          epicId: result.epicId,
         });
       }
     }

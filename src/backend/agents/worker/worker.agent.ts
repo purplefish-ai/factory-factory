@@ -285,6 +285,61 @@ async function monitorWorker(agentId: string): Promise<void> {
 }
 
 /**
+ * Handle a rebase request mail
+ */
+async function handleRebaseRequest(
+  agentId: string,
+  mail: { id: string; body: string },
+  taskId: string
+): Promise<void> {
+  console.log(`Worker ${agentId}: Received rebase request`);
+  await mailAccessor.markAsRead(mail.id);
+
+  const task = await taskAccessor.findById(taskId);
+  if (!task) {
+    return;
+  }
+
+  await sendMessage(
+    agentId,
+    `⚠️ REBASE REQUIRED ⚠️\n\n${mail.body}\n\nPlease:\n1. Run 'git fetch origin' to get latest changes\n2. Run 'git rebase origin/<epic-branch-name>' to rebase your branch\n3. Resolve any conflicts if needed\n4. Force push with 'git push --force'\n5. Your PR will be automatically updated\n\nAfter rebasing, your PR will return to the review queue.`
+  );
+
+  if (task.state === TaskState.BLOCKED) {
+    await taskAccessor.update(task.id, { state: TaskState.IN_PROGRESS });
+  }
+}
+
+/**
+ * Handle a change request mail
+ */
+async function handleChangesRequested(
+  agentId: string,
+  mail: { id: string; body: string }
+): Promise<void> {
+  console.log(`Worker ${agentId}: Received change request`);
+  await mailAccessor.markAsRead(mail.id);
+  await sendMessage(
+    agentId,
+    `📝 CHANGES REQUESTED 📝\n\n${mail.body}\n\nPlease address the feedback above, then commit and push your changes. The PR will be re-reviewed once you're done.`
+  );
+}
+
+/**
+ * Handle a generic mail
+ */
+async function handleGenericMail(
+  agentId: string,
+  mail: { id: string; subject: string; body: string; fromAgentId: string | null }
+): Promise<void> {
+  await mailAccessor.markAsRead(mail.id);
+  await sendMessage(
+    agentId,
+    `📬 New Message from ${mail.fromAgentId || 'supervisor'}:\n\nSubject: ${mail.subject}\n\n${mail.body}`
+  );
+}
+
+/**
  * Check worker inbox for supervisor messages (like rebase requests)
  */
 async function checkWorkerInbox(agentId: string): Promise<void> {
@@ -294,55 +349,20 @@ async function checkWorkerInbox(agentId: string): Promise<void> {
   }
 
   try {
-    // Get unread mail for worker
     const inbox = await mailAccessor.listInbox(agentId, false);
+    if (inbox.length === 0) {
+      return;
+    }
 
-    if (inbox.length > 0) {
-      console.log(`Worker ${agentId}: Found ${inbox.length} unread mail(s)`);
+    console.log(`Worker ${agentId}: Found ${inbox.length} unread mail(s)`);
 
-      for (const mail of inbox) {
-        // Check for rebase request
-        if (mail.subject === 'Rebase Required') {
-          console.log(`Worker ${agentId}: Received rebase request`);
-
-          // Mark mail as read
-          await mailAccessor.markAsRead(mail.id);
-
-          // Get task info
-          const task = await taskAccessor.findById(workerContext.taskId);
-          if (task) {
-            // Notify Claude about the rebase request
-            await sendMessage(
-              agentId,
-              `⚠️ REBASE REQUIRED ⚠️\n\n${mail.body}\n\nPlease:\n1. Run 'git fetch origin' to get latest changes\n2. Run 'git rebase origin/<epic-branch-name>' to rebase your branch\n3. Resolve any conflicts if needed\n4. Force push with 'git push --force'\n5. Your PR will be automatically updated\n\nAfter rebasing, your PR will return to the review queue.`
-            );
-
-            // Update task state back to IN_PROGRESS so worker can continue
-            if (task.state === TaskState.BLOCKED) {
-              await taskAccessor.update(task.id, {
-                state: TaskState.IN_PROGRESS,
-              });
-            }
-          }
-        } else if (mail.subject === 'Changes Requested') {
-          console.log(`Worker ${agentId}: Received change request`);
-
-          // Mark mail as read
-          await mailAccessor.markAsRead(mail.id);
-
-          // Notify Claude about the requested changes
-          await sendMessage(
-            agentId,
-            `📝 CHANGES REQUESTED 📝\n\n${mail.body}\n\nPlease address the feedback above, then commit and push your changes. The PR will be re-reviewed once you're done.`
-          );
-        } else {
-          // Generic mail - just notify Claude
-          await mailAccessor.markAsRead(mail.id);
-          await sendMessage(
-            agentId,
-            `📬 New Message from ${mail.fromAgentId || 'supervisor'}:\n\nSubject: ${mail.subject}\n\n${mail.body}`
-          );
-        }
+    for (const mail of inbox) {
+      if (mail.subject === 'Rebase Required') {
+        await handleRebaseRequest(agentId, mail, workerContext.taskId);
+      } else if (mail.subject === 'Changes Requested') {
+        await handleChangesRequested(agentId, mail);
+      } else {
+        await handleGenericMail(agentId, mail);
       }
     }
   } catch (error) {

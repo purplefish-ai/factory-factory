@@ -13,6 +13,135 @@ const stateColors: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-800',
 };
 
+function AgentDetailsCard({ agent }: { agent: AgentWithRelations }) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h2 className="text-lg font-semibold mb-4">Agent Details</h2>
+      <dl className="space-y-3">
+        <div>
+          <dt className="text-sm text-gray-500">Type</dt>
+          <dd className="font-medium">{agent.type}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-gray-500">State</dt>
+          <dd className="font-medium">{agent.state}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-gray-500">Health Status</dt>
+          <dd className={`font-medium ${agent.isHealthy ? 'text-green-600' : 'text-red-600'}`}>
+            {agent.isHealthy ? 'Healthy' : 'Unhealthy'}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm text-gray-500">Last Heartbeat</dt>
+          <dd className="font-medium">{agent.minutesSinceHeartbeat ?? 0} minutes ago</dd>
+        </div>
+        {agent.tmuxSessionName && (
+          <div>
+            <dt className="text-sm text-gray-500">Tmux Session</dt>
+            <dd className="font-mono text-sm">{agent.tmuxSessionName}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
+function RelatedResourcesCard({ agent }: { agent: AgentWithRelations }) {
+  const hasEpic = !!agent.currentEpic;
+  const hasTasks = agent.assignedTasks && agent.assignedTasks.length > 0;
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h2 className="text-lg font-semibold mb-4">Related Resources</h2>
+      <dl className="space-y-3">
+        {hasEpic && (
+          <div>
+            <dt className="text-sm text-gray-500">Current Epic</dt>
+            <dd>
+              <Link
+                href={`/epics/${agent.currentEpic?.id}`}
+                className="text-blue-600 hover:text-blue-800"
+              >
+                {agent.currentEpic?.title}
+              </Link>
+            </dd>
+          </div>
+        )}
+        {hasTasks && (
+          <div>
+            <dt className="text-sm text-gray-500">Assigned Tasks</dt>
+            <dd className="space-y-1">
+              {agent.assignedTasks?.map((task) => (
+                <Link
+                  key={task.id}
+                  href={`/tasks/${task.id}`}
+                  className="block text-blue-600 hover:text-blue-800"
+                >
+                  {task.title}
+                </Link>
+              ))}
+            </dd>
+          </div>
+        )}
+        {!(hasEpic || hasTasks) && <p className="text-gray-500 text-sm">No related resources</p>}
+      </dl>
+    </div>
+  );
+}
+
+interface DecisionLog {
+  id: string;
+  decision: string;
+  reasoning: string;
+  context?: string;
+  timestamp: Date;
+}
+
+function DecisionLogsSection({
+  logs,
+  showFullLogs,
+  onToggle,
+}: {
+  logs: DecisionLog[] | undefined;
+  showFullLogs: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold">Decision Logs</h2>
+        <button onClick={onToggle} className="text-blue-600 hover:text-blue-800 text-sm">
+          {showFullLogs ? 'Show less' : 'Show more'}
+        </button>
+      </div>
+      {!logs || logs.length === 0 ? (
+        <p className="text-gray-500 text-sm">No decision logs yet</p>
+      ) : (
+        <div className="space-y-4 max-h-96 overflow-y-auto">
+          {logs.map((log) => (
+            <div key={log.id} className="border-l-2 border-gray-200 pl-4 py-2">
+              <p className="font-medium text-sm">{log.decision}</p>
+              <p className="text-sm text-gray-600 mt-1">{log.reasoning}</p>
+              {log.context && (
+                <details className="mt-2">
+                  <summary className="text-xs text-gray-500 cursor-pointer">View context</summary>
+                  <pre className="mt-2 text-xs bg-gray-50 p-2 rounded overflow-x-auto">
+                    {log.context}
+                  </pre>
+                </details>
+              )}
+              <p className="text-xs text-gray-400 mt-1">
+                {new Date(log.timestamp).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [showFullLogs, setShowFullLogs] = useState(false);
@@ -23,7 +152,6 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
     error,
   } = trpc.agent.getById.useQuery({ id }, { refetchInterval: 2000 });
 
-  // Cast to include relations and health status
   const agent = agentData as AgentWithRelations | undefined;
 
   const { data: logs } = trpc.decisionLog.listByAgent.useQuery(
@@ -82,73 +210,8 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* Agent Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Agent Details</h2>
-          <dl className="space-y-3">
-            <div>
-              <dt className="text-sm text-gray-500">Type</dt>
-              <dd className="font-medium">{agent.type}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-gray-500">State</dt>
-              <dd className="font-medium">{agent.state}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-gray-500">Health Status</dt>
-              <dd className={`font-medium ${agent.isHealthy ? 'text-green-600' : 'text-red-600'}`}>
-                {agent.isHealthy ? 'Healthy' : 'Unhealthy'}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-gray-500">Last Heartbeat</dt>
-              <dd className="font-medium">{agent.minutesSinceHeartbeat ?? 0} minutes ago</dd>
-            </div>
-            {agent.tmuxSessionName && (
-              <div>
-                <dt className="text-sm text-gray-500">Tmux Session</dt>
-                <dd className="font-mono text-sm">{agent.tmuxSessionName}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Related Resources</h2>
-          <dl className="space-y-3">
-            {agent.currentEpic && (
-              <div>
-                <dt className="text-sm text-gray-500">Current Epic</dt>
-                <dd>
-                  <Link
-                    href={`/epics/${agent.currentEpic.id}`}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    {agent.currentEpic.title}
-                  </Link>
-                </dd>
-              </div>
-            )}
-            {agent.assignedTasks && agent.assignedTasks.length > 0 && (
-              <div>
-                <dt className="text-sm text-gray-500">Assigned Tasks</dt>
-                <dd className="space-y-1">
-                  {agent.assignedTasks.map((task) => (
-                    <Link
-                      key={task.id}
-                      href={`/tasks/${task.id}`}
-                      className="block text-blue-600 hover:text-blue-800"
-                    >
-                      {task.title}
-                    </Link>
-                  ))}
-                </dd>
-              </div>
-            )}
-            {!agent.currentEpic && (!agent.assignedTasks || agent.assignedTasks.length === 0) && (
-              <p className="text-gray-500 text-sm">No related resources</p>
-            )}
-          </dl>
-        </div>
+        <AgentDetailsCard agent={agent} />
+        <RelatedResourcesCard agent={agent} />
       </div>
 
       {/* Terminal Viewer */}
@@ -160,40 +223,11 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* Decision Logs */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Decision Logs</h2>
-          <button
-            onClick={() => setShowFullLogs(!showFullLogs)}
-            className="text-blue-600 hover:text-blue-800 text-sm"
-          >
-            {showFullLogs ? 'Show less' : 'Show more'}
-          </button>
-        </div>
-        {!logs || logs.length === 0 ? (
-          <p className="text-gray-500 text-sm">No decision logs yet</p>
-        ) : (
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {logs.map((log) => (
-              <div key={log.id} className="border-l-2 border-gray-200 pl-4 py-2">
-                <p className="font-medium text-sm">{log.decision}</p>
-                <p className="text-sm text-gray-600 mt-1">{log.reasoning}</p>
-                {log.context && (
-                  <details className="mt-2">
-                    <summary className="text-xs text-gray-500 cursor-pointer">View context</summary>
-                    <pre className="mt-2 text-xs bg-gray-50 p-2 rounded overflow-x-auto">
-                      {log.context}
-                    </pre>
-                  </details>
-                )}
-                <p className="text-xs text-gray-400 mt-1">
-                  {new Date(log.timestamp).toLocaleString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <DecisionLogsSection
+        logs={logs}
+        showFullLogs={showFullLogs}
+        onToggle={() => setShowFullLogs(!showFullLogs)}
+      />
     </div>
   );
 }

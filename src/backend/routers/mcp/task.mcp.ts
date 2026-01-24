@@ -51,6 +51,109 @@ function isValidStateTransition(from: TaskState, to: TaskState): boolean {
   return validTransitions[from]?.includes(to) ?? false;
 }
 
+interface WorkerTaskContext {
+  agentId: string;
+  task: { id: string; epicId: string; branchName: string; worktreePath: string; title: string };
+  epic: { id: string };
+}
+
+/**
+ * Validate worker context for PR creation
+ */
+async function validateWorkerForPR(
+  context: McpToolContext
+): Promise<
+  { success: true; data: WorkerTaskContext } | { success: false; error: McpToolResponse }
+> {
+  const agent = await agentAccessor.findById(context.agentId);
+  if (!agent) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.AGENT_NOT_FOUND,
+        `Agent with ID '${context.agentId}' not found`
+      ),
+    };
+  }
+
+  if (agent.type !== AgentType.WORKER) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.PERMISSION_DENIED,
+        'Only WORKER agents can create pull requests'
+      ),
+    };
+  }
+
+  if (!agent.currentTaskId) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Agent does not have a current task assigned'
+      ),
+    };
+  }
+
+  const task = await taskAccessor.findById(agent.currentTaskId);
+  if (!task) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Task with ID '${agent.currentTaskId}' not found`
+      ),
+    };
+  }
+
+  const epic = await epicAccessor.findById(task.epicId);
+  if (!epic) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Epic with ID '${task.epicId}' not found`
+      ),
+    };
+  }
+
+  if (!task.branchName) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a branch name'
+      ),
+    };
+  }
+
+  if (!task.worktreePath) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a worktree path'
+      ),
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      agentId: agent.id,
+      task: {
+        id: task.id,
+        epicId: task.epicId,
+        branchName: task.branchName,
+        worktreePath: task.worktreePath,
+        title: task.title,
+      },
+      epic: { id: epic.id },
+    },
+  };
+}
+
 // ============================================================================
 // Tool Implementations
 // ============================================================================
@@ -147,70 +250,14 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
   try {
     const validatedInput = CreatePRInputSchema.parse(input);
 
-    // Get agent
-    const agent = await agentAccessor.findById(context.agentId);
-    if (!agent) {
-      return createErrorResponse(
-        McpErrorCode.AGENT_NOT_FOUND,
-        `Agent with ID '${context.agentId}' not found`
-      );
+    const validation = await validateWorkerForPR(context);
+    if (!validation.success) {
+      return validation.error;
     }
+    const { task, epic, agentId } = validation.data;
 
-    // Verify agent is WORKER
-    if (agent.type !== AgentType.WORKER) {
-      return createErrorResponse(
-        McpErrorCode.PERMISSION_DENIED,
-        'Only WORKER agents can create pull requests'
-      );
-    }
-
-    // Verify agent has a task
-    if (!agent.currentTaskId) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Agent does not have a current task assigned'
-      );
-    }
-
-    // Get task
-    const task = await taskAccessor.findById(agent.currentTaskId);
-    if (!task) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Task with ID '${agent.currentTaskId}' not found`
-      );
-    }
-
-    // Get epic
-    const epic = await epicAccessor.findById(task.epicId);
-    if (!epic) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${task.epicId}' not found`
-      );
-    }
-
-    // Verify task has branch
-    if (!task.branchName) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a branch name'
-      );
-    }
-
-    // Verify task has worktree
-    if (!task.worktreePath) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a worktree path'
-      );
-    }
-
-    // Get epic branch name (we'll need to get this from somewhere)
-    // For now, assume epic has a similar pattern
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
 
-    // Create PR
     let prInfo: PRInfo;
     try {
       prInfo = await githubClient.createPR(
@@ -227,42 +274,32 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
       );
     }
 
-    // Update task with PR URL and state
     const updatedTask = await taskAccessor.update(task.id, {
       prUrl: prInfo.url,
       state: TaskState.REVIEW,
     });
 
-    // Send mail to supervisor (if exists)
-    // Note: In phase 2, there may not be a supervisor yet
     const orchestrator = await agentAccessor.findByEpicId(epic.id);
     if (orchestrator) {
       await mailAccessor.create({
-        fromAgentId: agent.id,
+        fromAgentId: agentId,
         toAgentId: orchestrator.id,
         subject: `Task Complete: ${task.title}`,
         body: `Task ${task.id} has been completed and PR ${prInfo.url} has been created for review.`,
       });
     }
 
-    // Log decision
     await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__task__create_pr', 'result', {
       taskId: task.id,
       prUrl: prInfo.url,
       prNumber: prInfo.number,
     });
 
-    // Send desktop notification for task completion
-    try {
-      await notificationService.notifyTaskComplete(
-        task.title,
-        prInfo.url,
-        task.branchName || undefined
-      );
-    } catch (error) {
-      console.error('Failed to send task completion notification:', error);
-      // Don't fail the operation if notification fails
-    }
+    notificationService
+      .notifyTaskComplete(task.title, prInfo.url, task.branchName)
+      .catch((error) => {
+        console.error('Failed to send task completion notification:', error);
+      });
 
     return createSuccessResponse({
       taskId: updatedTask.id,

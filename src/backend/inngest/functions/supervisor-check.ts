@@ -8,6 +8,124 @@ import {
 import { notificationService } from '../../services/notification.service.js';
 import { inngest } from '../client.js';
 
+interface SupervisorInfo {
+  id: string;
+  epicId: string;
+  state: string;
+  lastActiveAt: string;
+}
+
+interface WorkerHealthResult {
+  supervisorId: string;
+  epicId: string;
+  healthyCount: number;
+  unhealthyCount: number;
+  recoveredWorkers: string[];
+  failedRecoveries: string[];
+}
+
+interface UnhealthyWorkerInfo {
+  workerId: string;
+  taskId: string;
+  minutesSinceHeartbeat: number;
+}
+
+/**
+ * Recover unhealthy workers for a supervisor
+ */
+async function recoverUnhealthyWorkers(
+  unhealthyWorkers: UnhealthyWorkerInfo[],
+  supervisorId: string
+): Promise<{ recovered: string[]; failed: string[] }> {
+  const recovered: string[] = [];
+  const failed: string[] = [];
+
+  for (const unhealthy of unhealthyWorkers) {
+    console.log(
+      `Worker ${unhealthy.workerId} is unhealthy (${unhealthy.minutesSinceHeartbeat} minutes since heartbeat)`
+    );
+
+    try {
+      const result = await recoverWorker(unhealthy.workerId, unhealthy.taskId, supervisorId);
+
+      if (result.success && result.newWorkerId) {
+        recovered.push(result.newWorkerId);
+        console.log(`Recovered worker: ${unhealthy.workerId} -> ${result.newWorkerId}`);
+      } else if (result.permanentFailure) {
+        failed.push(unhealthy.workerId);
+        console.log(`Worker ${unhealthy.workerId} permanently failed after max attempts`);
+        await notificationService.notifyTaskFailed(
+          `Task for worker ${unhealthy.workerId}`,
+          `Worker failed after ${result.attemptNumber} recovery attempts`
+        );
+      } else {
+        failed.push(unhealthy.workerId);
+      }
+    } catch (error) {
+      console.error(`Failed to recover worker ${unhealthy.workerId}:`, error);
+      failed.push(unhealthy.workerId);
+    }
+  }
+
+  return { recovered, failed };
+}
+
+/**
+ * Check workers for a single supervisor
+ */
+async function checkSupervisorWorkers(supervisor: SupervisorInfo): Promise<WorkerHealthResult> {
+  try {
+    console.log(`Checking workers for supervisor ${supervisor.id} (epic: ${supervisor.epicId})`);
+
+    const { healthyWorkers, unhealthyWorkers } = await checkWorkerHealth(supervisor.id);
+    const { recovered, failed } = await recoverUnhealthyWorkers(unhealthyWorkers, supervisor.id);
+
+    if (unhealthyWorkers.length > 0) {
+      await decisionLogAccessor.createManual(
+        supervisor.id,
+        `Cron health check: ${unhealthyWorkers.length} unhealthy worker(s)`,
+        `Recovered: ${recovered.length}, Failed: ${failed.length}`,
+        JSON.stringify({
+          healthyCount: healthyWorkers.length,
+          unhealthyCount: unhealthyWorkers.length,
+          recoveredWorkers: recovered,
+          failedRecoveries: failed,
+        })
+      );
+    }
+
+    return {
+      supervisorId: supervisor.id,
+      epicId: supervisor.epicId,
+      healthyCount: healthyWorkers.length,
+      unhealthyCount: unhealthyWorkers.length,
+      recoveredWorkers: recovered,
+      failedRecoveries: failed,
+    };
+  } catch (error) {
+    console.error(`Error checking supervisor ${supervisor.id}:`, error);
+
+    await mailAccessor.create({
+      isForHuman: true,
+      subject: `Health check failed for supervisor ${supervisor.id}`,
+      body:
+        `The cron job failed to check worker health for supervisor ${supervisor.id}.\n\n` +
+        `Epic ID: ${supervisor.epicId}\n` +
+        `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
+        `Manual investigation may be required.`,
+    });
+
+    return {
+      supervisorId: supervisor.id,
+      epicId: supervisor.epicId,
+      healthyCount: 0,
+      unhealthyCount: 0,
+      recoveredWorkers: [],
+      failedRecoveries: [],
+    };
+  }
+}
+
 /**
  * Supervisor Health Check Cron Job
  *
@@ -59,102 +177,7 @@ export const supervisorCheckHandler = inngest.createFunction(
 
     // Step 2: Check worker health for each supervisor
     const results = await step.run('check-all-supervisors', async () => {
-      const results: Array<{
-        supervisorId: string;
-        epicId: string;
-        healthyCount: number;
-        unhealthyCount: number;
-        recoveredWorkers: string[];
-        failedRecoveries: string[];
-      }> = [];
-
-      for (const supervisor of activeSupervisors) {
-        try {
-          console.log(
-            `Checking workers for supervisor ${supervisor.id} (epic: ${supervisor.epicId})`
-          );
-
-          const { healthyWorkers, unhealthyWorkers } = await checkWorkerHealth(supervisor.id);
-
-          const recoveredWorkers: string[] = [];
-          const failedRecoveries: string[] = [];
-
-          // Recover unhealthy workers
-          for (const unhealthy of unhealthyWorkers) {
-            console.log(
-              `Worker ${unhealthy.workerId} is unhealthy (${unhealthy.minutesSinceHeartbeat} minutes since heartbeat)`
-            );
-
-            try {
-              const recoveryResult = await recoverWorker(
-                unhealthy.workerId,
-                unhealthy.taskId,
-                supervisor.id
-              );
-
-              if (recoveryResult.success && recoveryResult.newWorkerId) {
-                recoveredWorkers.push(recoveryResult.newWorkerId);
-                console.log(
-                  `Recovered worker: ${unhealthy.workerId} -> ${recoveryResult.newWorkerId}`
-                );
-              } else if (recoveryResult.permanentFailure) {
-                failedRecoveries.push(unhealthy.workerId);
-                console.log(`Worker ${unhealthy.workerId} permanently failed after max attempts`);
-
-                // Send notification for permanent failure
-                await notificationService.notifyTaskFailed(
-                  `Task for worker ${unhealthy.workerId}`,
-                  `Worker failed after ${recoveryResult.attemptNumber} recovery attempts`
-                );
-              } else {
-                failedRecoveries.push(unhealthy.workerId);
-              }
-            } catch (error) {
-              console.error(`Failed to recover worker ${unhealthy.workerId}:`, error);
-              failedRecoveries.push(unhealthy.workerId);
-            }
-          }
-
-          results.push({
-            supervisorId: supervisor.id,
-            epicId: supervisor.epicId,
-            healthyCount: healthyWorkers.length,
-            unhealthyCount: unhealthyWorkers.length,
-            recoveredWorkers,
-            failedRecoveries,
-          });
-
-          // Log the health check
-          if (unhealthyWorkers.length > 0) {
-            await decisionLogAccessor.createManual(
-              supervisor.id,
-              `Cron health check: ${unhealthyWorkers.length} unhealthy worker(s)`,
-              `Recovered: ${recoveredWorkers.length}, Failed: ${failedRecoveries.length}`,
-              JSON.stringify({
-                healthyCount: healthyWorkers.length,
-                unhealthyCount: unhealthyWorkers.length,
-                recoveredWorkers,
-                failedRecoveries,
-              })
-            );
-          }
-        } catch (error) {
-          console.error(`Error checking supervisor ${supervisor.id}:`, error);
-
-          // Notify human about health check failure
-          await mailAccessor.create({
-            isForHuman: true,
-            subject: `Health check failed for supervisor ${supervisor.id}`,
-            body:
-              `The cron job failed to check worker health for supervisor ${supervisor.id}.\n\n` +
-              `Epic ID: ${supervisor.epicId}\n` +
-              `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
-              `Manual investigation may be required.`,
-          });
-        }
-      }
-
-      return results;
+      return Promise.all(activeSupervisors.map((supervisor) => checkSupervisorWorkers(supervisor)));
     });
 
     // Calculate totals
