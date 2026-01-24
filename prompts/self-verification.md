@@ -50,6 +50,15 @@ After making API calls (curl commands):
 - If it should have changed state, verify the state changed
 - If it should have created something, verify it was created
 
+### When API Calls Fail
+
+If a curl command returns an error:
+1. Read the error message carefully
+2. Check if it's a transient issue (network, timeout) vs. a real error (bad input, invalid state)
+3. For transient issues: retry once after a few seconds
+4. For real errors: fix the underlying issue before retrying
+5. If stuck after 2-3 attempts: escalate (workers → supervisor, supervisors → humans)
+
 ## Verify Before State Transitions
 
 Before marking a task as REVIEW:

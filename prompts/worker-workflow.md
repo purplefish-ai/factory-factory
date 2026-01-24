@@ -65,10 +65,16 @@ Follow this structured workflow to complete your task reliably.
    ```bash
    git status  # Should show "nothing to commit, working tree clean"
    ```
-2. Update task state to REVIEW
-3. Send mail to your supervisor with:
-   - Confirmation that the task is complete
-   - Brief summary of what you implemented
-   - Any notes about your approach or trade-offs
 
-**Exit criteria**: Supervisor has been notified and can begin review.
+2. Create a PR for review using `mcp__task__create_pr`:
+   - Provide a clear title summarizing what you built
+   - Include a description with implementation details and any trade-offs
+
+This single tool call does everything needed:
+- Creates a GitHub PR from your branch to the supervisor's branch
+- Sets your task state to REVIEW
+- Notifies your supervisor automatically
+
+**Critical**: Only use `mcp__task__create_pr` to submit your work. Do NOT manually push to origin or create PRs through git/GitHub.
+
+**Exit criteria**: PR is created and supervisor has been notified.

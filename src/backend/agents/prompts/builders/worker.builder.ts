@@ -14,42 +14,46 @@ import {
 import type { ToolCategory, WorkerContext } from '../types.js';
 
 // Worker-specific tool definitions
-const TASK_STATE_TOOLS: ToolCategory = {
-  name: 'Task State Updates',
+const TASK_TOOLS: ToolCategory = {
+  name: 'Task Management',
   tools: [
     {
       name: 'mcp__task__update_state',
-      description: "Update your task's state",
+      description: 'Update your task state to IN_PROGRESS when starting work',
       inputExample: { state: 'IN_PROGRESS' },
-      inputComments: [
-        'Mark task as IN_PROGRESS when you start working',
-        'Mark task as REVIEW when code is ready for supervisor review',
-      ],
+    },
+    {
+      name: 'mcp__task__create_pr',
+      description:
+        'Submit your work for review. Creates PR, sets state to REVIEW, and notifies supervisor.',
+      inputExample: {
+        title: 'Add user authentication endpoint',
+        description: 'Implemented JWT-based auth with login/logout endpoints.',
+      },
     },
   ],
 };
 
 function generateFirstSteps(context: WorkerContext): string {
-  return `## IMPORTANT FIRST STEPS:
+  return `## FIRST STEPS
 
-1. First, update your task state to IN_PROGRESS:
+1. Update your task state to IN_PROGRESS:
 \`\`\`bash
 curl -X POST ${context.backendUrl}/mcp/execute -H "Content-Type: application/json" -d '{"agentId": "${context.agentId}", "toolName": "mcp__task__update_state", "input": {"state": "IN_PROGRESS"}}'
 \`\`\`
 
-2. Then explore the codebase with \`ls -la\` and \`git status\`
+2. Explore the codebase and implement your task
 
-3. When done, remember to:
-   - Commit all changes: \`git add . && git commit -m "your message"\`
-   - Verify clean working tree: \`git status\`
-   - Update state to REVIEW:
+## WHEN DONE
+
+1. Commit all changes: \`git add . && git commit -m "your message"\`
+2. Verify clean working tree: \`git status\`
+3. Submit for review:
 \`\`\`bash
-curl -X POST ${context.backendUrl}/mcp/execute -H "Content-Type: application/json" -d '{"agentId": "${context.agentId}", "toolName": "mcp__task__update_state", "input": {"state": "REVIEW"}}'
+curl -X POST ${context.backendUrl}/mcp/execute -H "Content-Type: application/json" -d '{"agentId": "${context.agentId}", "toolName": "mcp__task__create_pr", "input": {"title": "Brief title of what you built", "description": "Summary of implementation and any trade-offs."}}'
 \`\`\`
-   - Send mail to supervisor:
-\`\`\`bash
-curl -X POST ${context.backendUrl}/mcp/execute -H "Content-Type: application/json" -d '{"agentId": "${context.agentId}", "toolName": "mcp__mail__send", "input": {"toAgentId": "${context.supervisorAgentId}", "subject": "Code Ready for Review", "body": "Task ${context.taskTitle} completed. All changes committed and ready for your review."}}'
-\`\`\``;
+
+This creates the PR, sets your state to REVIEW, and notifies your supervisor automatically.`;
 }
 
 /**
@@ -58,10 +62,7 @@ curl -X POST ${context.backendUrl}/mcp/execute -H "Content-Type: application/jso
 export function buildWorkerPrompt(context: WorkerContext): string {
   // Build tools section with worker-specific tools
   const mailTools = getMailToolsForAgent('worker');
-  const toolCategories: ToolCategory[] = [
-    TASK_STATE_TOOLS,
-    { name: 'Communication', tools: mailTools },
-  ];
+  const toolCategories: ToolCategory[] = [TASK_TOOLS, { name: 'Communication', tools: mailTools }];
 
   // Build prompt from markdown files + dynamic sections
   const builder = new PromptBuilder()

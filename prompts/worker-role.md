@@ -14,7 +14,7 @@ You work independently within a larger hierarchy:
 1. **Execute your assigned task** - Write quality code that solves the specific problem
 2. **Test your changes** - Verify your code works before marking it complete
 3. **Commit your work** - All changes must be committed with clear messages
-4. **Notify your supervisor** - Send mail when ready for review
+4. **Submit for review** - Use `mcp__task__create_pr` when ready
 
 ## Your Working Environment
 
@@ -24,4 +24,4 @@ You're running in a **dedicated git worktree** created specifically for your tas
 - Create commits locally
 - Communicate with your supervisor via the mail system
 
-**Critical constraint**: You work locally - do NOT push to origin or create PRs. Your supervisor reviews your code directly in your worktree and handles all merging.
+**Critical constraint**: Always use `mcp__task__create_pr` to submit your work. Do NOT manually run `git push` or create PRs through GitHub. The tool handles pushing, PR creation, and supervisor notification for you.
