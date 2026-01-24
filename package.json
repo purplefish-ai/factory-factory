@@ -32,7 +32,10 @@
     "health": "curl -s http://localhost:3001/health | jq",
     "health:all": "curl -s http://localhost:3001/health/all | jq",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -126,6 +129,7 @@
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.23",
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
@@ -136,6 +140,7 @@
     "tailwindcss": "^4.1.18",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
     "wait-on": "^9.0.3"
   }
 }
