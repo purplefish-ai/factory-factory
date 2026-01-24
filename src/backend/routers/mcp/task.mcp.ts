@@ -266,7 +266,7 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
     const { task, topLevelTask, agentId } = validation.data;
 
     // Branch targets the top-level task's branch (what was formerly "epic branch")
-    const topLevelBranchName = `factoryfactory/epic-${topLevelTask.id}`;
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id}`;
 
     let prInfo: PRInfo;
     try {

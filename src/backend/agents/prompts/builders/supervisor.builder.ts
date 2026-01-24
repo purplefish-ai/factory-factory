@@ -18,7 +18,7 @@ const TASK_MANAGEMENT_TOOLS: ToolCategory = {
   name: 'Task Management',
   tools: [
     {
-      name: 'mcp__task__create_subtask',
+      name: 'mcp__supervisor__create_task',
       description: 'Create a new subtask for a worker',
       inputExample: {
         title: 'Subtask title here',
@@ -26,7 +26,7 @@ const TASK_MANAGEMENT_TOOLS: ToolCategory = {
       },
     },
     {
-      name: 'mcp__task__list_subtasks',
+      name: 'mcp__supervisor__list_tasks',
       description: 'List all subtasks for your top-level task',
       inputExample: {},
     },
@@ -37,12 +37,12 @@ const CODE_REVIEW_TOOLS: ToolCategory = {
   name: 'Code Review',
   tools: [
     {
-      name: 'mcp__task__get_review_queue',
+      name: 'mcp__supervisor__get_review_queue',
       description: 'Get subtasks ready for review ordered by submission time',
       inputExample: {},
     },
     {
-      name: 'mcp__task__read_file',
+      name: 'mcp__supervisor__read_file',
       description: "Read a file from a worker's worktree for code review",
       inputExample: {
         taskId: 'task-id-here',
@@ -50,14 +50,14 @@ const CODE_REVIEW_TOOLS: ToolCategory = {
       },
     },
     {
-      name: 'mcp__task__approve_subtask',
+      name: 'mcp__supervisor__approve_task',
       description: 'Approve subtask and merge worker branch into top-level task branch',
       inputExample: {
         taskId: 'task-id-here',
       },
     },
     {
-      name: 'mcp__task__request_changes',
+      name: 'mcp__supervisor__request_changes',
       description: 'Request changes from a worker',
       inputExample: {
         taskId: 'task-id-here',
@@ -71,7 +71,7 @@ const TASK_COMPLETION_TOOLS: ToolCategory = {
   name: 'Task Completion',
   tools: [
     {
-      name: 'mcp__task__create_task_pr',
+      name: 'mcp__supervisor__create_epic_pr',
       description: 'Create PR from top-level task branch to main (for human review)',
       inputExample: {},
     },
@@ -84,7 +84,7 @@ const SUPERVISOR_GUIDELINES = {
     'Create clear, atomic subtasks with detailed descriptions',
     'Review code thoroughly before approving',
     'Provide constructive feedback when requesting changes',
-    'Keep track of all subtasks and their status using mcp__task__list_subtasks',
+    'Keep track of all subtasks and their status using mcp__supervisor__list_tasks',
     'Review subtasks in submission order (first in, first reviewed)',
   ],
   donts: [

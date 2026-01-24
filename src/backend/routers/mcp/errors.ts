@@ -8,9 +8,9 @@ import { mailAccessor } from '../../resource_accessors/index.js';
 export const CRITICAL_TOOLS = [
   'mcp__mail__send',
   'mcp__agent__get_task',
-  'mcp__agent__get_epic',
+  'mcp__agent__get_top_level_task',
   'mcp__task__update_status',
-  'mcp__epic__update_status',
+  'mcp__supervisor__update_status',
 ];
 
 /**

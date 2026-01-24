@@ -103,9 +103,9 @@ export async function createWorker(taskId: string): Promise<string> {
     throw new Error(`Project with ID '${topLevelTask.projectId}' not found`);
   }
 
-  // Build epic branch name (matches supervisor's branch naming convention)
-  // Workers should branch from the epic branch so they have the latest merged code
-  const epicBranchName = `factoryfactory/epic-${topLevelTask.id.substring(0, 8)}`;
+  // Build top-level task branch name (matches supervisor's branch naming convention)
+  // Workers should branch from the top-level task branch so they have the latest merged code
+  const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
 
   // Create agent record
   const agent = await agentAccessor.create({
@@ -122,7 +122,7 @@ export async function createWorker(taskId: string): Promise<string> {
 
   // Create git worktree for task (branching from epic branch, not main)
   const worktreeName = `task-${agent.id.substring(0, 8)}`;
-  const worktreeInfo = await gitClient.createWorktree(worktreeName, epicBranchName);
+  const worktreeInfo = await gitClient.createWorktree(worktreeName, topLevelBranchName);
 
   // Update task with worktree info
   await taskAccessor.update(taskId, {
@@ -147,7 +147,7 @@ export async function createWorker(taskId: string): Promise<string> {
     taskTitle: task.title,
     taskDescription: task.description || 'No description provided',
     parentTaskTitle: topLevelTask.title,
-    parentTaskBranchName: epicBranchName,
+    parentTaskBranchName: topLevelBranchName,
     worktreePath: worktreeInfo.path,
     branchName: worktreeInfo.branchName,
     agentId: agent.id,

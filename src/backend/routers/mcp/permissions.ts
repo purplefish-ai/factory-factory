@@ -18,7 +18,7 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       'mcp__agent__*',
       'mcp__system__*',
       'mcp__task__*',
-      'mcp__epic__*',
+      'mcp__supervisor__*',
       'mcp__orchestrator__*', // Orchestrator-specific tools
     ],
     disallowed: [

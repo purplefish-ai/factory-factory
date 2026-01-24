@@ -154,12 +154,17 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
     const worktreeName = generateWorktreeName(task.id, validatedInput.title);
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__create_task', 'result', {
-      taskId: task.id,
-      parentId: topLevelTask.id,
-      title: validatedInput.title,
-      worktreeName,
-    });
+    await decisionLogAccessor.createAutomatic(
+      context.agentId,
+      'mcp__supervisor__create_task',
+      'result',
+      {
+        taskId: task.id,
+        parentId: topLevelTask.id,
+        title: validatedInput.title,
+        worktreeName,
+      }
+    );
 
     // Fire task.created event (for logging/observability)
     try {
@@ -226,11 +231,16 @@ async function listTasks(context: McpToolContext, input: unknown): Promise<McpTo
     });
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__list_tasks', 'result', {
-      topLevelTaskId: verification.topLevelTaskId,
-      taskCount: tasks.length,
-      filterState: validatedInput.state,
-    });
+    await decisionLogAccessor.createAutomatic(
+      context.agentId,
+      'mcp__supervisor__list_tasks',
+      'result',
+      {
+        topLevelTaskId: verification.topLevelTaskId,
+        taskCount: tasks.length,
+        filterState: validatedInput.state,
+      }
+    );
 
     return createSuccessResponse({
       topLevelTaskId: verification.topLevelTaskId,
@@ -276,7 +286,7 @@ async function getReviewQueue(context: McpToolContext, input: unknown): Promise<
     // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__get_review_queue',
+      'mcp__supervisor__get_review_queue',
       'result',
       {
         topLevelTaskId: verification.topLevelTaskId,
@@ -578,7 +588,7 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
     );
     await taskAccessor.update(task.id, { state: TaskState.COMPLETED, completedAt: new Date() });
 
-    const topLevelBranchName = `factoryfactory/epic-${topLevelTask.id.substring(0, 8)}`;
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
     const rebaseRequestsSent = await sendRebaseRequests(
       context,
       verification.topLevelTaskId,
@@ -589,7 +599,7 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
 
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__approve_task',
+      'mcp__supervisor__approve_task',
       'result',
       {
         taskId: task.id,
@@ -679,7 +689,7 @@ async function requestChanges(context: McpToolContext, input: unknown): Promise<
     // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__request_changes',
+      'mcp__supervisor__request_changes',
       'result',
       {
         taskId: task.id,
@@ -765,11 +775,16 @@ async function readFile(context: McpToolContext, input: unknown): Promise<McpToo
     }
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__read_file', 'result', {
-      taskId: task.id,
-      filePath: validatedInput.filePath,
-      contentLength: content.length,
-    });
+    await decisionLogAccessor.createAutomatic(
+      context.agentId,
+      'mcp__supervisor__read_file',
+      'result',
+      {
+        taskId: task.id,
+        filePath: validatedInput.filePath,
+        contentLength: content.length,
+      }
+    );
 
     return createSuccessResponse({
       taskId: task.id,
@@ -828,7 +843,7 @@ async function forceCompleteTask(
     // Log decision with reason
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__force_complete_task',
+      'mcp__supervisor__force_complete_task',
       'result',
       {
         taskId: task.id,
@@ -1018,7 +1033,7 @@ async function createTopLevelPR(context: McpToolContext, input: unknown): Promis
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const topLevelBranchName = `factoryfactory/epic-${topLevelTask.id}`;
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id}`;
     const worktreePath = gitClient.getWorktreePath(`epic-${topLevelTask.id.substring(0, 8)}`);
     const completedTasks = subtasks.filter((t) => t.state === TaskState.COMPLETED);
     const failedTasks = subtasks.filter((t) => t.state === TaskState.FAILED);
@@ -1058,7 +1073,7 @@ async function createTopLevelPR(context: McpToolContext, input: unknown): Promis
 
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__create_epic_pr',
+      'mcp__supervisor__create_epic_pr',
       'result',
       {
         topLevelTaskId: topLevelTask.id,
@@ -1101,14 +1116,14 @@ async function createTopLevelPR(context: McpToolContext, input: unknown): Promis
 export function registerEpicTools(): void {
   // Task Management
   registerMcpTool({
-    name: 'mcp__epic__create_task',
+    name: 'mcp__supervisor__create_task',
     description: 'Create a new subtask for the top-level task (SUPERVISOR only)',
     handler: createTask,
     schema: CreateTaskInputSchema,
   });
 
   registerMcpTool({
-    name: 'mcp__epic__list_tasks',
+    name: 'mcp__supervisor__list_tasks',
     description:
       'List all subtasks for the top-level task with optional state filter (SUPERVISOR only)',
     handler: listTasks,
@@ -1117,7 +1132,7 @@ export function registerEpicTools(): void {
 
   // Review Queue
   registerMcpTool({
-    name: 'mcp__epic__get_review_queue',
+    name: 'mcp__supervisor__get_review_queue',
     description: 'Get tasks ready for review ordered by submission time (SUPERVISOR only)',
     handler: getReviewQueue,
     schema: GetReviewQueueInputSchema,
@@ -1125,7 +1140,7 @@ export function registerEpicTools(): void {
 
   // Task Review Actions
   registerMcpTool({
-    name: 'mcp__epic__approve_task',
+    name: 'mcp__supervisor__approve_task',
     description:
       'Approve a task, merge worker branch into top-level task branch, and push (SUPERVISOR only)',
     handler: approveTask,
@@ -1133,14 +1148,14 @@ export function registerEpicTools(): void {
   });
 
   registerMcpTool({
-    name: 'mcp__epic__request_changes',
+    name: 'mcp__supervisor__request_changes',
     description: 'Request changes on a task with feedback (SUPERVISOR only)',
     handler: requestChanges,
     schema: RequestChangesInputSchema,
   });
 
   registerMcpTool({
-    name: 'mcp__epic__read_file',
+    name: 'mcp__supervisor__read_file',
     description: "Read a file from a worker's worktree for code review (SUPERVISOR only)",
     handler: readFile,
     schema: ReadFileInputSchema,
@@ -1148,7 +1163,7 @@ export function registerEpicTools(): void {
 
   // Recovery Tools
   registerMcpTool({
-    name: 'mcp__epic__force_complete_task',
+    name: 'mcp__supervisor__force_complete_task',
     description:
       'Force mark a task as completed when normal approval fails (e.g., merge conflicts resolved manually) (SUPERVISOR only)',
     handler: forceCompleteTask,
@@ -1157,7 +1172,7 @@ export function registerEpicTools(): void {
 
   // Top-Level Task Completion
   registerMcpTool({
-    name: 'mcp__epic__create_epic_pr',
+    name: 'mcp__supervisor__create_epic_pr',
     description:
       'Create PR from top-level task branch to main when all subtasks are done (SUPERVISOR only)',
     handler: createTopLevelPR,

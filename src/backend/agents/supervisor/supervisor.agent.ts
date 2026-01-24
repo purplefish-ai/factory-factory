@@ -235,7 +235,7 @@ export async function runSupervisor(agentId: string): Promise<void> {
   try {
     await sendSupervisorMessage(
       agentId,
-      'Review the epic description and break it down into tasks. Use the mcp__epic__create_task tool to create each task.'
+      'Review the epic description and break it down into tasks. Use the mcp__supervisor__create_task tool to create each task.'
     );
   } catch (error) {
     console.error(`Failed to send initial message to supervisor ${agentId}:`, error);
@@ -392,7 +392,7 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
         `📋 NEW TASKS READY FOR REVIEW:\n` +
           `${newReviewTasks.map((t) => `- ${t.title} (${t.id})`).join('\n')}\n\n` +
           `Total status: ${reviewTasks.length} in review, ${inProgressTasks.length} in progress, ${completedTasks.length} completed, ${failedTasks.length} failed\n\n` +
-          `Use mcp__epic__get_review_queue to see the full review queue.`
+          `Use mcp__supervisor__get_review_queue to see the full review queue.`
       );
     }
     // If all tasks are done and we haven't notified yet, prompt to create epic PR
@@ -407,7 +407,7 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
             `- ${completedTasks.length} task(s) completed successfully\n` +
             `- ${failedTasks.length} task(s) failed\n\n` +
             `It's time to create the final PR from the epic branch to main.\n` +
-            `Use mcp__epic__create_epic_pr to create the epic PR.`
+            `Use mcp__supervisor__create_epic_pr to create the epic PR.`
         );
       }
     }
@@ -454,7 +454,7 @@ async function performWorkerHealthCheck(agentId: string): Promise<void> {
               `- Task ID: ${unhealthy.taskId}\n` +
               `- Old Worker: ${unhealthy.workerId}\n` +
               `- Reason: Max recovery attempts (${result.attemptNumber}) reached\n\n` +
-              `The task has been marked as FAILED. You may need to manually investigate or mark it complete using mcp__epic__force_complete_task.`
+              `The task has been marked as FAILED. You may need to manually investigate or mark it complete using mcp__supervisor__force_complete_task.`
           );
         } else if (result.success) {
           await sendSupervisorMessage(
