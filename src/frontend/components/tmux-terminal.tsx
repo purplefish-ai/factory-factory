@@ -2,7 +2,18 @@
 
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
+import {
+  AlertCircle,
+  Circle,
+  Loader2,
+  RefreshCw,
+  TerminalSquare,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import type { ConnectionStatus, ServerMessage, TerminalDimensions } from '../types/terminal';
 
 interface XtermTerminalProps {
@@ -284,22 +295,45 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
     connect(cols, rows);
   }, [connect]);
 
-  // Status indicator component
+  // Status indicator component using shadcn Badge
   const StatusIndicator = () => {
-    const statusConfig = {
-      disconnected: { color: 'bg-gray-500', text: 'Disconnected' },
-      connecting: { color: 'bg-yellow-500 animate-pulse', text: 'Connecting...' },
-      connected: { color: 'bg-green-500', text: 'Connected' },
-      error: { color: 'bg-red-500', text: 'Error' },
+    const statusConfig: Record<
+      ConnectionStatus,
+      {
+        variant: 'default' | 'secondary' | 'destructive' | 'outline';
+        icon: React.ReactNode;
+        text: string;
+      }
+    > = {
+      disconnected: {
+        variant: 'secondary',
+        icon: <WifiOff className="h-3 w-3" />,
+        text: 'Disconnected',
+      },
+      connecting: {
+        variant: 'outline',
+        icon: <Loader2 className="h-3 w-3 animate-spin" />,
+        text: 'Connecting...',
+      },
+      connected: {
+        variant: 'default',
+        icon: <Wifi className="h-3 w-3" />,
+        text: 'Connected',
+      },
+      error: {
+        variant: 'destructive',
+        icon: <AlertCircle className="h-3 w-3" />,
+        text: 'Error',
+      },
     };
 
     const config = statusConfig[status];
 
     return (
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${config.color}`} />
-        <span className="text-xs text-gray-400">{config.text}</span>
-      </div>
+      <Badge variant={config.variant} className="gap-1.5">
+        {config.icon}
+        {config.text}
+      </Badge>
     );
   };
 
@@ -309,11 +343,12 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
       <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-4 py-2 rounded-t text-sm shrink-0">
         <div className="flex items-center gap-2">
           <span className="flex gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="w-3 h-3 rounded-full bg-yellow-500" />
-            <span className="w-3 h-3 rounded-full bg-green-500" />
+            <Circle className="h-3 w-3 fill-red-500 text-red-500" />
+            <Circle className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+            <Circle className="h-3 w-3 fill-green-500 text-green-500" />
           </span>
-          <span className="ml-2 font-mono text-xs">{effectiveSession}</span>
+          <TerminalSquare className="ml-2 h-4 w-4 text-gray-400" />
+          <span className="font-mono text-xs">{effectiveSession}</span>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-xs text-gray-500">
@@ -321,12 +356,10 @@ export function TmuxTerminal({ sessionName, agentId: _agentId }: XtermTerminalPr
           </span>
           <StatusIndicator />
           {(status === 'disconnected' || status === 'error') && (
-            <button
-              onClick={handleReconnect}
-              className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-            >
+            <Button variant="ghost" size="sm" onClick={handleReconnect}>
+              <RefreshCw className="h-4 w-4" />
               Reconnect
-            </button>
+            </Button>
           )}
         </div>
       </div>
