@@ -9,11 +9,10 @@ import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
-import { killSupervisorAndCleanup, startSupervisorForEpic } from '../supervisor/lifecycle.js';
+import { killSupervisorAndCleanup, startSupervisorForTask } from '../supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../worker/lifecycle.js';
 
 /**
@@ -29,8 +28,8 @@ export async function checkSupervisorHealth(_orchestratorId: string): Promise<{
   healthySupervisors: string[];
   unhealthySupervisors: Array<{
     supervisorId: string;
-    epicId: string;
-    epicTitle: string;
+    taskId: string;
+    taskTitle: string;
     minutesSinceHeartbeat: number;
   }>;
 }> {
@@ -43,26 +42,26 @@ export async function checkSupervisorHealth(_orchestratorId: string): Promise<{
   const healthySupervisors: string[] = [];
   const unhealthySupervisors: Array<{
     supervisorId: string;
-    epicId: string;
-    epicTitle: string;
+    taskId: string;
+    taskTitle: string;
     minutesSinceHeartbeat: number;
   }> = [];
 
   for (const supervisor of supervisors) {
-    if (!supervisor.currentEpicId) {
+    if (!supervisor.currentTaskId) {
       continue;
     }
 
-    const epic = await epicAccessor.findById(supervisor.currentEpicId);
-    const epicTitle = epic?.title || 'Unknown';
+    const task = await taskAccessor.findById(supervisor.currentTaskId);
+    const taskTitle = task?.title || 'Unknown';
 
     if (supervisor.isHealthy) {
       healthySupervisors.push(supervisor.id);
     } else {
       unhealthySupervisors.push({
         supervisorId: supervisor.id,
-        epicId: supervisor.currentEpicId,
-        epicTitle,
+        taskId: supervisor.currentTaskId,
+        taskTitle,
         minutesSinceHeartbeat: supervisor.minutesSinceHeartbeat,
       });
     }
@@ -72,10 +71,10 @@ export async function checkSupervisorHealth(_orchestratorId: string): Promise<{
 }
 
 /**
- * Kill all workers for an epic and mark them as failed
+ * Kill all workers for a top-level task and mark them as failed
  */
-async function killWorkersForEpic(epicId: string): Promise<string[]> {
-  const workers = await agentAccessor.findWorkersByEpicId(epicId);
+async function killWorkersForTopLevelTask(topLevelTaskId: string): Promise<string[]> {
+  const workers = await agentAccessor.findWorkersByTopLevelTaskId(topLevelTaskId);
   const killedWorkerIds: string[] = [];
 
   for (const worker of workers) {
@@ -99,7 +98,7 @@ async function killWorkersForEpic(epicId: string): Promise<string[]> {
 /**
  * Kill a supervisor and mark it as failed
  */
-async function killSupervisor(supervisorId: string): Promise<void> {
+async function killSupervisorAgent(supervisorId: string): Promise<void> {
   try {
     await killSupervisorAndCleanup(supervisorId);
   } catch (error) {
@@ -109,7 +108,7 @@ async function killSupervisor(supervisorId: string): Promise<void> {
   try {
     await agentAccessor.update(supervisorId, {
       state: AgentState.FAILED,
-      currentEpicId: null,
+      currentTaskId: null,
     });
   } catch (error) {
     console.error(`Failed to update supervisor ${supervisorId} state:`, error);
@@ -119,10 +118,10 @@ async function killSupervisor(supervisorId: string): Promise<void> {
 /**
  * Reset non-terminal tasks to PENDING state
  */
-async function resetTasksForEpic(
-  epicId: string
+async function resetTasksForTopLevelTask(
+  topLevelTaskId: string
 ): Promise<{ resetIds: string[]; totalCount: number }> {
-  const tasks = await taskAccessor.list({ epicId });
+  const tasks = await taskAccessor.findByParentId(topLevelTaskId);
   const resetTaskIds: string[] = [];
 
   for (const task of tasks) {
@@ -147,15 +146,15 @@ async function resetTasksForEpic(
 }
 
 /**
- * Create a new supervisor for an epic
+ * Create a new supervisor for a top-level task
  */
-async function createNewSupervisor(epicId: string): Promise<string | null> {
+async function createNewSupervisor(topLevelTaskId: string): Promise<string | null> {
   try {
-    const supervisorId = await startSupervisorForEpic(epicId);
+    const supervisorId = await startSupervisorForTask(topLevelTaskId);
     console.log(`Created new supervisor ${supervisorId}`);
     return supervisorId;
   } catch (error) {
-    console.error(`Failed to create new supervisor for epic ${epicId}:`, error);
+    console.error(`Failed to create new supervisor for task ${topLevelTaskId}:`, error);
     return null;
   }
 }
@@ -164,20 +163,20 @@ async function createNewSupervisor(epicId: string): Promise<string | null> {
  * Perform cascading recovery for a crashed supervisor
  *
  * This performs the full cascading recovery:
- * 1. Kill all workers for the epic
+ * 1. Kill all workers for the top-level task
  * 2. Kill the supervisor
  * 3. Reset task states (non-completed tasks back to PENDING)
  * 4. Create new supervisor
  * 5. Notify human
  *
  * @param supervisorId - The ID of the crashed supervisor
- * @param epicId - The ID of the epic the supervisor was managing
+ * @param taskId - The ID of the top-level task the supervisor was managing
  * @param orchestratorId - The ID of the orchestrator triggering recovery
  * @returns Recovery result
  */
 export async function recoverSupervisor(
   supervisorId: string,
-  epicId: string,
+  taskId: string,
   orchestratorId: string
 ): Promise<{
   success: boolean;
@@ -186,41 +185,42 @@ export async function recoverSupervisor(
   tasksReset: number;
   message: string;
 }> {
-  const epic = await epicAccessor.findById(epicId);
-  if (!epic) {
-    return { success: false, workersKilled: 0, tasksReset: 0, message: `Epic ${epicId} not found` };
+  const task = await taskAccessor.findById(taskId);
+  if (!task) {
+    return { success: false, workersKilled: 0, tasksReset: 0, message: `Task ${taskId} not found` };
   }
 
   // Validate orchestrator exists before using it as fromAgentId
   const orchestrator = await agentAccessor.findById(orchestratorId);
   const validOrchestratorId = orchestrator ? orchestratorId : undefined;
 
-  console.log(`Starting cascading recovery for supervisor ${supervisorId} (epic: ${epic.title})`);
+  console.log(`Starting cascading recovery for supervisor ${supervisorId} (task: ${task.title})`);
 
   // Phase 1: Kill workers
-  const killedWorkerIds = await killWorkersForEpic(epicId);
+  const killedWorkerIds = await killWorkersForTopLevelTask(taskId);
   console.log(`Killed ${killedWorkerIds.length} workers`);
 
   // Phase 2: Kill supervisor
-  await killSupervisor(supervisorId);
+  await killSupervisorAgent(supervisorId);
   console.log(`Killed supervisor ${supervisorId}`);
 
   // Phase 3: Reset tasks
-  const { resetIds: resetTaskIds, totalCount: totalTasks } = await resetTasksForEpic(epicId);
+  const { resetIds: resetTaskIds, totalCount: totalTasks } =
+    await resetTasksForTopLevelTask(taskId);
   console.log(`Reset ${resetTaskIds.length} tasks to PENDING`);
 
   // Phase 4: Create new supervisor
-  const newSupervisorId = await createNewSupervisor(epicId);
+  const newSupervisorId = await createNewSupervisor(taskId);
 
   // Phase 5: Notify and log
   await mailAccessor.create({
     fromAgentId: validOrchestratorId,
     isForHuman: true,
-    subject: `Supervisor Crashed and Recovered - Epic: ${epic.title}`,
+    subject: `Supervisor Crashed and Recovered - Task: ${task.title}`,
     body: `A supervisor crash was detected and cascading recovery was performed.
 
-**Epic**: ${epic.title}
-**Epic ID**: ${epicId}
+**Task**: ${task.title}
+**Task ID**: ${taskId}
 
 **Recovery Summary**:
 - Old Supervisor: ${supervisorId} (killed)
@@ -232,7 +232,7 @@ export async function recoverSupervisor(
 ${
   newSupervisorId
     ? 'The new supervisor will resume work on pending tasks automatically.'
-    : '⚠️ WARNING: Failed to create new supervisor. Manual intervention required.'
+    : 'WARNING: Failed to create new supervisor. Manual intervention required.'
 }`,
   });
 
@@ -241,7 +241,7 @@ ${
     `Supervisor crashed - cascading recovery performed`,
     `Supervisor ${supervisorId} became unresponsive. Killed ${killedWorkerIds.length} workers, reset ${resetTaskIds.length} tasks, created new supervisor ${newSupervisorId || 'FAILED'}`,
     JSON.stringify({
-      epicId,
+      taskId,
       oldSupervisorId: supervisorId,
       newSupervisorId,
       workersKilled: killedWorkerIds,
@@ -274,10 +274,10 @@ ${
 export async function sendSupervisorHealthCheck(
   orchestratorId: string,
   supervisorId: string,
-  epicId: string
+  taskId: string
 ): Promise<void> {
-  const epic = await epicAccessor.findById(epicId);
-  const epicTitle = epic?.title || 'Unknown epic';
+  const task = await taskAccessor.findById(taskId);
+  const taskTitle = task?.title || 'Unknown task';
 
   // Validate both agents exist before sending mail
   const orchestrator = await agentAccessor.findById(orchestratorId);
@@ -294,10 +294,10 @@ export async function sendSupervisorHealthCheck(
     fromAgentId: orchestratorId,
     toAgentId: supervisorId,
     subject: 'Health Check - Please confirm you are active',
-    body: `This is a health check from the orchestrator.\n\nPlease confirm you are still active by replying to this message with your current status.\n\nEpic: ${epicTitle}\nEpic ID: ${epicId}\n\nIf you don't respond within 7 minutes, you may be marked as unresponsive and recovered.`,
+    body: `This is a health check from the orchestrator.\n\nPlease confirm you are still active by replying to this message with your current status.\n\nTask: ${taskTitle}\nTask ID: ${taskId}\n\nIf you don't respond within 7 minutes, you may be marked as unresponsive and recovered.`,
   });
 
-  console.log(`Sent health check to supervisor ${supervisorId} for epic ${epicId}`);
+  console.log(`Sent health check to supervisor ${supervisorId} for task ${taskId}`);
 }
 
 /**
@@ -309,8 +309,8 @@ export async function getSupervisorHealthSummary(): Promise<{
   unhealthySupervisors: number;
   supervisors: Array<{
     supervisorId: string;
-    epicId: string | null;
-    epicTitle: string;
+    taskId: string | null;
+    taskTitle: string;
     state: string;
     isHealthy: boolean;
     minutesSinceHeartbeat: number;
@@ -323,12 +323,12 @@ export async function getSupervisorHealthSummary(): Promise<{
 
   const supervisorDetails = await Promise.all(
     supervisors.map(async (s) => {
-      const epic = s.currentEpicId ? await epicAccessor.findById(s.currentEpicId) : null;
+      const task = s.currentTaskId ? await taskAccessor.findById(s.currentTaskId) : null;
 
       return {
         supervisorId: s.id,
-        epicId: s.currentEpicId,
-        epicTitle: epic?.title || 'No epic',
+        taskId: s.currentTaskId,
+        taskTitle: task?.title || 'No task',
         state: s.state,
         isHealthy: s.isHealthy,
         minutesSinceHeartbeat: s.minutesSinceHeartbeat,
@@ -345,41 +345,41 @@ export async function getSupervisorHealthSummary(): Promise<{
 }
 
 /**
- * Check for pending epics that need supervisors
- * This is used by the orchestrator to create supervisors for new epics
+ * Check for pending top-level tasks that need supervisors
+ * This is used by the orchestrator to create supervisors for new top-level tasks
  */
-export async function getPendingEpicsNeedingSupervisors(): Promise<
+export async function getPendingTopLevelTasksNeedingSupervisors(): Promise<
   Array<{
-    epicId: string;
+    taskId: string;
     title: string;
     createdAt: Date;
   }>
 > {
-  const epics = await epicAccessor.list();
-  const pendingEpics: Array<{
-    epicId: string;
+  const topLevelTasks = await taskAccessor.findTopLevel();
+  const pendingTasks: Array<{
+    taskId: string;
     title: string;
     createdAt: Date;
   }> = [];
 
-  for (const epic of epics) {
-    // Only consider epics in PLANNING state
-    if (epic.state !== 'PLANNING') {
+  for (const task of topLevelTasks) {
+    // Only consider tasks in PLANNING state
+    if (task.state !== TaskState.PLANNING) {
       continue;
     }
 
-    // Check if epic already has a supervisor
-    const supervisor = await agentAccessor.findByEpicId(epic.id);
+    // Check if task already has a supervisor
+    const supervisor = await agentAccessor.findByTaskId(task.id);
     if (supervisor) {
       continue;
     }
 
-    pendingEpics.push({
-      epicId: epic.id,
-      title: epic.title,
-      createdAt: epic.createdAt,
+    pendingTasks.push({
+      taskId: task.id,
+      title: task.title,
+      createdAt: task.createdAt,
     });
   }
 
-  return pendingEpics;
+  return pendingTasks;
 }

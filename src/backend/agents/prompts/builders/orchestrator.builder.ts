@@ -31,9 +31,9 @@ const SUPERVISOR_MANAGEMENT_TOOLS: ToolCategory = {
     },
     {
       name: 'mcp__orchestrator__create_supervisor',
-      description: 'Create a new supervisor for an epic',
+      description: 'Create a new supervisor for a top-level task',
       inputExample: {
-        epicId: 'epic-id-here',
+        taskId: 'task-id-here',
       },
     },
     {
@@ -46,12 +46,12 @@ const SUPERVISOR_MANAGEMENT_TOOLS: ToolCategory = {
   ],
 };
 
-const EPIC_MANAGEMENT_TOOLS: ToolCategory = {
-  name: 'Epic Management',
+const TASK_MANAGEMENT_TOOLS: ToolCategory = {
+  name: 'Task Management',
   tools: [
     {
-      name: 'mcp__epic__list_pending',
-      description: 'List epics that need supervisors',
+      name: 'mcp__task__list_pending',
+      description: 'List top-level tasks that need supervisors',
       inputExample: {},
     },
   ],
@@ -61,14 +61,14 @@ const EPIC_MANAGEMENT_TOOLS: ToolCategory = {
 const ORCHESTRATOR_GUIDELINES = {
   dos: [
     'Monitor all supervisors regularly (every 7 minutes)',
-    'Create supervisors for pending epics promptly',
+    'Create supervisors for pending top-level tasks promptly',
     'Trigger recovery immediately when supervisors become unhealthy',
     'Log all health checks and recovery actions',
     'Notify humans of critical events',
   ],
   donts: [
     "Interfere with supervisor's work directly",
-    'Create multiple supervisors for the same epic',
+    'Create multiple supervisors for the same top-level task',
     'Ignore unhealthy supervisors',
     'Skip the recovery process',
   ],
@@ -79,14 +79,14 @@ function generateRoleSection(): string {
 
 ## Your Role
 
-You are the top-level autonomous agent responsible for managing all supervisors and epics in the system. You monitor supervisor health, detect crashes, create new supervisors for epics, and ensure the system continues operating even when agents fail.
+You are the top-level autonomous agent responsible for managing all supervisors and top-level tasks in the system. You monitor supervisor health, detect crashes, create new supervisors for top-level tasks, and ensure the system continues operating even when agents fail.
 
 ## Your Responsibilities
 
 1. **Monitor Supervisors**: Continuously check the health of all active supervisors
-2. **Create Supervisors**: When new epics are ready, create supervisors to manage them
+2. **Create Supervisors**: When new top-level tasks are ready, create supervisors to manage them
 3. **Crash Detection**: Detect when supervisors become unresponsive (no heartbeat for 2+ minutes)
-4. **Cascading Recovery**: When a supervisor crashes, kill all its workers, reset task states, and recreate the supervisor
+4. **Cascading Recovery**: When a supervisor crashes, kill all its workers, reset subtask states, and recreate the supervisor
 5. **Human Notification**: Notify humans of critical events (crashes, recoveries, failures)
 6. **Health Checks**: Respond to health check requests from the system`;
 }
@@ -94,7 +94,7 @@ You are the top-level autonomous agent responsible for managing all supervisors 
 function generateWorkingEnvironmentSection(): string {
   return `## Your Working Environment
 
-You run continuously as the single orchestrator instance. You do not work on epics directly - you delegate that to supervisors. Your job is to ensure supervisors are created and healthy.`;
+You run continuously as the single orchestrator instance. You do not work on top-level tasks directly - you delegate that to supervisors. Your job is to ensure supervisors are created and healthy.`;
 }
 
 function generateWorkflowSection(): string {
@@ -104,8 +104,8 @@ function generateWorkflowSection(): string {
 
 You should run in a continuous loop:
 
-1. **Check for new epics**: Use mcp__epic__list_pending to find epics in PLANNING state without supervisors
-2. **Create supervisors**: For each pending epic, create a supervisor using mcp__orchestrator__create_supervisor
+1. **Check for new top-level tasks**: Use mcp__task__list_pending to find top-level tasks in PLANNING state without supervisors
+2. **Create supervisors**: For each pending top-level task, create a supervisor using mcp__orchestrator__create_supervisor
 3. **Health monitoring**: Use mcp__orchestrator__list_supervisors to get health status of all supervisors
 4. **Recovery**: For any unhealthy supervisors (no heartbeat for 2+ minutes), trigger recovery
 5. **Check inbox**: Process any messages from supervisors or the system
@@ -125,9 +125,9 @@ A supervisor is considered **unhealthy** if:
 
 When you detect an unhealthy supervisor:
 
-1. **Kill Phase**: Kill all workers for that supervisor's epic, then kill the supervisor itself
-2. **Reset Phase**: Reset all non-completed tasks back to PENDING state
-3. **Recreate Phase**: Create a new supervisor for the epic
+1. **Kill Phase**: Kill all workers for that supervisor's top-level task, then kill the supervisor itself
+2. **Reset Phase**: Reset all non-completed subtasks back to PENDING state
+3. **Recreate Phase**: Create a new supervisor for the top-level task
 4. **Notify Phase**: Send mail to humans about the recovery`;
 }
 
@@ -135,8 +135,8 @@ function generateCommunicationSection(): string {
   return `## Communication Guidelines
 
 When notifying humans:
-- Include clear subject lines (e.g., "Supervisor Crashed - Epic: {title}")
-- Include relevant details (epic ID, supervisor ID, recovery status)
+- Include clear subject lines (e.g., "Supervisor Crashed - Task: {title}")
+- Include relevant details (task ID, supervisor ID, recovery status)
 - Use mail with isForHuman=true to ensure it reaches the human inbox
 
 Now, begin monitoring and managing supervisors!`;
@@ -150,7 +150,7 @@ export function buildOrchestratorPrompt(context: OrchestratorContext): string {
   const mailTools = getMailToolsForAgent('orchestrator');
   const toolCategories: ToolCategory[] = [
     SUPERVISOR_MANAGEMENT_TOOLS,
-    EPIC_MANAGEMENT_TOOLS,
+    TASK_MANAGEMENT_TOOLS,
     { name: 'Communication', tools: mailTools },
   ];
 
@@ -170,7 +170,7 @@ export function buildOrchestratorPrompt(context: OrchestratorContext): string {
   prompt = prompt.replace(/YOUR_AGENT_ID/g, context.agentId);
 
   // Add context footer (orchestrator has minimal additional context)
-  const closingMessage = `You are the Orchestrator. Begin by checking for any pending epics that need supervisors, then start monitoring supervisor health.`;
+  const closingMessage = `You are the Orchestrator. Begin by checking for any pending top-level tasks that need supervisors, then start monitoring supervisor health.`;
 
   const footer = generateContextFooter(context, [], closingMessage);
 

@@ -18,16 +18,16 @@ const TASK_MANAGEMENT_TOOLS: ToolCategory = {
   name: 'Task Management',
   tools: [
     {
-      name: 'mcp__epic__create_task',
-      description: 'Create a new task for a worker',
+      name: 'mcp__supervisor__create_task',
+      description: 'Create a new subtask for a worker',
       inputExample: {
-        title: 'Task title here',
+        title: 'Subtask title here',
         description: 'Detailed description of what the worker should implement',
       },
     },
     {
-      name: 'mcp__epic__list_tasks',
-      description: 'List all tasks for your epic',
+      name: 'mcp__supervisor__list_tasks',
+      description: 'List all subtasks for your top-level task',
       inputExample: {},
     },
   ],
@@ -37,12 +37,12 @@ const CODE_REVIEW_TOOLS: ToolCategory = {
   name: 'Code Review',
   tools: [
     {
-      name: 'mcp__epic__get_review_queue',
-      description: 'Get tasks ready for review ordered by submission time',
+      name: 'mcp__supervisor__get_review_queue',
+      description: 'Get subtasks ready for review ordered by submission time',
       inputExample: {},
     },
     {
-      name: 'mcp__epic__read_file',
+      name: 'mcp__supervisor__read_file',
       description: "Read a file from a worker's worktree for code review",
       inputExample: {
         taskId: 'task-id-here',
@@ -50,14 +50,14 @@ const CODE_REVIEW_TOOLS: ToolCategory = {
       },
     },
     {
-      name: 'mcp__epic__approve_task',
-      description: 'Approve task and merge worker branch into epic branch',
+      name: 'mcp__supervisor__approve_task',
+      description: 'Approve subtask and merge worker branch into top-level task branch',
       inputExample: {
         taskId: 'task-id-here',
       },
     },
     {
-      name: 'mcp__epic__request_changes',
+      name: 'mcp__supervisor__request_changes',
       description: 'Request changes from a worker',
       inputExample: {
         taskId: 'task-id-here',
@@ -67,12 +67,12 @@ const CODE_REVIEW_TOOLS: ToolCategory = {
   ],
 };
 
-const EPIC_COMPLETION_TOOLS: ToolCategory = {
-  name: 'Epic Completion',
+const TASK_COMPLETION_TOOLS: ToolCategory = {
+  name: 'Task Completion',
   tools: [
     {
-      name: 'mcp__epic__create_epic_pr',
-      description: 'Create PR from epic branch to main (for human review)',
+      name: 'mcp__supervisor__create_epic_pr',
+      description: 'Create PR from top-level task branch to main (for human review)',
       inputExample: {},
     },
   ],
@@ -81,17 +81,17 @@ const EPIC_COMPLETION_TOOLS: ToolCategory = {
 // Supervisor guidelines
 const SUPERVISOR_GUIDELINES = {
   dos: [
-    'Create clear, atomic tasks with detailed descriptions',
+    'Create clear, atomic subtasks with detailed descriptions',
     'Review code thoroughly before approving',
     'Provide constructive feedback when requesting changes',
-    'Keep track of all tasks and their status using mcp__epic__list_tasks',
-    'Review tasks in submission order (first in, first reviewed)',
+    'Keep track of all subtasks and their status using mcp__supervisor__list_tasks',
+    'Review subtasks in submission order (first in, first reviewed)',
   ],
   donts: [
-    'Create tasks that are too large or vague',
-    'Approve tasks without reviewing the code',
+    'Create subtasks that are too large or vague',
+    'Approve subtasks without reviewing the code',
     'Skip the review queue order (review sequentially)',
-    'Create the epic PR before all tasks are complete',
+    'Create the final PR before all subtasks are complete',
   ],
 };
 
@@ -100,65 +100,65 @@ function generateRoleSection(): string {
 
 ## Your Role
 
-You are an autonomous project coordinator responsible for managing an epic. You break down the epic into tasks, assign them to workers, review their code directly in their worktrees, merge approved code into the epic branch, and create a PR to main when the epic is complete.
+You are an autonomous project coordinator responsible for managing a top-level task. You break down the top-level task into subtasks, assign them to workers, review their code directly in their worktrees, merge approved code into the top-level task branch, and create a PR to main when the top-level task is complete.
 
 ## Your Responsibilities
 
-1. **Break Down Epic**: Analyze the epic design and break it into atomic, implementable tasks
-2. **Create Tasks**: Use the backend API to create tasks for workers
-3. **Review Code**: When workers complete tasks, review their code directly (no PRs between workers and you)
-4. **Merge Code**: Approve tasks to merge worker branches into the epic branch
+1. **Break Down Task**: Analyze the top-level task design and break it into atomic, implementable subtasks
+2. **Create Subtasks**: Use the backend API to create subtasks for workers
+3. **Review Code**: When workers complete subtasks, review their code directly (no PRs between workers and you)
+4. **Merge Code**: Approve subtasks to merge worker branches into the top-level task branch
 5. **Coordinate Rebases**: After merging, request rebases from other workers with pending reviews
-6. **Complete Epic**: When all tasks are done, create the PR from epic branch to main for human review`;
+6. **Complete Task**: When all subtasks are done, create the PR from top-level task branch to main for human review`;
 }
 
 function generateWorkingEnvironmentSection(): string {
   return `## Your Working Environment
 
-You are running in a dedicated git worktree for the epic branch. Workers create their own worktrees branching from main. When you approve a task, the worker's branch is merged into your epic branch.
+You are running in a dedicated git worktree for the top-level task branch. Workers create their own worktrees branching from main. When you approve a subtask, the worker's branch is merged into your top-level task branch.
 
-**Important**: There are no PRs between you and workers. Workers commit locally, you review their code directly using mcp__epic__read_file, and when approved, you merge their branch into the epic branch. Only the final epic-to-main submission creates a PR for human review.`;
+**Important**: There are no PRs between you and workers. Workers commit locally, you review their code directly using mcp__task__read_file, and when approved, you merge their branch into the top-level task branch. Only the final top-level-task-to-main submission creates a PR for human review.`;
 }
 
 function generateWorkflowSection(): string {
   return `## Workflow
 
-### Phase 1: Epic Breakdown
-1. Read and understand the epic description below
-2. Break it down into 2-5 atomic tasks (each should be a clear, independent unit of work)
-3. Create each task using the mcp__epic__create_task API call
-4. Workers will be automatically created and started for each task
+### Phase 1: Task Breakdown
+1. Read and understand the top-level task description below
+2. Break it down into 2-5 atomic subtasks (each should be a clear, independent unit of work)
+3. Create each subtask using the mcp__task__create_subtask API call
+4. Workers will be automatically created and started for each subtask
 
 ### Phase 2: Monitor Progress
 1. Periodically check your inbox using mcp__mail__list_inbox
 2. Workers will notify you when their code is ready for review
-3. Check the review queue using mcp__epic__get_review_queue
+3. Check the review queue using mcp__task__get_review_queue
 
 ### Phase 3: Code Review
-1. Review tasks one at a time in submission order
-2. For each task ready for review:
-   - Read the key files using mcp__epic__read_file
-   - Check that the implementation matches the task requirements
-   - Either approve (mcp__epic__approve_task) or request changes (mcp__epic__request_changes)
-3. When you approve, the worker's branch is merged into your epic branch and pushed
+1. Review subtasks one at a time in submission order
+2. For each subtask ready for review:
+   - Read the key files using mcp__task__read_file
+   - Check that the implementation matches the subtask requirements
+   - Either approve (mcp__task__approve_subtask) or request changes (mcp__task__request_changes)
+3. When you approve, the worker's branch is merged into your top-level task branch and pushed
 4. Other workers with pending reviews will be notified to rebase
 
-### Phase 4: Epic Completion
-1. When all tasks are COMPLETED, create the final PR
-2. Use mcp__epic__create_epic_pr to create PR from epic to main
-3. A human will review the final epic PR`;
+### Phase 4: Task Completion
+1. When all subtasks are COMPLETED, create the final PR
+2. Use mcp__task__create_task_pr to create PR from top-level task branch to main
+3. A human will review the final PR`;
 }
 
-function generateTaskCreationSection(): string {
-  return `## Task Creation Guidelines
+function generateSubtaskCreationSection(): string {
+  return `## Subtask Creation Guidelines
 
-When creating tasks:
-- Each task should be independently implementable
+When creating subtasks:
+- Each subtask should be independently implementable
 - Include enough context in the description for a worker to understand what to do
-- Avoid dependencies between tasks when possible
-- If tasks must be ordered, note it in the descriptions
+- Avoid dependencies between subtasks when possible
+- If subtasks must be ordered, note it in the descriptions
 
-Now, review your epic assignment below and begin by breaking it down into tasks!`;
+Now, review your top-level task assignment below and begin by breaking it down into subtasks!`;
 }
 
 /**
@@ -170,7 +170,7 @@ export function buildSupervisorPrompt(context: SupervisorContext): string {
   const toolCategories: ToolCategory[] = [
     TASK_MANAGEMENT_TOOLS,
     CODE_REVIEW_TOOLS,
-    EPIC_COMPLETION_TOOLS,
+    TASK_COMPLETION_TOOLS,
     { name: 'Communication', tools: mailTools },
   ];
 
@@ -182,7 +182,7 @@ export function buildSupervisorPrompt(context: SupervisorContext): string {
     generateToolsSection(toolCategories),
     generateWorkflowSection(),
     generateGuidelines(SUPERVISOR_GUIDELINES),
-    generateTaskCreationSection(),
+    generateSubtaskCreationSection(),
   ];
 
   // Join sections and replace placeholders
@@ -191,16 +191,16 @@ export function buildSupervisorPrompt(context: SupervisorContext): string {
 
   // Add context footer
   const additionalFields = [
-    { label: 'Epic ID', value: context.epicId },
-    { label: 'Epic Title', value: context.epicTitle },
-    { label: 'Description', value: `\n${context.epicDescription}` },
+    { label: 'Task ID', value: context.taskId },
+    { label: 'Task Title', value: context.taskTitle },
+    { label: 'Description', value: `\n${context.taskDescription}` },
     { label: 'Your Worktree', value: context.worktreePath },
-    { label: 'Epic Branch', value: context.epicBranchName },
+    { label: 'Task Branch', value: context.taskBranchName },
   ];
 
-  const closingMessage = `You are already in your epic worktree directory. Start by analyzing the epic description above.
+  const closingMessage = `You are already in your top-level task worktree directory. Start by analyzing the task description above.
 
-Then create tasks using curl commands to the backend API.`;
+Then create subtasks using curl commands to the backend API.`;
 
   const footer = generateContextFooter(context, additionalFields, closingMessage);
 

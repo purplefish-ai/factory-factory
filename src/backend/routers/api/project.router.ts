@@ -157,7 +157,7 @@ router.get('/:projectId', async (req, res) => {
         isArchived: project.isArchived,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
-        epics: project.epics,
+        tasks: project.tasks,
       },
     });
   } catch (error) {

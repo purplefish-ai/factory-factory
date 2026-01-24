@@ -178,7 +178,7 @@ export function buildWorkerPrompt(context: WorkerContext): string {
     { label: 'Task ID', value: context.taskId },
     { label: 'Task Title', value: context.taskTitle },
     { label: 'Description', value: `\n${context.taskDescription}` },
-    { label: 'Epic', value: context.epicTitle },
+    { label: 'Parent Task', value: context.parentTaskTitle },
     { label: 'Your Worktree', value: context.worktreePath },
     { label: 'Your Branch', value: context.branchName },
   ];

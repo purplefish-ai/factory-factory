@@ -5,7 +5,6 @@ import { githubClient } from '../../clients/index.js';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
@@ -39,13 +38,16 @@ const GetPRStatusInputSchema = z.object({});
  */
 function isValidStateTransition(from: TaskState, to: TaskState): boolean {
   const validTransitions: Record<TaskState, TaskState[]> = {
-    [TaskState.PENDING]: [TaskState.ASSIGNED, TaskState.IN_PROGRESS],
+    [TaskState.PLANNING]: [TaskState.PLANNED, TaskState.CANCELLED],
+    [TaskState.PLANNED]: [TaskState.IN_PROGRESS, TaskState.CANCELLED],
+    [TaskState.PENDING]: [TaskState.ASSIGNED, TaskState.IN_PROGRESS, TaskState.BLOCKED],
     [TaskState.ASSIGNED]: [TaskState.IN_PROGRESS, TaskState.PENDING],
     [TaskState.IN_PROGRESS]: [TaskState.REVIEW, TaskState.BLOCKED, TaskState.FAILED],
     [TaskState.REVIEW]: [TaskState.COMPLETED, TaskState.IN_PROGRESS, TaskState.BLOCKED],
-    [TaskState.BLOCKED]: [TaskState.IN_PROGRESS, TaskState.FAILED],
+    [TaskState.BLOCKED]: [TaskState.IN_PROGRESS, TaskState.FAILED, TaskState.PENDING],
     [TaskState.COMPLETED]: [],
-    [TaskState.FAILED]: [TaskState.IN_PROGRESS],
+    [TaskState.FAILED]: [TaskState.IN_PROGRESS, TaskState.PENDING],
+    [TaskState.CANCELLED]: [],
   };
 
   return validTransitions[from]?.includes(to) ?? false;
@@ -53,8 +55,14 @@ function isValidStateTransition(from: TaskState, to: TaskState): boolean {
 
 interface WorkerTaskContext {
   agentId: string;
-  task: { id: string; epicId: string; branchName: string; worktreePath: string; title: string };
-  epic: { id: string };
+  task: {
+    id: string;
+    parentId: string | null;
+    branchName: string;
+    worktreePath: string;
+    title: string;
+  };
+  topLevelTask: { id: string };
 }
 
 /**
@@ -107,13 +115,14 @@ async function validateWorkerForPR(
     };
   }
 
-  const epic = await epicAccessor.findById(task.epicId);
-  if (!epic) {
+  // Get the top-level parent task (what was formerly "Epic")
+  const topLevelTask = await taskAccessor.getTopLevelParent(task.id);
+  if (!topLevelTask) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${task.epicId}' not found`
+        `Top-level task for task '${task.id}' not found`
       ),
     };
   }
@@ -144,12 +153,12 @@ async function validateWorkerForPR(
       agentId: agent.id,
       task: {
         id: task.id,
-        epicId: task.epicId,
+        parentId: task.parentId,
         branchName: task.branchName,
         worktreePath: task.worktreePath,
         title: task.title,
       },
-      epic: { id: epic.id },
+      topLevelTask: { id: topLevelTask.id },
     },
   };
 }
@@ -254,15 +263,16 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
     if (!validation.success) {
       return validation.error;
     }
-    const { task, epic, agentId } = validation.data;
+    const { task, topLevelTask, agentId } = validation.data;
 
-    const epicBranchName = `factoryfactory/epic-${epic.id}`;
+    // Branch targets the top-level task's branch (what was formerly "epic branch")
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id}`;
 
     let prInfo: PRInfo;
     try {
       prInfo = await githubClient.createPR(
         task.branchName,
-        epicBranchName,
+        topLevelBranchName,
         validatedInput.title,
         validatedInput.description,
         task.worktreePath
@@ -279,11 +289,12 @@ async function createPR(context: McpToolContext, input: unknown): Promise<McpToo
       state: TaskState.REVIEW,
     });
 
-    const orchestrator = await agentAccessor.findByEpicId(epic.id);
-    if (orchestrator) {
+    // Find the supervisor for the top-level task
+    const supervisor = await agentAccessor.findSupervisorByTopLevelTaskId(topLevelTask.id);
+    if (supervisor) {
       await mailAccessor.create({
         fromAgentId: agentId,
-        toAgentId: orchestrator.id,
+        toAgentId: supervisor.id,
         subject: `Task Complete: ${task.title}`,
         body: `Task ${task.id} has been completed and PR ${prInfo.url} has been created for review.`,
       });

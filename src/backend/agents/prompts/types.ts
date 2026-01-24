@@ -21,10 +21,10 @@ export interface OrchestratorContext extends BaseAgentContext {
  * Supervisor-specific context
  */
 export interface SupervisorContext extends BaseAgentContext {
-  epicId: string;
-  epicTitle: string;
-  epicDescription: string;
-  epicBranchName: string;
+  taskId: string;
+  taskTitle: string;
+  taskDescription: string;
+  taskBranchName: string;
   worktreePath: string;
 }
 
@@ -35,8 +35,8 @@ export interface WorkerContext extends BaseAgentContext {
   taskId: string;
   taskTitle: string;
   taskDescription: string;
-  epicTitle: string;
-  epicBranchName: string;
+  parentTaskTitle: string;
+  parentTaskBranchName: string;
   worktreePath: string;
   branchName: string;
   supervisorAgentId: string;

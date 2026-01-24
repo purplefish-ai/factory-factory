@@ -1,39 +1,48 @@
-import { EpicState } from '@prisma-gen/client';
+import { TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { inngest } from '../inngest/client';
-import { epicAccessor } from '../resource_accessors/epic.accessor';
+import { taskAccessor } from '../resource_accessors/task.accessor.js';
 import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
+/**
+ * Epic router - now operates on top-level Tasks (parentId = null).
+ * "Epics" are simply top-level tasks in the unified Task model.
+ */
 export const epicRouter = router({
-  // List all epics with optional filtering (scoped to project from context)
+  // List all top-level tasks (formerly epics) with optional filtering (scoped to project from context)
   list: projectScopedProcedure
     .input(
       z
         .object({
-          state: z.nativeEnum(EpicState).optional(),
+          state: z.nativeEnum(TaskState).optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
         })
         .optional()
     )
     .query(({ ctx, input }) => {
-      return epicAccessor.list({
+      return taskAccessor.list({
         ...input,
         projectId: ctx.projectId,
+        isTopLevel: true, // Only top-level tasks (formerly epics)
       });
     }),
 
-  // Get epic by ID
+  // Get top-level task (epic) by ID
   getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const epic = await epicAccessor.findById(input.id);
-    if (!epic) {
+    const task = await taskAccessor.findById(input.id);
+    if (!task) {
       throw new Error(`Epic not found: ${input.id}`);
     }
-    return epic;
+    // Verify it's a top-level task
+    if (task.parentId !== null) {
+      throw new Error(`Task ${input.id} is not a top-level task (epic)`);
+    }
+    return task;
   }),
 
-  // Create a new epic (scoped to project from context)
+  // Create a new top-level task (epic) (scoped to project from context)
   create: projectScopedProcedure
     .input(
       z.object({
@@ -49,38 +58,39 @@ export const epicRouter = router({
       const linearIssueId = input.linearIssueId || `local-${Date.now()}`;
       const linearIssueUrl = input.linearIssueUrl || '';
 
-      const epic = await epicAccessor.create({
+      const task = await taskAccessor.create({
         projectId: ctx.projectId,
+        parentId: null, // Top-level task (epic)
         linearIssueId,
         linearIssueUrl,
         title: input.title,
         description: input.description
           ? `${input.description}\n\n---\n\n${input.design || ''}`
           : input.design || '',
-        state: EpicState.PLANNING,
+        state: TaskState.PLANNING,
       });
 
-      // Fire epic.created event to trigger supervisor creation
+      // Fire task.top_level.created event to trigger supervisor creation
       await inngest.send({
-        name: 'epic.created',
+        name: 'task.top_level.created',
         data: {
-          epicId: epic.id,
-          linearIssueId: epic.linearIssueId,
-          title: epic.title,
+          taskId: task.id,
+          linearIssueId: task.linearIssueId || '',
+          title: task.title,
         },
       });
 
-      return epic;
+      return task;
     }),
 
-  // Update an epic
+  // Update a top-level task (epic)
   update: publicProcedure
     .input(
       z.object({
         id: z.string(),
         title: z.string().min(1).optional(),
         description: z.string().optional(),
-        state: z.nativeEnum(EpicState).optional(),
+        state: z.nativeEnum(TaskState).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -89,46 +99,55 @@ export const epicRouter = router({
       // If completing, set completedAt
       const updateData = {
         ...updates,
-        completedAt: updates.state === EpicState.COMPLETED ? new Date() : undefined,
+        completedAt: updates.state === TaskState.COMPLETED ? new Date() : undefined,
       };
 
-      const epic = await epicAccessor.update(id, updateData);
+      const task = await taskAccessor.update(id, updateData);
 
-      // Fire epic.updated event
+      // Fire task.top_level.updated event
       await inngest.send({
-        name: 'epic.updated',
+        name: 'task.top_level.updated',
         data: {
-          epicId: epic.id,
-          state: epic.state,
+          taskId: task.id,
+          state: task.state,
         },
       });
 
-      return epic;
+      return task;
     }),
 
-  // Delete an epic
+  // Delete a top-level task (epic)
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
-    return epicAccessor.delete(input.id);
+    return taskAccessor.delete(input.id);
   }),
 
   // Get summary stats for dashboard (scoped to project from context)
   getStats: projectScopedProcedure.query(async ({ ctx }) => {
-    const epics = await epicAccessor.list({ projectId: ctx.projectId });
-
-    const byState: Record<EpicState, number> = {
-      PLANNING: 0,
-      IN_PROGRESS: 0,
-      BLOCKED: 0,
-      COMPLETED: 0,
-      CANCELLED: 0,
-    };
-
-    epics.forEach((epic) => {
-      byState[epic.state]++;
+    const topLevelTasks = await taskAccessor.list({
+      projectId: ctx.projectId,
+      isTopLevel: true,
     });
 
+    // Initialize all TaskState values for completeness
+    const byState: Record<TaskState, number> = {
+      [TaskState.PLANNING]: 0,
+      [TaskState.PLANNED]: 0,
+      [TaskState.PENDING]: 0,
+      [TaskState.ASSIGNED]: 0,
+      [TaskState.IN_PROGRESS]: 0,
+      [TaskState.REVIEW]: 0,
+      [TaskState.BLOCKED]: 0,
+      [TaskState.COMPLETED]: 0,
+      [TaskState.FAILED]: 0,
+      [TaskState.CANCELLED]: 0,
+    };
+
+    for (const task of topLevelTasks) {
+      byState[task.state]++;
+    }
+
     return {
-      total: epics.length,
+      total: topLevelTasks.length,
       byState,
     };
   }),

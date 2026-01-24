@@ -1,6 +1,7 @@
+import type { Task } from '@prisma-gen/client';
 import { AgentType } from '@prisma-gen/client';
 import { z } from 'zod';
-import { agentAccessor, epicAccessor, taskAccessor } from '../../resource_accessors/index.js';
+import { agentAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
@@ -11,7 +12,7 @@ import { McpErrorCode } from './types.js';
 
 const GetStatusInputSchema = z.object({});
 const GetTaskInputSchema = z.object({});
-const GetEpicInputSchema = z.object({});
+const GetTopLevelTaskInputSchema = z.object({});
 
 // ============================================================================
 // Tool Implementations
@@ -37,7 +38,6 @@ async function getStatus(context: McpToolContext, input: unknown): Promise<McpTo
       id: agent.id,
       type: agent.type,
       state: agent.state,
-      currentEpicId: agent.currentEpicId,
       currentTaskId: agent.currentTaskId,
       tmuxSessionName: agent.tmuxSessionName,
       lastActiveAt: agent.lastActiveAt,
@@ -98,7 +98,7 @@ async function getTask(context: McpToolContext, input: unknown): Promise<McpTool
       title: task.title,
       description: task.description,
       state: task.state,
-      epicId: task.epicId,
+      parentId: task.parentId,
       worktreePath: task.worktreePath,
       branchName: task.branchName,
       prUrl: task.prUrl,
@@ -114,11 +114,11 @@ async function getTask(context: McpToolContext, input: unknown): Promise<McpTool
 }
 
 /**
- * Get the current agent's epic (SUPERVISOR or WORKER)
+ * Get the current agent's top-level task (the root parent task)
  */
-async function getEpic(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+async function getTopLevelTask(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
-    GetEpicInputSchema.parse(input);
+    GetTopLevelTaskInputSchema.parse(input);
 
     const agent = await agentAccessor.findById(context.agentId);
 
@@ -129,7 +129,7 @@ async function getEpic(context: McpToolContext, input: unknown): Promise<McpTool
       );
     }
 
-    // Verify agent is SUPERVISOR or WORKER
+    // Verify agent is SUPERVISOR, ORCHESTRATOR, or WORKER
     if (
       agent.type !== AgentType.SUPERVISOR &&
       agent.type !== AgentType.ORCHESTRATOR &&
@@ -137,61 +137,42 @@ async function getEpic(context: McpToolContext, input: unknown): Promise<McpTool
     ) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Agent type does not have epic access'
+        'Agent type does not have top-level task access'
       );
     }
 
-    let epicId: string | null = null;
-
-    // Get epic ID based on agent type
-    if (agent.type === AgentType.SUPERVISOR || agent.type === AgentType.ORCHESTRATOR) {
-      epicId = agent.currentEpicId;
-    } else if (agent.type === AgentType.WORKER) {
-      // For workers, get epic via task
-      if (!agent.currentTaskId) {
-        return createErrorResponse(
-          McpErrorCode.INVALID_AGENT_STATE,
-          'Worker does not have a current task assigned'
-        );
-      }
-
-      const task = await taskAccessor.findById(agent.currentTaskId);
-      if (!task) {
-        return createErrorResponse(
-          McpErrorCode.RESOURCE_NOT_FOUND,
-          `Task with ID '${agent.currentTaskId}' not found`
-        );
-      }
-
-      epicId = task.epicId;
-    }
-
-    if (!epicId) {
+    if (!agent.currentTaskId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Agent does not have a current epic'
+        'Agent does not have a current task assigned'
       );
     }
 
-    const epic = await epicAccessor.findById(epicId);
+    let topLevelTask: Task | null;
 
-    if (!epic) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${epicId}' not found`
-      );
+    // Get top-level task based on agent type
+    if (agent.type === AgentType.SUPERVISOR || agent.type === AgentType.ORCHESTRATOR) {
+      // For supervisor/orchestrator, currentTaskId is already the top-level task
+      topLevelTask = await taskAccessor.findById(agent.currentTaskId);
+    } else {
+      // For workers, traverse up to find the root parent
+      topLevelTask = await taskAccessor.getTopLevelParent(agent.currentTaskId);
+    }
+
+    if (!topLevelTask) {
+      return createErrorResponse(McpErrorCode.RESOURCE_NOT_FOUND, 'Top-level task not found');
     }
 
     return createSuccessResponse({
-      id: epic.id,
-      linearIssueId: epic.linearIssueId,
-      linearIssueUrl: epic.linearIssueUrl,
-      title: epic.title,
-      description: epic.description,
-      state: epic.state,
-      createdAt: epic.createdAt,
-      updatedAt: epic.updatedAt,
-      completedAt: epic.completedAt,
+      id: topLevelTask.id,
+      title: topLevelTask.title,
+      description: topLevelTask.description,
+      state: topLevelTask.state,
+      linearIssueId: topLevelTask.linearIssueId,
+      linearIssueUrl: topLevelTask.linearIssueUrl,
+      createdAt: topLevelTask.createdAt,
+      updatedAt: topLevelTask.updatedAt,
+      completedAt: topLevelTask.completedAt,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -221,9 +202,9 @@ export function registerAgentTools(): void {
   });
 
   registerMcpTool({
-    name: 'mcp__agent__get_epic',
-    description: "Get the current agent's epic details",
-    handler: getEpic,
-    schema: GetEpicInputSchema,
+    name: 'mcp__agent__get_top_level_task',
+    description: "Get the current agent's top-level task (the root parent task in the hierarchy)",
+    handler: getTopLevelTask,
+    schema: GetTopLevelTaskInputSchema,
   });
 }

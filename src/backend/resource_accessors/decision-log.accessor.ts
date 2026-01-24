@@ -41,12 +41,12 @@ export class DecisionLogAccessor {
   }
 
   findRecent(limit = 100, projectId?: string): Promise<DecisionLog[]> {
-    const where: { agent?: { currentEpic: { projectId: string } } } = {};
+    const where: { agent?: { currentTask: { projectId: string } } } = {};
 
-    // Filter by project via agent → currentEpic → projectId
+    // Filter by project via agent → currentTask → projectId
     if (projectId) {
       where.agent = {
-        currentEpic: {
+        currentTask: {
           projectId,
         },
       };

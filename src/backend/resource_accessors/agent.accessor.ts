@@ -1,18 +1,17 @@
 import type { Agent, Prisma } from '@prisma-gen/client';
 import { AgentState, AgentType } from '@prisma-gen/client';
-import { prisma } from '../db';
+import { prisma } from '../db.js';
+import { taskAccessor } from './task.accessor.js';
 
 export interface CreateAgentInput {
   type: AgentType;
   state?: AgentState;
-  currentEpicId?: string;
   currentTaskId?: string;
   tmuxSessionName?: string;
 }
 
 export interface UpdateAgentInput {
   state?: AgentState;
-  currentEpicId?: string | null;
   currentTaskId?: string | null;
   tmuxSessionName?: string | null;
   sessionId?: string | null;
@@ -33,7 +32,6 @@ export class AgentAccessor {
       data: {
         type: data.type,
         state: data.state ?? AgentState.IDLE,
-        currentEpicId: data.currentEpicId,
         currentTaskId: data.currentTaskId,
         tmuxSessionName: data.tmuxSessionName,
       },
@@ -44,7 +42,7 @@ export class AgentAccessor {
     return prisma.agent.findUnique({
       where: { id },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
         mailReceived: {
           where: { isRead: false },
@@ -70,9 +68,9 @@ export class AgentAccessor {
     if (filters?.state) {
       where.state = filters.state;
     }
-    // Filter by project via currentEpic → projectId
+    // Filter by project via currentTask → projectId
     if (filters?.projectId) {
-      where.currentEpic = {
+      where.currentTask = {
         projectId: filters.projectId,
       };
     }
@@ -83,7 +81,7 @@ export class AgentAccessor {
       skip: filters?.offset,
       orderBy: { createdAt: 'desc' },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
       },
     });
@@ -93,17 +91,38 @@ export class AgentAccessor {
     return prisma.agent.findMany({
       where: { type },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
       },
     });
   }
 
-  findByEpicId(epicId: string): Promise<Agent | null> {
+  /**
+   * Find agent by their current task ID
+   * Works for both supervisors (top-level tasks) and workers (leaf tasks)
+   */
+  findByTaskId(taskId: string): Promise<Agent | null> {
     return prisma.agent.findFirst({
-      where: { currentEpicId: epicId },
+      where: { currentTaskId: taskId },
       include: {
-        currentEpic: true,
+        currentTask: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Find supervisor for a top-level task
+   * (Alias for findByTaskId for semantic clarity)
+   */
+  findSupervisorByTopLevelTaskId(taskId: string): Promise<Agent | null> {
+    return prisma.agent.findFirst({
+      where: {
+        currentTaskId: taskId,
+        type: AgentType.SUPERVISOR,
+      },
+      include: {
+        currentTask: true,
         assignedTasks: true,
       },
     });
@@ -137,7 +156,7 @@ export class AgentAccessor {
         },
       },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
       },
     });
@@ -159,7 +178,7 @@ export class AgentAccessor {
         },
       },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
       },
     });
@@ -185,7 +204,7 @@ export class AgentAccessor {
         ],
       },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
       },
     });
@@ -201,7 +220,7 @@ export class AgentAccessor {
     const agents = await prisma.agent.findMany({
       where: { type },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
       },
     });
@@ -220,63 +239,85 @@ export class AgentAccessor {
   }
 
   /**
-   * Find agent by task ID (for workers)
+   * Find all workers for a specific top-level task (formerly "epic")
+   * Workers are assigned to leaf tasks that are descendants of the top-level task
+   * Supports arbitrary nesting depth by getting all descendant task IDs first
    */
-  findByTaskId(taskId: string): Promise<Agent | null> {
-    return prisma.agent.findFirst({
-      where: { currentTaskId: taskId },
-      include: {
-        currentEpic: true,
-        assignedTasks: true,
-      },
-    });
-  }
+  async findWorkersByTopLevelTaskId(topLevelTaskId: string): Promise<Agent[]> {
+    // Get all descendant tasks (supports arbitrary nesting)
+    const descendants = await taskAccessor.getDescendants(topLevelTaskId);
+    const descendantIds = descendants.map((t) => t.id);
 
-  /**
-   * Find all workers for a specific epic
-   */
-  findWorkersByEpicId(epicId: string): Promise<Agent[]> {
+    if (descendantIds.length === 0) {
+      return [];
+    }
+
     return prisma.agent.findMany({
       where: {
         type: AgentType.WORKER,
         assignedTasks: {
           some: {
-            epicId,
+            id: { in: descendantIds },
           },
         },
       },
       include: {
-        currentEpic: true,
+        currentTask: true,
         assignedTasks: true,
       },
     });
   }
 
   /**
-   * Find all agents for a specific epic (workers and supervisors)
+   * Find all agents (workers and supervisors) for a specific top-level task
+   * Supports arbitrary nesting depth by getting all descendant task IDs first
    */
-  findAgentsByEpicId(epicId: string): Promise<Agent[]> {
+  async findAgentsByTopLevelTaskId(topLevelTaskId: string): Promise<Agent[]> {
+    // Get all descendant tasks (supports arbitrary nesting)
+    const descendants = await taskAccessor.getDescendants(topLevelTaskId);
+    const descendantIds = descendants.map((t) => t.id);
+
     return prisma.agent.findMany({
       where: {
         OR: [
-          // Workers assigned to tasks in this epic
-          {
-            type: AgentType.WORKER,
-            assignedTasks: {
-              some: {
-                epicId,
-              },
-            },
-          },
-          // Supervisor orchestrating this epic
+          // Workers assigned to tasks under this top-level task
+          ...(descendantIds.length > 0
+            ? [
+                {
+                  type: AgentType.WORKER,
+                  assignedTasks: {
+                    some: {
+                      id: { in: descendantIds },
+                    },
+                  },
+                },
+              ]
+            : []),
+          // Supervisor managing this top-level task
           {
             type: AgentType.SUPERVISOR,
-            currentEpicId: epicId,
+            currentTaskId: topLevelTaskId,
           },
         ],
       },
       include: {
-        currentEpic: true,
+        currentTask: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Find the supervisor for a specific top-level task (returns single agent or null)
+   */
+  findByTopLevelTaskId(topLevelTaskId: string): Promise<Agent | null> {
+    return prisma.agent.findFirst({
+      where: {
+        type: AgentType.SUPERVISOR,
+        currentTaskId: topLevelTaskId,
+      },
+      include: {
+        currentTask: true,
         assignedTasks: true,
       },
     });

@@ -12,11 +12,11 @@ import { prisma } from './db.js';
 import { inngest } from './inngest/client';
 import {
   agentCompletedHandler,
-  epicCreatedHandler,
   mailSentHandler,
   orchestratorCheckHandler,
   supervisorCheckHandler,
   taskCreatedHandler,
+  topLevelTaskCreatedHandler,
 } from './inngest/functions/index.js';
 import { epicRouter } from './routers/api/epic.router.js';
 import { orchestratorRouter } from './routers/api/orchestrator.router.js';
@@ -336,7 +336,7 @@ app.use(
     functions: [
       mailSentHandler,
       taskCreatedHandler,
-      epicCreatedHandler,
+      topLevelTaskCreatedHandler,
       agentCompletedHandler,
       supervisorCheckHandler,
       orchestratorCheckHandler,

@@ -4,7 +4,6 @@ import { gitCommand } from '../../lib/shell.js';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
@@ -29,7 +28,7 @@ const RebaseInputSchema = z.object({});
 async function verifyWorkerWithTask(context: McpToolContext): Promise<
   | {
       success: true;
-      task: { id: string; worktreePath: string; branchName: string; epicId: string };
+      task: { id: string; worktreePath: string; branchName: string; parentId: string | null };
     }
   | { success: false; error: McpToolResponse }
 > {
@@ -101,7 +100,7 @@ async function verifyWorkerWithTask(context: McpToolContext): Promise<
       id: task.id,
       worktreePath: task.worktreePath,
       branchName: task.branchName,
-      epicId: task.epicId,
+      parentId: task.parentId,
     },
   };
 }
@@ -125,7 +124,7 @@ function parseDiffStats(diffStats: string): {
 }
 
 /**
- * Get diff between task branch and epic branch (WORKER only)
+ * Get diff between task branch and parent task (epic) branch (WORKER only)
  */
 async function getDiff(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
@@ -137,21 +136,28 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     }
     const { task } = verification;
 
-    const epic = await epicAccessor.findById(task.epicId);
-    if (!epic) {
+    if (!task.parentId) {
       return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${task.epicId}' not found`
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a parent task (epic)'
       );
     }
 
-    const epicBranchName = `factoryfactory/epic-${epic.id}`;
+    const parentTask = await taskAccessor.findById(task.parentId);
+    if (!parentTask) {
+      return createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Parent task (epic) with ID '${task.parentId}' not found`
+      );
+    }
+
+    const topLevelBranchName = `factoryfactory/task-${parentTask.id}`;
 
     let diffStats: string;
     try {
       // Using spawn with array args (safe - no shell interpretation)
       const result = await gitCommand(
-        ['diff', '--stat', `${epicBranchName}...HEAD`],
+        ['diff', '--stat', `${topLevelBranchName}...HEAD`],
         task.worktreePath
       );
       diffStats = result.stdout;
@@ -164,7 +170,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
 
     let diffContent: string;
     try {
-      const result = await gitCommand(['diff', `${epicBranchName}...HEAD`], task.worktreePath);
+      const result = await gitCommand(['diff', `${topLevelBranchName}...HEAD`], task.worktreePath);
       diffContent = result.stdout;
     } catch (error) {
       return createErrorResponse(
@@ -177,7 +183,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
 
     await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__get_diff', 'result', {
       taskId: task.id,
-      epicBranch: epicBranchName,
+      epicBranch: topLevelBranchName,
       taskBranch: task.branchName,
       filesChanged,
       insertions,
@@ -186,7 +192,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
 
     return createSuccessResponse({
       taskId: task.id,
-      epicBranch: epicBranchName,
+      epicBranch: topLevelBranchName,
       taskBranch: task.branchName,
       filesChanged,
       insertions,
@@ -207,10 +213,10 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
  */
 async function attemptRebase(
   worktreePath: string,
-  epicBranchName: string
+  topLevelBranchName: string
 ): Promise<{ success: boolean; error: string; conflictFiles: string[] }> {
   try {
-    await gitCommand(['rebase', epicBranchName], worktreePath);
+    await gitCommand(['rebase', topLevelBranchName], worktreePath);
     return { success: true, error: '', conflictFiles: [] };
   } catch (error) {
     const rebaseError = error instanceof Error ? error.message : String(error);
@@ -234,7 +240,7 @@ async function attemptRebase(
 }
 
 /**
- * Rebase task branch onto epic branch (WORKER only)
+ * Rebase task branch onto parent task (epic) branch (WORKER only)
  */
 async function rebase(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
@@ -246,19 +252,26 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     }
     const { task } = verification;
 
-    const epic = await epicAccessor.findById(task.epicId);
-    if (!epic) {
+    if (!task.parentId) {
       return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${task.epicId}' not found`
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a parent task (epic)'
       );
     }
 
-    const epicBranchName = `factoryfactory/epic-${epic.id}`;
+    const parentTask = await taskAccessor.findById(task.parentId);
+    if (!parentTask) {
+      return createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Parent task (epic) with ID '${task.parentId}' not found`
+      );
+    }
+
+    const topLevelBranchName = `factoryfactory/task-${parentTask.id}`;
 
     try {
       // Fetch using spawn (safe)
-      await gitCommand(['fetch', 'origin', epicBranchName], task.worktreePath);
+      await gitCommand(['fetch', 'origin', topLevelBranchName], task.worktreePath);
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -266,7 +279,7 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
       );
     }
 
-    const rebaseResult = await attemptRebase(task.worktreePath, epicBranchName);
+    const rebaseResult = await attemptRebase(task.worktreePath, topLevelBranchName);
 
     if (!rebaseResult.success) {
       await taskAccessor.update(task.id, {
@@ -276,7 +289,7 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
 
       await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__rebase', 'error', {
         taskId: task.id,
-        epicBranch: epicBranchName,
+        epicBranch: topLevelBranchName,
         taskBranch: task.branchName,
         conflictFiles: rebaseResult.conflictFiles,
         error: rebaseResult.error,
@@ -303,14 +316,14 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
 
     await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__rebase', 'result', {
       taskId: task.id,
-      epicBranch: epicBranchName,
+      epicBranch: topLevelBranchName,
       taskBranch: task.branchName,
       success: true,
     });
 
     return createSuccessResponse({
       taskId: task.id,
-      epicBranch: epicBranchName,
+      epicBranch: topLevelBranchName,
       taskBranch: task.branchName,
       success: true,
       message: 'Rebase completed successfully and branch force-pushed',

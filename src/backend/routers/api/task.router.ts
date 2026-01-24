@@ -9,7 +9,7 @@ import {
   stopWorkerGracefully,
 } from '../../agents/worker/lifecycle.js';
 import { inngest } from '../../inngest/client.js';
-import { epicAccessor, taskAccessor } from '../../resource_accessors/index.js';
+import { taskAccessor } from '../../resource_accessors/index.js';
 
 const router = Router();
 
@@ -18,7 +18,7 @@ const router = Router();
 // ============================================================================
 
 const CreateTaskSchema = z.object({
-  epicId: z.string(),
+  parentId: z.string(),
   title: z.string(),
   description: z.string().optional(),
 });
@@ -50,27 +50,28 @@ const CancelTaskSchema = z.object({
 
 /**
  * POST /api/tasks/create
- * Create a new task for an epic
+ * Create a new child task under a parent task
  */
 router.post('/create', async (req, res) => {
   try {
     const validatedInput = CreateTaskSchema.parse(req.body);
 
-    // Verify epic exists
-    const epic = await epicAccessor.findById(validatedInput.epicId);
-    if (!epic) {
+    // Verify parent task exists
+    const parentTask = await taskAccessor.findById(validatedInput.parentId);
+    if (!parentTask) {
       return res.status(404).json({
         success: false,
         error: {
-          code: 'EPIC_NOT_FOUND',
-          message: `Epic with ID '${validatedInput.epicId}' not found`,
+          code: 'PARENT_NOT_FOUND',
+          message: `Parent task with ID '${validatedInput.parentId}' not found`,
         },
       });
     }
 
-    // Create task
+    // Create child task
     const task = await taskAccessor.create({
-      epicId: validatedInput.epicId,
+      projectId: parentTask.projectId,
+      parentId: validatedInput.parentId,
       title: validatedInput.title,
       description: validatedInput.description,
       state: TaskState.PENDING,
@@ -82,20 +83,20 @@ router.post('/create', async (req, res) => {
         name: 'task.created',
         data: {
           taskId: task.id,
-          epicId: task.epicId,
+          parentId: validatedInput.parentId, // Use validated input since we know it's a string
           title: task.title,
         },
       });
     } catch (error) {
       console.error('Failed to send task.created event:', error);
-      // Continue anyway - event is optional in Phase 2
+      // Continue anyway - event is optional
     }
 
     return res.status(201).json({
       success: true,
       data: {
         taskId: task.id,
-        epicId: task.epicId,
+        parentId: task.parentId,
         title: task.title,
         state: task.state,
         createdAt: task.createdAt,

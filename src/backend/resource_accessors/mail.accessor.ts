@@ -82,10 +82,10 @@ export class MailAccessor {
       where.isRead = false;
     }
 
-    // Filter by project via fromAgent → currentEpic → projectId
+    // Filter by project via fromAgent → currentTask → projectId
     if (projectId) {
       where.fromAgent = {
-        currentEpic: {
+        currentTask: {
           projectId,
         },
       };
@@ -108,19 +108,19 @@ export class MailAccessor {
       where.isRead = false;
     }
 
-    // Filter by project via agent → currentEpic → projectId
+    // Filter by project via agent → currentTask → projectId
     if (projectId) {
       where.OR = [
         {
           fromAgent: {
-            currentEpic: {
+            currentTask: {
               projectId,
             },
           },
         },
         {
           toAgent: {
-            currentEpic: {
+            currentTask: {
               projectId,
             },
           },

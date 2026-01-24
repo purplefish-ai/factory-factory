@@ -18,7 +18,7 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       'mcp__agent__*',
       'mcp__system__*',
       'mcp__task__*',
-      'mcp__epic__*',
+      'mcp__supervisor__*',
       'mcp__orchestrator__*', // Orchestrator-specific tools
     ],
     disallowed: [
@@ -32,18 +32,14 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       'mcp__mail__*',
       'mcp__agent__get_status',
       'mcp__agent__get_task',
-      'mcp__agent__get_epic',
+      'mcp__agent__get_top_level_task',
       'mcp__system__*',
       'mcp__task__update_state',
       'mcp__task__create_pr',
       'mcp__task__get_pr_status',
       'mcp__git__*',
     ],
-    disallowed: [
-      'mcp__supervisor__*',
-      'mcp__orchestrator__*',
-      'mcp__epic__*', // Workers cannot manage epics
-    ],
+    disallowed: ['mcp__supervisor__*', 'mcp__orchestrator__*'],
   },
 };
 

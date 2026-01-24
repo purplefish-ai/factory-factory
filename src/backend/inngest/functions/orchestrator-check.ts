@@ -1,10 +1,10 @@
 import { AgentState, AgentType } from '@prisma-gen/client';
 import {
   checkSupervisorHealth,
-  getPendingEpicsNeedingSupervisors,
+  getPendingTopLevelTasksNeedingSupervisors,
   recoverSupervisor,
 } from '../../agents/orchestrator/health.js';
-import { startSupervisorForEpic } from '../../agents/supervisor/lifecycle.js';
+import { startSupervisorForTask } from '../../agents/supervisor/lifecycle.js';
 import {
   agentAccessor,
   decisionLogAccessor,
@@ -15,8 +15,8 @@ import { inngest } from '../client.js';
 
 interface RecoveryResult {
   supervisorId: string;
-  epicId: string;
-  epicTitle: string;
+  taskId: string;
+  taskTitle: string;
   success: boolean;
   newSupervisorId?: string;
   workersKilled: number;
@@ -26,8 +26,8 @@ interface RecoveryResult {
 
 interface UnhealthySupervisor {
   supervisorId: string;
-  epicId: string;
-  epicTitle: string;
+  taskId: string;
+  taskTitle: string;
   minutesSinceHeartbeat: number;
 }
 
@@ -55,30 +55,30 @@ async function recoverUnhealthySupervisors(
 /**
  * Attempt to recover a single unhealthy supervisor
  */
-interface PendingEpic {
-  epicId: string;
+interface PendingTopLevelTask {
+  taskId: string;
   title: string;
 }
 
 interface NewSupervisorResult {
-  epicId: string;
-  epicTitle: string;
+  taskId: string;
+  taskTitle: string;
   supervisorId: string | null;
   success: boolean;
   error?: string;
 }
 
 /**
- * Create supervisors for pending epics
+ * Create supervisors for pending top-level tasks
  */
-async function createSupervisorsForPendingEpics(
-  pendingEpics: PendingEpic[],
+async function createSupervisorsForPendingTopLevelTasks(
+  pendingTasks: PendingTopLevelTask[],
   orchestratorId: string | null
 ): Promise<NewSupervisorResult[]> {
   const results: NewSupervisorResult[] = [];
 
-  for (const epic of pendingEpics) {
-    const result = await createSupervisorForEpic(epic, orchestratorId);
+  for (const task of pendingTasks) {
+    const result = await createSupervisorForTopLevelTask(task, orchestratorId);
     results.push(result);
   }
 
@@ -86,42 +86,42 @@ async function createSupervisorsForPendingEpics(
 }
 
 /**
- * Create a supervisor for a single pending epic
+ * Create a supervisor for a single pending top-level task
  */
-async function createSupervisorForEpic(
-  epic: PendingEpic,
+async function createSupervisorForTopLevelTask(
+  task: PendingTopLevelTask,
   orchestratorId: string | null
 ): Promise<NewSupervisorResult> {
   try {
-    const supervisorId = await startSupervisorForEpic(epic.epicId);
-    console.log(`Created supervisor ${supervisorId} for epic ${epic.epicId}`);
+    const supervisorId = await startSupervisorForTask(task.taskId);
+    console.log(`Created supervisor ${supervisorId} for top-level task ${task.taskId}`);
 
     if (orchestratorId) {
       await decisionLogAccessor.createManual(
         orchestratorId,
-        `Cron job: Created supervisor for pending epic "${epic.title}"`,
-        `Epic was in PLANNING state without a supervisor`,
-        JSON.stringify({ epicId: epic.epicId, supervisorId })
+        `Cron job: Created supervisor for pending top-level task "${task.title}"`,
+        `Task was in PLANNING state without a supervisor`,
+        JSON.stringify({ taskId: task.taskId, supervisorId })
       );
     }
 
-    return { epicId: epic.epicId, epicTitle: epic.title, supervisorId, success: true };
+    return { taskId: task.taskId, taskTitle: task.title, supervisorId, success: true };
   } catch (error) {
-    console.error(`Failed to create supervisor for epic ${epic.epicId}:`, error);
+    console.error(`Failed to create supervisor for top-level task ${task.taskId}:`, error);
 
     await mailAccessor.create({
       isForHuman: true,
-      subject: `Failed to create supervisor for epic: ${epic.title}`,
+      subject: `Failed to create supervisor for top-level task: ${task.title}`,
       body:
-        `The cron job failed to create a supervisor for epic "${epic.title}".\n\n` +
-        `Epic ID: ${epic.epicId}\n` +
+        `The cron job failed to create a supervisor for top-level task "${task.title}".\n\n` +
+        `Task ID: ${task.taskId}\n` +
         `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
         `Manual intervention may be required.`,
     });
 
     return {
-      epicId: epic.epicId,
-      epicTitle: epic.title,
+      taskId: task.taskId,
+      taskTitle: task.title,
       supervisorId: null,
       success: false,
       error: error instanceof Error ? error.message : String(error),
@@ -139,13 +139,13 @@ async function attemptSupervisorRecovery(
   try {
     const recoveryResult = await recoverSupervisor(
       unhealthy.supervisorId,
-      unhealthy.epicId,
+      unhealthy.taskId,
       orchestratorId
     );
 
     await notificationService.notifyCriticalError(
       'Supervisor',
-      unhealthy.epicTitle,
+      unhealthy.taskTitle,
       recoveryResult.success
         ? `Recovered successfully. New supervisor: ${recoveryResult.newSupervisorId}`
         : `Recovery failed: ${recoveryResult.message}`
@@ -161,8 +161,8 @@ async function attemptSupervisorRecovery(
 
     return {
       supervisorId: unhealthy.supervisorId,
-      epicId: unhealthy.epicId,
-      epicTitle: unhealthy.epicTitle,
+      taskId: unhealthy.taskId,
+      taskTitle: unhealthy.taskTitle,
       ...recoveryResult,
     };
   } catch (error) {
@@ -170,14 +170,14 @@ async function attemptSupervisorRecovery(
 
     await notificationService.notifyCriticalError(
       'Supervisor',
-      unhealthy.epicTitle,
+      unhealthy.taskTitle,
       `Recovery failed with error: ${error instanceof Error ? error.message : String(error)}`
     );
 
     return {
       supervisorId: unhealthy.supervisorId,
-      epicId: unhealthy.epicId,
-      epicTitle: unhealthy.epicTitle,
+      taskId: unhealthy.taskId,
+      taskTitle: unhealthy.taskTitle,
       success: false,
       workersKilled: 0,
       tasksReset: 0,
@@ -191,7 +191,7 @@ async function attemptSupervisorRecovery(
  *
  * Runs every 2 minutes to:
  * 1. Check supervisor health and trigger cascading recovery if needed
- * 2. Check for pending epics that need supervisors
+ * 2. Check for pending top-level tasks that need supervisors
  *
  * This serves as a backup/failsafe for the in-process checks
  * that the orchestrator performs internally.
@@ -263,23 +263,23 @@ export const orchestratorCheckHandler = inngest.createFunction(
       };
     });
 
-    // Step 3: Check for pending epics that need supervisors
-    const pendingEpicsResult = await step.run('check-pending-epics', async () => {
-      const pendingEpics = await getPendingEpicsNeedingSupervisors();
+    // Step 3: Check for pending top-level tasks that need supervisors
+    const pendingTasksResult = await step.run('check-pending-top-level-tasks', async () => {
+      const pendingTasks = await getPendingTopLevelTasksNeedingSupervisors();
 
-      if (pendingEpics.length === 0) {
-        return { pendingEpicsProcessed: 0, newSupervisors: [] };
+      if (pendingTasks.length === 0) {
+        return { pendingTasksProcessed: 0, newSupervisors: [] };
       }
 
-      console.log(`Found ${pendingEpics.length} pending epic(s) needing supervisors`);
+      console.log(`Found ${pendingTasks.length} pending top-level task(s) needing supervisors`);
 
-      const newSupervisors = await createSupervisorsForPendingEpics(
-        pendingEpics,
+      const newSupervisors = await createSupervisorsForPendingTopLevelTasks(
+        pendingTasks,
         orchestrator?.id || null
       );
 
       return {
-        pendingEpicsProcessed: pendingEpics.length,
+        pendingTasksProcessed: pendingTasks.length,
         newSupervisors,
       };
     });
@@ -287,12 +287,12 @@ export const orchestratorCheckHandler = inngest.createFunction(
     // Calculate totals
     const totalRecovered = healthCheckResult.recoveryResults.filter((r) => r.success).length;
     const totalFailed = healthCheckResult.recoveryResults.filter((r) => !r.success).length;
-    const totalNewSupervisors = pendingEpicsResult.newSupervisors.filter((s) => s.success).length;
+    const totalNewSupervisors = pendingTasksResult.newSupervisors.filter((s) => s.success).length;
 
     console.log(
       `Orchestrator check complete. ` +
         `Supervisors: ${healthCheckResult.unhealthyCount} unhealthy, ${totalRecovered} recovered, ${totalFailed} failed. ` +
-        `Pending epics: ${pendingEpicsResult.pendingEpicsProcessed} processed, ${totalNewSupervisors} new supervisors created.`
+        `Pending top-level tasks: ${pendingTasksResult.pendingTasksProcessed} processed, ${totalNewSupervisors} new supervisors created.`
     );
 
     return {
@@ -304,14 +304,14 @@ export const orchestratorCheckHandler = inngest.createFunction(
         supervisorsRecovered: totalRecovered,
         supervisorRecoveryFailed: totalFailed,
       },
-      pendingEpics: {
-        processed: pendingEpicsResult.pendingEpicsProcessed,
+      pendingTopLevelTasks: {
+        processed: pendingTasksResult.pendingTasksProcessed,
         supervisorsCreated: totalNewSupervisors,
-        failures: pendingEpicsResult.newSupervisors.filter((s) => !s.success).length,
+        failures: pendingTasksResult.newSupervisors.filter((s) => !s.success).length,
       },
       details: {
         recoveryResults: healthCheckResult.recoveryResults,
-        newSupervisors: pendingEpicsResult.newSupervisors,
+        newSupervisors: pendingTasksResult.newSupervisors,
       },
     };
   }

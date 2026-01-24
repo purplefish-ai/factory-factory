@@ -1,17 +1,17 @@
-import { EpicState } from '@prisma-gen/client';
+import { TaskState } from '@prisma-gen/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import {
-  getSupervisorForEpic,
+  getSupervisorForTask,
   getSupervisorStatus,
   killSupervisorAndCleanup,
   listAllSupervisors,
   recreateSupervisor,
-  startSupervisorForEpic,
+  startSupervisorForTask,
   stopSupervisorGracefully,
 } from '../../agents/supervisor/lifecycle.js';
 import { inngest } from '../../inngest/client.js';
-import { epicAccessor, taskAccessor } from '../../resource_accessors/index.js';
+import { taskAccessor } from '../../resource_accessors/index.js';
 
 const router = Router();
 
@@ -49,7 +49,7 @@ const RecreateSupervisorSchema = z.object({
 
 /**
  * POST /api/epics/create
- * Create a new epic
+ * Create a new top-level task (epic)
  */
 router.post('/create', async (req, res) => {
   try {
@@ -60,40 +60,41 @@ router.post('/create', async (req, res) => {
     const linearIssueUrl =
       validatedInput.linearIssueUrl || `https://linear.app/manual/${linearIssueId}`;
 
-    // Create epic
-    const epic = await epicAccessor.create({
+    // Create top-level task (epic)
+    const task = await taskAccessor.create({
       projectId: validatedInput.projectId,
+      parentId: null, // Top-level task (epic)
       title: validatedInput.title,
       description: validatedInput.description,
       linearIssueId,
       linearIssueUrl,
-      state: EpicState.PLANNING,
+      state: TaskState.PLANNING,
     });
 
-    // Fire epic.created event
+    // Fire task.top_level.created event to trigger supervisor creation
     try {
       await inngest.send({
-        name: 'epic.created',
+        name: 'task.top_level.created',
         data: {
-          epicId: epic.id,
-          linearIssueId: epic.linearIssueId,
-          title: epic.title,
+          taskId: task.id,
+          linearIssueId: task.linearIssueId || '',
+          title: task.title,
         },
       });
     } catch (error) {
-      console.error('Failed to send epic.created event:', error);
+      console.error('Failed to send task.top_level.created event:', error);
       // Continue anyway - event is optional
     }
 
     return res.status(201).json({
       success: true,
       data: {
-        epicId: epic.id,
-        title: epic.title,
-        description: epic.description,
-        state: epic.state,
-        linearIssueId: epic.linearIssueId,
-        createdAt: epic.createdAt,
+        epicId: task.id,
+        title: task.title,
+        description: task.description,
+        state: task.state,
+        linearIssueId: task.linearIssueId,
+        createdAt: task.createdAt,
       },
     });
   } catch (error) {
@@ -121,38 +122,49 @@ router.post('/create', async (req, res) => {
 
 /**
  * POST /api/epics/start-supervisor
- * Start a supervisor for an epic
+ * Start a supervisor for a top-level task (epic)
  */
 router.post('/start-supervisor', async (req, res) => {
   try {
     const validatedInput = StartSupervisorSchema.parse(req.body);
 
-    // Verify epic exists
-    const epic = await epicAccessor.findById(validatedInput.epicId);
-    if (!epic) {
+    // Verify top-level task (epic) exists
+    const task = await taskAccessor.findById(validatedInput.epicId);
+    if (!task) {
       return res.status(404).json({
         success: false,
         error: {
           code: 'EPIC_NOT_FOUND',
-          message: `Epic with ID '${validatedInput.epicId}' not found`,
+          message: `Top-level task (epic) with ID '${validatedInput.epicId}' not found`,
         },
       });
     }
 
-    // Check if epic already has a supervisor
-    const existingSupervisor = await getSupervisorForEpic(validatedInput.epicId);
+    // Verify it's a top-level task
+    if (task.parentId !== null) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'NOT_TOP_LEVEL_TASK',
+          message: `Task '${validatedInput.epicId}' is not a top-level task (epic)`,
+        },
+      });
+    }
+
+    // Check if task already has a supervisor
+    const existingSupervisor = await getSupervisorForTask(validatedInput.epicId);
     if (existingSupervisor) {
       return res.status(409).json({
         success: false,
         error: {
           code: 'SUPERVISOR_EXISTS',
-          message: `Epic already has a supervisor (${existingSupervisor})`,
+          message: `Task already has a supervisor (${existingSupervisor})`,
         },
       });
     }
 
     // Start supervisor
-    const agentId = await startSupervisorForEpic(validatedInput.epicId);
+    const agentId = await startSupervisorForTask(validatedInput.epicId);
 
     // Get supervisor details
     const status = await getSupervisorStatus(agentId);
@@ -161,7 +173,7 @@ router.post('/start-supervisor', async (req, res) => {
       success: true,
       data: {
         agentId,
-        epicId: epic.id,
+        epicId: task.id,
         tmuxSession: status.tmuxSession,
         isRunning: status.isRunning,
       },
@@ -191,27 +203,27 @@ router.post('/start-supervisor', async (req, res) => {
 
 /**
  * GET /api/epics/status/:epicId
- * Get epic status including supervisor and task info
+ * Get top-level task (epic) status including supervisor and child task info
  */
 router.get('/status/:epicId', async (req, res) => {
   try {
     const epicId = req.params.epicId;
 
-    // Get epic
-    const epic = await epicAccessor.findById(epicId);
-    if (!epic) {
+    // Get top-level task (epic)
+    const task = await taskAccessor.findById(epicId);
+    if (!task) {
       return res.status(404).json({
         success: false,
         error: {
           code: 'EPIC_NOT_FOUND',
-          message: `Epic with ID '${epicId}' not found`,
+          message: `Top-level task (epic) with ID '${epicId}' not found`,
         },
       });
     }
 
     // Get supervisor status if exists
     let supervisorStatus = null;
-    const supervisorId = await getSupervisorForEpic(epicId);
+    const supervisorId = await getSupervisorForTask(epicId);
     if (supervisorId) {
       try {
         supervisorStatus = await getSupervisorStatus(supervisorId);
@@ -220,36 +232,36 @@ router.get('/status/:epicId', async (req, res) => {
       }
     }
 
-    // Get all tasks for epic
-    const tasks = await taskAccessor.list({ epicId });
+    // Get all child tasks for this top-level task
+    const childTasks = await taskAccessor.findByParentId(epicId);
 
     // Calculate summary
     const taskSummary = {
-      total: tasks.length,
-      pending: tasks.filter((t) => t.state === 'PENDING').length,
-      assigned: tasks.filter((t) => t.state === 'ASSIGNED').length,
-      inProgress: tasks.filter((t) => t.state === 'IN_PROGRESS').length,
-      review: tasks.filter((t) => t.state === 'REVIEW').length,
-      blocked: tasks.filter((t) => t.state === 'BLOCKED').length,
-      completed: tasks.filter((t) => t.state === 'COMPLETED').length,
-      failed: tasks.filter((t) => t.state === 'FAILED').length,
+      total: childTasks.length,
+      pending: childTasks.filter((t) => t.state === 'PENDING').length,
+      assigned: childTasks.filter((t) => t.state === 'ASSIGNED').length,
+      inProgress: childTasks.filter((t) => t.state === 'IN_PROGRESS').length,
+      review: childTasks.filter((t) => t.state === 'REVIEW').length,
+      blocked: childTasks.filter((t) => t.state === 'BLOCKED').length,
+      completed: childTasks.filter((t) => t.state === 'COMPLETED').length,
+      failed: childTasks.filter((t) => t.state === 'FAILED').length,
     };
 
     return res.status(200).json({
       success: true,
       data: {
-        epicId: epic.id,
-        title: epic.title,
-        description: epic.description,
-        state: epic.state,
-        linearIssueId: epic.linearIssueId,
-        linearIssueUrl: epic.linearIssueUrl,
-        createdAt: epic.createdAt,
-        updatedAt: epic.updatedAt,
-        completedAt: epic.completedAt,
+        epicId: task.id,
+        title: task.title,
+        description: task.description,
+        state: task.state,
+        linearIssueId: task.linearIssueId,
+        linearIssueUrl: task.linearIssueUrl,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        completedAt: task.completedAt,
         supervisor: supervisorStatus,
         taskSummary,
-        tasks: tasks.map((t) => ({
+        tasks: childTasks.map((t) => ({
           id: t.id,
           title: t.title,
           state: t.state,
@@ -272,23 +284,26 @@ router.get('/status/:epicId', async (req, res) => {
 
 /**
  * GET /api/epics/list
- * List all epics (optionally filtered by projectId)
+ * List all top-level tasks (epics), optionally filtered by projectId
  */
 router.get('/list', async (req, res) => {
   try {
     const projectId = req.query.projectId as string | undefined;
-    const epics = await epicAccessor.list({ projectId });
+    const topLevelTasks = await taskAccessor.list({
+      projectId,
+      isTopLevel: true,
+    });
 
     return res.status(200).json({
       success: true,
       data: {
-        epics: epics.map((e) => ({
-          id: e.id,
-          title: e.title,
-          state: e.state,
-          linearIssueId: e.linearIssueId,
-          createdAt: e.createdAt,
-          updatedAt: e.updatedAt,
+        epics: topLevelTasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          state: t.state,
+          linearIssueId: t.linearIssueId,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
         })),
       },
     });

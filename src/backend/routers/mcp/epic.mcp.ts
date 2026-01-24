@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { AgentType, EpicState, TaskState } from '@prisma-gen/client';
+import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { startWorker } from '../../agents/worker/lifecycle.js';
 import { type GitClient, GitClientFactory } from '../../clients/git.client.js';
@@ -9,7 +9,6 @@ import { inngest } from '../../inngest/client.js';
 import {
   agentAccessor,
   decisionLogAccessor,
-  epicAccessor,
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
@@ -47,7 +46,7 @@ const ReadFileInputSchema = z.object({
   filePath: z.string().min(1, 'File path is required'),
 });
 
-const CreateEpicPRInputSchema = z.object({
+const CreateTopLevelPRInputSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
 });
@@ -62,12 +61,13 @@ const ForceCompleteTaskInputSchema = z.object({
 // ============================================================================
 
 /**
- * Verify agent is a SUPERVISOR with an epic assigned
+ * Verify agent is a SUPERVISOR with a top-level task assigned
  */
-async function verifySupervisorWithEpic(
+async function verifySupervisorWithTopLevelTask(
   context: McpToolContext
 ): Promise<
-  { success: true; agentId: string; epicId: string } | { success: false; error: McpToolResponse }
+  | { success: true; agentId: string; topLevelTaskId: string }
+  | { success: false; error: McpToolResponse }
 > {
   const agent = await agentAccessor.findById(context.agentId);
   if (!agent) {
@@ -90,17 +90,17 @@ async function verifySupervisorWithEpic(
     };
   }
 
-  if (!agent.currentEpicId) {
+  if (!agent.currentTaskId) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Supervisor does not have an epic assigned'
+        'Supervisor does not have a top-level task assigned'
       ),
     };
   }
 
-  return { success: true, agentId: agent.id, epicId: agent.currentEpicId };
+  return { success: true, agentId: agent.id, topLevelTaskId: agent.currentTaskId };
 }
 
 /**
@@ -120,30 +120,31 @@ function generateWorktreeName(taskId: string, title: string): string {
 // ============================================================================
 
 /**
- * Create a new task for the epic (SUPERVISOR only)
+ * Create a new subtask for the top-level task (SUPERVISOR only)
  */
 async function createTask(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = CreateTaskInputSchema.parse(input);
 
-    // Verify supervisor has epic
-    const verification = await verifySupervisorWithEpic(context);
+    // Verify supervisor has top-level task
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
 
-    // Get epic
-    const epic = await epicAccessor.findById(verification.epicId);
-    if (!epic) {
+    // Get top-level task
+    const topLevelTask = await taskAccessor.findById(verification.topLevelTaskId);
+    if (!topLevelTask) {
       return createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${verification.epicId}' not found`
+        `Top-level task with ID '${verification.topLevelTaskId}' not found`
       );
     }
 
-    // Create task record
+    // Create subtask
     const task = await taskAccessor.create({
-      epicId: epic.id,
+      projectId: topLevelTask.projectId,
+      parentId: topLevelTask.id,
       title: validatedInput.title,
       description: validatedInput.description,
       state: TaskState.PENDING,
@@ -153,12 +154,17 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
     const worktreeName = generateWorktreeName(task.id, validatedInput.title);
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__create_task', 'result', {
-      taskId: task.id,
-      epicId: epic.id,
-      title: validatedInput.title,
-      worktreeName,
-    });
+    await decisionLogAccessor.createAutomatic(
+      context.agentId,
+      'mcp__supervisor__create_task',
+      'result',
+      {
+        taskId: task.id,
+        parentId: topLevelTask.id,
+        title: validatedInput.title,
+        worktreeName,
+      }
+    );
 
     // Fire task.created event (for logging/observability)
     try {
@@ -166,7 +172,7 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
         name: 'task.created',
         data: {
           taskId: task.id,
-          epicId: epic.id,
+          parentId: topLevelTask.id,
           title: validatedInput.title,
         },
       });
@@ -206,33 +212,38 @@ async function createTask(context: McpToolContext, input: unknown): Promise<McpT
 }
 
 /**
- * List all tasks for the epic (SUPERVISOR only)
+ * List all subtasks for the top-level task (SUPERVISOR only)
  */
 async function listTasks(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = ListTasksInputSchema.parse(input);
 
-    // Verify supervisor has epic
-    const verification = await verifySupervisorWithEpic(context);
+    // Verify supervisor has top-level task
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
 
-    // Fetch tasks for epic
+    // Fetch subtasks
     const tasks = await taskAccessor.list({
-      epicId: verification.epicId,
+      parentId: verification.topLevelTaskId,
       state: validatedInput.state,
     });
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__list_tasks', 'result', {
-      epicId: verification.epicId,
-      taskCount: tasks.length,
-      filterState: validatedInput.state,
-    });
+    await decisionLogAccessor.createAutomatic(
+      context.agentId,
+      'mcp__supervisor__list_tasks',
+      'result',
+      {
+        topLevelTaskId: verification.topLevelTaskId,
+        taskCount: tasks.length,
+        filterState: validatedInput.state,
+      }
+    );
 
     return createSuccessResponse({
-      epicId: verification.epicId,
+      topLevelTaskId: verification.topLevelTaskId,
       tasks: tasks.map((t) => ({
         id: t.id,
         title: t.title,
@@ -257,41 +268,35 @@ async function listTasks(context: McpToolContext, input: unknown): Promise<McpTo
 }
 
 /**
- * Get the PR review queue for the epic (SUPERVISOR only)
+ * Get the PR review queue for the top-level task (SUPERVISOR only)
  */
 async function getReviewQueue(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     GetReviewQueueInputSchema.parse(input);
 
-    // Verify supervisor has epic
-    const verification = await verifySupervisorWithEpic(context);
+    // Verify supervisor has top-level task
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
 
     // Fetch tasks in REVIEW state
-    const tasks = await taskAccessor.list({
-      epicId: verification.epicId,
-      state: TaskState.REVIEW,
-    });
-
-    // Sort by updatedAt (submission order)
-    const sortedTasks = tasks.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
+    const tasks = await taskAccessor.getReviewQueue(verification.topLevelTaskId);
 
     // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__get_review_queue',
+      'mcp__supervisor__get_review_queue',
       'result',
       {
-        epicId: verification.epicId,
-        queueLength: sortedTasks.length,
+        topLevelTaskId: verification.topLevelTaskId,
+        queueLength: tasks.length,
       }
     );
 
     return createSuccessResponse({
-      epicId: verification.epicId,
-      queue: sortedTasks.map((t, index) => ({
+      topLevelTaskId: verification.topLevelTaskId,
+      queue: tasks.map((t, index) => ({
         position: index + 1,
         taskId: t.id,
         title: t.title,
@@ -316,11 +321,11 @@ async function getReviewQueue(context: McpToolContext, input: unknown): Promise<
  */
 async function sendRebaseRequests(
   context: McpToolContext,
-  epicId: string,
+  topLevelTaskId: string,
   excludeTaskId: string,
-  epicBranchName: string
+  topLevelBranchName: string
 ): Promise<number> {
-  const otherReviewTasks = await taskAccessor.list({ epicId, state: TaskState.REVIEW });
+  const otherReviewTasks = await taskAccessor.getReviewQueue(topLevelTaskId);
   let count = 0;
 
   for (const reviewTask of otherReviewTasks) {
@@ -330,7 +335,7 @@ async function sendRebaseRequests(
         fromAgentId: context.agentId,
         toAgentId: reviewTask.assignedAgentId,
         subject: 'Rebase Required',
-        body: `Another task has been merged into the epic branch. Please rebase your branch against the epic branch before I can review your code.\n\nTask: ${reviewTask.title}\nEpic branch: ${epicBranchName}\n\nRun: git fetch origin && git rebase origin/${epicBranchName}`,
+        body: `Another task has been merged into the top-level task branch. Please rebase your branch against the top-level task branch before I can review your code.\n\nTask: ${reviewTask.title}\nTop-level branch: ${topLevelBranchName}\n\nRun: git fetch origin && git rebase origin/${topLevelBranchName}`,
       });
       count++;
     }
@@ -367,10 +372,10 @@ interface TaskForApproval {
   assignedAgentId: string | null;
 }
 
-interface EpicForApproval {
+interface TopLevelTaskForApproval {
   id: string;
-  epicId: string;
-  epicWorktreePath: string;
+  topLevelTaskId: string;
+  topLevelWorktreePath: string;
   gitClient: GitClient;
 }
 
@@ -379,7 +384,7 @@ interface EpicForApproval {
  */
 async function validateTaskForApproval(
   taskId: string,
-  epicId: string
+  topLevelTaskId: string
 ): Promise<{ success: true; task: TaskForApproval } | { success: false; error: McpToolResponse }> {
   const task = await taskAccessor.findById(taskId);
   if (!task) {
@@ -391,12 +396,12 @@ async function validateTaskForApproval(
       ),
     };
   }
-  if (task.epicId !== epicId) {
+  if (task.parentId !== topLevelTaskId) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.PERMISSION_DENIED,
-        'Task does not belong to this epic'
+        'Task does not belong to this top-level task'
       ),
     };
   }
@@ -430,30 +435,33 @@ async function validateTaskForApproval(
 }
 
 /**
- * Get epic and worktree path for approval
+ * Get top-level task and worktree path for approval
  */
-async function getEpicForApproval(
-  epicId: string
-): Promise<{ success: true; epic: EpicForApproval } | { success: false; error: McpToolResponse }> {
-  const epic = await epicAccessor.findById(epicId);
-  if (!epic) {
+async function getTopLevelTaskForApproval(
+  topLevelTaskId: string
+): Promise<
+  | { success: true; topLevelTask: TopLevelTaskForApproval }
+  | { success: false; error: McpToolResponse }
+> {
+  const topLevelTask = await taskAccessor.findById(topLevelTaskId);
+  if (!topLevelTask) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${epicId}' not found`
+        `Top-level task with ID '${topLevelTaskId}' not found`
       ),
     };
   }
 
-  // Get project for this epic
-  const project = epic.project;
+  // Get project for this task
+  const project = topLevelTask.project;
   if (!project) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        `Epic '${epicId}' does not have an associated project`
+        `Top-level task '${topLevelTaskId}' does not have an associated project`
       ),
     };
   }
@@ -464,30 +472,30 @@ async function getEpicForApproval(
     worktreeBasePath: project.worktreeBasePath,
   });
 
-  const epicWorktreeName = `epic-${epic.id.substring(0, 8)}`;
+  const topLevelWorktreeName = `epic-${topLevelTask.id.substring(0, 8)}`;
   return {
     success: true,
-    epic: {
-      id: epic.id,
-      epicId,
-      epicWorktreePath: gitClient.getWorktreePath(epicWorktreeName),
+    topLevelTask: {
+      id: topLevelTask.id,
+      topLevelTaskId,
+      topLevelWorktreePath: gitClient.getWorktreePath(topLevelWorktreeName),
       gitClient,
     },
   };
 }
 
 /**
- * Merge a task branch into the epic worktree
+ * Merge a task branch into the top-level task worktree
  */
 async function mergeTaskBranch(
   gitClient: GitClient,
-  epicWorktreePath: string,
+  topLevelWorktreePath: string,
   branchName: string,
   taskTitle: string
 ): Promise<{ success: true; mergeCommit: string } | { success: false; error: McpToolResponse }> {
   try {
     const result = await gitClient.mergeBranch(
-      epicWorktreePath,
+      topLevelWorktreePath,
       branchName,
       `Merge task: ${taskTitle}`
     );
@@ -504,15 +512,18 @@ async function mergeTaskBranch(
 }
 
 /**
- * Try to push the epic branch, returns whether push succeeded
+ * Try to push the top-level task branch, returns whether push succeeded
  */
-async function tryPushEpicBranch(gitClient: GitClient, epicWorktreePath: string): Promise<boolean> {
+async function tryPushTopLevelBranch(
+  gitClient: GitClient,
+  topLevelWorktreePath: string
+): Promise<boolean> {
   try {
-    await gitClient.pushBranchWithUpstream(epicWorktreePath);
+    await gitClient.pushBranchWithUpstream(topLevelWorktreePath);
     return true;
   } catch (error) {
     console.log(
-      `Note: Could not push epic branch (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
+      `Note: Could not push top-level branch (this is OK for local testing): ${error instanceof Error ? error.message : String(error)}`
     );
     return false;
   }
@@ -527,43 +538,43 @@ function buildApprovalMessage(
   workerCleanedUp: boolean
 ): string {
   const pushStatus = pushed
-    ? 'merged into epic and pushed'
-    : 'merged into epic locally (push skipped - no remote)';
+    ? 'merged into top-level task and pushed'
+    : 'merged into top-level task locally (push skipped - no remote)';
   const workerStatus = workerCleanedUp ? ' Worker cleaned up.' : '';
   return `Task approved. Branch ${pushStatus}. ${rebaseRequestsSent} rebase requests sent.${workerStatus}`;
 }
 
 /**
- * Approve a task and merge worker's branch into epic branch (SUPERVISOR only)
- * This does a git merge locally, then pushes the epic branch to origin.
+ * Approve a task and merge worker's branch into top-level task branch (SUPERVISOR only)
+ * This does a git merge locally, then pushes the top-level task branch to origin.
  */
 async function approveTask(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
     const validatedInput = ApproveTaskInputSchema.parse(input);
 
-    const verification = await verifySupervisorWithEpic(context);
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
 
     const taskValidation = await validateTaskForApproval(
       validatedInput.taskId,
-      verification.epicId
+      verification.topLevelTaskId
     );
     if (!taskValidation.success) {
       return taskValidation.error;
     }
     const task = taskValidation.task;
 
-    const epicValidation = await getEpicForApproval(verification.epicId);
-    if (!epicValidation.success) {
-      return epicValidation.error;
+    const topLevelValidation = await getTopLevelTaskForApproval(verification.topLevelTaskId);
+    if (!topLevelValidation.success) {
+      return topLevelValidation.error;
     }
-    const { epic } = epicValidation;
+    const { topLevelTask } = topLevelValidation;
 
     const mergeResult = await mergeTaskBranch(
-      epic.gitClient,
-      epic.epicWorktreePath,
+      topLevelTask.gitClient,
+      topLevelTask.topLevelWorktreePath,
       task.branchName,
       task.title
     );
@@ -571,21 +582,24 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
       return mergeResult.error;
     }
 
-    const pushed = await tryPushEpicBranch(epic.gitClient, epic.epicWorktreePath);
+    const pushed = await tryPushTopLevelBranch(
+      topLevelTask.gitClient,
+      topLevelTask.topLevelWorktreePath
+    );
     await taskAccessor.update(task.id, { state: TaskState.COMPLETED, completedAt: new Date() });
 
-    const epicBranchName = `factoryfactory/epic-${epic.id.substring(0, 8)}`;
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id.substring(0, 8)}`;
     const rebaseRequestsSent = await sendRebaseRequests(
       context,
-      verification.epicId,
+      verification.topLevelTaskId,
       task.id,
-      epicBranchName
+      topLevelBranchName
     );
     const workerCleanedUp = await cleanupWorker(task.assignedAgentId);
 
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__approve_task',
+      'mcp__supervisor__approve_task',
       'result',
       {
         taskId: task.id,
@@ -620,8 +634,8 @@ async function requestChanges(context: McpToolContext, input: unknown): Promise<
   try {
     const validatedInput = RequestChangesInputSchema.parse(input);
 
-    // Verify supervisor has epic
-    const verification = await verifySupervisorWithEpic(context);
+    // Verify supervisor has top-level task
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
@@ -635,11 +649,11 @@ async function requestChanges(context: McpToolContext, input: unknown): Promise<
       );
     }
 
-    // Verify task belongs to this epic
-    if (task.epicId !== verification.epicId) {
+    // Verify task belongs to this top-level task
+    if (task.parentId !== verification.topLevelTaskId) {
       return createErrorResponse(
         McpErrorCode.PERMISSION_DENIED,
-        'Task does not belong to this epic'
+        'Task does not belong to this top-level task'
       );
     }
 
@@ -675,7 +689,7 @@ async function requestChanges(context: McpToolContext, input: unknown): Promise<
     // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__request_changes',
+      'mcp__supervisor__request_changes',
       'result',
       {
         taskId: task.id,
@@ -702,8 +716,8 @@ async function readFile(context: McpToolContext, input: unknown): Promise<McpToo
   try {
     const validatedInput = ReadFileInputSchema.parse(input);
 
-    // Verify supervisor has epic
-    const verification = await verifySupervisorWithEpic(context);
+    // Verify supervisor has top-level task
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
@@ -717,11 +731,11 @@ async function readFile(context: McpToolContext, input: unknown): Promise<McpToo
       );
     }
 
-    // Verify task belongs to this epic
-    if (task.epicId !== verification.epicId) {
+    // Verify task belongs to this top-level task
+    if (task.parentId !== verification.topLevelTaskId) {
       return createErrorResponse(
         McpErrorCode.PERMISSION_DENIED,
-        'Task does not belong to this epic'
+        'Task does not belong to this top-level task'
       );
     }
 
@@ -761,11 +775,16 @@ async function readFile(context: McpToolContext, input: unknown): Promise<McpToo
     }
 
     // Log decision
-    await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__epic__read_file', 'result', {
-      taskId: task.id,
-      filePath: validatedInput.filePath,
-      contentLength: content.length,
-    });
+    await decisionLogAccessor.createAutomatic(
+      context.agentId,
+      'mcp__supervisor__read_file',
+      'result',
+      {
+        taskId: task.id,
+        filePath: validatedInput.filePath,
+        contentLength: content.length,
+      }
+    );
 
     return createSuccessResponse({
       taskId: task.id,
@@ -792,8 +811,8 @@ async function forceCompleteTask(
   try {
     const validatedInput = ForceCompleteTaskInputSchema.parse(input);
 
-    // Verify supervisor has epic
-    const verification = await verifySupervisorWithEpic(context);
+    // Verify supervisor has top-level task
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
@@ -807,11 +826,11 @@ async function forceCompleteTask(
       );
     }
 
-    // Verify task belongs to this epic
-    if (task.epicId !== verification.epicId) {
+    // Verify task belongs to this top-level task
+    if (task.parentId !== verification.topLevelTaskId) {
       return createErrorResponse(
         McpErrorCode.PERMISSION_DENIED,
-        'Task does not belong to this epic'
+        'Task does not belong to this top-level task'
       );
     }
 
@@ -824,7 +843,7 @@ async function forceCompleteTask(
     // Log decision with reason
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__force_complete_task',
+      'mcp__supervisor__force_complete_task',
       'result',
       {
         taskId: task.id,
@@ -848,10 +867,10 @@ async function forceCompleteTask(
 }
 
 /**
- * Generate PR description for epic completion
+ * Generate PR description for top-level task completion
  */
-function generateEpicPRDescription(
-  epic: { title: string; description: string | null },
+function generateTopLevelPRDescription(
+  topLevelTask: { title: string; description: string | null },
   completedTasks: { title: string }[],
   failedTasks: { title: string; failureReason: string | null }[]
 ): string {
@@ -860,11 +879,11 @@ function generateEpicPRDescription(
       ? `## Failed Tasks (${failedTasks.length})\n${failedTasks.map((t) => `- ❌ ${t.title}: ${t.failureReason || 'No reason'}`).join('\n')}`
       : '';
 
-  return `## Epic: ${epic.title}
+  return `## Task: ${topLevelTask.title}
 
-${epic.description || 'No description provided.'}
+${topLevelTask.description || 'No description provided.'}
 
-## Completed Tasks (${completedTasks.length})
+## Completed Subtasks (${completedTasks.length})
 ${completedTasks.map((t) => `- ✅ ${t.title}`).join('\n')}
 
 ${failedSection}
@@ -924,23 +943,23 @@ async function attemptCreatePR(
 }
 
 /**
- * Send notifications after epic completion
+ * Send notifications after top-level task completion
  */
-async function sendEpicCompletionNotifications(
+async function sendTopLevelCompletionNotifications(
   context: McpToolContext,
-  epic: { id: string; title: string },
+  topLevelTask: { id: string; title: string },
   prUrl: string | null
 ): Promise<void> {
   try {
-    await notificationService.notifyEpicComplete(epic.title, prUrl || undefined);
+    await notificationService.notifyEpicComplete(topLevelTask.title, prUrl || undefined);
   } catch (error) {
-    console.error('Failed to send epic completion notification:', error);
+    console.error('Failed to send top-level task completion notification:', error);
   }
 
   try {
     await inngest.send({
       name: 'agent.completed',
-      data: { agentId: context.agentId, epicId: epic.id },
+      data: { agentId: context.agentId, taskId: topLevelTask.id },
     });
   } catch (error) {
     console.log(
@@ -951,10 +970,10 @@ async function sendEpicCompletionNotifications(
 }
 
 /**
- * Generate completion mail body for epic PR
+ * Generate completion mail body for top-level task PR
  */
-function generateEpicCompletionMailBody(
-  epicTitle: string,
+function generateTopLevelCompletionMailBody(
+  topLevelTaskTitle: string,
   branchName: string,
   completedCount: number,
   failedCount: number,
@@ -963,49 +982,49 @@ function generateEpicCompletionMailBody(
 ): string {
   const taskSummary = `Completed tasks: ${completedCount}\nFailed tasks: ${failedCount}`;
   if (prCreated) {
-    return `The epic "${epicTitle}" has been completed and is ready for review.\n\nPR URL: ${prUrl}\nBranch: ${branchName}\n\n${taskSummary}`;
+    return `The top-level task "${topLevelTaskTitle}" has been completed and is ready for review.\n\nPR URL: ${prUrl}\nBranch: ${branchName}\n\n${taskSummary}`;
   }
-  return `The epic "${epicTitle}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${branchName}\n\n${taskSummary}`;
+  return `The top-level task "${topLevelTaskTitle}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${branchName}\n\n${taskSummary}`;
 }
 
 /**
- * Create PR from epic branch to main (SUPERVISOR only)
+ * Create PR from top-level task branch to main (SUPERVISOR only)
  * Also cleans up worker tmux sessions for completed tasks
  */
-async function createEpicPR(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+async function createTopLevelPR(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
   try {
-    const validatedInput = CreateEpicPRInputSchema.parse(input);
+    const validatedInput = CreateTopLevelPRInputSchema.parse(input);
 
-    const verification = await verifySupervisorWithEpic(context);
+    const verification = await verifySupervisorWithTopLevelTask(context);
     if (!verification.success) {
       return verification.error;
     }
 
-    const epic = await epicAccessor.findById(verification.epicId);
-    if (!epic) {
+    const topLevelTask = await taskAccessor.findById(verification.topLevelTaskId);
+    if (!topLevelTask) {
       return createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${verification.epicId}' not found`
+        `Top-level task with ID '${verification.topLevelTaskId}' not found`
       );
     }
 
-    const project = epic.project;
+    const project = topLevelTask.project;
     if (!project) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        `Epic '${verification.epicId}' does not have an associated project`
+        `Top-level task '${verification.topLevelTaskId}' does not have an associated project`
       );
     }
 
-    const tasks = await taskAccessor.list({ epicId: epic.id });
-    const incompleteTasks = tasks.filter(
+    const subtasks = await taskAccessor.findByParentId(topLevelTask.id);
+    const incompleteTasks = subtasks.filter(
       (t) => t.state !== TaskState.COMPLETED && t.state !== TaskState.FAILED
     );
 
     if (incompleteTasks.length > 0) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        `Cannot create epic PR: ${incompleteTasks.length} task(s) are not complete. Tasks: ${incompleteTasks.map((t) => `${t.title} (${t.state})`).join(', ')}`
+        `Cannot create PR: ${incompleteTasks.length} task(s) are not complete. Tasks: ${incompleteTasks.map((t) => `${t.title} (${t.state})`).join(', ')}`
       );
     }
 
@@ -1014,27 +1033,31 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const epicBranchName = `factoryfactory/epic-${epic.id}`;
-    const worktreePath = gitClient.getWorktreePath(`epic-${epic.id.substring(0, 8)}`);
-    const completedTasks = tasks.filter((t) => t.state === TaskState.COMPLETED);
-    const failedTasks = tasks.filter((t) => t.state === TaskState.FAILED);
-    const prTitle = validatedInput.title || `[Epic] ${epic.title}`;
+    const topLevelBranchName = `factoryfactory/task-${topLevelTask.id}`;
+    const worktreePath = gitClient.getWorktreePath(`epic-${topLevelTask.id.substring(0, 8)}`);
+    const completedTasks = subtasks.filter((t) => t.state === TaskState.COMPLETED);
+    const failedTasks = subtasks.filter((t) => t.state === TaskState.FAILED);
+    const prTitle = validatedInput.title || `[Epic] ${topLevelTask.title}`;
     const prDescription =
-      validatedInput.description || generateEpicPRDescription(epic, completedTasks, failedTasks);
+      validatedInput.description ||
+      generateTopLevelPRDescription(topLevelTask, completedTasks, failedTasks);
 
     const { prInfo, created: prCreated } = await attemptCreatePR(
-      epicBranchName,
+      topLevelBranchName,
       prTitle,
       prDescription,
       worktreePath
     );
 
-    const cleanedUpCount = await cleanupAllWorkers(tasks);
-    await epicAccessor.update(epic.id, { state: EpicState.COMPLETED, completedAt: new Date() });
+    const cleanedUpCount = await cleanupAllWorkers(subtasks);
+    await taskAccessor.update(topLevelTask.id, {
+      state: TaskState.COMPLETED,
+      completedAt: new Date(),
+    });
 
-    const mailBody = generateEpicCompletionMailBody(
-      epic.title,
-      epicBranchName,
+    const mailBody = generateTopLevelCompletionMailBody(
+      topLevelTask.title,
+      topLevelBranchName,
       completedTasks.length,
       failedTasks.length,
       prInfo?.url,
@@ -1044,16 +1067,16 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
     await mailAccessor.create({
       fromAgentId: context.agentId,
       isForHuman: true,
-      subject: `Epic Complete: ${epic.title}`,
+      subject: `Task Complete: ${topLevelTask.title}`,
       body: mailBody,
     });
 
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__epic__create_epic_pr',
+      'mcp__supervisor__create_epic_pr',
       'result',
       {
-        epicId: epic.id,
+        topLevelTaskId: topLevelTask.id,
         prUrl: prInfo?.url || null,
         prNumber: prInfo?.number || null,
         prCreated,
@@ -1063,18 +1086,18 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       }
     );
 
-    await sendEpicCompletionNotifications(context, epic, prInfo?.url || null);
+    await sendTopLevelCompletionNotifications(context, topLevelTask, prInfo?.url || null);
 
     const message = prCreated
-      ? `Epic PR created successfully. ${cleanedUpCount} worker(s) cleaned up. Human review requested.`
-      : `Epic completed locally (PR skipped - no remote). ${cleanedUpCount} worker(s) cleaned up.`;
+      ? `PR created successfully. ${cleanedUpCount} worker(s) cleaned up. Human review requested.`
+      : `Task completed locally (PR skipped - no remote). ${cleanedUpCount} worker(s) cleaned up.`;
 
     return createSuccessResponse({
-      epicId: epic.id,
+      topLevelTaskId: topLevelTask.id,
       prUrl: prInfo?.url || null,
       prNumber: prInfo?.number || null,
       prCreated,
-      state: EpicState.COMPLETED,
+      state: TaskState.COMPLETED,
       workersCleanedUp: cleanedUpCount,
       message,
     });
@@ -1093,22 +1116,23 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
 export function registerEpicTools(): void {
   // Task Management
   registerMcpTool({
-    name: 'mcp__epic__create_task',
-    description: 'Create a new task for the epic (SUPERVISOR only)',
+    name: 'mcp__supervisor__create_task',
+    description: 'Create a new subtask for the top-level task (SUPERVISOR only)',
     handler: createTask,
     schema: CreateTaskInputSchema,
   });
 
   registerMcpTool({
-    name: 'mcp__epic__list_tasks',
-    description: 'List all tasks for the epic with optional state filter (SUPERVISOR only)',
+    name: 'mcp__supervisor__list_tasks',
+    description:
+      'List all subtasks for the top-level task with optional state filter (SUPERVISOR only)',
     handler: listTasks,
     schema: ListTasksInputSchema,
   });
 
   // Review Queue
   registerMcpTool({
-    name: 'mcp__epic__get_review_queue',
+    name: 'mcp__supervisor__get_review_queue',
     description: 'Get tasks ready for review ordered by submission time (SUPERVISOR only)',
     handler: getReviewQueue,
     schema: GetReviewQueueInputSchema,
@@ -1116,21 +1140,22 @@ export function registerEpicTools(): void {
 
   // Task Review Actions
   registerMcpTool({
-    name: 'mcp__epic__approve_task',
-    description: 'Approve a task, merge worker branch into epic branch, and push (SUPERVISOR only)',
+    name: 'mcp__supervisor__approve_task',
+    description:
+      'Approve a task, merge worker branch into top-level task branch, and push (SUPERVISOR only)',
     handler: approveTask,
     schema: ApproveTaskInputSchema,
   });
 
   registerMcpTool({
-    name: 'mcp__epic__request_changes',
+    name: 'mcp__supervisor__request_changes',
     description: 'Request changes on a task with feedback (SUPERVISOR only)',
     handler: requestChanges,
     schema: RequestChangesInputSchema,
   });
 
   registerMcpTool({
-    name: 'mcp__epic__read_file',
+    name: 'mcp__supervisor__read_file',
     description: "Read a file from a worker's worktree for code review (SUPERVISOR only)",
     handler: readFile,
     schema: ReadFileInputSchema,
@@ -1138,18 +1163,19 @@ export function registerEpicTools(): void {
 
   // Recovery Tools
   registerMcpTool({
-    name: 'mcp__epic__force_complete_task',
+    name: 'mcp__supervisor__force_complete_task',
     description:
       'Force mark a task as completed when normal approval fails (e.g., merge conflicts resolved manually) (SUPERVISOR only)',
     handler: forceCompleteTask,
     schema: ForceCompleteTaskInputSchema,
   });
 
-  // Epic Completion
+  // Top-Level Task Completion
   registerMcpTool({
-    name: 'mcp__epic__create_epic_pr',
-    description: 'Create PR from epic branch to main when all tasks are done (SUPERVISOR only)',
-    handler: createEpicPR,
-    schema: CreateEpicPRInputSchema,
+    name: 'mcp__supervisor__create_epic_pr',
+    description:
+      'Create PR from top-level task branch to main when all subtasks are done (SUPERVISOR only)',
+    handler: createTopLevelPR,
+    schema: CreateTopLevelPRInputSchema,
   });
 }
