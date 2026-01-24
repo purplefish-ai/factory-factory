@@ -228,53 +228,48 @@ export class GitClient {
   }
 }
 
+// Private module-level cache for GitClient instances
+const gitClientInstances = new Map<string, GitClient>();
+
+function forProject(project: { repoPath: string; worktreeBasePath: string }): GitClient {
+  const key = `${project.repoPath}:${project.worktreeBasePath}`;
+  const existing = gitClientInstances.get(key);
+  if (existing) {
+    return existing;
+  }
+  const client = new GitClient({
+    baseRepoPath: project.repoPath,
+    worktreeBase: project.worktreeBasePath,
+  });
+  gitClientInstances.set(key, client);
+  return client;
+}
+
+function removeProject(project: { repoPath: string; worktreeBasePath: string }): boolean {
+  const key = `${project.repoPath}:${project.worktreeBasePath}`;
+  return gitClientInstances.delete(key);
+}
+
+function clearCache(): void {
+  gitClientInstances.clear();
+}
+
+function getCacheSize(): number {
+  return gitClientInstances.size;
+}
+
 /**
  * Factory for creating project-specific GitClient instances.
  * Caches instances by repo+worktree path combination.
  */
-export class GitClientFactory {
-  private static instances = new Map<string, GitClient>();
-
-  /**
-   * Get or create a GitClient for a specific project.
-   */
-  static forProject(project: { repoPath: string; worktreeBasePath: string }): GitClient {
-    const key = `${project.repoPath}:${project.worktreeBasePath}`;
-    const existing = GitClientFactory.instances.get(key);
-    if (existing) {
-      return existing;
-    }
-    const client = new GitClient({
-      baseRepoPath: project.repoPath,
-      worktreeBase: project.worktreeBasePath,
-    });
-    GitClientFactory.instances.set(key, client);
-    return client;
-  }
-
-  /**
-   * Remove a cached GitClient for a project.
-   * Call this when a project is deleted or its paths change.
-   */
-  static removeProject(project: { repoPath: string; worktreeBasePath: string }): boolean {
-    const key = `${project.repoPath}:${project.worktreeBasePath}`;
-    return GitClientFactory.instances.delete(key);
-  }
-
-  /**
-   * Clear all cached instances. Useful for testing.
-   */
-  static clearCache(): void {
-    GitClientFactory.instances.clear();
-  }
-
-  /**
-   * Get the number of cached instances.
-   */
-  static get cacheSize(): number {
-    return GitClientFactory.instances.size;
-  }
-}
+export const GitClientFactory = {
+  forProject,
+  removeProject,
+  clearCache,
+  get cacheSize() {
+    return getCacheSize();
+  },
+};
 
 /**
  * @deprecated Use GitClientFactory.forProject() instead.

@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Dummy URL for Prisma generate (doesn't connect, just needs valid format)
+  DATABASE_URL: postgresql://user:pass@localhost:5432/db
+
 jobs:
   lint:
     name: Lint & Format

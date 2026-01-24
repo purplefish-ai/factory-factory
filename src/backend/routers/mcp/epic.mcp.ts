@@ -950,6 +950,76 @@ async function sendEpicCompletionNotifications(
   }
 }
 
+function generateEpicCompletionMailBody(
+  epicTitle: string,
+  branchName: string,
+  prUrl: string | null,
+  completedCount: number,
+  failedCount: number
+): string {
+  if (prUrl) {
+    return `The epic "${epicTitle}" has been completed and is ready for review.\n\nPR URL: ${prUrl}\nBranch: ${branchName}\n\nCompleted tasks: ${completedCount}\nFailed tasks: ${failedCount}`;
+  }
+  return `The epic "${epicTitle}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${branchName}\n\nCompleted tasks: ${completedCount}\nFailed tasks: ${failedCount}`;
+}
+
+function generateEpicPRResultMessage(prCreated: boolean, cleanedUpCount: number): string {
+  if (prCreated) {
+    return `Epic PR created successfully. ${cleanedUpCount} worker(s) cleaned up. Human review requested.`;
+  }
+  return `Epic completed locally (PR skipped - no remote). ${cleanedUpCount} worker(s) cleaned up.`;
+}
+
+function checkIncompleteTasks(
+  tasks: Array<{ title: string; state: string }>
+): McpToolResponse | null {
+  const incompleteTasks = tasks.filter(
+    (t) => t.state !== TaskState.COMPLETED && t.state !== TaskState.FAILED
+  );
+  if (incompleteTasks.length === 0) {
+    return null;
+  }
+  return createErrorResponse(
+    McpErrorCode.INVALID_AGENT_STATE,
+    `Cannot create epic PR: ${incompleteTasks.length} task(s) are not complete. Tasks: ${incompleteTasks.map((t) => `${t.title} (${t.state})`).join(', ')}`
+  );
+}
+
+type EpicResult = NonNullable<Awaited<ReturnType<typeof epicAccessor.findById>>>;
+type EpicWithProject = EpicResult & {
+  project: NonNullable<EpicResult['project']>;
+};
+
+async function validateEpicForPR(
+  context: McpToolContext
+): Promise<{ epic: EpicWithProject; error?: never } | { epic?: never; error: McpToolResponse }> {
+  const verification = await verifySupervisorWithEpic(context);
+  if (!verification.success) {
+    return { error: verification.error };
+  }
+
+  const epic = await epicAccessor.findById(verification.epicId);
+  if (!epic) {
+    return {
+      error: createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Epic with ID '${verification.epicId}' not found`
+      ),
+    };
+  }
+
+  if (!epic.project) {
+    return {
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        `Epic '${verification.epicId}' does not have an associated project`
+      ),
+    };
+  }
+
+  return { epic: epic as EpicWithProject };
+}
+
 /**
  * Create PR from epic branch to main (SUPERVISOR only)
  * Also cleans up worker tmux sessions for completed tasks
@@ -958,38 +1028,17 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
   try {
     const validatedInput = CreateEpicPRInputSchema.parse(input);
 
-    const verification = await verifySupervisorWithEpic(context);
-    if (!verification.success) {
-      return verification.error;
+    const validation = await validateEpicForPR(context);
+    if (validation.error) {
+      return validation.error;
     }
-
-    const epic = await epicAccessor.findById(verification.epicId);
-    if (!epic) {
-      return createErrorResponse(
-        McpErrorCode.RESOURCE_NOT_FOUND,
-        `Epic with ID '${verification.epicId}' not found`
-      );
-    }
-
-    // Get project for this epic
-    const project = epic.project;
-    if (!project) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        `Epic '${verification.epicId}' does not have an associated project`
-      );
-    }
+    const { epic } = validation;
+    const { project } = epic;
 
     const tasks = await taskAccessor.list({ epicId: epic.id });
-    const incompleteTasks = tasks.filter(
-      (t) => t.state !== TaskState.COMPLETED && t.state !== TaskState.FAILED
-    );
-
-    if (incompleteTasks.length > 0) {
-      return createErrorResponse(
-        McpErrorCode.INVALID_AGENT_STATE,
-        `Cannot create epic PR: ${incompleteTasks.length} task(s) are not complete. Tasks: ${incompleteTasks.map((t) => `${t.title} (${t.state})`).join(', ')}`
-      );
+    const incompleteError = checkIncompleteTasks(tasks);
+    if (incompleteError) {
+      return incompleteError;
     }
 
     // Get project-specific GitClient
@@ -1016,9 +1065,13 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
     const cleanedUpCount = await cleanupAllWorkers(tasks);
     await epicAccessor.update(epic.id, { state: EpicState.COMPLETED, completedAt: new Date() });
 
-    const mailBody = prCreated
-      ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo?.url}\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
-      : `The epic "${epic.title}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`;
+    const mailBody = generateEpicCompletionMailBody(
+      epic.title,
+      epicBranchName,
+      prCreated ? (prInfo?.url ?? null) : null,
+      completedTasks.length,
+      failedTasks.length
+    );
 
     await mailAccessor.create({
       fromAgentId: context.agentId,
@@ -1051,9 +1104,7 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       prCreated,
       state: EpicState.COMPLETED,
       workersCleanedUp: cleanedUpCount,
-      message: prCreated
-        ? `Epic PR created successfully. ${cleanedUpCount} worker(s) cleaned up. Human review requested.`
-        : `Epic completed locally (PR skipped - no remote). ${cleanedUpCount} worker(s) cleaned up.`,
+      message: generateEpicPRResultMessage(prCreated, cleanedUpCount),
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

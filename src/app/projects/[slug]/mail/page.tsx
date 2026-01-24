@@ -7,21 +7,27 @@ import { trpc } from '../../../../frontend/lib/trpc';
 
 type MailFilter = { type: 'all' } | { type: 'human' } | { type: 'agent'; agentId: string };
 
-export default function ProjectMailPage() {
-  const params = useParams();
-  const slug = params.slug as string;
+function getPageTitle(filterType: MailFilter['type']): string {
+  if (filterType === 'all') {
+    return 'All System Mail';
+  }
+  if (filterType === 'human') {
+    return 'Mail Inbox';
+  }
+  return 'Agent Inbox';
+}
 
-  const [showComposeModal, setShowComposeModal] = useState(false);
-  const [filter, setFilter] = useState<MailFilter>({ type: 'human' });
+function getPageDescription(filter: MailFilter, agentType?: string): string {
+  if (filter.type === 'all') {
+    return 'All mail in the system';
+  }
+  if (filter.type === 'human') {
+    return 'Communication from agents';
+  }
+  return `Mail for ${agentType || 'agent'}`;
+}
 
-  // Get project for filtering
-  const { data: project } = trpc.project.getBySlug.useQuery({ slug });
-  const projectId = project?.id;
-
-  // Fetch agents for filter dropdown (scoped to project)
-  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
-
-  // Conditional mail queries based on filter - all scoped to project
+function useMailQuery(filter: MailFilter, projectId: string | undefined) {
   const allMailQuery = trpc.mail.listAll.useQuery(
     { includeRead: true, projectId },
     { enabled: filter.type === 'all' && !!projectId, refetchInterval: 5000 }
@@ -37,27 +43,40 @@ export default function ProjectMailPage() {
     { enabled: filter.type === 'agent', refetchInterval: 5000 }
   );
 
-  // Determine which data to use based on filter
-  const mail =
-    filter.type === 'all'
-      ? allMailQuery.data
-      : filter.type === 'human'
-        ? humanMailQuery.data
-        : agentMailQuery.data;
+  if (filter.type === 'all') {
+    return {
+      mail: allMailQuery.data,
+      isLoading: allMailQuery.isLoading,
+      refetch: allMailQuery.refetch,
+    };
+  }
+  if (filter.type === 'human') {
+    return {
+      mail: humanMailQuery.data,
+      isLoading: humanMailQuery.isLoading,
+      refetch: humanMailQuery.refetch,
+    };
+  }
+  return {
+    mail: agentMailQuery.data,
+    isLoading: agentMailQuery.isLoading,
+    refetch: agentMailQuery.refetch,
+  };
+}
 
-  const isLoading =
-    filter.type === 'all'
-      ? allMailQuery.isLoading
-      : filter.type === 'human'
-        ? humanMailQuery.isLoading
-        : agentMailQuery.isLoading;
+export default function ProjectMailPage() {
+  const params = useParams();
+  const slug = params.slug as string;
 
-  const refetch =
-    filter.type === 'all'
-      ? allMailQuery.refetch
-      : filter.type === 'human'
-        ? humanMailQuery.refetch
-        : agentMailQuery.refetch;
+  const [showComposeModal, setShowComposeModal] = useState(false);
+  const [filter, setFilter] = useState<MailFilter>({ type: 'human' });
+
+  const { data: project } = trpc.project.getBySlug.useQuery({ slug });
+  const projectId = project?.id;
+
+  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
+
+  const { mail, isLoading, refetch } = useMailQuery(filter, projectId);
 
   if (isLoading) {
     return (
@@ -75,19 +94,9 @@ export default function ProjectMailPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {filter.type === 'all'
-              ? 'All System Mail'
-              : filter.type === 'human'
-                ? 'Mail Inbox'
-                : `Agent Inbox`}
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900">{getPageTitle(filter.type)}</h1>
           <p className="text-gray-600 mt-1">
-            {filter.type === 'all'
-              ? 'All mail in the system'
-              : filter.type === 'human'
-                ? 'Communication from agents'
-                : `Mail for ${selectedAgent?.type || 'agent'}`}
+            {getPageDescription(filter, selectedAgent?.type)}
             {unreadCount > 0 && <span className="ml-2 text-blue-600">({unreadCount} unread)</span>}
           </p>
         </div>
