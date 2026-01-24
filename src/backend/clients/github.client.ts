@@ -17,7 +17,7 @@ export interface PRStatus {
   reviewDecision: string | null;
 }
 
-export class GitHubClient {
+class GitHubClient {
   async checkInstalled(): Promise<boolean> {
     try {
       await execAsync('gh --version');

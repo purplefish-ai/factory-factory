@@ -54,25 +54,10 @@ export function escapeShellArg(arg: string): string {
 }
 
 /**
- * Escape a string for use inside double quotes in bash.
- * Escapes: " ` $ \
- *
- * Use this when you need variable expansion or other double-quote features,
- * but be aware this is less safe than single-quote escaping.
- *
- * @example
- * escapeDoubleQuoted('say "hello"') // 'say \\"hello\\"'
- * escapeDoubleQuoted('cost is $100') // 'cost is \\$100'
- */
-export function escapeDoubleQuoted(str: string): string {
-  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-}
-
-/**
  * Escape a string for AppleScript osascript commands.
  * Handles multiple escaping layers: shell -> AppleScript.
  */
-export function escapeForOsascript(str: string): string {
+function escapeForOsascript(str: string): string {
   return str
     .replace(/[\r\n]+/g, ' ') // Normalize newlines
     .replace(/\\/g, '\\\\') // Escape backslashes for AppleScript
@@ -89,7 +74,7 @@ export function escapeForOsascript(str: string): string {
  * Validate a git branch name.
  * Allows: alphanumeric, hyphens, underscores, slashes, dots
  */
-export function isValidBranchName(name: string): boolean {
+function isValidBranchName(name: string): boolean {
   // Git branch name rules (simplified):
   // - No spaces, ~, ^, :, ?, *, [, \, consecutive dots, leading/trailing dots/slashes
   return /^[\w][\w\-./]*$/.test(name) && !name.includes('..') && !name.endsWith('/');
@@ -109,7 +94,7 @@ export function validateBranchName(name: string): string {
  * Validate a tmux session name.
  * Only allows: alphanumeric, underscores, hyphens
  */
-export function isValidSessionName(name: string): boolean {
+function isValidSessionName(name: string): boolean {
   return /^[\w-]+$/.test(name);
 }
 
@@ -121,24 +106,6 @@ export function validateSessionName(name: string): string {
     throw new Error(`Invalid tmux session name: ${name}`);
   }
   return name;
-}
-
-/**
- * Validate a file path for safety.
- * Checks for: null bytes, command substitution
- */
-export function isValidPath(path: string): boolean {
-  return !(path.includes('\0') || path.includes('`') || path.includes('$('));
-}
-
-/**
- * Validate a path and throw if invalid.
- */
-export function validatePath(path: string): string {
-  if (!isValidPath(path)) {
-    throw new Error(`Invalid path (contains unsafe characters): ${path}`);
-  }
-  return path;
 }
 
 // ============================================================================

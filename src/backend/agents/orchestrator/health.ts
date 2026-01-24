@@ -285,39 +285,6 @@ ${
 }
 
 /**
- * Send health check mail to a supervisor
- * Used to proactively check if a supervisor is still active
- */
-export async function sendSupervisorHealthCheck(
-  orchestratorId: string,
-  supervisorId: string,
-  taskId: string
-): Promise<void> {
-  const task = await taskAccessor.findById(taskId);
-  const taskTitle = task?.title || 'Unknown task';
-
-  // Validate both agents exist before sending mail
-  const orchestrator = await agentAccessor.findById(orchestratorId);
-  const supervisor = await agentAccessor.findById(supervisorId);
-
-  if (!(orchestrator && supervisor)) {
-    console.warn(
-      `Cannot send health check: orchestrator ${orchestrator ? 'exists' : 'missing'}, supervisor ${supervisor ? 'exists' : 'missing'}`
-    );
-    return;
-  }
-
-  await mailAccessor.create({
-    fromAgentId: orchestratorId,
-    toAgentId: supervisorId,
-    subject: 'Health Check - Please confirm you are active',
-    body: `This is a health check from the orchestrator.\n\nPlease confirm you are still active by replying to this message with your current status.\n\nTask: ${taskTitle}\nTask ID: ${taskId}\n\nIf you don't respond within 7 minutes, you may be marked as unresponsive and recovered.`,
-  });
-
-  console.log(`Sent health check to supervisor ${supervisorId} for task ${taskId}`);
-}
-
-/**
  * Get health summary for all supervisors
  */
 export async function getSupervisorHealthSummary(): Promise<{

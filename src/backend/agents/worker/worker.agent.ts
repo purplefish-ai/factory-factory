@@ -528,13 +528,6 @@ export async function killWorker(agentId: string): Promise<void> {
 }
 
 /**
- * Get list of active workers
- */
-export function getActiveWorkers(): WorkerContext[] {
-  return Array.from(activeWorkers.values());
-}
-
-/**
  * Check if a worker is running
  */
 export function isWorkerRunning(agentId: string): boolean {

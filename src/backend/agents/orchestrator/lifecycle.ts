@@ -187,16 +187,3 @@ export async function getOrchestratorStatus(agentId: string): Promise<{
     minutesSinceHeartbeat,
   };
 }
-
-/**
- * Ensure an orchestrator is running
- * This is meant to be called during system startup
- */
-export async function ensureOrchestratorRunning(): Promise<string> {
-  const existingId = await getOrchestrator();
-  if (existingId && isOrchestratorRunning(existingId)) {
-    return existingId;
-  }
-
-  return startOrchestrator();
-}

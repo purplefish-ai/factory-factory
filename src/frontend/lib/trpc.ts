@@ -28,10 +28,6 @@ export function setProjectContext(projectId?: string, taskId?: string) {
   currentTaskId = taskId;
 }
 
-export function getProjectContext() {
-  return { projectId: currentProjectId, taskId: currentTaskId };
-}
-
 export const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({

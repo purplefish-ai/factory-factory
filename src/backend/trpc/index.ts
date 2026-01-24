@@ -18,6 +18,6 @@ export const appRouter = router({
 // Export type for use in frontend
 export type AppRouter = typeof appRouter;
 
-export { projectScopedProcedure, topLevelTaskScopedProcedure } from './procedures/index.js';
+export { projectScopedProcedure } from './procedures/index.js';
 // Re-export context and procedure helpers
 export { createContext, publicProcedure } from './trpc.js';

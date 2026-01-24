@@ -1,0 +1,71 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/app/**/*.{ts,tsx}",
+    "scripts/**/*.ts",
+    "src/backend/testing/smoke-test.ts",
+    "src/backend/testing/test-scenarios.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
+  "paths": {
+    "@/*": ["src/*"],
+    "@prisma-gen/*": ["prisma/generated/*"]
+  },
+  "ignore": [
+    "src/components/ui/**",
+    "src/backend/agents/prompts/**/index.ts",
+    "src/backend/services/index.ts",
+    "src/backend/services/*.service.ts",
+    "src/backend/resource_accessors/index.ts",
+    "src/backend/clients/index.ts",
+    "src/backend/trpc/index.ts",
+    "src/backend/trpc/procedures/index.ts"
+  ],
+  "ignoreDependencies": [
+    "autoprefixer",
+    "tw-animate-css",
+    "@prisma/client",
+    "@radix-ui/react-accordion",
+    "@radix-ui/react-alert-dialog",
+    "@radix-ui/react-aspect-ratio",
+    "@radix-ui/react-avatar",
+    "@radix-ui/react-checkbox",
+    "@radix-ui/react-context-menu",
+    "@radix-ui/react-dropdown-menu",
+    "@radix-ui/react-hover-card",
+    "@radix-ui/react-menubar",
+    "@radix-ui/react-navigation-menu",
+    "@radix-ui/react-popover",
+    "@radix-ui/react-progress",
+    "@radix-ui/react-radio-group",
+    "@radix-ui/react-scroll-area",
+    "@radix-ui/react-slider",
+    "@radix-ui/react-switch",
+    "@radix-ui/react-tabs",
+    "@radix-ui/react-toggle",
+    "@radix-ui/react-toggle-group",
+    "@xterm/addon-fit",
+    "@xterm/addon-web-links",
+    "@xterm/xterm",
+    "cmdk",
+    "date-fns",
+    "embla-carousel-react",
+    "input-otp",
+    "next-themes",
+    "react-day-picker",
+    "react-hook-form",
+    "react-resizable-panels",
+    "recharts",
+    "sonner",
+    "tailwindcss-animate",
+    "vaul",
+    "@hookform/resolvers"
+  ],
+  "ignoreBinaries": ["jq"],
+  "vitest": {
+    "entry": ["src/**/*.test.ts", "vitest.config.ts"]
+  },
+  "next": {
+    "entry": ["src/app/**/*.{ts,tsx}", "next.config.ts"]
+  }
+}

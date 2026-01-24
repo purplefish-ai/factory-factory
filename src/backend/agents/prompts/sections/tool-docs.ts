@@ -14,7 +14,7 @@ export interface ToolDocOptions {
 /**
  * Generate documentation for a single tool with curl example
  */
-export function generateToolDoc(tool: ToolDefinition, options?: ToolDocOptions): string {
+function generateToolDoc(tool: ToolDefinition, options?: ToolDocOptions): string {
   const placeholder = options?.agentIdPlaceholder ?? 'YOUR_AGENT_ID';
   const url = options?.backendUrl ?? 'http://localhost:3001';
 

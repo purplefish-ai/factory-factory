@@ -270,26 +270,3 @@ export class GitClientFactory {
     return GitClientFactory.instances.size;
   }
 }
-
-/**
- * @deprecated Use GitClientFactory.forProject() instead.
- * This singleton is kept temporarily for backward compatibility during migration.
- */
-let _gitClient: GitClient | null = null;
-
-export const gitClient = new Proxy({} as GitClient, {
-  get(_target, prop) {
-    if (!_gitClient) {
-      const baseRepoPath = process.env.GIT_BASE_REPO_PATH;
-      const worktreeBase = process.env.GIT_WORKTREE_BASE;
-      if (!(baseRepoPath && worktreeBase)) {
-        throw new Error(
-          'GIT_BASE_REPO_PATH and GIT_WORKTREE_BASE environment variables are required. ' +
-            'Consider using GitClientFactory.forProject() instead.'
-        );
-      }
-      _gitClient = new GitClient({ baseRepoPath, worktreeBase });
-    }
-    return _gitClient[prop as keyof GitClient];
-  },
-});

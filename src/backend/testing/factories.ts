@@ -1,14 +1,10 @@
-import type { Agent, Mail, Project, Task, TaskDependency } from '@prisma-gen/client';
+import type { Agent, Mail, Project, Task } from '@prisma-gen/client';
 import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
 
 let idCounter = 0;
 
 function generateId(): string {
   return `test-id-${++idCounter}`;
-}
-
-function resetIdCounter(): void {
-  idCounter = 0;
 }
 
 export interface ProjectOverrides {
@@ -148,23 +144,3 @@ export function createMail(overrides: MailOverrides = {}): Mail {
     readAt: overrides.readAt ?? null,
   };
 }
-
-export interface TaskDependencyOverrides {
-  id?: string;
-  taskId?: string;
-  dependsOnId?: string;
-  createdAt?: Date;
-}
-
-export function createTaskDependency(overrides: TaskDependencyOverrides = {}): TaskDependency {
-  const id = overrides.id ?? generateId();
-  const now = new Date();
-  return {
-    id,
-    taskId: overrides.taskId ?? generateId(),
-    dependsOnId: overrides.dependsOnId ?? generateId(),
-    createdAt: overrides.createdAt ?? now,
-  };
-}
-
-export { resetIdCounter };

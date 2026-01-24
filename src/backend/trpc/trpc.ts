@@ -6,7 +6,7 @@ import superjson from 'superjson';
  * Context for tRPC procedures.
  * Contains optional project/top-level task scoping from request headers.
  */
-export type Context = {
+type Context = {
   /** Project ID from X-Project-Id header */
   projectId?: string;
   /** Top-level Task ID from X-Top-Level-Task-Id header */

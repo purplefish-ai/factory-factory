@@ -30,7 +30,7 @@ export interface RateLimiterConfig {
 /**
  * Request priority levels
  */
-export enum RequestPriority {
+enum RequestPriority {
   ORCHESTRATOR = 0, // Highest priority
   SUPERVISOR = 1,
   WORKER = 2, // Lowest priority
@@ -93,7 +93,7 @@ function getDefaultConfig(): RateLimiterConfig {
 /**
  * Rate Limiter class for managing API and concurrency limits
  */
-export class RateLimiter {
+class RateLimiter {
   private config: RateLimiterConfig;
 
   // Request tracking

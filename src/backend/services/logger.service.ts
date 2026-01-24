@@ -5,7 +5,7 @@
  * Uses a simple but effective logging format compatible with log aggregation tools.
  */
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 interface LogEntry {
   level: LogLevel;
@@ -22,7 +22,7 @@ interface LogEntry {
 /**
  * Logger configuration
  */
-export interface LoggerConfig {
+interface LoggerConfig {
   level: LogLevel;
   prettyPrint: boolean;
   includeTimestamp: boolean;
@@ -60,7 +60,7 @@ function getDefaultConfig(): LoggerConfig {
 /**
  * Logger class for structured logging
  */
-export class Logger {
+class Logger {
   private config: LoggerConfig;
   private component: string;
 
@@ -283,12 +283,7 @@ export class Logger {
   }
 }
 
-// Create root logger
-const rootLogger = new Logger('root');
-
-// Export factory function and singleton
+// Export factory function
 export function createLogger(component: string): Logger {
   return new Logger(component);
 }
-
-export const logger = rootLogger;

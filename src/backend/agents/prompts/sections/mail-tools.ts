@@ -9,7 +9,7 @@ import type { AgentType, ToolDefinition } from '../types.js';
 /**
  * Mail tool definitions
  */
-export const MAIL_TOOLS: Record<string, ToolDefinition> = {
+const MAIL_TOOLS: Record<string, ToolDefinition> = {
   listInbox: {
     name: 'mcp__mail__list_inbox',
     description: 'Check for messages',

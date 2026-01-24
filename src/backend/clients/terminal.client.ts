@@ -20,30 +20,6 @@ export function tmuxSessionExists(sessionName: string): Promise<boolean> {
 }
 
 /**
- * Attach to a tmux session and return session info
- */
-export async function attachToTmuxSession(sessionName: string): Promise<{
-  sessionName: string;
-  exists: boolean;
-  error?: string;
-}> {
-  const exists = await tmuxSessionExists(sessionName);
-
-  if (!exists) {
-    return {
-      sessionName,
-      exists: false,
-      error: `Tmux session '${sessionName}' does not exist`,
-    };
-  }
-
-  return {
-    sessionName,
-    exists: true,
-  };
-}
-
-/**
  * Read session output from tmux session buffer
  */
 export function readSessionOutput(sessionName: string, lines = 100): Promise<string> {
@@ -127,27 +103,6 @@ export function listTmuxSessions(): Promise<
       } else {
         // No sessions is not an error, just return empty array
         resolve([]);
-      }
-    });
-
-    proc.on('error', (error) => {
-      reject(error);
-    });
-  });
-}
-
-/**
- * Send keys to a tmux session
- */
-export function sendKeysToSession(sessionName: string, keys: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('tmux', ['send-keys', '-t', sessionName, keys]);
-
-    proc.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Failed to send keys to session (exit code: ${code})`));
       }
     });
 

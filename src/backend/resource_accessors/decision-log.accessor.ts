@@ -1,14 +1,14 @@
 import type { DecisionLog } from '@prisma-gen/client';
 import { prisma } from '../db';
 
-export interface CreateDecisionLogInput {
+interface CreateDecisionLogInput {
   agentId: string;
   decision: string;
   reasoning: string;
   context?: string;
 }
 
-export class DecisionLogAccessor {
+class DecisionLogAccessor {
   create(data: CreateDecisionLogInput): Promise<DecisionLog> {
     return prisma.decisionLog.create({
       data: {

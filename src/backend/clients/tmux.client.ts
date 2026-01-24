@@ -1,6 +1,6 @@
 import { escapeShellArg, execShell, tmuxCommand, validateSessionName } from '../lib/shell.js';
 
-export interface TmuxSession {
+interface TmuxSession {
   name: string;
   windows: number;
   created: string;
@@ -11,7 +11,7 @@ export interface TmuxSession {
  * Centralized tmux client for all tmux operations.
  * All tmux commands should go through this client to ensure consistency.
  */
-export class TmuxClient {
+class TmuxClient {
   private socketPath?: string;
 
   constructor() {

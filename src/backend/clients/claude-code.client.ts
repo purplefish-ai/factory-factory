@@ -2,7 +2,7 @@ import { promptFileManager } from '../agents/prompts/file-manager.js';
 import { requireClaudeSetup } from './claude-auth.js';
 import { tmuxClient } from './tmux.client.js';
 
-export interface AgentExecutionProfile {
+interface AgentExecutionProfile {
   model?: string;
   permissions: 'skip' | 'prompt';
   sessionId?: string;
@@ -17,7 +17,7 @@ export interface WorkerSessionContext {
 }
 
 // Agent execution profiles
-export const AGENT_PROFILES: Record<string, AgentExecutionProfile> = {
+const AGENT_PROFILES: Record<string, AgentExecutionProfile> = {
   worker: {
     model: process.env.WORKER_MODEL || 'claude-sonnet-4-5-20250929',
     permissions: 'skip', // Use --dangerously-skip-permissions
@@ -145,50 +145,15 @@ function buildClaudeCommand(
 }
 
 /**
- * Resume existing Claude session
- */
-export async function resumeSession(
-  agentId: string,
-  sessionId: string,
-  workingDir: string,
-  agentType: AgentType = 'worker'
-): Promise<WorkerSessionContext> {
-  await requireClaudeSetup();
-
-  const tmuxSessionName = getTmuxSessionName(agentId);
-  const profile = AGENT_PROFILES[agentType] ?? AGENT_PROFILES.worker;
-
-  // Check if tmux session exists
-  const exists = await tmuxClient.sessionExists(tmuxSessionName);
-  if (!exists) {
-    throw new Error(`Tmux session ${tmuxSessionName} does not exist. Cannot resume.`);
-  }
-
-  // Build resume command
-  const resumeCommand = buildResumeCommand(sessionId, profile);
-
-  // Send resume command to tmux
-  await tmuxClient.sendMessage(tmuxSessionName, resumeCommand);
-
-  return {
-    agentId,
-    sessionId,
-    tmuxSessionName,
-    systemPromptPath: '', // Not needed for resume
-    workingDir,
-  };
-}
-
-/**
- * Build Claude resume command
+ * Build Claude Code CLI command for resuming an existing session
  */
 function buildResumeCommand(sessionId: string, profile: AgentExecutionProfile): string {
   const parts = ['claude'];
 
-  // Resume with session ID
+  // Resume existing session
   parts.push(`--resume ${sessionId}`);
 
-  // Skip permissions
+  // Skip permissions for automation
   if (profile.permissions === 'skip') {
     parts.push('--dangerously-skip-permissions');
   }
@@ -278,11 +243,4 @@ export async function killSession(agentId: string): Promise<void> {
 
   // Cleanup system prompt file
   promptFileManager.deletePromptFile(agentId);
-}
-
-/**
- * List all worker tmux sessions
- */
-export function listWorkerSessions(): Promise<string[]> {
-  return tmuxClient.listSessionsByPrefix('worker-');
 }

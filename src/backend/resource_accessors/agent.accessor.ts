@@ -3,14 +3,14 @@ import { AgentState, AgentType } from '@prisma-gen/client';
 import { prisma } from '../db.js';
 import { taskAccessor } from './task.accessor.js';
 
-export interface CreateAgentInput {
+interface CreateAgentInput {
   type: AgentType;
   state?: AgentState;
   currentTaskId?: string;
   tmuxSessionName?: string;
 }
 
-export interface UpdateAgentInput {
+interface UpdateAgentInput {
   state?: AgentState;
   currentTaskId?: string | null;
   tmuxSessionName?: string | null;
@@ -18,7 +18,7 @@ export interface UpdateAgentInput {
   lastActiveAt?: Date;
 }
 
-export interface ListAgentsFilters {
+interface ListAgentsFilters {
   type?: AgentType;
   state?: AgentState;
   projectId?: string;
@@ -26,7 +26,7 @@ export interface ListAgentsFilters {
   offset?: number;
 }
 
-export class AgentAccessor {
+class AgentAccessor {
   create(data: CreateAgentInput): Promise<Agent> {
     return prisma.agent.create({
       data: {
