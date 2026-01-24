@@ -14,7 +14,7 @@ export const projectRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
+    .query(({ input }) => {
       return projectAccessor.list(input);
     }),
 
@@ -80,14 +80,12 @@ export const projectRouter = router({
     }),
 
   // Archive a project (soft delete)
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
     return projectAccessor.archive(input.id);
   }),
 
   // Validate repo path
-  validateRepoPath: publicProcedure
-    .input(z.object({ repoPath: z.string() }))
-    .query(async ({ input }) => {
-      return projectAccessor.validateRepoPath(input.repoPath);
-    }),
+  validateRepoPath: publicProcedure.input(z.object({ repoPath: z.string() })).query(({ input }) => {
+    return projectAccessor.validateRepoPath(input.repoPath);
+  }),
 });

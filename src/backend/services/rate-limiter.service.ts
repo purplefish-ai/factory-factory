@@ -155,7 +155,7 @@ export class RateLimiter {
    * Acquire a rate limit slot for an API request
    * Returns a promise that resolves when the request can proceed
    */
-  async acquireSlot(
+  acquireSlot(
     agentId: string,
     epicId: string | null,
     priority: RequestPriority = RequestPriority.WORKER
@@ -163,12 +163,12 @@ export class RateLimiter {
     // Check if we can proceed immediately
     if (!this.isRateLimited()) {
       this.recordRequest(agentId, epicId);
-      return;
+      return Promise.resolve();
     }
 
     // Queue the request
     if (this.requestQueue.length >= this.config.maxQueueSize) {
-      throw new Error('Rate limit queue is full');
+      return Promise.reject(new Error('Rate limit queue is full'));
     }
 
     return new Promise<void>((resolve, reject) => {

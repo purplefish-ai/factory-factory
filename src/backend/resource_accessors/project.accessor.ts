@@ -149,7 +149,7 @@ export class ProjectAccessor {
     throw new Error(`Unable to create project: too many projects with similar names`);
   }
 
-  async findById(id: string): Promise<ProjectWithEpics | null> {
+  findById(id: string): Promise<ProjectWithEpics | null> {
     return prisma.project.findUnique({
       where: { id },
       include: {
@@ -161,7 +161,7 @@ export class ProjectAccessor {
     });
   }
 
-  async findBySlug(slug: string): Promise<ProjectWithEpics | null> {
+  findBySlug(slug: string): Promise<ProjectWithEpics | null> {
     return prisma.project.findUnique({
       where: { slug },
       include: {
@@ -173,14 +173,14 @@ export class ProjectAccessor {
     });
   }
 
-  async update(id: string, data: UpdateProjectInput): Promise<Project> {
+  update(id: string, data: UpdateProjectInput): Promise<Project> {
     return prisma.project.update({
       where: { id },
       data,
     });
   }
 
-  async list(filters?: ListProjectsFilters): Promise<Project[]> {
+  list(filters?: ListProjectsFilters): Promise<Project[]> {
     const where: Prisma.ProjectWhereInput = {};
 
     if (filters?.isArchived !== undefined) {
@@ -200,7 +200,7 @@ export class ProjectAccessor {
     });
   }
 
-  async archive(id: string): Promise<Project> {
+  archive(id: string): Promise<Project> {
     return prisma.project.update({
       where: { id },
       data: { isArchived: true },

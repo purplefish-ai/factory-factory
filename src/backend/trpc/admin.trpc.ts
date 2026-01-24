@@ -338,7 +338,7 @@ export const adminRouter = router({
         maxConcurrentEpics: z.number().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(({ input }) => {
       logger.info('Updating rate limits', input);
 
       rateLimiter.updateConfig(input);
@@ -358,7 +358,7 @@ export const adminRouter = router({
         agentId: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(({ input }) => {
       if (input.agentId) {
         crashRecoveryService.clearCrashRecords(input.agentId);
         return { success: true, message: `Crash records cleared for ${input.agentId}` };
