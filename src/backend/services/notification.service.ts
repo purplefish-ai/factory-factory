@@ -66,15 +66,22 @@ function escapeForShell(str: string): string {
 }
 
 /**
- * Escape and truncate string for osascript notifications
- * osascript doesn't handle newlines well in notifications
+ * Escape and truncate string for osascript notifications.
+ * The script is passed via: osascript -e 'display notification "..." with title "..."'
+ * Using single quotes for the shell command prevents backtick/$ interpretation.
+ * We use double quotes for AppleScript strings (inside the single-quoted shell arg).
+ *
+ * Escaping layers:
+ * 1. Shell single quotes: ' -> '\'' (end quote, escaped quote, start quote)
+ * 2. AppleScript double quotes: " -> \"
+ * 3. AppleScript backslashes: \ -> \\
  */
 function escapeForOsascript(str: string): string {
-  // Replace newlines with spaces, escape single quotes, and truncate if too long
   const cleaned = str
     .replace(/[\r\n]+/g, ' ') // Replace newlines with spaces
-    .replace(/'/g, "'\\''") // Escape single quotes
-    .replace(/\\/g, '\\\\') // Escape backslashes
+    .replace(/\\/g, '\\\\') // Escape backslashes for AppleScript
+    .replace(/"/g, '\\"') // Escape double quotes for AppleScript strings
+    .replace(/'/g, "'\\''") // Escape single quotes for shell
     .slice(0, 200); // Truncate to reasonable length for notifications
   return cleaned;
 }
@@ -90,14 +97,16 @@ async function sendMacOSNotification(
   const escapedTitle = escapeForOsascript(title);
   const escapedMessage = escapeForOsascript(message);
 
-  let script = `display notification '${escapedMessage}' with title '${escapedTitle}'`;
+  // Use single quotes for shell to prevent backtick/$ interpretation
+  // Use double quotes for AppleScript strings
+  let script = `display notification "${escapedMessage}" with title "${escapedTitle}"`;
 
   if (soundEnabled) {
     script += ` sound name "Glass"`;
   }
 
   try {
-    await execAsync(`osascript -e "${script.replace(/"/g, '\\"')}"`);
+    await execAsync(`osascript -e '${script}'`);
     console.log(`macOS notification sent: ${title}`);
   } catch (error) {
     console.error('Failed to send macOS notification:', error);
