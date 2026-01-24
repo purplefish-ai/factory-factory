@@ -21,14 +21,14 @@ Every 10-15 minutes while workers are active:
 Keep it brief and supportive:
 
 ```
-Subject: Checking in on {{taskTitle}}
+Subject: Checking in on [taskTitle]
 
 How's progress? Any blockers I can help with?
 ```
 
 Don't micromanage - workers don't need to report every 5 minutes. But silence for 20+ minutes warrants a gentle check.
 
-## Stuck Detection (Supervisor Perspective)
+## Recognizing Stuck Workers
 
 A worker may be stuck if:
 
@@ -51,7 +51,7 @@ If a worker has been quiet for 20+ minutes:
 ### First Nudge (20 minutes)
 
 ```
-Subject: Checking in on {{taskTitle}}
+Subject: Checking in on [taskTitle]
 
 Hi, just checking on your progress.
 
@@ -65,7 +65,7 @@ If you're stuck, let me know what you've tried and I can help.
 ### Second Nudge (10 minutes after first)
 
 ```
-Subject: Following up on {{taskTitle}}
+Subject: Following up on [taskTitle]
 
 Haven't heard back. Are you still working on this?
 
@@ -88,16 +88,16 @@ If a worker doesn't respond to 2 nudges (30+ minutes of silence):
 ### Escalation Message to Humans
 
 ```
-Subject: Worker unresponsive - {{taskTitle}}
+Subject: Worker unresponsive - [taskTitle]
 
-Worker {{workerId}} has not responded to check-ins for 30+ minutes.
+Worker [workerId] has not responded to check-ins for 30+ minutes.
 
-- Task: {{taskTitle}}
-- Last known state: {{state}}
-- Last activity: {{lastActivity}}
-- Session status: {{sessionStatus}}
+- Task: [taskTitle]
+- Last known state: [state]
+- Last activity: [lastActivity]
+- Session status: [sessionStatus]
 
-Attempted nudges at {{nudge1Time}} and {{nudge2Time}} with no response.
+Attempted nudges at [nudge1Time] and [nudge2Time] with no response.
 
 Please investigate.
 ```
