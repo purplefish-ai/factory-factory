@@ -28,7 +28,7 @@
     "db:studio": "prisma studio",
     "db:push": "prisma db push",
     "backend:dev": "tsx watch src/backend/index.ts",
-    "inngest:dev": "inngest-cli dev",
+    "inngest:dev": "inngest-cli dev --no-discovery -u http://localhost:3001/api/inngest",
     "health": "curl -s http://localhost:3001/health | jq",
     "health:all": "curl -s http://localhost:3001/health/all | jq",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
