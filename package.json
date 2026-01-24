@@ -3,17 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.28.1",
   "scripts": {
     "dev": "next dev",
-    "dev:all": "concurrently \"npm run dev\" \"npm run backend:dev\" \"npm run inngest:dev\"",
+    "dev:all": "concurrently \"pnpm dev\" \"pnpm backend:dev\" \"pnpm inngest:dev\"",
     "build": "next build",
     "build:backend": "tsc -p tsconfig.backend.json",
     "build:frontend": "next build",
-    "build:all": "npm run build:backend && npm run build:frontend",
+    "build:all": "pnpm build:backend && pnpm build:frontend",
     "start": "next start",
     "start:backend": "node dist/src/backend/index.js",
     "start:frontend": "next start",
-    "start:all": "concurrently \"npm run start:frontend\" \"npm run start:backend\"",
+    "start:all": "concurrently \"pnpm start:frontend\" \"pnpm start:backend\"",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
@@ -60,6 +61,17 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,md}": [
       "biome check --write"
+    ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "esbuild",
+      "inngest-cli",
+      "node-pty",
+      "prisma",
+      "protobufjs",
+      "sharp"
     ]
   },
   "devDependencies": {

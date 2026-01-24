@@ -5,12 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev:all       # Start frontend + backend + Inngest
-npm run db:migrate    # Run Prisma migrations
-npm run db:generate   # Regenerate Prisma client after schema changes
-npm run check:fix     # Lint + format with Biome
-npm run typecheck     # TypeScript checking
-npm run build:all     # Build for production
+pnpm dev:all       # Start frontend + backend + Inngest
+pnpm db:migrate    # Run Prisma migrations
+pnpm db:generate   # Regenerate Prisma client after schema changes
+pnpm check:fix     # Lint + format with Biome
+pnpm typecheck     # TypeScript checking
+pnpm build:all     # Build for production
 ```
 
 ## Architecture
