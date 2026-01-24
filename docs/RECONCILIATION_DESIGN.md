@@ -63,6 +63,7 @@ The current model can't express important scenarios:
 ├─────────────────────────────────────────────────────────────────────┤
 │  state: TaskState          // About the WORK                        │
 │    - PENDING               // Not started                           │
+│    - PLANNING              // Top-level only: breaking down work    │
 │    - IN_PROGRESS           // Being worked on                       │
 │    - REVIEW                // Submitted for review                  │
 │    - COMPLETED             // Work accepted                         │
@@ -187,9 +188,14 @@ This is independent of whether an agent is running.
 ├─────────────────┼──────────────────────────────────────────────────────┤
 │ PENDING         │ None (task not ready for work yet)                   │
 ├─────────────────┼──────────────────────────────────────────────────────┤
+│ PLANNING        │ Top-level tasks only (epics):                        │
+│                 │ • Worktree exists for supervisor                     │
+│                 │ • Epic branch exists                                 │
+│                 │ • No PR yet (created when subtasks complete)         │
+├─────────────────┼──────────────────────────────────────────────────────┤
 │ IN_PROGRESS     │ • Worktree exists at task.worktreePath               │
 │                 │ • Branch exists: task.branchName                     │
-│                 │ • Draft PR exists: task.draftPrUrl                   │
+│                 │ • Draft PR created after first commit                │
 │                 │ • Branch is based on parent (epic) branch            │
 │                 │ (Agent may or may not be running - separate concern) │
 ├─────────────────┼──────────────────────────────────────────────────────┤
@@ -198,8 +204,8 @@ This is independent of whether an agent is running.
 │                 │ • PR has latest commits pushed                       │
 ├─────────────────┼──────────────────────────────────────────────────────┤
 │ COMPLETED       │ • PR is merged                                       │
-│                 │ • Worktree can be cleaned up                         │
-│                 │ • Branch can be deleted                              │
+│                 │ • Worktree cleaned up                                │
+│                 │ • Branch deleted                                     │
 ├─────────────────┼──────────────────────────────────────────────────────┤
 │ FAILED          │ • Worktree preserved for debugging                   │
 │                 │ • PR remains as draft                                │
@@ -220,7 +226,7 @@ This is independent of task infrastructure.
 │ Agent Desired State         │ Required Execution                        │
 ├─────────────────────────────┼───────────────────────────────────────────┤
 │ ACTIVE                      │ • Tmux session exists and running         │
-│ (and task is IN_PROGRESS)   │ • Claude Code process is alive            │
+│ (and task is workable)      │ • Claude Code process is alive            │
 │                             │ • Recent heartbeat (< 5 min)              │
 ├─────────────────────────────┼───────────────────────────────────────────┤
 │ PAUSED                      │ • No tmux session should exist            │
@@ -229,57 +235,96 @@ This is independent of task infrastructure.
 ├─────────────────────────────┼───────────────────────────────────────────┤
 │ IDLE                        │ • No tmux session                         │
 │                             │ • Agent available for new work            │
+├─────────────────────────────┼───────────────────────────────────────────┤
+│ CRASHED (actual, not        │ • Tmux session may or may not exist       │
+│ desired - detected state)   │ • Reconciler will restart → ACTIVE        │
+│                             │ • Track crash count for alerting          │
 └─────────────────────────────┴───────────────────────────────────────────┘
 ```
 
 ### Combined Reconciliation Matrix
 
-The reconciler checks both dimensions independently:
+The reconciler checks both dimensions independently. This matrix is exhaustive for all task state × agent state combinations:
 
 ```
 ┌─────────────┬─────────────┬─────────────────────────────────────────────┐
 │ Task State  │ Agent State │ Reconciler Actions                          │
 ├─────────────┼─────────────┼─────────────────────────────────────────────┤
+│ PENDING     │ *           │ No infra needed, no agent needed            │
+├─────────────┼─────────────┼─────────────────────────────────────────────┤
+│ PLANNING    │ ACTIVE      │ Ensure worktree+branch + Ensure session     │
+│ PLANNING    │ PAUSED      │ Ensure worktree+branch only (deferred)      │
+│ PLANNING    │ CRASHED     │ Ensure worktree+branch + Restart session    │
+│ PLANNING    │ IDLE/(none) │ Ensure worktree+branch + Assign supervisor  │
+├─────────────┼─────────────┼─────────────────────────────────────────────┤
 │ IN_PROGRESS │ ACTIVE      │ Ensure infra + Ensure session running       │
 │ IN_PROGRESS │ PAUSED      │ Ensure infra only (deferred work)           │
 │ IN_PROGRESS │ CRASHED     │ Ensure infra + Restart session              │
-│ IN_PROGRESS │ (none)      │ Ensure infra + Assign agent                 │
+│ IN_PROGRESS │ IDLE/(none) │ Ensure infra + Assign agent                 │
 ├─────────────┼─────────────┼─────────────────────────────────────────────┤
 │ REVIEW      │ ACTIVE      │ Ensure infra + Mark PR ready + Stop agent   │
 │ REVIEW      │ PAUSED      │ Ensure infra + Mark PR ready                │
-│ REVIEW      │ IDLE        │ Ensure infra + Mark PR ready                │
+│ REVIEW      │ CRASHED     │ Ensure infra + Mark PR ready (no restart)   │
+│ REVIEW      │ IDLE/(none) │ Ensure infra + Mark PR ready                │
 ├─────────────┼─────────────┼─────────────────────────────────────────────┤
-│ BLOCKED     │ ACTIVE      │ Ensure infra + Pause agent (no point)       │
+│ BLOCKED     │ ACTIVE      │ Ensure infra + Stop agent (no point)        │
 │ BLOCKED     │ PAUSED      │ Ensure infra only                           │
+│ BLOCKED     │ CRASHED     │ Ensure infra only (don't restart)           │
+│ BLOCKED     │ IDLE/(none) │ Ensure infra only (don't assign)            │
 ├─────────────┼─────────────┼─────────────────────────────────────────────┤
-│ COMPLETED   │ *           │ Cleanup infra + Release agent               │
-│ FAILED      │ *           │ Preserve infra + Release agent              │
+│ COMPLETED   │ ACTIVE      │ Cleanup infra + Stop agent + Set IDLE       │
+│ COMPLETED   │ PAUSED      │ Cleanup infra + Set agent IDLE              │
+│ COMPLETED   │ CRASHED     │ Cleanup infra + Set agent IDLE              │
+│ COMPLETED   │ IDLE/(none) │ Cleanup infra                               │
+├─────────────┼─────────────┼─────────────────────────────────────────────┤
+│ FAILED      │ ACTIVE      │ Preserve infra + Stop agent + Set IDLE      │
+│ FAILED      │ PAUSED      │ Preserve infra + Set agent IDLE             │
+│ FAILED      │ CRASHED     │ Preserve infra + Set agent IDLE             │
+│ FAILED      │ IDLE/(none) │ Preserve infra                              │
 └─────────────┴─────────────┴─────────────────────────────────────────────┘
 ```
 
-### Top-Level Task (Epic) Infrastructure
-
-```
-┌─────────────────┬──────────────────────────────────────────────────────┐
-│ Task State      │ Required Infrastructure                              │
-├─────────────────┼──────────────────────────────────────────────────────┤
-│ PLANNING        │ • Worktree exists for supervisor                     │
-│                 │ • Epic branch exists                                 │
-├─────────────────┼──────────────────────────────────────────────────────┤
-│ IN_PROGRESS     │ Same as PLANNING                                     │
-│                 │ (Supervisor agent state is separate)                 │
-├─────────────────┼──────────────────────────────────────────────────────┤
-│ COMPLETED       │ • Final PR exists (epic branch → main)               │
-│                 │ • All subtask infrastructure cleaned up              │
-└─────────────────┴──────────────────────────────────────────────────────┘
-```
+Key observations:
+- **PLANNING/IN_PROGRESS**: Agent should run (if ACTIVE) since work is needed
+- **REVIEW**: Agent stops - work is done, waiting for approval
+- **BLOCKED**: Agent stops - waiting on external factors, no point running
+- **COMPLETED**: Cleanup infrastructure, release agent to IDLE for reuse
+- **FAILED**: Preserve infrastructure for debugging, release agent
 
 ## Reconciliation Loop
+
+### Triggering Strategy
+
+The reconciler can be triggered in two complementary ways:
+
+1. **Periodic (every 30s)** - Catches drift, ensures eventual consistency
+2. **Event-triggered** - Immediate reconciliation when state changes
+
+```typescript
+// Event-triggered: immediate reconciliation for a specific task
+async function taskStateChanged({ event }) {
+  // Event handler updates state (simple)
+  await taskAccessor.update(event.data.taskId, { state: event.data.newState });
+
+  // Then immediately trigger reconciliation for just this task (fast)
+  await reconcileTaskInfrastructure(
+    await taskAccessor.findById(event.data.taskId)
+  );
+}
+
+// Periodic: catches anything that was missed, handles drift
+// Inngest cron runs every 30s as backup
+```
+
+This hybrid approach gives you:
+- **Responsiveness**: State changes take effect immediately
+- **Reliability**: Periodic check catches any edge cases
+- **Simplicity**: Still level-triggered (checking desired vs actual), just triggered more often
 
 ### High-Level Flow
 
 ```
-Every 30 seconds (Inngest cron):
+Triggered by: Events (immediate) OR Cron (every 30s)
 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         RECONCILIATION LOOP                             │
@@ -321,20 +366,41 @@ Every 30 seconds (Inngest cron):
 With separated concerns, the reconciler has two independent loops:
 
 ```typescript
+// Prevent overlapping reconciliation runs
+let reconciliationInProgress = false;
+
 // Main reconciliation entry point
 async function runReconciliation() {
-  // 1. Reconcile all task infrastructure (independent of agents)
-  const activeTasks = await taskAccessor.findActive();
-  for (const task of activeTasks) {
-    await reconcileTaskInfrastructure(task);
+  // Guard against overlapping runs (if previous cycle takes >30s)
+  if (reconciliationInProgress) {
+    console.log('Reconciliation already in progress, skipping');
+    return;
   }
 
-  // 2. Reconcile all agent execution (independent of tasks)
-  const agents = await agentAccessor.findAll();
-  for (const agent of agents) {
-    await reconcileAgentExecution(agent);
+  reconciliationInProgress = true;
+  try {
+    // 1. Reconcile all task infrastructure (independent of agents)
+    const activeTasks = await taskAccessor.findActive();
+    for (const task of activeTasks) {
+      await reconcileTaskInfrastructure(task);
+    }
+
+    // 2. Reconcile all agent execution (independent of tasks)
+    const agents = await agentAccessor.findAll();
+    for (const agent of agents) {
+      await reconcileAgentExecution(agent);
+    }
+  } finally {
+    reconciliationInProgress = false;
   }
 }
+
+// Alternative: Use Inngest's concurrency control
+// inngest.createFunction(
+//   { id: 'reconciler', concurrency: { limit: 1 } },
+//   { cron: '*/30 * * * * *' },
+//   async () => { ... }
+// )
 
 // Task infrastructure reconciliation
 async function reconcileTaskInfrastructure(task: Task): Promise<ReconcileResult> {
@@ -342,7 +408,7 @@ async function reconcileTaskInfrastructure(task: Task): Promise<ReconcileResult>
   const actualInfra = await getActualInfrastructure(task);
   const actions: RemediationAction[] = [];
 
-  // Check infrastructure (independent of agent state)
+  // === CREATION: Ensure infrastructure exists when needed ===
   if (desiredInfra.worktree && !actualInfra.worktreeExists) {
     actions.push({ type: 'CREATE_WORKTREE', task });
   }
@@ -351,12 +417,22 @@ async function reconcileTaskInfrastructure(task: Task): Promise<ReconcileResult>
     actions.push({ type: 'CREATE_BRANCH', task });
   }
 
-  if (desiredInfra.draftPr && !actualInfra.draftPrExists) {
+  // Draft PR requires commits - only attempt if branch has commits ahead of base
+  if (desiredInfra.draftPr && !actualInfra.draftPrExists && actualInfra.hasCommits) {
     actions.push({ type: 'CREATE_DRAFT_PR', task });
   }
 
   if (desiredInfra.prReady && actualInfra.prIsDraft) {
     actions.push({ type: 'MARK_PR_READY', task });
+  }
+
+  // === CLEANUP: Remove infrastructure when no longer needed ===
+  if (!desiredInfra.worktree && actualInfra.worktreeExists) {
+    actions.push({ type: 'DELETE_WORKTREE', task });
+  }
+
+  if (!desiredInfra.branch && actualInfra.branchExists) {
+    actions.push({ type: 'DELETE_BRANCH', task });
   }
 
   // Execute remediations
@@ -406,6 +482,11 @@ function getDesiredInfrastructure(task: Task): DesiredInfrastructure {
     case 'PENDING':
       return { worktree: false, branch: false, draftPr: false, prReady: false };
 
+    case 'PLANNING':
+      // Top-level tasks in planning need worktree + branch (supervisor works here)
+      // No PR yet - will be created when subtasks merge back
+      return { worktree: true, branch: true, draftPr: false, prReady: false };
+
     case 'IN_PROGRESS':
     case 'BLOCKED':
     case 'FAILED':
@@ -416,36 +497,28 @@ function getDesiredInfrastructure(task: Task): DesiredInfrastructure {
 
     case 'COMPLETED':
       return { worktree: false, branch: false, draftPr: false, prReady: false };
-
-    default:
-      return { worktree: true, branch: true, draftPr: true, prReady: false };
   }
 }
 
 // Determine if agent should be running (combines agent desired state + task state)
 function getShouldAgentBeRunning(agent: Agent, task: Task | null): boolean {
-  // Agent explicitly paused? Don't run.
-  if (agent.desiredExecutionState === 'PAUSED') {
-    return false;
-  }
-
   // No task assigned? Don't run.
   if (!task) {
     return false;
   }
 
-  // Task not in a "work needed" state? Don't run.
-  if (task.state !== 'IN_PROGRESS') {
+  // Agent not set to ACTIVE? Don't run.
+  if (agent.desiredExecutionState !== 'ACTIVE') {
     return false;
   }
 
-  // Task blocked? Don't run (no point).
-  if (task.state === 'BLOCKED') {
-    return false;
-  }
-
-  // All conditions met - should be running
-  return agent.desiredExecutionState === 'ACTIVE';
+  // Only run for tasks actively being worked on
+  // PLANNING: supervisor is breaking down work (top-level tasks)
+  // IN_PROGRESS: agent is implementing the task
+  // BLOCKED tasks don't need agents running (waiting on external factors)
+  // REVIEW/COMPLETED/FAILED/PENDING don't need active work
+  const workableStates: TaskState[] = ['PLANNING', 'IN_PROGRESS'];
+  return workableStates.includes(task.state);
 }
 ```
 
@@ -505,10 +578,21 @@ async function remediateBranch(task: Task) {
 
 **Detection:** `gh pr view {branchName} --json number` fails or returns nothing
 
+**Prerequisite:** PR can only be created after the branch has at least one commit ahead of base.
+The reconciler checks for commits before attempting PR creation.
+
 **Remediation:**
 ```typescript
 async function remediateDraftPr(task: Task) {
   const epicTask = await getTopLevelTask(task);
+
+  // PRs require at least one commit - check before creating
+  const hasCommits = await gitClient.hasCommitsAhead(task.branchName, epicTask.branchName);
+  if (!hasCommits) {
+    // No commits yet - agent hasn't started working. Skip PR creation.
+    // PR will be created on next reconcile after agent makes first commit.
+    return;
+  }
 
   // Create draft PR
   const prUrl = await githubClient.createPR({
@@ -556,6 +640,40 @@ async function remediateAgentSession(task: Task) {
     resumeSessionId: agent.sessionId,  // Preserve context
     worktreePath: task.worktreePath
   });
+}
+```
+
+### 6. Cleanup: Worktree No Longer Needed (COMPLETED state)
+
+**Detection:** Task is COMPLETED but worktree still exists
+
+**Remediation:**
+```typescript
+async function cleanupWorktree(task: Task) {
+  if (!task.worktreePath) return;
+
+  // Remove the worktree
+  await gitClient.removeWorktree(task.worktreePath);
+
+  // Clear the path in DB
+  await taskAccessor.update(task.id, { worktreePath: null });
+}
+```
+
+### 7. Cleanup: Branch No Longer Needed (COMPLETED state)
+
+**Detection:** Task is COMPLETED but branch still exists
+
+**Remediation:**
+```typescript
+async function cleanupBranch(task: Task) {
+  if (!task.branchName) return;
+
+  // Delete local and remote branch
+  await gitClient.deleteBranch(task.branchName, { remote: true });
+
+  // Clear the branch name in DB
+  await taskAccessor.update(task.id, { branchName: null });
 }
 ```
 
@@ -754,7 +872,7 @@ With reconciliation handling infrastructure, MCP tools become simpler:
 
 ### Phase 1: Reconciliation Foundation
 
-1. Add new fields to Task model (`draftPrUrl`, `infraStatus`)
+1. Add new fields to Task model (`draftPrUrl`, `lastReconcileAt`, `reconcileFailures`)
 2. Add new fields to Agent model (`executionState`, `desiredExecutionState`)
 3. Create reconciliation service with two loops:
    - Task infrastructure reconciliation
@@ -828,10 +946,9 @@ model Task {
   // Infrastructure (managed by reconciler)
   worktreePath     String?
   branchName       String?
-  draftPrUrl       String?    // Created early, before agent starts
+  draftPrUrl       String?    // Created after first commit
 
   // Reconciliation tracking
-  infraStatus       InfraStatus @default(PENDING)
   lastReconcileAt   DateTime?
   reconcileFailures Json?      // { worktree: 0, branch: 0, pr: 0 }
 
@@ -843,21 +960,16 @@ model Task {
 
 enum TaskState {
   PENDING       // Not started, no agent assigned yet
+  PLANNING      // Top-level tasks only: supervisor is breaking down work
   IN_PROGRESS   // Being worked on (agent may or may not be running)
   REVIEW        // Work submitted for review
   COMPLETED     // Work accepted and merged
   FAILED        // Work abandoned
   BLOCKED       // External blocker (dependency, human input needed)
 }
-
-enum InfraStatus {
-  PENDING      // Not yet provisioned
-  PROVISIONING // Being created
-  READY        // All infrastructure exists
-  DEGRADED     // Some infrastructure missing, being repaired
-  FAILED       // Repeated failures, needs human intervention
-}
 ```
+
+Note: We intentionally don't track `infraStatus` separately. The reconciler checks actual infrastructure state each cycle, so a separate status field would just be stale metadata. The source of truth is always reality (does the worktree exist? does the branch exist?).
 
 ### Agent Model (About the Executor)
 
