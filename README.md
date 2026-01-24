@@ -18,7 +18,7 @@ npm install
 
 # 2. Configure
 cp .env.example .env
-# Edit .env: set GIT_BASE_REPO_PATH, GIT_WORKTREE_BASE
+# Edit .env: set DATABASE_URL (default works with docker-compose)
 
 # 3. Start PostgreSQL
 docker-compose up -d
@@ -28,6 +28,10 @@ npm run db:migrate
 
 # 5. Start all servers
 npm run dev:all
+
+# 6. Create a project
+# Open http://localhost:3000/projects/new
+# Enter your repository path and worktree base path
 ```
 
 ## Verify Installation

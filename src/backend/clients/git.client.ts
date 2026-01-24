@@ -11,23 +11,25 @@ export interface GitWorktreeInfo {
   branchName: string;
 }
 
+export interface GitClientConfig {
+  baseRepoPath: string;
+  worktreeBase: string;
+}
+
 export class GitClient {
   private baseRepoPath: string;
   private worktreeBase: string;
 
-  constructor() {
-    const baseRepoPath = process.env.GIT_BASE_REPO_PATH;
-    const worktreeBase = process.env.GIT_WORKTREE_BASE;
-
-    if (!baseRepoPath) {
-      throw new Error('GIT_BASE_REPO_PATH environment variable is not set');
+  constructor(config: GitClientConfig) {
+    if (!config.baseRepoPath) {
+      throw new Error('baseRepoPath is required');
     }
-    if (!worktreeBase) {
-      throw new Error('GIT_WORKTREE_BASE environment variable is not set');
+    if (!config.worktreeBase) {
+      throw new Error('worktreeBase is required');
     }
 
-    this.baseRepoPath = baseRepoPath;
-    this.worktreeBase = worktreeBase;
+    this.baseRepoPath = config.baseRepoPath;
+    this.worktreeBase = config.worktreeBase;
   }
 
   async createWorktree(name: string, baseBranch = 'main'): Promise<GitWorktreeInfo> {
@@ -226,12 +228,72 @@ export class GitClient {
   }
 }
 
+/**
+ * Factory for creating project-specific GitClient instances.
+ * Caches instances by repo+worktree path combination.
+ */
+export class GitClientFactory {
+  private static instances = new Map<string, GitClient>();
+
+  /**
+   * Get or create a GitClient for a specific project.
+   */
+  static forProject(project: { repoPath: string; worktreeBasePath: string }): GitClient {
+    const key = `${project.repoPath}:${project.worktreeBasePath}`;
+    const existing = GitClientFactory.instances.get(key);
+    if (existing) {
+      return existing;
+    }
+    const client = new GitClient({
+      baseRepoPath: project.repoPath,
+      worktreeBase: project.worktreeBasePath,
+    });
+    GitClientFactory.instances.set(key, client);
+    return client;
+  }
+
+  /**
+   * Remove a cached GitClient for a project.
+   * Call this when a project is deleted or its paths change.
+   */
+  static removeProject(project: { repoPath: string; worktreeBasePath: string }): boolean {
+    const key = `${project.repoPath}:${project.worktreeBasePath}`;
+    return GitClientFactory.instances.delete(key);
+  }
+
+  /**
+   * Clear all cached instances. Useful for testing.
+   */
+  static clearCache(): void {
+    GitClientFactory.instances.clear();
+  }
+
+  /**
+   * Get the number of cached instances.
+   */
+  static get cacheSize(): number {
+    return GitClientFactory.instances.size;
+  }
+}
+
+/**
+ * @deprecated Use GitClientFactory.forProject() instead.
+ * This singleton is kept temporarily for backward compatibility during migration.
+ */
 let _gitClient: GitClient | null = null;
 
 export const gitClient = new Proxy({} as GitClient, {
   get(_target, prop) {
     if (!_gitClient) {
-      _gitClient = new GitClient();
+      const baseRepoPath = process.env.GIT_BASE_REPO_PATH;
+      const worktreeBase = process.env.GIT_WORKTREE_BASE;
+      if (!(baseRepoPath && worktreeBase)) {
+        throw new Error(
+          'GIT_BASE_REPO_PATH and GIT_WORKTREE_BASE environment variables are required. ' +
+            'Consider using GitClientFactory.forProject() instead.'
+        );
+      }
+      _gitClient = new GitClient({ baseRepoPath, worktreeBase });
     }
     return _gitClient[prop as keyof GitClient];
   },

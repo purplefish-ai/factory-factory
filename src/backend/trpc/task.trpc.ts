@@ -9,6 +9,7 @@ export const taskRouter = router({
     .input(
       z
         .object({
+          projectId: z.string().optional(),
           epicId: z.string().optional(),
           state: z.nativeEnum(TaskState).optional(),
           assignedAgentId: z.string().optional(),

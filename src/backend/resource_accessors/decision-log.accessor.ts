@@ -40,8 +40,20 @@ export class DecisionLogAccessor {
     });
   }
 
-  async findRecent(limit = 100): Promise<DecisionLog[]> {
+  async findRecent(limit = 100, projectId?: string): Promise<DecisionLog[]> {
+    const where: { agent?: { currentEpic: { projectId: string } } } = {};
+
+    // Filter by project via agent → currentEpic → projectId
+    if (projectId) {
+      where.agent = {
+        currentEpic: {
+          projectId,
+        },
+      };
+    }
+
     return prisma.decisionLog.findMany({
+      where,
       orderBy: { timestamp: 'desc' },
       take: limit,
       include: {
@@ -129,13 +141,17 @@ export class DecisionLogAccessor {
   /**
    * List decision logs with optional filters
    */
-  async list(options: { agentId?: string; limit?: number }): Promise<DecisionLog[]> {
-    const { agentId, limit = 100 } = options;
+  async list(options: {
+    agentId?: string;
+    projectId?: string;
+    limit?: number;
+  }): Promise<DecisionLog[]> {
+    const { agentId, projectId, limit = 100 } = options;
 
     if (agentId) {
       return this.findByAgentId(agentId, limit);
     }
-    return this.findRecent(limit);
+    return this.findRecent(limit, projectId);
   }
 }
 

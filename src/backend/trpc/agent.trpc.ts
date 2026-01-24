@@ -15,6 +15,7 @@ export const agentRouter = router({
           type: z.nativeEnum(AgentType).optional(),
           state: z.nativeEnum(AgentState).optional(),
           epicId: z.string().optional(),
+          projectId: z.string().optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
         })

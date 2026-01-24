@@ -73,13 +73,22 @@ export class MailAccessor {
     });
   }
 
-  async listHumanInbox(includeRead = false): Promise<Mail[]> {
+  async listHumanInbox(includeRead = false, projectId?: string): Promise<Mail[]> {
     const where: Prisma.MailWhereInput = {
       isForHuman: true,
     };
 
     if (!includeRead) {
       where.isRead = false;
+    }
+
+    // Filter by project via fromAgent → currentEpic → projectId
+    if (projectId) {
+      where.fromAgent = {
+        currentEpic: {
+          projectId,
+        },
+      };
     }
 
     return prisma.mail.findMany({
@@ -92,11 +101,31 @@ export class MailAccessor {
     });
   }
 
-  async listAll(includeRead = true): Promise<Mail[]> {
+  async listAll(includeRead = true, projectId?: string): Promise<Mail[]> {
     const where: Prisma.MailWhereInput = {};
 
     if (!includeRead) {
       where.isRead = false;
+    }
+
+    // Filter by project via agent → currentEpic → projectId
+    if (projectId) {
+      where.OR = [
+        {
+          fromAgent: {
+            currentEpic: {
+              projectId,
+            },
+          },
+        },
+        {
+          toAgent: {
+            currentEpic: {
+              projectId,
+            },
+          },
+        },
+      ];
     }
 
     return prisma.mail.findMany({

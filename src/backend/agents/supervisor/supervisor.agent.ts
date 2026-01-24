@@ -1,6 +1,6 @@
 import { AgentState, AgentType, EpicState } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
-import { gitClient } from '../../clients/git.client.js';
+import { GitClientFactory } from '../../clients/git.client.js';
 import { tmuxClient } from '../../clients/tmux.client.js';
 import {
   agentAccessor,
@@ -87,10 +87,16 @@ function getSupervisorTmuxSessionName(agentId: string): string {
  * Create a new supervisor agent for an epic
  */
 export async function createSupervisor(epicId: string): Promise<string> {
-  // Get epic
+  // Get epic (includes project relation)
   const epic = await epicAccessor.findById(epicId);
   if (!epic) {
     throw new Error(`Epic with ID '${epicId}' not found`);
+  }
+
+  // Get project for this epic
+  const project = epic.project;
+  if (!project) {
+    throw new Error(`Epic '${epicId}' does not have an associated project`);
   }
 
   // Check if epic already has a supervisor
@@ -106,9 +112,15 @@ export async function createSupervisor(epicId: string): Promise<string> {
     currentEpicId: epicId,
   });
 
-  // Create git worktree for epic (branching from main)
+  // Get project-specific GitClient
+  const gitClient = GitClientFactory.forProject({
+    repoPath: project.repoPath,
+    worktreeBasePath: project.worktreeBasePath,
+  });
+
+  // Create git worktree for epic (branching from project's default branch)
   const worktreeName = `epic-${epic.id.substring(0, 8)}`;
-  const worktreeInfo = await gitClient.createWorktree(worktreeName, 'main');
+  const worktreeInfo = await gitClient.createWorktree(worktreeName, project.defaultBranch);
 
   // Update epic state to IN_PROGRESS
   await epicAccessor.update(epicId, {
@@ -572,11 +584,18 @@ export async function killSupervisor(agentId: string): Promise<void> {
 
   // Delete worktree if epic exists
   if (agent.currentEpicId) {
-    const worktreeName = `epic-${agent.currentEpicId.substring(0, 8)}`;
-    try {
-      await gitClient.deleteWorktree(worktreeName);
-    } catch {
-      // Worktree may not exist
+    const epic = await epicAccessor.findById(agent.currentEpicId);
+    if (epic?.project) {
+      const gitClient = GitClientFactory.forProject({
+        repoPath: epic.project.repoPath,
+        worktreeBasePath: epic.project.worktreeBasePath,
+      });
+      const worktreeName = `epic-${agent.currentEpicId.substring(0, 8)}`;
+      try {
+        await gitClient.deleteWorktree(worktreeName);
+      } catch {
+        // Worktree may not exist
+      }
     }
   }
 

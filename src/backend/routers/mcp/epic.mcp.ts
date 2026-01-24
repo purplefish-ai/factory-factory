@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { AgentType, EpicState, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { startWorker } from '../../agents/worker/lifecycle.js';
-import { gitClient } from '../../clients/git.client.js';
+import { type GitClient, GitClientFactory } from '../../clients/git.client.js';
 import { githubClient } from '../../clients/index.js';
 import { inngest } from '../../inngest/client.js';
 import {
@@ -371,6 +371,7 @@ interface EpicForApproval {
   id: string;
   epicId: string;
   epicWorktreePath: string;
+  gitClient: GitClient;
 }
 
 /**
@@ -444,10 +445,34 @@ async function getEpicForApproval(
       ),
     };
   }
+
+  // Get project for this epic
+  const project = epic.project;
+  if (!project) {
+    return {
+      success: false,
+      error: createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        `Epic '${epicId}' does not have an associated project`
+      ),
+    };
+  }
+
+  // Get project-specific GitClient
+  const gitClient = GitClientFactory.forProject({
+    repoPath: project.repoPath,
+    worktreeBasePath: project.worktreeBasePath,
+  });
+
   const epicWorktreeName = `epic-${epic.id.substring(0, 8)}`;
   return {
     success: true,
-    epic: { id: epic.id, epicId, epicWorktreePath: gitClient.getWorktreePath(epicWorktreeName) },
+    epic: {
+      id: epic.id,
+      epicId,
+      epicWorktreePath: gitClient.getWorktreePath(epicWorktreeName),
+      gitClient,
+    },
   };
 }
 
@@ -455,6 +480,7 @@ async function getEpicForApproval(
  * Merge a task branch into the epic worktree
  */
 async function mergeTaskBranch(
+  gitClient: GitClient,
   epicWorktreePath: string,
   branchName: string,
   taskTitle: string
@@ -480,7 +506,7 @@ async function mergeTaskBranch(
 /**
  * Try to push the epic branch, returns whether push succeeded
  */
-async function tryPushEpicBranch(epicWorktreePath: string): Promise<boolean> {
+async function tryPushEpicBranch(gitClient: GitClient, epicWorktreePath: string): Promise<boolean> {
   try {
     await gitClient.pushBranchWithUpstream(epicWorktreePath);
     return true;
@@ -535,12 +561,17 @@ async function approveTask(context: McpToolContext, input: unknown): Promise<Mcp
     }
     const { epic } = epicValidation;
 
-    const mergeResult = await mergeTaskBranch(epic.epicWorktreePath, task.branchName, task.title);
+    const mergeResult = await mergeTaskBranch(
+      epic.gitClient,
+      epic.epicWorktreePath,
+      task.branchName,
+      task.title
+    );
     if (!mergeResult.success) {
       return mergeResult.error;
     }
 
-    const pushed = await tryPushEpicBranch(epic.epicWorktreePath);
+    const pushed = await tryPushEpicBranch(epic.gitClient, epic.epicWorktreePath);
     await taskAccessor.update(task.id, { state: TaskState.COMPLETED, completedAt: new Date() });
 
     const epicBranchName = `factoryfactory/epic-${epic.id.substring(0, 8)}`;
@@ -940,6 +971,15 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       );
     }
 
+    // Get project for this epic
+    const project = epic.project;
+    if (!project) {
+      return createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        `Epic '${verification.epicId}' does not have an associated project`
+      );
+    }
+
     const tasks = await taskAccessor.list({ epicId: epic.id });
     const incompleteTasks = tasks.filter(
       (t) => t.state !== TaskState.COMPLETED && t.state !== TaskState.FAILED
@@ -951,6 +991,12 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
         `Cannot create epic PR: ${incompleteTasks.length} task(s) are not complete. Tasks: ${incompleteTasks.map((t) => `${t.title} (${t.state})`).join(', ')}`
       );
     }
+
+    // Get project-specific GitClient
+    const gitClient = GitClientFactory.forProject({
+      repoPath: project.repoPath,
+      worktreeBasePath: project.worktreeBasePath,
+    });
 
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
     const worktreePath = gitClient.getWorktreePath(`epic-${epic.id.substring(0, 8)}`);

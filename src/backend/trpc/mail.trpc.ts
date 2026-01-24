@@ -10,11 +10,12 @@ export const mailRouter = router({
       z
         .object({
           includeRead: z.boolean().optional(),
+          projectId: z.string().optional(),
         })
         .optional()
     )
     .query(async ({ input }) => {
-      return mailAccessor.listHumanInbox(input?.includeRead ?? true);
+      return mailAccessor.listHumanInbox(input?.includeRead ?? true, input?.projectId);
     }),
 
   // List all mail in the system
@@ -23,11 +24,12 @@ export const mailRouter = router({
       z
         .object({
           includeRead: z.boolean().optional(),
+          projectId: z.string().optional(),
         })
         .optional()
     )
     .query(async ({ input }) => {
-      return mailAccessor.listAll(input?.includeRead ?? true);
+      return mailAccessor.listAll(input?.includeRead ?? true, input?.projectId);
     }),
 
   // List inbox for a specific agent
@@ -137,8 +139,16 @@ export const mailRouter = router({
   }),
 
   // Get unread count for human inbox
-  getUnreadCount: publicProcedure.query(async () => {
-    const unreadMail = await mailAccessor.listHumanInbox(false);
-    return { count: unreadMail.length };
-  }),
+  getUnreadCount: publicProcedure
+    .input(
+      z
+        .object({
+          projectId: z.string().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      const unreadMail = await mailAccessor.listHumanInbox(false, input?.projectId);
+      return { count: unreadMail.length };
+    }),
 });

@@ -2,7 +2,13 @@ import type { Epic, Prisma } from '@prisma-gen/client';
 import { EpicState } from '@prisma-gen/client';
 import { prisma } from '../db';
 
+// Type for Epic with all relations included
+export type EpicWithRelations = Prisma.EpicGetPayload<{
+  include: { project: true; tasks: true; orchestratorAgent: true };
+}>;
+
 export interface CreateEpicInput {
+  projectId: string;
   linearIssueId: string;
   linearIssueUrl: string;
   title: string;
@@ -18,38 +24,47 @@ export interface UpdateEpicInput {
 }
 
 export interface ListEpicsFilters {
+  projectId?: string;
   state?: EpicState;
   limit?: number;
   offset?: number;
 }
 
 export class EpicAccessor {
-  async create(data: CreateEpicInput): Promise<Epic> {
+  async create(data: CreateEpicInput): Promise<EpicWithRelations> {
     return prisma.epic.create({
       data: {
+        projectId: data.projectId,
         linearIssueId: data.linearIssueId,
         linearIssueUrl: data.linearIssueUrl,
         title: data.title,
         description: data.description,
         state: data.state ?? EpicState.PLANNING,
       },
-    });
-  }
-
-  async findById(id: string): Promise<Epic | null> {
-    return prisma.epic.findUnique({
-      where: { id },
       include: {
+        project: true,
         tasks: true,
         orchestratorAgent: true,
       },
     });
   }
 
-  async findByLinearIssueId(linearIssueId: string): Promise<Epic | null> {
+  async findById(id: string): Promise<EpicWithRelations | null> {
+    return prisma.epic.findUnique({
+      where: { id },
+      include: {
+        project: true,
+        tasks: true,
+        orchestratorAgent: true,
+      },
+    });
+  }
+
+  async findByLinearIssueId(linearIssueId: string): Promise<EpicWithRelations | null> {
     return prisma.epic.findUnique({
       where: { linearIssueId },
       include: {
+        project: true,
         tasks: true,
         orchestratorAgent: true,
       },
@@ -63,8 +78,12 @@ export class EpicAccessor {
     });
   }
 
-  async list(filters?: ListEpicsFilters): Promise<Epic[]> {
+  async list(filters?: ListEpicsFilters): Promise<EpicWithRelations[]> {
     const where: Prisma.EpicWhereInput = {};
+
+    if (filters?.projectId) {
+      where.projectId = filters.projectId;
+    }
 
     if (filters?.state) {
       where.state = filters.state;
@@ -76,6 +95,7 @@ export class EpicAccessor {
       skip: filters?.offset,
       orderBy: { createdAt: 'desc' },
       include: {
+        project: true,
         tasks: true,
         orchestratorAgent: true,
       },

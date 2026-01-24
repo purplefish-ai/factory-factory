@@ -21,11 +21,12 @@ export const decisionLogRouter = router({
       z
         .object({
           limit: z.number().min(1).max(100).optional(),
+          projectId: z.string().optional(),
         })
         .optional()
     )
     .query(async ({ input }) => {
-      return decisionLogAccessor.findRecent(input?.limit ?? 100);
+      return decisionLogAccessor.findRecent(input?.limit ?? 100, input?.projectId);
     }),
 
   // Get decision log by ID

@@ -7,7 +7,7 @@ import {
   sendMessage,
   stopSession,
 } from '../../clients/claude-code.client.js';
-import { gitClient } from '../../clients/git.client.js';
+import { GitClientFactory } from '../../clients/git.client.js';
 import {
   agentAccessor,
   epicAccessor,
@@ -87,10 +87,16 @@ export async function createWorker(taskId: string): Promise<string> {
     throw new Error(`Task with ID '${taskId}' not found`);
   }
 
-  // Get epic
+  // Get epic (includes project relation)
   const epic = await epicAccessor.findById(task.epicId);
   if (!epic) {
     throw new Error(`Epic with ID '${task.epicId}' not found`);
+  }
+
+  // Get project for this epic
+  const project = epic.project;
+  if (!project) {
+    throw new Error(`Epic '${task.epicId}' does not have an associated project`);
   }
 
   // Build epic branch name (matches supervisor's branch naming convention)
@@ -102,6 +108,12 @@ export async function createWorker(taskId: string): Promise<string> {
     type: AgentType.WORKER,
     state: AgentState.IDLE,
     currentTaskId: taskId,
+  });
+
+  // Get project-specific GitClient
+  const gitClient = GitClientFactory.forProject({
+    repoPath: project.repoPath,
+    worktreeBasePath: project.worktreeBasePath,
   });
 
   // Create git worktree for task (branching from epic branch, not main)
@@ -465,12 +477,20 @@ export async function killWorker(agentId: string): Promise<void> {
   if (agent.currentTaskId) {
     const task = await taskAccessor.findById(agent.currentTaskId);
     if (task?.worktreePath) {
-      const worktreeName = task.worktreePath.split('/').pop();
-      if (worktreeName) {
-        try {
-          await gitClient.deleteWorktree(worktreeName);
-        } catch {
-          // Worktree may not exist
+      // Get project to create project-specific GitClient
+      const epic = await epicAccessor.findById(task.epicId);
+      if (epic?.project) {
+        const gitClient = GitClientFactory.forProject({
+          repoPath: epic.project.repoPath,
+          worktreeBasePath: epic.project.worktreeBasePath,
+        });
+        const worktreeName = task.worktreePath.split('/').pop();
+        if (worktreeName) {
+          try {
+            await gitClient.deleteWorktree(worktreeName);
+          } catch {
+            // Worktree may not exist
+          }
         }
       }
     }

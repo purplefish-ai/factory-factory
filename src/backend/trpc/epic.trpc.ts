@@ -10,6 +10,7 @@ export const epicRouter = router({
     .input(
       z
         .object({
+          projectId: z.string().optional(),
           state: z.nativeEnum(EpicState).optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
@@ -33,6 +34,7 @@ export const epicRouter = router({
   create: publicProcedure
     .input(
       z.object({
+        projectId: z.string().min(1, 'Project ID is required'),
         title: z.string().min(1),
         description: z.string().optional(),
         design: z.string().optional(),
@@ -46,6 +48,7 @@ export const epicRouter = router({
       const linearIssueUrl = input.linearIssueUrl || '';
 
       const epic = await epicAccessor.create({
+        projectId: input.projectId,
         linearIssueId,
         linearIssueUrl,
         title: input.title,

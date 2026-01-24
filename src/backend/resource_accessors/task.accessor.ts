@@ -2,6 +2,11 @@ import type { Prisma, Task } from '@prisma-gen/client';
 import { TaskState } from '@prisma-gen/client';
 import { prisma } from '../db';
 
+// Type for Task with all relations included
+export type TaskWithRelations = Prisma.TaskGetPayload<{
+  include: { epic: { include: { project: true } }; assignedAgent: true };
+}>;
+
 export interface CreateTaskInput {
   epicId: string;
   title: string;
@@ -23,6 +28,7 @@ export interface UpdateTaskInput {
 }
 
 export interface ListTasksFilters {
+  projectId?: string;
   epicId?: string;
   state?: TaskState;
   assignedAgentId?: string;
@@ -42,11 +48,15 @@ export class TaskAccessor {
     });
   }
 
-  async findById(id: string): Promise<Task | null> {
+  async findById(id: string): Promise<TaskWithRelations | null> {
     return prisma.task.findUnique({
       where: { id },
       include: {
-        epic: true,
+        epic: {
+          include: {
+            project: true,
+          },
+        },
         assignedAgent: true,
       },
     });
@@ -62,6 +72,9 @@ export class TaskAccessor {
   async list(filters?: ListTasksFilters): Promise<Task[]> {
     const where: Prisma.TaskWhereInput = {};
 
+    if (filters?.projectId) {
+      where.epic = { projectId: filters.projectId };
+    }
     if (filters?.epicId) {
       where.epicId = filters.epicId;
     }

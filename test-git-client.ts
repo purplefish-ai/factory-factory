@@ -1,11 +1,19 @@
-import * as dotenv from 'dotenv';
+import { GitClientFactory } from './src/backend/clients/git.client';
 
-dotenv.config();
-
-import { gitClient } from './src/backend/clients/git.client';
+// Test configuration - update these paths for your environment
+const TEST_PROJECT = {
+  repoPath: process.argv[2] || '/path/to/your/repo',
+  worktreeBasePath: process.argv[3] || '/tmp/factoryfactory-test-worktrees',
+};
 
 async function test() {
   console.log('🧪 Testing Git Client...\n');
+  console.log('Using:');
+  console.log('  - Repo path:', TEST_PROJECT.repoPath);
+  console.log('  - Worktree base:', TEST_PROJECT.worktreeBasePath);
+  console.log();
+
+  const gitClient = GitClientFactory.forProject(TEST_PROJECT);
 
   try {
     // Create worktree
