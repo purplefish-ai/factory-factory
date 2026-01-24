@@ -253,10 +253,26 @@ export class GitClientFactory {
   }
 
   /**
+   * Remove a cached GitClient for a project.
+   * Call this when a project is deleted or its paths change.
+   */
+  static removeProject(project: { repoPath: string; worktreeBasePath: string }): boolean {
+    const key = `${project.repoPath}:${project.worktreeBasePath}`;
+    return GitClientFactory.instances.delete(key);
+  }
+
+  /**
    * Clear all cached instances. Useful for testing.
    */
   static clearCache(): void {
     GitClientFactory.instances.clear();
+  }
+
+  /**
+   * Get the number of cached instances.
+   */
+  static get cacheSize(): number {
+    return GitClientFactory.instances.size;
   }
 }
 
