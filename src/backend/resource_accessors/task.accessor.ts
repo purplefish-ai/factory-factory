@@ -541,16 +541,12 @@ export class TaskAccessor {
       include: fullInclude,
     });
 
-    // Filter to only tasks that aren't blocked
-    const readyTasks: TaskWithRelations[] = [];
-    for (const task of pendingTasks) {
-      const isBlocked = await this.isBlocked(task.id);
-      if (!isBlocked) {
-        readyTasks.push(task);
-      }
-    }
+    // Filter to only tasks that aren't blocked (check in parallel for performance)
+    const blockedResults = await Promise.all(
+      pendingTasks.map((task) => this.isBlocked(task.id).then((blocked) => ({ task, blocked })))
+    );
 
-    return readyTasks;
+    return blockedResults.filter((r) => !r.blocked).map((r) => r.task);
   }
 
   /**

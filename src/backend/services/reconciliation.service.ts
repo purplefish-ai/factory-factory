@@ -311,7 +311,7 @@ class ReconciliationService {
     // Create supervisor agent
     logger.info('Creating supervisor for top-level task', { taskId: task.id, title: task.title });
 
-    const supervisor = await agentAccessor.create({
+    await agentAccessor.create({
       type: AgentType.SUPERVISOR,
       currentTaskId: task.id,
       desiredExecutionState: DesiredExecutionState.ACTIVE, // We want it to run
@@ -319,15 +319,12 @@ class ReconciliationService {
     });
 
     // Create worktree and branch for the top-level task
-    await this.createTopLevelTaskInfrastructure(task, supervisor.id);
+    await this.createTopLevelTaskInfrastructure(task);
 
     await taskAccessor.markReconciled(task.id);
   }
 
-  private async createTopLevelTaskInfrastructure(
-    task: TaskWithRelations,
-    _supervisorId: string
-  ): Promise<void> {
+  private async createTopLevelTaskInfrastructure(task: TaskWithRelations): Promise<void> {
     const project = task.project;
     if (!project) {
       throw new Error(`Task ${task.id} has no associated project`);
@@ -432,6 +429,7 @@ class ReconciliationService {
     return { tasksReconciled, workersCreated, infrastructureCreated, errors };
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reconciliation function with necessary branching
   private async reconcileSingleLeafTask(
     task: TaskWithRelations
   ): Promise<{ workerCreated: boolean; infrastructureCreated: boolean }> {
@@ -448,9 +446,22 @@ class ReconciliationService {
 
     // If task is in PENDING and unblocked, transition to IN_PROGRESS and create worker
     if (task.state === TaskState.PENDING && !task.assignedAgentId) {
-      // Create worker agent
+      // Re-fetch task to check for race condition (another reconciler may have already assigned)
+      const freshTask = await taskAccessor.findById(task.id);
+      if (freshTask?.assignedAgentId) {
+        logger.debug('Task already has agent assigned (race condition avoided)', {
+          taskId: task.id,
+        });
+        return { workerCreated, infrastructureCreated };
+      }
+
       logger.info('Creating worker for leaf task', { taskId: task.id, title: task.title });
 
+      // Create infrastructure FIRST (before state change) to ensure consistency
+      await this.ensureLeafTaskInfrastructure(task);
+      infrastructureCreated = true;
+
+      // Create worker agent
       const worker = await agentAccessor.create({
         type: AgentType.WORKER,
         currentTaskId: task.id,
@@ -464,18 +475,29 @@ class ReconciliationService {
         state: TaskState.IN_PROGRESS,
         assignedAgentId: worker.id,
       });
-
-      // Create infrastructure
-      await this.ensureLeafTaskInfrastructure(task);
-      infrastructureCreated = true;
     }
 
     // If task is IN_PROGRESS but has no worker, create one
     if (task.state === TaskState.IN_PROGRESS && !task.assignedAgentId) {
+      // Re-fetch task to check for race condition
+      const freshTask = await taskAccessor.findById(task.id);
+      if (freshTask?.assignedAgentId) {
+        logger.debug('Task already has agent assigned (race condition avoided)', {
+          taskId: task.id,
+        });
+        return { workerCreated, infrastructureCreated };
+      }
+
       logger.info('Creating missing worker for IN_PROGRESS task', {
         taskId: task.id,
         title: task.title,
       });
+
+      // Ensure infrastructure exists first
+      if (!(task.worktreePath && task.branchName)) {
+        await this.ensureLeafTaskInfrastructure(task);
+        infrastructureCreated = true;
+      }
 
       const worker = await agentAccessor.create({
         type: AgentType.WORKER,
@@ -490,8 +512,12 @@ class ReconciliationService {
       });
     }
 
-    // Ensure infrastructure exists for IN_PROGRESS tasks
-    if (task.state === TaskState.IN_PROGRESS && !(task.worktreePath && task.branchName)) {
+    // Ensure infrastructure exists for IN_PROGRESS tasks (if not already created above)
+    if (
+      task.state === TaskState.IN_PROGRESS &&
+      !(task.worktreePath && task.branchName) &&
+      !infrastructureCreated
+    ) {
       await this.ensureLeafTaskInfrastructure(task);
       infrastructureCreated = true;
     }

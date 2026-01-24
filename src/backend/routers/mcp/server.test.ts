@@ -216,7 +216,7 @@ describe('executeMcpTool', () => {
       await executeMcpTool(agent.id, 'mcp__test__heartbeat', {});
 
       expect(mockAgentAccessor.update).toHaveBeenCalledWith(agent.id, {
-        lastActiveAt: expect.any(Date),
+        lastHeartbeat: expect.any(Date),
       });
     });
 

@@ -16,7 +16,8 @@ import { inngest } from '../client.js';
  * This is the "backup" reconciliation that catches any drift
  * that wasn't handled by event-triggered reconciliation.
  *
- * Schedule: Every 30 seconds
+ * Schedule: Every 30 seconds (using Inngest's 6-field cron syntax with seconds)
+ * Format: second minute hour day-of-month month day-of-week
  */
 export const reconciliationCronHandler = inngest.createFunction(
   {
@@ -27,7 +28,7 @@ export const reconciliationCronHandler = inngest.createFunction(
       limit: 1, // Only one reconciliation at a time
     },
   },
-  { cron: '*/30 * * * * *' }, // Every 30 seconds
+  { cron: '*/30 * * * * *' }, // Every 30 seconds (Inngest supports sub-minute cron)
   async ({ step }) => {
     console.log('Periodic reconciliation started');
 
