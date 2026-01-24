@@ -99,13 +99,20 @@ export function Navigation() {
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('');
   const [hasCheckedProjects, setHasCheckedProjects] = useState(false);
 
-  const { data: unreadCount } = trpc.mail.getUnreadCount.useQuery(undefined, {
-    refetchInterval: 5000,
-  });
-
   const { data: projects, isLoading: projectsLoading } = trpc.project.list.useQuery({
     isArchived: false,
   });
+
+  // Get the selected project's ID for scoped queries
+  const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
+
+  const { data: unreadCount } = trpc.mail.getUnreadCount.useQuery(
+    { projectId: selectedProjectId },
+    {
+      refetchInterval: 5000,
+      enabled: !!selectedProjectId,
+    }
+  );
 
   // Get project slug from URL or localStorage
   useEffect(() => {

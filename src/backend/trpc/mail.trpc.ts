@@ -139,8 +139,16 @@ export const mailRouter = router({
   }),
 
   // Get unread count for human inbox
-  getUnreadCount: publicProcedure.query(async () => {
-    const unreadMail = await mailAccessor.listHumanInbox(false);
-    return { count: unreadMail.length };
-  }),
+  getUnreadCount: publicProcedure
+    .input(
+      z
+        .object({
+          projectId: z.string().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      const unreadMail = await mailAccessor.listHumanInbox(false, input?.projectId);
+      return { count: unreadMail.length };
+    }),
 });
