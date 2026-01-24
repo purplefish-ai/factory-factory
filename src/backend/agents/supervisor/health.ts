@@ -116,9 +116,11 @@ export async function recoverWorker(
     };
   }
 
-  // Get epic for logging
+  // Get supervisor - if it doesn't exist, we can't use it as fromAgentId
   const supervisor = await agentAccessor.findById(supervisorId);
   const epicId = supervisor?.currentEpicId;
+  // Only use supervisorId for mail if the supervisor exists in the database
+  const validSupervisorId = supervisor ? supervisorId : undefined;
 
   // Get current attempt count from task and increment
   const attempts = (task.attempts || 0) + 1;
@@ -147,7 +149,7 @@ export async function recoverWorker(
 
     // Send mail to human
     await mailAccessor.create({
-      fromAgentId: supervisorId,
+      fromAgentId: validSupervisorId,
       isForHuman: true,
       subject: `Task Permanently Failed: ${task.title}`,
       body: `The task "${task.title}" has failed after ${MAX_WORKER_ATTEMPTS} worker recovery attempts.\n\nTask ID: ${taskId}\nEpic ID: ${epicId || 'unknown'}\n\nManual intervention may be required.`,
@@ -234,6 +236,17 @@ export async function sendWorkerHealthCheck(
 ): Promise<void> {
   const task = await taskAccessor.findById(taskId);
   const taskTitle = task?.title || 'Unknown task';
+
+  // Validate both agents exist before sending mail
+  const supervisor = await agentAccessor.findById(supervisorId);
+  const worker = await agentAccessor.findById(workerId);
+
+  if (!(supervisor && worker)) {
+    console.warn(
+      `Cannot send health check: supervisor ${supervisor ? 'exists' : 'missing'}, worker ${worker ? 'exists' : 'missing'}`
+    );
+    return;
+  }
 
   await mailAccessor.create({
     fromAgentId: supervisorId,

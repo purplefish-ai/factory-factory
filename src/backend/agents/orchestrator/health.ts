@@ -191,6 +191,10 @@ export async function recoverSupervisor(
     return { success: false, workersKilled: 0, tasksReset: 0, message: `Epic ${epicId} not found` };
   }
 
+  // Validate orchestrator exists before using it as fromAgentId
+  const orchestrator = await agentAccessor.findById(orchestratorId);
+  const validOrchestratorId = orchestrator ? orchestratorId : undefined;
+
   console.log(`Starting cascading recovery for supervisor ${supervisorId} (epic: ${epic.title})`);
 
   // Phase 1: Kill workers
@@ -210,7 +214,7 @@ export async function recoverSupervisor(
 
   // Phase 5: Notify and log
   await mailAccessor.create({
-    fromAgentId: orchestratorId,
+    fromAgentId: validOrchestratorId,
     isForHuman: true,
     subject: `Supervisor Crashed and Recovered - Epic: ${epic.title}`,
     body: `A supervisor crash was detected and cascading recovery was performed.
@@ -274,6 +278,17 @@ export async function sendSupervisorHealthCheck(
 ): Promise<void> {
   const epic = await epicAccessor.findById(epicId);
   const epicTitle = epic?.title || 'Unknown epic';
+
+  // Validate both agents exist before sending mail
+  const orchestrator = await agentAccessor.findById(orchestratorId);
+  const supervisor = await agentAccessor.findById(supervisorId);
+
+  if (!(orchestrator && supervisor)) {
+    console.warn(
+      `Cannot send health check: orchestrator ${orchestrator ? 'exists' : 'missing'}, supervisor ${supervisor ? 'exists' : 'missing'}`
+    );
+    return;
+  }
 
   await mailAccessor.create({
     fromAgentId: orchestratorId,
