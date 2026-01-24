@@ -68,6 +68,7 @@ export class MailAccessor {
       orderBy: { createdAt: 'desc' },
       include: {
         fromAgent: true,
+        toAgent: true,
       },
     });
   }
@@ -86,6 +87,24 @@ export class MailAccessor {
       orderBy: { createdAt: 'desc' },
       include: {
         fromAgent: true,
+        toAgent: true,
+      },
+    });
+  }
+
+  async listAll(includeRead = true): Promise<Mail[]> {
+    const where: Prisma.MailWhereInput = {};
+
+    if (!includeRead) {
+      where.isRead = false;
+    }
+
+    return prisma.mail.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        fromAgent: true,
+        toAgent: true,
       },
     });
   }

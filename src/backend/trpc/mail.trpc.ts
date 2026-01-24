@@ -17,6 +17,31 @@ export const mailRouter = router({
       return mailAccessor.listHumanInbox(input?.includeRead ?? true);
     }),
 
+  // List all mail in the system
+  listAll: publicProcedure
+    .input(
+      z
+        .object({
+          includeRead: z.boolean().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      return mailAccessor.listAll(input?.includeRead ?? true);
+    }),
+
+  // List inbox for a specific agent
+  listAgentInbox: publicProcedure
+    .input(
+      z.object({
+        agentId: z.string(),
+        includeRead: z.boolean().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      return mailAccessor.listInbox(input.agentId, input.includeRead ?? true);
+    }),
+
   // Get mail by ID
   getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
     const mail = await mailAccessor.findById(input.id);
@@ -24,8 +49,8 @@ export const mailRouter = router({
       throw new Error(`Mail not found: ${input.id}`);
     }
 
-    // Mark as read when viewed
-    if (!mail.isRead) {
+    // Only mark as read if mail is for human (don't mark agent-to-agent mail)
+    if (!mail.isRead && mail.isForHuman) {
       await mailAccessor.markAsRead(input.id);
     }
 
