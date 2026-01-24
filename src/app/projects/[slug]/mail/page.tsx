@@ -381,6 +381,18 @@ function ComposeForm({ onSent }: { onSent: () => void }) {
       </div>
 
       <div className="flex justify-end gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setToAgentId('');
+            setSubject('');
+            setBody('');
+            setError('');
+          }}
+        >
+          Clear
+        </Button>
         <Button type="submit" disabled={sendMail.isPending}>
           {sendMail.isPending ? 'Sending...' : 'Send'}
         </Button>

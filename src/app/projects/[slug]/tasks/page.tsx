@@ -119,7 +119,9 @@ export default function ProjectTasksPage() {
                         href={`/projects/${slug}/epics/${task.parentId}`}
                         className="text-sm text-primary hover:underline"
                       >
-                        {task.parent.title.slice(0, 30)}...
+                        {task.parent.title.length > 30
+                          ? `${task.parent.title.slice(0, 30)}...`
+                          : task.parent.title}
                       </Link>
                     )}
                   </TableCell>

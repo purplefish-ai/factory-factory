@@ -127,7 +127,9 @@ export default function ProjectEpicsPage() {
                     </Link>
                     {task.description && (
                       <p className="text-sm text-muted-foreground truncate max-w-md">
-                        {task.description.slice(0, 100)}...
+                        {task.description.length > 100
+                          ? `${task.description.slice(0, 100)}...`
+                          : task.description}
                       </p>
                     )}
                   </TableCell>

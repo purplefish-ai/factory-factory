@@ -98,12 +98,12 @@ export function AppSidebar() {
     ? [
         {
           href: `/projects/${selectedProjectSlug}/epics`,
-          label: 'Epics',
+          label: 'Top Tasks',
           icon: FolderKanban,
         },
         {
           href: `/projects/${selectedProjectSlug}/tasks`,
-          label: 'Tasks',
+          label: 'Subtasks',
           icon: ListTodo,
         },
         {
