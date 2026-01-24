@@ -176,6 +176,7 @@ export const supervisorCheckHandler = inngest.createFunction(
     }
 
     // Step 2: Check worker health for each supervisor
+    // biome-ignore lint/suspicious/useAwait: Inngest step.run requires async for proper type inference
     const results = await step.run('check-all-supervisors', async () => {
       return Promise.all(activeSupervisors.map((supervisor) => checkSupervisorWorkers(supervisor)));
     });

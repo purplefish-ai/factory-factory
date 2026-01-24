@@ -155,7 +155,7 @@ export function validatePath(path: string): string {
  * await execCommand('git', ['commit', '-m', userMessage], { cwd: '/repo' });
  * await execCommand('mkdir', ['-p', '/path/with spaces/ok']);
  */
-export async function execCommand(
+export function execCommand(
   command: string,
   args: string[],
   options?: SpawnOptions
@@ -221,7 +221,7 @@ export async function execShell(
  * await gitCommand(['commit', '-m', userMessage], '/repo/path');
  * await gitCommand(['worktree', 'add', '-b', branch, path, base], repoPath);
  */
-export async function gitCommand(args: string[], cwd: string): Promise<ExecResult> {
+export function gitCommand(args: string[], cwd: string): Promise<ExecResult> {
   return execCommand('git', args, { cwd });
 }
 
@@ -232,7 +232,7 @@ export async function gitCommand(args: string[], cwd: string): Promise<ExecResul
  * await gitCommandC(repoPath, ['status']);
  * await gitCommandC(repoPath, ['diff', '--stat', 'main...HEAD']);
  */
-export async function gitCommandC(repoPath: string, args: string[]): Promise<ExecResult> {
+export function gitCommandC(repoPath: string, args: string[]): Promise<ExecResult> {
   return execCommand('git', ['-C', repoPath, ...args]);
 }
 
@@ -247,7 +247,7 @@ export async function gitCommandC(repoPath: string, args: string[]): Promise<Exe
  * await tmuxCommand(['has-session', '-t', sessionName]);
  * await tmuxCommand(['capture-pane', '-t', session, '-p']);
  */
-export async function tmuxCommand(args: string[], socketPath?: string): Promise<ExecResult> {
+export function tmuxCommand(args: string[], socketPath?: string): Promise<ExecResult> {
   const fullArgs = socketPath ? ['-S', socketPath, ...args] : args;
   return execCommand('tmux', fullArgs);
 }

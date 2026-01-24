@@ -7,6 +7,44 @@ import { trpc } from '../../../../frontend/lib/trpc';
 
 type MailFilter = { type: 'all' } | { type: 'human' } | { type: 'agent'; agentId: string };
 
+function getMailQueryResult<T>(
+  filter: MailFilter,
+  allData: T | undefined,
+  humanData: T | undefined,
+  agentData: T | undefined
+): T | undefined {
+  switch (filter.type) {
+    case 'all':
+      return allData;
+    case 'human':
+      return humanData;
+    case 'agent':
+      return agentData;
+  }
+}
+
+function getFilterTitle(filter: MailFilter): string {
+  switch (filter.type) {
+    case 'all':
+      return 'All System Mail';
+    case 'human':
+      return 'Mail Inbox';
+    case 'agent':
+      return 'Agent Inbox';
+  }
+}
+
+function getFilterDescription(filter: MailFilter, agentType: string | undefined): string {
+  switch (filter.type) {
+    case 'all':
+      return 'All mail in the system';
+    case 'human':
+      return 'Communication from agents';
+    case 'agent':
+      return `Mail for ${agentType || 'agent'}`;
+  }
+}
+
 export default function ProjectMailPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -14,13 +52,9 @@ export default function ProjectMailPage() {
   const [showComposeModal, setShowComposeModal] = useState(false);
   const [filter, setFilter] = useState<MailFilter>({ type: 'human' });
 
-  // Get project for filtering
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
-
-  // Fetch agents for filter dropdown (scoped to project via context header)
   const { data: agents } = trpc.agent.list.useQuery({}, { enabled: !!project?.id });
 
-  // Conditional mail queries based on filter - all scoped to project via context header
   const allMailQuery = trpc.mail.listAll.useQuery(
     { includeRead: true },
     { enabled: filter.type === 'all' && !!project?.id, refetchInterval: 5000 }
@@ -36,27 +70,24 @@ export default function ProjectMailPage() {
     { enabled: filter.type === 'agent', refetchInterval: 5000 }
   );
 
-  // Determine which data to use based on filter
-  const mail =
-    filter.type === 'all'
-      ? allMailQuery.data
-      : filter.type === 'human'
-        ? humanMailQuery.data
-        : agentMailQuery.data;
-
-  const isLoading =
-    filter.type === 'all'
-      ? allMailQuery.isLoading
-      : filter.type === 'human'
-        ? humanMailQuery.isLoading
-        : agentMailQuery.isLoading;
-
-  const refetch =
-    filter.type === 'all'
-      ? allMailQuery.refetch
-      : filter.type === 'human'
-        ? humanMailQuery.refetch
-        : agentMailQuery.refetch;
+  const mail = getMailQueryResult(
+    filter,
+    allMailQuery.data,
+    humanMailQuery.data,
+    agentMailQuery.data
+  );
+  const isLoading = getMailQueryResult(
+    filter,
+    allMailQuery.isLoading,
+    humanMailQuery.isLoading,
+    agentMailQuery.isLoading
+  );
+  const refetch = getMailQueryResult(
+    filter,
+    allMailQuery.refetch,
+    humanMailQuery.refetch,
+    agentMailQuery.refetch
+  );
 
   if (isLoading) {
     return (
@@ -74,19 +105,9 @@ export default function ProjectMailPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {filter.type === 'all'
-              ? 'All System Mail'
-              : filter.type === 'human'
-                ? 'Mail Inbox'
-                : `Agent Inbox`}
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900">{getFilterTitle(filter)}</h1>
           <p className="text-gray-600 mt-1">
-            {filter.type === 'all'
-              ? 'All mail in the system'
-              : filter.type === 'human'
-                ? 'Communication from agents'
-                : `Mail for ${selectedAgent?.type || 'agent'}`}
+            {getFilterDescription(filter, selectedAgent?.type)}
             {unreadCount > 0 && <span className="ml-2 text-blue-600">({unreadCount} unread)</span>}
           </p>
         </div>
@@ -234,7 +255,7 @@ export default function ProjectMailPage() {
           onClose={() => setShowComposeModal(false)}
           onSent={() => {
             setShowComposeModal(false);
-            refetch();
+            refetch?.();
           }}
         />
       )}

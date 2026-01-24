@@ -192,7 +192,7 @@ export async function sendMessage(agentId: string, message: string): Promise<voi
  * Capture output from tmux session
  * Returns last N lines of visible content
  */
-export async function captureOutput(agentId: string, lines: number = 100): Promise<string> {
+export function captureOutput(agentId: string, lines: number = 100): Promise<string> {
   const tmuxSessionName = getTmuxSessionName(agentId);
   return tmuxClient.capturePane(tmuxSessionName, lines);
 }
@@ -262,6 +262,6 @@ export async function killSession(agentId: string): Promise<void> {
 /**
  * List all worker tmux sessions
  */
-export async function listWorkerSessions(): Promise<string[]> {
+export function listWorkerSessions(): Promise<string[]> {
   return tmuxClient.listSessionsByPrefix('worker-');
 }

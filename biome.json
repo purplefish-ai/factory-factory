@@ -14,6 +14,13 @@
     "indentWidth": 2,
     "lineWidth": 100
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "javascript": {
     "formatter": {
       "quoteStyle": "single",
@@ -61,13 +68,14 @@
         "noConfusingVoidType": "error",
         "noEmptyBlockStatements": "error",
         "noMisleadingCharacterClass": "error",
-        "useAwait": "off",
+        "useAwait": "error",
         "useIterableCallbackReturn": "off",
-        "noArrayIndexKey": "off"
+        "noArrayIndexKey": "error",
+        "noUnsafeDeclarationMerging": "error"
       },
       "complexity": {
-        "noBannedTypes": "off",
-        "noExcessiveCognitiveComplexity": "warn",
+        "noBannedTypes": "error",
+        "noExcessiveCognitiveComplexity": "error",
         "noStaticOnlyClass": "off",
         "noUselessThisAlias": "error",
         "noUselessTypeConstraint": "error",
@@ -86,7 +94,7 @@
       },
       "performance": {
         "noAccumulatingSpread": "error",
-        "noDelete": "warn"
+        "noDelete": "error"
       }
     }
   },

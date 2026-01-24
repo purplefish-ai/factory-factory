@@ -31,7 +31,7 @@ export interface ListEpicsFilters {
 }
 
 export class EpicAccessor {
-  async create(data: CreateEpicInput): Promise<EpicWithRelations> {
+  create(data: CreateEpicInput): Promise<EpicWithRelations> {
     return prisma.epic.create({
       data: {
         projectId: data.projectId,
@@ -49,7 +49,7 @@ export class EpicAccessor {
     });
   }
 
-  async findById(id: string): Promise<EpicWithRelations | null> {
+  findById(id: string): Promise<EpicWithRelations | null> {
     return prisma.epic.findUnique({
       where: { id },
       include: {
@@ -60,7 +60,7 @@ export class EpicAccessor {
     });
   }
 
-  async findByLinearIssueId(linearIssueId: string): Promise<EpicWithRelations | null> {
+  findByLinearIssueId(linearIssueId: string): Promise<EpicWithRelations | null> {
     return prisma.epic.findUnique({
       where: { linearIssueId },
       include: {
@@ -71,14 +71,14 @@ export class EpicAccessor {
     });
   }
 
-  async update(id: string, data: UpdateEpicInput): Promise<Epic> {
+  update(id: string, data: UpdateEpicInput): Promise<Epic> {
     return prisma.epic.update({
       where: { id },
       data,
     });
   }
 
-  async list(filters?: ListEpicsFilters): Promise<EpicWithRelations[]> {
+  list(filters?: ListEpicsFilters): Promise<EpicWithRelations[]> {
     const where: Prisma.EpicWhereInput = {};
 
     if (filters?.projectId) {
@@ -102,7 +102,7 @@ export class EpicAccessor {
     });
   }
 
-  async delete(id: string): Promise<Epic> {
+  delete(id: string): Promise<Epic> {
     return prisma.epic.delete({
       where: { id },
     });

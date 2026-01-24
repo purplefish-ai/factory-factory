@@ -452,6 +452,35 @@ export async function stopWorker(agentId: string): Promise<void> {
 }
 
 /**
+ * Clean up worktree for a task if it exists
+ */
+async function cleanupTaskWorktree(taskId: string): Promise<void> {
+  const task = await taskAccessor.findById(taskId);
+  if (!task?.worktreePath) {
+    return;
+  }
+
+  const epic = await epicAccessor.findById(task.epicId);
+  if (!epic?.project) {
+    return;
+  }
+
+  const gitClient = GitClientFactory.forProject({
+    repoPath: epic.project.repoPath,
+    worktreeBasePath: epic.project.worktreeBasePath,
+  });
+
+  const worktreeName = task.worktreePath.split('/').pop();
+  if (worktreeName) {
+    try {
+      await gitClient.deleteWorktree(worktreeName);
+    } catch {
+      // Worktree may not exist
+    }
+  }
+}
+
+/**
  * Kill a worker agent and clean up resources
  */
 export async function killWorker(agentId: string): Promise<void> {
@@ -475,25 +504,7 @@ export async function killWorker(agentId: string): Promise<void> {
 
   // Delete worktree if task exists
   if (agent.currentTaskId) {
-    const task = await taskAccessor.findById(agent.currentTaskId);
-    if (task?.worktreePath) {
-      // Get project to create project-specific GitClient
-      const epic = await epicAccessor.findById(task.epicId);
-      if (epic?.project) {
-        const gitClient = GitClientFactory.forProject({
-          repoPath: epic.project.repoPath,
-          worktreeBasePath: epic.project.worktreeBasePath,
-        });
-        const worktreeName = task.worktreePath.split('/').pop();
-        if (worktreeName) {
-          try {
-            await gitClient.deleteWorktree(worktreeName);
-          } catch {
-            // Worktree may not exist
-          }
-        }
-      }
-    }
+    await cleanupTaskWorktree(agent.currentTaskId);
   }
 
   // Remove from active workers

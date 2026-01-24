@@ -9,7 +9,7 @@ export interface CreateDecisionLogInput {
 }
 
 export class DecisionLogAccessor {
-  async create(data: CreateDecisionLogInput): Promise<DecisionLog> {
+  create(data: CreateDecisionLogInput): Promise<DecisionLog> {
     return prisma.decisionLog.create({
       data: {
         agentId: data.agentId,
@@ -20,7 +20,7 @@ export class DecisionLogAccessor {
     });
   }
 
-  async findById(id: string): Promise<DecisionLog | null> {
+  findById(id: string): Promise<DecisionLog | null> {
     return prisma.decisionLog.findUnique({
       where: { id },
       include: {
@@ -29,7 +29,7 @@ export class DecisionLogAccessor {
     });
   }
 
-  async findByAgentId(agentId: string, limit = 50): Promise<DecisionLog[]> {
+  findByAgentId(agentId: string, limit = 50): Promise<DecisionLog[]> {
     return prisma.decisionLog.findMany({
       where: { agentId },
       orderBy: { timestamp: 'desc' },
@@ -40,7 +40,7 @@ export class DecisionLogAccessor {
     });
   }
 
-  async findRecent(limit = 100, projectId?: string): Promise<DecisionLog[]> {
+  findRecent(limit = 100, projectId?: string): Promise<DecisionLog[]> {
     const where: { agent?: { currentEpic: { projectId: string } } } = {};
 
     // Filter by project via agent → currentEpic → projectId
@@ -62,7 +62,7 @@ export class DecisionLogAccessor {
     });
   }
 
-  async delete(id: string): Promise<DecisionLog> {
+  delete(id: string): Promise<DecisionLog> {
     return prisma.decisionLog.delete({
       where: { id },
     });
@@ -71,7 +71,7 @@ export class DecisionLogAccessor {
   /**
    * Create an automatic decision log entry for MCP tool calls
    */
-  async createAutomatic(
+  createAutomatic(
     agentId: string,
     toolName: string,
     type: 'invocation' | 'result' | 'error',
@@ -110,7 +110,7 @@ export class DecisionLogAccessor {
   /**
    * Create a manual decision log entry for business logic
    */
-  async createManual(
+  createManual(
     agentId: string,
     title: string,
     body: string,
@@ -127,25 +127,21 @@ export class DecisionLogAccessor {
   /**
    * Get recent logs for a specific agent
    */
-  async findByAgentIdRecent(agentId: string, limit = 50): Promise<DecisionLog[]> {
+  findByAgentIdRecent(agentId: string, limit = 50): Promise<DecisionLog[]> {
     return this.findByAgentId(agentId, limit);
   }
 
   /**
    * Get recent logs across all agents
    */
-  async findAllRecent(limit = 100): Promise<DecisionLog[]> {
+  findAllRecent(limit = 100): Promise<DecisionLog[]> {
     return this.findRecent(limit);
   }
 
   /**
    * List decision logs with optional filters
    */
-  async list(options: {
-    agentId?: string;
-    projectId?: string;
-    limit?: number;
-  }): Promise<DecisionLog[]> {
+  list(options: { agentId?: string; projectId?: string; limit?: number }): Promise<DecisionLog[]> {
     const { agentId, projectId, limit = 100 } = options;
 
     if (agentId) {

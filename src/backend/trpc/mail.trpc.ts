@@ -14,7 +14,7 @@ export const mailRouter = router({
         })
         .optional()
     )
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       return mailAccessor.listHumanInbox(input?.includeRead ?? true, ctx.projectId);
     }),
 
@@ -27,7 +27,7 @@ export const mailRouter = router({
         })
         .optional()
     )
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       return mailAccessor.listAll(input?.includeRead ?? true, ctx.projectId);
     }),
 
@@ -39,7 +39,7 @@ export const mailRouter = router({
         includeRead: z.boolean().optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(({ input }) => {
       return mailAccessor.listInbox(input.agentId, input.includeRead ?? true);
     }),
 
@@ -133,7 +133,7 @@ export const mailRouter = router({
     }),
 
   // Mark mail as read
-  markAsRead: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+  markAsRead: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
     return mailAccessor.markAsRead(input.id);
   }),
 

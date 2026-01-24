@@ -28,7 +28,7 @@ export interface ListAgentsFilters {
 }
 
 export class AgentAccessor {
-  async create(data: CreateAgentInput): Promise<Agent> {
+  create(data: CreateAgentInput): Promise<Agent> {
     return prisma.agent.create({
       data: {
         type: data.type,
@@ -40,7 +40,7 @@ export class AgentAccessor {
     });
   }
 
-  async findById(id: string): Promise<Agent | null> {
+  findById(id: string): Promise<Agent | null> {
     return prisma.agent.findUnique({
       where: { id },
       include: {
@@ -54,14 +54,14 @@ export class AgentAccessor {
     });
   }
 
-  async update(id: string, data: UpdateAgentInput): Promise<Agent> {
+  update(id: string, data: UpdateAgentInput): Promise<Agent> {
     return prisma.agent.update({
       where: { id },
       data,
     });
   }
 
-  async list(filters?: ListAgentsFilters): Promise<Agent[]> {
+  list(filters?: ListAgentsFilters): Promise<Agent[]> {
     const where: Prisma.AgentWhereInput = {};
 
     if (filters?.type) {
@@ -89,7 +89,7 @@ export class AgentAccessor {
     });
   }
 
-  async findByType(type: AgentType): Promise<Agent[]> {
+  findByType(type: AgentType): Promise<Agent[]> {
     return prisma.agent.findMany({
       where: { type },
       include: {
@@ -99,7 +99,7 @@ export class AgentAccessor {
     });
   }
 
-  async findByEpicId(epicId: string): Promise<Agent | null> {
+  findByEpicId(epicId: string): Promise<Agent | null> {
     return prisma.agent.findFirst({
       where: { currentEpicId: epicId },
       include: {
@@ -109,7 +109,7 @@ export class AgentAccessor {
     });
   }
 
-  async delete(id: string): Promise<Agent> {
+  delete(id: string): Promise<Agent> {
     return prisma.agent.delete({
       where: { id },
     });
@@ -118,7 +118,7 @@ export class AgentAccessor {
   /**
    * Update an agent's heartbeat (lastActiveAt) to now
    */
-  async updateHeartbeat(id: string): Promise<Agent> {
+  updateHeartbeat(id: string): Promise<Agent> {
     return prisma.agent.update({
       where: { id },
       data: { lastActiveAt: new Date() },
@@ -128,7 +128,7 @@ export class AgentAccessor {
   /**
    * Get agents whose last heartbeat is older than the specified number of minutes
    */
-  async getAgentsSinceHeartbeat(minutes: number): Promise<Agent[]> {
+  getAgentsSinceHeartbeat(minutes: number): Promise<Agent[]> {
     const threshold = new Date(Date.now() - minutes * 60 * 1000);
     return prisma.agent.findMany({
       where: {
@@ -146,7 +146,7 @@ export class AgentAccessor {
   /**
    * Get healthy agents of a specific type (heartbeat within threshold)
    */
-  async getHealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
+  getHealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
     const threshold = new Date(Date.now() - minutes * 60 * 1000);
     return prisma.agent.findMany({
       where: {
@@ -168,7 +168,7 @@ export class AgentAccessor {
   /**
    * Get unhealthy agents of a specific type (heartbeat older than threshold)
    */
-  async getUnhealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
+  getUnhealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
     const threshold = new Date(Date.now() - minutes * 60 * 1000);
     return prisma.agent.findMany({
       where: {
@@ -222,7 +222,7 @@ export class AgentAccessor {
   /**
    * Find agent by task ID (for workers)
    */
-  async findByTaskId(taskId: string): Promise<Agent | null> {
+  findByTaskId(taskId: string): Promise<Agent | null> {
     return prisma.agent.findFirst({
       where: { currentTaskId: taskId },
       include: {
@@ -235,7 +235,7 @@ export class AgentAccessor {
   /**
    * Find all workers for a specific epic
    */
-  async findWorkersByEpicId(epicId: string): Promise<Agent[]> {
+  findWorkersByEpicId(epicId: string): Promise<Agent[]> {
     return prisma.agent.findMany({
       where: {
         type: AgentType.WORKER,
@@ -255,7 +255,7 @@ export class AgentAccessor {
   /**
    * Find all agents for a specific epic (workers and supervisors)
    */
-  async findAgentsByEpicId(epicId: string): Promise<Agent[]> {
+  findAgentsByEpicId(epicId: string): Promise<Agent[]> {
     return prisma.agent.findMany({
       where: {
         OR: [

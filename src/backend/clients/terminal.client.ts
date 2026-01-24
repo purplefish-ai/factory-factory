@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process';
 /**
  * Check if a tmux session exists
  */
-export async function tmuxSessionExists(sessionName: string): Promise<boolean> {
+export function tmuxSessionExists(sessionName: string): Promise<boolean> {
   return new Promise((resolve) => {
     const proc = spawn('tmux', ['has-session', '-t', sessionName]);
 
@@ -46,7 +46,7 @@ export async function attachToTmuxSession(sessionName: string): Promise<{
 /**
  * Read session output from tmux session buffer
  */
-export async function readSessionOutput(sessionName: string, lines = 100): Promise<string> {
+export function readSessionOutput(sessionName: string, lines = 100): Promise<string> {
   return new Promise((resolve, reject) => {
     // Verify session exists
     const hasSession = spawn('tmux', ['has-session', '-t', sessionName]);
@@ -94,7 +94,7 @@ export async function readSessionOutput(sessionName: string, lines = 100): Promi
 /**
  * List all tmux sessions
  */
-export async function listTmuxSessions(): Promise<
+export function listTmuxSessions(): Promise<
   Array<{ name: string; created: string; attached: boolean }>
 > {
   return new Promise((resolve, reject) => {
@@ -139,7 +139,7 @@ export async function listTmuxSessions(): Promise<
 /**
  * Send keys to a tmux session
  */
-export async function sendKeysToSession(sessionName: string, keys: string): Promise<void> {
+export function sendKeysToSession(sessionName: string, keys: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn('tmux', ['send-keys', '-t', sessionName, keys]);
 

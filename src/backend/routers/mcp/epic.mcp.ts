@@ -951,6 +951,24 @@ async function sendEpicCompletionNotifications(
 }
 
 /**
+ * Generate completion mail body for epic PR
+ */
+function generateEpicCompletionMailBody(
+  epicTitle: string,
+  branchName: string,
+  completedCount: number,
+  failedCount: number,
+  prUrl: string | undefined,
+  prCreated: boolean
+): string {
+  const taskSummary = `Completed tasks: ${completedCount}\nFailed tasks: ${failedCount}`;
+  if (prCreated) {
+    return `The epic "${epicTitle}" has been completed and is ready for review.\n\nPR URL: ${prUrl}\nBranch: ${branchName}\n\n${taskSummary}`;
+  }
+  return `The epic "${epicTitle}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${branchName}\n\n${taskSummary}`;
+}
+
+/**
  * Create PR from epic branch to main (SUPERVISOR only)
  * Also cleans up worker tmux sessions for completed tasks
  */
@@ -971,7 +989,6 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       );
     }
 
-    // Get project for this epic
     const project = epic.project;
     if (!project) {
       return createErrorResponse(
@@ -992,7 +1009,6 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       );
     }
 
-    // Get project-specific GitClient
     const gitClient = GitClientFactory.forProject({
       repoPath: project.repoPath,
       worktreeBasePath: project.worktreeBasePath,
@@ -1016,9 +1032,14 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
     const cleanedUpCount = await cleanupAllWorkers(tasks);
     await epicAccessor.update(epic.id, { state: EpicState.COMPLETED, completedAt: new Date() });
 
-    const mailBody = prCreated
-      ? `The epic "${epic.title}" has been completed and is ready for review.\n\nPR URL: ${prInfo?.url}\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`
-      : `The epic "${epic.title}" has been completed locally.\n\nNote: PR could not be created (no remote configured).\nBranch: ${epicBranchName}\n\nCompleted tasks: ${completedTasks.length}\nFailed tasks: ${failedTasks.length}`;
+    const mailBody = generateEpicCompletionMailBody(
+      epic.title,
+      epicBranchName,
+      completedTasks.length,
+      failedTasks.length,
+      prInfo?.url,
+      prCreated
+    );
 
     await mailAccessor.create({
       fromAgentId: context.agentId,
@@ -1044,6 +1065,10 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
 
     await sendEpicCompletionNotifications(context, epic, prInfo?.url || null);
 
+    const message = prCreated
+      ? `Epic PR created successfully. ${cleanedUpCount} worker(s) cleaned up. Human review requested.`
+      : `Epic completed locally (PR skipped - no remote). ${cleanedUpCount} worker(s) cleaned up.`;
+
     return createSuccessResponse({
       epicId: epic.id,
       prUrl: prInfo?.url || null,
@@ -1051,9 +1076,7 @@ async function createEpicPR(context: McpToolContext, input: unknown): Promise<Mc
       prCreated,
       state: EpicState.COMPLETED,
       workersCleanedUp: cleanedUpCount,
-      message: prCreated
-        ? `Epic PR created successfully. ${cleanedUpCount} worker(s) cleaned up. Human review requested.`
-        : `Epic completed locally (PR skipped - no remote). ${cleanedUpCount} worker(s) cleaned up.`,
+      message,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

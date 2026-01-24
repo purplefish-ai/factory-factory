@@ -37,7 +37,7 @@ export interface ListTasksFilters {
 }
 
 export class TaskAccessor {
-  async create(data: CreateTaskInput): Promise<Task> {
+  create(data: CreateTaskInput): Promise<Task> {
     return prisma.task.create({
       data: {
         epicId: data.epicId,
@@ -48,7 +48,7 @@ export class TaskAccessor {
     });
   }
 
-  async findById(id: string): Promise<TaskWithRelations | null> {
+  findById(id: string): Promise<TaskWithRelations | null> {
     return prisma.task.findUnique({
       where: { id },
       include: {
@@ -62,14 +62,14 @@ export class TaskAccessor {
     });
   }
 
-  async update(id: string, data: UpdateTaskInput): Promise<Task> {
+  update(id: string, data: UpdateTaskInput): Promise<Task> {
     return prisma.task.update({
       where: { id },
       data,
     });
   }
 
-  async list(filters?: ListTasksFilters): Promise<Task[]> {
+  list(filters?: ListTasksFilters): Promise<Task[]> {
     const where: Prisma.TaskWhereInput = {};
 
     if (filters?.projectId) {
@@ -97,7 +97,7 @@ export class TaskAccessor {
     });
   }
 
-  async findByEpicId(epicId: string): Promise<Task[]> {
+  findByEpicId(epicId: string): Promise<Task[]> {
     return prisma.task.findMany({
       where: { epicId },
       orderBy: { createdAt: 'asc' },
@@ -107,7 +107,7 @@ export class TaskAccessor {
     });
   }
 
-  async delete(id: string): Promise<Task> {
+  delete(id: string): Promise<Task> {
     return prisma.task.delete({
       where: { id },
     });

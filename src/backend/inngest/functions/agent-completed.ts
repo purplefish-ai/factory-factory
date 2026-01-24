@@ -57,6 +57,7 @@ export const agentCompletedHandler = inngest.createFunction(
     }
 
     // Step 2: Handle completion based on agent type
+    // biome-ignore lint/suspicious/useAwait: Inngest step.run requires async for proper type inference
     const completionResult = await step.run('handle-completion', async () => {
       switch (agentInfo.type) {
         case AgentType.WORKER:

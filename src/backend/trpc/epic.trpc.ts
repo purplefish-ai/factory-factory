@@ -17,7 +17,7 @@ export const epicRouter = router({
         })
         .optional()
     )
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       return epicAccessor.list({
         ...input,
         projectId: ctx.projectId,
@@ -107,7 +107,7 @@ export const epicRouter = router({
     }),
 
   // Delete an epic
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
     return epicAccessor.delete(input.id);
   }),
 
