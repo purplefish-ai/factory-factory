@@ -17,6 +17,9 @@ export default function NewProjectPage() {
   const [repoPath, setRepoPath] = useState('');
   const [error, setError] = useState('');
 
+  const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
+  const hasExistingProjects = projects && projects.length > 0;
+
   const createProject = trpc.project.create.useMutation({
     onSuccess: () => {
       router.push('/projects');
@@ -38,6 +41,62 @@ export default function NewProjectPage() {
     createProject.mutate({ repoPath });
   };
 
+  // Onboarding view when no projects exist
+  if (!hasExistingProjects) {
+    return (
+      <div className="flex min-h-[80vh] items-center justify-center">
+        <div className="w-full max-w-lg space-y-8">
+          <div className="text-center space-y-2">
+            <h1 className="text-4xl font-bold tracking-tight">FactoryFactory</h1>
+            <p className="text-lg text-muted-foreground">
+              Autonomous software development orchestration system
+            </p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Get Started</CardTitle>
+              <CardDescription>
+                Add your first repository to begin using FactoryFactory.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="repoPath">Repository Path</Label>
+                  <Input
+                    type="text"
+                    id="repoPath"
+                    value={repoPath}
+                    onChange={(e) => setRepoPath(e.target.value)}
+                    className="font-mono"
+                    placeholder="/Users/you/code/my-project"
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Path to a git repository on your local machine.
+                  </p>
+                </div>
+
+                <Button type="submit" className="w-full" disabled={createProject.isPending}>
+                  {createProject.isPending && <Spinner className="mr-2" />}
+                  {createProject.isPending ? 'Adding...' : 'Add Project'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Normal view when projects already exist
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
