@@ -4,14 +4,52 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { trpc } from '../../frontend/lib/trpc';
 
+type MailFilter = { type: 'all' } | { type: 'human' } | { type: 'agent'; agentId: string };
+
 export default function MailPage() {
   const [showComposeModal, setShowComposeModal] = useState(false);
+  const [filter, setFilter] = useState<MailFilter>({ type: 'human' });
 
-  const {
-    data: mail,
-    isLoading,
-    refetch,
-  } = trpc.mail.listHumanInbox.useQuery({ includeRead: true }, { refetchInterval: 5000 });
+  // Fetch agents for filter dropdown
+  const { data: agents } = trpc.agent.list.useQuery();
+
+  // Conditional mail queries based on filter
+  const allMailQuery = trpc.mail.listAll.useQuery(
+    { includeRead: true },
+    { enabled: filter.type === 'all', refetchInterval: 5000 }
+  );
+
+  const humanMailQuery = trpc.mail.listHumanInbox.useQuery(
+    { includeRead: true },
+    { enabled: filter.type === 'human', refetchInterval: 5000 }
+  );
+
+  const agentMailQuery = trpc.mail.listAgentInbox.useQuery(
+    { agentId: filter.type === 'agent' ? filter.agentId : '', includeRead: true },
+    { enabled: filter.type === 'agent', refetchInterval: 5000 }
+  );
+
+  // Determine which data to use based on filter
+  const mail =
+    filter.type === 'all'
+      ? allMailQuery.data
+      : filter.type === 'human'
+        ? humanMailQuery.data
+        : agentMailQuery.data;
+
+  const isLoading =
+    filter.type === 'all'
+      ? allMailQuery.isLoading
+      : filter.type === 'human'
+        ? humanMailQuery.isLoading
+        : agentMailQuery.isLoading;
+
+  const refetch =
+    filter.type === 'all'
+      ? allMailQuery.refetch
+      : filter.type === 'human'
+        ? humanMailQuery.refetch
+        : agentMailQuery.refetch;
 
   if (isLoading) {
     return (
@@ -22,14 +60,26 @@ export default function MailPage() {
   }
 
   const unreadCount = mail?.filter((m) => !m.isRead).length ?? 0;
+  const selectedAgent =
+    filter.type === 'agent' ? agents?.find((a) => a.id === filter.agentId) : null;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mail Inbox</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {filter.type === 'all'
+              ? 'All System Mail'
+              : filter.type === 'human'
+                ? 'Mail Inbox'
+                : `Agent Inbox`}
+          </h1>
           <p className="text-gray-600 mt-1">
-            Communication from agents
+            {filter.type === 'all'
+              ? 'All mail in the system'
+              : filter.type === 'human'
+                ? 'Communication from agents'
+                : `Mail for ${selectedAgent?.type || 'agent'}`}
             {unreadCount > 0 && <span className="ml-2 text-blue-600">({unreadCount} unread)</span>}
           </p>
         </div>
@@ -47,6 +97,68 @@ export default function MailPage() {
           </svg>
           Compose
         </button>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="bg-white rounded-lg shadow-sm p-4">
+        <div className="flex gap-4 items-center flex-wrap">
+          <label className="text-sm font-medium text-gray-700">View:</label>
+
+          {/* Quick filter buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilter({ type: 'human' })}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filter.type === 'human'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              My Inbox
+            </button>
+            <button
+              onClick={() => setFilter({ type: 'all' })}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filter.type === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All Mail
+            </button>
+          </div>
+
+          {/* Agent dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">or</span>
+            <select
+              value={filter.type === 'agent' ? filter.agentId : ''}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setFilter({ type: 'agent', agentId: e.target.value });
+                }
+              }}
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            >
+              <option value="">Select agent inbox...</option>
+              {agents?.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.type} - {agent.id.slice(0, 8)}...
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear filter (show when viewing agent) */}
+          {filter.type === 'agent' && (
+            <button
+              onClick={() => setFilter({ type: 'human' })}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Mail List */}
@@ -90,14 +202,10 @@ export default function MailPage() {
                       </p>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
-                      From:{' '}
-                      {(item as { fromAgent?: { type: string; id: string } }).fromAgent?.type ||
-                        'System'}{' '}
-                      {(item as { fromAgent?: { type: string; id: string } }).fromAgent?.id && (
-                        <span className="font-mono text-xs">
-                          ({(item as { fromAgent?: { id: string } }).fromAgent?.id.slice(0, 8)}...)
-                        </span>
-                      )}
+                      <MailParticipants
+                        item={item as MailWithRelations}
+                        showRecipient={filter.type === 'all'}
+                      />
                     </p>
                     <p className="text-sm text-gray-400 truncate mt-1">
                       {item.body.slice(0, 100)}...
@@ -124,6 +232,54 @@ export default function MailPage() {
         />
       )}
     </div>
+  );
+}
+
+// Type for mail items with relations
+type MailWithRelations = {
+  id: string;
+  fromAgentId: string | null;
+  toAgentId: string | null;
+  isForHuman: boolean;
+  fromAgent?: { type: string; id: string } | null;
+  toAgent?: { type: string; id: string } | null;
+};
+
+function MailParticipants({
+  item,
+  showRecipient,
+}: {
+  item: MailWithRelations;
+  showRecipient: boolean;
+}) {
+  return (
+    <>
+      From:{' '}
+      {item.fromAgent ? (
+        <>
+          {item.fromAgent.type}{' '}
+          <span className="font-mono text-xs">({item.fromAgent.id.slice(0, 8)}...)</span>
+        </>
+      ) : (
+        'Human'
+      )}
+      {showRecipient && (
+        <>
+          {' '}
+          <span className="text-gray-400">→</span>{' '}
+          {item.isForHuman ? (
+            'Human'
+          ) : item.toAgent ? (
+            <>
+              {item.toAgent.type}{' '}
+              <span className="font-mono text-xs">({item.toAgent.id.slice(0, 8)}...)</span>
+            </>
+          ) : (
+            'Unknown'
+          )}
+        </>
+      )}
+    </>
   );
 }
 
