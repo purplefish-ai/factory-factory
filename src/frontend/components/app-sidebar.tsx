@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { setProjectContext, trpc } from '../lib/trpc';
+import { Logo } from './logo';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
@@ -127,7 +128,7 @@ export function AppSidebar() {
     return (
       <Sidebar collapsible="none">
         <SidebarHeader className="border-b border-sidebar-border p-4">
-          <h1 className="text-xl font-bold">FactoryFactory</h1>
+          <Logo iconClassName="size-6" textClassName="text-sm" />
           <p className="text-xs text-muted-foreground mt-1">Loading...</p>
         </SidebarHeader>
         <SidebarContent>
@@ -153,8 +154,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="none">
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <h1 className="text-xl font-bold">FactoryFactory</h1>
-        <p className="text-xs text-muted-foreground mt-1">Autonomous Dev System</p>
+        <Logo iconClassName="size-6" textClassName="text-sm" />
 
         {projects && projects.length > 0 && (
           <div className="mt-3">

@@ -1,0 +1,11 @@
+<svg width="300" height="200" viewBox="0 0 300 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer square -->
+  <rect x="110" y="20" width="90" height="90" stroke="currentColor" stroke-width="6" fill="none" rx="2"/>
+  <!-- Inner square -->
+  <rect x="90" y="40" width="70" height="70" stroke="currentColor" stroke-width="6" fill="none" rx="2"/>
+  <!-- Text: FACTORY (light) FACTORY (bold) -->
+  <text x="150" y="150" text-anchor="middle" font-family="var(--font-geist-sans), system-ui, sans-serif" fill="currentColor">
+    <tspan font-size="20" font-weight="300" letter-spacing="0.1em">FACTORY</tspan>
+    <tspan font-size="20" font-weight="700" letter-spacing="0.1em" dx="8">FACTORY</tspan>
+  </text>
+</svg>

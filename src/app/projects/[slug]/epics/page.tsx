@@ -62,7 +62,7 @@ export default function ProjectEpicsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Epics" description={project.name}>
         <Button asChild>
           <Link href={`/projects/${slug}/epics/new`}>

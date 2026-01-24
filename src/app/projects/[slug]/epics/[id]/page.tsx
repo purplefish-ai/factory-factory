@@ -67,7 +67,7 @@ export default function EpicDetailPage() {
   const workers = agents?.filter((a) => a.type === 'WORKER') ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
