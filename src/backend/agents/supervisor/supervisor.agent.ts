@@ -36,12 +36,14 @@ const activeSupervisors = new Map<string, SupervisorContext>();
  * Parse tool calls from Claude CLI output
  * Looks for tool use blocks in the captured output
  */
-function parseToolCallsFromOutput(output: string): Array<{
+interface ToolCall {
   toolId: string;
   toolName: string;
-  toolInput: any;
-}> {
-  const toolCalls: Array<{ toolId: string; toolName: string; toolInput: any }> = [];
+  toolInput: Record<string, unknown>;
+}
+
+function parseToolCallsFromOutput(output: string): ToolCall[] {
+  const toolCalls: ToolCall[] = [];
 
   // Look for tool use patterns in output
   // Claude CLI outputs tool calls in a specific format
@@ -188,7 +190,7 @@ export async function runSupervisor(agentId: string): Promise<void> {
     throw new Error(`Agent '${agentId}' does not have an epic assigned`);
   }
 
-  if (!agent.sessionId || !agent.tmuxSessionName) {
+  if (!(agent.sessionId && agent.tmuxSessionName)) {
     throw new Error(`Agent '${agentId}' does not have a Claude session`);
   }
 
@@ -242,7 +244,7 @@ export async function runSupervisor(agentId: string): Promise<void> {
   // Start inbox check loop (30 seconds to avoid spamming)
   supervisorContext.inboxCheckInterval = setInterval(async () => {
     await checkSupervisorInbox(agentId);
-  }, 30000); // Check every 30 seconds
+  }, 30_000); // Check every 30 seconds
 
   // Start worker health check loop (7 minutes)
   supervisorContext.workerHealthCheckInterval = setInterval(
@@ -308,7 +310,7 @@ async function captureSupervisorOutput(agentId: string, lines: number = 100): Pr
  */
 async function monitorSupervisor(agentId: string): Promise<void> {
   const supervisorContext = activeSupervisors.get(agentId);
-  if (!supervisorContext || !supervisorContext.isRunning) {
+  if (!supervisorContext?.isRunning) {
     return;
   }
 
@@ -356,7 +358,7 @@ async function monitorSupervisor(agentId: string): Promise<void> {
  */
 async function checkSupervisorInbox(agentId: string): Promise<void> {
   const supervisorContext = activeSupervisors.get(agentId);
-  if (!supervisorContext || !supervisorContext.isRunning) {
+  if (!supervisorContext?.isRunning) {
     return;
   }
 
@@ -444,7 +446,7 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
  */
 async function performWorkerHealthCheck(agentId: string): Promise<void> {
   const supervisorContext = activeSupervisors.get(agentId);
-  if (!supervisorContext || !supervisorContext.isRunning) {
+  if (!supervisorContext?.isRunning) {
     return;
   }
 

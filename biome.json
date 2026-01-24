@@ -27,29 +27,64 @@
       "recommended": true,
       "correctness": {
         "noUnusedVariables": "error",
-        "noUnusedImports": "error"
+        "noUnusedImports": "error",
+        "noUnusedPrivateClassMembers": "error",
+        "useExhaustiveDependencies": "error",
+        "useHookAtTopLevel": "error"
       },
       "style": {
         "useConst": "error",
         "useImportType": "error",
-        "noNonNullAssertion": "warn"
+        "noNonNullAssertion": "error",
+        "useBlockStatements": "error",
+        "useCollapsedElseIf": "error",
+        "useConsistentArrayType": "error",
+        "useEnumInitializers": "error",
+        "useExponentiationOperator": "error",
+        "useForOf": "error",
+        "useFragmentSyntax": "error",
+        "useNodejsImportProtocol": "error",
+        "useNumberNamespace": "error",
+        "useNumericSeparators": "error",
+        "useSelfClosingElements": "error",
+        "useShorthandAssign": "error",
+        "useShorthandFunctionType": "error",
+        "useTemplate": "error"
       },
       "suspicious": {
-        "noExplicitAny": "warn",
+        "noExplicitAny": "error",
         "noDoubleEquals": "error",
-        "noConsole": "warn",
+        "noConsole": "error",
         "noVar": "error",
+        "noImplicitAnyLet": "error",
+        "noAssignInExpressions": "error",
+        "noConfusingVoidType": "error",
+        "noEmptyBlockStatements": "error",
+        "noMisleadingCharacterClass": "error",
+        "useAwait": "off",
         "useIterableCallbackReturn": "off",
-        "noImplicitAnyLet": "off",
         "noArrayIndexKey": "off"
       },
       "complexity": {
-        "noBannedTypes": "off"
+        "noBannedTypes": "off",
+        "noExcessiveCognitiveComplexity": "warn",
+        "noUselessThisAlias": "error",
+        "noUselessTypeConstraint": "error",
+        "useFlatMap": "error",
+        "useOptionalChain": "error",
+        "useSimplifiedLogicExpression": "error"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "error"
       },
       "a11y": {
         "noSvgWithoutTitle": "off",
         "useButtonType": "off",
         "noLabelWithoutControl": "off"
+      },
+      "performance": {
+        "noAccumulatingSpread": "error",
+        "noDelete": "warn"
       }
     }
   },

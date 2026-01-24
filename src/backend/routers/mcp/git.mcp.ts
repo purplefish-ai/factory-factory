@@ -96,7 +96,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     const epicBranchName = `factoryfactory/epic-${epic.id}`;
 
     // Get diff stats
-    let diffStats;
+    let diffStats: string;
     try {
       const { stdout: statsOutput } = await execAsync(
         `git -C "${task.worktreePath}" diff --stat ${epicBranchName}...HEAD`
@@ -110,7 +110,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     }
 
     // Get full diff
-    let diffContent;
+    let diffContent: string;
     try {
       const { stdout: diffOutput } = await execAsync(
         `git -C "${task.worktreePath}" diff ${epicBranchName}...HEAD`
@@ -127,9 +127,9 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     const statsMatch = diffStats.match(
       /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
     );
-    const filesChanged = statsMatch ? parseInt(statsMatch[1], 10) : 0;
-    const insertions = statsMatch?.[2] ? parseInt(statsMatch[2], 10) : 0;
-    const deletions = statsMatch?.[3] ? parseInt(statsMatch[3], 10) : 0;
+    const filesChanged = statsMatch ? Number.parseInt(statsMatch[1], 10) : 0;
+    const insertions = statsMatch?.[2] ? Number.parseInt(statsMatch[2], 10) : 0;
+    const deletions = statsMatch?.[3] ? Number.parseInt(statsMatch[3], 10) : 0;
 
     // Log decision
     await decisionLogAccessor.createAutomatic(context.agentId, 'mcp__git__get_diff', 'result', {

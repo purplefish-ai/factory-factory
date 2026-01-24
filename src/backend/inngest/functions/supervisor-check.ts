@@ -31,16 +31,17 @@ export const supervisorCheckHandler = inngest.createFunction(
     const activeSupervisors = await step.run('get-active-supervisors', async () => {
       const supervisors = await agentAccessor.findByType(AgentType.SUPERVISOR);
 
-      // Filter to only active (non-failed) supervisors
+      // Filter to only active (non-failed) supervisors with epics
       const active = supervisors.filter(
-        (s) => s.state !== AgentState.FAILED && s.currentEpicId !== null
+        (s): s is typeof s & { currentEpicId: string } =>
+          s.state !== AgentState.FAILED && s.currentEpicId !== null
       );
 
       console.log(`Found ${active.length} active supervisor(s)`);
 
       return active.map((s) => ({
         id: s.id,
-        epicId: s.currentEpicId!,
+        epicId: s.currentEpicId,
         state: s.state,
         lastActiveAt: s.lastActiveAt.toISOString(),
       }));

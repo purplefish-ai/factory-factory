@@ -20,7 +20,9 @@ export default function LogsPage() {
   const { data: agents } = trpc.agent.list.useQuery();
 
   const filteredLogs = logs?.filter((log) => {
-    if (!agentFilter) return true;
+    if (!agentFilter) {
+      return true;
+    }
     return log.agentId === agentFilter;
   });
 

@@ -149,7 +149,7 @@ export class WorktreeService {
       }
 
       // If we couldn't identify the worktree, check if it's old
-      if (!taskMatch && !epicMatch) {
+      if (!(taskMatch || epicMatch)) {
         // Mark unidentified worktrees as potentially orphaned
         isOrphaned = true;
         reason = 'unknown';

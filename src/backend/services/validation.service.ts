@@ -74,7 +74,9 @@ const FORBIDDEN_PATTERNS = [
  * Sanitize a string for safe use
  */
 function sanitizeString(input: string): string {
-  if (!input) return '';
+  if (!input) {
+    return '';
+  }
 
   // Remove null bytes
   let sanitized = input.replace(/\0/g, '');
@@ -83,8 +85,8 @@ function sanitizeString(input: string): string {
   sanitized = sanitized.trim();
 
   // Limit length to prevent DoS
-  if (sanitized.length > 10000) {
-    sanitized = sanitized.substring(0, 10000);
+  if (sanitized.length > 10_000) {
+    sanitized = sanitized.substring(0, 10_000);
   }
 
   return sanitized;
@@ -196,14 +198,16 @@ export class ValidationService {
     // Check for common missing information
     const lowerDesc = sanitized.toLowerCase();
 
-    if (!lowerDesc.includes('test') && !lowerDesc.includes('verify')) {
+    if (!(lowerDesc.includes('test') || lowerDesc.includes('verify'))) {
       clarificationQuestions.push('Should tests be included for this feature?');
     }
 
     if (
-      !lowerDesc.includes('error') &&
-      !lowerDesc.includes('fail') &&
-      !lowerDesc.includes('exception')
+      !(
+        lowerDesc.includes('error') ||
+        lowerDesc.includes('fail') ||
+        lowerDesc.includes('exception')
+      )
     ) {
       clarificationQuestions.push('How should errors be handled?');
     }

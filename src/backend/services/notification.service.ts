@@ -30,10 +30,10 @@ function getConfig(): NotificationConfig {
     pushEnabled: process.env.NOTIFICATION_PUSH_ENABLED !== 'false',
     soundFile: process.env.NOTIFICATION_SOUND_FILE,
     quietHoursStart: process.env.NOTIFICATION_QUIET_HOURS_START
-      ? parseInt(process.env.NOTIFICATION_QUIET_HOURS_START, 10)
+      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_START, 10)
       : undefined,
     quietHoursEnd: process.env.NOTIFICATION_QUIET_HOURS_END
-      ? parseInt(process.env.NOTIFICATION_QUIET_HOURS_END, 10)
+      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_END, 10)
       : undefined,
   };
 }

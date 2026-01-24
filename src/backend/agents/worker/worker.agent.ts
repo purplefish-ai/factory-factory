@@ -37,12 +37,14 @@ const activeWorkers = new Map<string, WorkerContext>();
  * Parse tool calls from Claude CLI output
  * Looks for tool use blocks in the captured output
  */
-function parseToolCallsFromOutput(output: string): Array<{
+interface ToolCall {
   toolId: string;
   toolName: string;
-  toolInput: any;
-}> {
-  const toolCalls: Array<{ toolId: string; toolName: string; toolInput: any }> = [];
+  toolInput: Record<string, unknown>;
+}
+
+function parseToolCallsFromOutput(output: string): ToolCall[] {
+  const toolCalls: ToolCall[] = [];
 
   // Look for tool use patterns in output
   // Claude CLI outputs tool calls in a specific format
@@ -171,7 +173,7 @@ export async function runWorker(agentId: string): Promise<void> {
     throw new Error(`Agent '${agentId}' does not have a task assigned`);
   }
 
-  if (!agent.sessionId || !agent.tmuxSessionName) {
+  if (!(agent.sessionId && agent.tmuxSessionName)) {
     throw new Error(`Agent '${agentId}' does not have a Claude session`);
   }
 
@@ -219,7 +221,7 @@ export async function runWorker(agentId: string): Promise<void> {
   // Start inbox check loop for rebase requests
   workerContext.inboxCheckInterval = setInterval(async () => {
     await checkWorkerInbox(agentId);
-  }, 10000); // Check every 10 seconds
+  }, 10_000); // Check every 10 seconds
 
   console.log(
     `Worker ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`
@@ -231,7 +233,7 @@ export async function runWorker(agentId: string): Promise<void> {
  */
 async function monitorWorker(agentId: string): Promise<void> {
   const workerContext = activeWorkers.get(agentId);
-  if (!workerContext || !workerContext.isRunning) {
+  if (!workerContext?.isRunning) {
     return;
   }
 
@@ -287,7 +289,7 @@ async function monitorWorker(agentId: string): Promise<void> {
  */
 async function checkWorkerInbox(agentId: string): Promise<void> {
   const workerContext = activeWorkers.get(agentId);
-  if (!workerContext || !workerContext.isRunning) {
+  if (!workerContext?.isRunning) {
     return;
   }
 

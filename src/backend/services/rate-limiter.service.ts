@@ -77,13 +77,13 @@ export interface ConcurrencyStats {
  */
 function getDefaultConfig(): RateLimiterConfig {
   return {
-    claudeRequestsPerMinute: parseInt(process.env.CLAUDE_RATE_LIMIT_PER_MINUTE || '60', 10),
-    claudeRequestsPerHour: parseInt(process.env.CLAUDE_RATE_LIMIT_PER_HOUR || '1000', 10),
-    maxConcurrentWorkers: parseInt(process.env.MAX_CONCURRENT_WORKERS || '10', 10),
-    maxConcurrentSupervisors: parseInt(process.env.MAX_CONCURRENT_SUPERVISORS || '5', 10),
-    maxConcurrentEpics: parseInt(process.env.MAX_CONCURRENT_EPICS || '5', 10),
-    maxQueueSize: parseInt(process.env.RATE_LIMIT_QUEUE_SIZE || '100', 10),
-    queueTimeoutMs: parseInt(process.env.RATE_LIMIT_QUEUE_TIMEOUT_MS || '30000', 10),
+    claudeRequestsPerMinute: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_MINUTE || '60', 10),
+    claudeRequestsPerHour: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_HOUR || '1000', 10),
+    maxConcurrentWorkers: Number.parseInt(process.env.MAX_CONCURRENT_WORKERS || '10', 10),
+    maxConcurrentSupervisors: Number.parseInt(process.env.MAX_CONCURRENT_SUPERVISORS || '5', 10),
+    maxConcurrentEpics: Number.parseInt(process.env.MAX_CONCURRENT_EPICS || '5', 10),
+    maxQueueSize: Number.parseInt(process.env.RATE_LIMIT_QUEUE_SIZE || '100', 10),
+    queueTimeoutMs: Number.parseInt(process.env.RATE_LIMIT_QUEUE_TIMEOUT_MS || '30000', 10),
   };
 }
 
@@ -119,14 +119,14 @@ export class RateLimiter {
     };
 
     // Clean up old timestamps periodically
-    setInterval(() => this.cleanupOldTimestamps(), 60000);
+    setInterval(() => this.cleanupOldTimestamps(), 60_000);
   }
 
   /**
    * Clean up old request timestamps
    */
   private cleanupOldTimestamps(): void {
-    const oneHourAgo = Date.now() - 3600000;
+    const oneHourAgo = Date.now() - 3_600_000;
     this.requestTimestamps = this.requestTimestamps.filter((ts) => ts > oneHourAgo);
   }
 
@@ -142,8 +142,8 @@ export class RateLimiter {
    * Check if rate limited
    */
   isRateLimited(): boolean {
-    const requestsLastMinute = this.getRequestsInWindow(60000);
-    const requestsLastHour = this.getRequestsInWindow(3600000);
+    const requestsLastMinute = this.getRequestsInWindow(60_000);
+    const requestsLastHour = this.getRequestsInWindow(3_600_000);
 
     return (
       requestsLastMinute >= this.config.claudeRequestsPerMinute ||
@@ -373,8 +373,8 @@ export class RateLimiter {
    */
   getApiUsageStats(): ApiUsageStats {
     return {
-      requestsLastMinute: this.getRequestsInWindow(60000),
-      requestsLastHour: this.getRequestsInWindow(3600000),
+      requestsLastMinute: this.getRequestsInWindow(60_000),
+      requestsLastHour: this.getRequestsInWindow(3_600_000),
       totalRequests: this.totalRequests,
       queueDepth: this.requestQueue.length,
       isRateLimited: this.isRateLimited(),

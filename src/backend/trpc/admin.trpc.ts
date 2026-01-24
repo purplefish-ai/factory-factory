@@ -292,8 +292,9 @@ export const adminRouter = router({
       });
 
       // Filter by date if provided
-      const filteredLogs: DecisionLog[] = input.since
-        ? logs.filter((log: DecisionLog) => new Date(log.timestamp) >= new Date(input.since!))
+      const sinceDate = input.since ? new Date(input.since) : null;
+      const filteredLogs: DecisionLog[] = sinceDate
+        ? logs.filter((log: DecisionLog) => new Date(log.timestamp) >= sinceDate)
         : logs;
 
       return {
