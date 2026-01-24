@@ -1,15 +1,13 @@
-import { adminRouter } from './admin.trpc';
-import { agentRouter } from './agent.trpc';
-import { decisionLogRouter } from './decision-log.trpc';
-import { epicRouter } from './epic.trpc';
-import { mailRouter } from './mail.trpc';
-import { projectRouter } from './project.trpc';
-import { taskRouter } from './task.trpc';
-import { router } from './trpc';
+import { adminRouter } from './admin.trpc.js';
+import { agentRouter } from './agent.trpc.js';
+import { decisionLogRouter } from './decision-log.trpc.js';
+import { mailRouter } from './mail.trpc.js';
+import { projectRouter } from './project.trpc.js';
+import { taskRouter } from './task.trpc.js';
+import { router } from './trpc.js';
 
 export const appRouter = router({
   project: projectRouter,
-  epic: epicRouter,
   task: taskRouter,
   agent: agentRouter,
   mail: mailRouter,
@@ -20,10 +18,6 @@ export const appRouter = router({
 // Export type for use in frontend
 export type AppRouter = typeof appRouter;
 
-export {
-  epicScopedProcedure,
-  projectScopedProcedure,
-  topLevelTaskScopedProcedure,
-} from './procedures/index.js';
+export { projectScopedProcedure, topLevelTaskScopedProcedure } from './procedures/index.js';
 // Re-export context and procedure helpers
-export { createContext, publicProcedure } from './trpc';
+export { createContext, publicProcedure } from './trpc.js';

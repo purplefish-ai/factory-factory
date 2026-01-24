@@ -260,8 +260,8 @@ function ApiUsageSection({
 interface ConcurrencyData {
   activeWorkers: number;
   activeSupervisors: number;
-  activeEpics: number;
-  limits: { maxWorkers: number; maxSupervisors: number; maxEpics: number };
+  activeTopLevelTasks: number;
+  limits: { maxWorkers: number; maxSupervisors: number; maxTopLevelTasks: number };
 }
 
 function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) {
@@ -281,8 +281,8 @@ function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) 
             value={`${concurrency?.activeSupervisors || 0} / ${concurrency?.limits?.maxSupervisors || 0}`}
           />
           <StatCard
-            title="Active Epics"
-            value={`${concurrency?.activeEpics || 0} / ${concurrency?.limits?.maxEpics || 0}`}
+            title="Active Top-Level Tasks"
+            value={`${concurrency?.activeTopLevelTasks || 0} / ${concurrency?.limits?.maxTopLevelTasks || 0}`}
           />
         </div>
       </CardContent>

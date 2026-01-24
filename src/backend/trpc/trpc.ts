@@ -4,26 +4,26 @@ import superjson from 'superjson';
 
 /**
  * Context for tRPC procedures.
- * Contains optional project/epic scoping from request headers.
+ * Contains optional project/top-level task scoping from request headers.
  */
 export type Context = {
   /** Project ID from X-Project-Id header */
   projectId?: string;
-  /** Epic ID from X-Epic-Id header */
-  epicId?: string;
+  /** Top-level Task ID from X-Top-Level-Task-Id header */
+  topLevelTaskId?: string;
 };
 
 /**
  * Creates tRPC context from Express request.
- * Extracts project and epic scope from headers.
+ * Extracts project and top-level task scope from headers.
  */
 export const createContext = ({ req }: { req: Request }): Context => {
   const projectId = req.headers['x-project-id'];
-  const epicId = req.headers['x-epic-id'];
+  const topLevelTaskId = req.headers['x-top-level-task-id'];
 
   return {
     projectId: typeof projectId === 'string' ? projectId : undefined,
-    epicId: typeof epicId === 'string' ? epicId : undefined,
+    topLevelTaskId: typeof topLevelTaskId === 'string' ? topLevelTaskId : undefined,
   };
 };
 

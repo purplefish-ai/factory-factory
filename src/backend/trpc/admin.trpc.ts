@@ -168,35 +168,35 @@ export const adminRouter = router({
     }),
 
   /**
-   * Reset a top-level task (epic) to IN_PROGRESS state
+   * Reset a top-level task to IN_PROGRESS state
    */
-  resetEpic: publicProcedure
+  resetTopLevelTask: publicProcedure
     .input(
       z.object({
-        epicId: z.string(),
-        resetTasks: z.boolean().default(false),
+        topLevelTaskId: z.string(),
+        resetChildTasks: z.boolean().default(false),
       })
     )
     .mutation(async ({ input }) => {
-      const task = await taskAccessor.findById(input.epicId);
+      const task = await taskAccessor.findById(input.topLevelTaskId);
       if (!task) {
-        throw new Error(`Top-level task (epic) ${input.epicId} not found`);
+        throw new Error(`Top-level task ${input.topLevelTaskId} not found`);
       }
 
       // Verify it's a top-level task
       if (task.parentId !== null) {
-        throw new Error(`Task ${input.epicId} is not a top-level task (epic)`);
+        throw new Error(`Task ${input.topLevelTaskId} is not a top-level task`);
       }
 
-      logger.info('Resetting epic', { epicId: input.epicId });
+      logger.info('Resetting top-level task', { topLevelTaskId: input.topLevelTaskId });
 
-      await taskAccessor.update(input.epicId, {
+      await taskAccessor.update(input.topLevelTaskId, {
         state: TaskState.IN_PROGRESS,
         completedAt: null,
       });
 
-      if (input.resetTasks) {
-        const childTasks = await taskAccessor.findByParentId(input.epicId);
+      if (input.resetChildTasks) {
+        const childTasks = await taskAccessor.findByParentId(input.topLevelTaskId);
         for (const childTask of childTasks) {
           if (childTask.state === TaskState.FAILED || childTask.state === TaskState.BLOCKED) {
             await taskAccessor.update(childTask.id, {
@@ -210,7 +210,7 @@ export const adminRouter = router({
 
       return {
         success: true,
-        message: `Top-level task (epic) ${input.epicId} reset to IN_PROGRESS`,
+        message: `Top-level task ${input.topLevelTaskId} reset to IN_PROGRESS`,
       };
     }),
 
@@ -395,11 +395,11 @@ export const adminRouter = router({
    */
   getApiUsageByAgent: publicProcedure.query(() => {
     const usageByAgent = rateLimiter.getUsageByAgent();
-    const usageByEpic = rateLimiter.getUsageByEpic();
+    const usageByTopLevelTask = rateLimiter.getUsageByTopLevelTask();
 
     return {
       byAgent: Object.fromEntries(usageByAgent),
-      byEpic: Object.fromEntries(usageByEpic),
+      byTopLevelTask: Object.fromEntries(usageByTopLevelTask),
     };
   }),
 

@@ -24,7 +24,7 @@ interface CrashRecord {
   agentId: string;
   agentType: AgentType;
   timestamps: number[];
-  epicId?: string;
+  topLevelTaskId?: string;
   taskId?: string;
 }
 
@@ -62,7 +62,12 @@ export class CrashRecoveryService {
   /**
    * Record an agent crash
    */
-  recordCrash(agentId: string, agentType: AgentType, epicId?: string, taskId?: string): void {
+  recordCrash(
+    agentId: string,
+    agentType: AgentType,
+    topLevelTaskId?: string,
+    taskId?: string
+  ): void {
     const now = Date.now();
     const existing = this.crashRecords.get(agentId);
 
@@ -75,7 +80,7 @@ export class CrashRecoveryService {
         agentId,
         agentType,
         timestamps: [now],
-        epicId,
+        topLevelTaskId,
         taskId,
       });
     }
@@ -84,7 +89,7 @@ export class CrashRecoveryService {
       agentId,
       agentType,
       crashCount: this.crashRecords.get(agentId)?.timestamps.length,
-      epicId,
+      topLevelTaskId,
       taskId,
     });
   }
@@ -119,23 +124,23 @@ export class CrashRecoveryService {
   handleAgentCrash(
     agentId: string,
     agentType: AgentType,
-    epicId?: string,
+    topLevelTaskId?: string,
     taskId?: string,
     error?: Error
   ): Promise<RecoveryResult> {
     // Record the crash
-    this.recordCrash(agentId, agentType, epicId, taskId);
+    this.recordCrash(agentId, agentType, topLevelTaskId, taskId);
 
     logger.error('Handling agent crash', error || new Error('Unknown crash'), {
       agentId,
       agentType,
-      epicId,
+      topLevelTaskId,
       taskId,
     });
 
     // Check for crash loop
     if (this.isInCrashLoop(agentId)) {
-      return this.handleCrashLoop(agentId, agentType, epicId, taskId);
+      return this.handleCrashLoop(agentId, agentType, topLevelTaskId, taskId);
     }
 
     // Attempt recovery based on agent type
@@ -144,7 +149,7 @@ export class CrashRecoveryService {
         return this.recoverWorker(agentId, taskId);
 
       case AgentType.SUPERVISOR:
-        return this.recoverSupervisor(agentId, epicId);
+        return this.recoverSupervisor(agentId, topLevelTaskId);
 
       case AgentType.ORCHESTRATOR:
         return this.recoverOrchestrator(agentId);
@@ -164,7 +169,7 @@ export class CrashRecoveryService {
   private async handleCrashLoop(
     agentId: string,
     agentType: AgentType,
-    epicId?: string,
+    topLevelTaskId?: string,
     taskId?: string
   ): Promise<RecoveryResult> {
     const config = configService.getSystemConfig();
@@ -172,7 +177,7 @@ export class CrashRecoveryService {
     logger.error('Agent in crash loop, marking as permanently failed', {
       agentId,
       agentType,
-      epicId,
+      topLevelTaskId,
       taskId,
     });
 
@@ -181,7 +186,7 @@ export class CrashRecoveryService {
       state: AgentState.FAILED,
     });
 
-    // Handle task/epic state
+    // Handle task/top-level task state
     if (taskId && agentType === AgentType.WORKER) {
       await taskAccessor.update(taskId, {
         state: TaskState.FAILED,
@@ -189,8 +194,8 @@ export class CrashRecoveryService {
       });
     }
 
-    if (epicId && agentType === AgentType.SUPERVISOR) {
-      await taskAccessor.update(epicId, {
+    if (topLevelTaskId && agentType === AgentType.SUPERVISOR) {
+      await taskAccessor.update(topLevelTaskId, {
         state: TaskState.BLOCKED,
       });
     }
@@ -198,7 +203,7 @@ export class CrashRecoveryService {
     // Send notification
     await notificationService.notifyCriticalError(
       agentType,
-      epicId ? (await taskAccessor.findById(epicId))?.title : undefined,
+      topLevelTaskId ? (await taskAccessor.findById(topLevelTaskId))?.title : undefined,
       `Agent ${agentId} entered crash loop and has been marked as failed`
     );
 
@@ -206,7 +211,7 @@ export class CrashRecoveryService {
     await mailAccessor.create({
       isForHuman: true,
       subject: `CRITICAL: ${agentType} in Crash Loop`,
-      body: `Agent ${agentId} (${agentType}) has crashed ${config.maxRapidCrashes} times in ${config.crashLoopThresholdMs / 1000} seconds and has been marked as permanently failed.\n\nEpic ID: ${epicId || 'N/A'}\nTask ID: ${taskId || 'N/A'}\n\nManual investigation and intervention required.`,
+      body: `Agent ${agentId} (${agentType}) has crashed ${config.maxRapidCrashes} times in ${config.crashLoopThresholdMs / 1000} seconds and has been marked as permanently failed.\n\nTop-level Task ID: ${topLevelTaskId || 'N/A'}\nTask ID: ${taskId || 'N/A'}\n\nManual investigation and intervention required.`,
     });
 
     return {

@@ -1,8 +1,45 @@
 import { TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
+import { inngest } from '../inngest/client.js';
 import { taskAccessor } from '../resource_accessors/task.accessor.js';
+import { generateLocalIssueId } from '../routers/mcp/helpers.js';
 import { projectScopedProcedure } from './procedures/project-scoped.js';
-import { publicProcedure, router } from './trpc';
+import { publicProcedure, router } from './trpc.js';
+
+/**
+ * Send Inngest event for task creation (fire-and-forget with error handling)
+ */
+async function sendTaskCreatedEvent(task: {
+  id: string;
+  parentId: string | null;
+  linearIssueId: string | null;
+  title: string;
+}): Promise<void> {
+  try {
+    if (task.parentId === null) {
+      await inngest.send({
+        name: 'task.top_level.created',
+        data: {
+          taskId: task.id,
+          linearIssueId: task.linearIssueId || '',
+          title: task.title,
+        },
+      });
+    } else {
+      await inngest.send({
+        name: 'task.created',
+        data: {
+          taskId: task.id,
+          parentId: task.parentId,
+          linearIssueId: task.linearIssueId || '',
+          title: task.title,
+        },
+      });
+    }
+  } catch (error) {
+    console.log('Inngest event send failed (non-critical):', error);
+  }
+}
 
 export const taskRouter = router({
   // List all tasks with optional filtering (scoped to project from context)
@@ -40,7 +77,47 @@ export const taskRouter = router({
     return taskAccessor.findByParentId(input.parentId);
   }),
 
-  // Update a task (admin use)
+  // Create a new task (scoped to project from context)
+  // If parentId is null/undefined, creates a top-level task and fires task.top_level.created event
+  // If parentId is provided, creates a child task and fires task.created event
+  create: projectScopedProcedure
+    .input(
+      z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        design: z.string().optional(),
+        parentId: z.string().nullable().optional(),
+        linearIssueId: z.string().optional(),
+        linearIssueUrl: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const isTopLevel = input.parentId === null || input.parentId === undefined;
+
+      // Generate a local ID if Linear integration not used
+      const linearIssueId = input.linearIssueId || generateLocalIssueId();
+      const linearIssueUrl = input.linearIssueUrl || '';
+
+      const task = await taskAccessor.create({
+        projectId: ctx.projectId,
+        parentId: input.parentId || null,
+        linearIssueId,
+        linearIssueUrl,
+        title: input.title,
+        description: input.description
+          ? `${input.description}\n\n---\n\n${input.design || ''}`
+          : input.design || '',
+        state: isTopLevel ? TaskState.PLANNING : TaskState.PENDING,
+      });
+
+      // Fire appropriate event based on task type
+      await sendTaskCreatedEvent(task);
+
+      return task;
+    }),
+
+  // Update a task
+  // Fires task.top_level.updated event if updating a top-level task
   update: publicProcedure
     .input(
       z.object({
@@ -50,7 +127,7 @@ export const taskRouter = router({
         state: z.nativeEnum(TaskState).optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...updates } = input;
 
       // If completing, set completedAt
@@ -59,33 +136,69 @@ export const taskRouter = router({
         completedAt: updates.state === TaskState.COMPLETED ? new Date() : undefined,
       };
 
-      return taskAccessor.update(id, updateData);
+      const task = await taskAccessor.update(id, updateData);
+
+      // Fire task.top_level.updated event if this is a top-level task
+      if (task.parentId === null) {
+        try {
+          await inngest.send({
+            name: 'task.top_level.updated',
+            data: {
+              taskId: task.id,
+              state: task.state,
+            },
+          });
+        } catch (error) {
+          console.log('Inngest event send failed (non-critical):', error);
+        }
+      }
+
+      return task;
     }),
 
-  // Get summary stats for dashboard (scoped to project from context)
-  getStats: projectScopedProcedure.query(async ({ ctx }) => {
-    const tasks = await taskAccessor.list({ projectId: ctx.projectId });
-
-    const byState: Record<TaskState, number> = {
-      PLANNING: 0,
-      PLANNED: 0,
-      PENDING: 0,
-      ASSIGNED: 0,
-      IN_PROGRESS: 0,
-      REVIEW: 0,
-      BLOCKED: 0,
-      COMPLETED: 0,
-      FAILED: 0,
-      CANCELLED: 0,
-    };
-
-    tasks.forEach((task) => {
-      byState[task.state]++;
-    });
-
-    return {
-      total: tasks.length,
-      byState,
-    };
+  // Delete a task
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
+    return taskAccessor.delete(input.id);
   }),
+
+  // Get summary stats for dashboard (scoped to project from context)
+  // If isTopLevel is true, returns stats for top-level tasks only
+  // Otherwise returns stats for all tasks
+  getStats: projectScopedProcedure
+    .input(
+      z
+        .object({
+          isTopLevel: z.boolean().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const tasks = await taskAccessor.list({
+        projectId: ctx.projectId,
+        isTopLevel: input?.isTopLevel,
+      });
+
+      // Initialize all TaskState values for completeness
+      const byState: Record<TaskState, number> = {
+        [TaskState.PLANNING]: 0,
+        [TaskState.PLANNED]: 0,
+        [TaskState.PENDING]: 0,
+        [TaskState.ASSIGNED]: 0,
+        [TaskState.IN_PROGRESS]: 0,
+        [TaskState.REVIEW]: 0,
+        [TaskState.BLOCKED]: 0,
+        [TaskState.COMPLETED]: 0,
+        [TaskState.FAILED]: 0,
+        [TaskState.CANCELLED]: 0,
+      };
+
+      for (const task of tasks) {
+        byState[task.state]++;
+      }
+
+      return {
+        total: tasks.length,
+        byState,
+      };
+    }),
 });

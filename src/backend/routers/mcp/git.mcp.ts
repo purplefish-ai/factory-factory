@@ -1,3 +1,5 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { gitCommand } from '../../lib/shell.js';
@@ -6,6 +8,7 @@ import {
   decisionLogAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
+import { getTopLevelTaskBranchName, verifySupervisorWithTopLevelTask } from './helpers.js';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
 import type { McpToolContext, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
@@ -18,8 +21,13 @@ const GetDiffInputSchema = z.object({});
 
 const RebaseInputSchema = z.object({});
 
+const ReadWorktreeFileInputSchema = z.object({
+  taskId: z.string().min(1, 'Task ID is required'),
+  filePath: z.string().min(1, 'File path is required'),
+});
+
 // ============================================================================
-// Tool Implementations
+// Helper Functions
 // ============================================================================
 
 /**
@@ -139,7 +147,7 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     if (!task.parentId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a parent task (epic)'
+        'Task does not have a parent task'
       );
     }
 
@@ -147,11 +155,11 @@ async function getDiff(context: McpToolContext, input: unknown): Promise<McpTool
     if (!parentTask) {
       return createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Parent task (epic) with ID '${task.parentId}' not found`
+        `Parent task with ID '${task.parentId}' not found`
       );
     }
 
-    const topLevelBranchName = `factoryfactory/task-${parentTask.id}`;
+    const topLevelBranchName = getTopLevelTaskBranchName(parentTask.id);
 
     let diffStats: string;
     try {
@@ -255,7 +263,7 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     if (!task.parentId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a parent task (epic)'
+        'Task does not have a parent task'
       );
     }
 
@@ -263,11 +271,11 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
     if (!parentTask) {
       return createErrorResponse(
         McpErrorCode.RESOURCE_NOT_FOUND,
-        `Parent task (epic) with ID '${task.parentId}' not found`
+        `Parent task with ID '${task.parentId}' not found`
       );
     }
 
-    const topLevelBranchName = `factoryfactory/task-${parentTask.id}`;
+    const topLevelBranchName = getTopLevelTaskBranchName(parentTask.id);
 
     try {
       // Fetch using spawn (safe)
@@ -336,6 +344,96 @@ async function rebase(context: McpToolContext, input: unknown): Promise<McpToolR
   }
 }
 
+/**
+ * Read a file from a worker's worktree (SUPERVISOR only)
+ */
+async function readWorktreeFile(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+  try {
+    const validatedInput = ReadWorktreeFileInputSchema.parse(input);
+
+    // Verify supervisor has top-level task
+    const verification = await verifySupervisorWithTopLevelTask(context);
+    if (!verification.success) {
+      return verification.error;
+    }
+
+    // Get task
+    const task = await taskAccessor.findById(validatedInput.taskId);
+    if (!task) {
+      return createErrorResponse(
+        McpErrorCode.RESOURCE_NOT_FOUND,
+        `Task with ID '${validatedInput.taskId}' not found`
+      );
+    }
+
+    // Verify task belongs to this top-level task
+    if (task.parentId !== verification.topLevelTaskId) {
+      return createErrorResponse(
+        McpErrorCode.PERMISSION_DENIED,
+        'Task does not belong to this top-level task'
+      );
+    }
+
+    // Verify task has worktree
+    if (!task.worktreePath) {
+      return createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task does not have a worktree path'
+      );
+    }
+
+    // Build full file path
+    const fullPath = path.join(task.worktreePath, validatedInput.filePath);
+
+    // Security check: ensure path doesn't escape worktree
+    const resolvedPath = path.resolve(fullPath);
+    const resolvedWorktree = path.resolve(task.worktreePath);
+    if (!resolvedPath.startsWith(resolvedWorktree)) {
+      return createErrorResponse(
+        McpErrorCode.PERMISSION_DENIED,
+        'File path must be within the task worktree'
+      );
+    }
+
+    // Read file
+    let content: string;
+    try {
+      content = await fs.readFile(fullPath, 'utf-8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return createErrorResponse(
+          McpErrorCode.RESOURCE_NOT_FOUND,
+          `File not found: ${validatedInput.filePath}`
+        );
+      }
+      throw error;
+    }
+
+    // Log decision
+    await decisionLogAccessor.createAutomatic(
+      context.agentId,
+      'mcp__git__read_worktree_file',
+      'result',
+      {
+        taskId: task.id,
+        filePath: validatedInput.filePath,
+        contentLength: content.length,
+      }
+    );
+
+    return createSuccessResponse({
+      taskId: task.id,
+      filePath: validatedInput.filePath,
+      content,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
+    }
+    throw error;
+  }
+}
+
 // ============================================================================
 // Tool Registration
 // ============================================================================
@@ -353,5 +451,12 @@ export function registerGitTools(): void {
     description: 'Rebase task branch onto epic branch (WORKER only)',
     handler: rebase,
     schema: RebaseInputSchema,
+  });
+
+  registerMcpTool({
+    name: 'mcp__git__read_worktree_file',
+    description: "Read a file from a worker's worktree for code review (SUPERVISOR only)",
+    handler: readWorktreeFile,
+    schema: ReadWorktreeFileInputSchema,
   });
 }

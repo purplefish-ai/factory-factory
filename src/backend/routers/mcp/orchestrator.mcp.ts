@@ -42,7 +42,7 @@ const RecoverSupervisorInputSchema = z.object({
   supervisorId: z.string().min(1, 'Supervisor ID is required'),
 });
 
-const ListPendingEpicsInputSchema = z.object({});
+const ListPendingTopLevelTasksInputSchema = z.object({});
 
 // ============================================================================
 // Helper Functions
@@ -534,7 +534,7 @@ async function listPendingTopLevelTasks(
   input: unknown
 ): Promise<McpToolResponse> {
   try {
-    ListPendingEpicsInputSchema.parse(input);
+    ListPendingTopLevelTasksInputSchema.parse(input);
 
     // Verify orchestrator
     const verification = await verifyOrchestrator(context);
@@ -571,7 +571,7 @@ async function listPendingTopLevelTasks(
     // Log decision
     await decisionLogAccessor.createAutomatic(
       context.agentId,
-      'mcp__orchestrator__list_pending_epics',
+      'mcp__orchestrator__list_pending_top_level_tasks',
       'result',
       {
         totalPendingTasks: tasksNeedingSupervisors.length,
@@ -579,7 +579,7 @@ async function listPendingTopLevelTasks(
     );
 
     return createSuccessResponse({
-      pendingEpics: tasksNeedingSupervisors,
+      pendingTopLevelTasks: tasksNeedingSupervisors,
       count: tasksNeedingSupervisors.length,
     });
   } catch (error) {
@@ -627,9 +627,9 @@ export function registerOrchestratorTools(): void {
 
   // Task Management
   registerMcpTool({
-    name: 'mcp__orchestrator__list_pending_epics',
+    name: 'mcp__orchestrator__list_pending_top_level_tasks',
     description: 'List top-level tasks in PLANNING state that need supervisors (ORCHESTRATOR only)',
     handler: listPendingTopLevelTasks,
-    schema: ListPendingEpicsInputSchema,
+    schema: ListPendingTopLevelTasksInputSchema,
   });
 }

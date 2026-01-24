@@ -20,7 +20,7 @@ export interface RateLimiterConfig {
   // Concurrency limits
   maxConcurrentWorkers: number;
   maxConcurrentSupervisors: number;
-  maxConcurrentEpics: number;
+  maxConcurrentTopLevelTasks: number;
 
   // Queue settings
   maxQueueSize: number;
@@ -64,11 +64,11 @@ export interface ApiUsageStats {
 export interface ConcurrencyStats {
   activeWorkers: number;
   activeSupervisors: number;
-  activeEpics: number;
+  activeTopLevelTasks: number;
   limits: {
     maxWorkers: number;
     maxSupervisors: number;
-    maxEpics: number;
+    maxTopLevelTasks: number;
   };
 }
 
@@ -81,7 +81,10 @@ function getDefaultConfig(): RateLimiterConfig {
     claudeRequestsPerHour: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_HOUR || '1000', 10),
     maxConcurrentWorkers: Number.parseInt(process.env.MAX_CONCURRENT_WORKERS || '10', 10),
     maxConcurrentSupervisors: Number.parseInt(process.env.MAX_CONCURRENT_SUPERVISORS || '5', 10),
-    maxConcurrentEpics: Number.parseInt(process.env.MAX_CONCURRENT_EPICS || '5', 10),
+    maxConcurrentTopLevelTasks: Number.parseInt(
+      process.env.MAX_CONCURRENT_TOP_LEVEL_TASKS || '5',
+      10
+    ),
     maxQueueSize: Number.parseInt(process.env.RATE_LIMIT_QUEUE_SIZE || '100', 10),
     queueTimeoutMs: Number.parseInt(process.env.RATE_LIMIT_QUEUE_TIMEOUT_MS || '30000', 10),
   };
@@ -103,14 +106,14 @@ export class RateLimiter {
   // Active agent tracking
   private activeWorkers = new Set<string>();
   private activeSupervisors = new Set<string>();
-  private activeEpics = new Set<string>();
+  private activeTopLevelTasks = new Set<string>();
 
   // Processing state
   private isProcessingQueue = false;
 
   // API usage by agent
   private usageByAgent: Map<string, number> = new Map();
-  private usageByEpic: Map<string, number> = new Map();
+  private usageByTopLevelTask: Map<string, number> = new Map();
 
   constructor(config?: Partial<RateLimiterConfig>) {
     this.config = {
@@ -157,12 +160,12 @@ export class RateLimiter {
    */
   acquireSlot(
     agentId: string,
-    epicId: string | null,
+    topLevelTaskId: string | null,
     priority: RequestPriority = RequestPriority.WORKER
   ): Promise<void> {
     // Check if we can proceed immediately
     if (!this.isRateLimited()) {
-      this.recordRequest(agentId, epicId);
+      this.recordRequest(agentId, topLevelTaskId);
       return Promise.resolve();
     }
 
@@ -177,7 +180,7 @@ export class RateLimiter {
         priority,
         timestamp: Date.now(),
         resolve: () => {
-          this.recordRequest(agentId, epicId);
+          this.recordRequest(agentId, topLevelTaskId);
           resolve();
         },
         reject,
@@ -214,7 +217,7 @@ export class RateLimiter {
   /**
    * Record a successful request
    */
-  private recordRequest(agentId: string, epicId: string | null): void {
+  private recordRequest(agentId: string, topLevelTaskId: string | null): void {
     const now = Date.now();
     this.requestTimestamps.push(now);
     this.totalRequests++;
@@ -222,9 +225,12 @@ export class RateLimiter {
     // Track usage by agent
     this.usageByAgent.set(agentId, (this.usageByAgent.get(agentId) || 0) + 1);
 
-    // Track usage by epic
-    if (epicId) {
-      this.usageByEpic.set(epicId, (this.usageByEpic.get(epicId) || 0) + 1);
+    // Track usage by top-level task
+    if (topLevelTaskId) {
+      this.usageByTopLevelTask.set(
+        topLevelTaskId,
+        (this.usageByTopLevelTask.get(topLevelTaskId) || 0) + 1
+      );
     }
   }
 
@@ -317,33 +323,33 @@ export class RateLimiter {
   }
 
   /**
-   * Register an active epic
+   * Register an active top-level task
    */
-  registerEpic(epicId: string): boolean {
-    if (this.activeEpics.size >= this.config.maxConcurrentEpics) {
-      logger.warn('Max concurrent epics reached', {
-        current: this.activeEpics.size,
-        max: this.config.maxConcurrentEpics,
+  registerTopLevelTask(topLevelTaskId: string): boolean {
+    if (this.activeTopLevelTasks.size >= this.config.maxConcurrentTopLevelTasks) {
+      logger.warn('Max concurrent top-level tasks reached', {
+        current: this.activeTopLevelTasks.size,
+        max: this.config.maxConcurrentTopLevelTasks,
       });
       return false;
     }
 
-    this.activeEpics.add(epicId);
-    logger.debug('Epic registered', {
-      epicId,
-      activeEpics: this.activeEpics.size,
+    this.activeTopLevelTasks.add(topLevelTaskId);
+    logger.debug('Top-level task registered', {
+      topLevelTaskId,
+      activeTopLevelTasks: this.activeTopLevelTasks.size,
     });
     return true;
   }
 
   /**
-   * Unregister an epic
+   * Unregister a top-level task
    */
-  unregisterEpic(epicId: string): void {
-    this.activeEpics.delete(epicId);
-    logger.debug('Epic unregistered', {
-      epicId,
-      activeEpics: this.activeEpics.size,
+  unregisterTopLevelTask(topLevelTaskId: string): void {
+    this.activeTopLevelTasks.delete(topLevelTaskId);
+    logger.debug('Top-level task unregistered', {
+      topLevelTaskId,
+      activeTopLevelTasks: this.activeTopLevelTasks.size,
     });
   }
 
@@ -362,10 +368,10 @@ export class RateLimiter {
   }
 
   /**
-   * Check if we can start a new epic
+   * Check if we can start a new top-level task
    */
-  canStartEpic(): boolean {
-    return this.activeEpics.size < this.config.maxConcurrentEpics;
+  canStartTopLevelTask(): boolean {
+    return this.activeTopLevelTasks.size < this.config.maxConcurrentTopLevelTasks;
   }
 
   /**
@@ -388,11 +394,11 @@ export class RateLimiter {
     return {
       activeWorkers: this.activeWorkers.size,
       activeSupervisors: this.activeSupervisors.size,
-      activeEpics: this.activeEpics.size,
+      activeTopLevelTasks: this.activeTopLevelTasks.size,
       limits: {
         maxWorkers: this.config.maxConcurrentWorkers,
         maxSupervisors: this.config.maxConcurrentSupervisors,
-        maxEpics: this.config.maxConcurrentEpics,
+        maxTopLevelTasks: this.config.maxConcurrentTopLevelTasks,
       },
     };
   }
@@ -405,10 +411,10 @@ export class RateLimiter {
   }
 
   /**
-   * Get usage by epic
+   * Get usage by top-level task
    */
-  getUsageByEpic(): Map<string, number> {
-    return new Map(this.usageByEpic);
+  getUsageByTopLevelTask(): Map<string, number> {
+    return new Map(this.usageByTopLevelTask);
   }
 
   /**
@@ -416,7 +422,7 @@ export class RateLimiter {
    */
   resetUsageStats(): void {
     this.usageByAgent.clear();
-    this.usageByEpic.clear();
+    this.usageByTopLevelTask.clear();
     this.totalRequests = 0;
   }
 

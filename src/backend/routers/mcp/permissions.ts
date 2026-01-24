@@ -18,12 +18,9 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       'mcp__agent__*',
       'mcp__system__*',
       'mcp__task__*',
-      'mcp__supervisor__*',
       'mcp__orchestrator__*', // Orchestrator-specific tools
     ],
-    disallowed: [
-      'mcp__supervisor__*', // Cannot use supervisor-only tools
-    ],
+    disallowed: [],
   },
 
   // Worker has limited permissions focused on task execution
@@ -39,7 +36,19 @@ export const AGENT_TOOL_PERMISSIONS: AgentToolPermissions = {
       'mcp__task__get_pr_status',
       'mcp__git__*',
     ],
-    disallowed: ['mcp__supervisor__*', 'mcp__orchestrator__*'],
+    disallowed: [
+      'mcp__orchestrator__*',
+      // Supervisor-only task management tools
+      'mcp__task__create',
+      'mcp__task__approve',
+      'mcp__task__request_changes',
+      'mcp__task__list',
+      'mcp__task__get_review_queue',
+      'mcp__task__force_complete',
+      'mcp__task__create_final_pr',
+      // Supervisor-only git tools
+      'mcp__git__read_worktree_file',
+    ],
   },
 };
 

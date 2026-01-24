@@ -239,16 +239,16 @@ export default function AdminSystemPage() {
         )}
       </div>
 
-      {/* API Usage by Epic */}
+      {/* API Usage by Top-Level Task */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-lg font-semibold mb-4">API Usage by Epic</h2>
-        {apiUsage?.byEpic && Object.keys(apiUsage.byEpic).length > 0 ? (
+        <h2 className="text-lg font-semibold mb-4">API Usage by Top-Level Task</h2>
+        {apiUsage?.byTopLevelTask && Object.keys(apiUsage.byTopLevelTask).length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Epic ID
+                    Task ID
                   </th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                     Requests
@@ -256,16 +256,16 @@ export default function AdminSystemPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {Object.entries(apiUsage.byEpic)
+                {Object.entries(apiUsage.byTopLevelTask)
                   .sort(([, a], [, b]) => (b as number) - (a as number))
-                  .map(([epicId, count]) => (
-                    <tr key={epicId}>
+                  .map(([topLevelTaskId, count]) => (
+                    <tr key={topLevelTaskId}>
                       <td className="px-4 py-2 text-sm">
                         <Link
-                          href={`/epics/${epicId}`}
+                          href={`/tasks/${topLevelTaskId}`}
                           className="text-blue-600 hover:text-blue-800"
                         >
-                          {epicId}
+                          {topLevelTaskId}
                         </Link>
                       </td>
                       <td className="px-4 py-2 text-sm text-right">{count as number}</td>

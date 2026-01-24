@@ -18,7 +18,6 @@ import {
   taskCreatedHandler,
   topLevelTaskCreatedHandler,
 } from './inngest/functions/index.js';
-import { epicRouter } from './routers/api/epic.router.js';
 import { orchestratorRouter } from './routers/api/orchestrator.router.js';
 import { projectRouter } from './routers/api/project.router.js';
 import { taskRouter } from './routers/api/task.router.js';
@@ -55,7 +54,7 @@ app.use((req, res, next): void => {
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Project-Id, X-Epic-Id'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Project-Id, X-Top-Level-Task-Id'
   );
   res.header('Access-Control-Allow-Credentials', 'true');
 
@@ -184,7 +183,7 @@ app.get('/health/agents', async (_req, res) => {
       concurrency: {
         activeWorkers: concurrency.activeWorkers,
         activeSupervisors: concurrency.activeSupervisors,
-        activeEpics: concurrency.activeEpics,
+        activeTopLevelTasks: concurrency.activeTopLevelTasks,
       },
       issues: healthStatus.issues,
     });
@@ -321,9 +320,6 @@ app.use('/api/projects', projectRouter);
 
 // Task API routes
 app.use('/api/tasks', taskRouter);
-
-// Epic API routes
-app.use('/api/epics', epicRouter);
 
 // Orchestrator API routes
 app.use('/api/orchestrator', orchestratorRouter);

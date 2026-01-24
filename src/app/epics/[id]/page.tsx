@@ -10,13 +10,13 @@ export default function EpicDetailRedirect() {
   const router = useRouter();
   const id = params.id as string;
 
-  const { data: epic, isLoading } = trpc.epic.getById.useQuery({ id });
+  const { data: task, isLoading } = trpc.task.getById.useQuery({ id });
 
   useEffect(() => {
-    if (!isLoading && epic) {
-      router.replace(`/projects/${epic.project.slug}/epics/${id}`);
+    if (!isLoading && task) {
+      router.replace(`/projects/${task.project.slug}/epics/${id}`);
     }
-  }, [isLoading, epic, id, router]);
+  }, [isLoading, task, id, router]);
 
   return (
     <div className="flex items-center justify-center h-full">

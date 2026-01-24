@@ -28,12 +28,12 @@ export default function EpicDetailPage() {
   const id = params.id as string;
 
   const {
-    data: epic,
+    data: topLevelTask,
     isLoading,
     error,
-  } = trpc.epic.getById.useQuery({ id }, { refetchInterval: 5000 });
+  } = trpc.task.getById.useQuery({ id }, { refetchInterval: 5000 });
 
-  const { data: tasks } = trpc.task.listByParent.useQuery(
+  const { data: childTasks } = trpc.task.listByParent.useQuery(
     { parentId: id },
     { refetchInterval: 5000 }
   );
@@ -51,7 +51,7 @@ export default function EpicDetailPage() {
     );
   }
 
-  if (error || !epic) {
+  if (error || !topLevelTask) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <p className="text-red-600 mb-4">Epic not found</p>
@@ -78,20 +78,22 @@ export default function EpicDetailPage() {
             </svg>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{epic.title}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{topLevelTask.title}</h1>
             <div className="flex items-center gap-3 mt-2">
-              <span className={`px-2 py-1 rounded text-xs font-medium ${stateColors[epic.state]}`}>
-                {epic.state}
+              <span
+                className={`px-2 py-1 rounded text-xs font-medium ${stateColors[topLevelTask.state]}`}
+              >
+                {topLevelTask.state}
               </span>
               <span className="text-sm text-gray-500">
-                Created {new Date(epic.createdAt).toLocaleDateString()}
+                Created {new Date(topLevelTask.createdAt).toLocaleDateString()}
               </span>
             </div>
           </div>
         </div>
-        {epic.linearIssueUrl && (
+        {topLevelTask.linearIssueUrl && (
           <a
-            href={epic.linearIssueUrl}
+            href={topLevelTask.linearIssueUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 hover:text-blue-800 text-sm"
@@ -102,12 +104,12 @@ export default function EpicDetailPage() {
       </div>
 
       {/* Description */}
-      {epic.description && (
+      {topLevelTask.description && (
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-lg font-semibold mb-3">Description</h2>
           <div className="prose prose-sm max-w-none">
             <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
-              {epic.description}
+              {topLevelTask.description}
             </pre>
           </div>
         </div>
@@ -144,13 +146,13 @@ export default function EpicDetailPage() {
       {/* Tasks */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Tasks ({tasks?.length ?? 0})</h2>
+          <h2 className="text-lg font-semibold">Tasks ({childTasks?.length ?? 0})</h2>
         </div>
-        {!tasks || tasks.length === 0 ? (
+        {!childTasks || childTasks.length === 0 ? (
           <p className="text-gray-500 text-sm">No tasks created yet</p>
         ) : (
           <div className="space-y-3">
-            {tasks.map((task) => (
+            {childTasks.map((task) => (
               <div
                 key={task.id}
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"

@@ -1,5 +1,6 @@
 'use client';
 
+import type { Task } from '@prisma-gen/browser';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -17,9 +18,9 @@ export default function NewEpicPage() {
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
 
-  const createEpic = trpc.epic.create.useMutation({
-    onSuccess: (epic) => {
-      router.push(`/projects/${slug}/epics/${epic.id}`);
+  const createTask = trpc.task.create.useMutation({
+    onSuccess: (task: Task) => {
+      router.push(`/projects/${slug}/epics/${task.id}`);
     },
     onError: (err) => {
       setError(err.message);
@@ -40,7 +41,8 @@ export default function NewEpicPage() {
       return;
     }
 
-    createEpic.mutate({ title, description, design });
+    // Create a top-level task (no parentId)
+    createTask.mutate({ title, description, design, parentId: null });
   };
 
   if (!project) {
@@ -146,10 +148,10 @@ Describe the implementation approach...
           </Link>
           <button
             type="submit"
-            disabled={createEpic.isPending}
+            disabled={createTask.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {createEpic.isPending ? 'Creating...' : 'Create Epic'}
+            {createTask.isPending ? 'Creating...' : 'Create Epic'}
           </button>
         </div>
       </form>

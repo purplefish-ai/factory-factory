@@ -249,16 +249,16 @@ export class Logger {
   }
 
   /**
-   * Log epic lifecycle events
+   * Log top-level task lifecycle events
    */
-  epicEvent(
+  topLevelTaskEvent(
     event: 'created' | 'started' | 'completed' | 'cancelled' | 'blocked',
-    epicId: string,
+    topLevelTaskId: string,
     context?: Record<string, unknown>
   ): void {
-    this.info(`Epic ${event}`, {
+    this.info(`Top-level task ${event}`, {
       event,
-      epicId,
+      topLevelTaskId,
       ...context,
     });
   }
