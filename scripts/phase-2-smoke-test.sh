@@ -105,7 +105,6 @@ fi
 echo ""
 echo "6. Checking environment variables..."
 REQUIRED_ENV_VARS=(
-    "ANTHROPIC_API_KEY"
     "GIT_BASE_REPO_PATH"
     "GIT_WORKTREE_BASE"
     "DATABASE_URL"

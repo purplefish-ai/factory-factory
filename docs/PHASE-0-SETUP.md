@@ -189,11 +189,8 @@ Already configured for local Docker setup:
 DATABASE_URL="postgresql://factoryfactory:factoryfactory_dev@localhost:5432/factoryfactory?schema=public"
 ```
 
-#### Anthropic API Key
-Get from https://console.anthropic.com/
-```env
-ANTHROPIC_API_KEY=sk-ant-api03-...
-```
+#### Claude Authentication
+No API key needed - uses OAuth. Run `claude login` to authenticate.
 
 #### Git Repository Paths
 

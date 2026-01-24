@@ -39,7 +39,6 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-factoryfactory}:${POSTGRES_PASSWORD:-factoryfactory_dev}@postgres:5432/${POSTGRES_DB:-factoryfactory}
       - BACKEND_PORT=3001
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY}
       - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}

@@ -204,9 +204,10 @@ npm run inngest:dev
 ### 2. Configure Environment
 
 Copy `.env.example` to `.env` and fill in:
-- `ANTHROPIC_API_KEY` - Your actual Claude API key
 - `GIT_BASE_REPO_PATH` - Path to your test repository
 - Other optional settings as needed
+
+Note: No API key needed - Claude uses OAuth via `claude login`.
 
 ### 3. Verify Installation
 
