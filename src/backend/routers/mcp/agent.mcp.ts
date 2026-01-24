@@ -37,10 +37,11 @@ async function getStatus(context: McpToolContext, input: unknown): Promise<McpTo
     return createSuccessResponse({
       id: agent.id,
       type: agent.type,
-      state: agent.state,
+      executionState: agent.executionState,
+      desiredExecutionState: agent.desiredExecutionState,
       currentTaskId: agent.currentTaskId,
       tmuxSessionName: agent.tmuxSessionName,
-      lastActiveAt: agent.lastActiveAt,
+      lastHeartbeat: agent.lastHeartbeat,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     });

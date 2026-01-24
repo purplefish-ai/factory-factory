@@ -133,7 +133,7 @@ export class WorktreeService {
     if (!task) {
       return { isOrphaned: true, reason: 'deleted_top_level_task' };
     }
-    if (task.state === 'COMPLETED' || task.state === 'CANCELLED') {
+    if (task.state === 'COMPLETED' || task.state === 'FAILED') {
       return { isOrphaned: true, reason: 'deleted_top_level_task' };
     }
     return { isOrphaned: false, reason: 'unknown' };

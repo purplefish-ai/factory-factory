@@ -5,7 +5,7 @@
  * The orchestrator periodically checks supervisor health and triggers cascading recovery when needed.
  */
 
-import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
+import { AgentType, ExecutionState, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,
@@ -71,7 +71,7 @@ export async function checkSupervisorHealth(_orchestratorId: string): Promise<{
 }
 
 /**
- * Kill all workers for a top-level task and mark them as failed
+ * Kill all workers for a top-level task and mark them as crashed
  */
 async function killWorkersForTopLevelTask(topLevelTaskId: string): Promise<string[]> {
   const workers = await agentAccessor.findWorkersByTopLevelTaskId(topLevelTaskId);
@@ -86,7 +86,7 @@ async function killWorkersForTopLevelTask(topLevelTaskId: string): Promise<strin
     }
 
     try {
-      await agentAccessor.update(worker.id, { state: AgentState.FAILED });
+      await agentAccessor.update(worker.id, { executionState: ExecutionState.CRASHED });
     } catch (error) {
       console.error(`Failed to update worker ${worker.id} state:`, error);
     }
@@ -96,7 +96,7 @@ async function killWorkersForTopLevelTask(topLevelTaskId: string): Promise<strin
 }
 
 /**
- * Kill a supervisor and mark it as failed
+ * Kill a supervisor and mark it as crashed
  */
 async function killSupervisorAgent(supervisorId: string): Promise<void> {
   try {
@@ -107,7 +107,7 @@ async function killSupervisorAgent(supervisorId: string): Promise<void> {
 
   try {
     await agentAccessor.update(supervisorId, {
-      state: AgentState.FAILED,
+      executionState: ExecutionState.CRASHED,
       currentTaskId: null,
     });
   } catch (error) {
@@ -295,7 +295,7 @@ export async function getSupervisorHealthSummary(): Promise<{
     supervisorId: string;
     taskId: string | null;
     taskTitle: string;
-    state: string;
+    executionState: string;
     isHealthy: boolean;
     minutesSinceHeartbeat: number;
   }>;
@@ -313,7 +313,7 @@ export async function getSupervisorHealthSummary(): Promise<{
         supervisorId: s.id,
         taskId: s.currentTaskId,
         taskTitle: task?.title || 'No task',
-        state: s.state,
+        executionState: s.executionState,
         isHealthy: s.isHealthy,
         minutesSinceHeartbeat: s.minutesSinceHeartbeat,
       };

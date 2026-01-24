@@ -45,6 +45,8 @@ export interface UpdateTaskInput {
   attempts?: number;
   completedAt?: Date | null;
   failureReason?: string | null;
+  lastReconcileAt?: Date;
+  reconcileFailures?: Prisma.InputJsonValue;
 }
 
 export interface ListTasksFilters {
@@ -440,7 +442,7 @@ export class TaskAccessor {
       where: {
         parentId: taskId,
         state: {
-          notIn: [TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED],
+          notIn: [TaskState.COMPLETED, TaskState.FAILED],
         },
       },
     });
@@ -457,16 +459,13 @@ export class TaskAccessor {
     });
 
     const counts: Record<TaskState, number> = {
-      [TaskState.PLANNING]: 0,
-      [TaskState.PLANNED]: 0,
       [TaskState.PENDING]: 0,
-      [TaskState.ASSIGNED]: 0,
+      [TaskState.PLANNING]: 0,
       [TaskState.IN_PROGRESS]: 0,
       [TaskState.REVIEW]: 0,
       [TaskState.COMPLETED]: 0,
       [TaskState.BLOCKED]: 0,
       [TaskState.FAILED]: 0,
-      [TaskState.CANCELLED]: 0,
     };
 
     for (const child of children) {
@@ -474,6 +473,127 @@ export class TaskAccessor {
     }
 
     return counts;
+  }
+
+  // ============================================
+  // Reconciliation Helpers
+  // ============================================
+
+  /**
+   * Find tasks that need reconciliation:
+   * - Tasks in active states (IN_PROGRESS, REVIEW) without assigned agents
+   * - Tasks in PENDING that should have workers
+   * - Tasks that haven't been reconciled recently
+   */
+  async findTasksNeedingReconciliation(staleMinutes = 5): Promise<TaskWithRelations[]> {
+    const staleThreshold = new Date(Date.now() - staleMinutes * 60 * 1000);
+
+    return await prisma.task.findMany({
+      where: {
+        OR: [
+          // Active tasks without agents
+          {
+            state: { in: [TaskState.IN_PROGRESS, TaskState.REVIEW] },
+            assignedAgentId: null,
+          },
+          // Tasks that haven't been reconciled recently
+          {
+            state: { in: [TaskState.PENDING, TaskState.IN_PROGRESS, TaskState.REVIEW] },
+            lastReconcileAt: {
+              lt: staleThreshold,
+            },
+          },
+          // Tasks that have never been reconciled
+          {
+            state: { in: [TaskState.PENDING, TaskState.IN_PROGRESS, TaskState.REVIEW] },
+            lastReconcileAt: null,
+          },
+        ],
+      },
+      include: fullInclude,
+    });
+  }
+
+  /**
+   * Find top-level tasks in PLANNING state that need supervisors
+   */
+  findTopLevelTasksNeedingSupervisors(): Promise<TaskWithRelations[]> {
+    return prisma.task.findMany({
+      where: {
+        parentId: null, // Top-level only
+        state: TaskState.PLANNING,
+        supervisorAgent: null, // No supervisor assigned
+      },
+      include: fullInclude,
+    });
+  }
+
+  /**
+   * Find leaf tasks in PENDING state that are ready for workers
+   */
+  async findLeafTasksNeedingWorkers(): Promise<TaskWithRelations[]> {
+    const pendingTasks = await prisma.task.findMany({
+      where: {
+        parentId: { not: null }, // Leaf tasks only
+        state: TaskState.PENDING,
+        assignedAgentId: null, // No worker assigned
+      },
+      include: fullInclude,
+    });
+
+    // Filter to only tasks that aren't blocked (check in parallel for performance)
+    const blockedResults = await Promise.all(
+      pendingTasks.map((task) => this.isBlocked(task.id).then((blocked) => ({ task, blocked })))
+    );
+
+    return blockedResults.filter((r) => !r.blocked).map((r) => r.task);
+  }
+
+  /**
+   * Update reconciliation timestamp
+   */
+  markReconciled(id: string): Promise<Task> {
+    return prisma.task.update({
+      where: { id },
+      data: { lastReconcileAt: new Date() },
+    });
+  }
+
+  /**
+   * Record a reconciliation failure
+   */
+  async recordReconcileFailure(id: string, error: string, action: string): Promise<Task> {
+    const task = await prisma.task.findUnique({ where: { id } });
+    const existingFailures = (task?.reconcileFailures as unknown[]) ?? [];
+    const newFailure = {
+      timestamp: new Date().toISOString(),
+      error,
+      action,
+    };
+
+    // Keep last 10 failures
+    const failures = [...existingFailures, newFailure].slice(-10) as object[];
+
+    return prisma.task.update({
+      where: { id },
+      data: {
+        reconcileFailures: failures,
+        lastReconcileAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Find tasks with missing infrastructure (worktree, branch) that should have it
+   */
+  findTasksWithMissingInfrastructure(): Promise<TaskWithRelations[]> {
+    return prisma.task.findMany({
+      where: {
+        state: TaskState.IN_PROGRESS,
+        OR: [{ worktreePath: null }, { branchName: null }],
+      },
+      include: fullInclude,
+    });
   }
 }
 

@@ -11,22 +11,16 @@ datasource db {
 }
 
 // Enums
+
+// Task state - about the WORK being done
 enum TaskState {
-  // Parent task states (for tasks with children)
-  PLANNING       // Task is being planned/broken down
-  PLANNED        // Subtasks created, ready for execution
-
-  // Leaf task states (for implementable tasks)
-  PENDING        // Task waiting to be picked up
-  ASSIGNED       // Task assigned to an agent
-  IN_PROGRESS    // Task being worked on
-  REVIEW         // Task waiting for review
-
-  // Terminal states (any task)
-  COMPLETED      // Task completed successfully
-  BLOCKED        // Task is blocked (dependencies or external)
-  FAILED         // Task failed
-  CANCELLED      // Task was cancelled
+  PENDING        // Not started (subtasks waiting to be picked up)
+  PLANNING       // Top-level only: supervisor breaking down work
+  IN_PROGRESS    // Being worked on (replaces ASSIGNED, PLANNED)
+  REVIEW         // Submitted for review
+  COMPLETED      // Work accepted and merged
+  FAILED         // Work abandoned
+  BLOCKED        // External blocker (dependencies, etc.)
 }
 
 enum AgentType {
@@ -35,11 +29,20 @@ enum AgentType {
   WORKER         // Task executor
 }
 
-enum AgentState {
-  IDLE           // Agent is idle
-  BUSY           // Agent is working
-  WAITING        // Agent is waiting for something
-  FAILED         // Agent encountered an error
+// Agent execution state - what the agent IS currently doing (actual state)
+enum ExecutionState {
+  IDLE           // Agent is idle, not running
+  ACTIVE         // Agent is actively running
+  PAUSED         // Agent is paused but can be resumed
+  CRASHED        // Agent process crashed unexpectedly
+}
+
+// Desired execution state - what we WANT the agent to be doing
+// (subset of ExecutionState - CRASHED is never desired)
+enum DesiredExecutionState {
+  IDLE           // We want the agent to be idle/stopped
+  ACTIVE         // We want the agent to be running
+  PAUSED         // We want the agent to be paused
 }
 
 // Models
@@ -75,9 +78,13 @@ model Task {
   assignedAgentId   String?
   worktreePath      String?
   branchName        String?
-  prUrl             String?
+  prUrl             String?     // Draft PR URL, created after first commit
   attempts          Int         @default(0)
   failureReason     String?     @db.Text
+
+  // Reconciliation tracking
+  lastReconcileAt   DateTime?   // Last time this task was reconciled
+  reconcileFailures Json?       // Array of {timestamp, error, action} for debugging
 
   // Timestamps
   createdAt         DateTime    @default(now())
@@ -99,6 +106,7 @@ model Task {
   @@index([parentId])
   @@index([state])
   @@index([assignedAgentId])
+  @@index([lastReconcileAt])
 }
 
 model TaskDependency {
@@ -117,26 +125,39 @@ model TaskDependency {
 }
 
 model Agent {
-  id                String      @id @default(cuid())
-  type              AgentType
-  state             AgentState  @default(IDLE)
-  currentTaskId     String?     @unique  // For both supervisors (top-level) and workers (leaf)
-  tmuxSessionName   String?
-  sessionId         String?     // Claude Code CLI session ID for resume
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  lastActiveAt      DateTime    @default(now())
+  id                      String              @id @default(cuid())
+  type                    AgentType
+  currentTaskId           String?             @unique  // For both supervisors (top-level) and workers (leaf)
+
+  // Execution state (reconciler-managed)
+  executionState          ExecutionState      @default(IDLE)    // ACTUAL: what agent IS doing
+  desiredExecutionState   DesiredExecutionState @default(IDLE)  // WANTED: what we want agent to do
+
+  // Session management
+  tmuxSessionName         String?
+  sessionId               String?             // Claude Code CLI session ID for resume
+
+  // Health tracking
+  lastHeartbeat           DateTime?           // Last agent heartbeat (set by agent itself)
+  lastReconcileAt         DateTime?           // Last time this agent was reconciled
+  reconcileFailures       Json?               // Array of {timestamp, error, action} for debugging
+
+  // Timestamps
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
   // Relations
-  currentTask       Task?       @relation("SupervisorTask", fields: [currentTaskId], references: [id])
-  assignedTasks     Task[]      @relation("AssignedTasks")
-  mailReceived      Mail[]      @relation("ReceiverAgent")
-  mailSent          Mail[]      @relation("SenderAgent")
-  decisionLogs      DecisionLog[]
+  currentTask             Task?               @relation("SupervisorTask", fields: [currentTaskId], references: [id])
+  assignedTasks           Task[]              @relation("AssignedTasks")
+  mailReceived            Mail[]              @relation("ReceiverAgent")
+  mailSent                Mail[]              @relation("SenderAgent")
+  decisionLogs            DecisionLog[]
 
   @@index([type])
-  @@index([state])
+  @@index([executionState])
+  @@index([desiredExecutionState])
   @@index([currentTaskId])
+  @@index([lastHeartbeat])
 }
 
 model Mail {

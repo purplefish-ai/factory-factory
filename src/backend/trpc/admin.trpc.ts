@@ -5,7 +5,7 @@
  */
 
 import type { DecisionLog } from '@prisma-gen/client';
-import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
+import { AgentType, ExecutionState, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { killSupervisorAndCleanup, recreateSupervisor } from '../agents/supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../agents/worker/lifecycle.js';
@@ -45,9 +45,9 @@ export const adminRouter = router({
         } else if (agent.type === AgentType.SUPERVISOR) {
           await killSupervisorAndCleanup(input.agentId);
         } else {
-          // Orchestrator - just mark as failed
+          // Orchestrator - just mark as crashed
           await agentAccessor.update(input.agentId, {
-            state: AgentState.FAILED,
+            executionState: ExecutionState.CRASHED,
           });
         }
 
@@ -100,7 +100,7 @@ export const adminRouter = router({
           });
 
           await agentAccessor.update(input.agentId, {
-            state: AgentState.FAILED,
+            executionState: ExecutionState.CRASHED,
           });
 
           return {
@@ -147,10 +147,10 @@ export const adminRouter = router({
 
       logger.info('Resetting task', { taskId: input.taskId });
 
-      // If task has an assigned agent, mark it as failed
+      // If task has an assigned agent, mark it as crashed
       if (task.assignedAgentId) {
         await agentAccessor.update(task.assignedAgentId, {
-          state: AgentState.FAILED,
+          executionState: ExecutionState.CRASHED,
         });
       }
 
@@ -231,25 +231,22 @@ export const adminRouter = router({
     const epicStats = {
       total: topLevelTasks.length,
       planning: topLevelTasks.filter((t) => t.state === TaskState.PLANNING).length,
-      planned: topLevelTasks.filter((t) => t.state === TaskState.PLANNED).length,
       inProgress: topLevelTasks.filter((t) => t.state === TaskState.IN_PROGRESS).length,
+      review: topLevelTasks.filter((t) => t.state === TaskState.REVIEW).length,
       completed: topLevelTasks.filter((t) => t.state === TaskState.COMPLETED).length,
       blocked: topLevelTasks.filter((t) => t.state === TaskState.BLOCKED).length,
-      cancelled: topLevelTasks.filter((t) => t.state === TaskState.CANCELLED).length,
+      failed: topLevelTasks.filter((t) => t.state === TaskState.FAILED).length,
     };
 
     const taskStats = {
       total: allTasks.length,
-      planning: allTasks.filter((t) => t.state === TaskState.PLANNING).length,
-      planned: allTasks.filter((t) => t.state === TaskState.PLANNED).length,
       pending: allTasks.filter((t) => t.state === TaskState.PENDING).length,
-      assigned: allTasks.filter((t) => t.state === TaskState.ASSIGNED).length,
+      planning: allTasks.filter((t) => t.state === TaskState.PLANNING).length,
       inProgress: allTasks.filter((t) => t.state === TaskState.IN_PROGRESS).length,
       review: allTasks.filter((t) => t.state === TaskState.REVIEW).length,
       completed: allTasks.filter((t) => t.state === TaskState.COMPLETED).length,
       failed: allTasks.filter((t) => t.state === TaskState.FAILED).length,
       blocked: allTasks.filter((t) => t.state === TaskState.BLOCKED).length,
-      cancelled: allTasks.filter((t) => t.state === TaskState.CANCELLED).length,
     };
 
     return {
@@ -381,10 +378,11 @@ export const adminRouter = router({
     return agents.map((agent) => ({
       id: agent.id,
       type: agent.type,
-      state: agent.state,
+      executionState: agent.executionState,
+      desiredExecutionState: agent.desiredExecutionState,
       currentTaskId: agent.currentTaskId,
       tmuxSessionName: agent.tmuxSessionName,
-      lastActiveAt: agent.lastActiveAt.toISOString(),
+      lastHeartbeat: (agent.lastHeartbeat ?? agent.createdAt).toISOString(),
       createdAt: agent.createdAt.toISOString(),
       isInCrashLoop: crashRecoveryService.isInCrashLoop(agent.id),
     }));

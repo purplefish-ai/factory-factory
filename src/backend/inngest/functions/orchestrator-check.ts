@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, ExecutionState } from '@prisma-gen/client';
 import {
   checkSupervisorHealth,
   getPendingTopLevelTasksNeedingSupervisors,
@@ -211,17 +211,20 @@ export const orchestratorCheckHandler = inngest.createFunction(
     // Step 1: Get the orchestrator agent (if one exists)
     const orchestrator = await step.run('get-orchestrator', async () => {
       const orchestrators = await agentAccessor.findByType(AgentType.ORCHESTRATOR);
-      const activeOrchestrators = orchestrators.filter((o) => o.state !== AgentState.FAILED);
+      const activeOrchestrators = orchestrators.filter(
+        (o) => o.executionState !== ExecutionState.CRASHED
+      );
 
       if (activeOrchestrators.length === 0) {
         console.log('No active orchestrator found');
         return null;
       }
 
+      const o = activeOrchestrators[0];
       return {
-        id: activeOrchestrators[0].id,
-        state: activeOrchestrators[0].state,
-        lastActiveAt: activeOrchestrators[0].lastActiveAt.toISOString(),
+        id: o.id,
+        executionState: o.executionState,
+        lastHeartbeat: (o.lastHeartbeat ?? o.createdAt).toISOString(),
       };
     });
 

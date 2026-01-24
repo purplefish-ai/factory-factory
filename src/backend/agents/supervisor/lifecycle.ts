@@ -91,7 +91,7 @@ export async function recreateSupervisor(taskId: string): Promise<string> {
 export async function getSupervisorStatus(agentId: string): Promise<{
   agentId: string;
   isRunning: boolean;
-  agentState: string;
+  executionState: string;
   taskId: string | null;
   tmuxSession: string | null;
 }> {
@@ -103,7 +103,7 @@ export async function getSupervisorStatus(agentId: string): Promise<{
   return {
     agentId: agent.id,
     isRunning: isSupervisorRunning(agentId),
-    agentState: agent.state,
+    executionState: agent.executionState,
     taskId: agent.currentTaskId,
     tmuxSession: agent.tmuxSessionName,
   };
@@ -124,7 +124,7 @@ export async function listAllSupervisors(): Promise<
   Array<{
     agentId: string;
     taskId: string | null;
-    state: string;
+    executionState: string;
     isRunning: boolean;
   }>
 > {
@@ -133,7 +133,7 @@ export async function listAllSupervisors(): Promise<
   return supervisors.map((s) => ({
     agentId: s.id,
     taskId: s.currentTaskId,
-    state: s.state,
+    executionState: s.executionState,
     isRunning: isSupervisorRunning(s.id),
   }));
 }

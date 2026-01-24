@@ -153,7 +153,7 @@ function calculateTaskSummary(childTasks: TaskWithBasicRelations[]) {
   return {
     total: childTasks.length,
     pending: childTasks.filter((t) => t.state === 'PENDING').length,
-    assigned: childTasks.filter((t) => t.state === 'ASSIGNED').length,
+    planning: childTasks.filter((t) => t.state === 'PLANNING').length,
     inProgress: childTasks.filter((t) => t.state === 'IN_PROGRESS').length,
     review: childTasks.filter((t) => t.state === 'REVIEW').length,
     blocked: childTasks.filter((t) => t.state === 'BLOCKED').length,

@@ -1,4 +1,4 @@
-import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
+import { AgentType, DesiredExecutionState, ExecutionState, TaskState } from '@prisma-gen/client';
 import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { GitClientFactory } from '../../clients/git.client.js';
 import { tmuxClient } from '../../clients/tmux.client.js';
@@ -113,7 +113,8 @@ export async function createSupervisor(
   // Create agent record
   const agent = await agentAccessor.create({
     type: AgentType.SUPERVISOR,
-    state: AgentState.IDLE,
+    executionState: ExecutionState.IDLE,
+    desiredExecutionState: DesiredExecutionState.IDLE,
     currentTaskId: taskId,
   });
 
@@ -240,7 +241,7 @@ export async function runSupervisor(agentId: string): Promise<void> {
 
   // Update agent state
   await agentAccessor.update(agentId, {
-    state: AgentState.BUSY,
+    executionState: ExecutionState.ACTIVE,
   });
 
   console.log(`Starting supervisor ${agentId}`);
@@ -383,9 +384,7 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
     const reviewTasks = tasks.filter((t) => t.state === 'REVIEW');
     const completedTasks = tasks.filter((t) => t.state === 'COMPLETED');
     const failedTasks = tasks.filter((t) => t.state === 'FAILED');
-    const inProgressTasks = tasks.filter(
-      (t) => t.state === 'IN_PROGRESS' || t.state === 'ASSIGNED'
-    );
+    const inProgressTasks = tasks.filter((t) => t.state === 'IN_PROGRESS');
 
     // Filter to only NEW review tasks we haven't notified about
     const newReviewTasks = reviewTasks.filter(
@@ -527,7 +526,7 @@ export async function stopSupervisor(agentId: string): Promise<void> {
 
   // Update agent state
   await agentAccessor.update(agentId, {
-    state: AgentState.IDLE,
+    executionState: ExecutionState.IDLE,
   });
 
   console.log(`Supervisor ${agentId} stopped`);

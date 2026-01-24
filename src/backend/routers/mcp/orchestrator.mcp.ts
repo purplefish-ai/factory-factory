@@ -1,4 +1,4 @@
-import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
+import { AgentType, ExecutionState, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import {
   killSupervisorAndCleanup,
@@ -167,7 +167,7 @@ async function killTaskWorkers(taskId: string): Promise<string[]> {
     } catch (error) {
       console.error(`Failed to kill worker ${worker.id}:`, error);
     }
-    await agentAccessor.update(worker.id, { state: AgentState.FAILED });
+    await agentAccessor.update(worker.id, { executionState: ExecutionState.CRASHED });
   }
 
   return killedWorkers;
@@ -234,14 +234,14 @@ async function listSupervisors(context: McpToolContext, input: unknown): Promise
         const task = s.currentTaskId ? await taskAccessor.findById(s.currentTaskId) : null;
         return {
           id: s.id,
-          state: s.state,
+          executionState: s.executionState,
           taskId: s.currentTaskId,
-          taskTitle: task?.title || null,
-          taskState: task?.state || null,
+          taskTitle: task?.title ?? null,
+          taskState: task?.state ?? null,
           tmuxSessionName: s.tmuxSessionName,
           isHealthy: s.isHealthy,
           minutesSinceHeartbeat: s.minutesSinceHeartbeat,
-          lastActiveAt: s.lastActiveAt,
+          lastHeartbeat: s.lastHeartbeat,
           createdAt: s.createdAt,
         };
       })
@@ -308,7 +308,9 @@ async function checkSupervisorHealth(
     }
 
     // Calculate health status
-    const { isHealthy, minutesSinceHeartbeat } = calculateHealthStatus(supervisor.lastActiveAt);
+    const { isHealthy, minutesSinceHeartbeat } = calculateHealthStatus(
+      supervisor.lastHeartbeat ?? supervisor.createdAt
+    );
 
     // Get task info
     const task = supervisor.currentTaskId
@@ -324,7 +326,7 @@ async function checkSupervisorHealth(
         supervisorId: supervisor.id,
         isHealthy,
         minutesSinceHeartbeat,
-        state: supervisor.state,
+        executionState: supervisor.executionState,
       }
     );
 
@@ -332,8 +334,8 @@ async function checkSupervisorHealth(
       supervisorId: supervisor.id,
       isHealthy,
       minutesSinceHeartbeat,
-      lastActiveAt: supervisor.lastActiveAt,
-      state: supervisor.state,
+      lastHeartbeat: supervisor.lastHeartbeat,
+      executionState: supervisor.executionState,
       taskId: supervisor.currentTaskId,
       taskTitle: task?.title || null,
       tmuxSessionName: supervisor.tmuxSessionName,
@@ -455,7 +457,10 @@ async function recoverSupervisor(
     } catch (error) {
       console.error(`Failed to kill supervisor ${oldSupervisorId}:`, error);
     }
-    await agentAccessor.update(oldSupervisorId, { state: AgentState.FAILED, currentTaskId: null });
+    await agentAccessor.update(oldSupervisorId, {
+      executionState: ExecutionState.CRASHED,
+      currentTaskId: null,
+    });
 
     // Phase 3: Reset subtask states
     const { resetTasks, totalTasks } = await resetTopLevelTaskSubtasks(taskId);

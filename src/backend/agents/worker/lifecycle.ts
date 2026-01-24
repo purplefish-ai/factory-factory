@@ -105,7 +105,7 @@ export async function recreateWorker(taskId: string): Promise<string> {
 export async function getWorkerStatus(agentId: string): Promise<{
   agentId: string;
   isRunning: boolean;
-  agentState: string;
+  executionState: string;
   taskId: string | null;
   tmuxSession: string | null;
 }> {
@@ -117,7 +117,7 @@ export async function getWorkerStatus(agentId: string): Promise<{
   return {
     agentId: agent.id,
     isRunning: isWorkerRunning(agentId),
-    agentState: agent.state,
+    executionState: agent.executionState,
     taskId: agent.currentTaskId,
     tmuxSession: agent.tmuxSessionName,
   };

@@ -1,4 +1,5 @@
-import { AgentState, AgentType } from '@prisma-gen/client';
+import type { Agent } from '@prisma-gen/client';
+import { AgentType, type DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { readSessionOutput } from '../clients/terminal.client';
 import { agentAccessor } from '../resource_accessors/agent.accessor';
@@ -7,6 +8,22 @@ import { publicProcedure, router } from './trpc';
 
 const HEALTH_THRESHOLD_MINUTES = 5;
 
+/**
+ * Calculate health status for an agent based on heartbeat and execution state
+ */
+function calculateAgentHealth(agent: Agent): {
+  isHealthy: boolean;
+  minutesSinceHeartbeat: number;
+} {
+  const now = Date.now();
+  const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+  const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
+  const isHealthy =
+    minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES &&
+    agent.executionState !== ExecutionState.CRASHED;
+  return { isHealthy, minutesSinceHeartbeat };
+}
+
 export const agentRouter = router({
   // List all agents with optional filtering (scoped to project from context)
   list: projectScopedProcedure
@@ -14,7 +31,7 @@ export const agentRouter = router({
       z
         .object({
           type: z.nativeEnum(AgentType).optional(),
-          state: z.nativeEnum(AgentState).optional(),
+          executionState: z.nativeEnum(ExecutionState).optional(),
           topLevelTaskId: z.string().optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
@@ -28,19 +45,10 @@ export const agentRouter = router({
       });
 
       // Calculate health status for each agent
-      const now = Date.now();
-      return agents.map((agent) => {
-        const minutesSinceHeartbeat = Math.floor(
-          (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-        );
-        const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
-        return {
-          ...agent,
-          isHealthy,
-          minutesSinceHeartbeat,
-        };
-      });
+      return agents.map((agent) => ({
+        ...agent,
+        ...calculateAgentHealth(agent),
+      }));
     }),
 
   // Get agent by ID
@@ -50,16 +58,9 @@ export const agentRouter = router({
       throw new Error(`Agent not found: ${input.id}`);
     }
 
-    // Calculate health status
-    const now = Date.now();
-    const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
-    const isHealthy =
-      minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
-
     return {
       ...agent,
-      isHealthy,
-      minutesSinceHeartbeat,
+      ...calculateAgentHealth(agent),
     };
   }),
 
@@ -101,18 +102,11 @@ export const agentRouter = router({
   // Get agents grouped by type with health status (scoped to project from context)
   listGrouped: projectScopedProcedure.query(async ({ ctx }) => {
     const allAgents = await agentAccessor.list({ projectId: ctx.projectId });
-    const now = Date.now();
 
-    const withHealth = allAgents.map((agent) => {
-      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
-      const isHealthy =
-        minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
-      return {
-        ...agent,
-        isHealthy,
-        minutesSinceHeartbeat,
-      };
-    });
+    const withHealth = allAgents.map((agent) => ({
+      ...agent,
+      ...calculateAgentHealth(agent),
+    }));
 
     return {
       orchestrators: withHealth.filter((a) => a.type === AgentType.ORCHESTRATOR),
@@ -126,26 +120,16 @@ export const agentRouter = router({
     .input(z.object({ topLevelTaskId: z.string() }))
     .query(async ({ input }) => {
       const agents = await agentAccessor.findAgentsByTopLevelTaskId(input.topLevelTaskId);
-      const now = Date.now();
 
-      return agents.map((agent) => {
-        const minutesSinceHeartbeat = Math.floor(
-          (now - agent.lastActiveAt.getTime()) / (60 * 1000)
-        );
-        const isHealthy =
-          minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED;
-        return {
-          ...agent,
-          isHealthy,
-          minutesSinceHeartbeat,
-        };
-      });
+      return agents.map((agent) => ({
+        ...agent,
+        ...calculateAgentHealth(agent),
+      }));
     }),
 
   // Get stats for dashboard (scoped to project from context)
   getStats: projectScopedProcedure.query(async ({ ctx }) => {
     const agents = await agentAccessor.list({ projectId: ctx.projectId });
-    const now = Date.now();
 
     let healthy = 0;
     let unhealthy = 0;
@@ -156,31 +140,39 @@ export const agentRouter = router({
       WORKER: 0,
     };
 
-    const byState: Record<AgentState, number> = {
+    const byExecutionState: Record<ExecutionState, number> = {
       IDLE: 0,
-      BUSY: 0,
-      WAITING: 0,
-      FAILED: 0,
+      ACTIVE: 0,
+      PAUSED: 0,
+      CRASHED: 0,
     };
 
-    agents.forEach((agent) => {
-      byType[agent.type]++;
-      byState[agent.state]++;
+    const byDesiredState: Record<DesiredExecutionState, number> = {
+      IDLE: 0,
+      ACTIVE: 0,
+      PAUSED: 0,
+    };
 
-      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
-      if (minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.state !== AgentState.FAILED) {
+    for (const agent of agents) {
+      byType[agent.type]++;
+      byExecutionState[agent.executionState]++;
+      byDesiredState[agent.desiredExecutionState]++;
+
+      const { isHealthy } = calculateAgentHealth(agent);
+      if (isHealthy) {
         healthy++;
       } else {
         unhealthy++;
       }
-    });
+    }
 
     return {
       total: agents.length,
       healthy,
       unhealthy,
       byType,
-      byState,
+      byExecutionState,
+      byDesiredState,
     };
   }),
 });

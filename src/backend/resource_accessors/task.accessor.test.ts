@@ -94,7 +94,7 @@ describe('TaskAccessor', () => {
       const project = createProject();
       const expectedTask = createTask({
         projectId: project.id,
-        state: TaskState.ASSIGNED,
+        state: TaskState.IN_PROGRESS,
       });
 
       mockPrisma.task.create.mockResolvedValue(expectedTask);
@@ -102,16 +102,16 @@ describe('TaskAccessor', () => {
       const result = await taskAccessor.create({
         projectId: project.id,
         title: 'Task with explicit state',
-        state: TaskState.ASSIGNED,
+        state: TaskState.IN_PROGRESS,
       });
 
       expect(mockPrisma.task.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          state: TaskState.ASSIGNED,
+          state: TaskState.IN_PROGRESS,
         }),
         include: expect.any(Object),
       });
-      expect(result.state).toBe(TaskState.ASSIGNED);
+      expect(result.state).toBe(TaskState.IN_PROGRESS);
     });
   });
 
@@ -566,7 +566,7 @@ describe('TaskAccessor', () => {
           where: {
             parentId: 'parent-id',
             state: {
-              notIn: [TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED],
+              notIn: [TaskState.COMPLETED, TaskState.FAILED],
             },
           },
         });
@@ -606,17 +606,21 @@ describe('TaskAccessor', () => {
 
 describe('Task State Machine', () => {
   describe('valid state transitions for parent tasks (planning)', () => {
-    const parentTaskStates: TaskState[] = [TaskState.PLANNING, TaskState.PLANNED];
+    const parentTaskStates: TaskState[] = [
+      TaskState.PLANNING,
+      TaskState.IN_PROGRESS,
+      TaskState.COMPLETED,
+    ];
 
     it('parent tasks should start in PLANNING state', () => {
       const task = createTask({ parentId: null });
       expect(task.state).toBe(TaskState.PLANNING);
     });
 
-    it('parent tasks can transition from PLANNING to PLANNED', () => {
+    it('parent tasks can transition from PLANNING to IN_PROGRESS', () => {
       const validTransition = {
         from: TaskState.PLANNING,
-        to: TaskState.PLANNED,
+        to: TaskState.IN_PROGRESS,
       };
       expect(parentTaskStates).toContain(validTransition.from);
       expect(parentTaskStates).toContain(validTransition.to);
@@ -626,7 +630,6 @@ describe('Task State Machine', () => {
   describe('valid state transitions for leaf tasks (execution)', () => {
     const leafTaskFlow = [
       TaskState.PENDING,
-      TaskState.ASSIGNED,
       TaskState.IN_PROGRESS,
       TaskState.REVIEW,
       TaskState.COMPLETED,
@@ -637,7 +640,7 @@ describe('Task State Machine', () => {
       expect(task.state).toBe(TaskState.PENDING);
     });
 
-    it('leaf tasks follow PENDING -> ASSIGNED -> IN_PROGRESS -> REVIEW -> COMPLETED flow', () => {
+    it('leaf tasks follow PENDING -> IN_PROGRESS -> REVIEW -> COMPLETED flow', () => {
       for (let i = 0; i < leafTaskFlow.length - 1; i++) {
         const from = leafTaskFlow[i];
         const to = leafTaskFlow[i + 1];
@@ -647,12 +650,7 @@ describe('Task State Machine', () => {
   });
 
   describe('terminal states', () => {
-    const terminalStates = [
-      TaskState.COMPLETED,
-      TaskState.BLOCKED,
-      TaskState.FAILED,
-      TaskState.CANCELLED,
-    ];
+    const terminalStates = [TaskState.COMPLETED, TaskState.BLOCKED, TaskState.FAILED];
 
     it('should recognize all terminal states', () => {
       for (const state of terminalStates) {

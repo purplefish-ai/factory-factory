@@ -11,15 +11,16 @@ import { trpc } from '../../../../../frontend/lib/trpc';
 
 const stateVariants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   PLANNING: 'secondary',
+  PENDING: 'outline',
   IN_PROGRESS: 'default',
   BLOCKED: 'destructive',
   COMPLETED: 'secondary',
-  CANCELLED: 'outline',
+  FAILED: 'destructive',
 };
 
 const taskStateVariants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   PENDING: 'outline',
-  ASSIGNED: 'default',
+  PLANNING: 'secondary',
   IN_PROGRESS: 'default',
   REVIEW: 'default',
   BLOCKED: 'destructive',
@@ -111,7 +112,7 @@ export default function EpicDetailPage() {
                 <p>
                   Agent ID: <span className="font-mono">{supervisor.id}</span>
                 </p>
-                <p>State: {supervisor.state}</p>
+                <p>State: {supervisor.executionState}</p>
               </div>
               {supervisor.tmuxSessionName && (
                 <Button variant="outline" size="sm" asChild>
@@ -198,7 +199,7 @@ export default function EpicDetailPage() {
                       title={agent.isHealthy ? 'Healthy' : 'Unhealthy'}
                     />
                   </div>
-                  <p className="text-sm text-muted-foreground">State: {agent.state}</p>
+                  <p className="text-sm text-muted-foreground">State: {agent.executionState}</p>
                   <Button variant="link" size="sm" className="px-0 mt-2" asChild>
                     <Link href={`/projects/${slug}/agents/${agent.id}`}>View Details</Link>
                   </Button>

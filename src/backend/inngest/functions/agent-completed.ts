@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, ExecutionState } from '@prisma-gen/client';
 import { killSupervisorAndCleanup } from '../../agents/supervisor/lifecycle.js';
 import { killWorkerAndCleanup } from '../../agents/worker/lifecycle.js';
 import {
@@ -40,7 +40,7 @@ export const agentCompletedHandler = inngest.createFunction(
       return {
         id: agent.id,
         type: agent.type,
-        state: agent.state,
+        executionState: agent.executionState,
         currentTaskId: agent.currentTaskId,
         tmuxSessionName: agent.tmuxSessionName,
       };
@@ -64,7 +64,7 @@ export const agentCompletedHandler = inngest.createFunction(
         case AgentType.SUPERVISOR:
           return handleSupervisorCompletion(
             agentId,
-            topLevelTaskId || agentInfo.currentTaskId || undefined
+            topLevelTaskId ?? agentInfo.currentTaskId ?? undefined
           );
 
         case AgentType.ORCHESTRATOR:
@@ -82,7 +82,7 @@ export const agentCompletedHandler = inngest.createFunction(
     await step.run('update-agent-state', async () => {
       try {
         await agentAccessor.update(agentId, {
-          state: AgentState.IDLE,
+          executionState: ExecutionState.IDLE,
         });
       } catch (error) {
         // Agent may have been deleted during cleanup

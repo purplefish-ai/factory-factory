@@ -1,4 +1,4 @@
-import { AgentState, AgentType, TaskState } from '@prisma-gen/client';
+import { AgentType, DesiredExecutionState, ExecutionState, TaskState } from '@prisma-gen/client';
 import {
   captureOutput,
   createWorkerSession,
@@ -116,7 +116,8 @@ export async function createWorker(taskId: string, options?: CreateWorkerOptions
   // Create agent record
   const agent = await agentAccessor.create({
     type: AgentType.WORKER,
-    state: AgentState.IDLE,
+    executionState: ExecutionState.IDLE,
+    desiredExecutionState: DesiredExecutionState.IDLE,
     currentTaskId: taskId,
   });
 
@@ -135,7 +136,7 @@ export async function createWorker(taskId: string, options?: CreateWorkerOptions
     assignedAgentId: agent.id,
     worktreePath: worktreeInfo.path,
     branchName: worktreeInfo.branchName,
-    state: TaskState.ASSIGNED,
+    state: TaskState.IN_PROGRESS,
   });
 
   // Backend URL for API calls
@@ -226,7 +227,7 @@ export async function runWorker(agentId: string): Promise<void> {
 
   // Update agent state
   await agentAccessor.update(agentId, {
-    state: AgentState.BUSY,
+    executionState: ExecutionState.ACTIVE,
   });
 
   console.log(`Starting worker ${agentId}`);
@@ -419,7 +420,7 @@ async function handleWorkerCompletion(agentId: string, reason: string): Promise<
 
   // Update agent state
   await agentAccessor.update(agentId, {
-    state: AgentState.IDLE,
+    executionState: ExecutionState.IDLE,
   });
 
   // Check task state to determine if successful
@@ -459,7 +460,7 @@ export async function stopWorker(agentId: string): Promise<void> {
 
   // Update agent state
   await agentAccessor.update(agentId, {
-    state: AgentState.IDLE,
+    executionState: ExecutionState.IDLE,
   });
 
   console.log(`Worker ${agentId} stopped`);

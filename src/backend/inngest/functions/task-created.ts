@@ -1,18 +1,20 @@
-import { startWorker } from '../../agents/worker/lifecycle.js';
-import {
-  agentAccessor,
-  decisionLogAccessor,
-  mailAccessor,
-  taskAccessor,
-} from '../../resource_accessors/index.js';
-import { inngest } from '../client.js';
-
 /**
- * Handle task.created event by starting a worker agent
+ * Handle task.created event (for subtasks/leaf tasks)
  *
- * This handler is triggered when a supervisor creates a subtask under a top-level task.
- * It automatically creates and starts a worker agent to implement the task.
+ * In the reconciliation pattern, event handlers are simple:
+ * they just verify state and trigger reconciliation.
+ *
+ * The reconciler is responsible for:
+ * - Checking if task is blocked
+ * - Creating the worker agent
+ * - Setting up worktree and branch
+ * - Managing agent lifecycle
  */
+
+import { taskAccessor } from '../../resource_accessors/index.js';
+import { inngest } from '../client.js';
+import { triggerTaskReconciliation } from './reconciliation.js';
+
 export const taskCreatedHandler = inngest.createFunction(
   {
     id: 'task-created',
@@ -21,11 +23,11 @@ export const taskCreatedHandler = inngest.createFunction(
   },
   { event: 'task.created' },
   async ({ event, step }) => {
-    const { taskId, parentId, title } = event.data;
+    const { taskId, parentId } = event.data;
 
     console.log(`Task created event received for task ${taskId} (parent: ${parentId})`);
 
-    // Step 1: Verify task exists and get its details
+    // Step 1: Verify task exists
     const task = await step.run('verify-task', async () => {
       const task = await taskAccessor.findById(taskId);
       if (!task) {
@@ -35,93 +37,24 @@ export const taskCreatedHandler = inngest.createFunction(
         id: task.id,
         title: task.title,
         parentId: task.parentId,
+        state: task.state,
       };
     });
 
-    // Step 2: Check if task is blocked by dependencies
-    const isBlocked = await step.run('check-dependencies', () => {
-      return taskAccessor.isBlocked(taskId);
+    // Step 2: Trigger reconciliation to handle worker creation and infrastructure
+    await step.run('trigger-reconciliation', async () => {
+      await triggerTaskReconciliation(taskId);
     });
 
-    if (isBlocked) {
-      console.log(`Task ${taskId} is blocked by dependencies, skipping worker creation`);
-      return {
-        success: true,
-        taskId,
-        taskTitle: task.title,
-        parentId: task.parentId,
-        agentId: null,
-        message: `Task ${taskId} is blocked by dependencies, worker will be created when unblocked`,
-        blocked: true,
-      };
-    }
-
-    // Step 3: Start worker for the task
-    const workerResult = await step.run('start-worker', async () => {
-      try {
-        const agentId = await startWorker(taskId);
-        console.log(`Started worker ${agentId} for task ${taskId}`);
-
-        // Log the worker creation
-        await decisionLogAccessor.createManual(
-          agentId,
-          `Worker created for task "${title}"`,
-          `Automatic worker creation triggered by task.created event`,
-          JSON.stringify({ taskId, parentId, title })
-        );
-
-        return {
-          success: true,
-          agentId,
-          message: `Worker ${agentId} started for task ${taskId}`,
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`Failed to start worker for task ${taskId}:`, error);
-
-        // Try to find the top-level task to get the supervisor
-        const topLevelTask = await taskAccessor.getTopLevelParent(taskId);
-        const supervisor = topLevelTask
-          ? await agentAccessor.findSupervisorByTopLevelTaskId(topLevelTask.id)
-          : null;
-
-        if (supervisor) {
-          // Notify supervisor about the failure
-          await mailAccessor.create({
-            toAgentId: supervisor.id,
-            subject: `Failed to create worker for task: ${title}`,
-            body:
-              `The system failed to automatically create a worker for task "${title}".\n\n` +
-              `Task ID: ${taskId}\n` +
-              `Error: ${errorMessage}\n\n` +
-              `You may need to manually retry or investigate.`,
-          });
-        }
-
-        // Also notify human
-        await mailAccessor.create({
-          isForHuman: true,
-          subject: `Failed to create worker for task: ${title}`,
-          body:
-            `The system failed to automatically create a worker for task "${title}".\n\n` +
-            `Task ID: ${taskId}\n` +
-            `Parent ID: ${parentId}\n` +
-            `Error: ${errorMessage}\n\n` +
-            `Manual intervention may be required.`,
-        });
-
-        throw error;
-      }
-    });
+    console.log(`Reconciliation triggered for task ${taskId}`);
 
     return {
-      success: workerResult.success,
+      success: true,
       taskId,
       taskTitle: task.title,
       parentId: task.parentId,
-      agentId: workerResult.agentId,
-      message: workerResult.message,
-      blocked: false,
+      state: task.state,
+      message: `Reconciliation triggered for task`,
     };
   }
 );

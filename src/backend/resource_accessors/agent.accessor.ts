@@ -1,26 +1,32 @@
 import type { Agent, Prisma } from '@prisma-gen/client';
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { prisma } from '../db.js';
 import { taskAccessor } from './task.accessor.js';
 
 interface CreateAgentInput {
   type: AgentType;
-  state?: AgentState;
   currentTaskId?: string;
   tmuxSessionName?: string;
+  sessionId?: string;
+  executionState?: ExecutionState;
+  desiredExecutionState?: DesiredExecutionState;
 }
 
 interface UpdateAgentInput {
-  state?: AgentState;
   currentTaskId?: string | null;
   tmuxSessionName?: string | null;
   sessionId?: string | null;
-  lastActiveAt?: Date;
+  executionState?: ExecutionState;
+  desiredExecutionState?: DesiredExecutionState;
+  lastHeartbeat?: Date | null;
+  lastReconcileAt?: Date;
+  reconcileFailures?: Prisma.InputJsonValue;
 }
 
 interface ListAgentsFilters {
   type?: AgentType;
-  state?: AgentState;
+  executionState?: ExecutionState;
+  desiredExecutionState?: DesiredExecutionState;
   projectId?: string;
   limit?: number;
   offset?: number;
@@ -31,9 +37,11 @@ class AgentAccessor {
     return prisma.agent.create({
       data: {
         type: data.type,
-        state: data.state ?? AgentState.IDLE,
         currentTaskId: data.currentTaskId,
         tmuxSessionName: data.tmuxSessionName,
+        sessionId: data.sessionId,
+        executionState: data.executionState ?? ExecutionState.IDLE,
+        desiredExecutionState: data.desiredExecutionState ?? DesiredExecutionState.IDLE,
       },
     });
   }
@@ -65,8 +73,11 @@ class AgentAccessor {
     if (filters?.type) {
       where.type = filters.type;
     }
-    if (filters?.state) {
-      where.state = filters.state;
+    if (filters?.executionState) {
+      where.executionState = filters.executionState;
+    }
+    if (filters?.desiredExecutionState) {
+      where.desiredExecutionState = filters.desiredExecutionState;
     }
     // Filter by project via currentTask → projectId
     if (filters?.projectId) {
@@ -135,12 +146,12 @@ class AgentAccessor {
   }
 
   /**
-   * Update an agent's heartbeat (lastActiveAt) to now
+   * Update an agent's heartbeat to now
    */
   updateHeartbeat(id: string): Promise<Agent> {
     return prisma.agent.update({
       where: { id },
-      data: { lastActiveAt: new Date() },
+      data: { lastHeartbeat: new Date() },
     });
   }
 
@@ -151,7 +162,7 @@ class AgentAccessor {
     const threshold = new Date(Date.now() - minutes * 60 * 1000);
     return prisma.agent.findMany({
       where: {
-        lastActiveAt: {
+        lastHeartbeat: {
           lt: threshold,
         },
       },
@@ -163,18 +174,18 @@ class AgentAccessor {
   }
 
   /**
-   * Get healthy agents of a specific type (heartbeat within threshold)
+   * Get healthy agents of a specific type (heartbeat within threshold and not crashed)
    */
   getHealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
     const threshold = new Date(Date.now() - minutes * 60 * 1000);
     return prisma.agent.findMany({
       where: {
         type,
-        lastActiveAt: {
+        lastHeartbeat: {
           gte: threshold,
         },
-        state: {
-          not: AgentState.FAILED,
+        executionState: {
+          not: ExecutionState.CRASHED,
         },
       },
       include: {
@@ -185,7 +196,7 @@ class AgentAccessor {
   }
 
   /**
-   * Get unhealthy agents of a specific type (heartbeat older than threshold)
+   * Get unhealthy agents of a specific type (heartbeat older than threshold or crashed)
    */
   getUnhealthyAgents(type: AgentType, minutes: number): Promise<Agent[]> {
     const threshold = new Date(Date.now() - minutes * 60 * 1000);
@@ -194,12 +205,12 @@ class AgentAccessor {
         type,
         OR: [
           {
-            lastActiveAt: {
+            lastHeartbeat: {
               lt: threshold,
             },
           },
           {
-            state: AgentState.FAILED,
+            executionState: ExecutionState.CRASHED,
           },
         ],
       },
@@ -227,9 +238,11 @@ class AgentAccessor {
 
     const now = Date.now();
     return agents.map((agent) => {
-      const minutesSinceHeartbeat = Math.floor((now - agent.lastActiveAt.getTime()) / (60 * 1000));
+      const heartbeat = agent.lastHeartbeat ?? agent.createdAt;
+      const minutesSinceHeartbeat = Math.floor((now - heartbeat.getTime()) / (60 * 1000));
       const isHealthy =
-        minutesSinceHeartbeat < healthThresholdMinutes && agent.state !== AgentState.FAILED;
+        minutesSinceHeartbeat < healthThresholdMinutes &&
+        agent.executionState !== ExecutionState.CRASHED;
       return {
         ...agent,
         isHealthy,
@@ -319,6 +332,129 @@ class AgentAccessor {
       include: {
         currentTask: true,
         assignedTasks: true,
+      },
+    });
+  }
+
+  // ============================================================================
+  // Reconciliation-related methods
+  // ============================================================================
+
+  /**
+   * Find agents that need reconciliation:
+   * - Agents where executionState !== desiredExecutionState
+   * - Or agents that haven't been reconciled recently
+   */
+  async findAgentsNeedingReconciliation(staleMinutes = 5): Promise<Agent[]> {
+    const staleThreshold = new Date(Date.now() - staleMinutes * 60 * 1000);
+
+    return await prisma.agent.findMany({
+      where: {
+        OR: [
+          // Agents where actual state differs from desired state
+          {
+            AND: [
+              { desiredExecutionState: DesiredExecutionState.ACTIVE },
+              { executionState: { not: ExecutionState.ACTIVE } },
+            ],
+          },
+          {
+            AND: [
+              { desiredExecutionState: DesiredExecutionState.IDLE },
+              { executionState: { not: ExecutionState.IDLE } },
+            ],
+          },
+          {
+            AND: [
+              { desiredExecutionState: DesiredExecutionState.PAUSED },
+              { executionState: { not: ExecutionState.PAUSED } },
+            ],
+          },
+          // Agents that haven't been reconciled recently
+          {
+            lastReconcileAt: {
+              lt: staleThreshold,
+            },
+          },
+          // Agents that have never been reconciled
+          {
+            lastReconcileAt: null,
+          },
+        ],
+      },
+      include: {
+        currentTask: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Find agents that should be active but appear crashed
+   * (desired ACTIVE but heartbeat is stale)
+   */
+  async findPotentiallyCrashedAgents(heartbeatThresholdMinutes: number): Promise<Agent[]> {
+    const threshold = new Date(Date.now() - heartbeatThresholdMinutes * 60 * 1000);
+
+    return await prisma.agent.findMany({
+      where: {
+        desiredExecutionState: DesiredExecutionState.ACTIVE,
+        executionState: ExecutionState.ACTIVE, // We think it's active
+        OR: [
+          { lastHeartbeat: { lt: threshold } },
+          { lastHeartbeat: null }, // Never sent a heartbeat
+        ],
+      },
+      include: {
+        currentTask: true,
+        assignedTasks: true,
+      },
+    });
+  }
+
+  /**
+   * Mark an agent as crashed
+   */
+  markAsCrashed(id: string): Promise<Agent> {
+    return prisma.agent.update({
+      where: { id },
+      data: {
+        executionState: ExecutionState.CRASHED,
+        lastReconcileAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Update reconciliation timestamp
+   */
+  markReconciled(id: string): Promise<Agent> {
+    return prisma.agent.update({
+      where: { id },
+      data: { lastReconcileAt: new Date() },
+    });
+  }
+
+  /**
+   * Record a reconciliation failure
+   */
+  async recordReconcileFailure(id: string, error: string, action: string): Promise<Agent> {
+    const agent = await prisma.agent.findUnique({ where: { id } });
+    const existingFailures = (agent?.reconcileFailures as unknown[]) ?? [];
+    const newFailure = {
+      timestamp: new Date().toISOString(),
+      error,
+      action,
+    };
+
+    // Keep last 10 failures
+    const failures = [...existingFailures, newFailure].slice(-10) as object[];
+
+    return prisma.agent.update({
+      where: { id },
+      data: {
+        reconcileFailures: failures,
+        lastReconcileAt: new Date(),
       },
     });
   }

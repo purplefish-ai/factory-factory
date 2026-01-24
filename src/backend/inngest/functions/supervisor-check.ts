@@ -1,4 +1,4 @@
-import { AgentState, AgentType } from '@prisma-gen/client';
+import { AgentType, ExecutionState } from '@prisma-gen/client';
 import { checkWorkerHealth, recoverWorker } from '../../agents/supervisor/health.js';
 import {
   agentAccessor,
@@ -12,8 +12,8 @@ interface SupervisorInfo {
   id: string;
   /** ID of the top-level task the supervisor is managing */
   topLevelTaskId: string;
-  state: string;
-  lastActiveAt: string;
+  executionState: ExecutionState;
+  lastHeartbeat: string;
 }
 
 interface WorkerHealthResult {
@@ -152,10 +152,10 @@ export const supervisorCheckHandler = inngest.createFunction(
     const activeSupervisors = await step.run('get-active-supervisors', async () => {
       const supervisors = await agentAccessor.findByType(AgentType.SUPERVISOR);
 
-      // Filter to only active (non-failed) supervisors with top-level tasks
+      // Filter to only active (non-crashed) supervisors with top-level tasks
       const active = supervisors.filter(
         (s): s is typeof s & { currentTaskId: string } =>
-          s.state !== AgentState.FAILED && s.currentTaskId !== null
+          s.executionState !== ExecutionState.CRASHED && s.currentTaskId !== null
       );
 
       console.log(`Found ${active.length} active supervisor(s)`);
@@ -163,8 +163,8 @@ export const supervisorCheckHandler = inngest.createFunction(
       return active.map((s) => ({
         id: s.id,
         topLevelTaskId: s.currentTaskId,
-        state: s.state,
-        lastActiveAt: s.lastActiveAt.toISOString(),
+        executionState: s.executionState,
+        lastHeartbeat: (s.lastHeartbeat ?? s.createdAt).toISOString(),
       }));
     });
 

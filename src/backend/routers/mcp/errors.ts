@@ -59,8 +59,9 @@ Error: ${error.message}
 Stack trace:
 ${error.stack || 'N/A'}
 
-Agent state: ${agent.state}
-Last active: ${agent.lastActiveAt}
+Execution state: ${agent.executionState}
+Desired state: ${agent.desiredExecutionState}
+Last heartbeat: ${agent.lastHeartbeat}
   `.trim();
 
   // Send to human if no specific recipient found
@@ -92,8 +93,8 @@ Error: ${error.message}
 Stack trace:
 ${error.stack || 'N/A'}
 
-Agent state: ${agent.state}
-Current task: ${agent.currentTaskId || 'N/A'}
+Execution state: ${agent.executionState}
+Current task: ${agent.currentTaskId ?? 'N/A'}
 
 This tool is marked as critical and requires immediate attention.
   `.trim();
