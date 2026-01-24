@@ -16,20 +16,19 @@ export default function ProjectMailPage() {
 
   // Get project for filtering
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
-  const projectId = project?.id;
 
-  // Fetch agents for filter dropdown (scoped to project)
-  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
+  // Fetch agents for filter dropdown (scoped to project via context header)
+  const { data: agents } = trpc.agent.list.useQuery({}, { enabled: !!project?.id });
 
-  // Conditional mail queries based on filter - all scoped to project
+  // Conditional mail queries based on filter - all scoped to project via context header
   const allMailQuery = trpc.mail.listAll.useQuery(
-    { includeRead: true, projectId },
-    { enabled: filter.type === 'all' && !!projectId, refetchInterval: 5000 }
+    { includeRead: true },
+    { enabled: filter.type === 'all' && !!project?.id, refetchInterval: 5000 }
   );
 
   const humanMailQuery = trpc.mail.listHumanInbox.useQuery(
-    { includeRead: true, projectId },
-    { enabled: filter.type === 'human' && !!projectId, refetchInterval: 5000 }
+    { includeRead: true },
+    { enabled: filter.type === 'human' && !!project?.id, refetchInterval: 5000 }
   );
 
   const agentMailQuery = trpc.mail.listAgentInbox.useQuery(
@@ -232,7 +231,6 @@ export default function ProjectMailPage() {
       {/* Compose Modal */}
       {showComposeModal && (
         <ComposeModal
-          projectId={projectId}
           onClose={() => setShowComposeModal(false)}
           onSent={() => {
             setShowComposeModal(false);
@@ -292,21 +290,14 @@ function MailParticipants({
   );
 }
 
-function ComposeModal({
-  projectId,
-  onClose,
-  onSent,
-}: {
-  projectId?: string;
-  onClose: () => void;
-  onSent: () => void;
-}) {
+function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
   const [toAgentId, setToAgentId] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [error, setError] = useState('');
 
-  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
+  // Agents are scoped to project via context header
+  const { data: agents } = trpc.agent.list.useQuery({});
 
   const sendMail = trpc.mail.sendToAgent.useMutation({
     onSuccess: () => {

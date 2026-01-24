@@ -15,17 +15,16 @@ export default function ProjectLogsPage() {
 
   // Get project for filtering
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
-  const projectId = project?.id;
 
   const { data: logsData, isLoading } = trpc.decisionLog.listRecent.useQuery(
-    { limit: 100, projectId },
-    { enabled: !!projectId, refetchInterval: 5000 }
+    { limit: 100 },
+    { enabled: !!project?.id, refetchInterval: 5000 }
   );
 
   // Cast to include relations
   const logs = logsData as DecisionLogWithRelations[] | undefined;
 
-  const { data: agents } = trpc.agent.list.useQuery({ projectId }, { enabled: !!projectId });
+  const { data: agents } = trpc.agent.list.useQuery({}, { enabled: !!project?.id });
 
   const filteredLogs = logs?.filter((log) => {
     if (!agentFilter) {

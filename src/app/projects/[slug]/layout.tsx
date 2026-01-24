@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { trpc } from '../../../frontend/lib/trpc';
+import { setProjectContext, trpc } from '../../../frontend/lib/trpc';
 
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
@@ -14,6 +14,17 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     isLoading,
     error,
   } = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
+
+  // Set project context for tRPC requests when project is loaded
+  useEffect(() => {
+    if (project?.id) {
+      setProjectContext(project.id);
+    }
+    return () => {
+      // Clear project context when leaving project pages
+      setProjectContext(undefined);
+    };
+  }, [project?.id]);
 
   useEffect(() => {
     if (!(isLoading || project || error)) {

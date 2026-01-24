@@ -20,5 +20,6 @@ export const appRouter = router({
 // Export type for use in frontend
 export type AppRouter = typeof appRouter;
 
+export { epicScopedProcedure, projectScopedProcedure } from './procedures/index.js';
 // Re-export context and procedure helpers
-export { createContext } from './trpc';
+export { createContext, publicProcedure } from './trpc';

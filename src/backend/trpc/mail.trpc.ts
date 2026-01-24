@@ -1,35 +1,34 @@
 import { z } from 'zod';
 import { inngest } from '../inngest/client';
 import { mailAccessor } from '../resource_accessors/mail.accessor';
+import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
 export const mailRouter = router({
-  // List human inbox
-  listHumanInbox: publicProcedure
+  // List human inbox (scoped to project from context)
+  listHumanInbox: projectScopedProcedure
     .input(
       z
         .object({
           includeRead: z.boolean().optional(),
-          projectId: z.string().optional(),
         })
         .optional()
     )
-    .query(async ({ input }) => {
-      return mailAccessor.listHumanInbox(input?.includeRead ?? true, input?.projectId);
+    .query(async ({ ctx, input }) => {
+      return mailAccessor.listHumanInbox(input?.includeRead ?? true, ctx.projectId);
     }),
 
-  // List all mail in the system
-  listAll: publicProcedure
+  // List all mail in the system (scoped to project from context)
+  listAll: projectScopedProcedure
     .input(
       z
         .object({
           includeRead: z.boolean().optional(),
-          projectId: z.string().optional(),
         })
         .optional()
     )
-    .query(async ({ input }) => {
-      return mailAccessor.listAll(input?.includeRead ?? true, input?.projectId);
+    .query(async ({ ctx, input }) => {
+      return mailAccessor.listAll(input?.includeRead ?? true, ctx.projectId);
     }),
 
   // List inbox for a specific agent
@@ -138,17 +137,9 @@ export const mailRouter = router({
     return mailAccessor.markAsRead(input.id);
   }),
 
-  // Get unread count for human inbox
-  getUnreadCount: publicProcedure
-    .input(
-      z
-        .object({
-          projectId: z.string().optional(),
-        })
-        .optional()
-    )
-    .query(async ({ input }) => {
-      const unreadMail = await mailAccessor.listHumanInbox(false, input?.projectId);
-      return { count: unreadMail.length };
-    }),
+  // Get unread count for human inbox (scoped to project from context)
+  getUnreadCount: projectScopedProcedure.query(async ({ ctx }) => {
+    const unreadMail = await mailAccessor.listHumanInbox(false, ctx.projectId);
+    return { count: unreadMail.length };
+  }),
 });

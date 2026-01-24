@@ -40,7 +40,7 @@ export default function NewEpicPage() {
       return;
     }
 
-    createEpic.mutate({ projectId: project.id, title, description, design });
+    createEpic.mutate({ title, description, design });
   };
 
   if (!project) {

@@ -2,27 +2,30 @@ import { AgentState, AgentType } from '@prisma-gen/client';
 import { z } from 'zod';
 import { readSessionOutput } from '../clients/terminal.client';
 import { agentAccessor } from '../resource_accessors/agent.accessor';
+import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
 
 const HEALTH_THRESHOLD_MINUTES = 5;
 
 export const agentRouter = router({
-  // List all agents with optional filtering
-  list: publicProcedure
+  // List all agents with optional filtering (scoped to project from context)
+  list: projectScopedProcedure
     .input(
       z
         .object({
           type: z.nativeEnum(AgentType).optional(),
           state: z.nativeEnum(AgentState).optional(),
           epicId: z.string().optional(),
-          projectId: z.string().optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
         })
         .optional()
     )
-    .query(async ({ input }) => {
-      const agents = await agentAccessor.list(input);
+    .query(async ({ ctx, input }) => {
+      const agents = await agentAccessor.list({
+        ...input,
+        projectId: ctx.projectId,
+      });
 
       // Calculate health status for each agent
       const now = Date.now();
@@ -95,9 +98,9 @@ export const agentRouter = router({
       }
     }),
 
-  // Get agents grouped by type with health status
-  listGrouped: publicProcedure.query(async () => {
-    const allAgents = await agentAccessor.list();
+  // Get agents grouped by type with health status (scoped to project from context)
+  listGrouped: projectScopedProcedure.query(async ({ ctx }) => {
+    const allAgents = await agentAccessor.list({ projectId: ctx.projectId });
     const now = Date.now();
 
     const withHealth = allAgents.map((agent) => {
@@ -135,9 +138,9 @@ export const agentRouter = router({
     });
   }),
 
-  // Get stats for dashboard
-  getStats: publicProcedure.query(async () => {
-    const agents = await agentAccessor.list();
+  // Get stats for dashboard (scoped to project from context)
+  getStats: projectScopedProcedure.query(async ({ ctx }) => {
+    const agents = await agentAccessor.list({ projectId: ctx.projectId });
     const now = Date.now();
 
     let healthy = 0;
