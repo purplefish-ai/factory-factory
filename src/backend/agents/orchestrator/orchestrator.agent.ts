@@ -151,10 +151,14 @@ export async function createOrchestrator(): Promise<string> {
 async function createOrchestratorSession(
   agentId: string,
   systemPrompt: string,
-  workingDir: string
+  workingDir: string,
+  options?: { resumeSessionId?: string }
 ): Promise<{ sessionId: string; tmuxSessionName: string }> {
   // Use the worker session creator but with orchestrator naming
-  const context = await createWorkerSession(agentId, systemPrompt, workingDir);
+  const context = await createWorkerSession(agentId, systemPrompt, workingDir, {
+    agentType: 'orchestrator',
+    resumeSessionId: options?.resumeSessionId,
+  });
 
   // Rename tmux session to orchestrator naming
   const orchestratorTmuxName = getOrchestratorTmuxSessionName(agentId);

@@ -1,6 +1,7 @@
 import { AgentType } from '@prisma-gen/client';
 import { agentAccessor } from '../../resource_accessors/index.js';
 import {
+  type CreateSupervisorOptions,
   createSupervisor,
   isSupervisorRunning,
   killSupervisor,
@@ -11,13 +12,21 @@ import {
 // Re-export runSupervisor so it can be used to start an existing supervisor
 export { runSupervisor };
 
+export interface StartSupervisorOptions extends CreateSupervisorOptions {}
+
 /**
  * Start a supervisor for a top-level task
  * Creates the supervisor agent, sets up environment, and starts execution
+ *
+ * @param taskId - The top-level task to start a supervisor for
+ * @param options - Optional settings including resumeSessionId for crash recovery
  */
-export async function startSupervisorForTask(taskId: string): Promise<string> {
-  // Create supervisor
-  const agentId = await createSupervisor(taskId);
+export async function startSupervisorForTask(
+  taskId: string,
+  options?: StartSupervisorOptions
+): Promise<string> {
+  // Create supervisor (with optional resume session ID for crash recovery)
+  const agentId = await createSupervisor(taskId, options);
 
   console.log(`Starting supervisor ${agentId} for task ${taskId}...`);
 

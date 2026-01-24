@@ -171,6 +171,14 @@ export async function recoverWorker(
     };
   }
 
+  // Get the old session ID before killing the worker (for resume capability)
+  const oldWorker = await agentAccessor.findById(workerId);
+  const oldSessionId = oldWorker?.sessionId;
+
+  if (oldSessionId) {
+    console.log(`Worker ${workerId} has session ID ${oldSessionId}, will attempt resume`);
+  }
+
   // Kill the old worker
   try {
     await killWorkerAndCleanup(workerId);
@@ -192,10 +200,13 @@ export async function recoverWorker(
     failureReason: null, // Clear failure reason since we're retrying
   });
 
-  // Create new worker
+  // Create new worker with resume capability if old session ID exists
+  // This preserves conversation history and context from the crashed session
   let newWorkerId: string;
   try {
-    newWorkerId = await startWorker(taskId);
+    newWorkerId = await startWorker(taskId, {
+      resumeSessionId: oldSessionId ?? undefined,
+    });
   } catch (error) {
     console.error(`Failed to create new worker for task ${taskId}:`, error);
     return {
