@@ -19,11 +19,11 @@ Three-tier agent hierarchy that processes Linear issues:
 
 ```
 Orchestrator (1 per system) → monitors health, manages supervisors
-    └── Supervisor (1 per Epic) → breaks down epic, reviews/merges PRs
-            └── Worker (1 per Task) → implements in isolated git worktree
+    └── Supervisor (1 per top-level task) → breaks down tasks, reviews/merges PRs
+            └── Worker (1 per subtask) → implements in isolated git worktree
 ```
 
-Agents communicate via Mail system and are triggered by Inngest events (`epic.created` → supervisor, `task.created` → worker). PRs are merged sequentially to avoid complex conflicts.
+Agents communicate via Mail system and are triggered by Inngest events (`task.top_level.created` → supervisor, `task.created` → worker). PRs are merged sequentially to avoid complex conflicts.
 
 ## Code Patterns
 

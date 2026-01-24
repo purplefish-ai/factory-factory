@@ -47,13 +47,13 @@ Three-tier agent hierarchy:
 
 ```
 Orchestrator (1 per system) - system health, supervisor lifecycle
-    └── Supervisor (1 per Epic) - breaks down epic, reviews/merges PRs
-            └── Worker (1 per Task) - implements in isolated git worktree
+    └── Supervisor (1 per top-level task) - breaks down tasks, reviews/merges PRs
+            └── Worker (1 per subtask) - implements in isolated git worktree
 ```
 
 Agents communicate via:
 - **Mail System** - async messages between agents
-- **Inngest Events** - triggers workflows (`epic.created` → supervisor, `task.created` → worker)
+- **Inngest Events** - triggers workflows (`task.top_level.created` → supervisor, `task.created` → worker)
 - **Database** - shared state
 
 PRs are merged sequentially to avoid complex conflicts. Workers rebase when requested.
