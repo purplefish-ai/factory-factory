@@ -83,6 +83,7 @@
     "dotenv": "^17.2.3",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.2.1",
+    "geist": "^1.5.1",
     "inngest": "^3.49.3",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.563.0",

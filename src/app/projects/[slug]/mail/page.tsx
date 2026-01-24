@@ -122,7 +122,7 @@ export default function ProjectMailPage() {
     filter.type === 'agent' ? agents?.find((a) => a.id === filter.agentId) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={getFilterTitle(filter)}
         description={`${getFilterDescription(filter, selectedAgent?.type)}${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
@@ -204,7 +204,7 @@ export default function ProjectMailPage() {
               <Link
                 key={item.id}
                 href={`/projects/${slug}/mail/${item.id}`}
-                className={`block p-4 hover:bg-muted/50 transition-colors ${!item.isRead ? 'bg-primary/5' : ''}`}
+                className={`block p-3 hover:bg-muted/50 transition-colors ${!item.isRead ? 'bg-primary/5' : ''}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">

@@ -56,7 +56,7 @@ export default function ProjectTasksPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Tasks" description={project.name} />
 
       <Card>

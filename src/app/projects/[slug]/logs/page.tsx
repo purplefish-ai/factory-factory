@@ -51,7 +51,7 @@ export default function ProjectLogsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Decision Logs" description="Audit trail of all agent decisions" />
 
       <Card>
