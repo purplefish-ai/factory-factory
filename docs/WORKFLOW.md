@@ -235,7 +235,11 @@ Final PR targets: main
 
 ## State Machines
 
-### Task States
+**Important:** Task state and agent state are separate concerns. Task state is about the *work*, agent state is about the *executor*. See `docs/RECONCILIATION_DESIGN.md` for details.
+
+### Task States (About the Work)
+
+Task state answers: "What's the status of this deliverable?"
 
 **Top-Level Task (Epic):**
 ```
@@ -247,18 +251,47 @@ PLANNING → IN_PROGRESS → COMPLETED
 
 **Subtask:**
 ```
-PENDING → ASSIGNED → IN_PROGRESS → REVIEW → COMPLETED
-   ↓                     ↓           ↓
- BLOCKED              FAILED      IN_PROGRESS (rework)
+PENDING → IN_PROGRESS → REVIEW → COMPLETED
+   ↓           ↓          ↓
+ BLOCKED    FAILED    IN_PROGRESS (rework)
 ```
 
-### Agent States
+Note: `IN_PROGRESS` does NOT imply an agent is actively running. The task could be in progress with the agent paused (deferred work).
+
+### Agent Execution States (About the Executor)
+
+Agent state answers: "What's happening with this executor?"
 
 ```
-IDLE → BUSY ↔ WAITING
-        ↓
-      FAILED
+┌─────────────────────────────────────────────────────────────┐
+│  desiredExecutionState    │  What we WANT the agent to do  │
+├───────────────────────────┼────────────────────────────────┤
+│  ACTIVE                   │  Should be running             │
+│  PAUSED                   │  Should NOT be running         │
+│  IDLE                     │  No task, available            │
+└───────────────────────────┴────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  executionState           │  What the agent IS doing       │
+├───────────────────────────┼────────────────────────────────┤
+│  ACTIVE                   │  Session running               │
+│  PAUSED                   │  Intentionally stopped         │
+│  IDLE                     │  Not assigned to work          │
+│  CRASHED                  │  Was running, died             │
+└───────────────────────────┴────────────────────────────────┘
 ```
+
+The reconciler compares `desiredExecutionState` vs `executionState` and remediates.
+
+### Example Scenarios
+
+| Task State | Agent Desired | Agent Actual | Meaning |
+|------------|---------------|--------------|---------|
+| IN_PROGRESS | ACTIVE | ACTIVE | Normal: work happening |
+| IN_PROGRESS | ACTIVE | CRASHED | Problem: needs restart |
+| IN_PROGRESS | PAUSED | PAUSED | Deferred: paused overnight |
+| REVIEW | IDLE | IDLE | Normal: awaiting review |
+| BLOCKED | PAUSED | PAUSED | Waiting on dependency |
 
 ---
 
