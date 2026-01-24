@@ -1,9 +1,33 @@
+import { existsSync } from 'node:fs';
 import * as pty from 'node-pty';
 import type { WebSocket } from 'ws';
 import { createLogger } from '../services/index.js';
 import { TERMINAL_LIMITS, terminalMessageSchema } from './schemas.js';
 
+// Find tmux binary - check common locations
+function findTmuxPath(): string {
+  const tmuxPaths = [
+    '/opt/homebrew/bin/tmux', // macOS ARM (Homebrew)
+    '/usr/local/bin/tmux', // macOS Intel (Homebrew)
+    '/usr/bin/tmux', // Linux
+  ];
+
+  for (const path of tmuxPaths) {
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+
+  // Fallback to PATH lookup (may not work with node-pty)
+  return 'tmux';
+}
+
+const TMUX_PATH = findTmuxPath();
+
 const logger = createLogger('pty-manager');
+
+// Log the tmux path on module load
+logger.info('Using tmux binary', { path: TMUX_PATH });
 
 // Connection limits
 const MAX_CONNECTIONS_PER_SESSION = 5;
@@ -62,20 +86,14 @@ export function attach(
   const clampedRows = Math.max(TERMINAL_LIMITS.MIN_ROWS, Math.min(TERMINAL_LIMITS.MAX_ROWS, rows));
 
   try {
-    // Ensure PATH includes common binary locations for tmux
-    const envPath = process.env.PATH || '';
-    const additionalPaths = ['/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin'];
-    const fullPath = [...new Set([...envPath.split(':'), ...additionalPaths])].join(':');
-
-    // Spawn PTY attached to tmux session using /usr/bin/env for better portability
-    const ptyProcess = pty.spawn('/usr/bin/env', ['tmux', 'attach-session', '-t', sessionName], {
+    // Spawn PTY attached to tmux session
+    const ptyProcess = pty.spawn(TMUX_PATH, ['attach-session', '-t', sessionName], {
       name: 'xterm-256color',
       cols: clampedCols,
       rows: clampedRows,
       cwd: process.env.HOME || '/',
       env: {
         ...process.env,
-        PATH: fullPath,
         TERM: 'xterm-256color',
       },
     });
