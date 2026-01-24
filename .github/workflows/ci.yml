@@ -79,3 +79,36 @@ jobs:
 
       - name: Build all
         run: pnpm build:all
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run tests with coverage
+        run: pnpm test:coverage
+
+      - name: Report Coverage
+        if: always() && github.event_name == 'pull_request'
+        uses: davelosert/vitest-coverage-report-action@v2
