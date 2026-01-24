@@ -1,30 +1,39 @@
 # FactoryFactory Dockerfile
 # Multi-stage build for production deployment
 
+# pnpm version used throughout the build
+ARG PNPM_VERSION=10.28.1
+
 # ============================================================================
 # Stage 1: Dependencies
 # ============================================================================
 FROM node:20-alpine AS deps
+ARG PNPM_VERSION
 WORKDIR /app
 
-# Install dependencies for native modules
+# Install dependencies for native modules and pnpm
 RUN apk add --no-cache libc6-compat
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm ci
+# Install dependencies with pnpm
+RUN pnpm install --frozen-lockfile
 
 # Generate Prisma client
-RUN npx prisma generate
+RUN pnpm db:generate
 
 # ============================================================================
 # Stage 2: Builder
 # ============================================================================
 FROM node:20-alpine AS builder
+ARG PNPM_VERSION
 WORKDIR /app
+
+# Enable pnpm
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
@@ -34,22 +43,24 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build Next.js frontend
-RUN npm run build
+# Build Next.js frontend and backend
+RUN pnpm build:all
 
 # ============================================================================
 # Stage 3: Runner
 # ============================================================================
 FROM node:20-alpine AS runner
+ARG PNPM_VERSION
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies and pnpm
 RUN apk add --no-cache \
     libc6-compat \
     git \
     tmux \
     bash \
     curl
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -61,7 +72,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/src/backend ./src/backend
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
 
 # Set ownership
@@ -83,5 +94,7 @@ EXPOSE 3000 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3001/health || exit 1
 
-# Start command
-CMD ["node", "server.js"]
+# Create startup script that runs migrations then starts the app
+# Note: For production, run migrations separately before deploying
+# This is a convenience for local Docker usage
+ENTRYPOINT ["sh", "-c", "pnpm db:migrate:deploy && node server.js"]

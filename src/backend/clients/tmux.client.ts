@@ -1,4 +1,5 @@
-import { escapeShellArg, execShell, tmuxCommand, validateSessionName } from '../lib/shell.js';
+import { spawn } from 'node:child_process';
+import { tmuxCommand, validateSessionName } from '../lib/shell.js';
 
 interface TmuxSession {
   name: string;
@@ -134,7 +135,7 @@ class TmuxClient {
   /**
    * Send a message to a tmux session using atomic buffer pattern.
    * This is the correct way to send text that may contain special characters.
-   * Uses set-buffer + paste-buffer + send-keys Enter for reliability.
+   * Uses load-buffer (stdin) + paste-buffer + send-keys Enter for reliability.
    */
   async sendMessage(sessionName: string, message: string): Promise<void> {
     const validatedName = validateSessionName(sessionName);
@@ -145,21 +146,57 @@ class TmuxClient {
       throw new Error(`Tmux session ${validatedName} does not exist`);
     }
 
-    // Build tmux socket args
-    const socketArgs = this.socketPath ? `-S ${escapeShellArg(this.socketPath)}` : '';
-
-    // Use atomic command chaining pattern:
-    // set-buffer (load text) -> paste-buffer (insert to pane) -> send-keys Enter (submit)
-    // Pass the message via environment variable to avoid shell escaping issues
-    const cmdStr = `tmux ${socketArgs} set-buffer -- "$TMUX_MESSAGE" && tmux ${socketArgs} paste-buffer -t ${validatedName} && tmux ${socketArgs} send-keys -t ${validatedName} Enter`;
-
     try {
-      await execShell(`sh -c '${cmdStr}'`, { env: { ...process.env, TMUX_MESSAGE: message } });
+      // Step 1: Load message into tmux buffer using load-buffer with stdin
+      // This avoids all shell escaping issues since we write directly to the process stdin
+      await this.loadBufferFromStdin(message);
+
+      // Step 2: Paste buffer content to the target pane
+      await tmuxCommand(['paste-buffer', '-t', validatedName], this.socketPath);
+
+      // Step 3: Send Enter key to submit
+      await tmuxCommand(['send-keys', '-t', validatedName, 'Enter'], this.socketPath);
     } catch (error) {
       throw new Error(
         `Failed to send message to tmux session: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  /**
+   * Load content into tmux buffer from stdin (avoids all shell escaping issues)
+   */
+  private loadBufferFromStdin(content: string, timeoutMs = 5000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const args = this.socketPath
+        ? ['-S', this.socketPath, 'load-buffer', '-']
+        : ['load-buffer', '-'];
+
+      const proc = spawn('tmux', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      const timeout = setTimeout(() => {
+        proc.kill('SIGKILL');
+        reject(new Error(`tmux load-buffer timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      proc.on('error', (error: Error) => {
+        clearTimeout(timeout);
+        reject(new Error(`Failed to spawn tmux: ${error.message}`));
+      });
+
+      proc.on('close', (code: number) => {
+        clearTimeout(timeout);
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`tmux load-buffer exited with code ${code}`));
+        }
+      });
+
+      // Write content to stdin and close
+      proc.stdin.write(content);
+      proc.stdin.end();
+    });
   }
 
   /**

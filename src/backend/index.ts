@@ -40,6 +40,19 @@ const PORT = process.env.BACKEND_PORT || 3001;
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
+// Security headers middleware
+app.use((_req, res, next) => {
+  // Prevent MIME type sniffing
+  res.header('X-Content-Type-Options', 'nosniff');
+  // Prevent clickjacking
+  res.header('X-Frame-Options', 'DENY');
+  // XSS protection (legacy but still useful)
+  res.header('X-XSS-Protection', '1; mode=block');
+  // Referrer policy
+  res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 // CORS configuration
 const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS?.split(',') || [
   'http://localhost:3000',
