@@ -7,10 +7,16 @@ import { trpc } from '../../../frontend/lib/trpc';
 
 export default function NewEpicPage() {
   const router = useRouter();
+  const [projectId, setProjectId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [design, setDesign] = useState('');
   const [error, setError] = useState('');
+
+  // Fetch projects for the selector
+  const { data: projects, isLoading: projectsLoading } = trpc.project.list.useQuery({
+    isArchived: false,
+  });
 
   const createEpic = trpc.epic.create.useMutation({
     onSuccess: (epic) => {
@@ -25,12 +31,17 @@ export default function NewEpicPage() {
     e.preventDefault();
     setError('');
 
+    if (!projectId) {
+      setError('Please select a project');
+      return;
+    }
+
     if (!title.trim()) {
       setError('Title is required');
       return;
     }
 
-    createEpic.mutate({ title, description, design });
+    createEpic.mutate({ projectId, title, description, design });
   };
 
   return (
@@ -58,6 +69,35 @@ export default function NewEpicPage() {
             {error}
           </div>
         )}
+
+        <div>
+          <label htmlFor="project" className="block text-sm font-medium text-gray-700 mb-1">
+            Project <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="project"
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={projectsLoading}
+          >
+            <option value="">{projectsLoading ? 'Loading projects...' : 'Select a project'}</option>
+            {projects?.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          {projects?.length === 0 && !projectsLoading && (
+            <p className="text-sm text-gray-500 mt-1">
+              No projects found.{' '}
+              <Link href="/projects/new" className="text-blue-600 hover:underline">
+                Create a project
+              </Link>{' '}
+              first.
+            </p>
+          )}
+        </div>
 
         <div>
           <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">

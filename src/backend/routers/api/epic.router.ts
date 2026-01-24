@@ -20,6 +20,7 @@ const router = Router();
 // ============================================================================
 
 const CreateEpicSchema = z.object({
+  projectId: z.string().min(1, 'Project ID is required'),
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   linearIssueId: z.string().optional(), // Optional for manual creation
@@ -61,6 +62,7 @@ router.post('/create', async (req, res) => {
 
     // Create epic
     const epic = await epicAccessor.create({
+      projectId: validatedInput.projectId,
       title: validatedInput.title,
       description: validatedInput.description,
       linearIssueId,
@@ -270,11 +272,12 @@ router.get('/status/:epicId', async (req, res) => {
 
 /**
  * GET /api/epics/list
- * List all epics
+ * List all epics (optionally filtered by projectId)
  */
-router.get('/list', async (_req, res) => {
+router.get('/list', async (req, res) => {
   try {
-    const epics = await epicAccessor.list();
+    const projectId = req.query.projectId as string | undefined;
+    const epics = await epicAccessor.list({ projectId });
 
     return res.status(200).json({
       success: true,

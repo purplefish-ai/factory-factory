@@ -43,8 +43,29 @@ enum AgentState {
 }
 
 // Models
+model Project {
+  id                String      @id @default(cuid())
+  name              String
+  slug              String      @unique
+  repoPath          String
+  worktreeBasePath  String
+  defaultBranch     String      @default("main")
+  githubOwner       String?
+  githubRepo        String?
+  isArchived        Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Relations
+  epics             Epic[]
+
+  @@index([slug])
+  @@index([isArchived])
+}
+
 model Epic {
   id                String      @id @default(cuid())
+  projectId         String?
   linearIssueId     String      @unique
   linearIssueUrl    String
   title             String
@@ -55,11 +76,13 @@ model Epic {
   completedAt       DateTime?
 
   // Relations
+  project           Project?    @relation(fields: [projectId], references: [id])
   tasks             Task[]
   orchestratorAgent Agent?      @relation("EpicOrchestrator")
 
   @@index([state])
   @@index([linearIssueId])
+  @@index([projectId])
 }
 
 model Task {

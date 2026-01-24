@@ -20,6 +20,7 @@ import {
 } from './inngest/functions/index.js';
 import { epicRouter } from './routers/api/epic.router.js';
 import { orchestratorRouter } from './routers/api/orchestrator.router.js';
+import { projectRouter } from './routers/api/project.router.js';
 import { taskRouter } from './routers/api/task.router.js';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index.js';
 import {
@@ -314,6 +315,9 @@ app.post('/mcp/execute', async (req, res) => {
 // ============================================================================
 // API Routes
 // ============================================================================
+
+// Project API routes
+app.use('/api/projects', projectRouter);
 
 // Task API routes
 app.use('/api/tasks', taskRouter);

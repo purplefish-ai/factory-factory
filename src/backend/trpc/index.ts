@@ -3,10 +3,12 @@ import { agentRouter } from './agent.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
 import { epicRouter } from './epic.trpc';
 import { mailRouter } from './mail.trpc';
+import { projectRouter } from './project.trpc';
 import { taskRouter } from './task.trpc';
 import { router } from './trpc';
 
 export const appRouter = router({
+  project: projectRouter,
   epic: epicRouter,
   task: taskRouter,
   agent: agentRouter,
