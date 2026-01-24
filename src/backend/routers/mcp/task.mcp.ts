@@ -1,6 +1,6 @@
 import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
-import { startWorker } from '../../agents/worker/lifecycle.js';
+import { killWorkerAndCleanup, startWorker } from '../../agents/worker/lifecycle.js';
 import { type GitClient, GitClientFactory } from '../../clients/git.client.js';
 import type { PRInfo, PRStatus } from '../../clients/github.client.js';
 import { githubClient } from '../../clients/index.js';
@@ -129,7 +129,6 @@ async function cleanupWorker(agentId: string | null): Promise<boolean> {
   }
 
   try {
-    const { killWorkerAndCleanup } = await import('../../agents/worker/lifecycle.js');
     await killWorkerAndCleanup(agentId);
     console.log(`Cleaned up worker ${agentId} after task approval`);
     return true;
@@ -350,7 +349,6 @@ ${failedSection}
  * Cleanup workers for all tasks
  */
 async function cleanupAllWorkers(tasks: { assignedAgentId: string | null }[]): Promise<number> {
-  const { killWorkerAndCleanup } = await import('../../agents/worker/lifecycle.js');
   let count = 0;
 
   for (const task of tasks) {
