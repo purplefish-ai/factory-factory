@@ -122,9 +122,11 @@ export async function createWorkerSession(
   // Remove ANTHROPIC_API_KEY from environment (force OAuth)
   await execAsync(`tmux set-environment -t ${tmuxSessionName} -r ANTHROPIC_API_KEY`);
 
-  // Send Claude command to tmux session
-  // Use shell escaping for the command to prevent injection
-  await execAsync(`tmux send-keys -t ${tmuxSessionName} ${shellEscape(claudeCommand)} Enter`);
+  // Send Claude command to tmux session using atomic pattern for cross-platform reliability
+  // Uses set-buffer + paste-buffer + send-keys Enter to handle special characters and different tmux versions
+  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
+  await execAsync(`sh -c '${cmdStr}' sh "${claudeCommand.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
+
 
   // Wait a moment for Claude to initialize
   await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -190,8 +192,10 @@ export async function resumeSession(
   // Build resume command
   const resumeCommand = buildResumeCommand(sessionId, profile);
 
-  // Send resume command to tmux
-  await execAsync(`tmux send-keys -t ${tmuxSessionName} ${shellEscape(resumeCommand)} Enter`);
+  // Send resume command to tmux using atomic pattern for cross-platform reliability
+  const cmdStr = `tmux set-buffer -- "$1" && tmux paste-buffer -t ${tmuxSessionName} && tmux send-keys -t ${tmuxSessionName} Enter`;
+  await execAsync(`sh -c '${cmdStr}' sh "${resumeCommand.replace(/"/g, '\\"').replace(/'/g, "'\\''")}"`);
+
 
   return {
     agentId,
