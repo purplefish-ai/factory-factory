@@ -106,7 +106,7 @@ export function AppSidebar() {
     ? [
         {
           href: `/projects/${selectedProjectSlug}/epics`,
-          label: 'Top Tasks',
+          label: 'Epics',
           icon: FolderKanban,
         },
         {
