@@ -389,6 +389,10 @@ class ReconciliationService {
   /**
    * Detect orphaned agents: DB says they're active but process is not found in memory.
    * This is critical for handling server restarts where all processes are lost.
+   *
+   * To avoid false positives after server restart, we add a grace period:
+   * Only consider an agent orphaned if its process was started more than 2 minutes ago.
+   * This gives the reconciler time to restart agents after a server restart.
    */
   private async detectOrphanedAgents(): Promise<
     Array<{
@@ -398,55 +402,48 @@ class ReconciliationService {
       cliProcessStatus: CliProcessStatus | null;
     }>
   > {
-    // Find agents that DB says are active
     const activeAgents = await agentAccessor.list({
       executionState: ExecutionState.ACTIVE,
     });
 
-    const orphaned: Array<{
-      id: string;
-      type: AgentType;
-      cliProcessId: string | null;
-      cliProcessStatus: CliProcessStatus | null;
-    }> = [];
+    return activeAgents
+      .filter((agent) => this.isAgentOrphaned(agent))
+      .map((agent) => ({
+        id: agent.id,
+        type: agent.type,
+        cliProcessId: agent.cliProcessId,
+        cliProcessStatus: agent.cliProcessStatus,
+      }));
+  }
 
-    for (const agent of activeAgents) {
-      // Skip agents that we already know are crashed/killed by status
-      const status = agent.cliProcessStatus;
-      if (status === CliProcessStatus.CRASHED || status === CliProcessStatus.KILLED) {
-        continue;
-      }
+  /**
+   * Check if an agent is orphaned (process not found in memory despite DB saying it's running)
+   */
+  private isAgentOrphaned(agent: {
+    id: string;
+    cliProcessStatus: CliProcessStatus | null;
+    cliProcessStartedAt: Date | null;
+    createdAt: Date;
+  }): boolean {
+    // Grace period after process start before considering orphaned (2 minutes)
+    const ORPHAN_GRACE_PERIOD_MS = 2 * 60 * 1000;
+    const now = Date.now();
+    const status = agent.cliProcessStatus;
 
-      // Check if process is actually running in memory
-      // If DB says RUNNING/IDLE but process not found in adapter, it's orphaned
-      if (
-        (status === CliProcessStatus.RUNNING || status === CliProcessStatus.IDLE) &&
-        !agentProcessAdapter.isRunning(agent.id)
-      ) {
-        orphaned.push({
-          id: agent.id,
-          type: agent.type,
-          cliProcessId: agent.cliProcessId,
-          cliProcessStatus: status,
-        });
-      }
-
-      // Also handle case where agent has no cliProcessId but is marked as active
-      // This shouldn't happen normally but covers edge cases
-      if (!agent.cliProcessId && agent.executionState === ExecutionState.ACTIVE) {
-        const isRunning = agentProcessAdapter.isRunning(agent.id);
-        if (!isRunning) {
-          orphaned.push({
-            id: agent.id,
-            type: agent.type,
-            cliProcessId: null,
-            cliProcessStatus: status,
-          });
-        }
-      }
+    // Skip agents with crashed/killed status - they're already handled
+    if (status === CliProcessStatus.CRASHED || status === CliProcessStatus.KILLED) {
+      return false;
     }
 
-    return orphaned;
+    // Skip agents started recently (grace period for server restart)
+    const processStartTime = agent.cliProcessStartedAt?.getTime() ?? agent.createdAt.getTime();
+    if (now - processStartTime < ORPHAN_GRACE_PERIOD_MS) {
+      return false;
+    }
+
+    // Only consider running/idle agents - check if process is actually in memory
+    const isActiveStatus = status === CliProcessStatus.RUNNING || status === CliProcessStatus.IDLE;
+    return isActiveStatus && !agentProcessAdapter.isRunning(agent.id);
   }
 
   // ============================================================================

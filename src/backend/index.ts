@@ -571,12 +571,13 @@ function calculateAgentHealth(agent: {
   isHealthy: boolean;
   minutesSinceHeartbeat: number;
 } {
-  const HEALTH_THRESHOLD_MINUTES = 5;
+  const config = configService.getSystemConfig();
+  const healthThresholdMinutes = config.agentHeartbeatThresholdMinutes;
   const now = Date.now();
   const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
   const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
   const isHealthy =
-    minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.executionState !== 'CRASHED';
+    minutesSinceHeartbeat < healthThresholdMinutes && agent.executionState !== 'CRASHED';
   return { isHealthy, minutesSinceHeartbeat };
 }
 

@@ -312,7 +312,14 @@ export class AgentProcessAdapter extends EventEmitter {
       ? `Tool ${toolUse.tool} result:\n${JSON.stringify(mcpResponse.data, null, 2)}`
       : `Tool ${toolUse.tool} error:\n${mcpResponse.error.message}`;
 
-    this.sendToAgent(agentId, resultText);
+    const sent = this.sendToAgent(agentId, resultText);
+    if (!sent) {
+      logger.error('Failed to send tool result back to agent', {
+        agentId,
+        tool: toolUse.tool,
+        toolId: toolUse.id,
+      });
+    }
   }
 
   /**
@@ -429,7 +436,7 @@ export class AgentProcessAdapter extends EventEmitter {
   }
 
   /**
-   * Kill an agent immediately with SIGKILL
+   * Kill an agent immediately (sends SIGTERM via ClaudeStreamingClient)
    */
   killAgent(agentId: string): void {
     const sessionId = this.agentToSession.get(agentId);
@@ -440,9 +447,6 @@ export class AgentProcessAdapter extends EventEmitter {
 
     logger.info('Killing agent immediately', { agentId, sessionId });
 
-    // Note: ClaudeStreamingClient.killProcess sends SIGTERM
-    // For a true SIGKILL, we'd need to enhance ClaudeStreamingClient
-    // For now, we use the same method
     claudeStreamingClient.killProcess(sessionId);
 
     // Clean up mappings immediately

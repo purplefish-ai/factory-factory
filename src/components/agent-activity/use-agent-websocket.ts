@@ -83,7 +83,9 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
     setError(null);
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.hostname}:3001/agent-activity?agentId=${agentId}`;
+    // Use NEXT_PUBLIC_WS_PORT env var, or default to backend port 3001
+    const wsPort = process.env.NEXT_PUBLIC_WS_PORT || '3001';
+    const wsUrl = `${protocol}//${window.location.hostname}:${wsPort}/agent-activity?agentId=${agentId}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

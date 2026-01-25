@@ -23,6 +23,16 @@ interface WorkerContext {
 // In-memory store for active workers
 const activeWorkers = new Map<string, WorkerContext>();
 
+// Cache for worker prompts (used between createWorker and runWorker)
+const workerPromptCache = new Map<
+  string,
+  {
+    systemPrompt: string;
+    workingDir: string;
+    resumeSessionId?: string;
+  }
+>();
+
 export interface CreateWorkerOptions {
   /** If provided, resume an existing Claude session instead of starting fresh */
   resumeSessionId?: string;
@@ -126,16 +136,6 @@ export async function createWorker(taskId: string, options?: CreateWorkerOptions
 
   return agent.id;
 }
-
-// Cache for worker prompts (used between createWorker and runWorker)
-const workerPromptCache = new Map<
-  string,
-  {
-    systemPrompt: string;
-    workingDir: string;
-    resumeSessionId?: string;
-  }
->();
 
 /**
  * Run a worker agent - starts the Claude process and sets up event handlers
