@@ -113,6 +113,29 @@ class AgentAccessor {
   }
 
   /**
+   * Count active agents by type.
+   * Used for enforcing concurrency limits.
+   * Counts agents that are ACTIVE or IDLE with desiredExecutionState=ACTIVE
+   * (i.e., agents that are running or about to start running)
+   */
+  countActiveByType(type: AgentType): Promise<number> {
+    return prisma.agent.count({
+      where: {
+        type,
+        OR: [
+          // Currently active agents
+          { executionState: ExecutionState.ACTIVE },
+          // Agents that are starting up (idle but want to be active)
+          {
+            executionState: ExecutionState.IDLE,
+            desiredExecutionState: DesiredExecutionState.ACTIVE,
+          },
+        ],
+      },
+    });
+  }
+
+  /**
    * Find agent by their current task ID
    * Works for both supervisors (top-level tasks) and workers (leaf tasks)
    */
