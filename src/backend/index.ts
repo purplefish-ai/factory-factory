@@ -1,8 +1,14 @@
 import { createServer } from 'node:http';
+import { resolve } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { serve } from 'inngest/express';
 import { WebSocketServer } from 'ws';
+import {
+  claudeStreamingClient,
+  getSessionHistory,
+  listSessions,
+} from './clients/claude-streaming.client.js';
 import {
   listTmuxSessions,
   readSessionOutput,
@@ -407,14 +413,270 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // ============================================================================
+// WebSocket Chat Handler (Claude CLI JSON Streaming)
+// ============================================================================
+
+// Track WebSocket connections per session
+const chatConnections = new Map<string, Set<import('ws').WebSocket>>();
+
+// Forward Claude process events to connected WebSocket clients
+claudeStreamingClient.on('message', ({ sessionId, message }) => {
+  const connections = chatConnections.get(sessionId);
+  if (connections) {
+    const data = JSON.stringify({ type: 'claude_message', data: message });
+    for (const ws of connections) {
+      if (ws.readyState === 1) {
+        // WebSocket.OPEN
+        ws.send(data);
+      }
+    }
+  }
+});
+
+claudeStreamingClient.on('stderr', ({ sessionId, data }) => {
+  const connections = chatConnections.get(sessionId);
+  if (connections) {
+    const message = JSON.stringify({ type: 'stderr', data });
+    for (const ws of connections) {
+      if (ws.readyState === 1) {
+        ws.send(message);
+      }
+    }
+  }
+});
+
+claudeStreamingClient.on('exit', ({ sessionId, code, claudeSessionId }) => {
+  const connections = chatConnections.get(sessionId);
+  if (connections) {
+    const message = JSON.stringify({ type: 'process_exit', code, claudeSessionId });
+    for (const ws of connections) {
+      if (ws.readyState === 1) {
+        ws.send(message);
+      }
+    }
+  }
+});
+
+claudeStreamingClient.on('error', ({ sessionId, error }) => {
+  const connections = chatConnections.get(sessionId);
+  if (connections) {
+    const message = JSON.stringify({ type: 'error', message: error.message });
+    for (const ws of connections) {
+      if (ws.readyState === 1) {
+        ws.send(message);
+      }
+    }
+  }
+});
+
+// Handle individual chat messages
+async function handleChatMessage(
+  ws: import('ws').WebSocket,
+  sessionId: string,
+  workingDir: string,
+  message: {
+    type: string;
+    text?: string;
+    workingDir?: string;
+    resumeSessionId?: string;
+    systemPrompt?: string;
+    model?: string;
+    claudeSessionId?: string;
+  }
+) {
+  switch (message.type) {
+    case 'start':
+      if (!claudeStreamingClient.isRunning(sessionId)) {
+        await claudeStreamingClient.startProcess({
+          sessionId,
+          workingDir: message.workingDir || workingDir,
+          resumeSessionId: message.resumeSessionId,
+          systemPrompt: message.systemPrompt,
+          model: message.model,
+        });
+        ws.send(JSON.stringify({ type: 'started', sessionId }));
+      }
+      break;
+
+    case 'user_input':
+      handleUserInput(sessionId, workingDir, message.text || '');
+      break;
+
+    case 'stop':
+      claudeStreamingClient.killProcess(sessionId);
+      ws.send(JSON.stringify({ type: 'stopped', sessionId }));
+      break;
+
+    case 'get_history': {
+      const claudeSessionId = claudeStreamingClient.getClaudeSessionId(sessionId);
+      if (claudeSessionId) {
+        const history = await getSessionHistory(claudeSessionId, workingDir);
+        ws.send(JSON.stringify({ type: 'history', sessionId, messages: history }));
+      } else {
+        ws.send(JSON.stringify({ type: 'history', sessionId, messages: [] }));
+      }
+      break;
+    }
+
+    case 'list_sessions': {
+      const sessions = await listSessions(workingDir);
+      ws.send(JSON.stringify({ type: 'sessions', sessions }));
+      break;
+    }
+
+    case 'load_session': {
+      const targetSessionId = message.claudeSessionId;
+      if (targetSessionId) {
+        // Set the Claude session ID so future messages resume this session
+        claudeStreamingClient.setClaudeSessionId(sessionId, targetSessionId);
+        // Get the history
+        const history = await getSessionHistory(targetSessionId, workingDir);
+        ws.send(
+          JSON.stringify({
+            type: 'session_loaded',
+            claudeSessionId: targetSessionId,
+            messages: history,
+          })
+        );
+      } else {
+        ws.send(JSON.stringify({ type: 'error', message: 'claudeSessionId required' }));
+      }
+      break;
+    }
+  }
+}
+
+/**
+ * Handle user input message.
+ * Note: startProcess is synchronous but spawn errors are emitted asynchronously
+ * via the 'error' event on the process. Error handling is done in setupListeners.
+ */
+function handleUserInput(sessionId: string, workingDir: string, text: string) {
+  if (!text) {
+    return;
+  }
+
+  // Ensure process is running (startProcess is idempotent - returns existing if already running)
+  claudeStreamingClient.startProcess({
+    sessionId,
+    workingDir,
+  });
+
+  // Send message to the process via stdin
+  claudeStreamingClient.sendMessage(sessionId, text);
+}
+
+/**
+ * Validate that workingDir is safe (no path traversal).
+ * Returns resolved path if valid, or null if invalid.
+ */
+function validateWorkingDir(workingDir: string): string | null {
+  const baseDir = process.cwd();
+  const resolved = resolve(baseDir, workingDir);
+
+  // Ensure the resolved path is within the base directory
+  // or is the base directory itself
+  if (!resolved.startsWith(baseDir)) {
+    return null;
+  }
+
+  // Reject paths with obvious traversal attempts
+  if (workingDir.includes('..')) {
+    return null;
+  }
+
+  return resolved;
+}
+
+// Handle chat WebSocket upgrade
+function handleChatUpgrade(
+  request: import('http').IncomingMessage,
+  socket: import('stream').Duplex,
+  head: Buffer,
+  url: URL
+) {
+  const sessionId = url.searchParams.get('sessionId') || `chat-${Date.now()}`;
+  const rawWorkingDir = url.searchParams.get('workingDir') || process.cwd();
+  const claudeSessionId = url.searchParams.get('claudeSessionId');
+
+  // Validate workingDir to prevent path traversal
+  const workingDir = validateWorkingDir(rawWorkingDir);
+  if (!workingDir) {
+    logger.warn('Invalid workingDir rejected', { rawWorkingDir, sessionId });
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    logger.info('Chat WebSocket connection established', { sessionId, claudeSessionId });
+
+    // If a Claude session ID was provided, store it for resuming
+    if (claudeSessionId) {
+      claudeStreamingClient.setClaudeSessionId(sessionId, claudeSessionId);
+    }
+
+    // Track this connection
+    if (!chatConnections.has(sessionId)) {
+      chatConnections.set(sessionId, new Set());
+    }
+    chatConnections.get(sessionId)?.add(ws);
+
+    // Send initial status
+    ws.send(
+      JSON.stringify({
+        type: 'status',
+        sessionId,
+        running: claudeStreamingClient.isRunning(sessionId),
+        claudeSessionId: claudeStreamingClient.getClaudeSessionId(sessionId),
+      })
+    );
+
+    // Handle incoming messages from client
+    ws.on('message', async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        await handleChatMessage(ws, sessionId, workingDir, message);
+      } catch (error) {
+        logger.error('Error handling chat message', error as Error);
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+      }
+    });
+
+    // Handle connection close
+    ws.on('close', () => {
+      logger.info('Chat WebSocket connection closed', { sessionId });
+      const connections = chatConnections.get(sessionId);
+      if (connections) {
+        connections.delete(ws);
+        if (connections.size === 0) {
+          chatConnections.delete(sessionId);
+        }
+      }
+    });
+
+    // Handle connection errors
+    ws.on('error', (error) => {
+      logger.error('Chat WebSocket error', error);
+    });
+  });
+}
+
+// ============================================================================
 // WebSocket Terminal Handler
 // ============================================================================
 
-// Handle WebSocket upgrade requests for /terminal path
+// Handle WebSocket upgrade requests
 server.on('upgrade', async (request, socket, head) => {
   const url = new URL(request.url || '', `http://${request.headers.host}`);
 
-  // Only handle /terminal path
+  // Route to appropriate handler based on path
+  if (url.pathname === '/chat') {
+    handleChatUpgrade(request, socket, head, url);
+    return;
+  }
+
+  // Handle /terminal path
   if (url.pathname !== '/terminal') {
     socket.destroy();
     return;
@@ -507,12 +769,14 @@ server.listen(PORT, () => {
   console.log(`Inngest endpoint: http://localhost:${PORT}/api/inngest`);
   console.log(`tRPC endpoint: http://localhost:${PORT}/api/trpc`);
   console.log(`WebSocket terminal: ws://localhost:${PORT}/terminal`);
+  console.log(`WebSocket chat: ws://localhost:${PORT}/chat`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   ptyManager.cleanupAll();
+  claudeStreamingClient.cleanupAll();
   wss.close();
   server.close();
   await prisma.$disconnect();
@@ -522,6 +786,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   ptyManager.cleanupAll();
+  claudeStreamingClient.cleanupAll();
   wss.close();
   server.close();
   await prisma.$disconnect();
