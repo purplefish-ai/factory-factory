@@ -8,12 +8,37 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { readdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { createLogger } from '../services/index.js';
+import { configService, createLogger } from '../services/index.js';
 
 const logger = createLogger('claude-streaming');
+
+// ============================================================================
+// Debug File Logging
+// ============================================================================
+
+function getDebugLogFile(): string {
+  return join(configService.getDebugLogDir(), 'claude-streaming.log');
+}
+
+async function logToDebugFile(
+  direction: 'INPUT' | 'OUTPUT' | 'STDERR',
+  sessionId: string,
+  data: unknown
+): Promise<void> {
+  try {
+    const debugLogDir = configService.getDebugLogDir();
+    await mkdir(debugLogDir, { recursive: true });
+    const timestamp = new Date().toISOString();
+    const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    const logEntry = `[${timestamp}] [${direction}] [${sessionId}]\n${content}\n---\n`;
+    await appendFile(getDebugLogFile(), logEntry);
+  } catch {
+    // Silently ignore logging errors to avoid disrupting main flow
+  }
+}
 
 // ============================================================================
 // Types
@@ -444,6 +469,7 @@ export class ClaudeStreamingClient extends EventEmitter {
         try {
           const message = JSON.parse(trimmed) as ClaudeOutputMessage;
           logger.info('Parsed Claude message', { sessionId, type: message.type });
+          logToDebugFile('OUTPUT', sessionId, message);
 
           // Capture session_id from result messages
           if (message.type === 'result' && 'session_id' in message) {
@@ -468,6 +494,7 @@ export class ClaudeStreamingClient extends EventEmitter {
     state.process.stderr?.on('data', (data: Buffer) => {
       const text = data.toString();
       logger.info('Claude stderr', { sessionId, text: text.slice(0, 500) });
+      logToDebugFile('STDERR', sessionId, text);
       this.emit('stderr', { sessionId, data: text });
     });
 
@@ -519,6 +546,7 @@ export class ClaudeStreamingClient extends EventEmitter {
 
     const json = JSON.stringify(message);
     logger.debug('Sending message to Claude', { sessionId, length: text.length });
+    logToDebugFile('INPUT', sessionId, message);
 
     try {
       const success = state.process.stdin.write(`${json}\n`);
