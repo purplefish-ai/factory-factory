@@ -1,24 +1,22 @@
 <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Outer square: 80x80 at (0, 0) -->
+  <!-- Outer square: 74x74 inset by 3 so stroke fits in viewBox -->
   <rect
-    x="0"
-    y="0"
-    width="80"
-    height="80"
+    x="3"
+    y="3"
+    width="74"
+    height="74"
     stroke="currentColor"
     stroke-width="6"
     fill="none"
-    rx="2"
   />
-  <!-- Inner square: 60x60 at (10, 10) - concentric -->
+  <!-- Inner square: 37x37 centered (half size of outer) -->
   <rect
-    x="10"
-    y="10"
-    width="60"
-    height="60"
+    x="21.5"
+    y="21.5"
+    width="37"
+    height="37"
     stroke="currentColor"
     stroke-width="6"
     fill="none"
-    rx="2"
   />
 </svg>
