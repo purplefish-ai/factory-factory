@@ -122,8 +122,16 @@ export class AgentProcessAdapter extends EventEmitter {
   // Track agent types for tool permissions
   private agentTypes = new Map<string, AgentType>();
 
-  constructor() {
-    super();
+  private listenersSetup = false;
+
+  /**
+   * Ensure listeners are set up (called lazily to avoid circular deps)
+   */
+  private ensureListenersSetup(): void {
+    if (this.listenersSetup) {
+      return;
+    }
+    this.listenersSetup = true;
     this.setupClientListeners();
   }
 
@@ -356,6 +364,9 @@ export class AgentProcessAdapter extends EventEmitter {
    * Start a Claude CLI process for an agent
    */
   async startAgent(options: AgentStartOptions): Promise<void> {
+    // Ensure listeners are set up (deferred to avoid circular deps at module load)
+    this.ensureListenersSetup();
+
     const { agentId } = options;
 
     // Check if already running

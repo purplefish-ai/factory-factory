@@ -1,5 +1,3 @@
-@import '@xterm/xterm/css/xterm.css';
-
 @plugin 'tailwindcss-animate';
 @import 'tailwindcss';
 @import "tw-animate-css";
