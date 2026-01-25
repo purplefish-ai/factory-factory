@@ -29,6 +29,11 @@ export interface ClaudeStreamOptions {
   initialPrompt?: string; // Required for first message when not resuming
   disableMcp?: boolean; // Skip MCP server loading for faster startup
   disableTools?: boolean; // Disable all tools for pure chat
+  /**
+   * Skip permission prompts. Defaults to true for POC.
+   * WARNING: Should be false or use allowedTools in production.
+   */
+  skipPermissions?: boolean;
 }
 
 interface ProcessState {
@@ -308,11 +313,18 @@ export class ClaudeStreamingClient extends EventEmitter {
 
     // Check if we have a previous Claude session to resume
     const existingClaudeSessionId = this.claudeSessionIds.get(sessionId);
-    const args = this.buildArgs(options, existingClaudeSessionId);
+    const { args, newClaudeSessionId } = this.buildArgs(options, existingClaudeSessionId);
+
+    // Store new session ID immediately to prevent loss if process crashes
+    if (newClaudeSessionId) {
+      this.claudeSessionIds.set(sessionId, newClaudeSessionId);
+    }
+
     logger.info('Starting Claude process', {
       sessionId,
       args,
       resuming: !!existingClaudeSessionId,
+      newClaudeSessionId,
     });
 
     const proc = spawn('claude', args, {
@@ -350,8 +362,12 @@ export class ClaudeStreamingClient extends EventEmitter {
     return sessionId;
   }
 
-  private buildArgs(options: ClaudeStreamOptions, resumeSessionId?: string): string[] {
+  private buildArgs(
+    options: ClaudeStreamOptions,
+    resumeSessionId?: string
+  ): { args: string[]; newClaudeSessionId?: string } {
     const args: string[] = [];
+    let newClaudeSessionId: string | undefined;
 
     // Use -p for non-interactive mode (required for stream-json)
     args.push('-p');
@@ -362,16 +378,21 @@ export class ClaudeStreamingClient extends EventEmitter {
       'stream-json',
       '--output-format',
       'stream-json',
-      '--verbose', // Required for stream-json output
-      '--dangerously-skip-permissions'
+      '--verbose' // Required for stream-json output
     );
+
+    // Permission handling - skip by default for POC, but configurable
+    // WARNING: In production, use allowedTools to restrict tool access
+    if (options.skipPermissions !== false) {
+      args.push('--dangerously-skip-permissions');
+    }
 
     // Session handling - use resume for existing sessions, new ID for fresh ones
     if (resumeSessionId) {
       args.push('--resume', resumeSessionId);
     } else {
-      const newSessionId = randomUUID();
-      args.push('--session-id', newSessionId);
+      newClaudeSessionId = randomUUID();
+      args.push('--session-id', newClaudeSessionId);
     }
 
     if (options.model) {
@@ -395,7 +416,7 @@ export class ClaudeStreamingClient extends EventEmitter {
       args.push('--tools', '');
     }
 
-    return args;
+    return { args, newClaudeSessionId };
   }
 
   private setupListeners(sessionId: string, state: ProcessState): void {
@@ -483,6 +504,11 @@ export class ClaudeStreamingClient extends EventEmitter {
       return false;
     }
 
+    if (!state.process.stdin) {
+      logger.error('Cannot send message - stdin not available', { sessionId });
+      return false;
+    }
+
     const message: UserInput = {
       type: 'user',
       message: {
@@ -493,9 +519,20 @@ export class ClaudeStreamingClient extends EventEmitter {
 
     const json = JSON.stringify(message);
     logger.debug('Sending message to Claude', { sessionId, length: text.length });
-    state.process.stdin?.write(`${json}\n`);
-    state.status = 'running';
-    return true;
+
+    try {
+      const success = state.process.stdin.write(`${json}\n`);
+      if (!success) {
+        // Buffer is full, wait for drain event
+        logger.warn('stdin buffer full, message queued', { sessionId });
+      }
+      state.status = 'running';
+      return true;
+    } catch (error) {
+      logger.error('Failed to write to stdin', { sessionId, error });
+      this.emit('error', { sessionId, error });
+      return false;
+    }
   }
 
   /**

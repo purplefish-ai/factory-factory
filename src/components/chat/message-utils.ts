@@ -173,6 +173,7 @@ export function convertHistoryMessage(msg: HistoryMessage, idx: number): ChatMes
         },
       };
     default:
-      return base;
+      // Fallback for unknown message types - use content as text
+      return { ...base, text: msg.content || '' };
   }
 }

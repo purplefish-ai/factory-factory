@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { resolve } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { serve } from 'inngest/express';
@@ -498,7 +499,7 @@ async function handleChatMessage(
       break;
 
     case 'user_input':
-      await handleUserInput(sessionId, workingDir, message.text || '');
+      handleUserInput(sessionId, workingDir, message.text || '');
       break;
 
     case 'stop':
@@ -545,20 +546,46 @@ async function handleChatMessage(
   }
 }
 
-// Handle user input message
-async function handleUserInput(sessionId: string, workingDir: string, text: string) {
+/**
+ * Handle user input message.
+ * Note: startProcess is synchronous but spawn errors are emitted asynchronously
+ * via the 'error' event on the process. Error handling is done in setupListeners.
+ */
+function handleUserInput(sessionId: string, workingDir: string, text: string) {
   if (!text) {
     return;
   }
 
   // Ensure process is running (startProcess is idempotent - returns existing if already running)
-  await claudeStreamingClient.startProcess({
+  claudeStreamingClient.startProcess({
     sessionId,
     workingDir,
   });
 
   // Send message to the process via stdin
   claudeStreamingClient.sendMessage(sessionId, text);
+}
+
+/**
+ * Validate that workingDir is safe (no path traversal).
+ * Returns resolved path if valid, or null if invalid.
+ */
+function validateWorkingDir(workingDir: string): string | null {
+  const baseDir = process.cwd();
+  const resolved = resolve(baseDir, workingDir);
+
+  // Ensure the resolved path is within the base directory
+  // or is the base directory itself
+  if (!resolved.startsWith(baseDir)) {
+    return null;
+  }
+
+  // Reject paths with obvious traversal attempts
+  if (workingDir.includes('..')) {
+    return null;
+  }
+
+  return resolved;
 }
 
 // Handle chat WebSocket upgrade
@@ -569,8 +596,17 @@ function handleChatUpgrade(
   url: URL
 ) {
   const sessionId = url.searchParams.get('sessionId') || `chat-${Date.now()}`;
-  const workingDir = url.searchParams.get('workingDir') || process.cwd();
+  const rawWorkingDir = url.searchParams.get('workingDir') || process.cwd();
   const claudeSessionId = url.searchParams.get('claudeSessionId');
+
+  // Validate workingDir to prevent path traversal
+  const workingDir = validateWorkingDir(rawWorkingDir);
+  if (!workingDir) {
+    logger.warn('Invalid workingDir rejected', { rawWorkingDir, sessionId });
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.destroy();
+    return;
+  }
 
   wss.handleUpgrade(request, socket, head, (ws) => {
     logger.info('Chat WebSocket connection established', { sessionId, claudeSessionId });

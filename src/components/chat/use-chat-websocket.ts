@@ -160,8 +160,10 @@ export function useChatWebSocket(): UseChatWebSocketReturn {
             handleError(data);
             break;
         }
-      } catch {
-        // Ignore parse errors
+      } catch (error) {
+        // Log parse errors for debugging (per code review feedback)
+        // biome-ignore lint/suspicious/noConsole: intentional debug logging
+        console.warn('WebSocket message parse error:', error);
       }
     };
 
@@ -197,16 +199,23 @@ export function useChatWebSocket(): UseChatWebSocketReturn {
     inputRef.current?.focus();
   }, [input]);
 
-  // Clear chat
+  // Clear chat and start fresh session
+  // Sets connected=false immediately to prevent sending during transition
   const clearChat = useCallback(() => {
+    // Disable sending immediately to prevent race condition
+    setConnected(false);
+
     setMessages([]);
     setClaudeSessionId(null);
     initialSessionLoadedRef.current = false;
     freshStartRef.current = true;
     router.replace('/chat', { scroll: false });
+
+    // Generate new session ID - the useEffect will reconnect on next render
     const newId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     setSessionId(newId);
 
+    // Close existing connection (triggers useEffect cleanup and reconnect)
     if (wsRef.current) {
       wsRef.current.close();
     }
