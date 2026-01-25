@@ -15,7 +15,7 @@
     "start:backend": "node dist/src/backend/index.js",
     "start:frontend": "next start",
     "start:all": "concurrently \"pnpm start:frontend\" \"pnpm start:backend\"",
-    "lint": "biome lint . && depcruise src --config .dependency-cruiser.cjs",
+    "lint": "biome lint .",
     "deps:check": "depcruise src --config .dependency-cruiser.cjs",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",

@@ -41,6 +41,10 @@ module.exports = {
     {
       name: "no-mcp-routers-importing-agents",
       severity: "error",
+      // task.mcp.ts is exempted because it's the MCP endpoint for managing agent
+      // lifecycle itself (startWorker, killWorkerAndCleanup). Unlike other MCP tools
+      // that provide capabilities TO agents, task.mcp.ts provides control OVER agents.
+      // This is fundamentally different - it's agent management, not agent capability.
       comment: "MCP routers should not import agent logic directly (except task.mcp.ts for worker lifecycle)",
       from: {
         path: "^src/backend/routers/mcp",

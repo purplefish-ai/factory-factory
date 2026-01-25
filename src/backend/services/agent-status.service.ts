@@ -7,6 +7,12 @@
  *
  * The process-adapter registers its status methods at startup, and
  * services call the exported functions to query status.
+ *
+ * Error Handling:
+ * - isAgentRunning() throws if provider not registered, as this indicates
+ *   a startup timing bug that should fail fast (reconciliation depends on it)
+ * - getAgentClaudeSessionId() returns null if provider not registered, as
+ *   crash recovery already handles null gracefully and this is non-critical
  */
 
 type StatusChecker = (agentId: string) => boolean;
