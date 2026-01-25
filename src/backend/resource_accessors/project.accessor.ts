@@ -4,7 +4,6 @@ import path from 'node:path';
 import type { Prisma, Project } from '@prisma-gen/client';
 import { GitClientFactory } from '../clients/git.client.js';
 import { prisma } from '../db.js';
-import { configService } from '../services/index.js';
 
 /**
  * Execute a command with proper argument separation (no shell injection).
@@ -84,17 +83,18 @@ function deriveSlugFromPath(repoPath: string): string {
 }
 
 /**
- * Get the worktree base directory from config.
+ * Compute the worktree path for a project.
  */
-function getWorktreeBaseDir(): string {
-  return configService.getWorktreeBaseDir();
+function computeWorktreePath(worktreeBaseDir: string, slug: string): string {
+  return path.join(worktreeBaseDir, slug);
 }
 
 /**
- * Compute the worktree path for a project.
+ * Context for project creation operations.
+ * Configuration values are passed in to maintain layer separation.
  */
-function computeWorktreePath(slug: string): string {
-  return path.join(getWorktreeBaseDir(), slug);
+export interface ProjectAccessorContext {
+  worktreeBaseDir: string;
 }
 
 class ProjectAccessor {
@@ -102,8 +102,11 @@ class ProjectAccessor {
    * Create a new project from a repository path.
    * Name, slug, and worktree path are auto-derived.
    * If slug conflicts, appends a counter suffix (e.g., "my-project-2").
+   *
+   * @param data - Project creation input (repoPath)
+   * @param context - Configuration context including worktreeBaseDir
    */
-  async create(data: CreateProjectInput): Promise<Project> {
+  async create(data: CreateProjectInput, context: ProjectAccessorContext): Promise<Project> {
     const name = deriveNameFromPath(data.repoPath);
     const baseSlug = deriveSlugFromPath(data.repoPath);
 
@@ -113,7 +116,7 @@ class ProjectAccessor {
     const maxAttempts = 100;
 
     while (counter <= maxAttempts) {
-      const worktreeBasePath = computeWorktreePath(slug);
+      const worktreeBasePath = computeWorktreePath(context.worktreeBaseDir, slug);
 
       try {
         return await prisma.project.create({

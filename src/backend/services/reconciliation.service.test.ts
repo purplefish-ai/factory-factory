@@ -26,8 +26,8 @@ const mockAgentAccessor = vi.hoisted(() => ({
   recordReconcileFailure: vi.fn(),
 }));
 
-const mockAgentProcessAdapter = vi.hoisted(() => ({
-  isRunning: vi.fn(),
+const mockAgentStatusService = vi.hoisted(() => ({
+  isAgentRunning: vi.fn(),
 }));
 
 const mockTaskAccessor = vi.hoisted(() => ({
@@ -75,9 +75,7 @@ vi.mock('../clients/git.client.js', () => ({
   GitClientFactory: mockGitClientFactory,
 }));
 
-vi.mock('../agents/process-adapter.js', () => ({
-  agentProcessAdapter: mockAgentProcessAdapter,
-}));
+vi.mock('./agent-status.service.js', () => mockAgentStatusService);
 
 vi.mock('./logger.service.js', () => ({
   createLogger: vi.fn(() => ({
@@ -108,7 +106,7 @@ describe('ReconciliationService', () => {
     mockAgentAccessor.delete.mockResolvedValue({});
 
     // Default: no agents are running in the process adapter
-    mockAgentProcessAdapter.isRunning.mockReturnValue(false);
+    mockAgentStatusService.isAgentRunning.mockReturnValue(false);
     mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([]);
     mockTaskAccessor.findLeafTasksNeedingWorkers.mockResolvedValue([]);
     mockTaskAccessor.findTasksWithMissingInfrastructure.mockResolvedValue([]);

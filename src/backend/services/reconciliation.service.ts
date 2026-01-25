@@ -29,10 +29,10 @@ import {
   ExecutionState,
   TaskState,
 } from '@prisma-gen/client';
-import { agentProcessAdapter } from '../agents/process-adapter.js';
 import { GitClientFactory } from '../clients/git.client.js';
 import { agentAccessor, taskAccessor } from '../resource_accessors/index.js';
 import type { TaskWithRelations } from '../resource_accessors/task.accessor.js';
+import { isAgentRunning } from './agent-status.service.js';
 import { configService } from './config.service.js';
 import { createLogger } from './logger.service.js';
 
@@ -335,7 +335,7 @@ class ReconciliationService {
         continue;
       }
       try {
-        const isActuallyRunning = agentProcessAdapter.isRunning(agent.id);
+        const isActuallyRunning = isAgentRunning(agent.id);
         if (!isActuallyRunning) {
           logger.warn('Marking agent as crashed (stale heartbeat and process not running)', {
             agentId: agent.id,
@@ -443,7 +443,7 @@ class ReconciliationService {
 
     // Only consider running/idle agents - check if process is actually in memory
     const isActiveStatus = status === CliProcessStatus.RUNNING || status === CliProcessStatus.IDLE;
-    return isActiveStatus && !agentProcessAdapter.isRunning(agent.id);
+    return isActiveStatus && !isAgentRunning(agent.id);
   }
 
   // ============================================================================

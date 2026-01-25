@@ -4,6 +4,12 @@
  * Central export point for all backend services.
  */
 
+// Agent status service (abstraction for querying agent process status)
+export {
+  getAgentClaudeSessionId,
+  isAgentRunning,
+  registerAgentStatusProvider,
+} from './agent-status.service.js';
 // Configuration service
 export { configService } from './config.service.js';
 // Crash recovery service

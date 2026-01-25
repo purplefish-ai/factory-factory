@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { projectAccessor } from '../resource_accessors/project.accessor.js';
+import { configService } from '../services/config.service.js';
 import { publicProcedure, router } from './trpc.js';
 
 export const projectRouter = router({
@@ -50,7 +51,9 @@ export const projectRouter = router({
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
 
-      return projectAccessor.create(input);
+      return projectAccessor.create(input, {
+        worktreeBaseDir: configService.getWorktreeBaseDir(),
+      });
     }),
 
   // Update a project

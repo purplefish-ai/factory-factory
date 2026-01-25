@@ -16,7 +16,8 @@ import {
 import { agentAccessor } from '../resource_accessors/index.js';
 import { executeMcpTool } from '../routers/mcp/server.js';
 import type { McpToolResponse } from '../routers/mcp/types.js';
-import { createLogger } from '../services/index.js';
+import { registerAgentStatusProvider } from '../services/agent-status.service.js';
+import { createLogger } from '../services/logger.service.js';
 
 const logger = createLogger('agent-process-adapter');
 
@@ -558,3 +559,9 @@ export class AgentProcessAdapter extends EventEmitter {
 
 // Singleton instance
 export const agentProcessAdapter = new AgentProcessAdapter();
+
+// Register status provider for services to query agent status
+registerAgentStatusProvider(
+  (agentId: string) => agentProcessAdapter.isRunning(agentId),
+  (agentId: string) => agentProcessAdapter.getClaudeSessionId(agentId)
+);

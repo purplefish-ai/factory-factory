@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { projectAccessor } from '../../resource_accessors/index.js';
+import { configService } from '../../services/config.service.js';
 
 const router = Router();
 
@@ -46,9 +47,10 @@ router.post('/create', async (req, res) => {
     }
 
     // Create project - name/slug/worktree derived from repoPath
-    const project = await projectAccessor.create({
-      repoPath: validatedInput.repoPath,
-    });
+    const project = await projectAccessor.create(
+      { repoPath: validatedInput.repoPath },
+      { worktreeBaseDir: configService.getWorktreeBaseDir() }
+    );
 
     return res.status(201).json({
       success: true,

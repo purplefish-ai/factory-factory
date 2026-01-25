@@ -6,13 +6,13 @@
  */
 
 import { AgentType, type CliProcessStatus, ExecutionState, TaskState } from '@prisma-gen/client';
-import { agentProcessAdapter } from '../agents/process-adapter.js';
 import {
   agentAccessor,
   decisionLogAccessor,
   mailAccessor,
   taskAccessor,
 } from '../resource_accessors/index.js';
+import { getAgentClaudeSessionId, isAgentRunning } from './agent-status.service.js';
 import { configService } from './config.service.js';
 import { createLogger } from './logger.service.js';
 import { notificationService } from './notification.service.js';
@@ -331,8 +331,7 @@ class CrashRecoveryService {
     // Get session ID from the old worker for potential resume capability
     // This allows the new worker to continue where the crashed one left off
     const oldWorker = await agentAccessor.findById(agentId);
-    const sessionIdForResume =
-      agentProcessAdapter.getClaudeSessionId(agentId) || oldWorker?.sessionId;
+    const sessionIdForResume = getAgentClaudeSessionId(agentId) || oldWorker?.sessionId;
 
     // Mark old worker as crashed with CLI process status
     await agentAccessor.update(agentId, {
@@ -548,7 +547,7 @@ class CrashRecoveryService {
       }
       // Check if process is actually running for active agents
       if (s.executionState === ExecutionState.ACTIVE) {
-        return agentProcessAdapter.isRunning(s.id);
+        return isAgentRunning(s.id);
       }
       return true;
     });
@@ -567,7 +566,7 @@ class CrashRecoveryService {
       }
       // Check if process is actually running for active agents
       if (w.executionState === ExecutionState.ACTIVE) {
-        return agentProcessAdapter.isRunning(w.id);
+        return isAgentRunning(w.id);
       }
       return true;
     });
@@ -577,7 +576,7 @@ class CrashRecoveryService {
       if (a.executionState !== ExecutionState.ACTIVE) {
         return false;
       }
-      return !agentProcessAdapter.isRunning(a.id);
+      return !isAgentRunning(a.id);
     });
     if (orphanedAgents.length > 0) {
       issues.push(`${orphanedAgents.length} orphaned agents (DB active but process not running)`);
