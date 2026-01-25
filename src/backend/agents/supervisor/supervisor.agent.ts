@@ -1,10 +1,8 @@
 import { AgentType, DesiredExecutionState, ExecutionState, TaskState } from '@prisma-gen/client';
-import { createWorkerSession } from '../../clients/claude-code.client.js';
 import { GitClientFactory } from '../../clients/git.client.js';
-import { tmuxClient } from '../../clients/tmux.client.js';
 import { agentAccessor, mailAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import { getTopLevelTaskWorktreeName } from '../../routers/mcp/helpers.js';
-import { executeMcpTool } from '../../routers/mcp/server.js';
+import { type AgentProcessEvents, agentProcessAdapter } from '../process-adapter.js';
 import { buildSupervisorPrompt } from '../prompts/builders/supervisor.builder.js';
 import { promptFileManager } from '../prompts/file-manager.js';
 import { checkWorkerHealth, recoverWorker } from './health.js';
@@ -15,12 +13,10 @@ import { checkWorkerHealth, recoverWorker } from './health.js';
 interface SupervisorContext {
   agentId: string;
   topLevelTaskId: string;
-  sessionId: string;
-  tmuxSessionName: string;
   isRunning: boolean;
-  monitoringInterval?: NodeJS.Timeout;
   inboxCheckInterval?: NodeJS.Timeout;
   workerHealthCheckInterval?: NodeJS.Timeout;
+  eventCleanup?: () => void;
   // Track what we've already notified about to avoid spam
   lastNotifiedMailIds: Set<string>;
   lastNotifiedReviewTaskIds: Set<string>;
@@ -30,54 +26,15 @@ interface SupervisorContext {
 // In-memory store for active supervisors
 const activeSupervisors = new Map<string, SupervisorContext>();
 
-/**
- * Parse tool calls from Claude CLI output
- * Looks for tool use blocks in the captured output
- */
-interface ToolCall {
-  toolId: string;
-  toolName: string;
-  toolInput: Record<string, unknown>;
-}
-
-function parseToolCallsFromOutput(output: string): ToolCall[] {
-  const toolCalls: ToolCall[] = [];
-
-  // Look for tool use patterns in output
-  // Claude CLI outputs tool calls in a specific format
-  const toolUsePattern = /<tool_use>[\s\S]*?<\/tool_use>/g;
-  const matches = output.match(toolUsePattern);
-
-  if (matches) {
-    for (const match of matches) {
-      // Extract tool name and input from the match
-      const nameMatch = match.match(/<tool_name>(.*?)<\/tool_name>/);
-      const inputMatch = match.match(/<tool_input>(.*?)<\/tool_input>/s);
-      const idMatch = match.match(/id="(.*?)"/);
-
-      if (nameMatch && inputMatch) {
-        try {
-          toolCalls.push({
-            toolId: idMatch ? idMatch[1] : `tool_${Date.now()}`,
-            toolName: nameMatch[1],
-            toolInput: JSON.parse(inputMatch[1]),
-          });
-        } catch (e) {
-          console.error('Failed to parse tool call:', e);
-        }
-      }
-    }
+// Cache for supervisor prompts (used between createSupervisor and runSupervisor)
+const supervisorPromptCache = new Map<
+  string,
+  {
+    systemPrompt: string;
+    workingDir: string;
+    resumeSessionId?: string;
   }
-
-  return toolCalls;
-}
-
-/**
- * Get tmux session name for supervisor
- */
-function getSupervisorTmuxSessionName(agentId: string): string {
-  return `supervisor-${agentId}`;
-}
+>();
 
 export interface CreateSupervisorOptions {
   /** If provided, resume an existing Claude session instead of starting fresh */
@@ -145,57 +102,28 @@ export async function createSupervisor(
     backendUrl,
   });
 
-  // Create Claude Code session in tmux
-  // If resumeSessionId is provided, resume existing conversation instead of starting fresh
-  const sessionContext = await createSupervisorSession(agent.id, systemPrompt, worktreeInfo.path, {
+  // Update agent with worktree path and session info (if resuming)
+  await agentAccessor.update(agent.id, {
+    worktreePath: worktreeInfo.path,
+    ...(options?.resumeSessionId && { sessionId: options.resumeSessionId }),
+  });
+
+  // Store prompt for use when starting the agent
+  // The adapter will use this when startAgent is called
+  supervisorPromptCache.set(agent.id, {
+    systemPrompt,
+    workingDir: worktreeInfo.path,
     resumeSessionId: options?.resumeSessionId,
   });
 
-  // Update agent with session info and worktree path
-  await agentAccessor.update(agent.id, {
-    sessionId: sessionContext.sessionId,
-    tmuxSessionName: sessionContext.tmuxSessionName,
-    worktreePath: worktreeInfo.path,
-  });
-
   console.log(`Created supervisor ${agent.id} for task ${taskId}`);
-  console.log(`Tmux session: ${sessionContext.tmuxSessionName}`);
-  console.log(`Session ID: ${sessionContext.sessionId}`);
+  console.log(`Worktree: ${worktreeInfo.path}`);
 
   return agent.id;
 }
 
 /**
- * Create supervisor session (similar to worker but with different naming)
- */
-async function createSupervisorSession(
-  agentId: string,
-  systemPrompt: string,
-  workingDir: string,
-  options?: { resumeSessionId?: string }
-): Promise<{ sessionId: string; tmuxSessionName: string }> {
-  // Use the worker session creator but with supervisor naming
-  const context = await createWorkerSession(agentId, systemPrompt, workingDir, {
-    agentType: 'supervisor',
-    resumeSessionId: options?.resumeSessionId,
-  });
-
-  // Rename tmux session to supervisor naming
-  const supervisorTmuxName = getSupervisorTmuxSessionName(agentId);
-  try {
-    await tmuxClient.renameSession(context.tmuxSessionName, supervisorTmuxName);
-  } catch (error) {
-    console.warn(`Could not rename tmux session: ${error}`);
-  }
-
-  return {
-    sessionId: context.sessionId,
-    tmuxSessionName: supervisorTmuxName,
-  };
-}
-
-/**
- * Run a supervisor agent - starts monitoring and tool execution
+ * Run a supervisor agent - starts the Claude process and sets up event handlers
  */
 export async function runSupervisor(agentId: string): Promise<void> {
   // Get agent
@@ -212,8 +140,15 @@ export async function runSupervisor(agentId: string): Promise<void> {
     throw new Error(`Agent '${agentId}' does not have a task assigned`);
   }
 
-  if (!(agent.sessionId && agent.tmuxSessionName)) {
-    throw new Error(`Agent '${agentId}' does not have a Claude session`);
+  // Check if already running
+  if (activeSupervisors.has(agentId)) {
+    throw new Error(`Supervisor ${agentId} is already running`);
+  }
+
+  // Get cached prompt info
+  const promptInfo = supervisorPromptCache.get(agentId);
+  if (!promptInfo) {
+    throw new Error(`No prompt info found for agent ${agentId}. Was createSupervisor called?`);
   }
 
   // Get task
@@ -222,17 +157,10 @@ export async function runSupervisor(agentId: string): Promise<void> {
     throw new Error(`Task with ID '${agent.currentTaskId}' not found`);
   }
 
-  // Check if already running
-  if (activeSupervisors.has(agentId)) {
-    throw new Error(`Supervisor ${agentId} is already running`);
-  }
-
-  // Mark supervisor as running
+  // Create supervisor context
   const supervisorContext: SupervisorContext = {
     agentId,
     topLevelTaskId: topLevelTask.id,
-    sessionId: agent.sessionId,
-    tmuxSessionName: agent.tmuxSessionName,
     isRunning: true,
     lastNotifiedMailIds: new Set(),
     lastNotifiedReviewTaskIds: new Set(),
@@ -247,28 +175,100 @@ export async function runSupervisor(agentId: string): Promise<void> {
 
   console.log(`Starting supervisor ${agentId}`);
 
-  // Send initial message to Claude
-  try {
-    await sendSupervisorMessage(
-      agentId,
-      'Review the top-level task description and break it down into subtasks. Use the mcp__task__create tool to create each subtask.'
-    );
-  } catch (error) {
-    console.error(`Failed to send initial message to supervisor ${agentId}:`, error);
-    throw error;
-  }
+  // Set up event handlers for the adapter
+  const handleMessage = (event: AgentProcessEvents['message']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
 
-  // Start monitoring loop
-  supervisorContext.monitoringInterval = setInterval(async () => {
-    await monitorSupervisor(agentId);
-  }, 5000); // Check every 5 seconds
+    const msg = event.message;
 
-  // Start inbox check loop (30 seconds to avoid spamming)
+    // Log messages for debugging based on type
+    switch (msg.type) {
+      case 'assistant':
+        console.log(`Supervisor ${agentId}: Assistant message received`);
+        break;
+      case 'tool_use':
+        console.log(`Supervisor ${agentId}: Tool use - ${'tool' in msg ? msg.tool : 'unknown'}`);
+        break;
+      case 'tool_result':
+        console.log(
+          `Supervisor ${agentId}: Tool result - ${'is_error' in msg && msg.is_error ? 'error' : 'success'}`
+        );
+        break;
+    }
+  };
+
+  const handleResult = async (event: AgentProcessEvents['result']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
+
+    console.log(`Supervisor ${agentId}: Session completed`);
+    console.log(`  Claude Session ID: ${event.claudeSessionId}`);
+    console.log(`  Turns: ${event.numTurns}`);
+    console.log(`  Duration: ${event.durationMs}ms`);
+    console.log(`  Cost: $${event.totalCostUsd?.toFixed(4) || 'N/A'}`);
+
+    // Store Claude session ID for potential resume
+    await agentAccessor.update(agentId, {
+      sessionId: event.claudeSessionId,
+    });
+
+    // Handle completion
+    await handleSupervisorCompletion(agentId, 'Claude session completed');
+  };
+
+  const handleError = (event: AgentProcessEvents['error']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
+
+    console.error(`Supervisor ${agentId}: Error - ${event.error.message}`);
+
+    // Don't stop the supervisor on errors - adapter handles recovery
+  };
+
+  const handleExit = async (event: AgentProcessEvents['exit']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
+
+    console.log(`Supervisor ${agentId}: Process exited with code ${event.code}`);
+
+    if (event.sessionId) {
+      // Store session ID for potential resume
+      await agentAccessor.update(agentId, {
+        sessionId: event.sessionId,
+      });
+    }
+
+    // Handle completion based on exit code
+    const reason =
+      event.code === 0 ? 'Process exited normally' : `Process exited with code ${event.code}`;
+    await handleSupervisorCompletion(agentId, reason);
+  };
+
+  // Register event handlers
+  agentProcessAdapter.on('message', handleMessage);
+  agentProcessAdapter.on('result', handleResult);
+  agentProcessAdapter.on('error', handleError);
+  agentProcessAdapter.on('exit', handleExit);
+
+  // Store cleanup function
+  supervisorContext.eventCleanup = () => {
+    agentProcessAdapter.off('message', handleMessage);
+    agentProcessAdapter.off('result', handleResult);
+    agentProcessAdapter.off('error', handleError);
+    agentProcessAdapter.off('exit', handleExit);
+  };
+
+  // Start inbox check timer for worker messages (30 seconds to avoid spamming)
   supervisorContext.inboxCheckInterval = setInterval(async () => {
     await checkSupervisorInbox(agentId);
   }, 30_000); // Check every 30 seconds
 
-  // Start worker health check loop (7 minutes)
+  // Start worker health check timer (7 minutes)
   supervisorContext.workerHealthCheckInterval = setInterval(
     async () => {
       await performWorkerHealthCheck(agentId);
@@ -276,71 +276,86 @@ export async function runSupervisor(agentId: string): Promise<void> {
     7 * 60 * 1000
   ); // Check every 7 minutes
 
-  console.log(
-    `Supervisor ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`
-  );
+  // Start the Claude process via the adapter
+  try {
+    const model = process.env.SUPERVISOR_MODEL || 'claude-sonnet-4-5-20250929';
+    const initialPrompt =
+      'Review the top-level task description and break it down into subtasks. Use the mcp__task__create tool to create each subtask.';
+
+    await agentProcessAdapter.startAgent({
+      agentId,
+      agentType: 'supervisor',
+      workingDir: promptInfo.workingDir,
+      systemPrompt: promptInfo.systemPrompt,
+      initialPrompt,
+      model,
+      resumeSessionId: promptInfo.resumeSessionId,
+    });
+
+    console.log(`Supervisor ${agentId} is now running`);
+
+    // Clean up prompt cache after starting
+    supervisorPromptCache.delete(agentId);
+  } catch (error) {
+    // Clean up on startup failure
+    cleanupSupervisorContext(agentId);
+    throw error;
+  }
 }
 
 /**
- * Send message to supervisor (using supervisor tmux session naming)
+ * Clean up supervisor context (intervals and event handlers)
  */
-async function sendSupervisorMessage(agentId: string, message: string): Promise<void> {
-  const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  await tmuxClient.sendMessage(tmuxSessionName, message);
-}
-
-/**
- * Capture output from supervisor tmux session
- */
-function captureSupervisorOutput(agentId: string, lines: number = 100): Promise<string> {
-  const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  return tmuxClient.capturePane(tmuxSessionName, lines);
-}
-
-/**
- * Monitor supervisor output and handle tool calls
- */
-async function monitorSupervisor(agentId: string): Promise<void> {
+function cleanupSupervisorContext(agentId: string): void {
   const supervisorContext = activeSupervisors.get(agentId);
-  if (!supervisorContext?.isRunning) {
+  if (!supervisorContext) {
     return;
   }
 
-  try {
-    // Capture recent output
-    const output = await captureSupervisorOutput(agentId, 50);
+  // Clear inbox check interval
+  if (supervisorContext.inboxCheckInterval) {
+    clearInterval(supervisorContext.inboxCheckInterval);
+  }
 
-    // Parse tool calls from output
-    const toolCalls = parseToolCallsFromOutput(output);
+  // Clear worker health check interval
+  if (supervisorContext.workerHealthCheckInterval) {
+    clearInterval(supervisorContext.workerHealthCheckInterval);
+  }
 
-    if (toolCalls.length > 0) {
-      console.log(`Supervisor ${agentId}: Found ${toolCalls.length} tool call(s)`);
+  // Clean up event handlers
+  if (supervisorContext.eventCleanup) {
+    supervisorContext.eventCleanup();
+  }
 
-      // Execute each tool call
-      for (const toolCall of toolCalls) {
-        try {
-          console.log(`Supervisor ${agentId}: Executing ${toolCall.toolName}`);
+  supervisorContext.isRunning = false;
+}
 
-          // Execute tool via MCP
-          const result = await executeMcpTool(agentId, toolCall.toolName, toolCall.toolInput);
+/**
+ * Handle supervisor completion (success or failure)
+ */
+async function handleSupervisorCompletion(agentId: string, reason: string): Promise<void> {
+  const supervisorContext = activeSupervisors.get(agentId);
+  if (!supervisorContext) {
+    return;
+  }
 
-          // Format result for Claude
-          const resultMessage = `Tool ${toolCall.toolName} result:\n${JSON.stringify(result, null, 2)}`;
+  console.log(`Supervisor ${agentId} completed: ${reason}`);
 
-          // Send result back to Claude
-          await sendSupervisorMessage(agentId, resultMessage);
-        } catch (error) {
-          console.error(`Supervisor ${agentId}: Tool ${toolCall.toolName} failed:`, error);
+  // Clean up context
+  cleanupSupervisorContext(agentId);
 
-          // Send error back to Claude
-          const errorMessage = `Tool ${toolCall.toolName} failed: ${error instanceof Error ? error.message : String(error)}`;
-          await sendSupervisorMessage(agentId, errorMessage);
-        }
-      }
-    }
-  } catch (error) {
-    console.error(`Supervisor ${agentId}: Monitoring error:`, error);
-    // Don't stop supervisor on monitoring errors - they might be transient
+  // Update agent state
+  await agentAccessor.update(agentId, {
+    executionState: ExecutionState.IDLE,
+  });
+
+  // Check top-level task state to determine if successful
+  const task = await taskAccessor.findById(supervisorContext.topLevelTaskId);
+  if (task && task.state !== TaskState.REVIEW && task.state !== TaskState.COMPLETED) {
+    // Supervisor stopped but task not in review - likely needs attention
+    console.log(
+      `Supervisor ${agentId}: Task ${task.id} is in state ${task.state}, may need manual attention`
+    );
   }
 }
 
@@ -374,7 +389,7 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
         .map((m) => `- From ${m.fromAgentId || 'unknown'}: ${m.subject}`)
         .join('\n');
 
-      await sendSupervisorMessage(
+      agentProcessAdapter.sendToAgent(
         agentId,
         `You have ${newMail.length} new message(s) in your inbox:\n${mailSummary}\n\nUse mcp__mail__read to read them.`
       );
@@ -401,9 +416,9 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
         supervisorContext.lastNotifiedReviewTaskIds.add(task.id);
       }
 
-      await sendSupervisorMessage(
+      agentProcessAdapter.sendToAgent(
         agentId,
-        `📋 NEW TASKS READY FOR REVIEW:\n` +
+        `NEW TASKS READY FOR REVIEW:\n` +
           `${newReviewTasks.map((t) => `- ${t.title} (${t.id})`).join('\n')}\n\n` +
           `Total status: ${reviewTasks.length} in review, ${inProgressTasks.length} in progress, ${completedTasks.length} completed, ${failedTasks.length} failed\n\n` +
           `Use mcp__task__get_review_queue to see the full review queue.`
@@ -415,9 +430,9 @@ async function checkSupervisorInbox(agentId: string): Promise<void> {
       if (allDone && !supervisorContext.lastNotifiedAllComplete) {
         supervisorContext.lastNotifiedAllComplete = true;
         console.log(`Supervisor ${agentId}: All tasks complete, prompting for final PR`);
-        await sendSupervisorMessage(
+        agentProcessAdapter.sendToAgent(
           agentId,
-          `🎉 ALL TASKS COMPLETE!\n` +
+          `ALL TASKS COMPLETE!\n` +
             `- ${completedTasks.length} task(s) completed successfully\n` +
             `- ${failedTasks.length} task(s) failed\n\n` +
             `It's time to create the final PR from the top-level task branch to main.\n` +
@@ -462,7 +477,7 @@ async function performWorkerHealthCheck(agentId: string): Promise<void> {
 
         // Notify supervisor Claude about the recovery
         if (result.permanentFailure) {
-          await sendSupervisorMessage(
+          agentProcessAdapter.sendToAgent(
             agentId,
             `[AUTOMATIC WORKER HEALTH CHECK] Worker permanently failed:\n` +
               `- Task ID: ${unhealthy.taskId}\n` +
@@ -471,7 +486,7 @@ async function performWorkerHealthCheck(agentId: string): Promise<void> {
               `The task has been marked as FAILED. You may need to manually investigate or mark it complete using mcp__task__force_complete.`
           );
         } else if (result.success) {
-          await sendSupervisorMessage(
+          agentProcessAdapter.sendToAgent(
             agentId,
             `[AUTOMATIC WORKER HEALTH CHECK] Recovered unhealthy worker:\n` +
               `- Task ID: ${unhealthy.taskId}\n` +
@@ -503,27 +518,11 @@ export async function stopSupervisor(agentId: string): Promise<void> {
 
   console.log(`Stopping supervisor ${agentId}`);
 
-  // Stop monitoring
-  if (supervisorContext.monitoringInterval) {
-    clearInterval(supervisorContext.monitoringInterval);
-  }
-  if (supervisorContext.inboxCheckInterval) {
-    clearInterval(supervisorContext.inboxCheckInterval);
-  }
-  if (supervisorContext.workerHealthCheckInterval) {
-    clearInterval(supervisorContext.workerHealthCheckInterval);
-  }
+  // Clean up context
+  cleanupSupervisorContext(agentId);
 
-  supervisorContext.isRunning = false;
-
-  // Stop Claude session
-  const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  try {
-    await tmuxClient.sendInterrupt(tmuxSessionName);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  } catch {
-    // Session may not exist
-  }
+  // Stop the Claude process gracefully
+  await agentProcessAdapter.stopAgent(agentId);
 
   // Update agent state
   await agentAccessor.update(agentId, {
@@ -552,13 +551,8 @@ export async function killSupervisor(agentId: string): Promise<void> {
     throw new Error(`Agent with ID '${agentId}' not found`);
   }
 
-  // Kill tmux session
-  const tmuxSessionName = getSupervisorTmuxSessionName(agentId);
-  try {
-    await tmuxClient.killSession(tmuxSessionName);
-  } catch {
-    // Session may not exist
-  }
+  // Force kill the Claude process
+  agentProcessAdapter.killAgent(agentId);
 
   // Delete worktree if task exists
   if (agent.currentTaskId) {
@@ -582,6 +576,9 @@ export async function killSupervisor(agentId: string): Promise<void> {
 
   // Remove from active supervisors
   activeSupervisors.delete(agentId);
+
+  // Clean up prompt cache if exists
+  supervisorPromptCache.delete(agentId);
 
   console.log(`Supervisor ${agentId} killed and cleaned up`);
 }

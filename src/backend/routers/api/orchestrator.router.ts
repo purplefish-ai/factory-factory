@@ -79,7 +79,7 @@ router.post('/start', async (_req, res) => {
       data: {
         agentId,
         isRunning: status.isRunning,
-        tmuxSession: status.tmuxSession,
+        sessionId: status.sessionId,
         message: `Orchestrator ${agentId} started successfully`,
       },
     });

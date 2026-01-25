@@ -1,12 +1,4 @@
 import { AgentType, DesiredExecutionState, ExecutionState, TaskState } from '@prisma-gen/client';
-import {
-  captureOutput,
-  createWorkerSession,
-  getSessionStatus,
-  killSession,
-  sendMessage,
-  stopSession,
-} from '../../clients/claude-code.client.js';
 import { GitClientFactory } from '../../clients/git.client.js';
 import {
   agentAccessor,
@@ -14,7 +6,7 @@ import {
   projectAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
-import { executeMcpTool } from '../../routers/mcp/server.js';
+import { type AgentProcessEvents, agentProcessAdapter } from '../process-adapter.js';
 import { buildWorkerPrompt } from '../prompts/builders/worker.builder.js';
 
 /**
@@ -23,59 +15,23 @@ import { buildWorkerPrompt } from '../prompts/builders/worker.builder.js';
 interface WorkerContext {
   agentId: string;
   taskId: string;
-  sessionId: string;
-  tmuxSessionName: string;
   isRunning: boolean;
-  monitoringInterval?: NodeJS.Timeout;
   inboxCheckInterval?: NodeJS.Timeout;
+  eventCleanup?: () => void;
 }
 
 // In-memory store for active workers
 const activeWorkers = new Map<string, WorkerContext>();
 
-/**
- * Parse tool calls from Claude CLI output
- * Looks for tool use blocks in the captured output
- */
-interface ToolCall {
-  toolId: string;
-  toolName: string;
-  toolInput: Record<string, unknown>;
-}
-
-function parseToolCallsFromOutput(output: string): ToolCall[] {
-  const toolCalls: ToolCall[] = [];
-
-  // Look for tool use patterns in output
-  // Claude CLI outputs tool calls in a specific format
-  // This is a simplified parser - may need refinement based on actual CLI output format
-  const toolUsePattern = /<tool_use>[\s\S]*?<\/tool_use>/g;
-  const matches = output.match(toolUsePattern);
-
-  if (matches) {
-    for (const match of matches) {
-      // Extract tool name and input from the match
-      // This regex may need adjustment based on actual format
-      const nameMatch = match.match(/<tool_name>(.*?)<\/tool_name>/);
-      const inputMatch = match.match(/<tool_input>(.*?)<\/tool_input>/s);
-      const idMatch = match.match(/id="(.*?)"/);
-
-      if (nameMatch && inputMatch) {
-        try {
-          toolCalls.push({
-            toolId: idMatch ? idMatch[1] : `tool_${Date.now()}`,
-            toolName: nameMatch[1],
-            toolInput: JSON.parse(inputMatch[1]),
-          });
-        } catch (e) {
-          console.error('Failed to parse tool call:', e);
-        }
-      }
-    }
+// Cache for worker prompts (used between createWorker and runWorker)
+const workerPromptCache = new Map<
+  string,
+  {
+    systemPrompt: string;
+    workingDir: string;
+    resumeSessionId?: string;
   }
-
-  return toolCalls;
-}
+>();
 
 export interface CreateWorkerOptions {
   /** If provided, resume an existing Claude session instead of starting fresh */
@@ -161,29 +117,28 @@ export async function createWorker(taskId: string, options?: CreateWorkerOptions
     supervisorAgentId: supervisor.id,
   });
 
-  // Create Claude Code session in tmux
-  // If resumeSessionId is provided, resume existing conversation instead of starting fresh
-  const sessionContext = await createWorkerSession(agent.id, systemPrompt, worktreeInfo.path, {
-    agentType: 'worker',
+  // Update agent with worktree path and session info (if resuming)
+  await agentAccessor.update(agent.id, {
+    worktreePath: worktreeInfo.path,
+    ...(options?.resumeSessionId && { sessionId: options.resumeSessionId }),
+  });
+
+  // Store prompt for use when starting the agent
+  // The adapter will use this when startAgent is called
+  workerPromptCache.set(agent.id, {
+    systemPrompt,
+    workingDir: worktreeInfo.path,
     resumeSessionId: options?.resumeSessionId,
   });
 
-  // Update agent with session info and worktree path
-  await agentAccessor.update(agent.id, {
-    sessionId: sessionContext.sessionId,
-    tmuxSessionName: sessionContext.tmuxSessionName,
-    worktreePath: worktreeInfo.path,
-  });
-
   console.log(`Created worker ${agent.id} for task ${taskId}`);
-  console.log(`Tmux session: ${sessionContext.tmuxSessionName}`);
-  console.log(`Session ID: ${sessionContext.sessionId}`);
+  console.log(`Worktree: ${worktreeInfo.path}`);
 
   return agent.id;
 }
 
 /**
- * Run a worker agent - starts monitoring and tool execution
+ * Run a worker agent - starts the Claude process and sets up event handlers
  */
 export async function runWorker(agentId: string): Promise<void> {
   // Get agent
@@ -200,8 +155,15 @@ export async function runWorker(agentId: string): Promise<void> {
     throw new Error(`Agent '${agentId}' does not have a task assigned`);
   }
 
-  if (!(agent.sessionId && agent.tmuxSessionName)) {
-    throw new Error(`Agent '${agentId}' does not have a Claude session`);
+  // Check if already running
+  if (activeWorkers.has(agentId)) {
+    throw new Error(`Worker ${agentId} is already running`);
+  }
+
+  // Get cached prompt info
+  const promptInfo = workerPromptCache.get(agentId);
+  if (!promptInfo) {
+    throw new Error(`No prompt info found for agent ${agentId}. Was createWorker called?`);
   }
 
   // Get task
@@ -210,17 +172,10 @@ export async function runWorker(agentId: string): Promise<void> {
     throw new Error(`Task with ID '${agent.currentTaskId}' not found`);
   }
 
-  // Check if already running
-  if (activeWorkers.has(agentId)) {
-    throw new Error(`Worker ${agentId} is already running`);
-  }
-
-  // Mark worker as running
+  // Create worker context
   const workerContext: WorkerContext = {
     agentId,
     taskId: task.id,
-    sessionId: agent.sessionId,
-    tmuxSessionName: agent.tmuxSessionName,
     isRunning: true,
   };
   activeWorkers.set(agentId, workerContext);
@@ -232,82 +187,122 @@ export async function runWorker(agentId: string): Promise<void> {
 
   console.log(`Starting worker ${agentId}`);
 
-  // Send initial message to Claude
-  try {
-    await sendMessage(agentId, 'Check your task assignment and begin work.');
-  } catch (error) {
-    console.error(`Failed to send initial message to worker ${agentId}:`, error);
-    throw error;
-  }
+  // Set up event handlers for the adapter
+  const handleMessage = (event: AgentProcessEvents['message']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
 
-  // Start monitoring loop
-  workerContext.monitoringInterval = setInterval(async () => {
-    await monitorWorker(agentId);
-  }, 5000); // Check every 5 seconds
+    const msg = event.message;
 
-  // Start inbox check loop for rebase requests
+    // Log messages for debugging based on type
+    switch (msg.type) {
+      case 'assistant':
+        console.log(`Worker ${agentId}: Assistant message received`);
+        break;
+      case 'tool_use':
+        console.log(`Worker ${agentId}: Tool use - ${'tool' in msg ? msg.tool : 'unknown'}`);
+        break;
+      case 'tool_result':
+        console.log(
+          `Worker ${agentId}: Tool result - ${'is_error' in msg && msg.is_error ? 'error' : 'success'}`
+        );
+        break;
+    }
+  };
+
+  const handleResult = async (event: AgentProcessEvents['result']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
+
+    console.log(`Worker ${agentId}: Session completed`);
+    console.log(`  Claude Session ID: ${event.claudeSessionId}`);
+    console.log(`  Turns: ${event.numTurns}`);
+    console.log(`  Duration: ${event.durationMs}ms`);
+    console.log(`  Cost: $${event.totalCostUsd?.toFixed(4) || 'N/A'}`);
+
+    // Store Claude session ID for potential resume
+    await agentAccessor.update(agentId, {
+      sessionId: event.claudeSessionId,
+    });
+
+    // Handle completion
+    await handleWorkerCompletion(agentId, 'Claude session completed');
+  };
+
+  const handleError = (event: AgentProcessEvents['error']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
+
+    console.error(`Worker ${agentId}: Error - ${event.error.message}`);
+
+    // Don't stop the worker on errors - adapter handles recovery
+  };
+
+  const handleExit = async (event: AgentProcessEvents['exit']) => {
+    if (event.agentId !== agentId) {
+      return;
+    }
+
+    console.log(`Worker ${agentId}: Process exited with code ${event.code}`);
+
+    if (event.sessionId) {
+      // Store session ID for potential resume
+      await agentAccessor.update(agentId, {
+        sessionId: event.sessionId,
+      });
+    }
+
+    // Handle completion based on exit code
+    const reason =
+      event.code === 0 ? 'Process exited normally' : `Process exited with code ${event.code}`;
+    await handleWorkerCompletion(agentId, reason);
+  };
+
+  // Register event handlers
+  agentProcessAdapter.on('message', handleMessage);
+  agentProcessAdapter.on('result', handleResult);
+  agentProcessAdapter.on('error', handleError);
+  agentProcessAdapter.on('exit', handleExit);
+
+  // Store cleanup function
+  workerContext.eventCleanup = () => {
+    agentProcessAdapter.off('message', handleMessage);
+    agentProcessAdapter.off('result', handleResult);
+    agentProcessAdapter.off('error', handleError);
+    agentProcessAdapter.off('exit', handleExit);
+  };
+
+  // Start inbox check timer for supervisor messages (rebase requests, etc.)
   workerContext.inboxCheckInterval = setInterval(async () => {
     await checkWorkerInbox(agentId);
   }, 10_000); // Check every 10 seconds
 
-  console.log(
-    `Worker ${agentId} is now running. Monitor with: tmux attach -t ${agent.tmuxSessionName}`
-  );
-}
-
-/**
- * Monitor worker output and handle tool calls
- */
-async function monitorWorker(agentId: string): Promise<void> {
-  const workerContext = activeWorkers.get(agentId);
-  if (!workerContext?.isRunning) {
-    return;
-  }
-
+  // Start the Claude process via the adapter
   try {
-    // Check if Claude session is still running
-    const status = await getSessionStatus(agentId);
-    if (!status.running && status.exists) {
-      // Claude finished or crashed
-      console.log(`Worker ${agentId}: Claude process has stopped`);
-      await handleWorkerCompletion(agentId, 'Claude process stopped');
-      return;
-    }
+    const model = process.env.WORKER_MODEL || 'claude-sonnet-4-5-20250929';
+    const initialPrompt = 'Check your task assignment and begin work.';
 
-    // Capture recent output
-    const output = await captureOutput(agentId, 50);
+    await agentProcessAdapter.startAgent({
+      agentId,
+      agentType: 'worker',
+      workingDir: promptInfo.workingDir,
+      systemPrompt: promptInfo.systemPrompt,
+      initialPrompt,
+      model,
+      resumeSessionId: promptInfo.resumeSessionId,
+    });
 
-    // Parse tool calls from output
-    const toolCalls = parseToolCallsFromOutput(output);
+    console.log(`Worker ${agentId} is now running`);
 
-    if (toolCalls.length > 0) {
-      console.log(`Worker ${agentId}: Found ${toolCalls.length} tool call(s)`);
-
-      // Execute each tool call
-      for (const toolCall of toolCalls) {
-        try {
-          console.log(`Worker ${agentId}: Executing ${toolCall.toolName}`);
-
-          // Execute tool via MCP
-          const result = await executeMcpTool(agentId, toolCall.toolName, toolCall.toolInput);
-
-          // Format result for Claude
-          const resultMessage = `Tool ${toolCall.toolName} result:\n${JSON.stringify(result, null, 2)}`;
-
-          // Send result back to Claude
-          await sendMessage(agentId, resultMessage);
-        } catch (error) {
-          console.error(`Worker ${agentId}: Tool ${toolCall.toolName} failed:`, error);
-
-          // Send error back to Claude
-          const errorMessage = `Tool ${toolCall.toolName} failed: ${error instanceof Error ? error.message : String(error)}`;
-          await sendMessage(agentId, errorMessage);
-        }
-      }
-    }
+    // Clean up prompt cache after starting
+    workerPromptCache.delete(agentId);
   } catch (error) {
-    console.error(`Worker ${agentId}: Monitoring error:`, error);
-    // Don't stop worker on monitoring errors - they might be transient
+    // Clean up on startup failure
+    cleanupWorkerContext(agentId);
+    throw error;
   }
 }
 
@@ -327,10 +322,9 @@ async function handleRebaseRequest(
     return;
   }
 
-  await sendMessage(
-    agentId,
-    `⚠️ REBASE REQUIRED ⚠️\n\n${mail.body}\n\nPlease:\n1. Run 'git fetch origin' to get latest changes\n2. Run 'git rebase origin/<top-level-branch-name>' to rebase your branch\n3. Resolve any conflicts if needed\n4. Force push with 'git push --force'\n5. Your PR will be automatically updated\n\nAfter rebasing, your PR will return to the review queue.`
-  );
+  const message = `REBASE REQUIRED\n\n${mail.body}\n\nPlease:\n1. Run 'git fetch origin' to get latest changes\n2. Run 'git rebase origin/<top-level-branch-name>' to rebase your branch\n3. Resolve any conflicts if needed\n4. Force push with 'git push --force'\n5. Your PR will be automatically updated\n\nAfter rebasing, your PR will return to the review queue.`;
+
+  agentProcessAdapter.sendToAgent(agentId, message);
 
   if (task.state === TaskState.BLOCKED) {
     await taskAccessor.update(task.id, { state: TaskState.IN_PROGRESS });
@@ -346,10 +340,10 @@ async function handleChangesRequested(
 ): Promise<void> {
   console.log(`Worker ${agentId}: Received change request`);
   await mailAccessor.markAsRead(mail.id);
-  await sendMessage(
-    agentId,
-    `📝 CHANGES REQUESTED 📝\n\n${mail.body}\n\nPlease address the feedback above, then commit and push your changes. The PR will be re-reviewed once you're done.`
-  );
+
+  const message = `CHANGES REQUESTED\n\n${mail.body}\n\nPlease address the feedback above, then commit and push your changes. The PR will be re-reviewed once you're done.`;
+
+  agentProcessAdapter.sendToAgent(agentId, message);
 }
 
 /**
@@ -360,10 +354,10 @@ async function handleGenericMail(
   mail: { id: string; subject: string; body: string; fromAgentId: string | null }
 ): Promise<void> {
   await mailAccessor.markAsRead(mail.id);
-  await sendMessage(
-    agentId,
-    `📬 New Message from ${mail.fromAgentId || 'supervisor'}:\n\nSubject: ${mail.subject}\n\n${mail.body}`
-  );
+
+  const message = `New Message from ${mail.fromAgentId || 'supervisor'}:\n\nSubject: ${mail.subject}\n\n${mail.body}`;
+
+  agentProcessAdapter.sendToAgent(agentId, message);
 }
 
 /**
@@ -398,6 +392,28 @@ async function checkWorkerInbox(agentId: string): Promise<void> {
 }
 
 /**
+ * Clean up worker context (intervals and event handlers)
+ */
+function cleanupWorkerContext(agentId: string): void {
+  const workerContext = activeWorkers.get(agentId);
+  if (!workerContext) {
+    return;
+  }
+
+  // Clear inbox check interval
+  if (workerContext.inboxCheckInterval) {
+    clearInterval(workerContext.inboxCheckInterval);
+  }
+
+  // Clean up event handlers
+  if (workerContext.eventCleanup) {
+    workerContext.eventCleanup();
+  }
+
+  workerContext.isRunning = false;
+}
+
+/**
  * Handle worker completion (success or failure)
  */
 async function handleWorkerCompletion(agentId: string, reason: string): Promise<void> {
@@ -408,15 +424,8 @@ async function handleWorkerCompletion(agentId: string, reason: string): Promise<
 
   console.log(`Worker ${agentId} completed: ${reason}`);
 
-  // Stop monitoring
-  if (workerContext.monitoringInterval) {
-    clearInterval(workerContext.monitoringInterval);
-  }
-  if (workerContext.inboxCheckInterval) {
-    clearInterval(workerContext.inboxCheckInterval);
-  }
-
-  workerContext.isRunning = false;
+  // Clean up context
+  cleanupWorkerContext(agentId);
 
   // Update agent state
   await agentAccessor.update(agentId, {
@@ -445,18 +454,11 @@ export async function stopWorker(agentId: string): Promise<void> {
 
   console.log(`Stopping worker ${agentId}`);
 
-  // Stop monitoring
-  if (workerContext.monitoringInterval) {
-    clearInterval(workerContext.monitoringInterval);
-  }
-  if (workerContext.inboxCheckInterval) {
-    clearInterval(workerContext.inboxCheckInterval);
-  }
+  // Clean up context
+  cleanupWorkerContext(agentId);
 
-  workerContext.isRunning = false;
-
-  // Stop Claude session
-  await stopSession(agentId);
+  // Stop the Claude process gracefully
+  await agentProcessAdapter.stopAgent(agentId);
 
   // Update agent state
   await agentAccessor.update(agentId, {
@@ -524,14 +526,17 @@ export async function killWorker(agentId: string): Promise<void> {
     throw new Error(`Agent with ID '${agentId}' not found`);
   }
 
-  // Kill Claude session and cleanup
-  await killSession(agentId);
+  // Force kill the Claude process
+  await agentProcessAdapter.killAgent(agentId);
 
   // Delete worktree for this agent
   await cleanupAgentWorktree(agentId);
 
   // Remove from active workers
   activeWorkers.delete(agentId);
+
+  // Clean up prompt cache if exists
+  workerPromptCache.delete(agentId);
 
   console.log(`Worker ${agentId} killed and cleaned up`);
 }

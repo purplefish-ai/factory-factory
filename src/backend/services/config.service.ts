@@ -5,6 +5,8 @@
  * Handles agent profiles, environment variables, and runtime configuration.
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { AgentType } from '@prisma-gen/client';
 import { createLogger } from './logger.service.js';
 
@@ -29,6 +31,11 @@ export interface AgentProfile {
  * System configuration
  */
 interface SystemConfig {
+  // Directory paths
+  baseDir: string;
+  worktreeBaseDir: string;
+  debugLogDir: string;
+
   // Server settings
   backendPort: number;
   frontendPort: number;
@@ -149,10 +156,24 @@ function buildDefaultAgentProfiles(): Record<AgentType, AgentProfile> {
 }
 
 /**
+ * Get default base directory
+ */
+function getDefaultBaseDir(): string {
+  return join(homedir(), 'factory-factory');
+}
+
+/**
  * Load system configuration from environment
  */
 function loadSystemConfig(): SystemConfig {
+  const baseDir = process.env.BASE_DIR || getDefaultBaseDir();
+
   const config: SystemConfig = {
+    // Directory paths
+    baseDir,
+    worktreeBaseDir: process.env.WORKTREE_BASE_DIR || join(baseDir, 'worktrees'),
+    debugLogDir: join(baseDir, 'debug'),
+
     // Server settings
     backendPort: Number.parseInt(process.env.BACKEND_PORT || '3001', 10),
     frontendPort: Number.parseInt(process.env.FRONTEND_PORT || '3000', 10),
@@ -319,6 +340,27 @@ class ConfigService {
    */
   getBackendPort(): number {
     return this.config.backendPort;
+  }
+
+  /**
+   * Get base directory for all FactoryFactory data
+   */
+  getBaseDir(): string {
+    return this.config.baseDir;
+  }
+
+  /**
+   * Get worktree base directory
+   */
+  getWorktreeBaseDir(): string {
+    return this.config.worktreeBaseDir;
+  }
+
+  /**
+   * Get debug log directory
+   */
+  getDebugLogDir(): string {
+    return this.config.debugLogDir;
   }
 
   /**

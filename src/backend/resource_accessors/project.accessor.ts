@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Prisma, Project } from '@prisma-gen/client';
 import { GitClientFactory } from '../clients/git.client.js';
 import { prisma } from '../db.js';
+import { configService } from '../services/index.js';
 
 /**
  * Execute a command with proper argument separation (no shell injection).
@@ -83,17 +84,10 @@ function deriveSlugFromPath(repoPath: string): string {
 }
 
 /**
- * Get the worktree base directory from environment.
+ * Get the worktree base directory from config.
  */
 function getWorktreeBaseDir(): string {
-  const baseDir = process.env.WORKTREE_BASE_DIR;
-  if (!baseDir) {
-    throw new Error(
-      'WORKTREE_BASE_DIR environment variable is required. ' +
-        'Set it to the base directory for project worktrees.'
-    );
-  }
-  return baseDir;
+  return configService.getWorktreeBaseDir();
 }
 
 /**

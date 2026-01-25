@@ -1,5 +1,11 @@
 import type { Agent, Mail, Project, Task } from '@prisma-gen/client';
-import { AgentType, DesiredExecutionState, ExecutionState, TaskState } from '@prisma-gen/client';
+import {
+  AgentType,
+  type CliProcessStatus,
+  DesiredExecutionState,
+  ExecutionState,
+  TaskState,
+} from '@prisma-gen/client';
 
 let idCounter = 0;
 
@@ -99,10 +105,15 @@ export interface AgentOverrides {
   lastHeartbeat?: Date | null;
   lastReconcileAt?: Date | null;
   reconcileFailures?: object[];
+  cliProcessId?: string | null;
+  cliProcessStatus?: CliProcessStatus | null;
+  cliProcessStartedAt?: Date | null;
+  cliProcessExitCode?: number | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: factory function with many default fields
 export function createAgent(overrides: AgentOverrides = {}): Agent {
   const id = overrides.id ?? generateId();
   const now = new Date();
@@ -118,6 +129,10 @@ export function createAgent(overrides: AgentOverrides = {}): Agent {
     lastHeartbeat: overrides.lastHeartbeat ?? now,
     lastReconcileAt: overrides.lastReconcileAt ?? null,
     reconcileFailures: overrides.reconcileFailures ?? [],
+    cliProcessId: overrides.cliProcessId ?? null,
+    cliProcessStatus: overrides.cliProcessStatus ?? null,
+    cliProcessStartedAt: overrides.cliProcessStartedAt ?? null,
+    cliProcessExitCode: overrides.cliProcessExitCode ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   };

@@ -2,9 +2,11 @@
  * Crash Recovery Service
  *
  * Handles crash loop detection, agent recovery, and system resilience.
+ * Integrates with CLI process status tracking for accurate crash detection.
  */
 
-import { AgentType, ExecutionState, TaskState } from '@prisma-gen/client';
+import { AgentType, type CliProcessStatus, ExecutionState, TaskState } from '@prisma-gen/client';
+import { agentProcessAdapter } from '../agents/process-adapter.js';
 import {
   agentAccessor,
   decisionLogAccessor,
@@ -26,6 +28,8 @@ interface CrashRecord {
   timestamps: number[];
   topLevelTaskId?: string;
   taskId?: string;
+  lastCliProcessStatus?: CliProcessStatus;
+  lastExitCode?: number;
 }
 
 /**
@@ -60,13 +64,15 @@ class CrashRecoveryService {
   private crashRecords: Map<string, CrashRecord> = new Map();
 
   /**
-   * Record an agent crash
+   * Record an agent crash with optional CLI process information
    */
   recordCrash(
     agentId: string,
     agentType: AgentType,
     topLevelTaskId?: string,
-    taskId?: string
+    taskId?: string,
+    cliProcessStatus?: CliProcessStatus,
+    exitCode?: number
   ): void {
     const now = Date.now();
     const existing = this.crashRecords.get(agentId);
@@ -75,6 +81,13 @@ class CrashRecoveryService {
       existing.timestamps.push(now);
       // Keep only recent crashes (last hour)
       existing.timestamps = existing.timestamps.filter((ts) => now - ts < 3_600_000);
+      // Update CLI process info
+      if (cliProcessStatus !== undefined) {
+        existing.lastCliProcessStatus = cliProcessStatus;
+      }
+      if (exitCode !== undefined) {
+        existing.lastExitCode = exitCode;
+      }
     } else {
       this.crashRecords.set(agentId, {
         agentId,
@@ -82,6 +95,8 @@ class CrashRecoveryService {
         timestamps: [now],
         topLevelTaskId,
         taskId,
+        lastCliProcessStatus: cliProcessStatus,
+        lastExitCode: exitCode,
       });
     }
 
@@ -91,6 +106,8 @@ class CrashRecoveryService {
       crashCount: this.crashRecords.get(agentId)?.timestamps.length,
       topLevelTaskId,
       taskId,
+      cliProcessStatus,
+      exitCode,
     });
   }
 
@@ -119,23 +136,52 @@ class CrashRecoveryService {
   }
 
   /**
-   * Handle agent crash with recovery logic
+   * Handle agent crash with recovery logic.
+   * Integrates with CLI process status for accurate crash detection and logging.
    */
-  handleAgentCrash(
+  async handleAgentCrash(
     agentId: string,
     agentType: AgentType,
     topLevelTaskId?: string,
     taskId?: string,
-    error?: Error
+    error?: Error,
+    cliProcessStatus?: CliProcessStatus,
+    exitCode?: number
   ): Promise<RecoveryResult> {
-    // Record the crash
-    this.recordCrash(agentId, agentType, topLevelTaskId, taskId);
+    // If CLI process info not provided, try to get it from the agent
+    let finalCliProcessStatus = cliProcessStatus;
+    let finalExitCode = exitCode;
+
+    if (finalCliProcessStatus === undefined) {
+      try {
+        const agent = await agentAccessor.findById(agentId);
+        if (agent) {
+          finalCliProcessStatus = agent.cliProcessStatus ?? undefined;
+          finalExitCode = agent.cliProcessExitCode ?? undefined;
+        }
+      } catch (e) {
+        // Ignore errors, we'll proceed without CLI info
+        logger.debug('Failed to fetch agent CLI process info', { agentId, error: e });
+      }
+    }
+
+    // Record the crash with CLI process information
+    this.recordCrash(
+      agentId,
+      agentType,
+      topLevelTaskId,
+      taskId,
+      finalCliProcessStatus,
+      finalExitCode
+    );
 
     logger.error('Handling agent crash', error || new Error('Unknown crash'), {
       agentId,
       agentType,
       topLevelTaskId,
       taskId,
+      cliProcessStatus: finalCliProcessStatus,
+      exitCode: finalExitCode,
     });
 
     // Check for crash loop
@@ -222,7 +268,8 @@ class CrashRecoveryService {
   }
 
   /**
-   * Recover a crashed worker
+   * Recover a crashed worker.
+   * Updates CLI process status and prepares task for new worker assignment.
    */
   private async recoverWorker(agentId: string, taskId?: string): Promise<RecoveryResult> {
     if (!taskId) {
@@ -246,23 +293,27 @@ class CrashRecoveryService {
     const config = configService.getSystemConfig();
     const attempts = (task.attempts || 0) + 1;
 
+    // Get crash record to include CLI info in logging
+    const crashRecord = this.crashRecords.get(agentId);
+
     // Check if max attempts reached
     if (attempts >= config.maxWorkerAttempts) {
       await taskAccessor.update(taskId, {
         state: TaskState.FAILED,
         attempts,
-        failureReason: `Worker crashed ${config.maxWorkerAttempts} times`,
+        failureReason: `Worker crashed ${config.maxWorkerAttempts} times${crashRecord?.lastCliProcessStatus ? ` (last status: ${crashRecord.lastCliProcessStatus})` : ''}`,
       });
 
       await agentAccessor.update(agentId, {
         executionState: ExecutionState.CRASHED,
+        cliProcessStatus: 'CRASHED',
       });
 
       // Notify human
       await mailAccessor.create({
         isForHuman: true,
         subject: `Task Failed: ${task.title}`,
-        body: `Task "${task.title}" has failed after ${config.maxWorkerAttempts} worker recovery attempts.\n\nTask ID: ${taskId}\nParent Task ID: ${task.parentId || 'N/A'}\n\nManual intervention required.`,
+        body: `Task "${task.title}" has failed after ${config.maxWorkerAttempts} worker recovery attempts.\n\nTask ID: ${taskId}\nParent Task ID: ${task.parentId || 'N/A'}\nLast CLI Process Status: ${crashRecord?.lastCliProcessStatus || 'unknown'}\nLast Exit Code: ${crashRecord?.lastExitCode ?? 'unknown'}\n\nManual intervention required.`,
       });
 
       await notificationService.notifyTaskFailed(
@@ -277,12 +328,20 @@ class CrashRecoveryService {
       };
     }
 
-    // Mark old worker as crashed
+    // Get session ID from the old worker for potential resume capability
+    // This allows the new worker to continue where the crashed one left off
+    const oldWorker = await agentAccessor.findById(agentId);
+    const sessionIdForResume =
+      agentProcessAdapter.getClaudeSessionId(agentId) || oldWorker?.sessionId;
+
+    // Mark old worker as crashed with CLI process status
     await agentAccessor.update(agentId, {
       executionState: ExecutionState.CRASHED,
+      cliProcessStatus: 'CRASHED',
     });
 
-    // Reset task for new worker
+    // Reset task for new worker (the reconciler will pick this up and create a new worker)
+    // Store the session ID in the task metadata for the new worker to use
     await taskAccessor.update(taskId, {
       state: TaskState.PENDING,
       assignedAgentId: null,
@@ -293,14 +352,23 @@ class CrashRecoveryService {
       oldWorkerId: agentId,
       taskId,
       attempt: attempts,
+      sessionIdForResume: sessionIdForResume ? 'available' : 'none',
+      lastCliProcessStatus: crashRecord?.lastCliProcessStatus,
+      lastExitCode: crashRecord?.lastExitCode,
     });
 
     // Log the decision
     await decisionLogAccessor.createManual(
       agentId,
       `Worker crashed, task reset for recovery attempt ${attempts}`,
-      'Worker became unresponsive or crashed',
-      JSON.stringify({ taskId, attempts })
+      `Worker became unresponsive or crashed (CLI status: ${crashRecord?.lastCliProcessStatus || 'unknown'})`,
+      JSON.stringify({
+        taskId,
+        attempts,
+        cliProcessStatus: crashRecord?.lastCliProcessStatus,
+        exitCode: crashRecord?.lastExitCode,
+        sessionIdForResume: !!sessionIdForResume,
+      })
     );
 
     return {
@@ -311,7 +379,8 @@ class CrashRecoveryService {
   }
 
   /**
-   * Recover a crashed supervisor
+   * Recover a crashed supervisor.
+   * Updates CLI process status and prepares for new supervisor creation.
    */
   private async recoverSupervisor(
     agentId: string,
@@ -335,14 +404,19 @@ class CrashRecoveryService {
       };
     }
 
-    // Mark old supervisor as crashed
+    // Get crash record to include CLI info
+    const crashRecord = this.crashRecords.get(agentId);
+
+    // Mark old supervisor as crashed with CLI process status
     await agentAccessor.update(agentId, {
       executionState: ExecutionState.CRASHED,
+      cliProcessStatus: 'CRASHED',
       currentTaskId: null,
     });
 
     // Mark all active workers for this top-level task as needing recovery
     const tasks = await taskAccessor.list({ parentId: topLevelTaskId });
+    let workersReset = 0;
     for (const task of tasks) {
       if (task.assignedAgentId && task.state === TaskState.IN_PROGRESS) {
         // Mark worker's task as pending for reassignment
@@ -351,57 +425,67 @@ class CrashRecoveryService {
           assignedAgentId: null,
         });
 
-        // Mark worker as crashed
+        // Mark worker as crashed with CLI process status
         await agentAccessor.update(task.assignedAgentId, {
           executionState: ExecutionState.CRASHED,
+          cliProcessStatus: 'KILLED', // Workers are killed when supervisor crashes
         });
+        workersReset++;
       }
     }
 
-    // Update top-level task state
+    // Update top-level task state - set to PLANNING so reconciler creates new supervisor
     await taskAccessor.update(topLevelTaskId, {
-      state: TaskState.IN_PROGRESS, // Keep in progress for new supervisor
+      state: TaskState.PLANNING,
     });
 
     // Notify human
     await mailAccessor.create({
       isForHuman: true,
       subject: `Supervisor Crashed: ${topLevelTask.title}`,
-      body: `The supervisor for task "${topLevelTask.title}" has crashed.\n\nTask ID: ${topLevelTaskId}\n\nA new supervisor needs to be started. Active workers have been reset.`,
+      body: `The supervisor for task "${topLevelTask.title}" has crashed.\n\nTask ID: ${topLevelTaskId}\nCLI Process Status: ${crashRecord?.lastCliProcessStatus || 'unknown'}\nExit Code: ${crashRecord?.lastExitCode ?? 'unknown'}\nWorkers Reset: ${workersReset}\n\nThe reconciler will create a new supervisor automatically.`,
     });
 
     await notificationService.notifyCriticalError(
       'Supervisor',
       topLevelTask.title,
-      'Supervisor crashed - new supervisor needed'
+      'Supervisor crashed - new supervisor will be created'
     );
 
     logger.info('Supervisor recovery initiated', {
       oldSupervisorId: agentId,
       topLevelTaskId,
+      workersReset,
+      lastCliProcessStatus: crashRecord?.lastCliProcessStatus,
+      lastExitCode: crashRecord?.lastExitCode,
     });
 
     return {
       success: true,
       action: 'recovered',
-      message: 'Supervisor marked as failed, top-level task ready for new supervisor',
+      message: `Supervisor marked as failed, ${workersReset} workers reset, task ready for new supervisor`,
     };
   }
 
   /**
-   * Recover the orchestrator
+   * Recover the orchestrator.
+   * Updates CLI process status and notifies humans for manual intervention.
    */
   private async recoverOrchestrator(agentId: string): Promise<RecoveryResult> {
-    // Mark old orchestrator as crashed
+    // Get crash record to include CLI info
+    const crashRecord = this.crashRecords.get(agentId);
+
+    // Mark old orchestrator as crashed with CLI process status
     await agentAccessor.update(agentId, {
       executionState: ExecutionState.CRASHED,
+      cliProcessStatus: 'CRASHED',
     });
 
     // Notify human - orchestrator recovery is critical
     await mailAccessor.create({
       isForHuman: true,
       subject: 'CRITICAL: Orchestrator Crashed',
-      body: `The system orchestrator has crashed.\n\nAgent ID: ${agentId}\n\nThe orchestrator needs to be manually restarted. All supervisors will continue running but may need health checks.`,
+      body: `The system orchestrator has crashed.\n\nAgent ID: ${agentId}\nCLI Process Status: ${crashRecord?.lastCliProcessStatus || 'unknown'}\nExit Code: ${crashRecord?.lastExitCode ?? 'unknown'}\n\nThe orchestrator needs to be manually restarted. All supervisors will continue running but may need health checks.`,
     });
 
     await notificationService.notifyCriticalError(
@@ -412,6 +496,8 @@ class CrashRecoveryService {
 
     logger.error('Orchestrator crashed, manual intervention required', {
       orchestratorId: agentId,
+      lastCliProcessStatus: crashRecord?.lastCliProcessStatus,
+      lastExitCode: crashRecord?.lastExitCode,
     });
 
     return {
@@ -422,7 +508,8 @@ class CrashRecoveryService {
   }
 
   /**
-   * Get system health status
+   * Get system health status.
+   * Includes CLI process status checks for more accurate health reporting.
    */
   async getSystemHealthStatus(): Promise<SystemHealthStatus> {
     const issues: string[] = [];
@@ -447,15 +534,54 @@ class CrashRecoveryService {
       issues.push('No active orchestrator found');
     }
 
-    // Get supervisor status
+    // Get supervisor status - check both execution state and CLI process status
     const supervisors = await agentAccessor.findByType(AgentType.SUPERVISOR);
-    const healthySupervisors = supervisors.filter(
-      (s) => s.executionState !== ExecutionState.CRASHED
-    );
+    const healthySupervisors = supervisors.filter((s) => {
+      // Check execution state
+      if (s.executionState === ExecutionState.CRASHED) {
+        return false;
+      }
+      // Check CLI process status
+      const cliStatus = s.cliProcessStatus;
+      if (cliStatus === 'CRASHED' || cliStatus === 'KILLED' || cliStatus === 'EXITED') {
+        return false;
+      }
+      // Check if process is actually running for active agents
+      if (s.executionState === ExecutionState.ACTIVE) {
+        return agentProcessAdapter.isRunning(s.id);
+      }
+      return true;
+    });
 
-    // Get worker status
+    // Get worker status - check both execution state and CLI process status
     const workers = await agentAccessor.findByType(AgentType.WORKER);
-    const healthyWorkers = workers.filter((w) => w.executionState !== ExecutionState.CRASHED);
+    const healthyWorkers = workers.filter((w) => {
+      // Check execution state
+      if (w.executionState === ExecutionState.CRASHED) {
+        return false;
+      }
+      // Check CLI process status
+      const cliStatus = w.cliProcessStatus;
+      if (cliStatus === 'CRASHED' || cliStatus === 'KILLED' || cliStatus === 'EXITED') {
+        return false;
+      }
+      // Check if process is actually running for active agents
+      if (w.executionState === ExecutionState.ACTIVE) {
+        return agentProcessAdapter.isRunning(w.id);
+      }
+      return true;
+    });
+
+    // Check for orphaned agents (DB says active but process not running)
+    const orphanedAgents = [...supervisors, ...workers].filter((a) => {
+      if (a.executionState !== ExecutionState.ACTIVE) {
+        return false;
+      }
+      return !agentProcessAdapter.isRunning(a.id);
+    });
+    if (orphanedAgents.length > 0) {
+      issues.push(`${orphanedAgents.length} orphaned agents (DB active but process not running)`);
+    }
 
     // Get crash loop agents
     const crashLoopAgents = this.getCrashLoopAgents();

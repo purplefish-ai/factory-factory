@@ -648,7 +648,7 @@ router.post('/start-worker', async (req, res) => {
       data: {
         agentId,
         taskId: task.id,
-        tmuxSession: status.tmuxSession,
+        sessionId: status.sessionId,
         isRunning: status.isRunning,
       },
     });
@@ -771,7 +771,7 @@ router.post('/recreate-worker', async (req, res) => {
       data: {
         agentId,
         taskId: validatedInput.taskId,
-        tmuxSession: status.tmuxSession,
+        sessionId: status.sessionId,
         isRunning: status.isRunning,
       },
     });

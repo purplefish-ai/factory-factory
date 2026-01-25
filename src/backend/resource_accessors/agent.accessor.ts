@@ -1,5 +1,10 @@
 import type { Agent, Prisma } from '@prisma-gen/client';
-import { AgentType, DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
+import {
+  AgentType,
+  type CliProcessStatus,
+  DesiredExecutionState,
+  ExecutionState,
+} from '@prisma-gen/client';
 import { prisma } from '../db.js';
 import { appendReconcileFailure } from '../lib/reconcile-failures.js';
 import { taskAccessor } from './task.accessor.js';
@@ -12,6 +17,8 @@ interface CreateAgentInput {
   worktreePath?: string;
   executionState?: ExecutionState;
   desiredExecutionState?: DesiredExecutionState;
+  cliProcessId?: string;
+  cliProcessStatus?: CliProcessStatus;
 }
 
 interface UpdateAgentInput {
@@ -24,6 +31,10 @@ interface UpdateAgentInput {
   lastHeartbeat?: Date | null;
   lastReconcileAt?: Date;
   reconcileFailures?: Prisma.InputJsonValue;
+  cliProcessId?: string | null;
+  cliProcessStatus?: CliProcessStatus | null;
+  cliProcessStartedAt?: Date | null;
+  cliProcessExitCode?: number | null;
 }
 
 interface ListAgentsFilters {
@@ -474,6 +485,40 @@ class AgentAccessor {
       data: {
         reconcileFailures: failures,
         lastReconcileAt: new Date(),
+      },
+    });
+  }
+
+  // ============================================================================
+  // CLI Process tracking methods
+  // ============================================================================
+
+  /**
+   * Update an agent's CLI process status
+   */
+  updateProcessStatus(
+    agentId: string,
+    status: CliProcessStatus,
+    exitCode?: number
+  ): Promise<Agent> {
+    return prisma.agent.update({
+      where: { id: agentId },
+      data: {
+        cliProcessStatus: status,
+        ...(exitCode !== undefined && { cliProcessExitCode: exitCode }),
+      },
+    });
+  }
+
+  /**
+   * Find an agent by its CLI process ID
+   */
+  findByCliProcessId(processId: string): Promise<Agent | null> {
+    return prisma.agent.findFirst({
+      where: { cliProcessId: processId },
+      include: {
+        currentTask: true,
+        assignedTasks: true,
       },
     });
   }

@@ -5,13 +5,15 @@
  * The supervisor periodically checks worker health and triggers recovery when needed.
  */
 
-import { ExecutionState, TaskState } from '@prisma-gen/client';
+import type { Agent } from '@prisma-gen/client';
+import { CliProcessStatus, ExecutionState, TaskState } from '@prisma-gen/client';
 import {
   agentAccessor,
   decisionLogAccessor,
   mailAccessor,
   taskAccessor,
 } from '../../resource_accessors/index.js';
+import { agentProcessAdapter } from '../process-adapter.js';
 import { killWorkerAndCleanup, startWorker } from '../worker/lifecycle.js';
 
 /**
@@ -25,37 +27,40 @@ const WORKER_HEALTH_THRESHOLD_MINUTES = 7;
 const MAX_WORKER_ATTEMPTS = 5;
 
 /**
+ * Worker health status with extended information
+ */
+interface UnhealthyWorkerInfo {
+  workerId: string;
+  taskId: string;
+  minutesSinceHeartbeat: number;
+  reason: 'stale_heartbeat' | 'crashed_state' | 'process_not_running' | 'process_crashed';
+  cliProcessStatus?: CliProcessStatus | null;
+}
+
+/**
  * Check health of all workers for a supervisor's top-level task
- * Returns list of unhealthy workers
+ * Returns list of unhealthy workers with detailed reasons
+ *
+ * Checks multiple indicators:
+ * 1. CLI process status (CRASHED, KILLED, EXITED)
+ * 2. Whether process is actually running via agentProcessAdapter
+ * 3. Heartbeat staleness
+ * 4. ExecutionState.CRASHED in database
  */
 export async function checkWorkerHealth(supervisorId: string): Promise<{
   healthyWorkers: string[];
-  unhealthyWorkers: Array<{
-    workerId: string;
-    taskId: string;
-    minutesSinceHeartbeat: number;
-  }>;
+  unhealthyWorkers: UnhealthyWorkerInfo[];
 }> {
-  // Get supervisor
   const supervisor = await agentAccessor.findById(supervisorId);
   if (!supervisor?.currentTaskId) {
     throw new Error(`Supervisor ${supervisorId} not found or has no task`);
   }
 
-  const topLevelTaskId = supervisor.currentTaskId;
-
-  // Get all child tasks for this top-level task that are in progress
-  const tasks = await taskAccessor.findByParentId(topLevelTaskId);
+  const tasks = await taskAccessor.findByParentId(supervisor.currentTaskId);
   const activeTasks = tasks.filter((t) => t.state === TaskState.IN_PROGRESS);
 
   const healthyWorkers: string[] = [];
-  const unhealthyWorkers: Array<{
-    workerId: string;
-    taskId: string;
-    minutesSinceHeartbeat: number;
-  }> = [];
-
-  const now = Date.now();
+  const unhealthyWorkers: UnhealthyWorkerInfo[] = [];
 
   for (const task of activeTasks) {
     if (!task.assignedAgentId) {
@@ -67,24 +72,55 @@ export async function checkWorkerHealth(supervisorId: string): Promise<{
       continue;
     }
 
-    const heartbeatTime = worker.lastHeartbeat ?? worker.createdAt;
-    const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
-
-    if (
-      minutesSinceHeartbeat >= WORKER_HEALTH_THRESHOLD_MINUTES ||
-      worker.executionState === ExecutionState.CRASHED
-    ) {
-      unhealthyWorkers.push({
-        workerId: worker.id,
-        taskId: task.id,
-        minutesSinceHeartbeat,
-      });
+    const healthCheck = getWorkerHealthStatus(worker, task.id);
+    if (healthCheck) {
+      unhealthyWorkers.push(healthCheck);
     } else {
       healthyWorkers.push(worker.id);
     }
   }
 
   return { healthyWorkers, unhealthyWorkers };
+}
+
+/**
+ * Check a single worker's health and return UnhealthyWorkerInfo if unhealthy, null if healthy.
+ */
+function getWorkerHealthStatus(worker: Agent, taskId: string): UnhealthyWorkerInfo | null {
+  const heartbeatTime = worker.lastHeartbeat ?? worker.createdAt;
+  const minutesSinceHeartbeat = Math.floor((Date.now() - heartbeatTime.getTime()) / (60 * 1000));
+  const cliStatus = worker.cliProcessStatus;
+
+  const base = { workerId: worker.id, taskId, minutesSinceHeartbeat, cliProcessStatus: cliStatus };
+
+  // Check 1: CLI process status indicates crash or unexpected exit
+  if (
+    cliStatus === CliProcessStatus.CRASHED ||
+    cliStatus === CliProcessStatus.KILLED ||
+    cliStatus === CliProcessStatus.EXITED
+  ) {
+    return { ...base, reason: 'process_crashed' };
+  }
+
+  // Check 2: ExecutionState is CRASHED in database
+  if (worker.executionState === ExecutionState.CRASHED) {
+    return { ...base, reason: 'crashed_state' };
+  }
+
+  // Check 3: Process not running in memory (handles server restart)
+  if (
+    worker.executionState === ExecutionState.ACTIVE &&
+    !agentProcessAdapter.isRunning(worker.id)
+  ) {
+    return { ...base, reason: 'process_not_running' };
+  }
+
+  // Check 4: Stale heartbeat (fallback check)
+  if (minutesSinceHeartbeat >= WORKER_HEALTH_THRESHOLD_MINUTES) {
+    return { ...base, reason: 'stale_heartbeat' };
+  }
+
+  return null;
 }
 
 /**
@@ -170,12 +206,24 @@ export async function recoverWorker(
     };
   }
 
-  // Get the old session ID before killing the worker (for resume capability)
+  // Get the old worker's session information before killing it (for resume capability)
   const oldWorker = await agentAccessor.findById(workerId);
-  const oldSessionId = oldWorker?.sessionId;
 
-  if (oldSessionId) {
-    console.log(`Worker ${workerId} has session ID ${oldSessionId}, will attempt resume`);
+  // Try to get the Claude session ID from the adapter first (more reliable if process was running)
+  // Fall back to the sessionId stored in the database
+  let resumeSessionId: string | undefined;
+
+  // First try to get the live Claude session ID from the adapter
+  const liveClaudeSessionId = agentProcessAdapter.getClaudeSessionId(workerId);
+  if (liveClaudeSessionId) {
+    resumeSessionId = liveClaudeSessionId;
+    console.log(
+      `Worker ${workerId} has live Claude session ID ${resumeSessionId}, will attempt resume`
+    );
+  } else if (oldWorker?.sessionId) {
+    // Fall back to stored session ID
+    resumeSessionId = oldWorker.sessionId;
+    console.log(`Worker ${workerId} has stored session ID ${resumeSessionId}, will attempt resume`);
   }
 
   // Kill the old worker
@@ -183,12 +231,13 @@ export async function recoverWorker(
     await killWorkerAndCleanup(workerId);
   } catch (error) {
     console.error(`Failed to kill worker ${workerId}:`, error);
-    // Continue anyway
+    // Continue anyway - the process might already be dead
   }
 
-  // Mark old worker as crashed
+  // Mark old worker as crashed and update process status
   await agentAccessor.update(workerId, {
     executionState: ExecutionState.CRASHED,
+    cliProcessStatus: CliProcessStatus.CRASHED,
   });
 
   // Update task with attempt count and set back to IN_PROGRESS
@@ -199,12 +248,12 @@ export async function recoverWorker(
     failureReason: null, // Clear failure reason since we're retrying
   });
 
-  // Create new worker with resume capability if old session ID exists
+  // Create new worker with resume capability if session ID exists
   // This preserves conversation history and context from the crashed session
   let newWorkerId: string;
   try {
     newWorkerId = await startWorker(taskId, {
-      resumeSessionId: oldSessionId ?? undefined,
+      resumeSessionId,
     });
   } catch (error) {
     console.error(`Failed to create new worker for task ${taskId}:`, error);
@@ -219,18 +268,24 @@ export async function recoverWorker(
   await decisionLogAccessor.createManual(
     supervisorId,
     `Worker crashed and recreated (attempt ${attempts}/${MAX_WORKER_ATTEMPTS})`,
-    `Worker ${workerId} became unresponsive, created new worker ${newWorkerId}`,
-    JSON.stringify({ taskId, oldWorkerId: workerId, newWorkerId, attempts })
+    `Worker ${workerId} became unresponsive, created new worker ${newWorkerId}${resumeSessionId ? ' with session resume' : ''}`,
+    JSON.stringify({
+      taskId,
+      oldWorkerId: workerId,
+      newWorkerId,
+      attempts,
+      resumeSessionId: resumeSessionId ?? null,
+    })
   );
 
   console.log(
-    `Worker recovered: ${workerId} -> ${newWorkerId} (attempt ${attempts}/${MAX_WORKER_ATTEMPTS})`
+    `Worker recovered: ${workerId} -> ${newWorkerId} (attempt ${attempts}/${MAX_WORKER_ATTEMPTS})${resumeSessionId ? ' with session resume' : ''}`
   );
 
   return {
     success: true,
     newWorkerId,
     attemptNumber: attempts,
-    message: `Worker recreated (attempt ${attempts}/${MAX_WORKER_ATTEMPTS})`,
+    message: `Worker recreated (attempt ${attempts}/${MAX_WORKER_ATTEMPTS})${resumeSessionId ? ' with session resume' : ''}`,
   };
 }

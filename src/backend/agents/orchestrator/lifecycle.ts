@@ -166,7 +166,7 @@ export async function getOrchestratorStatus(agentId: string): Promise<{
   agentId: string;
   isRunning: boolean;
   executionState: string;
-  tmuxSession: string | null;
+  sessionId: string | null;
   lastHeartbeat: Date | null;
   minutesSinceHeartbeat: number;
 }> {
@@ -187,7 +187,7 @@ export async function getOrchestratorStatus(agentId: string): Promise<{
     agentId: agent.id,
     isRunning: isOrchestratorRunning(agentId),
     executionState: agent.executionState,
-    tmuxSession: agent.tmuxSessionName,
+    sessionId: agent.sessionId,
     lastHeartbeat: agent.lastHeartbeat,
     minutesSinceHeartbeat,
   };
