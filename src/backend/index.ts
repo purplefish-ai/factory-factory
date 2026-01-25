@@ -4,11 +4,8 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { serve } from 'inngest/express';
 import { WebSocketServer } from 'ws';
-import {
-  claudeStreamingClient,
-  getSessionHistory,
-  listSessions,
-} from './clients/claude-streaming.client.js';
+import { agentProcessAdapter } from './agents/process-adapter.js';
+import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index.js';
 import { prisma } from './db.js';
 import { inngest } from './inngest/client';
 import {
@@ -381,51 +378,118 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // Track WebSocket connections per session
 const chatConnections = new Map<string, Set<import('ws').WebSocket>>();
 
-// Forward Claude process events to connected WebSocket clients
-claudeStreamingClient.on('message', ({ sessionId, message }) => {
+// ============================================================================
+// Chat Client Manager
+// ============================================================================
+
+// Simple manager for chat WebSocket clients
+const chatClients = new Map<string, ClaudeClient>();
+
+// Helper to forward data to WebSocket connections for a session
+function forwardToConnections(sessionId: string, data: unknown): void {
   const connections = chatConnections.get(sessionId);
+  if (connections) {
+    const json = JSON.stringify(data);
+    for (const ws of connections) {
+      if (ws.readyState === 1) {
+        ws.send(json);
+      }
+    }
+  }
+}
+
+// Set up event forwarding from ClaudeClient to WebSocket connections
+function setupChatClientEvents(sessionId: string, client: ClaudeClient): void {
+  client.on('message', (msg) => {
+    forwardToConnections(sessionId, { type: 'claude_message', data: msg });
+  });
+
+  client.on('stream', (event) => {
+    forwardToConnections(sessionId, { type: 'claude_message', data: event });
+  });
+
+  client.on('exit', (result) => {
+    forwardToConnections(sessionId, {
+      type: 'process_exit',
+      code: result.code,
+      claudeSessionId: result.sessionId,
+    });
+    chatClients.delete(sessionId);
+  });
+
+  client.on('error', (error) => {
+    forwardToConnections(sessionId, { type: 'error', message: error.message });
+  });
+}
+
+// Get or create a chat client for a session
+async function getOrCreateChatClient(
+  sessionId: string,
+  options: {
+    workingDir: string;
+    resumeSessionId?: string;
+    systemPrompt?: string;
+    model?: string;
+  }
+): Promise<ClaudeClient> {
+  let client = chatClients.get(sessionId);
+  if (client?.isRunning()) {
+    return client;
+  }
+
+  const clientOptions: ClaudeClientOptions = {
+    workingDir: options.workingDir,
+    resumeSessionId: options.resumeSessionId,
+    systemPrompt: options.systemPrompt,
+    model: options.model,
+    permissionMode: 'bypassPermissions', // Auto-approve for chat
+  };
+
+  client = await ClaudeClient.create(clientOptions);
+  chatClients.set(sessionId, client);
+
+  // Set up event forwarding to WebSocket clients
+  setupChatClientEvents(sessionId, client);
+
+  return client;
+}
+
+// ============================================================================
+// Agent Process Event Forwarding
+// ============================================================================
+
+// Forward agent process events to agent activity WebSocket clients
+agentProcessAdapter.on('message', ({ agentId, message }) => {
+  const connections = agentActivityConnections.get(agentId);
   if (connections) {
     const data = JSON.stringify({ type: 'claude_message', data: message });
     for (const ws of connections) {
       if (ws.readyState === 1) {
-        // WebSocket.OPEN
         ws.send(data);
       }
     }
   }
 });
 
-claudeStreamingClient.on('stderr', ({ sessionId, data }) => {
-  const connections = chatConnections.get(sessionId);
+agentProcessAdapter.on('exit', ({ agentId, code, sessionId }) => {
+  const connections = agentActivityConnections.get(agentId);
   if (connections) {
-    const message = JSON.stringify({ type: 'stderr', data });
+    const data = JSON.stringify({ type: 'process_exit', code, claudeSessionId: sessionId });
     for (const ws of connections) {
       if (ws.readyState === 1) {
-        ws.send(message);
+        ws.send(data);
       }
     }
   }
 });
 
-claudeStreamingClient.on('exit', ({ sessionId, code, claudeSessionId }) => {
-  const connections = chatConnections.get(sessionId);
+agentProcessAdapter.on('error', ({ agentId, error }) => {
+  const connections = agentActivityConnections.get(agentId);
   if (connections) {
-    const message = JSON.stringify({ type: 'process_exit', code, claudeSessionId });
+    const data = JSON.stringify({ type: 'error', message: error.message });
     for (const ws of connections) {
       if (ws.readyState === 1) {
-        ws.send(message);
-      }
-    }
-  }
-});
-
-claudeStreamingClient.on('error', ({ sessionId, error }) => {
-  const connections = chatConnections.get(sessionId);
-  if (connections) {
-    const message = JSON.stringify({ type: 'error', message: error.message });
-    for (const ws of connections) {
-      if (ws.readyState === 1) {
-        ws.send(message);
+        ws.send(data);
       }
     }
   }
@@ -447,32 +511,44 @@ async function handleChatMessage(
   }
 ) {
   switch (message.type) {
-    case 'start':
-      if (!claudeStreamingClient.isRunning(sessionId)) {
-        await claudeStreamingClient.startProcess({
-          sessionId,
-          workingDir: message.workingDir || workingDir,
-          resumeSessionId: message.resumeSessionId,
-          systemPrompt: message.systemPrompt,
-          model: message.model,
-        });
-        ws.send(JSON.stringify({ type: 'started', sessionId }));
+    case 'start': {
+      await getOrCreateChatClient(sessionId, {
+        workingDir: message.workingDir || workingDir,
+        resumeSessionId: message.resumeSessionId,
+        systemPrompt: message.systemPrompt,
+        model: message.model,
+      });
+      ws.send(JSON.stringify({ type: 'started', sessionId }));
+      break;
+    }
+
+    case 'user_input': {
+      const client = chatClients.get(sessionId);
+      if (client) {
+        client.sendMessage(message.text || '');
+      } else {
+        // Auto-start if not running
+        const newClient = await getOrCreateChatClient(sessionId, { workingDir });
+        newClient.sendMessage(message.text || '');
       }
       break;
+    }
 
-    case 'user_input':
-      handleUserInput(sessionId, workingDir, message.text || '');
-      break;
-
-    case 'stop':
-      claudeStreamingClient.killProcess(sessionId);
+    case 'stop': {
+      const client = chatClients.get(sessionId);
+      if (client) {
+        client.kill();
+        chatClients.delete(sessionId);
+      }
       ws.send(JSON.stringify({ type: 'stopped', sessionId }));
       break;
+    }
 
     case 'get_history': {
-      const claudeSessionId = claudeStreamingClient.getClaudeSessionId(sessionId);
+      const client = chatClients.get(sessionId);
+      const claudeSessionId = client?.getSessionId();
       if (claudeSessionId) {
-        const history = await getSessionHistory(claudeSessionId, workingDir);
+        const history = await SessionManager.getHistory(claudeSessionId, workingDir);
         ws.send(JSON.stringify({ type: 'history', sessionId, messages: history }));
       } else {
         ws.send(JSON.stringify({ type: 'history', sessionId, messages: [] }));
@@ -481,18 +557,16 @@ async function handleChatMessage(
     }
 
     case 'list_sessions': {
-      const sessions = await listSessions(workingDir);
+      const sessions = await SessionManager.listSessions(workingDir);
       ws.send(JSON.stringify({ type: 'sessions', sessions }));
       break;
     }
 
     case 'load_session': {
+      // Load session history without starting a process
       const targetSessionId = message.claudeSessionId;
       if (targetSessionId) {
-        // Set the Claude session ID so future messages resume this session
-        claudeStreamingClient.setClaudeSessionId(sessionId, targetSessionId);
-        // Get the history
-        const history = await getSessionHistory(targetSessionId, workingDir);
+        const history = await SessionManager.getHistory(targetSessionId, workingDir);
         ws.send(
           JSON.stringify({
             type: 'session_loaded',
@@ -506,26 +580,6 @@ async function handleChatMessage(
       break;
     }
   }
-}
-
-/**
- * Handle user input message.
- * Note: startProcess is synchronous but spawn errors are emitted asynchronously
- * via the 'error' event on the process. Error handling is done in setupListeners.
- */
-function handleUserInput(sessionId: string, workingDir: string, text: string) {
-  if (!text) {
-    return;
-  }
-
-  // Ensure process is running (startProcess is idempotent - returns existing if already running)
-  claudeStreamingClient.startProcess({
-    sessionId,
-    workingDir,
-  });
-
-  // Send message to the process via stdin
-  claudeStreamingClient.sendMessage(sessionId, text);
 }
 
 /**
@@ -556,9 +610,6 @@ function validateWorkingDir(workingDir: string): string | null {
 
 // Track WebSocket connections per agent
 const agentActivityConnections = new Map<string, Set<import('ws').WebSocket>>();
-
-// Forward Claude process events to agent activity WebSocket clients
-// (Uses same event handlers as chat since they share the claudeStreamingClient)
 
 /**
  * Calculate health status for an agent
@@ -669,19 +720,12 @@ async function handleAgentActivityUpgrade(
     }
     agentActivityConnections.get(agentId)?.add(ws);
 
-    // Also track in chatConnections so we receive claude events
-    if (!chatConnections.has(sessionId)) {
-      chatConnections.set(sessionId, new Set());
-    }
-    chatConnections.get(sessionId)?.add(ws);
-
-    // If agent has a session ID, store it for resuming
-    if (agent.sessionId) {
-      claudeStreamingClient.setClaudeSessionId(sessionId, agent.sessionId);
-    }
-
     // Build and send agent metadata
     const agentMetadata = await buildAgentMetadata(agentId);
+
+    // Get running status from agentProcessAdapter
+    const isRunning = agentProcessAdapter.isRunning(agentId);
+    const claudeSessionId = agentProcessAdapter.getClaudeSessionId(agentId) ?? agent.sessionId;
 
     // Send initial status with agent metadata
     ws.send(
@@ -689,8 +733,8 @@ async function handleAgentActivityUpgrade(
         type: 'status',
         agentId,
         sessionId,
-        running: claudeStreamingClient.isRunning(sessionId),
-        claudeSessionId: claudeStreamingClient.getClaudeSessionId(sessionId),
+        running: isRunning,
+        claudeSessionId,
         agentMetadata,
       })
     );
@@ -698,7 +742,7 @@ async function handleAgentActivityUpgrade(
     // If agent has a session ID, try to load history
     if (agent.sessionId) {
       try {
-        const history = await getSessionHistory(agent.sessionId, workingDir);
+        const history = await SessionManager.getHistory(agent.sessionId, workingDir);
         if (history.length > 0) {
           ws.send(
             JSON.stringify({
@@ -723,15 +767,6 @@ async function handleAgentActivityUpgrade(
         agentConns.delete(ws);
         if (agentConns.size === 0) {
           agentActivityConnections.delete(agentId);
-        }
-      }
-
-      // Clean up chat connections
-      const chatConns = chatConnections.get(sessionId);
-      if (chatConns) {
-        chatConns.delete(ws);
-        if (chatConns.size === 0) {
-          chatConnections.delete(sessionId);
         }
       }
     });
@@ -766,24 +801,24 @@ function handleChatUpgrade(
   wss.handleUpgrade(request, socket, head, (ws) => {
     logger.info('Chat WebSocket connection established', { sessionId, claudeSessionId });
 
-    // If a Claude session ID was provided, store it for resuming
-    if (claudeSessionId) {
-      claudeStreamingClient.setClaudeSessionId(sessionId, claudeSessionId);
-    }
-
     // Track this connection
     if (!chatConnections.has(sessionId)) {
       chatConnections.set(sessionId, new Set());
     }
     chatConnections.get(sessionId)?.add(ws);
 
+    // Get running status from chatClients
+    const client = chatClients.get(sessionId);
+    const isRunning = client?.isRunning() ?? false;
+    const currentClaudeSessionId = client?.getSessionId() ?? claudeSessionId ?? null;
+
     // Send initial status
     ws.send(
       JSON.stringify({
         type: 'status',
         sessionId,
-        running: claudeStreamingClient.isRunning(sessionId),
-        claudeSessionId: claudeStreamingClient.getClaudeSessionId(sessionId),
+        running: isRunning,
+        claudeSessionId: currentClaudeSessionId,
       })
     );
 
@@ -861,7 +896,13 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  claudeStreamingClient.cleanupAll();
+  // Clean up all chat clients
+  for (const client of chatClients.values()) {
+    client.kill();
+  }
+  chatClients.clear();
+  // Clean up all agent processes
+  agentProcessAdapter.cleanup();
   wss.close();
   server.close();
   await prisma.$disconnect();
@@ -870,7 +911,13 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
-  claudeStreamingClient.cleanupAll();
+  // Clean up all chat clients
+  for (const client of chatClients.values()) {
+    client.kill();
+  }
+  chatClients.clear();
+  // Clean up all agent processes
+  agentProcessAdapter.cleanup();
   wss.close();
   server.close();
   await prisma.$disconnect();
