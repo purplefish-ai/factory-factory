@@ -8,7 +8,7 @@ on:
 
 jobs:
   checks:
-    name: Lint, Type Check & Dead Code
+    name: Lint, Type Check, Dependencies & Dead Code
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
@@ -32,6 +32,9 @@ jobs:
 
       - name: Run Biome check
         run: pnpm check
+
+      - name: Check dependency architecture
+        run: pnpm deps:check
 
       - name: Run Knip (unused files & dependencies)
         run: pnpm knip --include files,dependencies,unlisted
