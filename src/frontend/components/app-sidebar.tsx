@@ -18,7 +18,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -89,17 +88,25 @@ export function AppSidebar() {
     }
   }, [projectsLoading, projects, selectedProjectSlug, pathname, router]);
 
-  const handleProjectChange = (slug: string) => {
-    setSelectedProjectSlug(slug);
-    localStorage.setItem(SELECTED_PROJECT_KEY, slug);
-    router.push(`/projects/${slug}/epics`);
+  const handleProjectChange = (value: string) => {
+    if (value === '__manage__') {
+      router.push('/projects');
+      return;
+    }
+    if (value === '__create__') {
+      router.push('/projects/new');
+      return;
+    }
+    setSelectedProjectSlug(value);
+    localStorage.setItem(SELECTED_PROJECT_KEY, value);
+    router.push(`/projects/${value}/epics`);
   };
 
   const projectNavItems = selectedProjectSlug
     ? [
         {
           href: `/projects/${selectedProjectSlug}/epics`,
-          label: 'Top Tasks',
+          label: 'Epics',
           icon: FolderKanban,
         },
         {
@@ -158,9 +165,6 @@ export function AppSidebar() {
 
         {projects && projects.length > 0 && (
           <div className="mt-3">
-            <label htmlFor="project-select" className="text-xs text-muted-foreground block mb-1">
-              Project
-            </label>
             <Select value={selectedProjectSlug} onValueChange={handleProjectChange}>
               <SelectTrigger id="project-select" className="w-full">
                 <SelectValue placeholder="Select a project" />
@@ -171,14 +175,14 @@ export function AppSidebar() {
                     {project.name}
                   </SelectItem>
                 ))}
+                <SelectItem value="__create__" className="text-muted-foreground">
+                  + Create project
+                </SelectItem>
+                <SelectItem value="__manage__" className="text-muted-foreground">
+                  Manage projects...
+                </SelectItem>
               </SelectContent>
             </Select>
-            <Link
-              href="/projects"
-              className="text-xs text-sidebar-primary hover:text-sidebar-primary/80 mt-1 inline-block"
-            >
-              Manage projects
-            </Link>
           </div>
         )}
       </SidebarHeader>
@@ -186,7 +190,6 @@ export function AppSidebar() {
       <SidebarContent>
         {projectNavItems.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>Project</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {projectNavItems.map((item) => {
@@ -217,7 +220,6 @@ export function AppSidebar() {
         <SidebarSeparator />
 
         <SidebarGroup>
-          <SidebarGroupLabel>System</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {globalNavItems.map((item) => {
