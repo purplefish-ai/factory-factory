@@ -3,7 +3,11 @@ import * as path from 'node:path';
 import { AgentType, TaskState } from '@prisma-gen/client';
 import { z } from 'zod';
 import { gitCommand } from '../../lib/shell.js';
-import { decisionLogAccessor, taskAccessor } from '../../resource_accessors/index.js';
+import {
+  agentAccessor,
+  decisionLogAccessor,
+  taskAccessor,
+} from '../../resource_accessors/index.js';
 import {
   getTopLevelTaskBranchName,
   verifyAgent,
@@ -54,6 +58,7 @@ async function verifyWorkerWithTask(context: McpToolContext): Promise<
 
   // currentTaskId is guaranteed by requireTask: true
   const currentTaskId = agentResult.currentTaskId as string;
+  const agent = agentResult.agent;
 
   // Fetch and validate task details
   const task = await taskAccessor.findById(currentTaskId);
@@ -67,12 +72,13 @@ async function verifyWorkerWithTask(context: McpToolContext): Promise<
     };
   }
 
-  if (!task.worktreePath) {
+  // worktreePath is now on the agent
+  if (!agent.worktreePath) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a worktree path'
+        'Agent does not have a worktree path'
       ),
     };
   }
@@ -91,7 +97,7 @@ async function verifyWorkerWithTask(context: McpToolContext): Promise<
     success: true,
     task: {
       id: task.id,
-      worktreePath: task.worktreePath,
+      worktreePath: agent.worktreePath,
       branchName: task.branchName,
       parentId: task.parentId,
     },
@@ -359,20 +365,30 @@ async function readWorktreeFile(context: McpToolContext, input: unknown): Promis
       );
     }
 
-    // Verify task has worktree
-    if (!task.worktreePath) {
+    // Get worktreePath from the task's assigned agent
+    if (!task.assignedAgentId) {
       return createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a worktree path'
+        'Task does not have an assigned agent'
       );
     }
 
+    const taskAgent = await agentAccessor.findById(task.assignedAgentId);
+    if (!taskAgent?.worktreePath) {
+      return createErrorResponse(
+        McpErrorCode.INVALID_AGENT_STATE,
+        'Task agent does not have a worktree path'
+      );
+    }
+
+    const worktreePath = taskAgent.worktreePath;
+
     // Build full file path
-    const fullPath = path.join(task.worktreePath, validatedInput.filePath);
+    const fullPath = path.join(worktreePath, validatedInput.filePath);
 
     // Security check: ensure path doesn't escape worktree
     const resolvedPath = path.resolve(fullPath);
-    const resolvedWorktree = path.resolve(task.worktreePath);
+    const resolvedWorktree = path.resolve(worktreePath);
     if (!resolvedPath.startsWith(resolvedWorktree)) {
       return createErrorResponse(
         McpErrorCode.PERMISSION_DENIED,

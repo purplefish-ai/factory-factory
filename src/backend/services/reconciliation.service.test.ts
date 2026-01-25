@@ -205,12 +205,15 @@ describe('ReconciliationService', () => {
       });
 
       mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([task]);
-      // First call (during reconcileSingleTopLevelTask) returns null
-      // Second call (after reconciliation to count supervisors) returns the created supervisor
+      // First call: check if supervisor exists (returns null → create one)
+      // Second call: find supervisor to update worktreePath
+      // Third call: count supervisors after reconciliation
       mockAgentAccessor.findSupervisorByTopLevelTaskId
         .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(newSupervisor)
         .mockResolvedValueOnce(newSupervisor);
       mockAgentAccessor.create.mockResolvedValue(newSupervisor);
+      mockAgentAccessor.update.mockResolvedValue({});
 
       const result = await reconciliationService.reconcileAll();
 
@@ -240,9 +243,15 @@ describe('ReconciliationService', () => {
         dependents: [],
       };
 
+      const newSupervisor = createAgent({ id: 'new-supervisor', type: AgentType.SUPERVISOR });
       mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([task]);
-      mockAgentAccessor.findSupervisorByTopLevelTaskId.mockResolvedValue(null);
-      mockAgentAccessor.create.mockResolvedValue(createAgent({ id: 'new-supervisor' }));
+      // First call: check if exists, Second call: find for worktreePath update, Third call: count
+      mockAgentAccessor.findSupervisorByTopLevelTaskId
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(newSupervisor)
+        .mockResolvedValueOnce(newSupervisor);
+      mockAgentAccessor.create.mockResolvedValue(newSupervisor);
+      mockAgentAccessor.update.mockResolvedValue({});
       mockTaskAccessor.update.mockResolvedValue({});
 
       await reconciliationService.reconcileAll();
@@ -251,11 +260,18 @@ describe('ReconciliationService', () => {
         repoPath: project.repoPath,
         worktreeBasePath: project.worktreeBasePath,
       });
+      // Task only gets branchName (worktreePath is now on Agent)
       expect(mockTaskAccessor.update).toHaveBeenCalledWith(
         'top-level-1',
         expect.objectContaining({
-          worktreePath: expect.any(String),
           branchName: expect.any(String),
+        })
+      );
+      // Agent gets worktreePath
+      expect(mockAgentAccessor.update).toHaveBeenCalledWith(
+        'new-supervisor',
+        expect.objectContaining({
+          worktreePath: expect.any(String),
         })
       );
     });
@@ -460,21 +476,20 @@ describe('ReconciliationService', () => {
       });
     });
 
-    it('should create infrastructure for task with missing worktree', async () => {
+    it('should create infrastructure for task with missing branch', async () => {
       const taskMissingInfra = {
         ...createTask({
           id: 'no-infra-1',
           projectId: project.id,
           parentId: topLevelTask.id,
           state: TaskState.IN_PROGRESS,
-          worktreePath: null, // Missing!
           branchName: null, // Missing!
           assignedAgentId: 'some-worker',
         }),
         project,
         parent: topLevelTask,
         children: [],
-        assignedAgent: null,
+        assignedAgent: createAgent({ id: 'some-worker', worktreePath: null }), // Agent with no worktreePath
         supervisorAgent: null,
         dependsOn: [],
         dependents: [],
@@ -487,15 +502,23 @@ describe('ReconciliationService', () => {
         branchName: 'top-level-branch',
       });
       mockTaskAccessor.update.mockResolvedValue({});
+      mockAgentAccessor.update.mockResolvedValue({});
 
       const result = await reconciliationService.reconcileAll();
 
       expect(mockGitClientFactory.forProject).toHaveBeenCalled();
+      // Task only gets branchName (worktreePath is now on Agent)
       expect(mockTaskAccessor.update).toHaveBeenCalledWith(
         'no-infra-1',
         expect.objectContaining({
-          worktreePath: expect.any(String),
           branchName: expect.any(String),
+        })
+      );
+      // Agent gets worktreePath
+      expect(mockAgentAccessor.update).toHaveBeenCalledWith(
+        'some-worker',
+        expect.objectContaining({
+          worktreePath: expect.any(String),
         })
       );
       expect(result.infrastructureCreated).toBeGreaterThan(0);
@@ -932,13 +955,15 @@ describe('ReconciliationService', () => {
       // Phase 2: One top-level task needing supervisor
       const newSupervisor = createAgent({ id: 'new-supervisor', type: AgentType.SUPERVISOR });
       mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([topLevelTask]);
-      // First call returns null (checking if exists), second returns created supervisor (counting)
+      // First call: check if exists, Second call: find for worktreePath update, Third call: count
       mockAgentAccessor.findSupervisorByTopLevelTaskId
         .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(newSupervisor)
         .mockResolvedValueOnce(newSupervisor);
       mockAgentAccessor.create
         .mockResolvedValueOnce(newSupervisor)
         .mockResolvedValueOnce(createAgent({ id: 'new-worker', type: AgentType.WORKER }));
+      mockAgentAccessor.update.mockResolvedValue({});
 
       // Phase 3: One leaf task needing worker
       mockTaskAccessor.findLeafTasksNeedingWorkers.mockResolvedValue([leafTask]);
@@ -1100,7 +1125,7 @@ describe('ReconciliationService', () => {
           projectId: project.id,
           parentId: 'nonexistent-parent',
           state: TaskState.IN_PROGRESS,
-          worktreePath: null,
+          branchName: null, // Missing branch (worktreePath is now on Agent)
         }),
         project,
         parent: null,

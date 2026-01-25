@@ -524,12 +524,13 @@ async function validateWorkerForPR(
     };
   }
 
-  if (!task.worktreePath) {
+  // worktreePath is now on the agent
+  if (!agent.worktreePath) {
     return {
       success: false,
       error: createErrorResponse(
         McpErrorCode.INVALID_AGENT_STATE,
-        'Task does not have a worktree path'
+        'Agent does not have a worktree path'
       ),
     };
   }
@@ -542,7 +543,7 @@ async function validateWorkerForPR(
         id: task.id,
         parentId: task.parentId,
         branchName: task.branchName,
-        worktreePath: task.worktreePath,
+        worktreePath: agent.worktreePath,
         title: task.title,
       },
       topLevelTask: { id: topLevelTask.id },
@@ -759,10 +760,10 @@ async function getPRStatus(context: McpToolContext, input: unknown): Promise<Mcp
       return createErrorResponse(McpErrorCode.INVALID_AGENT_STATE, 'Task does not have a PR URL');
     }
 
-    // Get PR status
+    // Get PR status (worktreePath is on the agent)
     let prStatus: PRStatus;
     try {
-      prStatus = await githubClient.getPRStatus(task.prUrl, task.worktreePath || undefined);
+      prStatus = await githubClient.getPRStatus(task.prUrl, agent.worktreePath || undefined);
     } catch (error) {
       return createErrorResponse(
         McpErrorCode.INTERNAL_ERROR,
@@ -918,7 +919,7 @@ async function listTasks(context: McpToolContext, input: unknown): Promise<McpTo
         state: t.state,
         assignedAgentId: t.assignedAgentId,
         prUrl: t.prUrl,
-        worktreePath: t.worktreePath,
+        worktreePath: t.assignedAgent?.worktreePath ?? null,
         branchName: t.branchName,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
@@ -969,7 +970,7 @@ async function getReviewQueue(context: McpToolContext, input: unknown): Promise<
         title: t.title,
         description: t.description,
         prUrl: t.prUrl,
-        worktreePath: t.worktreePath,
+        worktreePath: t.assignedAgent?.worktreePath ?? null,
         branchName: t.branchName,
         assignedAgentId: t.assignedAgentId,
         submittedAt: t.updatedAt,

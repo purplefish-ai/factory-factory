@@ -76,7 +76,6 @@ model Task {
 
   // Execution tracking (for leaf tasks)
   assignedAgentId   String?
-  worktreePath      String?
   branchName        String?
   prUrl             String?     // Draft PR URL, created after first commit
   attempts          Int         @default(0)
@@ -136,6 +135,7 @@ model Agent {
   // Session management
   tmuxSessionName         String?
   sessionId               String?             // Claude Code CLI session ID for resume
+  worktreePath            String?             // Git worktree path for this agent's workspace
 
   // Health tracking
   lastHeartbeat           DateTime?           // Last agent heartbeat (set by agent itself)

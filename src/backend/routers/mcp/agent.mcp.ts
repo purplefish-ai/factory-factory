@@ -100,7 +100,7 @@ async function getTask(context: McpToolContext, input: unknown): Promise<McpTool
       description: task.description,
       state: task.state,
       parentId: task.parentId,
-      worktreePath: task.worktreePath,
+      worktreePath: agent.worktreePath,
       branchName: task.branchName,
       prUrl: task.prUrl,
       createdAt: task.createdAt,

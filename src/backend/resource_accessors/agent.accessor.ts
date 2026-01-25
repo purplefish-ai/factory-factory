@@ -9,6 +9,7 @@ interface CreateAgentInput {
   currentTaskId?: string;
   tmuxSessionName?: string;
   sessionId?: string;
+  worktreePath?: string;
   executionState?: ExecutionState;
   desiredExecutionState?: DesiredExecutionState;
 }
@@ -17,6 +18,7 @@ interface UpdateAgentInput {
   currentTaskId?: string | null;
   tmuxSessionName?: string | null;
   sessionId?: string | null;
+  worktreePath?: string | null;
   executionState?: ExecutionState;
   desiredExecutionState?: DesiredExecutionState;
   lastHeartbeat?: Date | null;
@@ -41,6 +43,7 @@ class AgentAccessor {
         currentTaskId: data.currentTaskId,
         tmuxSessionName: data.tmuxSessionName,
         sessionId: data.sessionId,
+        worktreePath: data.worktreePath,
         executionState: data.executionState ?? ExecutionState.IDLE,
         desiredExecutionState: data.desiredExecutionState ?? DesiredExecutionState.IDLE,
       },

@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { gitCommand, validateBranchName } from '../lib/shell.js';
-import { taskAccessor } from '../resource_accessors/index.js';
+import { agentAccessor, taskAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';
 
 const logger = createLogger('worktree');
@@ -418,17 +418,22 @@ export class WorktreeService {
   }
 
   /**
-   * Remove worktree for a task
+   * Remove worktree for a task (looks up worktreePath from the assigned agent)
    */
   async removeWorktreeForTask(taskId: string): Promise<boolean> {
     const task = await taskAccessor.findById(taskId);
-
-    if (!task?.worktreePath) {
-      logger.debug('No worktree path for task', { taskId });
+    if (!task?.assignedAgentId) {
+      logger.debug('No assigned agent for task', { taskId });
       return true;
     }
 
-    return this.removeWorktree(task.worktreePath, true);
+    const agent = await agentAccessor.findById(task.assignedAgentId);
+    if (!agent?.worktreePath) {
+      logger.debug('No worktree path on agent', { taskId, agentId: task.assignedAgentId });
+      return true;
+    }
+
+    return this.removeWorktree(agent.worktreePath, true);
   }
 }
 

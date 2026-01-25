@@ -19,7 +19,7 @@ import {
   stopWorkerGracefully,
 } from '../../agents/worker/lifecycle.js';
 import { inngest } from '../../inngest/client.js';
-import { taskAccessor } from '../../resource_accessors/index.js';
+import { agentAccessor, taskAccessor } from '../../resource_accessors/index.js';
 import type { TaskWithBasicRelations } from '../../resource_accessors/task.accessor.js';
 
 const router = Router();
@@ -199,9 +199,13 @@ async function buildTopLevelTaskStatus(task: Task, baseData: Record<string, unkn
  */
 async function buildChildTaskStatus(task: Task, baseData: Record<string, unknown>) {
   let workerStatus = null;
+  let worktreePath: string | null = null;
   if (task.assignedAgentId) {
     try {
       workerStatus = await getWorkerStatus(task.assignedAgentId);
+      // Get worktreePath from the assigned agent
+      const agent = await agentAccessor.findById(task.assignedAgentId);
+      worktreePath = agent?.worktreePath ?? null;
     } catch {
       // Worker may have been deleted
     }
@@ -210,7 +214,7 @@ async function buildChildTaskStatus(task: Task, baseData: Record<string, unknown
   return {
     ...baseData,
     assignedAgentId: task.assignedAgentId,
-    worktreePath: task.worktreePath,
+    worktreePath,
     branchName: task.branchName,
     prUrl: task.prUrl,
     failureReason: task.failureReason,

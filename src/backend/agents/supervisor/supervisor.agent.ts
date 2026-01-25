@@ -151,10 +151,11 @@ export async function createSupervisor(
     resumeSessionId: options?.resumeSessionId,
   });
 
-  // Update agent with session info
+  // Update agent with session info and worktree path
   await agentAccessor.update(agent.id, {
     sessionId: sessionContext.sessionId,
     tmuxSessionName: sessionContext.tmuxSessionName,
+    worktreePath: worktreeInfo.path,
   });
 
   console.log(`Created supervisor ${agent.id} for task ${taskId}`);

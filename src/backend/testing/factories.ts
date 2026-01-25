@@ -47,7 +47,6 @@ export interface TaskOverrides {
   description?: string | null;
   state?: TaskState;
   assignedAgentId?: string | null;
-  worktreePath?: string | null;
   branchName?: string | null;
   prUrl?: string | null;
   attempts?: number;
@@ -76,7 +75,6 @@ export function createTask(overrides: TaskOverrides = {}): Task {
     description: overrides.description ?? null,
     state: overrides.state ?? defaultState,
     assignedAgentId: overrides.assignedAgentId ?? null,
-    worktreePath: overrides.worktreePath ?? null,
     branchName: overrides.branchName ?? null,
     prUrl: overrides.prUrl ?? null,
     attempts: overrides.attempts ?? 0,
@@ -97,6 +95,7 @@ export interface AgentOverrides {
   currentTaskId?: string | null;
   tmuxSessionName?: string | null;
   sessionId?: string | null;
+  worktreePath?: string | null;
   lastHeartbeat?: Date | null;
   lastReconcileAt?: Date | null;
   reconcileFailures?: object[];
@@ -115,6 +114,7 @@ export function createAgent(overrides: AgentOverrides = {}): Agent {
     currentTaskId: overrides.currentTaskId ?? null,
     tmuxSessionName: overrides.tmuxSessionName ?? null,
     sessionId: overrides.sessionId ?? null,
+    worktreePath: overrides.worktreePath ?? null,
     lastHeartbeat: overrides.lastHeartbeat ?? now,
     lastReconcileAt: overrides.lastReconcileAt ?? null,
     reconcileFailures: overrides.reconcileFailures ?? [],
