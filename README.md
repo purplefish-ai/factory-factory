@@ -1,7 +1,5 @@
-# FACTORY FACTORY
-
 <p align="center">
-  <img src="public/logo.svg" alt="Factory Factory Logo" width="80" height="80">
+  <img src="public/logo-full.svg" alt="Factory Factory" width="300" height="200">
 </p>
 
 Autonomous software development orchestration system that uses AI agents to execute tasks.
