@@ -107,7 +107,7 @@ export async function getWorkerStatus(agentId: string): Promise<{
   isRunning: boolean;
   executionState: string;
   taskId: string | null;
-  tmuxSession: string | null;
+  sessionId: string | null;
 }> {
   const agent = await agentAccessor.findById(agentId);
   if (!agent) {
@@ -119,6 +119,6 @@ export async function getWorkerStatus(agentId: string): Promise<{
     isRunning: isWorkerRunning(agentId),
     executionState: agent.executionState,
     taskId: agent.currentTaskId,
-    tmuxSession: agent.tmuxSessionName,
+    sessionId: agent.sessionId,
   };
 }

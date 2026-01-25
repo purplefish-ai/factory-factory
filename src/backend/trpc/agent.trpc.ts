@@ -1,7 +1,6 @@
 import type { Agent } from '@prisma-gen/client';
 import { AgentType, type DesiredExecutionState, ExecutionState } from '@prisma-gen/client';
 import { z } from 'zod';
-import { readSessionOutput } from '../clients/terminal.client';
 import { agentAccessor } from '../resource_accessors/agent.accessor';
 import { projectScopedProcedure } from './procedures/project-scoped.js';
 import { publicProcedure, router } from './trpc';
@@ -63,41 +62,6 @@ export const agentRouter = router({
       ...calculateAgentHealth(agent),
     };
   }),
-
-  // Get terminal output for an agent
-  getTerminalOutput: publicProcedure
-    .input(
-      z.object({
-        agentId: z.string().optional(),
-        sessionName: z.string().optional(),
-      })
-    )
-    .query(async ({ input }) => {
-      let sessionName = input.sessionName;
-
-      // If agentId provided, look up the session name
-      if (input.agentId && !sessionName) {
-        const agent = await agentAccessor.findById(input.agentId);
-        if (!agent) {
-          throw new Error(`Agent not found: ${input.agentId}`);
-        }
-        sessionName = agent.tmuxSessionName || undefined;
-      }
-
-      if (!sessionName) {
-        throw new Error('No tmux session found for agent');
-      }
-
-      try {
-        const output = await readSessionOutput(sessionName);
-        return { output, sessionName };
-      } catch (error) {
-        return {
-          output: `Error reading session: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          sessionName,
-        };
-      }
-    }),
 
   // Get agents grouped by type with health status (scoped to project from context)
   listGrouped: projectScopedProcedure.query(async ({ ctx }) => {

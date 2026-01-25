@@ -22,7 +22,14 @@
  */
 
 import type { Task } from '@prisma-gen/client';
-import { AgentType, DesiredExecutionState, ExecutionState, TaskState } from '@prisma-gen/client';
+import {
+  AgentType,
+  CliProcessStatus,
+  DesiredExecutionState,
+  ExecutionState,
+  TaskState,
+} from '@prisma-gen/client';
+import { agentProcessAdapter } from '../agents/process-adapter.js';
 import { GitClientFactory } from '../clients/git.client.js';
 import { agentAccessor, taskAccessor } from '../resource_accessors/index.js';
 import type { TaskWithRelations } from '../resource_accessors/task.accessor.js';
@@ -216,34 +223,26 @@ class ReconciliationService {
   }> {
     const errors: ReconciliationResult['errors'] = [];
     let crashesDetected = 0;
+    const processedIds = new Set<string>();
 
     try {
       const config = configService.getSystemConfig();
       const heartbeatThreshold = config.agentHeartbeatThresholdMinutes;
 
-      // Find agents that should be active but haven't sent a heartbeat recently
-      const potentiallyCrashed =
-        await agentAccessor.findPotentiallyCrashedAgents(heartbeatThreshold);
+      // Step 1: Check agents with CLI process status indicating crash
+      const step1 = await this.markAgentsWithCrashedStatus(processedIds);
+      crashesDetected += step1.count;
+      errors.push(...step1.errors);
 
-      for (const agent of potentiallyCrashed) {
-        try {
-          logger.warn('Marking agent as crashed (stale heartbeat)', {
-            agentId: agent.id,
-            agentType: agent.type,
-            lastHeartbeat: agent.lastHeartbeat?.toISOString(),
-          });
+      // Step 2: Detect orphaned agents (DB says active but process not in memory)
+      const step2 = await this.markOrphanedAgents(processedIds);
+      crashesDetected += step2.count;
+      errors.push(...step2.errors);
 
-          await agentAccessor.markAsCrashed(agent.id);
-          crashesDetected++;
-        } catch (error) {
-          errors.push({
-            entity: 'agent',
-            id: agent.id,
-            error: error instanceof Error ? error.message : String(error),
-            action: 'mark_crashed',
-          });
-        }
-      }
+      // Step 3: Find agents with stale heartbeats (fallback detection)
+      const step3 = await this.markStaleHeartbeatAgents(heartbeatThreshold, processedIds);
+      crashesDetected += step3.count;
+      errors.push(...step3.errors);
     } catch (error) {
       errors.push({
         entity: 'system',
@@ -254,6 +253,200 @@ class ReconciliationService {
     }
 
     return { crashesDetected, errors };
+  }
+
+  private async markAgentsWithCrashedStatus(processedIds: Set<string>): Promise<{
+    count: number;
+    errors: ReconciliationResult['errors'];
+  }> {
+    const errors: ReconciliationResult['errors'] = [];
+    let count = 0;
+    const agents = await this.detectAgentsWithCrashedProcessStatus();
+
+    for (const agent of agents) {
+      try {
+        logger.warn('Marking agent as crashed (CLI process status indicates crash)', {
+          agentId: agent.id,
+          agentType: agent.type,
+          cliProcessStatus: agent.cliProcessStatus,
+        });
+        await agentAccessor.markAsCrashed(agent.id);
+        processedIds.add(agent.id);
+        count++;
+      } catch (error) {
+        errors.push({
+          entity: 'agent',
+          id: agent.id,
+          error: error instanceof Error ? error.message : String(error),
+          action: 'mark_crashed_process_status',
+        });
+      }
+    }
+    return { count, errors };
+  }
+
+  private async markOrphanedAgents(processedIds: Set<string>): Promise<{
+    count: number;
+    errors: ReconciliationResult['errors'];
+  }> {
+    const errors: ReconciliationResult['errors'] = [];
+    let count = 0;
+    const agents = await this.detectOrphanedAgents();
+
+    for (const agent of agents) {
+      if (processedIds.has(agent.id)) {
+        continue;
+      }
+      try {
+        logger.warn('Marking agent as crashed (orphaned - process not found in memory)', {
+          agentId: agent.id,
+          agentType: agent.type,
+          cliProcessId: agent.cliProcessId,
+          cliProcessStatus: agent.cliProcessStatus,
+        });
+        await agentAccessor.markAsCrashed(agent.id);
+        processedIds.add(agent.id);
+        count++;
+      } catch (error) {
+        errors.push({
+          entity: 'agent',
+          id: agent.id,
+          error: error instanceof Error ? error.message : String(error),
+          action: 'mark_crashed_orphaned',
+        });
+      }
+    }
+    return { count, errors };
+  }
+
+  private async markStaleHeartbeatAgents(
+    heartbeatThreshold: number,
+    processedIds: Set<string>
+  ): Promise<{
+    count: number;
+    errors: ReconciliationResult['errors'];
+  }> {
+    const errors: ReconciliationResult['errors'] = [];
+    let count = 0;
+    const agents = await agentAccessor.findPotentiallyCrashedAgents(heartbeatThreshold);
+
+    for (const agent of agents) {
+      if (processedIds.has(agent.id)) {
+        continue;
+      }
+      try {
+        const isActuallyRunning = agentProcessAdapter.isRunning(agent.id);
+        if (!isActuallyRunning) {
+          logger.warn('Marking agent as crashed (stale heartbeat and process not running)', {
+            agentId: agent.id,
+            agentType: agent.type,
+            lastHeartbeat: agent.lastHeartbeat?.toISOString(),
+          });
+          await agentAccessor.markAsCrashed(agent.id);
+          count++;
+        } else {
+          logger.warn('Agent has stale heartbeat but process is running (may be stuck)', {
+            agentId: agent.id,
+            agentType: agent.type,
+            lastHeartbeat: agent.lastHeartbeat?.toISOString(),
+          });
+        }
+      } catch (error) {
+        errors.push({
+          entity: 'agent',
+          id: agent.id,
+          error: error instanceof Error ? error.message : String(error),
+          action: 'mark_crashed',
+        });
+      }
+    }
+    return { count, errors };
+  }
+
+  /**
+   * Detect agents whose CLI process status indicates a crash or unexpected exit.
+   * This catches cases where the process exited but the exit event properly updated the DB.
+   */
+  private async detectAgentsWithCrashedProcessStatus(): Promise<
+    Array<{
+      id: string;
+      type: AgentType;
+      cliProcessStatus: CliProcessStatus | null;
+    }>
+  > {
+    // Find agents that are supposed to be active but have crashed/killed process status
+    const agents = await agentAccessor.list({
+      executionState: ExecutionState.ACTIVE,
+    });
+
+    return agents.filter((agent) => {
+      // Check if CLI process status indicates the process died
+      const status = agent.cliProcessStatus;
+      return status === CliProcessStatus.CRASHED || status === CliProcessStatus.KILLED;
+    });
+  }
+
+  /**
+   * Detect orphaned agents: DB says they're active but process is not found in memory.
+   * This is critical for handling server restarts where all processes are lost.
+   */
+  private async detectOrphanedAgents(): Promise<
+    Array<{
+      id: string;
+      type: AgentType;
+      cliProcessId: string | null;
+      cliProcessStatus: CliProcessStatus | null;
+    }>
+  > {
+    // Find agents that DB says are active
+    const activeAgents = await agentAccessor.list({
+      executionState: ExecutionState.ACTIVE,
+    });
+
+    const orphaned: Array<{
+      id: string;
+      type: AgentType;
+      cliProcessId: string | null;
+      cliProcessStatus: CliProcessStatus | null;
+    }> = [];
+
+    for (const agent of activeAgents) {
+      // Skip agents that we already know are crashed/killed by status
+      const status = agent.cliProcessStatus;
+      if (status === CliProcessStatus.CRASHED || status === CliProcessStatus.KILLED) {
+        continue;
+      }
+
+      // Check if process is actually running in memory
+      // If DB says RUNNING/IDLE but process not found in adapter, it's orphaned
+      if (
+        (status === CliProcessStatus.RUNNING || status === CliProcessStatus.IDLE) &&
+        !agentProcessAdapter.isRunning(agent.id)
+      ) {
+        orphaned.push({
+          id: agent.id,
+          type: agent.type,
+          cliProcessId: agent.cliProcessId,
+          cliProcessStatus: status,
+        });
+      }
+
+      // Also handle case where agent has no cliProcessId but is marked as active
+      // This shouldn't happen normally but covers edge cases
+      if (!agent.cliProcessId && agent.executionState === ExecutionState.ACTIVE) {
+        const isRunning = agentProcessAdapter.isRunning(agent.id);
+        if (!isRunning) {
+          orphaned.push({
+            id: agent.id,
+            type: agent.type,
+            cliProcessId: null,
+            cliProcessStatus: status,
+          });
+        }
+      }
+    }
+
+    return orphaned;
   }
 
   // ============================================================================

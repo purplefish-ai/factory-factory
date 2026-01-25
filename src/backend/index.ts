@@ -9,11 +9,6 @@ import {
   getSessionHistory,
   listSessions,
 } from './clients/claude-streaming.client.js';
-import {
-  listTmuxSessions,
-  readSessionOutput,
-  tmuxSessionExists,
-} from './clients/terminal.client.js';
 import { prisma } from './db.js';
 import { inngest } from './inngest/client';
 import {
@@ -35,8 +30,6 @@ import {
   rateLimiter,
 } from './services/index.js';
 import { appRouter, createContext } from './trpc/index.js';
-import * as ptyManager from './websocket/pty-manager.js';
-import { connectionParamsSchema } from './websocket/schemas.js';
 
 const logger = createLogger('server');
 const app = express();
@@ -369,37 +362,6 @@ app.use(
 );
 
 // ============================================================================
-// Terminal API Endpoints
-// ============================================================================
-
-app.get('/api/terminal/sessions', async (_req, res) => {
-  try {
-    const sessions = await listTmuxSessions();
-    res.json({ sessions });
-  } catch (error) {
-    logger.error('Error listing tmux sessions', error as Error);
-    res.status(500).json({
-      error: 'Failed to list tmux sessions',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-app.get('/api/terminal/session/:sessionName/output', async (req, res) => {
-  try {
-    const { sessionName } = req.params;
-    const output = await readSessionOutput(sessionName);
-    res.json({ output, sessionName });
-  } catch (error) {
-    logger.error('Error reading session output', error as Error);
-    res.status(500).json({
-      error: 'Failed to read session output',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-// ============================================================================
 // Error Handling
 // ============================================================================
 
@@ -588,6 +550,198 @@ function validateWorkingDir(workingDir: string): string | null {
   return resolved;
 }
 
+// ============================================================================
+// WebSocket Agent Activity Handler
+// ============================================================================
+
+// Track WebSocket connections per agent
+const agentActivityConnections = new Map<string, Set<import('ws').WebSocket>>();
+
+// Forward Claude process events to agent activity WebSocket clients
+// (Uses same event handlers as chat since they share the claudeStreamingClient)
+
+/**
+ * Calculate health status for an agent
+ */
+function calculateAgentHealth(agent: {
+  lastHeartbeat: Date | null;
+  createdAt: Date;
+  executionState: string;
+}): {
+  isHealthy: boolean;
+  minutesSinceHeartbeat: number;
+} {
+  const HEALTH_THRESHOLD_MINUTES = 5;
+  const now = Date.now();
+  const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
+  const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
+  const isHealthy =
+    minutesSinceHeartbeat < HEALTH_THRESHOLD_MINUTES && agent.executionState !== 'CRASHED';
+  return { isHealthy, minutesSinceHeartbeat };
+}
+
+/**
+ * Build agent metadata for WebSocket response
+ */
+async function buildAgentMetadata(agentId: string) {
+  const agent = await prisma.agent.findUnique({
+    where: { id: agentId },
+    include: {
+      currentTask: true,
+      assignedTasks: {
+        select: { id: true, title: true, state: true },
+      },
+    },
+  });
+
+  if (!agent) {
+    return null;
+  }
+
+  const { isHealthy, minutesSinceHeartbeat } = calculateAgentHealth(agent);
+
+  return {
+    id: agent.id,
+    type: agent.type,
+    executionState: agent.executionState,
+    desiredExecutionState: agent.desiredExecutionState,
+    worktreePath: agent.worktreePath,
+    sessionId: agent.sessionId,
+    tmuxSessionName: agent.tmuxSessionName,
+    cliProcessId: agent.cliProcessId,
+    cliProcessStatus: agent.cliProcessStatus,
+    isHealthy,
+    minutesSinceHeartbeat,
+    currentTask: agent.currentTask
+      ? {
+          id: agent.currentTask.id,
+          title: agent.currentTask.title,
+          state: agent.currentTask.state,
+          branchName: agent.currentTask.branchName,
+          prUrl: agent.currentTask.prUrl,
+        }
+      : null,
+    assignedTasks: agent.assignedTasks,
+  };
+}
+
+// Handle agent activity WebSocket upgrade
+async function handleAgentActivityUpgrade(
+  request: import('http').IncomingMessage,
+  socket: import('stream').Duplex,
+  head: Buffer,
+  url: URL
+) {
+  const agentId = url.searchParams.get('agentId');
+
+  if (!agentId) {
+    logger.warn('Agent activity WebSocket: missing agentId');
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  // Look up agent to get workingDir (worktreePath)
+  const agent = await prisma.agent.findUnique({
+    where: { id: agentId },
+  });
+
+  if (!agent) {
+    logger.warn('Agent activity WebSocket: agent not found', { agentId });
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  // Use agent's worktreePath or fall back to cwd
+  const workingDir = agent.worktreePath || process.cwd();
+
+  // Use agent's session ID or cliProcessId as the session key
+  const sessionId = agent.cliProcessId || agent.sessionId || `agent-${agentId}`;
+
+  wss.handleUpgrade(request, socket, head, async (ws) => {
+    logger.info('Agent activity WebSocket connection established', { agentId, sessionId });
+
+    // Track this connection for agent activity
+    if (!agentActivityConnections.has(agentId)) {
+      agentActivityConnections.set(agentId, new Set());
+    }
+    agentActivityConnections.get(agentId)?.add(ws);
+
+    // Also track in chatConnections so we receive claude events
+    if (!chatConnections.has(sessionId)) {
+      chatConnections.set(sessionId, new Set());
+    }
+    chatConnections.get(sessionId)?.add(ws);
+
+    // If agent has a session ID, store it for resuming
+    if (agent.sessionId) {
+      claudeStreamingClient.setClaudeSessionId(sessionId, agent.sessionId);
+    }
+
+    // Build and send agent metadata
+    const agentMetadata = await buildAgentMetadata(agentId);
+
+    // Send initial status with agent metadata
+    ws.send(
+      JSON.stringify({
+        type: 'status',
+        agentId,
+        sessionId,
+        running: claudeStreamingClient.isRunning(sessionId),
+        claudeSessionId: claudeStreamingClient.getClaudeSessionId(sessionId),
+        agentMetadata,
+      })
+    );
+
+    // If agent has a session ID, try to load history
+    if (agent.sessionId) {
+      try {
+        const history = await getSessionHistory(agent.sessionId, workingDir);
+        if (history.length > 0) {
+          ws.send(
+            JSON.stringify({
+              type: 'session_loaded',
+              claudeSessionId: agent.sessionId,
+              messages: history,
+            })
+          );
+        }
+      } catch (error) {
+        logger.warn('Error loading agent session history', { agentId, error });
+      }
+    }
+
+    // Handle connection close
+    ws.on('close', () => {
+      logger.info('Agent activity WebSocket connection closed', { agentId, sessionId });
+
+      // Clean up agent activity connections
+      const agentConns = agentActivityConnections.get(agentId);
+      if (agentConns) {
+        agentConns.delete(ws);
+        if (agentConns.size === 0) {
+          agentActivityConnections.delete(agentId);
+        }
+      }
+
+      // Clean up chat connections
+      const chatConns = chatConnections.get(sessionId);
+      if (chatConns) {
+        chatConns.delete(ws);
+        if (chatConns.size === 0) {
+          chatConnections.delete(sessionId);
+        }
+      }
+    });
+
+    // Handle connection errors
+    ws.on('error', (error) => {
+      logger.error('Agent activity WebSocket error', error);
+    });
+  });
+}
+
 // Handle chat WebSocket upgrade
 function handleChatUpgrade(
   request: import('http').IncomingMessage,
@@ -663,7 +817,7 @@ function handleChatUpgrade(
 }
 
 // ============================================================================
-// WebSocket Terminal Handler
+// WebSocket Upgrade Handler
 // ============================================================================
 
 // Handle WebSocket upgrade requests
@@ -676,82 +830,13 @@ server.on('upgrade', async (request, socket, head) => {
     return;
   }
 
-  // Handle /terminal path
-  if (url.pathname !== '/terminal') {
-    socket.destroy();
+  if (url.pathname === '/agent-activity') {
+    await handleAgentActivityUpgrade(request, socket, head, url);
     return;
   }
 
-  try {
-    // Parse and validate connection parameters
-    const params = connectionParamsSchema.safeParse({
-      session: url.searchParams.get('session'),
-      cols: url.searchParams.get('cols'),
-      rows: url.searchParams.get('rows'),
-    });
-
-    if (!params.success) {
-      logger.warn('Invalid terminal connection parameters', {
-        issues: params.error.issues,
-      });
-      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-
-    const { session, cols, rows } = params.data;
-
-    // Verify tmux session exists
-    const sessionExists = await tmuxSessionExists(session);
-    if (!sessionExists) {
-      logger.warn('Tmux session not found', { session });
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-
-    // Complete the WebSocket handshake
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      logger.info('WebSocket connection established', { session, cols, rows });
-
-      // Attach PTY to the tmux session
-      const result = ptyManager.attach(session, ws, cols, rows);
-
-      if (!result.success) {
-        ws.send(JSON.stringify({ type: 'error', message: result.error }));
-        ws.close(1008, result.error);
-        return;
-      }
-
-      // Handle incoming messages
-      ws.on('message', (data) => {
-        const message = data.toString();
-        ptyManager.handleMessage(ws, message);
-      });
-
-      // Handle connection close
-      ws.on('close', () => {
-        logger.info('WebSocket connection closed', { session });
-        ptyManager.cleanup(ws);
-      });
-
-      // Handle connection errors
-      ws.on('error', (error) => {
-        logger.error('WebSocket error', error);
-        ptyManager.cleanup(ws);
-      });
-    });
-  } catch (error) {
-    logger.error('Error handling WebSocket upgrade', error as Error);
-    socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
-    socket.destroy();
-  }
-});
-
-// WebSocket connection stats endpoint
-app.get('/api/terminal/stats', (_req, res) => {
-  const stats = ptyManager.getStats();
-  res.json(stats);
+  // Unknown WebSocket path
+  socket.destroy();
 });
 
 // ============================================================================
@@ -768,14 +853,13 @@ server.listen(PORT, () => {
   console.log(`Health check (all): http://localhost:${PORT}/health/all`);
   console.log(`Inngest endpoint: http://localhost:${PORT}/api/inngest`);
   console.log(`tRPC endpoint: http://localhost:${PORT}/api/trpc`);
-  console.log(`WebSocket terminal: ws://localhost:${PORT}/terminal`);
   console.log(`WebSocket chat: ws://localhost:${PORT}/chat`);
+  console.log(`WebSocket agent-activity: ws://localhost:${PORT}/agent-activity`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  ptyManager.cleanupAll();
   claudeStreamingClient.cleanupAll();
   wss.close();
   server.close();
@@ -785,7 +869,6 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
-  ptyManager.cleanupAll();
   claudeStreamingClient.cleanupAll();
   wss.close();
   server.close();

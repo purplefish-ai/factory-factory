@@ -45,6 +45,17 @@ enum DesiredExecutionState {
   PAUSED         // We want the agent to be paused
 }
 
+// CLI process lifecycle state
+enum CliProcessStatus {
+  NOT_STARTED    // Process has not been started yet
+  STARTING       // Process is being spawned
+  RUNNING        // Process is actively running
+  IDLE           // Process is idle (waiting for input)
+  EXITED         // Process exited normally
+  CRASHED        // Process crashed unexpectedly
+  KILLED         // Process was intentionally terminated
+}
+
 // Models
 model Project {
   id                String      @id @default(cuid())
@@ -136,6 +147,12 @@ model Agent {
   tmuxSessionName         String?
   sessionId               String?             // Claude Code CLI session ID for resume
   worktreePath            String?             // Git worktree path for this agent's workspace
+
+  // CLI process tracking
+  cliProcessId            String?             // AgentProcessAdapter session ID
+  cliProcessStatus        CliProcessStatus?   // Process state
+  cliProcessStartedAt     DateTime?           // When process was started
+  cliProcessExitCode      Int?                // Exit code if process exited
 
   // Health tracking
   lastHeartbeat           DateTime?           // Last agent heartbeat (set by agent itself)
