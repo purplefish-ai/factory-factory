@@ -11,6 +11,7 @@ const mockPrisma = vi.hoisted(() => ({
     findMany: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    count: vi.fn(),
   },
   task: {
     findMany: vi.fn(),
@@ -255,6 +256,70 @@ describe('AgentAccessor', () => {
         include: expect.any(Object),
       });
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('countActiveByType', () => {
+    it('should count ACTIVE agents of specified type', async () => {
+      mockPrisma.agent.count.mockResolvedValue(3);
+
+      const result = await agentAccessor.countActiveByType(AgentType.WORKER);
+
+      expect(mockPrisma.agent.count).toHaveBeenCalledWith({
+        where: {
+          type: AgentType.WORKER,
+          OR: [
+            { executionState: ExecutionState.ACTIVE },
+            {
+              executionState: ExecutionState.IDLE,
+              desiredExecutionState: DesiredExecutionState.ACTIVE,
+            },
+          ],
+        },
+      });
+      expect(result).toBe(3);
+    });
+
+    it('should count active supervisors', async () => {
+      mockPrisma.agent.count.mockResolvedValue(2);
+
+      const result = await agentAccessor.countActiveByType(AgentType.SUPERVISOR);
+
+      expect(mockPrisma.agent.count).toHaveBeenCalledWith({
+        where: {
+          type: AgentType.SUPERVISOR,
+          OR: expect.any(Array),
+        },
+      });
+      expect(result).toBe(2);
+    });
+
+    it('should return 0 when no active agents exist', async () => {
+      mockPrisma.agent.count.mockResolvedValue(0);
+
+      const result = await agentAccessor.countActiveByType(AgentType.WORKER);
+
+      expect(result).toBe(0);
+    });
+
+    it('should include agents that are starting up (IDLE with desired ACTIVE)', async () => {
+      mockPrisma.agent.count.mockResolvedValue(5);
+
+      await agentAccessor.countActiveByType(AgentType.WORKER);
+
+      // Verify OR clause includes both currently active AND starting up agents
+      expect(mockPrisma.agent.count).toHaveBeenCalledWith({
+        where: {
+          type: AgentType.WORKER,
+          OR: [
+            { executionState: ExecutionState.ACTIVE },
+            {
+              executionState: ExecutionState.IDLE,
+              desiredExecutionState: DesiredExecutionState.ACTIVE,
+            },
+          ],
+        },
+      });
     });
   });
 

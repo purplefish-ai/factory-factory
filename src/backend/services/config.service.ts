@@ -48,6 +48,10 @@ interface SystemConfig {
   healthCheckIntervalMs: number;
   agentHeartbeatThresholdMinutes: number;
 
+  // Agent concurrency limits
+  maxConcurrentWorkers: number;
+  maxConcurrentSupervisors: number;
+
   // Crash recovery settings
   maxWorkerAttempts: number;
   crashLoopThresholdMs: number;
@@ -170,6 +174,10 @@ function loadSystemConfig(): SystemConfig {
       process.env.AGENT_HEARTBEAT_THRESHOLD_MINUTES || '7',
       10
     ),
+
+    // Agent concurrency limits
+    maxConcurrentWorkers: Number.parseInt(process.env.MAX_CONCURRENT_WORKERS || '10', 10),
+    maxConcurrentSupervisors: Number.parseInt(process.env.MAX_CONCURRENT_SUPERVISORS || '5', 10),
 
     // Crash recovery settings
     maxWorkerAttempts: Number.parseInt(process.env.MAX_WORKER_ATTEMPTS || '5', 10),
