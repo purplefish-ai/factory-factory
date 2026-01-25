@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback } from 'react';
+import { Suspense, useCallback } from 'react';
 import { GroupedMessages, useChatWebSocket } from '@/components/chat';
 
-export default function ChatPage() {
+function ChatContent() {
   const {
     messages,
     input,
@@ -137,5 +137,21 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ChatLoading() {
+  return (
+    <div className="flex flex-col h-[calc(100vh-2rem)] items-center justify-center">
+      <div className="text-muted-foreground">Loading chat...</div>
+    </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<ChatLoading />}>
+      <ChatContent />
+    </Suspense>
   );
 }
