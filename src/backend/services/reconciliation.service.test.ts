@@ -15,9 +15,11 @@ const mockAgentAccessor = vi.hoisted(() => ({
   findById: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  delete: vi.fn(),
   findSupervisorByTopLevelTaskId: vi.fn(),
   findPotentiallyCrashedAgents: vi.fn(),
   findAgentsNeedingReconciliation: vi.fn(),
+  countActiveByType: vi.fn(),
   markAsCrashed: vi.fn(),
   markReconciled: vi.fn(),
   recordReconcileFailure: vi.fn(),
@@ -41,6 +43,8 @@ const mockConfigService = vi.hoisted(() => ({
     maxWorkerAttempts: 3,
     crashLoopThresholdMs: 60_000,
     maxRapidCrashes: 3,
+    maxConcurrentWorkers: 10,
+    maxConcurrentSupervisors: 5,
   })),
 }));
 
@@ -85,20 +89,40 @@ const { reconciliationService } = await import('./reconciliation.service.js');
 
 describe('ReconciliationService', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
 
     // Default mock returns - empty arrays/null
     mockAgentAccessor.findPotentiallyCrashedAgents.mockResolvedValue([]);
     mockAgentAccessor.findAgentsNeedingReconciliation.mockResolvedValue([]);
+    mockAgentAccessor.countActiveByType.mockResolvedValue(0); // Default: no active agents
+    mockAgentAccessor.delete.mockResolvedValue({});
     mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([]);
     mockTaskAccessor.findLeafTasksNeedingWorkers.mockResolvedValue([]);
     mockTaskAccessor.findTasksWithMissingInfrastructure.mockResolvedValue([]);
     mockTaskAccessor.markReconciled.mockResolvedValue({});
     mockAgentAccessor.markReconciled.mockResolvedValue({});
+
+    // Reset config to defaults
+    mockConfigService.getSystemConfig.mockReturnValue({
+      agentHeartbeatThresholdMinutes: 5,
+      maxWorkerAttempts: 3,
+      crashLoopThresholdMs: 60_000,
+      maxRapidCrashes: 3,
+      maxConcurrentWorkers: 10,
+      maxConcurrentSupervisors: 5,
+    });
+
+    // Reset git client factory
+    mockGitClientFactory.forProject.mockReturnValue({
+      getWorktreePath: vi.fn((name: string) => `/tmp/worktrees/${name}`),
+      createWorktree: vi.fn(() =>
+        Promise.resolve({ branchName: 'test-branch', worktreePath: '/tmp/worktrees/test' })
+      ),
+    });
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   // ============================================================================
@@ -245,11 +269,12 @@ describe('ReconciliationService', () => {
 
       const newSupervisor = createAgent({ id: 'new-supervisor', type: AgentType.SUPERVISOR });
       mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([task]);
-      // First call: check if exists, Second call: find for worktreePath update, Third call: count
+      // First call: check if exists (returns null), Second call: find for worktreePath update
       mockAgentAccessor.findSupervisorByTopLevelTaskId
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(newSupervisor)
         .mockResolvedValueOnce(newSupervisor);
+      // Ensure we're under the supervisor limit
+      mockAgentAccessor.countActiveByType.mockResolvedValue(0);
       mockAgentAccessor.create.mockResolvedValue(newSupervisor);
       mockAgentAccessor.update.mockResolvedValue({});
       mockTaskAccessor.update.mockResolvedValue({});
@@ -315,8 +340,10 @@ describe('ReconciliationService', () => {
       });
 
       mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([task]);
+      // Supervisor exists and is crashed - should be reset, not recreated
       mockAgentAccessor.findSupervisorByTopLevelTaskId.mockResolvedValue(crashedSupervisor);
       mockAgentAccessor.update.mockResolvedValue({});
+      // countActiveByType should NOT be called when supervisor exists
 
       await reconciliationService.reconcileAll();
 
@@ -326,6 +353,8 @@ describe('ReconciliationService', () => {
         executionState: ExecutionState.IDLE,
       });
       expect(mockAgentAccessor.create).not.toHaveBeenCalled();
+      // countActiveByType should not be called when supervisor already exists
+      expect(mockAgentAccessor.countActiveByType).not.toHaveBeenCalled();
     });
 
     it('should not reconcile tasks not in PLANNING state', async () => {
@@ -578,6 +607,296 @@ describe('ReconciliationService', () => {
 
       expect(mockAgentAccessor.create).toHaveBeenCalledTimes(2);
       expect(result.workersCreated).toBe(2);
+    });
+  });
+
+  // ============================================================================
+  // Concurrency Limit Enforcement
+  // ============================================================================
+
+  describe('Concurrency Limit Enforcement', () => {
+    const project = createProject({ id: 'project-1' });
+    const topLevelTask = createTask({
+      id: 'top-level-1',
+      projectId: project.id,
+      parentId: null,
+      state: TaskState.IN_PROGRESS,
+      branchName: 'top-level-branch',
+    });
+
+    describe('Worker limits', () => {
+      it('should skip worker creation when limit is reached', async () => {
+        const leafTask = {
+          ...createTask({
+            id: 'leaf-1',
+            projectId: project.id,
+            parentId: topLevelTask.id,
+            state: TaskState.PENDING,
+            assignedAgentId: null,
+          }),
+          project,
+          parent: topLevelTask,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+
+        mockTaskAccessor.findLeafTasksNeedingWorkers.mockResolvedValue([leafTask]);
+        mockTaskAccessor.isBlocked.mockResolvedValue(false);
+        mockTaskAccessor.findById.mockResolvedValue({ ...leafTask, assignedAgentId: null });
+        // Simulate 10 active workers (at limit)
+        mockAgentAccessor.countActiveByType.mockResolvedValue(10);
+
+        const result = await reconciliationService.reconcileAll();
+
+        expect(mockAgentAccessor.create).not.toHaveBeenCalled();
+        expect(result.workersCreated).toBe(0);
+        expect(result.workersSkippedDueToLimit).toBe(1);
+      });
+
+      it('should create worker when under limit', async () => {
+        const leafTask = {
+          ...createTask({
+            id: 'leaf-1',
+            projectId: project.id,
+            parentId: topLevelTask.id,
+            state: TaskState.PENDING,
+            assignedAgentId: null,
+          }),
+          project,
+          parent: topLevelTask,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+
+        mockTaskAccessor.findLeafTasksNeedingWorkers.mockResolvedValue([leafTask]);
+        mockTaskAccessor.isBlocked.mockResolvedValue(false);
+        mockTaskAccessor.getTopLevelParent.mockResolvedValue(topLevelTask);
+        mockTaskAccessor.update.mockResolvedValue({});
+        mockTaskAccessor.findById.mockResolvedValue({ ...leafTask, assignedAgentId: null });
+        // Simulate 5 active workers (under limit of 10)
+        mockAgentAccessor.countActiveByType.mockResolvedValue(5);
+        mockAgentAccessor.create.mockResolvedValue(
+          createAgent({
+            id: 'new-worker',
+            type: AgentType.WORKER,
+            currentTaskId: leafTask.id,
+          })
+        );
+
+        const result = await reconciliationService.reconcileAll();
+
+        expect(mockAgentAccessor.create).toHaveBeenCalled();
+        expect(result.workersCreated).toBe(1);
+        expect(result.workersSkippedDueToLimit).toBe(0);
+      });
+
+      it('should create workers for tasks up to the limit', async () => {
+        const task1 = {
+          ...createTask({
+            id: 'leaf-1',
+            projectId: project.id,
+            parentId: topLevelTask.id,
+            state: TaskState.PENDING,
+          }),
+          project,
+          parent: topLevelTask,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+        const task2 = {
+          ...createTask({
+            id: 'leaf-2',
+            projectId: project.id,
+            parentId: topLevelTask.id,
+            state: TaskState.PENDING,
+          }),
+          project,
+          parent: topLevelTask,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+        const task3 = {
+          ...createTask({
+            id: 'leaf-3',
+            projectId: project.id,
+            parentId: topLevelTask.id,
+            state: TaskState.PENDING,
+          }),
+          project,
+          parent: topLevelTask,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+
+        mockTaskAccessor.findLeafTasksNeedingWorkers.mockResolvedValue([task1, task2, task3]);
+        mockTaskAccessor.isBlocked.mockResolvedValue(false);
+        mockTaskAccessor.getTopLevelParent.mockResolvedValue(topLevelTask);
+        mockTaskAccessor.update.mockResolvedValue({});
+        mockTaskAccessor.findById.mockImplementation((id: string) => {
+          if (id === 'leaf-1') {
+            return Promise.resolve({ ...task1, assignedAgentId: null });
+          }
+          if (id === 'leaf-2') {
+            return Promise.resolve({ ...task2, assignedAgentId: null });
+          }
+          if (id === 'leaf-3') {
+            return Promise.resolve({ ...task3, assignedAgentId: null });
+          }
+          return Promise.resolve(null);
+        });
+
+        // Start at 9 workers, limit is 10
+        // First task: 9 active -> creates worker (now 10)
+        // Second task: 10 active -> skipped
+        // Third task: 10 active -> skipped
+        mockAgentAccessor.countActiveByType
+          .mockResolvedValueOnce(9) // Check for task 1
+          .mockResolvedValueOnce(10) // Check for task 2
+          .mockResolvedValueOnce(10); // Check for task 3
+
+        mockAgentAccessor.create.mockResolvedValueOnce(createAgent({ id: 'worker-1' }));
+
+        const result = await reconciliationService.reconcileAll();
+
+        expect(mockAgentAccessor.create).toHaveBeenCalledTimes(1);
+        expect(result.workersCreated).toBe(1);
+        expect(result.workersSkippedDueToLimit).toBe(2);
+      });
+    });
+
+    describe('Supervisor limits', () => {
+      it('should skip supervisor creation when limit is reached', async () => {
+        const task = {
+          ...createTask({
+            id: 'top-level-2',
+            projectId: project.id,
+            parentId: null,
+            state: TaskState.PLANNING,
+          }),
+          project,
+          parent: null,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+
+        mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([task]);
+        // No existing supervisor
+        mockAgentAccessor.findSupervisorByTopLevelTaskId.mockResolvedValue(null);
+        // Simulate 5 active supervisors (at limit of 5)
+        mockAgentAccessor.countActiveByType.mockImplementation((type) => {
+          if (type === AgentType.SUPERVISOR) {
+            return Promise.resolve(5);
+          }
+          return Promise.resolve(0);
+        });
+
+        const result = await reconciliationService.reconcileAll();
+
+        expect(mockAgentAccessor.countActiveByType).toHaveBeenCalledWith(AgentType.SUPERVISOR);
+        expect(mockAgentAccessor.create).not.toHaveBeenCalled();
+        expect(result.supervisorsCreated).toBe(0);
+        expect(result.supervisorsSkippedDueToLimit).toBe(1);
+      });
+
+      it('should create supervisor when under limit', async () => {
+        const task = {
+          ...createTask({
+            id: 'top-level-2',
+            projectId: project.id,
+            parentId: null,
+            state: TaskState.PLANNING,
+          }),
+          project,
+          parent: null,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+
+        const newSupervisor = createAgent({
+          id: 'new-supervisor',
+          type: AgentType.SUPERVISOR,
+          currentTaskId: task.id,
+        });
+
+        mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValue([task]);
+        mockAgentAccessor.findSupervisorByTopLevelTaskId
+          .mockResolvedValueOnce(null) // Check if exists
+          .mockResolvedValueOnce(newSupervisor); // Find for worktreePath update
+        // Simulate 3 active supervisors (under limit of 5)
+        mockAgentAccessor.countActiveByType.mockResolvedValue(3);
+        mockAgentAccessor.create.mockResolvedValue(newSupervisor);
+        mockAgentAccessor.update.mockResolvedValue({});
+        mockTaskAccessor.update.mockResolvedValue({});
+
+        const result = await reconciliationService.reconcileAll();
+
+        expect(mockAgentAccessor.create).toHaveBeenCalled();
+        expect(result.supervisorsCreated).toBe(1);
+        expect(result.supervisorsSkippedDueToLimit).toBe(0);
+      });
+    });
+
+    describe('Configuration integration', () => {
+      it('should respect configurable worker limit', async () => {
+        // Override config to have a lower limit
+        mockConfigService.getSystemConfig.mockReturnValue({
+          agentHeartbeatThresholdMinutes: 5,
+          maxWorkerAttempts: 3,
+          crashLoopThresholdMs: 60_000,
+          maxRapidCrashes: 3,
+          maxConcurrentWorkers: 2, // Lower limit
+          maxConcurrentSupervisors: 5,
+        });
+
+        const leafTask = {
+          ...createTask({
+            id: 'leaf-1',
+            projectId: project.id,
+            parentId: topLevelTask.id,
+            state: TaskState.PENDING,
+            assignedAgentId: null,
+          }),
+          project,
+          parent: topLevelTask,
+          children: [],
+          assignedAgent: null,
+          supervisorAgent: null,
+          dependsOn: [],
+          dependents: [],
+        };
+
+        mockTaskAccessor.findLeafTasksNeedingWorkers.mockResolvedValue([leafTask]);
+        mockTaskAccessor.isBlocked.mockResolvedValue(false);
+        mockTaskAccessor.findById.mockResolvedValue({ ...leafTask, assignedAgentId: null });
+        // 2 active workers (at the lower limit)
+        mockAgentAccessor.countActiveByType.mockResolvedValue(2);
+
+        const result = await reconciliationService.reconcileAll();
+
+        expect(mockAgentAccessor.create).not.toHaveBeenCalled();
+        expect(result.workersSkippedDueToLimit).toBe(1);
+      });
     });
   });
 
@@ -1043,10 +1362,17 @@ describe('ReconciliationService', () => {
         dependents: [],
       };
 
+      const newSupervisor = createAgent({ id: 'supervisor-1', type: AgentType.SUPERVISOR });
+
       // First run - no supervisor exists
       mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValueOnce([task]);
-      mockAgentAccessor.findSupervisorByTopLevelTaskId.mockResolvedValueOnce(null);
-      mockAgentAccessor.create.mockResolvedValueOnce(createAgent({ id: 'supervisor-1' }));
+      // First call: check if exists (null), Second call: find for worktreePath update
+      mockAgentAccessor.findSupervisorByTopLevelTaskId
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(newSupervisor);
+      mockAgentAccessor.countActiveByType.mockResolvedValue(0); // Under limit
+      mockAgentAccessor.create.mockResolvedValueOnce(newSupervisor);
+      mockAgentAccessor.update.mockResolvedValue({});
       mockTaskAccessor.update.mockResolvedValue({});
 
       await reconciliationService.reconcileAll();
@@ -1054,13 +1380,13 @@ describe('ReconciliationService', () => {
       expect(mockAgentAccessor.create).toHaveBeenCalledTimes(1);
 
       // Second run - supervisor now exists
-      const createdSupervisor = createAgent({
+      const existingSupervisor = createAgent({
         id: 'supervisor-1',
         type: AgentType.SUPERVISOR,
         executionState: ExecutionState.ACTIVE,
       });
       mockTaskAccessor.findTopLevelTasksNeedingSupervisors.mockResolvedValueOnce([task]);
-      mockAgentAccessor.findSupervisorByTopLevelTaskId.mockResolvedValueOnce(createdSupervisor);
+      mockAgentAccessor.findSupervisorByTopLevelTaskId.mockResolvedValueOnce(existingSupervisor);
 
       await reconciliationService.reconcileAll();
 

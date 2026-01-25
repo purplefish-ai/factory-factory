@@ -10,6 +10,15 @@
  * 2. Separate task state from agent state
  * 3. Events update state, reconciler acts
  * 4. Hybrid triggering - events trigger immediate reconciliation; periodic cron catches drift
+ *
+ * Concurrency model:
+ * - The reconciliation loop is designed to run single-threaded (one reconcileAll at a time)
+ * - Concurrency limit checks (countActiveByType + create) are not atomic, but this is
+ *   acceptable because:
+ *   a) The reconciler is the only component that creates agents
+ *   b) Only one reconciliation cycle runs at a time (enforced by Inngest/cron scheduling)
+ *   c) Even if limits are slightly exceeded due to timing, the system self-corrects on
+ *      the next cycle as tasks naturally queue when at capacity
  */
 
 import type { Task } from '@prisma-gen/client';
@@ -34,6 +43,9 @@ export interface ReconciliationResult {
   workersCreated: number;
   infrastructureCreated: number;
   crashesDetected: number;
+  // Concurrency limit tracking
+  supervisorsSkippedDueToLimit: number;
+  workersSkippedDueToLimit: number;
   errors: Array<{ entity: string; id: string; error: string; action: string }>;
 }
 
@@ -73,6 +85,8 @@ class ReconciliationService {
       workersCreated: 0,
       infrastructureCreated: 0,
       crashesDetected: 0,
+      supervisorsSkippedDueToLimit: 0,
+      workersSkippedDueToLimit: 0,
       errors: [],
     };
 
@@ -87,11 +101,13 @@ class ReconciliationService {
       // Phase 2: Reconcile top-level tasks (supervisors)
       const topLevelResult = await this.reconcileTopLevelTasks();
       result.supervisorsCreated = topLevelResult.supervisorsCreated;
+      result.supervisorsSkippedDueToLimit = topLevelResult.supervisorsSkippedDueToLimit;
       result.errors.push(...topLevelResult.errors);
 
       // Phase 3: Reconcile leaf tasks (workers + infrastructure)
       const leafResult = await this.reconcileLeafTasks();
       result.workersCreated = leafResult.workersCreated;
+      result.workersSkippedDueToLimit = leafResult.workersSkippedDueToLimit;
       result.infrastructureCreated = leafResult.infrastructureCreated;
       result.errors.push(...leafResult.errors);
 
@@ -111,6 +127,8 @@ class ReconciliationService {
         workersCreated: result.workersCreated,
         infrastructureCreated: result.infrastructureCreated,
         crashesDetected: result.crashesDetected,
+        supervisorsSkippedDueToLimit: result.supervisorsSkippedDueToLimit,
+        workersSkippedDueToLimit: result.workersSkippedDueToLimit,
         errorCount: result.errors.length,
       });
     } catch (error) {
@@ -245,11 +263,13 @@ class ReconciliationService {
   private async reconcileTopLevelTasks(): Promise<{
     tasksReconciled: number;
     supervisorsCreated: number;
+    supervisorsSkippedDueToLimit: number;
     errors: ReconciliationResult['errors'];
   }> {
     const errors: ReconciliationResult['errors'] = [];
     let tasksReconciled = 0;
     let supervisorsCreated = 0;
+    let supervisorsSkippedDueToLimit = 0;
 
     try {
       // Find top-level tasks in PLANNING state that need supervisors
@@ -257,12 +277,13 @@ class ReconciliationService {
 
       for (const task of tasksNeedingSupervisors) {
         try {
-          await this.reconcileSingleTopLevelTask(task);
+          const result = await this.reconcileSingleTopLevelTask(task);
           tasksReconciled++;
-          // Check if we created a supervisor
-          const supervisor = await agentAccessor.findSupervisorByTopLevelTaskId(task.id);
-          if (supervisor) {
+          if (result.supervisorCreated) {
             supervisorsCreated++;
+          }
+          if (result.skippedDueToLimit) {
+            supervisorsSkippedDueToLimit++;
           }
         } catch (error) {
           errors.push({
@@ -282,13 +303,15 @@ class ReconciliationService {
       });
     }
 
-    return { tasksReconciled, supervisorsCreated, errors };
+    return { tasksReconciled, supervisorsCreated, supervisorsSkippedDueToLimit, errors };
   }
 
-  private async reconcileSingleTopLevelTask(task: TaskWithRelations): Promise<void> {
+  private async reconcileSingleTopLevelTask(
+    task: TaskWithRelations
+  ): Promise<{ supervisorCreated: boolean; skippedDueToLimit: boolean }> {
     // Only reconcile tasks in PLANNING state that don't have a supervisor
     if (task.state !== TaskState.PLANNING) {
-      return;
+      return { supervisorCreated: false, skippedDueToLimit: false };
     }
 
     const existingSupervisor = await agentAccessor.findSupervisorByTopLevelTaskId(task.id);
@@ -305,7 +328,21 @@ class ReconciliationService {
           taskId: task.id,
         });
       }
-      return;
+      return { supervisorCreated: false, skippedDueToLimit: false };
+    }
+
+    // Check concurrency limit before creating supervisor
+    const config = configService.getSystemConfig();
+    const activeSupervisors = await agentAccessor.countActiveByType(AgentType.SUPERVISOR);
+
+    if (activeSupervisors >= config.maxConcurrentSupervisors) {
+      logger.info('Supervisor limit reached, task will wait for capacity', {
+        taskId: task.id,
+        title: task.title,
+        activeSupervisors,
+        limit: config.maxConcurrentSupervisors,
+      });
+      return { supervisorCreated: false, skippedDueToLimit: true };
     }
 
     // Create supervisor agent
@@ -322,6 +359,7 @@ class ReconciliationService {
     await this.createTopLevelTaskInfrastructure(task);
 
     await taskAccessor.markReconciled(task.id);
+    return { supervisorCreated: true, skippedDueToLimit: false };
   }
 
   private async createTopLevelTaskInfrastructure(task: TaskWithRelations): Promise<void> {
@@ -376,12 +414,14 @@ class ReconciliationService {
   private async reconcileLeafTasks(): Promise<{
     tasksReconciled: number;
     workersCreated: number;
+    workersSkippedDueToLimit: number;
     infrastructureCreated: number;
     errors: ReconciliationResult['errors'];
   }> {
     const errors: ReconciliationResult['errors'] = [];
     let tasksReconciled = 0;
     let workersCreated = 0;
+    let workersSkippedDueToLimit = 0;
     let infrastructureCreated = 0;
 
     try {
@@ -389,6 +429,7 @@ class ReconciliationService {
       const workerResult = await this.reconcileTasksNeedingWorkers();
       tasksReconciled += workerResult.tasksReconciled;
       workersCreated += workerResult.workersCreated;
+      workersSkippedDueToLimit += workerResult.workersSkippedDueToLimit;
       infrastructureCreated += workerResult.infrastructureCreated;
       errors.push(...workerResult.errors);
 
@@ -405,18 +446,26 @@ class ReconciliationService {
       });
     }
 
-    return { tasksReconciled, workersCreated, infrastructureCreated, errors };
+    return {
+      tasksReconciled,
+      workersCreated,
+      workersSkippedDueToLimit,
+      infrastructureCreated,
+      errors,
+    };
   }
 
   private async reconcileTasksNeedingWorkers(): Promise<{
     tasksReconciled: number;
     workersCreated: number;
+    workersSkippedDueToLimit: number;
     infrastructureCreated: number;
     errors: ReconciliationResult['errors'];
   }> {
     const errors: ReconciliationResult['errors'] = [];
     let tasksReconciled = 0;
     let workersCreated = 0;
+    let workersSkippedDueToLimit = 0;
     let infrastructureCreated = 0;
 
     const tasksNeedingWorkers = await taskAccessor.findLeafTasksNeedingWorkers();
@@ -427,6 +476,9 @@ class ReconciliationService {
         tasksReconciled++;
         if (result.workerCreated) {
           workersCreated++;
+        }
+        if (result.skippedDueToLimit) {
+          workersSkippedDueToLimit++;
         }
         if (result.infrastructureCreated) {
           infrastructureCreated++;
@@ -441,7 +493,13 @@ class ReconciliationService {
       }
     }
 
-    return { tasksReconciled, workersCreated, infrastructureCreated, errors };
+    return {
+      tasksReconciled,
+      workersCreated,
+      workersSkippedDueToLimit,
+      infrastructureCreated,
+      errors,
+    };
   }
 
   private async reconcileTasksWithMissingInfrastructure(): Promise<{
@@ -474,12 +532,14 @@ class ReconciliationService {
     return { infrastructureCreated, errors };
   }
 
-  private async reconcileSingleLeafTask(
-    task: TaskWithRelations
-  ): Promise<{ workerCreated: boolean; infrastructureCreated: boolean }> {
+  private async reconcileSingleLeafTask(task: TaskWithRelations): Promise<{
+    workerCreated: boolean;
+    skippedDueToLimit: boolean;
+    infrastructureCreated: boolean;
+  }> {
     // Handle blocked tasks
     if (await this.handleBlockedTask(task)) {
-      return { workerCreated: false, infrastructureCreated: false };
+      return { workerCreated: false, skippedDueToLimit: false, infrastructureCreated: false };
     }
 
     // Handle PENDING tasks that need workers
@@ -501,11 +561,11 @@ class ReconciliationService {
         await agentAccessor.update(task.assignedAgentId, { worktreePath });
       }
       await taskAccessor.markReconciled(task.id);
-      return { workerCreated: false, infrastructureCreated: true };
+      return { workerCreated: false, skippedDueToLimit: false, infrastructureCreated: true };
     }
 
     await taskAccessor.markReconciled(task.id);
-    return { workerCreated: false, infrastructureCreated: false };
+    return { workerCreated: false, skippedDueToLimit: false, infrastructureCreated: false };
   }
 
   /**
@@ -522,16 +582,49 @@ class ReconciliationService {
   }
 
   /**
+   * Check if worker concurrency limit has been reached.
+   * Logs when limit is reached and returns limit information for tracking.
+   */
+  private async checkWorkerLimit(task: TaskWithRelations): Promise<{
+    limitReached: boolean;
+    activeWorkers: number;
+    limit: number;
+  }> {
+    const config = configService.getSystemConfig();
+    const activeWorkers = await agentAccessor.countActiveByType(AgentType.WORKER);
+    const limitReached = activeWorkers >= config.maxConcurrentWorkers;
+
+    if (limitReached) {
+      logger.info('Worker limit reached, task will wait for capacity', {
+        taskId: task.id,
+        title: task.title,
+        activeWorkers,
+        limit: config.maxConcurrentWorkers,
+      });
+    }
+
+    return { limitReached, activeWorkers, limit: config.maxConcurrentWorkers };
+  }
+
+  /**
    * Create a worker for a PENDING task and transition it to IN_PROGRESS.
    */
-  private async createWorkerForPendingTask(
-    task: TaskWithRelations
-  ): Promise<{ workerCreated: boolean; infrastructureCreated: boolean }> {
+  private async createWorkerForPendingTask(task: TaskWithRelations): Promise<{
+    workerCreated: boolean;
+    skippedDueToLimit: boolean;
+    infrastructureCreated: boolean;
+  }> {
     // Re-fetch task to check for race condition
     const freshTask = await taskAccessor.findById(task.id);
     if (freshTask?.assignedAgentId) {
       logger.debug('Task already has agent assigned (race condition avoided)', { taskId: task.id });
-      return { workerCreated: false, infrastructureCreated: false };
+      return { workerCreated: false, skippedDueToLimit: false, infrastructureCreated: false };
+    }
+
+    // Check concurrency limit before creating worker
+    const { limitReached } = await this.checkWorkerLimit(task);
+    if (limitReached) {
+      return { workerCreated: false, skippedDueToLimit: true, infrastructureCreated: false };
     }
 
     logger.info('Creating worker for leaf task', { taskId: task.id, title: task.title });
@@ -556,7 +649,7 @@ class ReconciliationService {
       });
 
       await taskAccessor.markReconciled(task.id);
-      return { workerCreated: true, infrastructureCreated: true };
+      return { workerCreated: true, skippedDueToLimit: false, infrastructureCreated: true };
     } catch (error) {
       // Clean up orphaned agent if infrastructure creation fails
       logger.error('Infrastructure creation failed, cleaning up agent', error as Error, {
@@ -571,14 +664,22 @@ class ReconciliationService {
   /**
    * Create a worker for an IN_PROGRESS task that has no assigned agent.
    */
-  private async createWorkerForOrphanedTask(
-    task: TaskWithRelations
-  ): Promise<{ workerCreated: boolean; infrastructureCreated: boolean }> {
+  private async createWorkerForOrphanedTask(task: TaskWithRelations): Promise<{
+    workerCreated: boolean;
+    skippedDueToLimit: boolean;
+    infrastructureCreated: boolean;
+  }> {
     // Re-fetch task to check for race condition
     const freshTask = await taskAccessor.findById(task.id);
     if (freshTask?.assignedAgentId) {
       logger.debug('Task already has agent assigned (race condition avoided)', { taskId: task.id });
-      return { workerCreated: false, infrastructureCreated: false };
+      return { workerCreated: false, skippedDueToLimit: false, infrastructureCreated: false };
+    }
+
+    // Check concurrency limit before creating worker
+    const { limitReached } = await this.checkWorkerLimit(task);
+    if (limitReached) {
+      return { workerCreated: false, skippedDueToLimit: true, infrastructureCreated: false };
     }
 
     logger.info('Creating missing worker for IN_PROGRESS task', {
@@ -607,7 +708,7 @@ class ReconciliationService {
       await taskAccessor.update(task.id, { assignedAgentId: worker.id });
       await taskAccessor.markReconciled(task.id);
 
-      return { workerCreated: true, infrastructureCreated };
+      return { workerCreated: true, skippedDueToLimit: false, infrastructureCreated };
     } catch (error) {
       // Clean up orphaned agent if infrastructure creation fails
       logger.error('Failed to set up orphaned task worker, cleaning up agent', error as Error, {
