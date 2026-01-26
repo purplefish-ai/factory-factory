@@ -1,6 +1,6 @@
 'use client';
 
-import { FolderKanban, Settings, Terminal } from 'lucide-react';
+import { FolderKanban, Plus, Settings, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -19,6 +19,7 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
@@ -34,6 +35,15 @@ function getProjectSlugFromPath(pathname: string): string | null {
   return match ? match[1] : null;
 }
 
+function generateWorkspaceName(): string {
+  const now = new Date();
+  const month = now.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+  const day = now.getDate();
+  const hour = now.getHours();
+  const min = now.getMinutes().toString().padStart(2, '0');
+  return `workspace-${month}${day}-${hour}${min}`;
+}
+
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -45,6 +55,24 @@ export function AppSidebar() {
   });
 
   const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
+
+  const createWorkspace = trpc.workspace.create.useMutation({
+    onSuccess: (workspace) => {
+      router.push(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
+    },
+  });
+
+  const handleCreateWorkspace = () => {
+    if (!selectedProjectId) {
+      return;
+    }
+    const name = generateWorkspaceName();
+    createWorkspace.mutate({
+      projectId: selectedProjectId,
+      name,
+      branchName: name,
+    });
+  };
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -176,6 +204,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 {projectNavItems.map((item) => {
                   const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                  const isWorkspaces = item.label === 'Workspaces';
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild isActive={isActive}>
@@ -184,6 +213,15 @@ export function AppSidebar() {
                           <span>{item.label}</span>
                         </Link>
                       </SidebarMenuButton>
+                      {isWorkspaces && (
+                        <SidebarMenuAction
+                          onClick={handleCreateWorkspace}
+                          disabled={createWorkspace.isPending}
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span className="sr-only">New Workspace</span>
+                        </SidebarMenuAction>
+                      )}
                     </SidebarMenuItem>
                   );
                 })}
