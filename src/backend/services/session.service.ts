@@ -133,18 +133,6 @@ class SessionService {
   }
 
   /**
-   * Get working status for all sessions in a workspace.
-   * Returns a map of sessionId -> isWorking
-   */
-  getWorkspaceWorkingStatus(sessionIds: string[]): Map<string, boolean> {
-    const result = new Map<string, boolean>();
-    for (const sessionId of sessionIds) {
-      result.set(sessionId, this.isSessionWorking(sessionId));
-    }
-    return result;
-  }
-
-  /**
    * Check if any session in the given list is actively working
    */
   isAnySessionWorking(sessionIds: string[]): boolean {

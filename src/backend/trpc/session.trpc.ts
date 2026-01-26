@@ -164,10 +164,21 @@ export const sessionRouter = router({
   getWorkspacesWorkingStatus: publicProcedure
     .input(z.object({ workspaceIds: z.array(z.string()) }))
     .query(async ({ input }) => {
-      const result: Record<string, boolean> = {};
+      // Fetch all sessions for all workspaces in a single query
+      const sessions = await claudeSessionAccessor.findByWorkspaceIds(input.workspaceIds);
+
+      // Group sessions by workspace ID
+      const sessionsByWorkspace = new Map<string, string[]>();
       for (const workspaceId of input.workspaceIds) {
-        const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
-        const sessionIds = sessions.map((s) => s.id);
+        sessionsByWorkspace.set(workspaceId, []);
+      }
+      for (const session of sessions) {
+        sessionsByWorkspace.get(session.workspaceId)?.push(session.id);
+      }
+
+      // Check working status for each workspace
+      const result: Record<string, boolean> = {};
+      for (const [workspaceId, sessionIds] of sessionsByWorkspace) {
         result[workspaceId] = sessionService.isAnySessionWorking(sessionIds);
       }
       return result;
