@@ -679,6 +679,8 @@ async function getOrCreateChatClient(
     resumeSessionId?: string;
     systemPrompt?: string;
     model?: string;
+    thinkingEnabled?: boolean;
+    permissionMode?: 'bypassPermissions' | 'plan';
   }
 ): Promise<ClaudeClient> {
   // Check for existing running client
@@ -714,8 +716,9 @@ async function getOrCreateChatClient(
       resumeSessionId: options.resumeSessionId,
       systemPrompt: options.systemPrompt,
       model: options.model,
-      permissionMode: 'bypassPermissions', // Auto-approve for chat
+      permissionMode: options.permissionMode ?? 'bypassPermissions',
       includePartialMessages: true, // Enable streaming events for real-time UI updates
+      thinkingEnabled: options.thinkingEnabled,
     };
 
     const newClient = await ClaudeClient.create(clientOptions);
@@ -811,6 +814,7 @@ agentProcessAdapter.on('error', ({ agentId, error }) => {
 });
 
 // Handle individual chat messages
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles multiple message types with settings
 async function handleChatMessage(
   ws: import('ws').WebSocket,
   sessionId: string,
@@ -823,15 +827,30 @@ async function handleChatMessage(
     systemPrompt?: string;
     model?: string;
     claudeSessionId?: string;
+    // Settings fields
+    thinkingEnabled?: boolean;
+    planModeEnabled?: boolean;
+    selectedModel?: string | null;
   }
 ) {
   switch (message.type) {
     case 'start': {
+      // Map planModeEnabled to permissionMode
+      const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
+
+      // Validate model value - only allow known models, fallback to default
+      const validModels = ['sonnet', 'opus'];
+      const requestedModel = message.selectedModel || message.model;
+      const model =
+        requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
+
       await getOrCreateChatClient(sessionId, {
         workingDir: message.workingDir || workingDir,
         resumeSessionId: message.resumeSessionId,
         systemPrompt: message.systemPrompt,
-        model: message.model,
+        model,
+        thinkingEnabled: message.thinkingEnabled,
+        permissionMode,
       });
       ws.send(JSON.stringify({ type: 'started', sessionId }));
       break;
@@ -879,14 +898,35 @@ async function handleChatMessage(
 
     case 'load_session': {
       // Load session history without starting a process
+      // Settings are inferred from session file (model from assistant messages,
+      // thinking mode from last user message ending with suffix)
       const targetSessionId = message.claudeSessionId;
       if (targetSessionId) {
-        const history = await SessionManager.getHistory(targetSessionId, workingDir);
+        const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
+          SessionManager.getHistory(targetSessionId, workingDir),
+          SessionManager.getSessionModel(targetSessionId, workingDir),
+          SessionManager.getSessionThinkingEnabled(targetSessionId, workingDir),
+          SessionManager.getSessionGitBranch(targetSessionId, workingDir),
+        ]);
+
+        // Map full model ID to short alias if needed
+        const selectedModel = model?.includes('opus')
+          ? 'opus'
+          : model?.includes('haiku')
+            ? 'haiku'
+            : null; // null = sonnet (default)
+
         ws.send(
           JSON.stringify({
             type: 'session_loaded',
             claudeSessionId: targetSessionId,
             messages: history,
+            gitBranch,
+            settings: {
+              selectedModel,
+              thinkingEnabled,
+              planModeEnabled: false, // Plan mode is not persisted, always default to off
+            },
           })
         );
       } else {

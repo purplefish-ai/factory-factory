@@ -10,6 +10,56 @@
  */
 
 // =============================================================================
+// Model and Settings Types
+// =============================================================================
+
+/**
+ * Information about an available model.
+ */
+export interface ModelInfo {
+  value: string;
+  displayName: string;
+}
+
+/**
+ * Available models using Claude CLI aliases.
+ * Sonnet is the default (when selectedModel is null).
+ */
+export const AVAILABLE_MODELS: ModelInfo[] = [
+  { value: 'sonnet', displayName: 'Sonnet' },
+  { value: 'opus', displayName: 'Opus' },
+];
+
+/**
+ * Chat session settings that persist per-session.
+ */
+export interface ChatSettings {
+  selectedModel: string | null; // null = use default (Sonnet)
+  thinkingEnabled: boolean;
+  planModeEnabled: boolean;
+}
+
+/**
+ * Default chat settings for new sessions.
+ */
+export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
+  selectedModel: null,
+  thinkingEnabled: false,
+  planModeEnabled: false,
+};
+
+/**
+ * Suffix appended to user messages to enable extended thinking mode in Claude CLI.
+ * This is stripped from display in the UI.
+ */
+export const THINKING_SUFFIX = ' ultrathink';
+
+/**
+ * Valid model values for server-side validation.
+ */
+export const VALID_MODEL_VALUES = AVAILABLE_MODELS.map((m) => m.value);
+
+// =============================================================================
 // Content Item Types (mirrors backend types for frontend use)
 // =============================================================================
 
@@ -336,12 +386,15 @@ export interface WebSocketMessage {
   sessions?: SessionInfo[];
   messages?: HistoryMessage[];
   agentMetadata?: AgentMetadata;
+  gitBranch?: string | null;
   // Permission request fields (Phase 9)
   requestId?: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   // AskUserQuestion fields (Phase 11)
   questions?: AskUserQuestion[];
+  // Chat settings
+  settings?: ChatSettings;
 }
 
 // =============================================================================

@@ -38,6 +38,8 @@ export interface ClaudeProcessOptions {
   initialPrompt?: string;
   /** Hook configuration for PreToolUse and Stop hooks */
   hooks?: HooksConfig;
+  /** Enable extended thinking mode */
+  thinkingEnabled?: boolean;
 }
 
 /**
@@ -415,6 +417,11 @@ export class ClaudeProcess extends EventEmitter {
     // Disallowed tools
     if (options.disallowedTools && options.disallowedTools.length > 0) {
       args.push('--disallowed-tools', options.disallowedTools.join(','));
+    }
+
+    // Extended thinking mode
+    if (options.thinkingEnabled) {
+      args.push('--thinking');
     }
 
     return args;

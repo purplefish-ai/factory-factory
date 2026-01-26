@@ -8,6 +8,7 @@ import {
   groupAdjacentToolCalls,
   isThinkingContent,
   isToolSequence,
+  THINKING_SUFFIX,
 } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import {
@@ -21,6 +22,24 @@ import { MinimalStatus, StatusBar } from './status-bar';
 import { ToolSequenceGroup } from './tool-renderers';
 import type { AgentMetadata, ConnectionState, TokenStats } from './types';
 import { useAgentWebSocket } from './use-agent-websocket';
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Strips the thinking suffix from user message text for display.
+ * This is appended when thinking mode is enabled but shouldn't be shown in the UI.
+ */
+function stripThinkingSuffix(text: string | undefined): string {
+  if (!text) {
+    return '';
+  }
+  if (text.endsWith(THINKING_SUFFIX)) {
+    return text.slice(0, -THINKING_SUFFIX.length);
+  }
+  return text;
+}
 
 // =============================================================================
 // Agent Activity Component
@@ -199,7 +218,7 @@ export function MessageItem({ message }: MessageItemProps) {
     return (
       <MessageWrapper chatMessage={message}>
         <div className="rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block">
-          {message.text}
+          {stripThinkingSuffix(message.text)}
         </div>
       </MessageWrapper>
     );
@@ -247,7 +266,7 @@ function CompactMessageItem({ message }: CompactMessageItemProps) {
   if (message.source === 'user') {
     return (
       <div className="text-sm text-muted-foreground">
-        <span className="font-medium">User:</span> {message.text}
+        <span className="font-medium">User:</span> {stripThinkingSuffix(message.text)}
       </div>
     );
   }
