@@ -1,6 +1,6 @@
 'use client';
 
-import { GitBranch, PanelRight } from 'lucide-react';
+import { Archive, GitBranch, PanelRight } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -243,6 +243,13 @@ function WorkspaceChatContent() {
     },
   });
 
+  // Archive workspace mutation
+  const archiveWorkspace = trpc.workspace.archive.useMutation({
+    onSuccess: () => {
+      router.push(`/projects/${slug}/workspaces`);
+    },
+  });
+
   // Get the first session (or most recent) to auto-load
   const initialSessionId = claudeSessions?.[0]?.id;
 
@@ -423,7 +430,23 @@ function WorkspaceChatContent() {
           )}
           <StatusDot status={status} />
         </div>
-        <ToggleRightPanelButton />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            title="Archive workspace"
+            onClick={() => {
+              if (confirm('Are you sure you want to archive this workspace?')) {
+                archiveWorkspace.mutate({ id: workspaceId });
+              }
+            }}
+            disabled={archiveWorkspace.isPending}
+          >
+            <Archive className="h-4 w-4" />
+          </Button>
+          <ToggleRightPanelButton />
+        </div>
       </div>
 
       {/* Main Content Area: Two-column layout */}
