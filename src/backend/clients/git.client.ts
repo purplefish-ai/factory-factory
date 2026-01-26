@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { gitCommand, gitCommandC } from '../lib/shell.js';
+import { gitCommand, gitCommandC } from '../lib/shell';
 
 export interface GitWorktreeInfo {
   name: string;

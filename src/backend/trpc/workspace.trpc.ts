@@ -3,11 +3,11 @@ import path from 'node:path';
 import { WorkspaceStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { GitClientFactory } from '../clients/git.client.js';
-import { gitCommand } from '../lib/shell.js';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor.js';
-import { createLogger } from '../services/logger.service.js';
-import { publicProcedure, router } from './trpc.js';
+import { GitClientFactory } from '../clients/git.client';
+import { gitCommand } from '../lib/shell';
+import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { createLogger } from '../services/logger.service';
+import { publicProcedure, router } from './trpc';
 
 const logger = createLogger('workspace-trpc');
 

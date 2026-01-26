@@ -1,1 +1,1 @@
-export { projectScopedProcedure } from './project-scoped.js';
+export { projectScopedProcedure } from './project-scoped';

@@ -6,9 +6,9 @@
 
 import type { DecisionLog } from '@prisma-gen/client';
 import { z } from 'zod';
-import { decisionLogAccessor } from '../resource_accessors/index.js';
-import { configService, createLogger, rateLimiter } from '../services/index.js';
-import { publicProcedure, router } from './trpc.js';
+import { decisionLogAccessor } from '../resource_accessors/index';
+import { configService, createLogger, rateLimiter } from '../services/index';
+import { publicProcedure, router } from './trpc';
 
 const logger = createLogger('admin-trpc');
 

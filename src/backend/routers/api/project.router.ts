@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { projectAccessor } from '../../resource_accessors/index.js';
-import { configService } from '../../services/config.service.js';
+import { projectAccessor } from '../../resource_accessors/index';
+import { configService } from '../../services/config.service';
 
 const router = Router();
 

@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Prisma, Project } from '@prisma-gen/client';
-import { GitClientFactory } from '../clients/git.client.js';
-import { prisma } from '../db.js';
+import { GitClientFactory } from '../clients/git.client';
+import { prisma } from '../db';
 
 /**
  * Execute a command with proper argument separation (no shell injection).

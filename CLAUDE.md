@@ -28,6 +28,6 @@ Agents communicate via Mail system and are triggered by Inngest events (`task.to
 ## Code Patterns
 
 - **Path aliases:** `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`
-- **Backend imports:** Use `.js` extension for local imports (ESM requirement)
+- **Backend imports:** No `.js` extension needed (tsx handles module resolution)
 - **Database access:** All queries go through `src/backend/resource_accessors/`
 - **Agent tools:** MCP tools in `src/backend/routers/mcp/`, permissions per agent type in `permissions.ts`

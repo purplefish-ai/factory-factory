@@ -5,7 +5,7 @@
  * Supports macOS, Linux, and Windows.
  */
 
-import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/shell.js';
+import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/shell';
 
 /**
  * Notification configuration

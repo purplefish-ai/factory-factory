@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PromptBuilder } from './builder.js';
+import { PromptBuilder } from './builder';
 
 describe('PromptBuilder', () => {
   describe('addFile', () => {

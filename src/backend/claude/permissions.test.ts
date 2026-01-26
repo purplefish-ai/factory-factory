@@ -11,8 +11,8 @@ import {
   ModeBasedHandler,
   READ_ONLY_TOOLS,
   shouldAutoApprove,
-} from './permissions.js';
-import type { CanUseToolRequest, HookCallbackRequest, PermissionMode } from './types.js';
+} from './permissions';
+import type { CanUseToolRequest, HookCallbackRequest, PermissionMode } from './types';
 
 // =============================================================================
 // Sample Test Data

@@ -1,5 +1,5 @@
-import { createLogger } from '../../services/logger.service.js';
-import { registerSystemTools } from './system.mcp.js';
+import { createLogger } from '../../services/logger.service';
+import { registerSystemTools } from './system.mcp';
 
 const logger = createLogger('mcp');
 
@@ -15,7 +15,7 @@ export function initializeMcpTools(): void {
   logger.info('MCP tools initialized successfully');
 }
 
-export * from './errors.js';
+export * from './errors';
 // Export everything from server
-export * from './server.js';
-export * from './types.js';
+export * from './server';
+export * from './types';
