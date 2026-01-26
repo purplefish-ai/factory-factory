@@ -194,6 +194,8 @@ interface MessageHandlerContext {
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
   /** Updates tool input for a specific tool_use_id */
   updateToolInput: (toolUseId: string, input: Record<string, unknown>) => void;
+  /** Ref to track which session has been successfully loaded */
+  loadedSessionIdRef: React.MutableRefObject<string | null>;
 }
 
 function handleStatusMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
@@ -412,6 +414,8 @@ function handleSessionsMessage(data: WebSocketMessage, ctx: MessageHandlerContex
 function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
   if (data.claudeSessionId) {
     ctx.setClaudeSessionId(data.claudeSessionId);
+    // Track that this session has been successfully loaded
+    ctx.loadedSessionIdRef.current = data.claudeSessionId;
   }
   // Set git branch (may be null if session doesn't have branch info)
   ctx.setGitBranch(data.gitBranch ?? null);
@@ -494,8 +498,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   // Store initial session ID in a ref so it's only used on first connect,
   // not when URL changes after loading a different session
-  const initialSessionIdRef = useRef<string | undefined>(initialSessionId);
+  const initialSessionIdRef = useRef<string | null>(initialSessionId ?? null);
   const hasLoadedInitialSessionRef = useRef(false);
+  // Track which session ID has been successfully loaded (via URL or picker)
+  const loadedSessionIdRef = useRef<string | null>(null);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
   // Debug message counter (instance-scoped, not global)
@@ -508,6 +514,20 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages.length]);
+
+  // Sync initial session ref with prop and reset load flag when navigating to a different session
+  // This handles: page refresh, direct URL navigation, and browser back/forward
+  useEffect(() => {
+    const sessionId = initialSessionId ?? null;
+    if (sessionId !== initialSessionIdRef.current) {
+      initialSessionIdRef.current = sessionId;
+      // Only reset the load flag if we haven't already loaded this session
+      // This prevents duplicate loads when URL updates after loading via picker
+      if (sessionId !== loadedSessionIdRef.current) {
+        hasLoadedInitialSessionRef.current = false;
+      }
+    }
+  }, [initialSessionId]);
 
   // Send message to WebSocket
   const sendWsMessage = useCallback((message: OutgoingMessage) => {
@@ -579,6 +599,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       setChatSettings,
       toolInputAccumulatorRef,
       updateToolInput,
+      loadedSessionIdRef,
     }),
     [updateToolInput]
   );
@@ -769,6 +790,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     setStartingSession(false);
     setChatSettings(DEFAULT_CHAT_SETTINGS);
     toolInputAccumulatorRef.current.clear();
+
+    // Reset session tracking refs for fresh start
+    loadedSessionIdRef.current = null;
+    hasLoadedInitialSessionRef.current = false;
+    initialSessionIdRef.current = null;
 
     // Generate new session ID
     sessionIdRef.current = generateSessionId();
