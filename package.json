@@ -40,7 +40,9 @@
     "knip": "knip --include files,dependencies,unlisted",
     "knip:all": "knip",
     "knip:fix": "knip --fix",
-    "cpd": "jscpd src"
+    "cpd": "jscpd src",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build -o storybook-static"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -123,6 +125,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.12",
+    "@storybook/addon-a11y": "10.2.0",
+    "@storybook/addon-themes": "10.2.0",
+    "@storybook/nextjs-vite": "10.2.0",
+    "@storybook/react": "10.2.0",
+    "@tailwindcss/vite": "^4.1.18",
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.10",
     "@types/react": "^19.2.9",
@@ -139,6 +146,7 @@
     "lint-staged": "^16.2.7",
     "postcss": "^8.5.6",
     "prisma": "^7.3.0",
+    "storybook": "10.2.0",
     "tailwindcss": "^4.1.18",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
