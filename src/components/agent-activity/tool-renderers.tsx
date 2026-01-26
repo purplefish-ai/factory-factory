@@ -251,12 +251,24 @@ export function ToolSequenceGroup({ sequence, defaultOpen = false }: ToolSequenc
   };
 
   // Format tool names for display (truncate if too many)
+  // Returns styled elements where error tools show in red
   const formatToolNames = () => {
-    const names = pairedCalls.map((pc) => pc.name);
-    if (names.length <= 4) {
-      return names.join(', ');
-    }
-    return `${names.slice(0, 3).join(', ')}, +${names.length - 3} more`;
+    const displayCalls = pairedCalls.length <= 4 ? pairedCalls : pairedCalls.slice(0, 3);
+    const remaining = pairedCalls.length > 4 ? pairedCalls.length - 3 : 0;
+
+    return (
+      <>
+        {displayCalls.map((call, index) => (
+          <React.Fragment key={call.id}>
+            <span className={call.status === 'error' ? 'text-destructive' : undefined}>
+              {call.name}
+            </span>
+            {index < displayCalls.length - 1 && ', '}
+          </React.Fragment>
+        ))}
+        {remaining > 0 && `, +${remaining} more`}
+      </>
+    );
   };
 
   return (
