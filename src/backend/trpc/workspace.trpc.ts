@@ -221,6 +221,18 @@ export const workspaceRouter = router({
         const worktreeName = `workspace-${workspace.id}`;
         const baseBranch = input.branchName ?? project.defaultBranch;
 
+        // Validate that the base branch exists before attempting to create worktree
+        const branchExists = await gitClient.branchExists(baseBranch);
+        if (!branchExists) {
+          // Also check if it's a remote branch (origin/branchName)
+          const remoteBranchExists = await gitClient.branchExists(`origin/${baseBranch}`);
+          if (!remoteBranchExists) {
+            throw new Error(
+              `Branch '${baseBranch}' does not exist. Please specify an existing branch or leave empty to use the default branch '${project.defaultBranch}'.`
+            );
+          }
+        }
+
         const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch);
         const worktreePath = gitClient.getWorktreePath(worktreeName);
 

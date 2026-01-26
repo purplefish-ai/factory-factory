@@ -82,11 +82,10 @@ export function AppSidebar() {
     }
     const name = generateWorkspaceName();
 
-    // Create workspace
+    // Create workspace (branchName defaults to project's default branch)
     const workspace = await createWorkspace.mutateAsync({
       projectId: selectedProjectId,
       name,
-      branchName: name,
     });
 
     // Create a Claude session for the workspace
