@@ -55,7 +55,9 @@ class ReconciliationService {
     const worktreeName = `workspace-${workspaceId}`;
     const baseBranch = workspace.branchName ?? project.defaultBranch;
 
-    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch);
+    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
+      branchPrefix: project.githubOwner ?? undefined,
+    });
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
     await workspaceAccessor.update(workspaceId, {
