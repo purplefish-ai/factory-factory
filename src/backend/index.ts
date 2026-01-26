@@ -961,6 +961,7 @@ function handleTerminalUpgrade(
     terminalConnections.get(workspaceId)?.add(ws);
 
     // Send initial status
+    logger.debug('Sending initial status message', { workspaceId });
     ws.send(JSON.stringify({ type: 'status', connected: true }));
 
     // Handle messages
@@ -968,18 +969,33 @@ function handleTerminalUpgrade(
     ws.on('message', async (data) => {
       try {
         const message = JSON.parse(data.toString());
+        logger.debug('Received terminal message', {
+          workspaceId,
+          type: message.type,
+          terminalId: message.terminalId,
+        });
 
         switch (message.type) {
           case 'create': {
+            logger.info('Creating terminal', {
+              workspaceId,
+              cols: message.cols,
+              rows: message.rows,
+            });
             // Get workspace to find working directory
             const workspace = await workspaceAccessor.findById(workspaceId);
             if (!workspace?.worktreePath) {
+              logger.warn('Workspace not found or has no worktree', { workspaceId });
               ws.send(
                 JSON.stringify({ type: 'error', message: 'Workspace not found or has no worktree' })
               );
               return;
             }
 
+            logger.info('Creating terminal with worktree', {
+              workspaceId,
+              worktreePath: workspace.worktreePath,
+            });
             const terminalId = await terminalService.createTerminal({
               workspaceId,
               workingDir: workspace.worktreePath,
@@ -988,48 +1004,87 @@ function handleTerminalUpgrade(
             });
 
             // Set up output forwarding - include terminalId so frontend can route to correct tab
+            logger.debug('Setting up output forwarding', { terminalId });
             terminalService.onOutput(terminalId, (output) => {
               if (ws.readyState === 1) {
+                logger.debug('Forwarding output to client', {
+                  terminalId,
+                  outputLen: output.length,
+                });
                 ws.send(JSON.stringify({ type: 'output', terminalId, data: output }));
+              } else {
+                logger.warn('Cannot forward output - WebSocket not open', {
+                  terminalId,
+                  readyState: ws.readyState,
+                });
               }
             });
 
             // Set up exit handler - include terminalId so frontend can route to correct tab
             terminalService.onExit(terminalId, (exitCode) => {
+              logger.info('Terminal process exited', { terminalId, exitCode });
               if (ws.readyState === 1) {
                 ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
               }
             });
 
+            logger.info('Sending created message to client', { terminalId });
             ws.send(JSON.stringify({ type: 'created', terminalId }));
             break;
           }
 
           case 'input': {
             if (message.terminalId && message.data) {
-              terminalService.writeToTerminal(workspaceId, message.terminalId, message.data);
+              logger.debug('Writing input to terminal', {
+                terminalId: message.terminalId,
+                dataLen: message.data.length,
+              });
+              const success = terminalService.writeToTerminal(
+                workspaceId,
+                message.terminalId,
+                message.data
+              );
+              if (!success) {
+                logger.warn('Failed to write to terminal', {
+                  workspaceId,
+                  terminalId: message.terminalId,
+                });
+              }
+            } else {
+              logger.warn('Input message missing terminalId or data', { message });
             }
             break;
           }
 
           case 'resize': {
             if (message.terminalId && message.cols && message.rows) {
+              logger.debug('Resizing terminal', {
+                terminalId: message.terminalId,
+                cols: message.cols,
+                rows: message.rows,
+              });
               terminalService.resizeTerminal(
                 workspaceId,
                 message.terminalId,
                 message.cols,
                 message.rows
               );
+            } else {
+              logger.warn('Resize message missing required fields', { message });
             }
             break;
           }
 
           case 'destroy': {
             if (message.terminalId) {
+              logger.info('Destroying terminal', { terminalId: message.terminalId });
               terminalService.destroyTerminal(workspaceId, message.terminalId);
             }
             break;
           }
+
+          default:
+            logger.warn('Unknown message type', { type: message.type });
         }
       } catch (error) {
         logger.error('Error handling terminal message', error as Error);
@@ -1107,38 +1162,37 @@ server.listen(PORT, async () => {
   console.log(`WebSocket terminal: ws://localhost:${PORT}/terminal`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully');
+// Shared cleanup logic
+const performCleanup = async () => {
   // Clean up all chat clients
   for (const client of chatClients.values()) {
     client.kill();
   }
   chatClients.clear();
-  // Clean up all terminals
+  // Clean up all terminals (disposes listeners before killing)
   terminalService.cleanup();
   // Clean up all agent processes
   agentProcessAdapter.cleanup();
+  // Close WebSocket server
   wss.close();
+  // Close HTTP server
   server.close();
+  // Disconnect from database
   await prisma.$disconnect();
+  // Give child processes a moment to terminate
+  await new Promise((resolve) => setTimeout(resolve, 100));
+};
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  await performCleanup();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
-  // Clean up all chat clients
-  for (const client of chatClients.values()) {
-    client.kill();
-  }
-  chatClients.clear();
-  // Clean up all terminals
-  terminalService.cleanup();
-  // Clean up all agent processes
-  agentProcessAdapter.cleanup();
-  wss.close();
-  server.close();
-  await prisma.$disconnect();
+  await performCleanup();
   process.exit(0);
 });
 

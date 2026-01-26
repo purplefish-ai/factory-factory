@@ -38,6 +38,7 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
   useEffect(() => {
     let terminal: import('@xterm/xterm').Terminal | null = null;
     let fitAddon: import('@xterm/addon-fit').FitAddon | null = null;
+    let mounted = true;
 
     const initTerminal = async () => {
       if (!containerRef.current) {
@@ -55,6 +56,10 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
       // @ts-expect-error CSS imports are handled by bundler
       // biome-ignore lint/plugin: dynamic import required for CSS in client component
       await import('@xterm/xterm/css/xterm.css');
+
+      if (!mounted) {
+        return;
+      }
 
       terminal = new Terminal({
         cursorBlink: true,
@@ -123,6 +128,7 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
     const cleanup = initTerminal();
 
     return () => {
+      mounted = false;
       cleanup.then((cleanupFn) => cleanupFn?.());
     };
   }, []); // Empty deps - only run once on mount

@@ -22,6 +22,8 @@ export interface TerminalInstance {
   cols: number;
   rows: number;
   createdAt: Date;
+  // Disposables for cleaning up event listeners
+  disposables: (() => void)[];
 }
 
 export interface CreateTerminalOptions {
@@ -102,6 +104,36 @@ class TerminalService {
       },
     });
 
+    // Track disposables for cleanup
+    const disposables: (() => void)[] = [];
+
+    // Set up output listener
+    const dataDisposable = pty.onData((data: string) => {
+      const listeners = this.outputListeners.get(terminalId);
+      if (listeners) {
+        for (const listener of listeners) {
+          listener(data);
+        }
+      }
+    });
+    disposables.push(() => dataDisposable.dispose());
+
+    // Set up exit listener
+    const exitDisposable = pty.onExit(({ exitCode }: { exitCode: number }) => {
+      logger.info('Terminal exited', { terminalId, exitCode });
+      const listeners = this.exitListeners.get(terminalId);
+      if (listeners) {
+        for (const listener of listeners) {
+          listener(exitCode);
+        }
+      }
+      // Clean up (but not during forced cleanup - check if still tracked)
+      if (this.terminals.get(workspaceId)?.has(terminalId)) {
+        this.destroyTerminal(workspaceId, terminalId);
+      }
+    });
+    disposables.push(() => exitDisposable.dispose());
+
     // Create terminal instance
     const instance: TerminalInstance = {
       id: terminalId,
@@ -110,6 +142,7 @@ class TerminalService {
       cols,
       rows,
       createdAt: new Date(),
+      disposables,
     };
 
     // Store in workspace terminals map
@@ -117,29 +150,6 @@ class TerminalService {
       this.terminals.set(workspaceId, new Map());
     }
     this.terminals.get(workspaceId)?.set(terminalId, instance);
-
-    // Set up output listener
-    pty.onData((data: string) => {
-      const listeners = this.outputListeners.get(terminalId);
-      if (listeners) {
-        for (const listener of listeners) {
-          listener(data);
-        }
-      }
-    });
-
-    // Set up exit listener
-    pty.onExit(({ exitCode }: { exitCode: number }) => {
-      logger.info('Terminal exited', { terminalId, exitCode });
-      const listeners = this.exitListeners.get(terminalId);
-      if (listeners) {
-        for (const listener of listeners) {
-          listener(exitCode);
-        }
-      }
-      // Clean up
-      this.destroyTerminal(workspaceId, terminalId);
-    });
 
     logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
 
@@ -192,22 +202,31 @@ class TerminalService {
       return false;
     }
 
+    // Remove from maps FIRST to prevent re-entry from exit handler
+    workspaceTerminals.delete(terminalId);
+    if (workspaceTerminals.size === 0) {
+      this.terminals.delete(workspaceId);
+    }
+
+    // Clean up our listeners
+    this.outputListeners.delete(terminalId);
+    this.exitListeners.delete(terminalId);
+
+    // Dispose PTY event listeners before killing
+    for (const dispose of instance.disposables) {
+      try {
+        dispose();
+      } catch {
+        // Ignore disposal errors
+      }
+    }
+
     // Kill the PTY process
     try {
       instance.pty.kill();
     } catch (error) {
       logger.warn('Error killing terminal', { terminalId, error });
     }
-
-    // Remove from maps
-    workspaceTerminals.delete(terminalId);
-    if (workspaceTerminals.size === 0) {
-      this.terminals.delete(workspaceId);
-    }
-
-    // Clean up listeners
-    this.outputListeners.delete(terminalId);
-    this.exitListeners.delete(terminalId);
 
     logger.info('Terminal destroyed', { terminalId, workspaceId });
     return true;
