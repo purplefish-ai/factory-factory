@@ -23,6 +23,17 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
   const lastOutputLengthRef = useRef(0);
 
+  // Store callbacks in refs to avoid reinitializing terminal when they change
+  // This is critical because onData/onResize depend on parent state (tabs)
+  // and would otherwise cause the terminal to dispose/recreate on every output
+  const onDataRef = useRef(onData);
+  const onResizeRef = useRef(onResize);
+
+  useEffect(() => {
+    onDataRef.current = onData;
+    onResizeRef.current = onResize;
+  }, [onData, onResize]);
+
   // Initialize terminal
   useEffect(() => {
     let terminal: import('@xterm/xterm').Terminal | null = null;
@@ -84,19 +95,19 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
-      // Report initial size
-      onResize(terminal.cols, terminal.rows);
+      // Report initial size via ref to get latest callback
+      onResizeRef.current(terminal.cols, terminal.rows);
 
-      // Handle user input
+      // Handle user input via ref to always use latest callback
       terminal.onData((data) => {
-        onData(data);
+        onDataRef.current(data);
       });
 
-      // Handle resize
+      // Handle resize via ref to always use latest callback
       const resizeObserver = new ResizeObserver(() => {
         if (fitAddonRef.current && terminalRef.current) {
           fitAddonRef.current.fit();
-          onResize(terminalRef.current.cols, terminalRef.current.rows);
+          onResizeRef.current(terminalRef.current.cols, terminalRef.current.rows);
         }
       });
 
@@ -114,7 +125,7 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
     return () => {
       cleanup.then((cleanupFn) => cleanupFn?.());
     };
-  }, [onData, onResize]);
+  }, []); // Empty deps - only run once on mount
 
   // Write output to terminal
   useEffect(() => {
