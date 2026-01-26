@@ -90,6 +90,18 @@ class ClaudeSessionAccessor {
       orderBy: { updatedAt: 'desc' },
     });
   }
+
+  /**
+   * Find sessions for multiple workspaces in a single query.
+   */
+  findByWorkspaceIds(workspaceIds: string[]): Promise<ClaudeSession[]> {
+    return prisma.claudeSession.findMany({
+      where: {
+        workspaceId: { in: workspaceIds },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
 }
 
 export const claudeSessionAccessor = new ClaudeSessionAccessor();
