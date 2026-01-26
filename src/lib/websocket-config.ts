@@ -5,9 +5,10 @@
 
 /**
  * Port number for WebSocket connections to the backend.
- * In development, this matches the BACKEND_PORT env var (defaults to 3001).
+ * Configurable via NEXT_PUBLIC_BACKEND_PORT env var (defaults to 3001).
+ * This allows running dev and production servers on different ports simultaneously.
  */
-export const WEBSOCKET_PORT = 3001;
+export const WEBSOCKET_PORT = Number(process.env.NEXT_PUBLIC_BACKEND_PORT) || 3001;
 
 /**
  * Maximum reconnection attempts before giving up.

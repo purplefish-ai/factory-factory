@@ -1,8 +1,9 @@
 'use client';
 
 import { AlertCircle, AlertTriangle, FileCode, Loader2 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
@@ -35,10 +36,13 @@ function formatFileSize(bytes: number): string {
 // =============================================================================
 
 export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
+  const { resolvedTheme } = useTheme();
   const { data, isLoading, error } = trpc.workspace.readFile.useQuery({
     workspaceId,
     path: filePath,
   });
+
+  const syntaxTheme = resolvedTheme === 'dark' ? oneDark : oneLight;
 
   if (isLoading) {
     return (
@@ -107,7 +111,7 @@ export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
         ) : (
           <SyntaxHighlighter
             language={data.language}
-            style={oneLight}
+            style={syntaxTheme}
             showLineNumbers
             wrapLines
             customStyle={{

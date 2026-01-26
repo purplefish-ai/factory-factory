@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '../frontend/components/app-sidebar';
+import { ThemeProvider } from '../frontend/components/theme-provider';
 import { TRPCProvider } from '../frontend/lib/providers';
 
 export const metadata: Metadata = {
@@ -13,14 +14,20 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-screen bg-background font-sans antialiased">
-        <TRPCProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset className="p-3">{children}</SidebarInset>
-          </SidebarProvider>
-        </TRPCProvider>
+        <ThemeProvider>
+          <TRPCProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <SidebarInset className="p-3">{children}</SidebarInset>
+            </SidebarProvider>
+          </TRPCProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

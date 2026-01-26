@@ -29,6 +29,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { setProjectContext, trpc } from '../lib/trpc';
 import { Logo } from './logo';
+import { ThemeToggle } from './theme-toggle';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
@@ -326,7 +327,10 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
-        <p className="text-xs text-muted-foreground">Phase 7: Production Ready</p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">Phase 7: Production Ready</p>
+          <ThemeToggle />
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
