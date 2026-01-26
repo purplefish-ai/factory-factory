@@ -90,6 +90,9 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
     // Show error in pending tab if there is one
     const pendingTabId = pendingTabIdRef.current;
     if (pendingTabId) {
+      // Clear the pending tab ref since creation failed
+      pendingTabIdRef.current = null;
+
       setTabs((prev) =>
         prev.map((tab) =>
           tab.id === pendingTabId
@@ -98,6 +101,10 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
         )
       );
     }
+
+    // Clear any orphaned buffer entries that won't be claimed
+    // This prevents memory leaks when terminal creation fails
+    outputBufferRef.current.clear();
   }, []);
 
   const { connected, create, sendInput, resize, destroy } = useTerminalWebSocket({
@@ -129,19 +136,31 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
   // Close terminal tab
   const handleCloseTab = useCallback(
     (id: string) => {
-      // Find the tab to get its terminalId before removing it
-      const tab = tabs.find((t) => t.id === id);
-      if (tab?.terminalId) {
-        // Destroy the server-side terminal process
-        destroy(tab.terminalId);
-      }
+      setTabs((prev) => {
+        // Find the tab to get its terminalId before removing it
+        const tab = prev.find((t) => t.id === id);
+        if (tab?.terminalId) {
+          // Destroy the server-side terminal process
+          destroy(tab.terminalId);
+          // Clean up any buffered output for this terminal
+          outputBufferRef.current.delete(tab.terminalId);
+        }
 
-      setTabs((prev) => prev.filter((t) => t.id !== id));
-      if (activeTabId === id) {
-        setActiveTabId(tabs.length > 1 ? (tabs[tabs.length - 2]?.id ?? null) : null);
-      }
+        const filtered = prev.filter((t) => t.id !== id);
+
+        // Update active tab if we're closing the current one
+        // Use setTimeout to avoid state update during render
+        if (activeTabId === id) {
+          const closedIndex = prev.findIndex((t) => t.id === id);
+          // Prefer the tab before the closed one, or the first remaining tab
+          const newActiveTab = filtered[closedIndex - 1] ?? filtered[0];
+          setTimeout(() => setActiveTabId(newActiveTab?.id ?? null), 0);
+        }
+
+        return filtered;
+      });
     },
-    [activeTabId, tabs, destroy]
+    [activeTabId, destroy]
   );
 
   // Handle terminal input - send to the active tab's terminal

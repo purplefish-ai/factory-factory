@@ -21,6 +21,7 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const lastOutputLengthRef = useRef(0);
 
   // Store callbacks in refs to avoid reinitializing terminal when they change
@@ -116,20 +117,22 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
         }
       });
 
+      resizeObserverRef.current = resizeObserver;
       resizeObserver.observe(containerRef.current);
-
-      // Cleanup on unmount
-      return () => {
-        resizeObserver.disconnect();
-        terminal?.dispose();
-      };
     };
 
-    const cleanup = initTerminal();
+    initTerminal();
 
+    // Cleanup on unmount - done synchronously to ensure proper cleanup
     return () => {
       mounted = false;
-      cleanup.then((cleanupFn) => cleanupFn?.());
+      // Disconnect ResizeObserver synchronously
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+      // Dispose terminal
+      terminalRef.current?.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
     };
   }, []); // Empty deps - only run once on mount
 

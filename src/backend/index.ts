@@ -1137,8 +1137,21 @@ function handleTerminalUpgrade(
             logger.warn('Unknown message type', { type: message.type });
         }
       } catch (error) {
-        logger.error('Error handling terminal message', error as Error);
-        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+        const err = error as Error;
+        // Determine if this is a parse error or an operation error
+        const isParsError = err instanceof SyntaxError;
+        const errorMessage = isParsError
+          ? 'Invalid message format'
+          : `Operation failed: ${err.message}`;
+
+        logger.error('Error handling terminal message', err, {
+          workspaceId,
+          isParsError,
+        });
+
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'error', message: errorMessage }));
+        }
       }
     });
 

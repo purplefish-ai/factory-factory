@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { WorkspaceStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
@@ -74,9 +74,10 @@ function parseGitStatusOutput(output: string): GitStatusFile[] {
 
 /**
  * Validate that a file path doesn't escape the worktree directory.
- * Uses path normalization to handle encoded sequences and other bypass attempts.
+ * Uses path normalization and realpath to handle encoded sequences,
+ * symlinks, and other bypass attempts.
  */
-function isPathSafe(worktreePath: string, filePath: string): boolean {
+async function isPathSafe(worktreePath: string, filePath: string): Promise<boolean> {
   // Normalize the file path first to handle encoded sequences and resolve ./ etc
   const normalizedPath = path.normalize(filePath);
 
@@ -94,7 +95,20 @@ function isPathSafe(worktreePath: string, filePath: string): boolean {
   const fullPath = path.resolve(worktreePath, normalizedPath);
   const normalizedWorktree = path.resolve(worktreePath);
 
-  return fullPath.startsWith(normalizedWorktree + path.sep) || fullPath === normalizedWorktree;
+  // Initial check before file exists
+  if (!fullPath.startsWith(normalizedWorktree + path.sep) && fullPath !== normalizedWorktree) {
+    return false;
+  }
+
+  // If the file exists, resolve symlinks and verify the real path is still within worktree
+  try {
+    const realFullPath = await realpath(fullPath);
+    const realWorktree = await realpath(normalizedWorktree);
+    return realFullPath.startsWith(realWorktree + path.sep) || realFullPath === realWorktree;
+  } catch {
+    // File doesn't exist yet (e.g., for new file creation) - rely on the initial check
+    return true;
+  }
 }
 
 /**
@@ -302,7 +316,7 @@ export const workspaceRouter = router({
       }
 
       // Validate path is safe
-      if (!isPathSafe(workspace.worktreePath, input.filePath)) {
+      if (!(await isPathSafe(workspace.worktreePath, input.filePath))) {
         throw new Error('Invalid file path');
       }
 
@@ -376,7 +390,7 @@ export const workspaceRouter = router({
       const relativePath = input.path ?? '';
 
       // Validate path is safe
-      if (relativePath && !isPathSafe(workspace.worktreePath, relativePath)) {
+      if (relativePath && !(await isPathSafe(workspace.worktreePath, relativePath))) {
         throw new Error('Invalid file path');
       }
 
@@ -450,7 +464,7 @@ export const workspaceRouter = router({
       }
 
       // Validate path is safe
-      if (!isPathSafe(workspace.worktreePath, input.path)) {
+      if (!(await isPathSafe(workspace.worktreePath, input.path))) {
         throw new Error('Invalid file path');
       }
 
