@@ -15,10 +15,8 @@ import {
   type StreamEventMessage,
   type ToolUseContent,
 } from '../claude/index.js';
-import { agentAccessor } from '../resource_accessors/index.js';
 import { executeMcpTool } from '../routers/mcp/server.js';
 import type { McpToolResponse } from '../routers/mcp/types.js';
-import { registerAgentStatusProvider } from '../services/agent-status.service.js';
 import { createLogger } from '../services/logger.service.js';
 
 const logger = createLogger('agent-process-adapter');
@@ -117,19 +115,13 @@ export interface AgentProcessAdapterEvents {
  * - Listen for messages and re-emit with agentId
  * - Handle tool_use messages by calling executeMcpTool()
  * - Send tool results using proper tool_result content blocks
- * - Update Agent.lastHeartbeat on message activity
  * - Handle process exit and update agent status
- * - Sync process state to database for crash recovery
- * - Clean up orphan processes on startup
- * - Support session resume for crash recovery
  */
 export class AgentProcessAdapter extends EventEmitter {
   // agentId -> ClaudeClient mapping
   private agents = new Map<string, ClaudeClient>();
   // Track agent types for tool permissions
   private agentTypes = new Map<string, AgentType>();
-  // Flag to prevent multiple orphan cleanup runs
-  private orphanCleanupDone = false;
 
   /**
    * Set up listeners on a ClaudeClient instance
@@ -146,8 +138,7 @@ export class AgentProcessAdapter extends EventEmitter {
     });
 
     // Handle message events (for UI forwarding)
-    client.on('message', async (msg) => {
-      await this.updateHeartbeat(agentId);
+    client.on('message', (msg) => {
       this.emit('message', { agentId, message: msg as ClaudeJson });
     });
 
@@ -173,28 +164,13 @@ export class AgentProcessAdapter extends EventEmitter {
     });
 
     // Handle exit events
-    client.on('exit', async (exitResult: ExitResult) => {
+    client.on('exit', (exitResult: ExitResult) => {
       this.emit('exit', {
         agentId,
         code: exitResult.code,
         signal: exitResult.signal,
         sessionId: exitResult.sessionId,
       });
-
-      // Sync exit status to database
-      try {
-        const status = exitResult.signal ? 'KILLED' : 'EXITED';
-        await agentAccessor.updateCliProcess(agentId, {
-          cliProcessStatus: status,
-          cliProcessExitCode: exitResult.code,
-          cliProcessPid: null, // Clear PID on exit
-        });
-      } catch (error) {
-        logger.warn('Failed to update process exit status in database', {
-          agentId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
 
       this.cleanupAgent(agentId);
     });
@@ -265,20 +241,6 @@ export class AgentProcessAdapter extends EventEmitter {
   }
 
   /**
-   * Update agent heartbeat
-   */
-  private async updateHeartbeat(agentId: string): Promise<void> {
-    try {
-      await agentAccessor.updateHeartbeat(agentId);
-    } catch (error) {
-      logger.warn('Failed to update heartbeat', {
-        agentId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  /**
    * Clean up agent mappings
    */
   private cleanupAgent(agentId: string): void {
@@ -312,19 +274,6 @@ export class AgentProcessAdapter extends EventEmitter {
       resuming: !!options.resumeSessionId,
     });
 
-    // Mark as starting in database
-    try {
-      await agentAccessor.updateCliProcess(agentId, {
-        cliProcessStatus: 'STARTING',
-        cliProcessStartedAt: new Date(),
-      });
-    } catch (error) {
-      logger.warn('Failed to update starting status in database', {
-        agentId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
     const clientOptions: ClaudeClientOptions = {
       workingDir: options.workingDir,
       systemPrompt: options.systemPrompt,
@@ -339,40 +288,9 @@ export class AgentProcessAdapter extends EventEmitter {
       const client = await ClaudeClient.create(clientOptions);
       this.agents.set(agentId, client);
       this.setupClientListeners(agentId, client);
-
-      // Sync running status and PID to database
-      const pid = client.getPid();
-      try {
-        await agentAccessor.updateCliProcess(agentId, {
-          cliProcessStatus: 'RUNNING',
-          cliProcessPid: pid ?? null,
-        });
-      } catch (error) {
-        logger.warn('Failed to update running status in database', {
-          agentId,
-          pid,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      await this.updateHeartbeat(agentId);
     } catch (error) {
       // Clean up agentTypes on failure
       this.agentTypes.delete(agentId);
-
-      // Mark as crashed in database
-      try {
-        await agentAccessor.updateCliProcess(agentId, {
-          cliProcessStatus: 'CRASHED',
-          cliProcessPid: null,
-        });
-      } catch (dbError) {
-        logger.warn('Failed to update crashed status in database', {
-          agentId,
-          error: dbError instanceof Error ? dbError.message : String(dbError),
-        });
-      }
-
       throw error;
     }
   }
@@ -516,86 +434,7 @@ export class AgentProcessAdapter extends EventEmitter {
       this.killAgent(agentId);
     }
   }
-
-  /**
-   * Clean up orphan processes from previous crashes.
-   * Called on startup to kill any processes that were marked as running
-   * but whose parent process crashed.
-   */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orphan cleanup requires multiple error handling branches
-  async cleanupOrphanProcesses(): Promise<void> {
-    if (this.orphanCleanupDone) {
-      logger.debug('Orphan cleanup already done, skipping');
-      return;
-    }
-    this.orphanCleanupDone = true;
-
-    logger.info('Scanning for orphan CLI processes');
-
-    try {
-      // Find processes marked as RUNNING or STARTING in database
-      const orphans = await agentAccessor.findRunningProcesses();
-
-      if (orphans.length === 0) {
-        logger.info('No orphan processes found');
-        return;
-      }
-
-      logger.info('Found potential orphan processes', { count: orphans.length });
-
-      for (const agent of orphans) {
-        const pid = agent.cliProcessPid;
-
-        if (pid) {
-          try {
-            // Check if process is still alive
-            process.kill(pid, 0);
-            // Process is alive - kill it
-            logger.info('Killing orphan process', { agentId: agent.id, pid });
-            try {
-              // Try to kill process group first
-              process.kill(-pid, 'SIGKILL');
-            } catch {
-              // Fallback to killing single process
-              try {
-                process.kill(pid, 'SIGKILL');
-              } catch {
-                // Process may have died between check and kill
-              }
-            }
-          } catch {
-            // Process not found - already dead
-            logger.debug('Orphan process already dead', { agentId: agent.id, pid });
-          }
-        }
-
-        // Mark as crashed in database
-        try {
-          await agentAccessor.updateCliProcess(agent.id, {
-            cliProcessStatus: 'CRASHED',
-            cliProcessPid: null,
-          });
-          logger.info('Marked orphan as crashed', { agentId: agent.id });
-        } catch (error) {
-          logger.warn('Failed to update orphan status', {
-            agentId: agent.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      logger.info('Orphan cleanup completed', { cleaned: orphans.length });
-    } catch (error) {
-      logger.error('Failed to cleanup orphan processes', error as Error);
-    }
-  }
 }
 
 // Singleton instance
 export const agentProcessAdapter = new AgentProcessAdapter();
-
-// Register status provider for services to query agent status
-registerAgentStatusProvider(
-  (agentId: string) => agentProcessAdapter.isRunning(agentId),
-  (agentId: string) => agentProcessAdapter.getClaudeSessionId(agentId)
-);

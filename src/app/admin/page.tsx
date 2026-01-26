@@ -1,8 +1,7 @@
 'use client';
 
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,124 +41,6 @@ function StatCard({
   );
 }
 
-function IssuesList({ issues }: { issues: string[] }) {
-  if (issues.length === 0) {
-    return (
-      <div className="text-success flex items-center gap-2">
-        <CheckCircle2 className="w-5 h-5" />
-        No issues detected
-      </div>
-    );
-  }
-
-  return (
-    <ul className="space-y-2">
-      {issues.map((issue) => (
-        <li key={issue} className="flex items-center gap-2 text-destructive">
-          <XCircle className="w-5 h-5" />
-          {issue}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: number;
-  className?: string;
-}) {
-  return (
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium ${className || ''}`}>{value}</span>
-    </div>
-  );
-}
-
-function EpicsSummary({
-  epics,
-}: {
-  epics?: {
-    total: number;
-    planning: number;
-    inProgress: number;
-    completed: number;
-    blocked: number;
-  };
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Epics Summary</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <SummaryRow label="Total" value={epics?.total || 0} />
-        <SummaryRow label="Planning" value={epics?.planning || 0} />
-        <SummaryRow label="In Progress" value={epics?.inProgress || 0} />
-        <SummaryRow label="Completed" value={epics?.completed || 0} className="text-success" />
-        <SummaryRow label="Blocked" value={epics?.blocked || 0} className="text-destructive" />
-      </CardContent>
-    </Card>
-  );
-}
-
-function TasksSummary({
-  tasks,
-}: {
-  tasks?: {
-    total: number;
-    pending: number;
-    inProgress: number;
-    review: number;
-    completed: number;
-    failed: number;
-  };
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Tasks Summary</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <SummaryRow label="Total" value={tasks?.total || 0} />
-        <SummaryRow label="Pending" value={tasks?.pending || 0} />
-        <SummaryRow label="In Progress" value={tasks?.inProgress || 0} />
-        <SummaryRow label="In Review" value={tasks?.review || 0} className="text-info" />
-        <SummaryRow label="Completed" value={tasks?.completed || 0} className="text-success" />
-        <SummaryRow label="Failed" value={tasks?.failed || 0} className="text-destructive" />
-      </CardContent>
-    </Card>
-  );
-}
-
-function WorktreesByReason({ byReason }: { byReason?: Record<string, number> }) {
-  const hasReasons = byReason && Object.keys(byReason).length > 0;
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardDescription>By Reason</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-1 text-sm">
-        {hasReasons ? (
-          Object.entries(byReason).map(([reason, count]) => (
-            <div key={reason} className="flex justify-between">
-              <span className="text-muted-foreground">{reason}</span>
-              <span className="font-medium">{count}</span>
-            </div>
-          ))
-        ) : (
-          <span className="text-muted-foreground">None</span>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function getEnabledFeatures(features?: Record<string, boolean>): string {
   if (!features) {
     return 'none';
@@ -168,50 +49,6 @@ function getEnabledFeatures(features?: Record<string, boolean>): string {
     .filter(([, isEnabled]) => isEnabled)
     .map(([feature]) => feature);
   return enabled.length > 0 ? enabled.join(', ') : 'none';
-}
-
-interface HealthData {
-  isHealthy: boolean;
-  databaseConnected: boolean;
-  orchestratorHealthy: boolean;
-  crashLoopAgents?: string[];
-  issues?: string[];
-}
-
-function SystemHealthSection({ health }: { health?: HealthData }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>System Health</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="Overall Status"
-            value={health?.isHealthy ? 'Healthy' : 'Degraded'}
-            status={health?.isHealthy ? 'ok' : 'error'}
-          />
-          <StatCard
-            title="Database"
-            value={health?.databaseConnected ? 'Connected' : 'Disconnected'}
-            status={health?.databaseConnected ? 'ok' : 'error'}
-          />
-          <StatCard
-            title="Orchestrator"
-            value={health?.orchestratorHealthy ? 'Running' : 'Stopped'}
-            status={health?.orchestratorHealthy ? 'ok' : 'warning'}
-          />
-          <StatCard
-            title="Crash Loops"
-            value={health?.crashLoopAgents?.length || 0}
-            status={health?.crashLoopAgents?.length ? 'error' : 'ok'}
-          />
-        </div>
-        <h3 className="font-medium mb-2">Issues</h3>
-        <IssuesList issues={health?.issues || []} />
-      </CardContent>
-    </Card>
-  );
 }
 
 interface ApiUsageData {
@@ -301,17 +138,6 @@ export default function AdminDashboardPage() {
     refetchInterval: 5000,
   });
 
-  const triggerHealthCheck = trpc.admin.triggerHealthCheck.useMutation({
-    onSuccess: () => {
-      refetch();
-    },
-  });
-
-  const cleanupWorktrees = trpc.admin.cleanupWorktrees.useMutation({
-    onSuccess: () => {
-      refetch();
-    },
-  });
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
       refetch();
@@ -325,12 +151,11 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Admin Dashboard" description="System monitoring and management">
-        <Button onClick={() => triggerHealthCheck.mutate()} disabled={triggerHealthCheck.isPending}>
-          {triggerHealthCheck.isPending ? 'Checking...' : 'Run Health Check'}
-        </Button>
+        <Badge variant="outline" className="flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3" />
+          Simplified Model
+        </Badge>
       </PageHeader>
-
-      <SystemHealthSection health={stats?.health} />
 
       <ApiUsageSection
         apiUsage={stats?.apiUsage}
@@ -340,47 +165,6 @@ export default function AdminDashboardPage() {
 
       <ConcurrencySection concurrency={stats?.concurrency} />
 
-      {/* Epics & Tasks Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <EpicsSummary epics={stats?.epics} />
-        <TasksSummary tasks={stats?.tasks} />
-      </div>
-
-      {/* Worktrees */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle>Worktrees</CardTitle>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => cleanupWorktrees.mutate()}
-            disabled={cleanupWorktrees.isPending}
-          >
-            {cleanupWorktrees.isPending ? 'Cleaning...' : 'Cleanup Orphaned'}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatCard title="Total Worktrees" value={stats?.worktrees.total || 0} />
-            <StatCard
-              title="Orphaned"
-              value={stats?.worktrees.orphaned || 0}
-              status={stats?.worktrees.orphaned ? 'warning' : 'ok'}
-            />
-            <WorktreesByReason byReason={stats?.worktrees.byReason} />
-          </div>
-          {cleanupWorktrees.data && (
-            <Alert className="mt-4 border-success/30 bg-success/10 text-success">
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                Cleaned {cleanupWorktrees.data.cleaned} worktrees. {cleanupWorktrees.data.failed}{' '}
-                failed.
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Quick Links */}
       <Card>
         <CardHeader>
@@ -389,13 +173,7 @@ export default function AdminDashboardPage() {
         <CardContent>
           <div className="flex gap-4 flex-wrap">
             <Button variant="secondary" asChild>
-              <Link href="/admin/agents">Manage Agents</Link>
-            </Button>
-            <Button variant="secondary" asChild>
               <Link href="/admin/system">System Settings</Link>
-            </Button>
-            <Button variant="secondary" asChild>
-              <Link href="/logs">View Logs</Link>
             </Button>
           </div>
         </CardContent>

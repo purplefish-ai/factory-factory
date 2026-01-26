@@ -1,12 +1,5 @@
-import type { Agent, AgentType } from '@prisma-gen/client';
-import { agentAccessor, decisionLogAccessor } from '../../resource_accessors/index.js';
-import {
-  CRITICAL_TOOLS,
-  escalateCriticalError,
-  escalateToolFailure,
-  isTransientError,
-} from './errors.js';
-import { checkToolPermissions } from './permissions.js';
+import { decisionLogAccessor } from '../../resource_accessors/index.js';
+import { CRITICAL_TOOLS, isTransientError } from './errors.js';
 import type { McpToolContext, McpToolRegistryEntry, McpToolResponse } from './types.js';
 import { McpErrorCode } from './types.js';
 
@@ -51,36 +44,16 @@ const MAX_RETRIES = 3;
  */
 const RETRY_DELAY_MS = 1000;
 
-interface ToolExecutionContext {
-  agent: Agent;
-  toolEntry: McpToolRegistryEntry;
-}
-
 /**
  * Validate tool execution prerequisites
  */
-async function validateToolExecution(
-  agentId: string,
+function validateToolExecution(
+  _agentId: string,
   toolName: string,
   timestamp: Date
-): Promise<
-  { success: true; context: ToolExecutionContext } | { success: false; response: McpToolResponse }
-> {
-  const agent = await agentAccessor.findById(agentId);
-  if (!agent) {
-    return {
-      success: false,
-      response: {
-        success: false,
-        error: {
-          code: McpErrorCode.AGENT_NOT_FOUND,
-          message: `Agent with ID '${agentId}' not found`,
-        },
-        timestamp,
-      },
-    };
-  }
-
+):
+  | { success: true; toolEntry: McpToolRegistryEntry }
+  | { success: false; response: McpToolResponse } {
   const toolEntry = getTool(toolName);
   if (!toolEntry) {
     return {
@@ -96,22 +69,7 @@ async function validateToolExecution(
     };
   }
 
-  const permissionCheck = checkToolPermissions(agent.type as AgentType, toolName);
-  if (!permissionCheck.allowed) {
-    return {
-      success: false,
-      response: {
-        success: false,
-        error: {
-          code: McpErrorCode.PERMISSION_DENIED,
-          message: permissionCheck.reason || 'Permission denied',
-        },
-        timestamp,
-      },
-    };
-  }
-
-  return { success: true, context: { agent, toolEntry } };
+  return { success: true, toolEntry };
 }
 
 /**
@@ -130,7 +88,6 @@ async function executeWithRetry<TInput, TOutput>(
       const context: McpToolContext = { agentId };
       const result = await toolEntry.handler(context, toolInput);
       await decisionLogAccessor.createAutomatic(agentId, toolName, 'result', result);
-      await agentAccessor.update(agentId, { lastHeartbeat: new Date() });
       return { success: true, result: result as McpToolResponse<TOutput> };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -150,7 +107,6 @@ async function executeWithRetry<TInput, TOutput>(
  * Handle tool execution failure
  */
 async function handleToolFailure(
-  agent: Agent,
   agentId: string,
   toolName: string,
   error: Error,
@@ -161,10 +117,9 @@ async function handleToolFailure(
     stack: error.stack,
   });
 
+  // Log critical tool failures
   if (CRITICAL_TOOLS.includes(toolName)) {
-    await escalateCriticalError(agent, toolName, error);
-  } else {
-    await escalateToolFailure(agent, toolName, error);
+    console.error(`Critical tool failure: ${toolName}`, error);
   }
 
   return {
@@ -193,7 +148,7 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
     if (!validation.success) {
       return validation.response as McpToolResponse<TOutput>;
     }
-    const { agent, toolEntry } = validation.context;
+    const { toolEntry } = validation;
 
     await decisionLogAccessor.createAutomatic(agentId, toolName, 'invocation', toolInput);
 
@@ -208,7 +163,6 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
     }
 
     return (await handleToolFailure(
-      agent,
       agentId,
       toolName,
       execution.error,

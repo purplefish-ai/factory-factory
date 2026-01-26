@@ -2,25 +2,24 @@
  * Configuration Service
  *
  * Centralized configuration management for FactoryFactory.
- * Handles agent profiles, environment variables, and runtime configuration.
+ * Handles environment variables, and runtime configuration.
  */
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentType } from '@prisma-gen/client';
 import { createLogger } from './logger.service.js';
 
 const logger = createLogger('config');
 
 /**
- * Permission modes for agents
+ * Permission modes for sessions
  */
 type PermissionMode = 'strict' | 'relaxed' | 'yolo';
 
 /**
- * Agent execution profile
+ * Session execution profile
  */
-export interface AgentProfile {
+export interface SessionProfile {
   model: string;
   permissionMode: PermissionMode;
   maxTokens: number;
@@ -48,24 +47,11 @@ interface SystemConfig {
   inngestEventKey?: string;
   inngestSigningKey?: string;
 
-  // Agent defaults
-  defaultAgentProfiles: Record<AgentType, AgentProfile>;
+  // Default session profile
+  defaultSessionProfile: SessionProfile;
 
   // Health check settings
   healthCheckIntervalMs: number;
-  agentHeartbeatThresholdMinutes: number;
-
-  // Agent concurrency limits
-  maxConcurrentWorkers: number;
-  maxConcurrentSupervisors: number;
-
-  // Crash recovery settings
-  maxWorkerAttempts: number;
-  crashLoopThresholdMs: number;
-  maxRapidCrashes: number;
-
-  // PR review settings
-  prReviewTimeoutMinutes: number;
 
   // Feature flags
   features: {
@@ -128,30 +114,16 @@ function resolvePermissionMode(
 }
 
 /**
- * Build default agent profiles from environment
+ * Build default session profile from environment
  */
-function buildDefaultAgentProfiles(): Record<AgentType, AgentProfile> {
+function buildDefaultSessionProfile(): SessionProfile {
   const defaultModel = 'claude-sonnet-4-5-20250929';
 
   return {
-    ORCHESTRATOR: {
-      model: resolveModel(process.env.ORCHESTRATOR_MODEL, defaultModel),
-      permissionMode: resolvePermissionMode(process.env.ORCHESTRATOR_PERMISSIONS, 'strict'),
-      maxTokens: 8192,
-      temperature: 1.0,
-    },
-    SUPERVISOR: {
-      model: resolveModel(process.env.SUPERVISOR_MODEL, defaultModel),
-      permissionMode: resolvePermissionMode(process.env.SUPERVISOR_PERMISSIONS, 'relaxed'),
-      maxTokens: 8192,
-      temperature: 1.0,
-    },
-    WORKER: {
-      model: resolveModel(process.env.WORKER_MODEL, defaultModel),
-      permissionMode: resolvePermissionMode(process.env.WORKER_PERMISSIONS, 'yolo'),
-      maxTokens: 8192,
-      temperature: 1.0,
-    },
+    model: resolveModel(process.env.DEFAULT_MODEL, defaultModel),
+    permissionMode: resolvePermissionMode(process.env.DEFAULT_PERMISSIONS, 'yolo'),
+    maxTokens: 8192,
+    temperature: 1.0,
   };
 }
 
@@ -186,27 +158,11 @@ function loadSystemConfig(): SystemConfig {
     inngestEventKey: process.env.INNGEST_EVENT_KEY,
     inngestSigningKey: process.env.INNGEST_SIGNING_KEY,
 
-    // Agent defaults
-    defaultAgentProfiles: buildDefaultAgentProfiles(),
+    // Default session profile
+    defaultSessionProfile: buildDefaultSessionProfile(),
 
     // Health check settings
     healthCheckIntervalMs: Number.parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '300000', 10), // 5 minutes
-    agentHeartbeatThresholdMinutes: Number.parseInt(
-      process.env.AGENT_HEARTBEAT_THRESHOLD_MINUTES || '7',
-      10
-    ),
-
-    // Agent concurrency limits
-    maxConcurrentWorkers: Number.parseInt(process.env.MAX_CONCURRENT_WORKERS || '10', 10),
-    maxConcurrentSupervisors: Number.parseInt(process.env.MAX_CONCURRENT_SUPERVISORS || '5', 10),
-
-    // Crash recovery settings
-    maxWorkerAttempts: Number.parseInt(process.env.MAX_WORKER_ATTEMPTS || '5', 10),
-    crashLoopThresholdMs: Number.parseInt(process.env.CRASH_LOOP_THRESHOLD_MS || '60000', 10), // 1 minute
-    maxRapidCrashes: Number.parseInt(process.env.MAX_RAPID_CRASHES || '3', 10),
-
-    // PR review settings
-    prReviewTimeoutMinutes: Number.parseInt(process.env.PR_REVIEW_TIMEOUT_MINUTES || '60', 10),
 
     // Feature flags
     features: {
@@ -224,7 +180,6 @@ function loadSystemConfig(): SystemConfig {
  */
 class ConfigService {
   private config: SystemConfig;
-  private agentProfileOverrides: Map<string, Partial<AgentProfile>> = new Map();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -271,40 +226,10 @@ class ConfigService {
   }
 
   /**
-   * Get agent profile for a given agent type
+   * Get the default session profile
    */
-  getAgentProfile(type: AgentType): AgentProfile {
-    return { ...this.config.defaultAgentProfiles[type] };
-  }
-
-  /**
-   * Get agent profile with optional overrides for a specific agent
-   */
-  getAgentProfileForId(agentId: string, type: AgentType): AgentProfile {
-    const baseProfile = this.getAgentProfile(type);
-    const overrides = this.agentProfileOverrides.get(agentId);
-
-    if (overrides) {
-      return { ...baseProfile, ...overrides };
-    }
-
-    return baseProfile;
-  }
-
-  /**
-   * Set agent profile override for a specific agent
-   */
-  setAgentProfileOverride(agentId: string, override: Partial<AgentProfile>): void {
-    this.agentProfileOverrides.set(agentId, override);
-    logger.info('Agent profile override set', { agentId, override });
-  }
-
-  /**
-   * Remove agent profile override
-   */
-  removeAgentProfileOverride(agentId: string): void {
-    this.agentProfileOverrides.delete(agentId);
-    logger.info('Agent profile override removed', { agentId });
+  getDefaultSessionProfile(): SessionProfile {
+    return { ...this.config.defaultSessionProfile };
   }
 
   /**

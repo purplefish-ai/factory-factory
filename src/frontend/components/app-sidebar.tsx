@@ -1,10 +1,10 @@
 'use client';
 
-import { FolderKanban, ListTodo, Mail, Settings, Terminal } from 'lucide-react';
+import { GitBranch, Plus, Settings, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -17,15 +17,17 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { setProjectContext, trpc } from '../lib/trpc';
 import { Logo } from './logo';
 
@@ -34,6 +36,15 @@ const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
   return match ? match[1] : null;
+}
+
+function generateWorkspaceName(): string {
+  const now = new Date();
+  const month = now.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+  const day = now.getDate();
+  const hour = now.getHours();
+  const min = now.getMinutes().toString().padStart(2, '0');
+  return `workspace-${month}${day}-${hour}${min}`;
 }
 
 export function AppSidebar() {
@@ -48,16 +59,53 @@ export function AppSidebar() {
 
   const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
 
+  // Fetch workspaces for the selected project
+  const { data: workspaces } = trpc.workspace.list.useQuery(
+    { projectId: selectedProjectId ?? '', status: 'ACTIVE' },
+    { enabled: !!selectedProjectId, refetchInterval: 5000 }
+  );
+
+  const utils = trpc.useUtils();
+
+  const createWorkspace = trpc.workspace.create.useMutation();
+  const createSession = trpc.session.createClaudeSession.useMutation();
+
+  const handleCreateWorkspace = async () => {
+    if (!selectedProjectId) {
+      return;
+    }
+    const name = generateWorkspaceName();
+
+    // Create workspace
+    const workspace = await createWorkspace.mutateAsync({
+      projectId: selectedProjectId,
+      name,
+      branchName: name,
+    });
+
+    // Create a Claude session for the workspace
+    await createSession.mutateAsync({
+      workspaceId: workspace.id,
+      workflow: 'explore',
+      model: 'sonnet',
+    });
+
+    // Invalidate workspace list cache
+    utils.workspace.list.invalidate({ projectId: selectedProjectId });
+
+    // Navigate to workspace
+    router.push(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
+  };
+
+  // Get current workspace ID from URL
+  const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
+  const isCreatingWorkspace = createWorkspace.isPending || createSession.isPending;
+
   useEffect(() => {
     if (selectedProjectId) {
       setProjectContext(selectedProjectId);
     }
   }, [selectedProjectId]);
-
-  const { data: unreadCount } = trpc.mail.getUnreadCount.useQuery(undefined, {
-    refetchInterval: 5000,
-    enabled: !!selectedProjectId,
-  });
 
   useEffect(() => {
     const slugFromPath = getProjectSlugFromPath(pathname);
@@ -99,27 +147,11 @@ export function AppSidebar() {
     }
     setSelectedProjectSlug(value);
     localStorage.setItem(SELECTED_PROJECT_KEY, value);
-    router.push(`/projects/${value}/epics`);
+    router.push(`/projects/${value}/workspaces`);
   };
 
   const projectNavItems = selectedProjectSlug
     ? [
-        {
-          href: `/projects/${selectedProjectSlug}/epics`,
-          label: 'Epics',
-          icon: FolderKanban,
-        },
-        {
-          href: `/projects/${selectedProjectSlug}/tasks`,
-          label: 'Subtasks',
-          icon: ListTodo,
-        },
-        {
-          href: `/projects/${selectedProjectSlug}/mail`,
-          label: 'Mail',
-          icon: Mail,
-          badge: unreadCount?.count,
-        },
         {
           href: `/projects/${selectedProjectSlug}/logs`,
           label: 'Logs',
@@ -187,7 +219,67 @@ export function AppSidebar() {
         )}
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="flex flex-col">
+        {/* Workspaces section */}
+        {selectedProjectSlug && (
+          <SidebarGroup className="flex-1 min-h-0 flex flex-col">
+            <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
+            <SidebarGroupAction onClick={handleCreateWorkspace} disabled={isCreatingWorkspace}>
+              <Plus className="h-4 w-4" />
+              <span className="sr-only">New Workspace</span>
+            </SidebarGroupAction>
+            <SidebarGroupContent className="flex-1 min-h-0">
+              <ScrollArea className="h-full">
+                <SidebarMenu>
+                  {workspaces?.map((workspace) => {
+                    const isActive = currentWorkspaceId === workspace.id;
+                    return (
+                      <SidebarMenuItem key={workspace.id}>
+                        <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
+                          <Link
+                            href={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
+                          >
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                {workspace.branchName && (
+                                  <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                )}
+                                <span className="truncate font-medium text-sm">
+                                  {workspace.branchName || workspace.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <span className="truncate">{workspace.name}</span>
+                                <span>·</span>
+                                <span
+                                  className={cn(
+                                    workspace.status === 'ACTIVE' && 'text-green-500',
+                                    workspace.status === 'COMPLETED' && 'text-blue-500'
+                                  )}
+                                >
+                                  {workspace.status === 'ACTIVE' ? 'Working...' : workspace.status}
+                                </span>
+                              </div>
+                            </div>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                  {workspaces?.length === 0 && (
+                    <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                      No active workspaces
+                    </div>
+                  )}
+                </SidebarMenu>
+              </ScrollArea>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        <SidebarSeparator />
+
+        {/* Other nav items */}
         {projectNavItems.length > 0 && (
           <SidebarGroup>
             <SidebarGroupContent>
@@ -202,13 +294,6 @@ export function AppSidebar() {
                           <span>{item.label}</span>
                         </Link>
                       </SidebarMenuButton>
-                      {item.badge != null && item.badge > 0 && (
-                        <SidebarMenuBadge>
-                          <Badge variant="destructive" className="rounded-full px-1.5 py-0 text-xs">
-                            {item.badge}
-                          </Badge>
-                        </SidebarMenuBadge>
-                      )}
                     </SidebarMenuItem>
                   );
                 })}
@@ -216,8 +301,6 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
-
-        <SidebarSeparator />
 
         <SidebarGroup>
           <SidebarGroupContent>

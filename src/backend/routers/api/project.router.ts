@@ -159,7 +159,7 @@ router.get('/:projectId', async (req, res) => {
         isArchived: project.isArchived,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
-        tasks: project.tasks,
+        workspaces: project.workspaces,
       },
     });
   } catch (error) {

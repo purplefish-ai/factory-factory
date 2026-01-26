@@ -12,48 +12,18 @@ datasource db {
 
 // Enums
 
-// Task state - about the WORK being done
-enum TaskState {
-  PENDING        // Not started (subtasks waiting to be picked up)
-  PLANNING       // Top-level only: supervisor breaking down work
-  IN_PROGRESS    // Being worked on (replaces ASSIGNED, PLANNED)
-  REVIEW         // Submitted for review
-  COMPLETED      // Work accepted and merged
-  FAILED         // Work abandoned
-  BLOCKED        // External blocker (dependencies, etc.)
+enum WorkspaceStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
 }
 
-enum AgentType {
-  SUPERVISOR     // High-level orchestrator
-  ORCHESTRATOR   // Epic-level manager
-  WORKER         // Task executor
-}
-
-// Agent execution state - what the agent IS currently doing (actual state)
-enum ExecutionState {
-  IDLE           // Agent is idle, not running
-  ACTIVE         // Agent is actively running
-  PAUSED         // Agent is paused but can be resumed
-  CRASHED        // Agent process crashed unexpectedly
-}
-
-// Desired execution state - what we WANT the agent to be doing
-// (subset of ExecutionState - CRASHED is never desired)
-enum DesiredExecutionState {
-  IDLE           // We want the agent to be idle/stopped
-  ACTIVE         // We want the agent to be running
-  PAUSED         // We want the agent to be paused
-}
-
-// CLI process lifecycle state
-enum CliProcessStatus {
-  NOT_STARTED    // Process has not been started yet
-  STARTING       // Process is being spawned
-  RUNNING        // Process is actively running
-  IDLE           // Process is idle (waiting for input)
-  EXITED         // Process exited normally
-  CRASHED        // Process crashed unexpectedly
-  KILLED         // Process was intentionally terminated
+enum SessionStatus {
+  IDLE
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
 }
 
 // Models
@@ -71,146 +41,72 @@ model Project {
   updatedAt         DateTime    @updatedAt
 
   // Relations
-  tasks             Task[]
+  workspaces        Workspace[]
 
   @@index([slug])
   @@index([isArchived])
 }
 
-model Task {
-  id                String      @id @default(cuid())
-  projectId         String
-  parentId          String?     // null = top-level (was "Epic")
-  title             String
-  description       String?     @db.Text
-  state             TaskState   @default(PENDING)
-
-  // Execution tracking (for leaf tasks)
-  assignedAgentId   String?
-  branchName        String?
-  prUrl             String?     // Draft PR URL, created after first commit
-  attempts          Int         @default(0)
-  failureReason     String?     @db.Text
-
-  // Reconciliation tracking
-  lastReconcileAt   DateTime?   // Last time this task was reconciled
-  reconcileFailures Json?       // Array of {timestamp, error, action} for debugging
-
-  // Timestamps
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  completedAt       DateTime?
-
-  // Relations
-  project           Project     @relation(fields: [projectId], references: [id])
-  parent            Task?       @relation("TaskHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children          Task[]      @relation("TaskHierarchy")
-  assignedAgent     Agent?      @relation("AssignedTasks", fields: [assignedAgentId], references: [id])
-  supervisorAgent   Agent?      @relation("SupervisorTask")
-
-  // Dependencies
-  dependsOn         TaskDependency[] @relation("DependentTask")
-  dependents        TaskDependency[] @relation("DependsOnTask")
-
-  @@index([projectId])
-  @@index([parentId])
-  @@index([state])
-  @@index([assignedAgentId])
-  @@index([lastReconcileAt])
-}
-
-model TaskDependency {
-  id                String      @id @default(cuid())
-  taskId            String      // The task that has the dependency (is blocked)
-  dependsOnId       String      // The task it depends on
-  createdAt         DateTime    @default(now())
-
-  // Relations
-  task              Task        @relation("DependentTask", fields: [taskId], references: [id], onDelete: Cascade)
-  dependsOn         Task        @relation("DependsOnTask", fields: [dependsOnId], references: [id], onDelete: Cascade)
-
-  @@unique([taskId, dependsOnId])
-  @@index([taskId])
-  @@index([dependsOnId])
-}
-
-model Agent {
-  id                      String              @id @default(cuid())
-  type                    AgentType
-  currentTaskId           String?             @unique  // For both supervisors (top-level) and workers (leaf)
-
-  // Execution state (reconciler-managed)
-  executionState          ExecutionState      @default(IDLE)    // ACTUAL: what agent IS doing
-  desiredExecutionState   DesiredExecutionState @default(IDLE)  // WANTED: what we want agent to do
-
-  // Session management
-  tmuxSessionName         String?
-  sessionId               String?             // Claude Code CLI session ID for resume
-  worktreePath            String?             // Git worktree path for this agent's workspace
-
-  // CLI process tracking
-  cliProcessId            String?             // AgentProcessAdapter session ID
-  cliProcessStatus        CliProcessStatus?   // Process state
-  cliProcessStartedAt     DateTime?           // When process was started
-  cliProcessExitCode      Int?                // Exit code if process exited
-  cliProcessPid           Int?                // OS process ID for orphan cleanup
-
-  // Health tracking
-  lastHeartbeat           DateTime?           // Last agent heartbeat (set by agent itself)
-  lastReconcileAt         DateTime?           // Last time this agent was reconciled
-  reconcileFailures       Json?               // Array of {timestamp, error, action} for debugging
-
-  // Timestamps
-  createdAt               DateTime            @default(now())
-  updatedAt               DateTime            @updatedAt
-
-  // Relations
-  currentTask             Task?               @relation("SupervisorTask", fields: [currentTaskId], references: [id])
-  assignedTasks           Task[]              @relation("AssignedTasks")
-  mailReceived            Mail[]              @relation("ReceiverAgent")
-  mailSent                Mail[]              @relation("SenderAgent")
-  decisionLogs            DecisionLog[]
-
-  @@index([type])
-  @@index([executionState])
-  @@index([desiredExecutionState])
-  @@index([currentTaskId])
-  @@index([lastHeartbeat])
-  @@index([cliProcessStatus])
-}
-
-model Mail {
-  id                String      @id @default(cuid())
-  fromAgentId       String?
-  toAgentId         String?
-  isForHuman        Boolean     @default(false)
-  subject           String
-  body              String      @db.Text
-  isRead            Boolean     @default(false)
-  createdAt         DateTime    @default(now())
-  readAt            DateTime?
-
-  // Relations
-  fromAgent         Agent?      @relation("SenderAgent", fields: [fromAgentId], references: [id])
-  toAgent           Agent?      @relation("ReceiverAgent", fields: [toAgentId], references: [id])
-
-  @@index([toAgentId, isRead])
-  @@index([isForHuman, isRead])
-  @@index([createdAt])
-}
-
 model DecisionLog {
   id                String      @id @default(cuid())
-  agentId           String
+  agentId           String      // Can be sessionId or any identifier
   decision          String      @db.Text
   reasoning         String      @db.Text
   context           String?     @db.Text
   timestamp         DateTime    @default(now())
 
-  // Relations
-  agent             Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
   @@index([agentId, timestamp])
   @@index([timestamp])
 }
 
+model Workspace {
+  id                String            @id @default(cuid())
+  projectId         String
+  project           Project           @relation(fields: [projectId], references: [id])
+  name              String
+  description       String?
+  status            WorkspaceStatus   @default(ACTIVE)
+  worktreePath      String?
+  branchName        String?
+  prUrl             String?
+  githubIssueNumber Int?
+  githubIssueUrl    String?
+  claudeSessions    ClaudeSession[]
+  terminalSessions  TerminalSession[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model ClaudeSession {
+  id               String        @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name             String?
+  workflow         String        // "explore", "implement", "test"
+  model            String        @default("sonnet")
+  status           SessionStatus @default(IDLE)
+  claudeSessionId  String?       // For resume
+  claudeProcessPid Int?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model TerminalSession {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name            String?
+  status          SessionStatus @default(IDLE)
+  pid             Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([workspaceId])
+  @@index([status])
+}
