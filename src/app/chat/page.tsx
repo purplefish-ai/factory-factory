@@ -1,6 +1,6 @@
 'use client';
 
-import { GitBranch, Plus } from 'lucide-react';
+import { GitBranch, Loader2, Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 // Types
 // =============================================================================
 
-type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
+type ConnectionStatus = 'ready' | 'busy' | 'disconnected';
 
 // =============================================================================
 // Helper Components
@@ -32,12 +32,10 @@ type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
  */
 function getStatusText(status: ConnectionStatus): string {
   switch (status) {
-    case 'connected':
-      return 'Connected';
-    case 'processing':
-      return 'Processing request';
-    case 'loading':
-      return 'Loading session';
+    case 'ready':
+      return 'Ready';
+    case 'busy':
+      return 'Working';
     case 'disconnected':
       return 'Disconnected';
   }
@@ -57,10 +55,9 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
       <div
         className={cn(
           'h-2.5 w-2.5 rounded-full',
-          status === 'connected' && 'bg-green-500',
-          status === 'processing' && 'bg-yellow-500 animate-pulse',
-          status === 'loading' && 'bg-blue-500 animate-pulse',
-          status === 'disconnected' && 'bg-red-500'
+          status === 'ready' && 'bg-green-500',
+          status === 'busy' && 'bg-green-500 animate-pulse',
+          status === 'disconnected' && 'bg-gray-400'
         )}
         title={statusText}
         aria-hidden="true"
@@ -70,6 +67,36 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
         {statusText}
       </output>
     </>
+  );
+}
+
+/**
+ * Determines the connection status based on state flags.
+ */
+function getConnectionStatus(
+  connected: boolean,
+  loadingSession: boolean,
+  startingSession: boolean,
+  running: boolean
+): ConnectionStatus {
+  if (!connected) {
+    return 'disconnected';
+  }
+  if (loadingSession || startingSession || running) {
+    return 'busy';
+  }
+  return 'ready';
+}
+
+/**
+ * Shows a starting indicator when the Claude session is initializing.
+ */
+function StartingIndicator({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-2 text-muted-foreground', className)}>
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span className="text-sm">Starting session...</span>
+    </div>
   );
 }
 
@@ -123,6 +150,7 @@ function ChatContent() {
     pendingPermission,
     pendingQuestion,
     loadingSession,
+    startingSession,
     chatSettings,
     sendMessage,
     stopChat,
@@ -163,13 +191,7 @@ function ChatContent() {
   }, [clearChat, router]);
 
   // Determine connection status for indicator
-  const status: ConnectionStatus = !connected
-    ? 'disconnected'
-    : loadingSession
-      ? 'loading'
-      : running
-        ? 'processing'
-        : 'connected';
+  const status = getConnectionStatus(connected, loadingSession, startingSession, running);
 
   // Track if user is near bottom for auto-scroll
   const isNearBottomRef = useRef(true);
@@ -230,7 +252,9 @@ function ChatContent() {
       {/* Message List */}
       <ScrollArea className="flex-1" onScroll={handleScroll}>
         <div className="p-4 space-y-2">
-          {messages.length === 0 && !running && !loadingSession && <EmptyState />}
+          {messages.length === 0 && !running && !loadingSession && !startingSession && (
+            <EmptyState />
+          )}
 
           {loadingSession && messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -245,7 +269,8 @@ function ChatContent() {
             <GroupedMessageItemRenderer key={item.id} item={item} />
           ))}
 
-          {running && <LoadingIndicator className="py-4" />}
+          {startingSession && <StartingIndicator className="py-4" />}
+          {running && !startingSession && <LoadingIndicator className="py-4" />}
 
           <div ref={messagesEndRef} className="h-px" />
         </div>
@@ -264,7 +289,13 @@ function ChatContent() {
           disabled={!connected}
           running={running}
           inputRef={inputRef}
-          placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
+          placeholder={
+            startingSession
+              ? 'Starting session...'
+              : running
+                ? 'Claude is thinking...'
+                : 'Type a message...'
+          }
           settings={chatSettings}
           onSettingsChange={updateSettings}
         />
