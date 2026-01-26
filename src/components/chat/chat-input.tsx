@@ -192,8 +192,9 @@ export function ChatInput({
         if (text && !disabled && !running) {
           onSend(text);
           event.currentTarget.value = '';
-          // Reset textarea height
+          // Reset textarea height and overflow
           event.currentTarget.style.height = 'auto';
+          event.currentTarget.style.overflowY = 'hidden';
         }
       }
     },
@@ -212,16 +213,22 @@ export function ChatInput({
         onSend(text);
         inputRef.current.value = '';
         inputRef.current.style.height = 'auto';
+        inputRef.current.style.overflowY = 'hidden';
         inputRef.current.focus();
       }
     }
   }, [onSend, onStop, inputRef, disabled, running]);
 
   // Auto-resize textarea based on content
+  const maxHeight = 200;
   const handleInput = useCallback((event: React.FormEvent<HTMLTextAreaElement>) => {
     const target = event.currentTarget;
+    // Reset height to auto to get accurate scrollHeight
     target.style.height = 'auto';
-    target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+    const newHeight = Math.min(target.scrollHeight, maxHeight);
+    target.style.height = `${newHeight}px`;
+    // Show scrollbar only when content exceeds max height
+    target.style.overflowY = target.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, []);
 
   // Focus input when component mounts or when running state changes to false
@@ -266,7 +273,7 @@ export function ChatInput({
           disabled={isDisabled}
           placeholder={isDisabled ? 'Connecting...' : placeholder}
           className={cn(
-            'min-h-[40px] max-h-[200px]',
+            'min-h-[40px] max-h-[200px] overflow-y-hidden',
             isDisabled && 'opacity-50 cursor-not-allowed'
           )}
           rows={1}
