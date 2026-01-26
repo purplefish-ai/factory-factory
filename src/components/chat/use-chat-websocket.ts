@@ -41,6 +41,8 @@ export interface UseChatWebSocketReturn {
   pendingQuestion: UserQuestionRequest | null;
   // Session loading state
   loadingSession: boolean;
+  // Session starting state (Claude CLI is spinning up)
+  startingSession: boolean;
   // Chat settings
   chatSettings: ChatSettings;
   // Actions
@@ -186,6 +188,7 @@ interface MessageHandlerContext {
   setPendingPermission: (permission: PermissionRequest | null) => void;
   setPendingQuestion: (question: UserQuestionRequest | null) => void;
   setLoadingSession: (loading: boolean) => void;
+  setStartingSession: (starting: boolean) => void;
   setChatSettings: (settings: ChatSettings) => void;
   /** Ref to track accumulated tool input JSON per tool_use_id */
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
@@ -200,7 +203,12 @@ function handleStatusMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
   }
 }
 
+function handleStartingMessage(_data: WebSocketMessage, ctx: MessageHandlerContext): void {
+  ctx.setStartingSession(true);
+}
+
 function handleStartedMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
+  ctx.setStartingSession(false);
   ctx.setRunning(true);
   if (data.claudeSessionId) {
     ctx.setClaudeSessionId(data.claudeSessionId);
@@ -259,6 +267,9 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
 function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
   if (data.data) {
     const claudeMsg = data.data as ClaudeMessage;
+
+    // If we receive a Claude message, we're clearly past the starting phase
+    ctx.setStartingSession(false);
 
     // When we receive a 'result' message, Claude has finished the current turn
     // Set running to false so the UI no longer shows "Agent is working..."
@@ -471,6 +482,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<UserQuestionRequest | null>(null);
   const [loadingSession, setLoadingSession] = useState(false);
+  const [startingSession, setStartingSession] = useState(false);
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
 
   // Refs
@@ -563,6 +575,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       setPendingPermission,
       setPendingQuestion,
       setLoadingSession,
+      setStartingSession,
       setChatSettings,
       toolInputAccumulatorRef,
       updateToolInput,
@@ -585,9 +598,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
           (data: WebSocketMessage, ctx: MessageHandlerContext) => void
         > = {
           status: handleStatusMessage,
+          starting: handleStartingMessage,
           started: handleStartedMessage,
-          stopped: (_, ctx) => ctx.setRunning(false),
-          process_exit: (_, ctx) => ctx.setRunning(false),
+          stopped: (_, ctx) => {
+            ctx.setRunning(false);
+            ctx.setStartingSession(false);
+          },
+          process_exit: (_, ctx) => {
+            ctx.setRunning(false);
+            ctx.setStartingSession(false);
+          },
           claude_message: handleClaudeMessage,
           error: handleErrorMessage,
           sessions: handleSessionsMessage,
@@ -703,6 +723,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
 
       // If Claude is not running, start it first
       if (!running) {
+        // Show starting indicator immediately for user feedback
+        setStartingSession(true);
+
         const startMsg: StartMessage = {
           type: 'start',
           // Include current settings when starting
@@ -743,6 +766,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     setGitBranch(null);
     setPendingPermission(null);
     setPendingQuestion(null);
+    setStartingSession(false);
     setChatSettings(DEFAULT_CHAT_SETTINGS);
     toolInputAccumulatorRef.current.clear();
 
@@ -794,6 +818,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     pendingPermission,
     pendingQuestion,
     loadingSession,
+    startingSession,
     chatSettings,
     // Actions
     sendMessage,
