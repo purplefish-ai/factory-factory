@@ -6,12 +6,18 @@ import {
   ChevronDown,
   ChevronRight,
   FileCode,
+  Loader2,
   Terminal,
 } from 'lucide-react';
 import * as React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { ClaudeMessage, ToolResultContentValue } from '@/lib/claude-types';
+import type {
+  ClaudeMessage,
+  PairedToolCall,
+  ToolResultContentValue,
+  ToolSequence,
+} from '@/lib/claude-types';
 import {
   extractToolInfo,
   extractToolResultInfo,
@@ -78,13 +84,18 @@ export function extractFileReferences(
 interface ToolInfoRendererProps {
   message: ClaudeMessage;
   defaultOpen?: boolean;
+  isPending?: boolean;
 }
 
 /**
  * Renders tool use or tool result information.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but readable conditional rendering
-export function ToolInfoRenderer({ message, defaultOpen = false }: ToolInfoRendererProps) {
+export function ToolInfoRenderer({
+  message,
+  defaultOpen = false,
+  isPending = false,
+}: ToolInfoRendererProps) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   // Check if this is a tool use message
@@ -96,23 +107,33 @@ export function ToolInfoRenderer({ message, defaultOpen = false }: ToolInfoRende
 
     return (
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="rounded-md border bg-muted/30">
+        <div className="rounded border bg-muted/30">
           <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center gap-2 p-2 text-left hover:bg-muted/50 transition-colors">
+            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
               {isOpen ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
-              <Terminal className="h-4 w-4 text-muted-foreground" />
-              <span className="font-mono text-sm">{toolInfo.name}</span>
-              <Badge variant="outline" className="ml-auto text-xs">
-                Tool Call
-              </Badge>
+              {isPending ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+              ) : (
+                <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              <span className="font-mono text-xs">{toolInfo.name}</span>
+              {isPending ? (
+                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
+                  Running...
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0">
+                  Tool Call
+                </Badge>
+              )}
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="border-t p-2">
+            <div className="border-t px-2 py-1.5">
               <ToolInputRenderer name={toolInfo.name} input={toolInfo.input} />
             </div>
           </CollapsibleContent>
@@ -132,33 +153,33 @@ export function ToolInfoRenderer({ message, defaultOpen = false }: ToolInfoRende
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <div
           className={cn(
-            'rounded-md border',
+            'rounded border',
             resultInfo.isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
           )}
         >
           <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center gap-2 p-2 text-left hover:bg-muted/50 transition-colors">
+            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
               {isOpen ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
               {resultInfo.isError ? (
-                <AlertCircle className="h-4 w-4 text-destructive" />
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
               ) : (
-                <CheckCircle className="h-4 w-4 text-success" />
+                <CheckCircle className="h-4 w-4 shrink-0 text-success" />
               )}
-              <span className="text-sm text-muted-foreground">Tool Result</span>
+              <span className="text-xs text-muted-foreground">Tool Result</span>
               <Badge
                 variant={resultInfo.isError ? 'destructive' : 'success'}
-                className="ml-auto text-xs"
+                className="ml-auto text-[10px] px-1 py-0"
               >
                 {resultInfo.isError ? 'Error' : 'Success'}
               </Badge>
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="border-t p-2">
+            <div className="border-t px-2 py-1.5">
               <ToolResultContentRenderer
                 content={resultInfo.content}
                 isError={resultInfo.isError}
@@ -171,6 +192,182 @@ export function ToolInfoRenderer({ message, defaultOpen = false }: ToolInfoRende
   }
 
   return null;
+}
+
+// =============================================================================
+// Tool Sequence Group Renderer
+// =============================================================================
+
+interface ToolSequenceGroupProps {
+  sequence: ToolSequence;
+  defaultOpen?: boolean;
+}
+
+/**
+ * Renders a group of adjacent tool calls.
+ * Each tool_use is paired with its corresponding tool_result.
+ * - Single tool: Shows inline with status, expands to show input + result
+ * - Multiple tools: Shows summary "3 tools: Read, Edit, Bash [✓][✓][✓]", expands to show all
+ */
+export function ToolSequenceGroup({ sequence, defaultOpen = false }: ToolSequenceGroupProps) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
+  const { pairedCalls } = sequence;
+
+  if (pairedCalls.length === 0) {
+    return null;
+  }
+
+  // Single tool call - render inline without grouping wrapper
+  if (pairedCalls.length === 1) {
+    return <PairedToolCallRenderer call={pairedCalls[0]} defaultOpen={defaultOpen} />;
+  }
+
+  // Multiple tool calls - render as collapsible group
+  const renderStatusIndicators = () => {
+    return pairedCalls.map((call) => {
+      const key = `${sequence.id}-status-${call.id}`;
+      switch (call.status) {
+        case 'success':
+          return (
+            <span key={key} title="Success">
+              <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success" />
+            </span>
+          );
+        case 'error':
+          return (
+            <span key={key} title="Error">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+            </span>
+          );
+        case 'pending':
+          return (
+            <span key={key} title="Pending">
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+            </span>
+          );
+      }
+    });
+  };
+
+  // Format tool names for display (truncate if too many)
+  const formatToolNames = () => {
+    const names = pairedCalls.map((pc) => pc.name);
+    if (names.length <= 4) {
+      return names.join(', ');
+    }
+    return `${names.slice(0, 3).join(', ')}, +${names.length - 3} more`;
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded border bg-muted/20">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/50 transition-colors">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-xs">
+              {pairedCalls.length} tools: {formatToolNames()}
+            </span>
+            <span className="ml-auto flex gap-1 text-xs">{renderStatusIndicators()}</span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t space-y-1 p-1.5">
+            {pairedCalls.map((call) => (
+              <div key={call.id} className="pl-2">
+                <PairedToolCallRenderer call={call} defaultOpen={false} />
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
+// =============================================================================
+// Paired Tool Call Renderer
+// =============================================================================
+
+interface PairedToolCallRendererProps {
+  call: PairedToolCall;
+  defaultOpen?: boolean;
+}
+
+/**
+ * Renders a single tool call paired with its result.
+ * Shows: ToolName [status] - expands to show input and result.
+ */
+function PairedToolCallRenderer({ call, defaultOpen = false }: PairedToolCallRendererProps) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
+  const isPending = call.status === 'pending';
+  const isError = call.status === 'error';
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div
+        className={cn(
+          'rounded border',
+          isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
+        )}
+      >
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            {isPending ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+            ) : isError ? (
+              <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+            ) : (
+              <CheckCircle className="h-4 w-4 shrink-0 text-success" />
+            )}
+            <span className="font-mono text-xs">{call.name}</span>
+            {isPending ? (
+              <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
+                Running...
+              </Badge>
+            ) : (
+              <Badge
+                variant={isError ? 'destructive' : 'success'}
+                className="ml-auto text-[10px] px-1 py-0"
+              >
+                {isError ? 'Error' : 'Success'}
+              </Badge>
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-2 py-1.5 space-y-2">
+            {/* Tool Input */}
+            <div>
+              <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Input</div>
+              <ToolInputRenderer name={call.name} input={call.input} />
+            </div>
+            {/* Tool Result */}
+            {call.result && (
+              <div>
+                <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Result</div>
+                <ToolResultContentRenderer
+                  content={call.result.content}
+                  isError={call.result.isError}
+                />
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
 }
 
 // =============================================================================
@@ -199,10 +396,10 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
 
     case 'Write':
       return (
-        <div className="space-y-2">
+        <div className="space-y-1">
           <FilePathDisplay path={input.file_path as string} />
-          <div className="rounded bg-muted p-2">
-            <pre className="text-xs overflow-x-auto max-h-40 overflow-y-auto">
+          <div className="rounded bg-muted px-1.5 py-1">
+            <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto">
               {truncateContent(input.content as string, 500)}
             </pre>
           </div>
@@ -211,18 +408,18 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
 
     case 'Edit':
       return (
-        <div className="space-y-2">
+        <div className="space-y-1">
           <FilePathDisplay path={input.file_path as string} />
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded bg-destructive/10 p-2">
-              <div className="text-xs font-medium text-destructive mb-1">Remove</div>
-              <pre className="text-xs overflow-x-auto max-h-20 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className="rounded bg-destructive/10 px-1.5 py-1">
+              <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
+              <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
                 {truncateContent(input.old_string as string, 200)}
               </pre>
             </div>
-            <div className="rounded bg-success/10 p-2">
-              <div className="text-xs font-medium text-success mb-1">Add</div>
-              <pre className="text-xs overflow-x-auto max-h-20 overflow-y-auto">
+            <div className="rounded bg-success/10 px-1.5 py-1">
+              <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
+              <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
                 {truncateContent(input.new_string as string, 200)}
               </pre>
             </div>
@@ -232,14 +429,14 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
 
     case 'Bash':
       return (
-        <div className="space-y-1">
-          <div className="rounded bg-muted p-2 font-mono">
+        <div className="space-y-0.5">
+          <div className="rounded bg-muted px-1.5 py-1 font-mono">
             <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
               {String(input.command ?? '')}
             </pre>
           </div>
           {input.description != null && (
-            <div className="text-xs text-muted-foreground">{String(input.description)}</div>
+            <div className="text-[10px] text-muted-foreground">{String(input.description)}</div>
           )}
         </div>
       );
@@ -247,8 +444,8 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
     case 'Glob':
     case 'Grep':
       return (
-        <div className="space-y-1">
-          <div className="font-mono text-sm">{String(input.pattern ?? '')}</div>
+        <div className="space-y-0.5">
+          <div className="font-mono text-xs">{String(input.pattern ?? '')}</div>
           {input.path != null && <FilePathDisplay path={String(input.path)} />}
         </div>
       );
@@ -256,7 +453,7 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
     default:
       // Generic JSON display for unknown tools
       return (
-        <pre className="text-xs overflow-x-auto max-h-40 overflow-y-auto rounded bg-muted p-2">
+        <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
           {JSON.stringify(input, null, 2)}
         </pre>
       );
@@ -277,7 +474,7 @@ function ToolResultContentRenderer({ content, isError }: ToolResultContentRender
     return (
       <pre
         className={cn(
-          'text-xs overflow-x-auto max-h-60 overflow-y-auto rounded p-2',
+          'text-xs overflow-x-auto max-h-40 overflow-y-auto rounded px-1.5 py-1',
           isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
         )}
       >
@@ -288,7 +485,7 @@ function ToolResultContentRenderer({ content, isError }: ToolResultContentRender
 
   // Handle array of text/image items
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {content.map((item, index) => {
         const key =
           item.type === 'text' ? `text-${index}-${(item.text ?? '').slice(0, 20)}` : `img-${index}`;
@@ -297,7 +494,7 @@ function ToolResultContentRenderer({ content, isError }: ToolResultContentRender
             <pre
               key={key}
               className={cn(
-                'text-xs overflow-x-auto max-h-60 overflow-y-auto rounded p-2',
+                'text-xs overflow-x-auto max-h-40 overflow-y-auto rounded px-1.5 py-1',
                 isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
               )}
             >
@@ -344,29 +541,29 @@ export function ToolCallGroupRenderer({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="rounded-md border bg-muted/20">
+      <div className="rounded border bg-muted/20">
         <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-2 p-2 text-left hover:bg-muted/50 transition-colors">
+          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
             {isOpen ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
-            <Terminal className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">{toolCalls.length} tool calls</span>
+            <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-xs">{toolCalls.length} tool calls</span>
             <div className="ml-auto flex gap-1">
               {successCount > 0 && (
-                <Badge variant="success" className="text-xs">
+                <Badge variant="success" className="text-[10px] px-1 py-0">
                   {successCount}
                 </Badge>
               )}
               {errorCount > 0 && (
-                <Badge variant="destructive" className="text-xs">
+                <Badge variant="destructive" className="text-[10px] px-1 py-0">
                   {errorCount}
                 </Badge>
               )}
               {pendingCount > 0 && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-[10px] px-1 py-0">
                   {pendingCount}
                 </Badge>
               )}
@@ -399,26 +596,26 @@ function ToolCallItem({ toolCall }: ToolCallItemProps) {
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger asChild>
-        <button className="flex w-full items-center gap-2 p-2 text-left hover:bg-muted/30 transition-colors">
+        <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/30 transition-colors">
           {isOpen ? (
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
           ) : (
-            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
           <span className="font-mono text-xs">{toolCall.name}</span>
           {toolCall.result && (
             <span className="ml-auto">
               {toolCall.result.isError ? (
-                <AlertCircle className="h-3 w-3 text-destructive" />
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
               ) : (
-                <CheckCircle className="h-3 w-3 text-success" />
+                <CheckCircle className="h-4 w-4 shrink-0 text-success" />
               )}
             </span>
           )}
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="px-6 pb-2 space-y-2">
+        <div className="px-4 pb-1.5 space-y-1">
           <ToolInputRenderer name={toolCall.name} input={toolCall.input} />
           {toolCall.result && (
             <ToolResultContentRenderer
@@ -448,7 +645,7 @@ function FilePathDisplay({ path }: { path: string }) {
 
   return (
     <div className="flex items-center gap-1 text-sm">
-      <FileCode className="h-3 w-3 text-muted-foreground" />
+      <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="text-muted-foreground">{directory}/</span>
       <span className="font-medium">{filename}</span>
     </div>

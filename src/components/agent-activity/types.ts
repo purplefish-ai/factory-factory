@@ -21,6 +21,8 @@ export type {
   ClaudeUsage,
   ConnectionState,
   ContentBlockDelta,
+  // Tool call grouping types
+  GroupedMessageItem,
   HistoryMessage,
   ImageItem,
   MessageGroup,
@@ -39,6 +41,7 @@ export type {
   ToolDefinition,
   ToolResultContent,
   ToolResultContentValue,
+  ToolSequence,
   ToolUseContent,
   WebSocketMessage,
 } from '@/lib/claude-types';
@@ -50,6 +53,7 @@ export {
   extractTextFromMessage,
   extractToolInfo,
   extractToolResultInfo,
+  groupAdjacentToolCalls,
   groupMessages,
   isContentBlockDeltaEvent,
   isContentBlockStartEvent,
@@ -57,6 +61,7 @@ export {
   isThinkingContent,
   isToolResultContent,
   isToolResultMessage,
+  isToolSequence,
   isToolUseContent,
   isToolUseMessage,
   updateTokenStatsFromResult,

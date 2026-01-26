@@ -1,30 +1,26 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { AgentActivity, CompactAgentActivity } from './agent-activity';
+import {
+  createAgentMetadata,
+  createBashCommandScenario,
+  createCompleteConversation,
+  createConversationWithErrors,
+  createEditFileScenario,
+  createManyToolsScenario,
+  createManyToolsWithErrorsScenario,
+  createMultiToolScenario,
+  createReadFileScenario,
+  createThinkingScenario,
+  createTokenStats,
+  resetIdCounters,
+} from '@/lib/claude-fixtures';
+import { MockAgentActivity, MockCompactAgentActivity } from './agent-activity';
 
-/**
- * AgentActivity Component Stories
- *
- * NOTE: The AgentActivity and CompactAgentActivity components internally use
- * the useAgentWebSocket hook which requires an active WebSocket connection
- * to an agent. These stories demonstrate the component structure but will
- * show connection/loading states in Storybook since no real WebSocket
- * connection is available.
- *
- * For testing the full functionality, use the actual application with a
- * running agent, or see the individual component stories:
- * - AgentActivity/StatusBar - for connection and agent state display
- * - AgentActivity/StatsPanel - for token usage and cost statistics
- * - AgentActivity/ToolRenderers - for tool call visualization
- *
- * To properly test AgentActivity in isolation, you would need to:
- * 1. Create a mock WebSocket provider/context
- * 2. Mock the useAgentWebSocket hook using Storybook decorators
- * 3. Or refactor the component to accept messages as props (render props pattern)
- */
+// Reset ID counters for consistent IDs across story renders
+resetIdCounters();
 
 const meta = {
   title: 'AgentActivity/AgentActivity',
-  component: AgentActivity,
+  component: MockAgentActivity,
   parameters: {
     layout: 'padded',
     docs: {
@@ -33,9 +29,8 @@ const meta = {
 The AgentActivity component provides a real-time view of agent Claude sessions.
 It connects via WebSocket to stream messages and displays them with token statistics.
 
-**Note:** This component requires an active WebSocket connection to function properly.
-In Storybook, it will show the connecting/empty state. See subcomponent stories for
-detailed UI testing.
+These stories use MockAgentActivity, which accepts pre-loaded messages as props
+for testing without requiring a WebSocket connection.
 
 ### Related Stories
 - \`AgentActivity/StatusBar\` - Connection and agent status indicators
@@ -46,10 +41,26 @@ detailed UI testing.
     },
   },
   tags: ['autodocs'],
+  decorators: [
+    (Story) => (
+      <div style={{ height: '600px' }}>
+        <Story />
+      </div>
+    ),
+  ],
   argTypes: {
-    agentId: {
-      control: 'text',
-      description: 'The agent ID to connect to',
+    messages: {
+      control: false,
+      description: 'Array of ChatMessage objects to display',
+    },
+    connectionState: {
+      control: 'select',
+      options: ['connected', 'connecting', 'disconnected', 'error'],
+      description: 'Simulated connection state',
+    },
+    running: {
+      control: 'boolean',
+      description: 'Whether the agent appears to be running',
     },
     showStats: {
       control: 'boolean',
@@ -63,12 +74,8 @@ detailed UI testing.
       control: 'text',
       description: 'Height of the scroll area (Tailwind class)',
     },
-    autoConnect: {
-      control: 'boolean',
-      description: 'Whether to auto-connect on mount',
-    },
   },
-} satisfies Meta<typeof AgentActivity>;
+} satisfies Meta<typeof MockAgentActivity>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -78,16 +85,269 @@ type Story = StoryObj<typeof meta>;
 // =============================================================================
 
 /**
- * Default configuration showing the full AgentActivity component.
- * Will display connecting state in Storybook due to lack of WebSocket connection.
+ * Default view showing a complete conversation with multiple tool calls,
+ * messages, and results.
  */
 export const Default: Story = {
   args: {
-    agentId: 'agent-demo-123',
+    messages: createCompleteConversation(),
+    connectionState: 'connected',
+    running: false,
     showStats: true,
     showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 2500,
+      outputTokens: 1200,
+      totalCostUsd: 0.0185,
+      totalDurationMs: 8500,
+      turnCount: 4,
+    }),
+    agentMetadata: createAgentMetadata({
+      type: 'WORKER',
+      executionState: 'RUNNING',
+    }),
     height: 'h-[500px]',
-    autoConnect: true,
+  },
+};
+
+/**
+ * Shows a read file operation scenario with user request, tool use, and result.
+ */
+export const ReadFileScenario: Story = {
+  args: {
+    messages: createReadFileScenario(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 800,
+      outputTokens: 450,
+      totalCostUsd: 0.0065,
+      turnCount: 2,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows an edit file operation with read, edit, and verification steps.
+ */
+export const EditFileScenario: Story = {
+  args: {
+    messages: createEditFileScenario(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 1200,
+      outputTokens: 600,
+      totalCostUsd: 0.009,
+      turnCount: 3,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows bash command execution with output.
+ */
+export const BashCommandScenario: Story = {
+  args: {
+    messages: createBashCommandScenario(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 500,
+      outputTokens: 300,
+      totalCostUsd: 0.004,
+      turnCount: 2,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows multiple tools being used in sequence (glob + read).
+ */
+export const MultiToolScenario: Story = {
+  args: {
+    messages: createMultiToolScenario(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 1800,
+      outputTokens: 950,
+      totalCostUsd: 0.014,
+      turnCount: 4,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows many adjacent tool calls grouped together in a collapsible container.
+ * The group shows a summary like "4 tools: Read, Read, Read, Bash [checkmark][checkmark][checkmark][checkmark]"
+ */
+export const GroupedToolCalls: Story = {
+  args: {
+    messages: createManyToolsScenario(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 2200,
+      outputTokens: 1100,
+      totalCostUsd: 0.016,
+      turnCount: 5,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows grouped tool calls where some have errors.
+ * Demonstrates error status indicators in the group summary.
+ */
+export const GroupedToolCallsWithErrors: Story = {
+  args: {
+    messages: createManyToolsWithErrorsScenario(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 1500,
+      outputTokens: 800,
+      totalCostUsd: 0.012,
+      turnCount: 4,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows thinking/reasoning content before the response.
+ */
+export const WithThinking: Story = {
+  args: {
+    messages: createThinkingScenario(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats(),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows the agent in an active running state with loading indicator.
+ */
+export const Running: Story = {
+  args: {
+    messages: createReadFileScenario().slice(0, 3), // Partial conversation
+    connectionState: 'connected',
+    running: true,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 400,
+      outputTokens: 150,
+      totalCostUsd: 0.003,
+      turnCount: 1,
+    }),
+    agentMetadata: createAgentMetadata({
+      executionState: 'RUNNING',
+      cliProcessStatus: 'RUNNING',
+    }),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows error handling with tool errors and system errors.
+ */
+export const WithErrors: Story = {
+  args: {
+    messages: createConversationWithErrors(),
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    error: 'Connection to Claude CLI was interrupted',
+    tokenStats: createTokenStats({
+      inputTokens: 300,
+      outputTokens: 100,
+      totalCostUsd: 0.002,
+      turnCount: 2,
+    }),
+    agentMetadata: createAgentMetadata({
+      isHealthy: false,
+    }),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows the disconnected state.
+ */
+export const Disconnected: Story = {
+  args: {
+    messages: [],
+    connectionState: 'disconnected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: null,
+    agentMetadata: null,
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows the connecting state with skeleton loading.
+ */
+export const Connecting: Story = {
+  args: {
+    messages: [],
+    connectionState: 'connecting',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: null,
+    agentMetadata: null,
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Shows the error connection state.
+ */
+export const ConnectionError: Story = {
+  args: {
+    messages: [],
+    connectionState: 'error',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    error: 'Failed to connect to agent WebSocket',
+    tokenStats: null,
+    agentMetadata: null,
+    height: 'h-[500px]',
   },
 };
 
@@ -96,11 +356,14 @@ export const Default: Story = {
  */
 export const WithoutStats: Story = {
   args: {
-    agentId: 'agent-demo-456',
+    messages: createCompleteConversation(),
+    connectionState: 'connected',
+    running: false,
     showStats: false,
     showStatusBar: true,
+    tokenStats: createTokenStats(),
+    agentMetadata: createAgentMetadata(),
     height: 'h-[500px]',
-    autoConnect: true,
   },
 };
 
@@ -109,11 +372,14 @@ export const WithoutStats: Story = {
  */
 export const WithoutStatusBar: Story = {
   args: {
-    agentId: 'agent-demo-789',
+    messages: createCompleteConversation(),
+    connectionState: 'connected',
+    running: false,
     showStats: true,
     showStatusBar: false,
+    tokenStats: createTokenStats(),
+    agentMetadata: createAgentMetadata(),
     height: 'h-[500px]',
-    autoConnect: true,
   },
 };
 
@@ -122,50 +388,14 @@ export const WithoutStatusBar: Story = {
  */
 export const MessagesOnly: Story = {
   args: {
-    agentId: 'agent-demo-minimal',
+    messages: createReadFileScenario(),
+    connectionState: 'connected',
+    running: false,
     showStats: false,
     showStatusBar: false,
+    tokenStats: null,
+    agentMetadata: null,
     height: 'h-[400px]',
-    autoConnect: true,
-  },
-};
-
-/**
- * Taller configuration for full-page views.
- */
-export const TallView: Story = {
-  args: {
-    agentId: 'agent-demo-tall',
-    showStats: true,
-    showStatusBar: true,
-    height: 'h-[800px]',
-    autoConnect: true,
-  },
-};
-
-/**
- * Short configuration for dashboard widgets.
- */
-export const ShortView: Story = {
-  args: {
-    agentId: 'agent-demo-short',
-    showStats: true,
-    showStatusBar: true,
-    height: 'h-[300px]',
-    autoConnect: true,
-  },
-};
-
-/**
- * Auto-connect disabled - requires manual connection trigger.
- */
-export const ManualConnect: Story = {
-  args: {
-    agentId: 'agent-demo-manual',
-    showStats: true,
-    showStatusBar: true,
-    height: 'h-[500px]',
-    autoConnect: false,
   },
 };
 
@@ -175,53 +405,133 @@ export const ManualConnect: Story = {
 
 /**
  * Compact version of AgentActivity for space-constrained layouts.
- * Shows fewer messages and uses inline stats.
  */
 export const Compact: Story = {
   args: {
-    agentId: 'agent-demo-compact',
+    messages: createCompleteConversation(),
   },
-  render: () => <CompactAgentActivity agentId="agent-demo-compact" maxMessages={10} />,
+  render: (args) => (
+    <MockCompactAgentActivity
+      messages={args.messages}
+      connectionState="connected"
+      running={false}
+      tokenStats={createTokenStats()}
+      maxMessages={10}
+    />
+  ),
 };
 
+/**
+ * Compact view with fewer messages displayed.
+ */
 export const CompactFewMessages: Story = {
   args: {
-    agentId: 'agent-demo-compact-few',
+    messages: createCompleteConversation(),
   },
-  render: () => <CompactAgentActivity agentId="agent-demo-compact-few" maxMessages={5} />,
+  render: (args) => (
+    <MockCompactAgentActivity
+      messages={args.messages}
+      connectionState="connected"
+      running={false}
+      tokenStats={createTokenStats()}
+      maxMessages={5}
+    />
+  ),
 };
 
-export const CompactManyMessages: Story = {
+/**
+ * Compact view in running state.
+ */
+export const CompactRunning: Story = {
   args: {
-    agentId: 'agent-demo-compact-many',
+    messages: createReadFileScenario().slice(0, 3),
   },
-  render: () => <CompactAgentActivity agentId="agent-demo-compact-many" maxMessages={20} />,
+  render: (args) => (
+    <MockCompactAgentActivity
+      messages={args.messages}
+      connectionState="connected"
+      running={true}
+      tokenStats={createTokenStats({
+        inputTokens: 200,
+        outputTokens: 50,
+      })}
+      maxMessages={10}
+    />
+  ),
+};
+
+/**
+ * Compact view in disconnected state.
+ */
+export const CompactDisconnected: Story = {
+  args: {
+    messages: [],
+  },
+  render: () => (
+    <MockCompactAgentActivity
+      messages={[]}
+      connectionState="disconnected"
+      running={false}
+      tokenStats={null}
+      maxMessages={10}
+    />
+  ),
 };
 
 // =============================================================================
 // Layout Examples
 // =============================================================================
 
+/**
+ * Dashboard layout with multiple compact agent views and a main supervisor view.
+ */
 export const DashboardLayout: Story = {
   args: {
-    agentId: 'agent-demo-dashboard',
+    messages: createCompleteConversation(),
   },
+  decorators: [
+    (Story) => (
+      <div style={{ height: '800px' }}>
+        <Story />
+      </div>
+    ),
+  ],
   render: () => (
     <div className="grid grid-cols-2 gap-4">
       <div>
         <h3 className="text-sm font-medium mb-2">Worker Agent 1</h3>
-        <CompactAgentActivity agentId="worker-1" maxMessages={5} />
+        <MockCompactAgentActivity
+          messages={createReadFileScenario()}
+          connectionState="connected"
+          running={false}
+          tokenStats={createTokenStats({ inputTokens: 500, outputTokens: 200 })}
+          maxMessages={5}
+        />
       </div>
       <div>
         <h3 className="text-sm font-medium mb-2">Worker Agent 2</h3>
-        <CompactAgentActivity agentId="worker-2" maxMessages={5} />
+        <MockCompactAgentActivity
+          messages={createBashCommandScenario()}
+          connectionState="connected"
+          running={true}
+          tokenStats={createTokenStats({ inputTokens: 300, outputTokens: 100 })}
+          maxMessages={5}
+        />
       </div>
       <div className="col-span-2">
         <h3 className="text-sm font-medium mb-2">Supervisor Agent</h3>
-        <AgentActivity
-          agentId="supervisor-1"
+        <MockAgentActivity
+          messages={createCompleteConversation()}
+          connectionState="connected"
+          running={false}
           showStats={true}
           showStatusBar={true}
+          tokenStats={createTokenStats({
+            inputTokens: 2500,
+            outputTokens: 1200,
+            totalCostUsd: 0.0185,
+          })}
+          agentMetadata={createAgentMetadata({ type: 'SUPERVISOR' })}
           height="h-[300px]"
         />
       </div>
@@ -229,9 +539,12 @@ export const DashboardLayout: Story = {
   ),
 };
 
+/**
+ * Side panel layout with main content area and agent activity sidebar.
+ */
 export const SidePanelLayout: Story = {
   args: {
-    agentId: 'agent-demo-sidepanel',
+    messages: createMultiToolScenario(),
   },
   render: () => (
     <div className="flex gap-4">
@@ -243,11 +556,71 @@ export const SidePanelLayout: Story = {
       </div>
       <div className="w-80">
         <h3 className="text-sm font-medium mb-2">Agent Activity</h3>
-        <AgentActivity
-          agentId="side-panel-agent"
+        <MockAgentActivity
+          messages={createMultiToolScenario()}
+          connectionState="connected"
+          running={false}
           showStats={false}
           showStatusBar={true}
+          tokenStats={createTokenStats()}
+          agentMetadata={createAgentMetadata()}
           height="h-[400px]"
+        />
+      </div>
+    </div>
+  ),
+};
+
+/**
+ * Multiple agent states shown side by side for comparison.
+ */
+export const StateComparison: Story = {
+  args: {
+    messages: [],
+  },
+  decorators: [
+    (Story) => (
+      <div style={{ height: '300px' }}>
+        <Story />
+      </div>
+    ),
+  ],
+  render: () => (
+    <div className="grid grid-cols-4 gap-4">
+      <div>
+        <h4 className="text-xs font-medium mb-2 text-muted-foreground">Connected</h4>
+        <MockCompactAgentActivity
+          messages={createReadFileScenario()}
+          connectionState="connected"
+          running={false}
+          tokenStats={createTokenStats()}
+        />
+      </div>
+      <div>
+        <h4 className="text-xs font-medium mb-2 text-muted-foreground">Running</h4>
+        <MockCompactAgentActivity
+          messages={createReadFileScenario().slice(0, 2)}
+          connectionState="connected"
+          running={true}
+          tokenStats={createTokenStats()}
+        />
+      </div>
+      <div>
+        <h4 className="text-xs font-medium mb-2 text-muted-foreground">Connecting</h4>
+        <MockCompactAgentActivity
+          messages={[]}
+          connectionState="connecting"
+          running={false}
+          tokenStats={null}
+        />
+      </div>
+      <div>
+        <h4 className="text-xs font-medium mb-2 text-muted-foreground">Disconnected</h4>
+        <MockCompactAgentActivity
+          messages={[]}
+          connectionState="disconnected"
+          running={false}
+          tokenStats={null}
         />
       </div>
     </div>

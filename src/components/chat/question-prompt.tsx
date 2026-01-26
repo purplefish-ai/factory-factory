@@ -5,14 +5,6 @@ import { useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
@@ -21,7 +13,7 @@ import { cn } from '@/lib/utils';
 // Types
 // =============================================================================
 
-interface QuestionModalProps {
+interface QuestionPromptProps {
   question: UserQuestionRequest | null;
   onAnswer: (requestId: string, answers: Record<string, string | string[]>) => void;
 }
@@ -44,19 +36,19 @@ function SingleSelectQuestion({ question, index, value, onChange }: SingleQuesti
   const selectedValue = typeof value === 'string' ? value : '';
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {question.header && (
-        <h4 className="text-sm font-medium text-muted-foreground">{question.header}</h4>
+        <h4 className="text-xs font-medium text-muted-foreground">{question.header}</h4>
       )}
       <p className="text-sm font-medium">{question.question}</p>
 
-      <RadioGroup value={selectedValue} onValueChange={onChange} className="space-y-2">
+      <RadioGroup value={selectedValue} onValueChange={onChange} className="space-y-1.5">
         {question.options.map((option) => (
           <label
             key={`${index}-${option.label}`}
             htmlFor={`question-${index}-option-${option.label}`}
             className={cn(
-              'flex items-center gap-3 p-3 rounded-md border transition-colors cursor-pointer hover:bg-muted',
+              'flex items-center gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
               selectedValue === option.label && 'border-primary bg-primary/5'
             )}
           >
@@ -65,10 +57,10 @@ function SingleSelectQuestion({ question, index, value, onChange }: SingleQuesti
               id={`question-${index}-option-${option.label}`}
               className="shrink-0"
             />
-            <div className="flex-1 space-y-1">
-              <span className="text-sm font-medium">{option.label}</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm">{option.label}</span>
               {option.description && (
-                <p className="text-xs text-muted-foreground">{option.description}</p>
+                <p className="text-xs text-muted-foreground truncate">{option.description}</p>
               )}
             </div>
           </label>
@@ -96,13 +88,13 @@ function MultiSelectQuestion({ question, index, value, onChange }: SingleQuestio
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {question.header && (
-        <h4 className="text-sm font-medium text-muted-foreground">{question.header}</h4>
+        <h4 className="text-xs font-medium text-muted-foreground">{question.header}</h4>
       )}
       <p className="text-sm font-medium">{question.question}</p>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {question.options.map((option) => {
           const isSelected = selectedValues.includes(option.label);
 
@@ -111,7 +103,7 @@ function MultiSelectQuestion({ question, index, value, onChange }: SingleQuestio
               key={`${index}-${option.label}`}
               htmlFor={`question-${index}-option-${option.label}`}
               className={cn(
-                'flex items-center gap-3 p-3 rounded-md border transition-colors cursor-pointer hover:bg-muted',
+                'flex items-center gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
                 isSelected && 'border-primary bg-primary/5'
               )}
             >
@@ -121,10 +113,10 @@ function MultiSelectQuestion({ question, index, value, onChange }: SingleQuestio
                 onCheckedChange={(checked) => handleCheckboxChange(option.label, checked === true)}
                 className="shrink-0"
               />
-              <div className="flex-1 space-y-1">
-                <span className="text-sm font-medium">{option.label}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm">{option.label}</span>
                 {option.description && (
-                  <p className="text-xs text-muted-foreground">{option.description}</p>
+                  <p className="text-xs text-muted-foreground truncate">{option.description}</p>
                 )}
               </div>
             </label>
@@ -140,13 +132,14 @@ function MultiSelectQuestion({ question, index, value, onChange }: SingleQuestio
 // =============================================================================
 
 /**
- * Modal dialog for answering AskUserQuestion requests (Phase 11).
+ * Inline prompt for answering AskUserQuestion requests.
+ * Appears above the chat input as a compact card.
  */
-export function QuestionModal({ question, onAnswer }: QuestionModalProps) {
+export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   // State for answers - keyed by question index
   const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
 
-  // Reset answers when question changes
+  // Current request ID for key generation
   const currentRequestId = question?.requestId;
 
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
@@ -195,27 +188,11 @@ export function QuestionModal({ question, onAnswer }: QuestionModalProps) {
   }
 
   return (
-    <Dialog
-      open={!!question}
-      onOpenChange={() => {
-        /* Modal cannot be dismissed */
-      }}
-    >
-      <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5 text-blue-500" />
-            <DialogTitle>Question from Claude</DialogTitle>
-          </div>
-          <DialogDescription>
-            Please answer the following question{question.questions.length > 1 ? 's' : ''} to
-            continue.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-6 py-4">
+    <div className="border-t bg-muted/50 p-3">
+      <div className="flex items-start gap-3">
+        <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" />
+        <div className="flex-1 min-w-0 space-y-3">
           {question.questions.map((q, index) => (
-            // Using question text as key since questions don't have unique IDs
             <div key={`${currentRequestId}-${q.question}`}>
               {q.multiSelect ? (
                 <MultiSelectQuestion
@@ -233,17 +210,16 @@ export function QuestionModal({ question, onAnswer }: QuestionModalProps) {
                 />
               )}
 
-              {index < question.questions.length - 1 && <div className="border-t my-4" />}
+              {index < question.questions.length - 1 && <div className="border-t my-3" />}
             </div>
           ))}
         </div>
-
-        <DialogFooter>
-          <Button onClick={handleSubmit} disabled={!isComplete}>
+        <div className="shrink-0 self-end">
+          <Button size="sm" onClick={handleSubmit} disabled={!isComplete}>
             Submit
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 }

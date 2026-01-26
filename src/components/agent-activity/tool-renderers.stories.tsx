@@ -5,8 +5,8 @@ import {
   SAMPLE_FILE_CONTENTS,
   SAMPLE_FILE_PATHS,
 } from '@/lib/claude-fixtures';
-import type { ClaudeMessage } from '@/lib/claude-types';
-import { ToolCallGroupRenderer, ToolInfoRenderer } from './tool-renderers';
+import type { ChatMessage, ClaudeMessage, ToolSequence } from '@/lib/claude-types';
+import { ToolCallGroupRenderer, ToolInfoRenderer, ToolSequenceGroup } from './tool-renderers';
 import type { ToolCallInfo } from './types';
 
 // =============================================================================
@@ -574,5 +574,194 @@ export const ToolResultStates: Story = {
         />
       </div>
     </div>
+  ),
+};
+
+// =============================================================================
+// ToolSequenceGroup Stories
+// =============================================================================
+
+/**
+ * Helper to create a ChatMessage from a tool use.
+ */
+function createToolUseChatMessage(
+  toolName: string,
+  input: Record<string, unknown>,
+  toolId = `toolu_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+): ChatMessage {
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    source: 'claude',
+    message: createToolUseClaudeMessage(toolName, input, toolId),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Helper to create a ChatMessage from a tool result.
+ */
+function createToolResultChatMessage(
+  toolUseId: string,
+  content: string,
+  isError = false
+): ChatMessage {
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    source: 'claude',
+    message: createToolResultClaudeMessage(toolUseId, content, isError),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Creates a ToolSequence for testing.
+ */
+function createToolSequence(
+  tools: Array<{ name: string; input: Record<string, unknown>; result?: string; isError?: boolean }>
+): ToolSequence {
+  const messages: ChatMessage[] = [];
+  const toolNames: string[] = [];
+  const statuses: Array<'pending' | 'success' | 'error'> = [];
+  const pairedCalls: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    status: 'pending' | 'success' | 'error';
+    result?: { content: string; isError: boolean };
+  }> = [];
+
+  for (const tool of tools) {
+    const toolId = `toolu_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    messages.push(createToolUseChatMessage(tool.name, tool.input, toolId));
+    toolNames.push(tool.name);
+
+    const status: 'pending' | 'success' | 'error' =
+      tool.result !== undefined ? (tool.isError ? 'error' : 'success') : 'pending';
+    statuses.push(status);
+
+    pairedCalls.push({
+      id: toolId,
+      name: tool.name,
+      input: tool.input,
+      status,
+      result:
+        tool.result !== undefined
+          ? { content: tool.result, isError: tool.isError ?? false }
+          : undefined,
+    });
+
+    if (tool.result !== undefined) {
+      messages.push(createToolResultChatMessage(toolId, tool.result, tool.isError));
+    }
+  }
+
+  return {
+    type: 'tool_sequence',
+    id: `tool-seq-${Date.now()}`,
+    pairedCalls,
+    messages,
+    toolNames,
+    statuses,
+  };
+}
+
+export const ToolSequenceGroupBasic: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      defaultOpen={false}
+      sequence={createToolSequence([
+        {
+          name: 'Read',
+          input: { file_path: '/project/src/Button.tsx' },
+          result: SAMPLE_FILE_CONTENTS.typescript,
+        },
+        {
+          name: 'Read',
+          input: { file_path: '/project/src/Input.tsx' },
+          result: 'export function Input() {}',
+        },
+        { name: 'Bash', input: { command: 'npm test' }, result: SAMPLE_BASH_OUTPUTS.npmTest },
+      ])}
+    />
+  ),
+};
+
+export const ToolSequenceGroupExpanded: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      defaultOpen={true}
+      sequence={createToolSequence([
+        {
+          name: 'Read',
+          input: { file_path: '/project/src/Button.tsx' },
+          result: SAMPLE_FILE_CONTENTS.typescript,
+        },
+        {
+          name: 'Edit',
+          input: { file_path: '/project/src/Button.tsx', old_string: 'const', new_string: 'let' },
+          result: 'File edited successfully',
+        },
+        { name: 'Bash', input: { command: 'npm test' }, result: SAMPLE_BASH_OUTPUTS.npmTest },
+      ])}
+    />
+  ),
+};
+
+export const ToolSequenceGroupWithErrors: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      defaultOpen={false}
+      sequence={createToolSequence([
+        {
+          name: 'Read',
+          input: { file_path: '/project/src/valid.ts' },
+          result: 'export const valid = true;',
+        },
+        {
+          name: 'Read',
+          input: { file_path: '/project/src/missing.ts' },
+          result: 'Error: ENOENT: no such file',
+          isError: true,
+        },
+        {
+          name: 'Read',
+          input: { file_path: '/project/src/another.ts' },
+          result: 'export const another = 42;',
+        },
+      ])}
+    />
+  ),
+};
+
+export const ToolSequenceGroupPending: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      defaultOpen={false}
+      sequence={createToolSequence([
+        { name: 'Read', input: { file_path: '/project/src/file1.ts' }, result: 'content 1' },
+        { name: 'Read', input: { file_path: '/project/src/file2.ts' } }, // No result = pending
+        { name: 'Read', input: { file_path: '/project/src/file3.ts' } }, // No result = pending
+      ])}
+    />
+  ),
+};
+
+export const ToolSequenceGroupManyTools: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      defaultOpen={false}
+      sequence={createToolSequence([
+        { name: 'Glob', input: { pattern: '**/*.ts' }, result: '["/a.ts", "/b.ts"]' },
+        { name: 'Read', input: { file_path: '/a.ts' }, result: 'export const a = 1;' },
+        { name: 'Read', input: { file_path: '/b.ts' }, result: 'export const b = 2;' },
+        {
+          name: 'Edit',
+          input: { file_path: '/a.ts', old_string: '1', new_string: '2' },
+          result: 'ok',
+        },
+        { name: 'Bash', input: { command: 'npm test' }, result: 'pass' },
+        { name: 'Bash', input: { command: 'npm build' }, result: 'done' },
+      ])}
+    />
   ),
 };

@@ -726,6 +726,158 @@ export function extractToolResultInfo(msg: ClaudeMessage): ToolResultInfo | null
   return null;
 }
 
+// =============================================================================
+// Tool Call Grouping Types
+// =============================================================================
+
+/**
+ * Represents a tool call paired with its result.
+ */
+export interface PairedToolCall {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  status: 'pending' | 'success' | 'error';
+  result?: {
+    content: ToolResultContentValue;
+    isError: boolean;
+  };
+}
+
+/**
+ * Represents a grouped sequence of adjacent tool calls.
+ * Each tool_use is paired with its corresponding tool_result.
+ */
+export interface ToolSequence {
+  type: 'tool_sequence';
+  id: string;
+  pairedCalls: PairedToolCall[];
+  /** @deprecated Use pairedCalls instead */
+  messages: ChatMessage[];
+  /** @deprecated Use pairedCalls instead */
+  toolNames: string[];
+  /** @deprecated Use pairedCalls instead */
+  statuses: Array<'pending' | 'success' | 'error'>;
+}
+
+/**
+ * Union type for items in a grouped message list.
+ */
+export type GroupedMessageItem = ChatMessage | ToolSequence;
+
+/**
+ * Checks if a grouped item is a ToolSequence.
+ */
+export function isToolSequence(item: GroupedMessageItem): item is ToolSequence {
+  return (item as ToolSequence).type === 'tool_sequence';
+}
+
+/**
+ * Processes a sequence of tool messages and extracts paired tool calls.
+ * Each tool_use is paired with its corresponding tool_result.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but necessary nested conditions for message type checking
+function extractPairedToolCalls(toolMessages: ChatMessage[]): {
+  pairedCalls: PairedToolCall[];
+  toolNames: string[];
+  statuses: Array<'pending' | 'success' | 'error'>;
+} {
+  const pairedCalls: PairedToolCall[] = [];
+  const toolUseIdToIndex = new Map<string, number>(); // Maps tool_use_id to pairedCalls index
+
+  // First pass: collect all tool_use messages
+  for (const msg of toolMessages) {
+    if (msg.message && isToolUseMessage(msg.message)) {
+      const toolInfo = extractToolInfo(msg.message);
+      if (toolInfo) {
+        toolUseIdToIndex.set(toolInfo.id, pairedCalls.length);
+        pairedCalls.push({
+          id: toolInfo.id,
+          name: toolInfo.name,
+          input: toolInfo.input,
+          status: 'pending',
+        });
+      }
+    }
+  }
+
+  // Second pass: match tool_result messages to their tool_use
+  for (const msg of toolMessages) {
+    if (msg.message && isToolResultMessage(msg.message)) {
+      const resultInfo = extractToolResultInfo(msg.message);
+      if (resultInfo) {
+        const callIndex = toolUseIdToIndex.get(resultInfo.toolUseId);
+        if (callIndex !== undefined) {
+          pairedCalls[callIndex].status = resultInfo.isError ? 'error' : 'success';
+          pairedCalls[callIndex].result = {
+            content: resultInfo.content,
+            isError: resultInfo.isError,
+          };
+        }
+      }
+    }
+  }
+
+  // Extract deprecated fields for backwards compatibility
+  const toolNames = pairedCalls.map((pc) => pc.name);
+  const statuses = pairedCalls.map((pc) => pc.status);
+
+  return { pairedCalls, toolNames, statuses };
+}
+
+/**
+ * Groups adjacent tool_use and tool_result messages together.
+ * Returns a mixed array of regular messages and tool sequences.
+ * Each tool_use is paired with its corresponding tool_result for unified rendering.
+ */
+export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageItem[] {
+  const result: GroupedMessageItem[] = [];
+  let currentToolSequence: ChatMessage[] = [];
+
+  const flushToolSequence = () => {
+    if (currentToolSequence.length === 0) {
+      return;
+    }
+
+    const { pairedCalls, toolNames, statuses } = extractPairedToolCalls(currentToolSequence);
+
+    // Always create a sequence, even for single tools (so they're paired with results)
+    const sequence: ToolSequence = {
+      type: 'tool_sequence',
+      id: `tool-seq-${currentToolSequence[0].id}`,
+      pairedCalls,
+      messages: currentToolSequence,
+      toolNames,
+      statuses,
+    };
+    result.push(sequence);
+    currentToolSequence = [];
+  };
+
+  for (const message of messages) {
+    const isToolMessage =
+      message.message &&
+      (isToolUseMessage(message.message) || isToolResultMessage(message.message));
+
+    if (isToolMessage) {
+      currentToolSequence.push(message);
+    } else {
+      // Flush any pending tool sequence before adding a non-tool message
+      flushToolSequence();
+      result.push(message);
+    }
+  }
+
+  // Flush any remaining tool sequence
+  flushToolSequence();
+
+  return result;
+}
+
+// =============================================================================
+// Token Stats
+// =============================================================================
+
 /**
  * Creates an empty TokenStats object.
  */

@@ -2,12 +2,13 @@
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { ChatMessage } from '@/lib/claude-types';
-import { extractTextFromMessage } from '@/lib/claude-types';
+import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
+import { extractTextFromMessage, groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import { AssistantMessageRenderer, LoadingIndicator, MessageWrapper } from './message-renderers';
 import { StatsPanel } from './stats-panel';
 import { MinimalStatus, StatusBar } from './status-bar';
+import { ToolSequenceGroup } from './tool-renderers';
 import { useAgentWebSocket } from './use-agent-websocket';
 
 // =============================================================================
@@ -76,15 +77,18 @@ export function AgentActivity({
         {/* Message List */}
         <div className="flex-1 min-w-0">
           <ScrollArea className={cn('rounded-md border', height)}>
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-2">
               {/* Empty State */}
               {messages.length === 0 && !running && (
                 <EmptyState connectionState={connectionState} />
               )}
 
-              {/* Messages */}
-              {messages.map((message) => (
-                <MessageItem key={message.id} message={message} />
+              {/* Messages (with tool call grouping) */}
+              {groupAdjacentToolCalls(messages).map((item) => (
+                <GroupedMessageItemRenderer
+                  key={isToolSequence(item) ? item.id : item.id}
+                  item={item}
+                />
               ))}
 
               {/* Loading Indicator */}
@@ -198,6 +202,24 @@ function MessageItem({ message }: MessageItemProps) {
 }
 
 // =============================================================================
+// Grouped Message Item Renderer
+// =============================================================================
+
+interface GroupedMessageItemRendererProps {
+  item: GroupedMessageItem;
+}
+
+/**
+ * Renders either a regular message or a tool sequence group.
+ */
+function GroupedMessageItemRenderer({ item }: GroupedMessageItemRendererProps) {
+  if (isToolSequence(item)) {
+    return <ToolSequenceGroup sequence={item} />;
+  }
+  return <MessageItem message={item} />;
+}
+
+// =============================================================================
 // Compact Message Item
 // =============================================================================
 
@@ -271,6 +293,157 @@ function EmptyState({ connectionState }: EmptyStateProps) {
       </div>
       <p className="font-medium">No Activity Yet</p>
       <p className="text-sm">Agent output will appear here when activity starts</p>
+    </div>
+  );
+}
+
+// =============================================================================
+// Mock Agent Activity (for Storybook/testing)
+// =============================================================================
+
+import type { AgentMetadata, ConnectionState, TokenStats } from './types';
+
+export interface MockAgentActivityProps {
+  /** Pre-loaded messages to display */
+  messages: ChatMessage[];
+  /** Connection state to simulate */
+  connectionState?: ConnectionState;
+  /** Whether the agent appears to be running */
+  running?: boolean;
+  /** Agent metadata to display */
+  agentMetadata?: AgentMetadata | null;
+  /** Token stats to display */
+  tokenStats?: TokenStats | null;
+  /** Error message to display */
+  error?: string | null;
+  /** Whether to show the stats panel */
+  showStats?: boolean;
+  /** Whether to show the status bar */
+  showStatusBar?: boolean;
+  /** Additional CSS classes */
+  className?: string;
+  /** Height of the scroll area */
+  height?: string;
+}
+
+/**
+ * Mock version of AgentActivity for Storybook testing.
+ * Accepts messages and state as props instead of using WebSocket.
+ */
+export function MockAgentActivity({
+  messages,
+  connectionState = 'connected',
+  running = false,
+  agentMetadata = null,
+  tokenStats = null,
+  error = null,
+  showStats = true,
+  showStatusBar = true,
+  className,
+  height = 'h-[500px]',
+}: MockAgentActivityProps) {
+  return (
+    <div className={cn('flex flex-col', className)}>
+      {/* Status Bar */}
+      {showStatusBar && (
+        <StatusBar
+          connectionState={connectionState}
+          running={running}
+          agentMetadata={agentMetadata}
+          error={error}
+          onReconnect={() => {
+            // No-op for mock component
+          }}
+          className="mb-3"
+        />
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex gap-4">
+        {/* Message List */}
+        <div className="flex-1 min-w-0">
+          <ScrollArea className={cn('rounded-md border', height)}>
+            <div className="p-4 space-y-2">
+              {/* Empty State */}
+              {messages.length === 0 && !running && (
+                <EmptyState connectionState={connectionState} />
+              )}
+
+              {/* Messages (with tool call grouping) */}
+              {groupAdjacentToolCalls(messages).map((item) => (
+                <GroupedMessageItemRenderer
+                  key={isToolSequence(item) ? item.id : item.id}
+                  item={item}
+                />
+              ))}
+
+              {/* Loading Indicator */}
+              {running && <LoadingIndicator className="py-4" />}
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* Stats Panel (side) */}
+        {showStats && tokenStats && (
+          <div className="w-64 shrink-0">
+            <StatsPanel stats={tokenStats} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export interface MockCompactAgentActivityProps {
+  /** Pre-loaded messages to display */
+  messages: ChatMessage[];
+  /** Connection state to simulate */
+  connectionState?: ConnectionState;
+  /** Whether the agent appears to be running */
+  running?: boolean;
+  /** Token stats to display */
+  tokenStats?: TokenStats | null;
+  /** Maximum messages to show */
+  maxMessages?: number;
+  /** Additional CSS classes */
+  className?: string;
+}
+
+/**
+ * Mock version of CompactAgentActivity for Storybook testing.
+ */
+export function MockCompactAgentActivity({
+  messages,
+  connectionState = 'connected',
+  running = false,
+  tokenStats = null,
+  maxMessages = 10,
+  className,
+}: MockCompactAgentActivityProps) {
+  // Only show the last N messages
+  const displayMessages = messages.slice(-maxMessages);
+
+  return (
+    <div className={cn('rounded-md border', className)}>
+      {/* Header with status */}
+      <div className="flex items-center justify-between border-b px-3 py-2">
+        <div className="flex items-center gap-2">
+          <MinimalStatus connectionState={connectionState} running={running} />
+          <span className="text-sm font-medium">Agent Activity</span>
+        </div>
+        {tokenStats && <StatsPanel stats={tokenStats} variant="compact" />}
+      </div>
+
+      {/* Message List */}
+      <ScrollArea className="h-48">
+        <div className="p-3 space-y-2">
+          {displayMessages.map((message) => (
+            <CompactMessageItem key={message.id} message={message} />
+          ))}
+
+          {running && <LoadingIndicator className="py-2" />}
+        </div>
+      </ScrollArea>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Bot, Loader2 } from 'lucide-react';
 import * as React from 'react';
+import { MarkdownRenderer } from '@/components/ui/markdown';
 import type {
   ChatMessage,
   ClaudeMessage,
@@ -83,7 +84,7 @@ interface ToolCallRendererProps {
  */
 export function ToolCallRenderer({ message, className }: ToolCallRendererProps) {
   return (
-    <div className={cn('my-2', className)}>
+    <div className={cn('my-1', className)}>
       <ToolInfoRenderer message={message} />
     </div>
   );
@@ -290,41 +291,10 @@ interface TextRendererProps {
 }
 
 /**
- * Renders text content with basic markdown-like formatting.
+ * Renders text content with full markdown support.
  */
 function TextRenderer({ text }: TextRendererProps) {
-  // Simple code block detection
-  const parts = text.split(/(```[\s\S]*?```)/g);
-
-  return (
-    <>
-      {parts.map((part, index) => {
-        if (part.startsWith('```') && part.endsWith('```')) {
-          // Code block
-          const content = part.slice(3, -3);
-          const firstNewline = content.indexOf('\n');
-          const language = firstNewline > 0 ? content.slice(0, firstNewline).trim() : '';
-          const code = firstNewline > 0 ? content.slice(firstNewline + 1) : content;
-
-          return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: parts from text split have no natural ID
-            <pre key={index} className="my-2 rounded-md bg-muted p-3 overflow-x-auto text-sm">
-              {language && <div className="text-xs text-muted-foreground mb-2">{language}</div>}
-              <code>{code}</code>
-            </pre>
-          );
-        }
-
-        // Regular text - preserve whitespace
-        return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: parts from text split have no natural ID
-          <span key={index} className="whitespace-pre-wrap">
-            {part}
-          </span>
-        );
-      })}
-    </>
-  );
+  return <MarkdownRenderer content={text} />;
 }
 
 // =============================================================================

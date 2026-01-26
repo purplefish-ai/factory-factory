@@ -938,6 +938,95 @@ export function createUserQuestionScenario(): {
 }
 
 /**
+ * Creates a scenario with many adjacent tool calls for testing tool grouping.
+ */
+export function createManyToolsScenario(): ChatMessage[] {
+  const userMsg = createUserMessage('Read all the component files and check the tests.');
+  const assistantMsg = createAssistantMessage(
+    "I'll read the component files and check the test suite."
+  );
+
+  // Multiple adjacent tool uses with their results
+  const read1 = createReadToolUse('/Users/developer/project/src/components/Button.tsx');
+  const read1Result = createToolResultMessage(getToolUseId(read1), SAMPLE_FILE_CONTENTS.typescript);
+
+  const read2 = createReadToolUse('/Users/developer/project/src/components/Input.tsx');
+  const read2Result = createToolResultMessage(
+    getToolUseId(read2),
+    'export function Input({ value, onChange }) { return <input value={value} onChange={onChange} />; }'
+  );
+
+  const read3 = createReadToolUse('/Users/developer/project/src/components/Card.tsx');
+  const read3Result = createToolResultMessage(
+    getToolUseId(read3),
+    'export function Card({ children }) { return <div className="card">{children}</div>; }'
+  );
+
+  const bashTest = createBashToolUse('npm test', 'Run the test suite');
+  const bashTestResult = createToolResultMessage(
+    getToolUseId(bashTest),
+    SAMPLE_BASH_OUTPUTS.npmTest
+  );
+
+  const summary = createAssistantMessage(
+    "I've read 3 component files (Button, Input, Card) and verified that all tests pass. The components are well-structured functional React components."
+  );
+
+  return [
+    userMsg,
+    assistantMsg,
+    read1,
+    read1Result,
+    read2,
+    read2Result,
+    read3,
+    read3Result,
+    bashTest,
+    bashTestResult,
+    summary,
+  ];
+}
+
+/**
+ * Creates a scenario with adjacent tool calls where some fail.
+ */
+export function createManyToolsWithErrorsScenario(): ChatMessage[] {
+  const userMsg = createUserMessage('Read these three files.');
+  const assistantMsg = createAssistantMessage("I'll read the three files.");
+
+  const read1 = createReadToolUse('/Users/developer/project/src/valid.ts');
+  const read1Result = createToolResultMessage(getToolUseId(read1), 'export const valid = true;');
+
+  const read2 = createToolUseMessage('Read', {
+    file_path: '/Users/developer/project/src/missing.ts',
+  });
+  const read2Result = createToolResultMessage(
+    getToolUseId(read2),
+    'Error: ENOENT: no such file or directory',
+    true
+  );
+
+  const read3 = createReadToolUse('/Users/developer/project/src/another.ts');
+  const read3Result = createToolResultMessage(getToolUseId(read3), 'export const another = 42;');
+
+  const followUp = createAssistantMessage(
+    'I was able to read 2 of the 3 files. The file missing.ts does not exist.'
+  );
+
+  return [
+    userMsg,
+    assistantMsg,
+    read1,
+    read1Result,
+    read2,
+    read2Result,
+    read3,
+    read3Result,
+    followUp,
+  ];
+}
+
+/**
  * Creates a complete conversation with system init, multiple exchanges, and result.
  */
 export function createCompleteConversation(): ChatMessage[] {

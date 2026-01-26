@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ChatMessage, ClaudeMessage, ToolResultContentValue } from '@/lib/claude-types';
 import {
   extractTextFromMessage,
@@ -236,7 +237,7 @@ function ErrorMessage({ error }: { error: string }) {
 }
 
 /**
- * Renders text content with optional streaming cursor.
+ * Renders text content with markdown support and optional streaming cursor.
  */
 function TextBlock({ text, isStreaming }: { text: string; isStreaming?: boolean }) {
   if (!(text || isStreaming)) {
@@ -244,8 +245,8 @@ function TextBlock({ text, isStreaming }: { text: string; isStreaming?: boolean 
   }
 
   return (
-    <div className="whitespace-pre-wrap text-sm">
-      {text}
+    <div className="text-sm">
+      <MarkdownRenderer content={text} />
       {isStreaming && <StreamingCursor />}
     </div>
   );
@@ -266,7 +267,9 @@ export function MessageRenderer({ message, isStreaming = false }: MessageRendere
     return (
       <Card className="bg-primary text-primary-foreground ml-auto max-w-[80%]">
         <CardContent className="p-3">
-          <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+          <div className="text-sm">
+            <MarkdownRenderer content={message.text ?? ''} className="prose-invert" />
+          </div>
         </CardContent>
       </Card>
     );
