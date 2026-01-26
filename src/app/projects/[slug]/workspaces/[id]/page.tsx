@@ -2,7 +2,7 @@
 
 import { GitBranch, PanelRight } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@/components/chat';
@@ -224,6 +224,9 @@ function WorkspaceChatContent() {
   const { data: claudeSessions, isLoading: sessionsLoading } =
     trpc.session.listClaudeSessions.useQuery({ workspaceId }, { refetchInterval: 5000 });
 
+  // Track selected session locally for immediate UI feedback
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
   const utils = trpc.useUtils();
 
   // Create session mutation
@@ -242,6 +245,13 @@ function WorkspaceChatContent() {
 
   // Get the first session (or most recent) to auto-load
   const initialSessionId = claudeSessions?.[0]?.id;
+
+  // Initialize selectedSessionId when sessions first load
+  useEffect(() => {
+    if (initialSessionId && selectedSessionId === null) {
+      setSelectedSessionId(initialSessionId);
+    }
+  }, [initialSessionId, selectedSessionId]);
 
   // Initialize WebSocket connection with chat hook
   const {
@@ -279,6 +289,9 @@ function WorkspaceChatContent() {
   // Handle selecting a session by TRPC session ID
   const handleSelectSession = useCallback(
     (sessionId: string) => {
+      // Update selected session immediately for UI feedback
+      setSelectedSessionId(sessionId);
+
       // Find the session and load it using the claudeSessionId
       const session = claudeSessions?.find((s) => s.id === sessionId);
       if (session?.claudeSessionId) {
@@ -305,16 +318,16 @@ function WorkspaceChatContent() {
         return;
       }
 
-      const closingSession = claudeSessions[sessionIndex];
-      const isCurrentSession = closingSession.claudeSessionId === claudeSessionId;
+      const isSelectedSession = sessionId === selectedSessionId;
 
       // Delete the session
       deleteSession.mutate({ id: sessionId });
 
-      // If closing the current session, switch to an adjacent one
-      if (isCurrentSession && claudeSessions.length > 1) {
+      // If closing the selected session, switch to an adjacent one
+      if (isSelectedSession && claudeSessions.length > 1) {
         // Prefer next session, fallback to previous
         const nextSession = claudeSessions[sessionIndex + 1] ?? claudeSessions[sessionIndex - 1];
+        setSelectedSessionId(nextSession?.id ?? null);
         if (nextSession?.claudeSessionId) {
           loadSession(nextSession.claudeSessionId);
         } else {
@@ -322,10 +335,11 @@ function WorkspaceChatContent() {
         }
       } else if (claudeSessions.length === 1) {
         // Closing the last session
+        setSelectedSessionId(null);
         clearChat();
       }
     },
-    [claudeSessions, claudeSessionId, deleteSession, loadSession, clearChat]
+    [claudeSessions, selectedSessionId, deleteSession, loadSession, clearChat]
   );
 
   // Handle new chat button - creates a new session for this workspace
@@ -389,9 +403,7 @@ function WorkspaceChatContent() {
     );
   }
 
-  // Find the current TRPC session ID and running session ID
-  const currentTrpcSessionId =
-    claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id ?? null;
+  // Find the running session ID (still needs to be derived from claudeSessionId)
   const runningSessionId = running
     ? claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id
     : undefined;
@@ -422,7 +434,7 @@ function WorkspaceChatContent() {
           <div className="px-4 py-2 border-b">
             <MainViewTabBar
               sessions={claudeSessions}
-              currentSessionId={currentTrpcSessionId}
+              currentSessionId={selectedSessionId}
               runningSessionId={runningSessionId}
               onSelectSession={handleSelectSession}
               onCreateSession={handleNewChat}

@@ -100,7 +100,7 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
     }
   }, []);
 
-  const { connected, create, sendInput, resize } = useTerminalWebSocket({
+  const { connected, create, sendInput, resize, destroy } = useTerminalWebSocket({
     workspaceId,
     onOutput: handleOutput,
     onCreated: handleCreated,
@@ -129,12 +129,19 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
   // Close terminal tab
   const handleCloseTab = useCallback(
     (id: string) => {
-      setTabs((prev) => prev.filter((tab) => tab.id !== id));
+      // Find the tab to get its terminalId before removing it
+      const tab = tabs.find((t) => t.id === id);
+      if (tab?.terminalId) {
+        // Destroy the server-side terminal process
+        destroy(tab.terminalId);
+      }
+
+      setTabs((prev) => prev.filter((t) => t.id !== id));
       if (activeTabId === id) {
         setActiveTabId(tabs.length > 1 ? (tabs[tabs.length - 2]?.id ?? null) : null);
       }
     },
-    [activeTabId, tabs]
+    [activeTabId, tabs, destroy]
   );
 
   // Handle terminal input - send to the active tab's terminal

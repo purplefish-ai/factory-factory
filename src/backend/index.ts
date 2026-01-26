@@ -935,6 +935,28 @@ function handleChatUpgrade(
 // Track terminal WebSocket connections per workspace
 const terminalConnections = new Map<string, Set<import('ws').WebSocket>>();
 
+// Track listener unsubscribe functions per WebSocket connection
+// Map: WebSocket -> Map<terminalId, unsubscribe functions[]>
+const terminalListenerCleanup = new WeakMap<import('ws').WebSocket, Map<string, (() => void)[]>>();
+
+/**
+ * Clean up all terminal listener subscriptions for a WebSocket connection
+ */
+function cleanupTerminalListeners(ws: import('ws').WebSocket): void {
+  const cleanupMap = terminalListenerCleanup.get(ws);
+  if (!cleanupMap) {
+    return;
+  }
+
+  for (const [terminalId, unsubs] of cleanupMap) {
+    logger.debug('Cleaning up listeners for terminal', { terminalId });
+    for (const unsub of unsubs) {
+      unsub();
+    }
+  }
+  cleanupMap.clear();
+}
+
 // Handle terminal WebSocket upgrade
 function handleTerminalUpgrade(
   request: import('http').IncomingMessage,
@@ -959,6 +981,9 @@ function handleTerminalUpgrade(
       terminalConnections.set(workspaceId, new Set());
     }
     terminalConnections.get(workspaceId)?.add(ws);
+
+    // Initialize listener cleanup tracking for this WebSocket
+    terminalListenerCleanup.set(ws, new Map());
 
     // Send initial status
     logger.debug('Sending initial status message', { workspaceId });
@@ -1003,9 +1028,12 @@ function handleTerminalUpgrade(
               rows: message.rows ?? 24,
             });
 
+            // Track unsubscribe functions for this terminal
+            const unsubscribers: (() => void)[] = [];
+
             // Set up output forwarding - include terminalId so frontend can route to correct tab
             logger.debug('Setting up output forwarding', { terminalId });
-            terminalService.onOutput(terminalId, (output) => {
+            const unsubOutput = terminalService.onOutput(terminalId, (output) => {
               if (ws.readyState === 1) {
                 logger.debug('Forwarding output to client', {
                   terminalId,
@@ -1019,14 +1047,27 @@ function handleTerminalUpgrade(
                 });
               }
             });
+            unsubscribers.push(unsubOutput);
 
             // Set up exit handler - include terminalId so frontend can route to correct tab
-            terminalService.onExit(terminalId, (exitCode) => {
+            const unsubExit = terminalService.onExit(terminalId, (exitCode) => {
               logger.info('Terminal process exited', { terminalId, exitCode });
               if (ws.readyState === 1) {
                 ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
               }
+              // Clean up listeners for this terminal when it exits
+              const cleanupMap = terminalListenerCleanup.get(ws);
+              if (cleanupMap) {
+                cleanupMap.delete(terminalId);
+              }
             });
+            unsubscribers.push(unsubExit);
+
+            // Store unsubscribers for cleanup
+            const cleanupMap = terminalListenerCleanup.get(ws);
+            if (cleanupMap) {
+              cleanupMap.set(terminalId, unsubscribers);
+            }
 
             logger.info('Sending created message to client', { terminalId });
             ws.send(JSON.stringify({ type: 'created', terminalId }));
@@ -1078,6 +1119,15 @@ function handleTerminalUpgrade(
           case 'destroy': {
             if (message.terminalId) {
               logger.info('Destroying terminal', { terminalId: message.terminalId });
+              // Clean up listeners before destroying
+              const cleanupMap = terminalListenerCleanup.get(ws);
+              const unsubs = cleanupMap?.get(message.terminalId);
+              if (unsubs) {
+                for (const unsub of unsubs) {
+                  unsub();
+                }
+                cleanupMap?.delete(message.terminalId);
+              }
               terminalService.destroyTerminal(workspaceId, message.terminalId);
             }
             break;
@@ -1095,6 +1145,10 @@ function handleTerminalUpgrade(
     // Handle close
     ws.on('close', () => {
       logger.info('Terminal WebSocket connection closed', { workspaceId });
+
+      // Clean up all listener subscriptions for this WebSocket
+      cleanupTerminalListeners(ws);
+
       const connections = terminalConnections.get(workspaceId);
       if (connections) {
         connections.delete(ws);

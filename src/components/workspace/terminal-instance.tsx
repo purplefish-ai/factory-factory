@@ -135,7 +135,24 @@ export function TerminalInstance({ onData, onResize, output, className }: Termin
 
   // Write output to terminal
   useEffect(() => {
-    if (terminalRef.current && output.length > lastOutputLengthRef.current) {
+    if (!terminalRef.current) {
+      return;
+    }
+
+    // Handle output reset (e.g., when switching tabs or clearing)
+    if (output.length < lastOutputLengthRef.current) {
+      terminalRef.current.clear();
+      lastOutputLengthRef.current = 0;
+      // If there's new output after reset, write it
+      if (output.length > 0) {
+        terminalRef.current.write(output);
+        lastOutputLengthRef.current = output.length;
+      }
+      return;
+    }
+
+    // Handle new output appended
+    if (output.length > lastOutputLengthRef.current) {
       const newOutput = output.slice(lastOutputLengthRef.current);
       terminalRef.current.write(newOutput);
       lastOutputLengthRef.current = output.length;

@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { WorkspaceStatus } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { GitClientFactory } from '../clients/git.client.js';
 import { gitCommand } from '../lib/shell.js';
@@ -72,16 +73,25 @@ function parseGitStatusOutput(output: string): GitStatusFile[] {
 }
 
 /**
- * Validate that a file path doesn't escape the worktree directory
+ * Validate that a file path doesn't escape the worktree directory.
+ * Uses path normalization to handle encoded sequences and other bypass attempts.
  */
 function isPathSafe(worktreePath: string, filePath: string): boolean {
-  // Reject paths with ..
-  if (filePath.includes('..')) {
+  // Normalize the file path first to handle encoded sequences and resolve ./ etc
+  const normalizedPath = path.normalize(filePath);
+
+  // Check for path traversal attempts after normalization
+  if (
+    normalizedPath.startsWith('..') ||
+    normalizedPath.includes(`${path.sep}..${path.sep}`) ||
+    normalizedPath.includes(`${path.sep}..`) ||
+    normalizedPath.startsWith(path.sep)
+  ) {
     return false;
   }
 
   // Resolve the full path and ensure it's within the worktree
-  const fullPath = path.resolve(worktreePath, filePath);
+  const fullPath = path.resolve(worktreePath, normalizedPath);
   const normalizedWorktree = path.resolve(worktreePath);
 
   return fullPath.startsWith(normalizedWorktree + path.sep) || fullPath === normalizedWorktree;
@@ -209,8 +219,12 @@ export const workspaceRouter = router({
         logger.error('Failed to create worktree for workspace', error as Error, {
           workspaceId: workspace.id,
         });
-        // Return workspace without worktree - user can see the error in Files tab
-        return workspace;
+        // Throw error so user can see what went wrong
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Failed to create worktree: ${(error as Error).message}`,
+          cause: error,
+        });
       }
     }),
 
