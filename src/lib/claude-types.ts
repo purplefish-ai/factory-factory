@@ -48,6 +48,17 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   planModeEnabled: false,
 };
 
+/**
+ * Suffix appended to user messages to enable extended thinking mode in Claude CLI.
+ * This is stripped from display in the UI.
+ */
+export const THINKING_SUFFIX = ' ultrathink';
+
+/**
+ * Valid model values for server-side validation.
+ */
+export const VALID_MODEL_VALUES = AVAILABLE_MODELS.map((m) => m.value);
+
 // =============================================================================
 // Content Item Types (mirrors backend types for frontend use)
 // =============================================================================
@@ -365,8 +376,7 @@ export interface WebSocketMessage {
     | 'session_loaded'
     | 'agent_metadata'
     | 'permission_request'
-    | 'user_question'
-    | 'settings_updated';
+    | 'user_question';
   sessionId?: string;
   claudeSessionId?: string;
   running?: boolean;

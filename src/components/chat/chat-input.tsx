@@ -298,6 +298,7 @@ export function ChatInput({
           </div>
 
           {/* Right side: Send/Stop button */}
+          {/* Button is enabled when running to allow stop functionality */}
           <InputGroupButton
             onClick={handleSendClick}
             disabled={isDisabled && !running}

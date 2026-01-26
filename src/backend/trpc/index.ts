@@ -1,6 +1,5 @@
 import { adminRouter } from './admin.trpc.js';
 import { agentRouter } from './agent.trpc.js';
-import { chatSessionSettingsRouter } from './chat-session-settings.trpc.js';
 import { decisionLogRouter } from './decision-log.trpc.js';
 import { mailRouter } from './mail.trpc.js';
 import { projectRouter } from './project.trpc.js';
@@ -14,7 +13,6 @@ export const appRouter = router({
   mail: mailRouter,
   decisionLog: decisionLogRouter,
   admin: adminRouter,
-  chatSessionSettings: chatSessionSettingsRouter,
 });
 
 // Export type for use in frontend

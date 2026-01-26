@@ -214,14 +214,3 @@ model DecisionLog {
   @@index([timestamp])
 }
 
-model ChatSessionSettings {
-  id                String      @id @default(cuid())
-  sessionId         String      @unique  // Claude CLI session ID
-  selectedModel     String?     // null = use CLI default
-  thinkingEnabled   Boolean     @default(false)
-  planModeEnabled   Boolean     @default(false)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  @@index([sessionId])
-}

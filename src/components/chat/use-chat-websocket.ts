@@ -11,7 +11,7 @@ import type {
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
-import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
 import {
   buildWebSocketUrl,
   MAX_RECONNECT_ATTEMPTS,
@@ -99,14 +99,6 @@ interface QuestionResponseMessage {
   answers: Record<string, string | string[]>;
 }
 
-interface UpdateSettingsMessage {
-  type: 'update_settings';
-  claudeSessionId: string;
-  selectedModel?: string | null;
-  thinkingEnabled?: boolean;
-  planModeEnabled?: boolean;
-}
-
 type OutgoingMessage =
   | StartMessage
   | UserInputMessage
@@ -114,8 +106,7 @@ type OutgoingMessage =
   | ListSessionsMessage
   | LoadSessionMessage
   | PermissionResponseMessage
-  | QuestionResponseMessage
-  | UpdateSettingsMessage;
+  | QuestionResponseMessage;
 
 // =============================================================================
 // Debug Logging
@@ -442,12 +433,6 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
   ctx.setLoadingSession(false);
 }
 
-function handleSettingsUpdatedMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
-  if (data.settings) {
-    ctx.setChatSettings(data.settings);
-  }
-}
-
 function handlePermissionRequestMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
   if (data.requestId && data.toolName) {
     ctx.setPendingPermission({
@@ -609,7 +594,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
           session_loaded: handleSessionLoadedMessage,
           permission_request: handlePermissionRequestMessage,
           user_question: handleUserQuestionMessage,
-          settings_updated: handleSettingsUpdatedMessage,
         };
 
         const handler = handlers[data.type];
@@ -734,8 +718,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       }
 
       // Send the user input
-      // Append "ultrathink" to enable extended thinking when thinking mode is enabled
-      const messageToSend = chatSettings.thinkingEnabled ? `${text} ultrathink` : text;
+      // Append thinking suffix to enable extended thinking when thinking mode is enabled
+      const messageToSend = chatSettings.thinkingEnabled ? `${text}${THINKING_SUFFIX}` : text;
       sendWsMessage({ type: 'user_input', text: messageToSend });
     },
     [running, claudeSessionId, chatSettings, sendWsMessage]
@@ -793,22 +777,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     [sendWsMessage]
   );
 
-  const updateSettings = useCallback(
-    (settings: Partial<ChatSettings>) => {
-      // Update local state immediately for responsive UI
-      setChatSettings((prev) => ({ ...prev, ...settings }));
-
-      // Persist to database if we have a session
-      if (claudeSessionId) {
-        sendWsMessage({
-          type: 'update_settings',
-          claudeSessionId,
-          ...settings,
-        });
-      }
-    },
-    [claudeSessionId, sendWsMessage]
-  );
+  const updateSettings = useCallback((settings: Partial<ChatSettings>) => {
+    // Update local state - settings are inferred from session file on load,
+    // not persisted to database
+    setChatSettings((prev) => ({ ...prev, ...settings }));
+  }, []);
 
   return {
     // State

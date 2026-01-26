@@ -17,7 +17,6 @@ import {
   taskCreatedHandler,
   topLevelTaskCreatedHandler,
 } from './inngest/functions/index.js';
-import { chatSessionSettingsAccessor } from './resource_accessors/chat-session-settings.accessor.js';
 import { orchestratorRouter } from './routers/api/orchestrator.router.js';
 import { projectRouter } from './routers/api/project.router.js';
 import { taskRouter } from './routers/api/task.router.js';
@@ -839,11 +838,17 @@ async function handleChatMessage(
       // Map planModeEnabled to permissionMode
       const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
 
+      // Validate model value - only allow known models, fallback to default
+      const validModels = ['sonnet', 'opus'];
+      const requestedModel = message.selectedModel || message.model;
+      const model =
+        requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
+
       await getOrCreateChatClient(sessionId, {
         workingDir: message.workingDir || workingDir,
         resumeSessionId: message.resumeSessionId,
         systemPrompt: message.systemPrompt,
-        model: message.selectedModel || message.model,
+        model,
         thinkingEnabled: message.thinkingEnabled,
         permissionMode,
       });
@@ -893,13 +898,24 @@ async function handleChatMessage(
 
     case 'load_session': {
       // Load session history without starting a process
+      // Settings are inferred from session file (model from assistant messages,
+      // thinking mode from last user message ending with suffix)
       const targetSessionId = message.claudeSessionId;
       if (targetSessionId) {
-        const [history, settings, gitBranch] = await Promise.all([
+        const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
           SessionManager.getHistory(targetSessionId, workingDir),
-          chatSessionSettingsAccessor.getOrCreate(targetSessionId),
+          SessionManager.getSessionModel(targetSessionId, workingDir),
+          SessionManager.getSessionThinkingEnabled(targetSessionId, workingDir),
           SessionManager.getSessionGitBranch(targetSessionId, workingDir),
         ]);
+
+        // Map full model ID to short alias if needed
+        const selectedModel = model?.includes('opus')
+          ? 'opus'
+          : model?.includes('haiku')
+            ? 'haiku'
+            : null; // null = sonnet (default)
+
         ws.send(
           JSON.stringify({
             type: 'session_loaded',
@@ -907,35 +923,9 @@ async function handleChatMessage(
             messages: history,
             gitBranch,
             settings: {
-              selectedModel: settings.selectedModel,
-              thinkingEnabled: settings.thinkingEnabled,
-              planModeEnabled: settings.planModeEnabled,
-            },
-          })
-        );
-      } else {
-        ws.send(JSON.stringify({ type: 'error', message: 'claudeSessionId required' }));
-      }
-      break;
-    }
-
-    case 'update_settings': {
-      // Update settings for the current session
-      const targetSessionId = message.claudeSessionId;
-      if (targetSessionId) {
-        const updatedSettings = await chatSessionSettingsAccessor.update(targetSessionId, {
-          selectedModel: message.selectedModel,
-          thinkingEnabled: message.thinkingEnabled,
-          planModeEnabled: message.planModeEnabled,
-        });
-        ws.send(
-          JSON.stringify({
-            type: 'settings_updated',
-            claudeSessionId: targetSessionId,
-            settings: {
-              selectedModel: updatedSettings.selectedModel,
-              thinkingEnabled: updatedSettings.thinkingEnabled,
-              planModeEnabled: updatedSettings.planModeEnabled,
+              selectedModel,
+              thinkingEnabled,
+              planModeEnabled: false, // Plan mode is not persisted, always default to off
             },
           })
         );

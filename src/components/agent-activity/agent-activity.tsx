@@ -8,6 +8,7 @@ import {
   groupAdjacentToolCalls,
   isThinkingContent,
   isToolSequence,
+  THINKING_SUFFIX,
 } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import {
@@ -27,15 +28,15 @@ import { useAgentWebSocket } from './use-agent-websocket';
 // =============================================================================
 
 /**
- * Strips the "ultrathink" suffix from user message text for display.
+ * Strips the thinking suffix from user message text for display.
  * This is appended when thinking mode is enabled but shouldn't be shown in the UI.
  */
-function stripUltrathinkSuffix(text: string | undefined): string {
+function stripThinkingSuffix(text: string | undefined): string {
   if (!text) {
     return '';
   }
-  if (text.endsWith(' ultrathink')) {
-    return text.slice(0, -11); // ' ultrathink' is 11 characters
+  if (text.endsWith(THINKING_SUFFIX)) {
+    return text.slice(0, -THINKING_SUFFIX.length);
   }
   return text;
 }
@@ -217,7 +218,7 @@ export function MessageItem({ message }: MessageItemProps) {
     return (
       <MessageWrapper chatMessage={message}>
         <div className="rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block">
-          {stripUltrathinkSuffix(message.text)}
+          {stripThinkingSuffix(message.text)}
         </div>
       </MessageWrapper>
     );
@@ -265,7 +266,7 @@ function CompactMessageItem({ message }: CompactMessageItemProps) {
   if (message.source === 'user') {
     return (
       <div className="text-sm text-muted-foreground">
-        <span className="font-medium">User:</span> {stripUltrathinkSuffix(message.text)}
+        <span className="font-medium">User:</span> {stripThinkingSuffix(message.text)}
       </div>
     );
   }
