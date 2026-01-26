@@ -5,17 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
-import {
-  ChatInput,
-  PermissionPrompt,
-  QuestionPrompt,
-  SessionTabBar,
-  useChatWebSocket,
-} from '@/components/chat';
+import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   MainViewContent,
+  MainViewTabBar,
   RightPanel,
   useWorkspacePanel,
   WorkspacePanelProvider,
@@ -394,8 +389,10 @@ function WorkspaceChatContent() {
     );
   }
 
-  // Find the running session ID (session that is currently processing)
-  const runningSessionIdFromDb = running
+  // Find the current TRPC session ID and running session ID
+  const currentTrpcSessionId =
+    claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id ?? null;
+  const runningSessionId = running
     ? claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id
     : undefined;
 
@@ -421,14 +418,12 @@ function WorkspaceChatContent() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel: Session tabs + Main View Content */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Session tabs (only above left panel) */}
+          {/* Tab bar */}
           <div className="px-4 py-2 border-b">
-            <SessionTabBar
-              sessions={claudeSessions ?? []}
-              currentSessionId={
-                claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id ?? null
-              }
-              runningSessionId={runningSessionIdFromDb}
+            <MainViewTabBar
+              sessions={claudeSessions}
+              currentSessionId={currentTrpcSessionId}
+              runningSessionId={runningSessionId}
               onSelectSession={handleSelectSession}
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}

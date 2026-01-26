@@ -2,7 +2,7 @@
 
 import { AlertCircle, AlertTriangle, FileCode, Loader2 } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
@@ -107,8 +107,9 @@ export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
         ) : (
           <SyntaxHighlighter
             language={data.language}
-            style={vscDarkPlus}
+            style={oneLight}
             showLineNumbers
+            wrapLines
             customStyle={{
               margin: 0,
               padding: '1rem',
@@ -116,11 +117,21 @@ export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
               fontSize: '0.75rem',
               lineHeight: '1.5',
             }}
+            codeTagProps={{
+              style: {
+                background: 'transparent',
+              },
+            }}
             lineNumberStyle={{
               minWidth: '3em',
               paddingRight: '1em',
               color: 'var(--muted-foreground)',
-              opacity: 0.5,
+              background: 'transparent',
+            }}
+            lineProps={{
+              style: {
+                background: 'transparent',
+              },
             }}
           >
             {data.content}

@@ -143,10 +143,20 @@ function FileNode({ entry, depth, onFileSelect }: FileNodeProps) {
 // =============================================================================
 
 export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: FileTreeProps) {
-  const { data, isLoading, error } = trpc.workspace.listFiles.useQuery({
-    workspaceId,
-    path: path || undefined,
-  });
+  const { data, isLoading, error } = trpc.workspace.listFiles.useQuery(
+    {
+      workspaceId,
+      path: path || undefined,
+    },
+    {
+      // Refetch when window focuses to pick up new files or worktree changes
+      refetchOnWindowFocus: true,
+      // Refetch periodically to catch worktree creation
+      refetchInterval: depth === 0 ? 10_000 : false, // Only root level refetches
+      // Consider data stale immediately so it refetches on mount
+      staleTime: 0,
+    }
+  );
 
   if (isLoading) {
     return (

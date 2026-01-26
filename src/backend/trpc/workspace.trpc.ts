@@ -348,7 +348,14 @@ export const workspaceRouter = router({
         throw new Error(`Workspace not found: ${input.workspaceId}`);
       }
 
+      logger.info('listFiles called', {
+        workspaceId: input.workspaceId,
+        worktreePath: workspace.worktreePath,
+        requestedPath: input.path,
+      });
+
       if (!workspace.worktreePath) {
+        logger.warn('No worktreePath for workspace', { workspaceId: input.workspaceId });
         return { entries: [], hasWorktree: false };
       }
 
@@ -390,8 +397,19 @@ export const workspaceRouter = router({
           return a.name.localeCompare(b.name);
         });
 
+        logger.info('listFiles returning entries', {
+          workspaceId: input.workspaceId,
+          fullPath,
+          entryCount: entries.length,
+        });
+
         return { entries, hasWorktree: true };
       } catch (error) {
+        logger.error('listFiles error', error as Error, {
+          workspaceId: input.workspaceId,
+          fullPath,
+          errorCode: (error as NodeJS.ErrnoException).code,
+        });
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
           return { entries: [], hasWorktree: true };
         }
