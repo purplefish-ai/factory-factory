@@ -84,6 +84,9 @@ export type ProcessStatus = 'starting' | 'ready' | 'running' | 'exited';
 export class ClaudeProcess extends EventEmitter {
   readonly protocol: ClaudeProtocol;
 
+  /** Timeout for spawn/initialization in milliseconds */
+  private static readonly SPAWN_TIMEOUT = 30_000;
+
   private process: ChildProcess;
   private sessionId: string | null = null;
   private status: ProcessStatus = 'starting';
@@ -119,6 +122,8 @@ export class ClaudeProcess extends EventEmitter {
         FORCE_COLOR: '0',
         NO_COLOR: '1',
       },
+      // Create new process group for clean termination
+      detached: true,
     });
 
     // Verify stdio handles exist
@@ -149,10 +154,45 @@ export class ClaudeProcess extends EventEmitter {
     // Start the protocol
     protocol.start();
 
-    // Perform initialization sequence
-    await claudeProcess.initialize(options);
+    // Perform initialization sequence with timeout
+    try {
+      await ClaudeProcess.withTimeout(
+        claudeProcess.initialize(options),
+        ClaudeProcess.SPAWN_TIMEOUT,
+        'Claude process spawn/initialization timed out'
+      );
+    } catch (error) {
+      // Clean up on initialization failure
+      claudeProcess.killProcessGroup();
+      throw error;
+    }
 
     return claudeProcess;
+  }
+
+  /**
+   * Helper to wrap a promise with a timeout.
+   */
+  private static withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(message));
+      }, timeoutMs);
+
+      promise
+        .then((result) => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        });
+    });
   }
 
   // ===========================================================================
@@ -183,6 +223,14 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   /**
+   * Get the OS process ID.
+   * Used for database tracking and orphan cleanup.
+   */
+  getPid(): number | undefined {
+    return this.process.pid;
+  }
+
+  /**
    * Check if the process is still running.
    */
   isRunning(): boolean {
@@ -203,7 +251,7 @@ export class ClaudeProcess extends EventEmitter {
     }
 
     // Send interrupt via protocol
-    this.protocol.sendInterrupt();
+    await this.protocol.sendInterrupt();
 
     // Wait for graceful exit with timeout
     const gracefulTimeout = 5000;
@@ -221,18 +269,41 @@ export class ClaudeProcess extends EventEmitter {
 
     await Promise.race([exitPromise, timeoutPromise]);
 
-    // Force kill if still running
+    // Force kill entire process group if still running
     if (this.isRunning()) {
-      this.process.kill('SIGKILL');
+      this.killProcessGroup();
     }
   }
 
   /**
-   * Forcefully kill the process immediately.
+   * Forcefully kill the process and its process group immediately.
    */
   kill(): void {
     if (this.status !== 'exited') {
-      this.process.kill('SIGKILL');
+      this.killProcessGroup();
+    }
+  }
+
+  /**
+   * Kill the entire process group using negative PGID.
+   * Falls back to killing single process if group kill fails.
+   */
+  private killProcessGroup(): void {
+    const pid = this.process.pid;
+    if (!pid) {
+      return;
+    }
+
+    try {
+      // Kill entire process group using negative PID
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // Fallback to killing single process
+      try {
+        this.process.kill('SIGKILL');
+      } catch {
+        // Process may already be dead
+      }
     }
   }
 
@@ -343,7 +414,7 @@ export class ClaudeProcess extends EventEmitter {
 
     // Disallowed tools
     if (options.disallowedTools && options.disallowedTools.length > 0) {
-      args.push('--disallowedTools', options.disallowedTools.join(','));
+      args.push('--disallowed-tools', options.disallowedTools.join(','));
     }
 
     return args;
@@ -412,7 +483,7 @@ export class ClaudeProcess extends EventEmitter {
 
     // Set permission mode if specified
     if (options.permissionMode) {
-      this.protocol.sendSetPermissionMode(options.permissionMode);
+      await this.protocol.sendSetPermissionMode(options.permissionMode);
     }
 
     // Update status to ready

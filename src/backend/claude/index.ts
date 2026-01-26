@@ -15,6 +15,7 @@ import {
   type AssistantMessage,
   type ClaudeJson,
   type ControlRequest,
+  type HookCallbackRequest,
   type HooksConfig,
   type InitializeResponseData,
   isCanUseToolRequest,
@@ -235,6 +236,16 @@ export class ClaudeClient extends EventEmitter {
     return this.process?.getInitializeResponse() ?? null;
   }
 
+  /**
+   * Get the OS process ID.
+   * Used for database tracking and orphan cleanup.
+   *
+   * @returns The PID or undefined if process not running
+   */
+  getPid(): number | undefined {
+    return this.process?.getPid();
+  }
+
   // ===========================================================================
   // Lifecycle
   // ===========================================================================
@@ -374,31 +385,8 @@ export class ClaudeClient extends EventEmitter {
       // Emit the permission request for visibility
       this.emit('permission_request', controlRequest);
 
-      const request = controlRequest.request;
-      let response: ControlResponseBody;
-
       try {
-        if (isCanUseToolRequest(request)) {
-          // Handle can_use_tool request
-          response = await this.permissionHandler.onCanUseTool(request);
-        } else if (isHookCallbackRequest(request)) {
-          // Handle hook_callback request
-          const hookEventName = request.input.hook_event_name;
-
-          if (hookEventName === 'PreToolUse') {
-            response = await this.permissionHandler.onPreToolUseHook(request);
-          } else if (hookEventName === 'Stop') {
-            response = await this.permissionHandler.onStopHook(request);
-          } else {
-            // Unknown hook type - allow by default
-            response = { behavior: 'allow' as const };
-          }
-        } else {
-          // Unknown request type - allow by default
-          response = { behavior: 'allow' as const };
-        }
-
-        // Send the response
+        const response = await this.handleControlRequest(controlRequest.request);
         this.process?.protocol.sendControlResponse(controlRequest.request_id, response);
       } catch (error) {
         // On error, deny the request
@@ -409,6 +397,45 @@ export class ClaudeClient extends EventEmitter {
         });
       }
     });
+  }
+
+  /**
+   * Handle a control request and return the appropriate response.
+   */
+  private async handleControlRequest(
+    request: ControlRequest['request']
+  ): Promise<ControlResponseBody> {
+    if (isCanUseToolRequest(request)) {
+      return await this.permissionHandler.onCanUseTool(request);
+    }
+
+    if (isHookCallbackRequest(request)) {
+      return await this.handleHookCallback(request);
+    }
+
+    // Unknown request type - deny for security
+    return {
+      behavior: 'deny',
+      message: `Unknown request subtype: ${(request as { subtype?: string }).subtype ?? 'undefined'}`,
+    };
+  }
+
+  /**
+   * Handle a hook callback request.
+   */
+  private async handleHookCallback(request: HookCallbackRequest): Promise<ControlResponseBody> {
+    const hookEventName = request.input.hook_event_name;
+
+    if (hookEventName === 'PreToolUse') {
+      return await this.permissionHandler.onPreToolUseHook(request);
+    }
+
+    if (hookEventName === 'Stop') {
+      return await this.permissionHandler.onStopHook(request);
+    }
+
+    // Unknown hook type - allow by default
+    return { behavior: 'allow' };
   }
 }
 

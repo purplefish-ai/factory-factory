@@ -1,38 +1,12 @@
-/**
- * Chat components barrel exports
- */
+// Hook
+
+export { ChatInput } from './chat-input';
+export { MessageList } from './message-list';
 
 // Components
-export { AssistantGroupRenderer, GroupedMessages } from './message-groups';
-export {
-  AssistantMessageRenderer,
-  ErrorRenderer,
-  MessageRenderer,
-  ResultRenderer,
-  StreamDeltaRenderer,
-  SystemMessageRenderer,
-} from './message-renderers';
-// Utilities
-export {
-  convertHistoryMessage,
-  extractFromContent,
-  extractToolInfo,
-  extractToolResult,
-  extractToolUse,
-  groupMessages,
-  hasToolContent,
-} from './message-utils';
-export { ToolCallGroupRenderer, ToolInfoRenderer } from './tool-renderers';
-// Types
-export type {
-  ChatMessage,
-  ClaudeMessage,
-  HistoryMessage,
-  MessageGroup,
-  ToolInfo,
-  WebSocketMessage,
-} from './types';
-export type { UseChatWebSocketReturn } from './use-chat-websocket';
-// Hooks
+export { MessageRenderer } from './message-renderer';
+export { PermissionModal } from './permission-modal';
+export { QuestionModal } from './question-modal';
+export { SessionPicker } from './session-picker';
+export type { UseChatWebSocketOptions, UseChatWebSocketReturn } from './use-chat-websocket';
 export { useChatWebSocket } from './use-chat-websocket';
-export { UserMessage } from './user-message';

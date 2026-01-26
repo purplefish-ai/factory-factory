@@ -44,6 +44,8 @@ export interface PendingRequest {
 export interface ClaudeProtocolOptions {
   /** Timeout for pending requests in milliseconds. Default: 60000ms */
   requestTimeout?: number;
+  /** Maximum line length to accept from CLI. Default: 1MB */
+  maxLineLength?: number;
 }
 
 /**
@@ -83,7 +85,9 @@ export class ClaudeProtocol extends EventEmitter {
   private pendingRequests: Map<string, PendingRequest>;
   private rl: readline.Interface | null;
   private requestTimeout: number;
+  private maxLineLength: number;
   private started: boolean;
+  private drainPromise: Promise<void> | null;
 
   constructor(stdin: Writable, stdout: Readable, options?: ClaudeProtocolOptions) {
     super();
@@ -92,7 +96,9 @@ export class ClaudeProtocol extends EventEmitter {
     this.pendingRequests = new Map();
     this.rl = null;
     this.requestTimeout = options?.requestTimeout ?? 60_000;
+    this.maxLineLength = options?.maxLineLength ?? 1_000_000; // 1MB default
     this.started = false;
+    this.drainPromise = null;
   }
 
   // ===========================================================================
@@ -130,7 +136,8 @@ export class ClaudeProtocol extends EventEmitter {
         timeoutId,
       });
 
-      this.sendRaw(message);
+      // Fire-and-forget the send - backpressure handled internally
+      void this.sendRaw(message);
     });
   }
 
@@ -138,8 +145,9 @@ export class ClaudeProtocol extends EventEmitter {
    * Send request to set permission mode.
    *
    * @param mode - The permission mode to set
+   * @returns Promise that resolves when the message is sent
    */
-  sendSetPermissionMode(mode: PermissionMode): void {
+  async sendSetPermissionMode(mode: PermissionMode): Promise<void> {
     const requestId = randomUUID();
 
     const message = {
@@ -151,26 +159,25 @@ export class ClaudeProtocol extends EventEmitter {
       },
     };
 
-    this.sendRaw(message);
+    await this.sendRaw(message);
   }
 
   /**
    * Send a user message to the CLI.
    *
    * @param content - Either a string or an array of content items
+   * @returns Promise that resolves when the message is sent
    */
-  sendUserMessage(content: string | ClaudeContentItem[]): void {
-    const messageContent = typeof content === 'string' ? content : content;
-
+  async sendUserMessage(content: string | ClaudeContentItem[]): Promise<void> {
     const message = {
       type: 'user' as const,
       message: {
         role: 'user' as const,
-        content: messageContent,
+        content,
       },
     };
 
-    this.sendRaw(message);
+    await this.sendRaw(message);
   }
 
   /**
@@ -178,8 +185,9 @@ export class ClaudeProtocol extends EventEmitter {
    *
    * @param requestId - The request_id from the control request
    * @param response - The response data
+   * @returns Promise that resolves when the message is sent
    */
-  sendControlResponse(requestId: string, response: ControlResponseBody): void {
+  async sendControlResponse(requestId: string, response: ControlResponseBody): Promise<void> {
     const message = {
       type: 'control_response' as const,
       response: {
@@ -189,13 +197,15 @@ export class ClaudeProtocol extends EventEmitter {
       },
     };
 
-    this.sendRaw(message);
+    await this.sendRaw(message);
   }
 
   /**
    * Send an interrupt signal to the CLI.
+   *
+   * @returns Promise that resolves when the message is sent
    */
-  sendInterrupt(): void {
+  async sendInterrupt(): Promise<void> {
     const requestId = randomUUID();
 
     const message = {
@@ -206,7 +216,7 @@ export class ClaudeProtocol extends EventEmitter {
       },
     };
 
-    this.sendRaw(message);
+    await this.sendRaw(message);
   }
 
   // ===========================================================================
@@ -272,11 +282,30 @@ export class ClaudeProtocol extends EventEmitter {
   // ===========================================================================
 
   /**
-   * Send a raw message to stdin as NDJSON.
+   * Send a raw message to stdin as NDJSON with backpressure handling.
+   *
+   * If the write buffer is full, waits for drain before continuing.
+   * This prevents memory exhaustion under high message volume.
    */
-  private sendRaw(message: unknown): void {
+  private async sendRaw(message: unknown): Promise<void> {
+    // Wait for any pending drain
+    if (this.drainPromise) {
+      await this.drainPromise;
+    }
+
     const line = `${JSON.stringify(message)}\n`;
-    this.stdin.write(line);
+    const canContinue = this.stdin.write(line);
+
+    if (!canContinue) {
+      // Buffer is full, wait for drain
+      this.drainPromise = new Promise<void>((resolve) => {
+        this.stdin.once('drain', () => {
+          this.drainPromise = null;
+          resolve();
+        });
+      });
+      await this.drainPromise;
+    }
   }
 
   /**
@@ -285,6 +314,15 @@ export class ClaudeProtocol extends EventEmitter {
   private processLine(line: string): void {
     const trimmed = line.trim();
     if (!trimmed) {
+      return;
+    }
+
+    // Check line length to prevent memory exhaustion from pathological inputs
+    if (trimmed.length > this.maxLineLength) {
+      this.emit(
+        'error',
+        new Error(`Message exceeds max line length: ${trimmed.length} > ${this.maxLineLength}`)
+      );
       return;
     }
 

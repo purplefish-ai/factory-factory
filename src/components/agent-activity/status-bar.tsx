@@ -1,14 +1,9 @@
 'use client';
 
-/**
- * Status bar component for agent activity
- * Shows connection state, agent status, and running state
- */
-
 import {
   Activity,
   AlertCircle,
-  GitBranch,
+  CheckCircle,
   Loader2,
   Pause,
   Play,
@@ -16,138 +11,74 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
+import type * as React from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { AgentMetadata, ConnectionState } from './types';
+import { Separator } from '@/components/ui/separator';
+import type { AgentMetadata, ConnectionState } from '@/lib/claude-types';
+import { cn } from '@/lib/utils';
+
+// =============================================================================
+// Status Bar
+// =============================================================================
 
 interface StatusBarProps {
   connectionState: ConnectionState;
   running: boolean;
   agentMetadata: AgentMetadata | null;
-  onReconnect: () => void;
+  error: string | null;
+  onReconnect?: () => void;
+  className?: string;
 }
 
-function ConnectionIndicator({ state }: { state: ConnectionState }) {
-  switch (state) {
-    case 'connected':
-      return (
-        <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
-          <Wifi className="h-4 w-4" />
-          <span className="text-xs font-medium">Connected</span>
-        </div>
-      );
-    case 'connecting':
-      return (
-        <div className="flex items-center gap-1.5 text-yellow-600 dark:text-yellow-400">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-xs font-medium">Connecting...</span>
-        </div>
-      );
-    case 'disconnected':
-      return (
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <WifiOff className="h-4 w-4" />
-          <span className="text-xs font-medium">Disconnected</span>
-        </div>
-      );
-    case 'error':
-      return (
-        <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
-          <AlertCircle className="h-4 w-4" />
-          <span className="text-xs font-medium">Connection Error</span>
-        </div>
-      );
-  }
-}
-
-function AgentStateIndicator({ metadata }: { metadata: AgentMetadata | null }) {
-  if (!metadata) {
-    return null;
-  }
-
-  const stateColors: Record<string, string> = {
-    IDLE: 'text-muted-foreground',
-    ACTIVE: 'text-green-600 dark:text-green-400',
-    PAUSED: 'text-yellow-600 dark:text-yellow-400',
-    CRASHED: 'text-red-600 dark:text-red-400',
-  };
-
-  const stateIcons: Record<string, React.ReactNode> = {
-    IDLE: <Pause className="h-4 w-4" />,
-    ACTIVE: <Play className="h-4 w-4" />,
-    PAUSED: <Pause className="h-4 w-4" />,
-    CRASHED: <AlertCircle className="h-4 w-4" />,
-  };
-
-  return (
-    <div
-      className={`flex items-center gap-1.5 ${stateColors[metadata.executionState] || 'text-muted-foreground'}`}
-    >
-      {stateIcons[metadata.executionState]}
-      <span className="text-xs font-medium">{metadata.executionState}</span>
-    </div>
-  );
-}
-
-function ProcessIndicator({ running }: { running: boolean }) {
-  if (running) {
-    return (
-      <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
-        <Activity className="h-4 w-4 animate-pulse" />
-        <span className="text-xs font-medium">Processing</span>
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-1.5 text-muted-foreground">
-      <Activity className="h-4 w-4" />
-      <span className="text-xs font-medium">Idle</span>
-    </div>
-  );
-}
-
+/**
+ * Displays connection status, agent metadata, and provides reconnect functionality.
+ */
 export function StatusBar({
   connectionState,
   running,
   agentMetadata,
+  error,
   onReconnect,
+  className,
 }: StatusBarProps) {
-  const showReconnect = connectionState === 'disconnected' || connectionState === 'error';
-
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b">
+    <div
+      className={cn(
+        'flex items-center justify-between gap-4 rounded-md border bg-muted/30 px-3 py-2',
+        className
+      )}
+    >
       <div className="flex items-center gap-4">
+        {/* Connection Status */}
         <ConnectionIndicator state={connectionState} />
-        <div className="h-4 w-px bg-border" />
-        <AgentStateIndicator metadata={agentMetadata} />
-        <div className="h-4 w-px bg-border" />
-        <ProcessIndicator running={running} />
 
-        {agentMetadata?.currentTask?.branchName && (
+        <Separator orientation="vertical" className="h-5" />
+
+        {/* Agent Status */}
+        <AgentStatusIndicator running={running} agentMetadata={agentMetadata} />
+
+        {/* Agent Type & Task Info */}
+        {agentMetadata && (
           <>
-            <div className="h-4 w-px bg-border" />
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <GitBranch className="h-4 w-4" />
-              <span className="text-xs font-mono">{agentMetadata.currentTask.branchName}</span>
-            </div>
+            <Separator orientation="vertical" className="h-5" />
+            <AgentMetadataDisplay metadata={agentMetadata} />
           </>
         )}
       </div>
 
       <div className="flex items-center gap-2">
-        {agentMetadata && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                agentMetadata.isHealthy ? 'bg-green-500' : 'bg-red-500'
-              }`}
-              title={agentMetadata.isHealthy ? 'Healthy' : 'Unhealthy'}
-            />
-            <span className="font-mono">{agentMetadata.type}</span>
+        {/* Error Display */}
+        {error && (
+          <div className="flex items-center gap-1 text-destructive text-sm">
+            <AlertCircle className="h-3 w-3" />
+            <span className="max-w-48 truncate">{error}</span>
           </div>
         )}
 
-        {showReconnect && (
-          <Button variant="ghost" size="sm" onClick={onReconnect} className="h-7 text-xs">
+        {/* Reconnect Button */}
+        {(connectionState === 'disconnected' || connectionState === 'error') && onReconnect && (
+          <Button variant="outline" size="sm" onClick={onReconnect}>
             <RefreshCw className="h-3 w-3 mr-1" />
             Reconnect
           </Button>
@@ -155,4 +86,213 @@ export function StatusBar({
       </div>
     </div>
   );
+}
+
+// =============================================================================
+// Connection Indicator
+// =============================================================================
+
+interface ConnectionIndicatorProps {
+  state: ConnectionState;
+}
+
+function ConnectionIndicator({ state }: ConnectionIndicatorProps) {
+  const config = getConnectionConfig(state);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <config.icon className={cn('h-4 w-4', config.iconClass)} />
+      <span className={cn('text-sm', config.textClass)}>{config.label}</span>
+    </div>
+  );
+}
+
+function getConnectionConfig(state: ConnectionState): {
+  icon: React.ElementType;
+  iconClass: string;
+  textClass: string;
+  label: string;
+} {
+  switch (state) {
+    case 'connecting':
+      return {
+        icon: Loader2,
+        iconClass: 'animate-spin text-muted-foreground',
+        textClass: 'text-muted-foreground',
+        label: 'Connecting...',
+      };
+    case 'connected':
+      return {
+        icon: Wifi,
+        iconClass: 'text-success',
+        textClass: 'text-success',
+        label: 'Connected',
+      };
+    case 'disconnected':
+      return {
+        icon: WifiOff,
+        iconClass: 'text-muted-foreground',
+        textClass: 'text-muted-foreground',
+        label: 'Disconnected',
+      };
+    case 'error':
+      return {
+        icon: AlertCircle,
+        iconClass: 'text-destructive',
+        textClass: 'text-destructive',
+        label: 'Error',
+      };
+  }
+}
+
+// =============================================================================
+// Agent Status Indicator
+// =============================================================================
+
+interface AgentStatusIndicatorProps {
+  running: boolean;
+  agentMetadata: AgentMetadata | null;
+}
+
+function AgentStatusIndicator({ running, agentMetadata }: AgentStatusIndicatorProps) {
+  // Determine agent state
+  const executionState = agentMetadata?.executionState ?? 'unknown';
+
+  if (running) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Activity className="h-4 w-4 text-success animate-pulse" />
+        <span className="text-sm text-success">Running</span>
+      </div>
+    );
+  }
+
+  // Map execution states to display
+  switch (executionState) {
+    case 'running':
+      return (
+        <div className="flex items-center gap-1.5">
+          <Activity className="h-4 w-4 text-success animate-pulse" />
+          <span className="text-sm text-success">Running</span>
+        </div>
+      );
+    case 'paused':
+      return (
+        <div className="flex items-center gap-1.5">
+          <Pause className="h-4 w-4 text-warning" />
+          <span className="text-sm text-warning">Paused</span>
+        </div>
+      );
+    case 'stopped':
+      return (
+        <div className="flex items-center gap-1.5">
+          <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Stopped</span>
+        </div>
+      );
+    case 'pending':
+      return (
+        <div className="flex items-center gap-1.5">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Pending</span>
+        </div>
+      );
+    case 'error':
+      return (
+        <div className="flex items-center gap-1.5">
+          <AlertCircle className="h-4 w-4 text-destructive" />
+          <span className="text-sm text-destructive">Error</span>
+        </div>
+      );
+    default:
+      return (
+        <div className="flex items-center gap-1.5">
+          <Play className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Idle</span>
+        </div>
+      );
+  }
+}
+
+// =============================================================================
+// Agent Metadata Display
+// =============================================================================
+
+interface AgentMetadataDisplayProps {
+  metadata: AgentMetadata;
+}
+
+function AgentMetadataDisplay({ metadata }: AgentMetadataDisplayProps) {
+  return (
+    <div className="flex items-center gap-2">
+      {/* Agent Type */}
+      <Badge variant="outline" className="text-xs capitalize">
+        {formatAgentType(metadata.type)}
+      </Badge>
+
+      {/* Health Status */}
+      {!metadata.isHealthy && (
+        <Badge variant="destructive" className="text-xs">
+          Unhealthy
+        </Badge>
+      )}
+
+      {/* Current Task */}
+      {metadata.currentTask && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground max-w-60">
+          <span className="truncate">{metadata.currentTask.title}</span>
+          <Badge variant="secondary" className="text-xs shrink-0">
+            {metadata.currentTask.state}
+          </Badge>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Minimal Status Indicator
+// =============================================================================
+
+interface MinimalStatusProps {
+  connectionState: ConnectionState;
+  running: boolean;
+  className?: string;
+}
+
+/**
+ * A minimal status indicator for compact layouts.
+ */
+export function MinimalStatus({ connectionState, running, className }: MinimalStatusProps) {
+  const isConnected = connectionState === 'connected';
+
+  return (
+    <div className={cn('flex items-center gap-2', className)}>
+      {/* Connection Dot */}
+      <div
+        className={cn('h-2 w-2 rounded-full', isConnected ? 'bg-success' : 'bg-muted-foreground')}
+      />
+
+      {/* Running Animation */}
+      {running && (
+        <div className="flex gap-0.5">
+          <div className="h-2 w-0.5 bg-success animate-pulse" style={{ animationDelay: '0ms' }} />
+          <div className="h-2 w-0.5 bg-success animate-pulse" style={{ animationDelay: '150ms' }} />
+          <div className="h-2 w-0.5 bg-success animate-pulse" style={{ animationDelay: '300ms' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+function formatAgentType(type: string): string {
+  // Convert snake_case or camelCase to readable format
+  return type
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase();
 }

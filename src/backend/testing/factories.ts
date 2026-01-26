@@ -109,6 +109,7 @@ export interface AgentOverrides {
   cliProcessStatus?: CliProcessStatus | null;
   cliProcessStartedAt?: Date | null;
   cliProcessExitCode?: number | null;
+  cliProcessPid?: number | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -133,6 +134,7 @@ export function createAgent(overrides: AgentOverrides = {}): Agent {
     cliProcessStatus: overrides.cliProcessStatus ?? null,
     cliProcessStartedAt: overrides.cliProcessStartedAt ?? null,
     cliProcessExitCode: overrides.cliProcessExitCode ?? null,
+    cliProcessPid: overrides.cliProcessPid ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   };

@@ -446,10 +446,10 @@ async function getOrCreateChatClient(
   };
 
   client = await ClaudeClient.create(clientOptions);
-  chatClients.set(sessionId, client);
 
-  // Set up event forwarding to WebSocket clients
+  // Set up event forwarding before storing in map to ensure events aren't missed
   setupChatClientEvents(sessionId, client);
+  chatClients.set(sessionId, client);
 
   return client;
 }
@@ -879,11 +879,19 @@ server.on('upgrade', async (request, socket, head) => {
 // Server Startup
 // ============================================================================
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   logger.info('Backend server started', {
     port: PORT,
     environment: configService.getEnvironment(),
   });
+
+  // Clean up orphan processes from previous crashes
+  try {
+    await agentProcessAdapter.cleanupOrphanProcesses();
+  } catch (error) {
+    logger.error('Failed to cleanup orphan processes on startup', error as Error);
+  }
+
   console.log(`Backend server running on http://localhost:${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Health check (all): http://localhost:${PORT}/health/all`);
@@ -922,4 +930,24 @@ process.on('SIGINT', async () => {
   server.close();
   await prisma.$disconnect();
   process.exit(0);
+});
+
+// Handle uncaught exceptions - ensure process cleanup before crash
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception, cleaning up processes', error);
+  // Synchronous cleanup of agent processes to prevent orphans
+  agentProcessAdapter.cleanup();
+  // Clean up chat clients
+  for (const client of chatClients.values()) {
+    client.kill();
+  }
+  chatClients.clear();
+  // Exit with error code
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection at promise', { reason, promise });
+  // Log but don't exit - let the normal error handling deal with it
 });
