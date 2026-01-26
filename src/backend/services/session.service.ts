@@ -38,10 +38,8 @@ class SessionService {
     }
 
     // Mark workspace as having had sessions (for kanban backlog/waiting distinction)
-    if (!workspace.hasHadSessions) {
-      await workspaceAccessor.markHasHadSessions(workspace.id);
-      logger.debug('Marked workspace as having had sessions', { workspaceId: workspace.id });
-    }
+    // Uses atomic conditional update - safe to call even if already true
+    await workspaceAccessor.markHasHadSessions(workspace.id);
 
     // Build process options
     const processOptions: ClaudeProcessOptions = {

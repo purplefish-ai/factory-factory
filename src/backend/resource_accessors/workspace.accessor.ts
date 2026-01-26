@@ -189,10 +189,11 @@ class WorkspaceAccessor {
 
   /**
    * Mark workspace as having had sessions (for kanban backlog/waiting distinction).
+   * Uses atomic conditional update to prevent race conditions when multiple sessions start.
    */
-  markHasHadSessions(id: string): Promise<Workspace> {
-    return prisma.workspace.update({
-      where: { id },
+  async markHasHadSessions(id: string): Promise<void> {
+    await prisma.workspace.updateMany({
+      where: { id, hasHadSessions: false },
       data: { hasHadSessions: true },
     });
   }

@@ -41,7 +41,11 @@ function saveHiddenColumnsToStorage(projectId: string, columns: KanbanColumnType
   if (typeof window === 'undefined') {
     return;
   }
-  localStorage.setItem(`${STORAGE_KEY_PREFIX}${projectId}`, JSON.stringify(columns));
+  try {
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}${projectId}`, JSON.stringify(columns));
+  } catch {
+    // Ignore errors (e.g., private browsing mode, storage full)
+  }
 }
 
 export function KanbanBoard({ projectId, projectSlug }: KanbanBoardProps) {
@@ -55,6 +59,8 @@ export function KanbanBoard({ projectId, projectSlug }: KanbanBoardProps) {
   const {
     data: workspaces,
     isLoading,
+    isError,
+    error,
     refetch,
     dataUpdatedAt,
   } = trpc.workspace.listWithKanbanState.useQuery({ projectId }, { refetchInterval: 5000 });
@@ -103,6 +109,20 @@ export function KanbanBoard({ projectId, projectSlug }: KanbanBoardProps) {
             <Skeleton className="h-[200px] w-full" />
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-destructive mb-4">
+          Failed to load workspaces: {error?.message ?? 'Unknown error'}
+        </p>
+        <Button variant="outline" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
       </div>
     );
   }

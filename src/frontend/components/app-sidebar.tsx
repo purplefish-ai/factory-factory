@@ -1,6 +1,6 @@
 'use client';
 
-import { GitBranch, Plus, Settings, Terminal } from 'lucide-react';
+import { GitBranch, Kanban, Plus, Settings, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -229,7 +229,21 @@ export function AppSidebar() {
         {/* Workspaces section */}
         {selectedProjectSlug && (
           <SidebarGroup className="flex-1 min-h-0 flex flex-col">
-            <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
+            <SidebarGroupLabel className="flex items-center gap-1">
+              <Link
+                href={`/projects/${selectedProjectSlug}/workspaces`}
+                className="hover:text-foreground transition-colors"
+              >
+                Workspaces
+              </Link>
+              <Link
+                href={`/projects/${selectedProjectSlug}/workspaces`}
+                className="ml-auto mr-1 p-1 rounded hover:bg-sidebar-accent transition-colors"
+                title="View Kanban board"
+              >
+                <Kanban className="h-3.5 w-3.5" />
+              </Link>
+            </SidebarGroupLabel>
             <SidebarGroupAction onClick={handleCreateWorkspace} disabled={isCreatingWorkspace}>
               <Plus className="h-4 w-4" />
               <span className="sr-only">New Workspace</span>

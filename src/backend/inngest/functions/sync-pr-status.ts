@@ -26,7 +26,7 @@ export const syncPRStatusBatch = inngest.createFunction(
     }
 
     // Send individual sync events for each workspace
-    // Process sequentially to avoid hitting rate limits
+    // Events are processed concurrently by Inngest (rate limited by syncPRStatus concurrency config)
     const events = workspaces.map((workspace) => ({
       name: 'github.pr.sync' as const,
       data: {
@@ -46,7 +46,12 @@ export const syncPRStatusBatch = inngest.createFunction(
  * Triggered by batch job or manual refresh.
  */
 export const syncPRStatus = inngest.createFunction(
-  { id: 'sync-pr-status', name: 'Sync PR Status' },
+  {
+    id: 'sync-pr-status',
+    name: 'Sync PR Status',
+    // Limit concurrent GitHub API calls to avoid rate limits
+    concurrency: { limit: 5 },
+  },
   { event: 'github.pr.sync' },
   async ({ event, step }) => {
     const { workspaceId, force } = event.data;

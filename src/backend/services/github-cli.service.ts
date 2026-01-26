@@ -1,9 +1,9 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PRState } from '@prisma-gen/client';
 import { createLogger } from './logger.service';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
 export interface PRStatusFromGitHub {
@@ -57,8 +57,18 @@ class GitHubCLIService {
 
     try {
       // Use gh pr view with --json to get structured data
-      const { stdout } = await execAsync(
-        `gh pr view ${prInfo.number} --repo ${prInfo.owner}/${prInfo.repo} --json number,state,isDraft,reviewDecision,mergedAt,updatedAt`,
+      // Using execFile with args array prevents shell injection
+      const { stdout } = await execFileAsync(
+        'gh',
+        [
+          'pr',
+          'view',
+          String(prInfo.number),
+          '--repo',
+          `${prInfo.owner}/${prInfo.repo}`,
+          '--json',
+          'number,state,isDraft,reviewDecision,mergedAt,updatedAt',
+        ],
         { timeout: 30_000 }
       );
 
