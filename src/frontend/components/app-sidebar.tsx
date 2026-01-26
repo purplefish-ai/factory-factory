@@ -1,10 +1,9 @@
 'use client';
 
-import { FolderKanban, ListTodo, Mail, Settings, Terminal } from 'lucide-react';
+import { FolderKanban, Settings, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -20,7 +19,6 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
@@ -53,11 +51,6 @@ export function AppSidebar() {
       setProjectContext(selectedProjectId);
     }
   }, [selectedProjectId]);
-
-  const { data: unreadCount } = trpc.mail.getUnreadCount.useQuery(undefined, {
-    refetchInterval: 5000,
-    enabled: !!selectedProjectId,
-  });
 
   useEffect(() => {
     const slugFromPath = getProjectSlugFromPath(pathname);
@@ -99,26 +92,15 @@ export function AppSidebar() {
     }
     setSelectedProjectSlug(value);
     localStorage.setItem(SELECTED_PROJECT_KEY, value);
-    router.push(`/projects/${value}/epics`);
+    router.push(`/projects/${value}/workspaces`);
   };
 
   const projectNavItems = selectedProjectSlug
     ? [
         {
-          href: `/projects/${selectedProjectSlug}/epics`,
-          label: 'Epics',
+          href: `/projects/${selectedProjectSlug}/workspaces`,
+          label: 'Workspaces',
           icon: FolderKanban,
-        },
-        {
-          href: `/projects/${selectedProjectSlug}/tasks`,
-          label: 'Subtasks',
-          icon: ListTodo,
-        },
-        {
-          href: `/projects/${selectedProjectSlug}/mail`,
-          label: 'Mail',
-          icon: Mail,
-          badge: unreadCount?.count,
         },
         {
           href: `/projects/${selectedProjectSlug}/logs`,
@@ -202,13 +184,6 @@ export function AppSidebar() {
                           <span>{item.label}</span>
                         </Link>
                       </SidebarMenuButton>
-                      {item.badge != null && item.badge > 0 && (
-                        <SidebarMenuBadge>
-                          <Badge variant="destructive" className="rounded-full px-1.5 py-0 text-xs">
-                            {item.badge}
-                          </Badge>
-                        </SidebarMenuBadge>
-                      )}
                     </SidebarMenuItem>
                   );
                 })}

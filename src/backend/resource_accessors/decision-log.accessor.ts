@@ -23,9 +23,6 @@ class DecisionLogAccessor {
   findById(id: string): Promise<DecisionLog | null> {
     return prisma.decisionLog.findUnique({
       where: { id },
-      include: {
-        agent: true,
-      },
     });
   }
 
@@ -34,31 +31,13 @@ class DecisionLogAccessor {
       where: { agentId },
       orderBy: { timestamp: 'desc' },
       take: limit,
-      include: {
-        agent: true,
-      },
     });
   }
 
-  findRecent(limit = 100, projectId?: string): Promise<DecisionLog[]> {
-    const where: { agent?: { currentTask: { projectId: string } } } = {};
-
-    // Filter by project via agent → currentTask → projectId
-    if (projectId) {
-      where.agent = {
-        currentTask: {
-          projectId,
-        },
-      };
-    }
-
+  findRecent(limit = 100): Promise<DecisionLog[]> {
     return prisma.decisionLog.findMany({
-      where,
       orderBy: { timestamp: 'desc' },
       take: limit,
-      include: {
-        agent: true,
-      },
     });
   }
 
@@ -141,13 +120,13 @@ class DecisionLogAccessor {
   /**
    * List decision logs with optional filters
    */
-  list(options: { agentId?: string; projectId?: string; limit?: number }): Promise<DecisionLog[]> {
-    const { agentId, projectId, limit = 100 } = options;
+  list(options: { agentId?: string; limit?: number }): Promise<DecisionLog[]> {
+    const { agentId, limit = 100 } = options;
 
     if (agentId) {
       return this.findByAgentId(agentId, limit);
     }
-    return this.findRecent(limit, projectId);
+    return this.findRecent(limit);
   }
 }
 

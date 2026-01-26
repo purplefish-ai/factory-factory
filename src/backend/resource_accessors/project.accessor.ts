@@ -34,9 +34,9 @@ function execCommand(command: string, args: string[]): Promise<{ stdout: string;
   });
 }
 
-// Type for Project with tasks relation included
-type ProjectWithTasks = Prisma.ProjectGetPayload<{
-  include: { tasks: true };
+// Type for Project with workspaces relation included
+type ProjectWithWorkspaces = Prisma.ProjectGetPayload<{
+  include: { workspaces: true };
 }>;
 
 // Simplified input - only repoPath is required
@@ -146,12 +146,11 @@ class ProjectAccessor {
     throw new Error(`Unable to create project: too many projects with similar names`);
   }
 
-  findById(id: string): Promise<ProjectWithTasks | null> {
+  findById(id: string): Promise<ProjectWithWorkspaces | null> {
     return prisma.project.findUnique({
       where: { id },
       include: {
-        tasks: {
-          where: { parentId: null }, // Only top-level tasks (epics)
+        workspaces: {
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
@@ -159,12 +158,11 @@ class ProjectAccessor {
     });
   }
 
-  findBySlug(slug: string): Promise<ProjectWithTasks | null> {
+  findBySlug(slug: string): Promise<ProjectWithWorkspaces | null> {
     return prisma.project.findUnique({
       where: { slug },
       include: {
-        tasks: {
-          where: { parentId: null }, // Only top-level tasks (epics)
+        workspaces: {
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
@@ -193,7 +191,7 @@ class ProjectAccessor {
       orderBy: { updatedAt: 'desc' },
       include: {
         _count: {
-          select: { tasks: true },
+          select: { workspaces: true },
         },
       },
     });

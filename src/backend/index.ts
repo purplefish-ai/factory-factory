@@ -9,24 +9,9 @@ import { agentProcessAdapter } from './agents/process-adapter.js';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index.js';
 import { prisma } from './db.js';
 import { inngest } from './inngest/client';
-import {
-  agentCompletedHandler,
-  mailSentHandler,
-  orchestratorCheckHandler,
-  supervisorCheckHandler,
-  taskCreatedHandler,
-  topLevelTaskCreatedHandler,
-} from './inngest/functions/index.js';
-import { orchestratorRouter } from './routers/api/orchestrator.router.js';
 import { projectRouter } from './routers/api/project.router.js';
-import { taskRouter } from './routers/api/task.router.js';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index.js';
-import {
-  configService,
-  crashRecoveryService,
-  createLogger,
-  rateLimiter,
-} from './services/index.js';
+import { configService, createLogger, rateLimiter } from './services/index.js';
 import { appRouter, createContext } from './trpc/index.js';
 
 const logger = createLogger('server');
@@ -159,55 +144,6 @@ app.get('/health/inngest', (_req, res) => {
 });
 
 /**
- * Agent health summary
- */
-app.get('/health/agents', async (_req, res) => {
-  try {
-    const healthStatus = await crashRecoveryService.getSystemHealthStatus();
-    const apiUsage = rateLimiter.getApiUsageStats();
-    const concurrency = rateLimiter.getConcurrencyStats();
-
-    const status = healthStatus.isHealthy ? 'ok' : 'degraded';
-
-    res.status(status === 'ok' ? 200 : 503).json({
-      status,
-      timestamp: new Date().toISOString(),
-      agents: {
-        orchestratorHealthy: healthStatus.orchestratorHealthy,
-        supervisors: {
-          total: healthStatus.supervisorCount,
-          healthy: healthStatus.healthySupervisors,
-        },
-        workers: {
-          total: healthStatus.workerCount,
-          healthy: healthStatus.healthyWorkers,
-        },
-        crashLoopAgents: healthStatus.crashLoopAgents,
-      },
-      apiUsage: {
-        requestsLastMinute: apiUsage.requestsLastMinute,
-        requestsLastHour: apiUsage.requestsLastHour,
-        isRateLimited: apiUsage.isRateLimited,
-        queueDepth: apiUsage.queueDepth,
-      },
-      concurrency: {
-        activeWorkers: concurrency.activeWorkers,
-        activeSupervisors: concurrency.activeSupervisors,
-        activeTopLevelTasks: concurrency.activeTopLevelTasks,
-      },
-      issues: healthStatus.issues,
-    });
-  } catch (error) {
-    logger.error('Agent health check failed', error as Error);
-    res.status(503).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-/**
  * Comprehensive health check (all systems)
  */
 app.get('/health/all', async (_req, res) => {
@@ -222,22 +158,6 @@ app.get('/health/all', async (_req, res) => {
       status: 'error',
       details: error instanceof Error ? error.message : 'Unknown error',
     };
-  }
-
-  // Agent check
-  try {
-    const healthStatus = await crashRecoveryService.getSystemHealthStatus();
-    checks.agents = {
-      status: healthStatus.isHealthy ? 'ok' : 'degraded',
-      details: {
-        orchestratorHealthy: healthStatus.orchestratorHealthy,
-        healthySupervisors: healthStatus.healthySupervisors,
-        healthyWorkers: healthStatus.healthyWorkers,
-        issues: healthStatus.issues,
-      },
-    };
-  } catch {
-    checks.agents = { status: 'error' };
   }
 
   // Inngest check
@@ -328,25 +248,12 @@ app.post('/mcp/execute', async (req, res) => {
 // Project API routes
 app.use('/api/projects', projectRouter);
 
-// Task API routes
-app.use('/api/tasks', taskRouter);
-
-// Orchestrator API routes
-app.use('/api/orchestrator', orchestratorRouter);
-
-// Inngest webhook handler
+// Inngest webhook handler (empty functions array for now)
 app.use(
   '/api/inngest',
   serve({
     client: inngest,
-    functions: [
-      mailSentHandler,
-      taskCreatedHandler,
-      topLevelTaskCreatedHandler,
-      agentCompletedHandler,
-      supervisorCheckHandler,
-      orchestratorCheckHandler,
-    ],
+    functions: [],
   })
 );
 
@@ -453,12 +360,12 @@ class SessionFileLogger {
     const timestamp = new Date().toISOString();
     const directionIcon =
       direction === 'OUT_TO_CLIENT'
-        ? '⬆️ OUT→CLIENT'
+        ? '>>> OUT->CLIENT'
         : direction === 'IN_FROM_CLIENT'
-          ? '⬇️ IN←CLIENT'
+          ? '<<< IN<-CLIENT'
           : direction === 'FROM_CLAUDE_CLI'
-            ? '📥 FROM_CLI'
-            : 'ℹ️  INFO';
+            ? '### FROM_CLI'
+            : '*** INFO';
 
     // Extract summary info for quick scanning
     let summary = '';
@@ -744,6 +651,9 @@ async function getOrCreateChatClient(
 // Agent Process Event Forwarding
 // ============================================================================
 
+// Track WebSocket connections per agent
+const agentActivityConnections = new Map<string, Set<import('ws').WebSocket>>();
+
 // Forward agent process events to agent activity WebSocket clients
 agentProcessAdapter.on('message', ({ agentId, message }) => {
   // Skip 'assistant' and 'user' messages - they duplicate the content from stream events.
@@ -959,180 +869,6 @@ function validateWorkingDir(workingDir: string): string | null {
   return resolved;
 }
 
-// ============================================================================
-// WebSocket Agent Activity Handler
-// ============================================================================
-
-// Track WebSocket connections per agent
-const agentActivityConnections = new Map<string, Set<import('ws').WebSocket>>();
-
-/**
- * Calculate health status for an agent
- */
-function calculateAgentHealth(agent: {
-  lastHeartbeat: Date | null;
-  createdAt: Date;
-  executionState: string;
-}): {
-  isHealthy: boolean;
-  minutesSinceHeartbeat: number;
-} {
-  const config = configService.getSystemConfig();
-  const healthThresholdMinutes = config.agentHeartbeatThresholdMinutes;
-  const now = Date.now();
-  const heartbeatTime = agent.lastHeartbeat ?? agent.createdAt;
-  const minutesSinceHeartbeat = Math.floor((now - heartbeatTime.getTime()) / (60 * 1000));
-  const isHealthy =
-    minutesSinceHeartbeat < healthThresholdMinutes && agent.executionState !== 'CRASHED';
-  return { isHealthy, minutesSinceHeartbeat };
-}
-
-/**
- * Build agent metadata for WebSocket response
- */
-async function buildAgentMetadata(agentId: string) {
-  const agent = await prisma.agent.findUnique({
-    where: { id: agentId },
-    include: {
-      currentTask: true,
-      assignedTasks: {
-        select: { id: true, title: true, state: true },
-      },
-    },
-  });
-
-  if (!agent) {
-    return null;
-  }
-
-  const { isHealthy, minutesSinceHeartbeat } = calculateAgentHealth(agent);
-
-  return {
-    id: agent.id,
-    type: agent.type,
-    executionState: agent.executionState,
-    desiredExecutionState: agent.desiredExecutionState,
-    worktreePath: agent.worktreePath,
-    sessionId: agent.sessionId,
-    tmuxSessionName: agent.tmuxSessionName,
-    cliProcessId: agent.cliProcessId,
-    cliProcessStatus: agent.cliProcessStatus,
-    isHealthy,
-    minutesSinceHeartbeat,
-    currentTask: agent.currentTask
-      ? {
-          id: agent.currentTask.id,
-          title: agent.currentTask.title,
-          state: agent.currentTask.state,
-          branchName: agent.currentTask.branchName,
-          prUrl: agent.currentTask.prUrl,
-        }
-      : null,
-    assignedTasks: agent.assignedTasks,
-  };
-}
-
-// Handle agent activity WebSocket upgrade
-async function handleAgentActivityUpgrade(
-  request: import('http').IncomingMessage,
-  socket: import('stream').Duplex,
-  head: Buffer,
-  url: URL
-) {
-  const agentId = url.searchParams.get('agentId');
-
-  if (!agentId) {
-    logger.warn('Agent activity WebSocket: missing agentId');
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-    socket.destroy();
-    return;
-  }
-
-  // Look up agent to get workingDir (worktreePath)
-  const agent = await prisma.agent.findUnique({
-    where: { id: agentId },
-  });
-
-  if (!agent) {
-    logger.warn('Agent activity WebSocket: agent not found', { agentId });
-    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-    socket.destroy();
-    return;
-  }
-
-  // Use agent's worktreePath or fall back to cwd
-  const workingDir = agent.worktreePath || process.cwd();
-
-  // Use agent's session ID or cliProcessId as the session key
-  const sessionId = agent.cliProcessId || agent.sessionId || `agent-${agentId}`;
-
-  wss.handleUpgrade(request, socket, head, async (ws) => {
-    logger.info('Agent activity WebSocket connection established', { agentId, sessionId });
-
-    // Track this connection for agent activity
-    if (!agentActivityConnections.has(agentId)) {
-      agentActivityConnections.set(agentId, new Set());
-    }
-    agentActivityConnections.get(agentId)?.add(ws);
-
-    // Build and send agent metadata
-    const agentMetadata = await buildAgentMetadata(agentId);
-
-    // Get running status from agentProcessAdapter
-    const isRunning = agentProcessAdapter.isRunning(agentId);
-    const claudeSessionId = agentProcessAdapter.getClaudeSessionId(agentId) ?? agent.sessionId;
-
-    // Send initial status with agent metadata
-    ws.send(
-      JSON.stringify({
-        type: 'status',
-        agentId,
-        sessionId,
-        running: isRunning,
-        claudeSessionId,
-        agentMetadata,
-      })
-    );
-
-    // If agent has a session ID, try to load history
-    if (agent.sessionId) {
-      try {
-        const history = await SessionManager.getHistory(agent.sessionId, workingDir);
-        if (history.length > 0) {
-          ws.send(
-            JSON.stringify({
-              type: 'session_loaded',
-              claudeSessionId: agent.sessionId,
-              messages: history,
-            })
-          );
-        }
-      } catch (error) {
-        logger.warn('Error loading agent session history', { agentId, error });
-      }
-    }
-
-    // Handle connection close
-    ws.on('close', () => {
-      logger.info('Agent activity WebSocket connection closed', { agentId, sessionId });
-
-      // Clean up agent activity connections
-      const agentConns = agentActivityConnections.get(agentId);
-      if (agentConns) {
-        agentConns.delete(ws);
-        if (agentConns.size === 0) {
-          agentActivityConnections.delete(agentId);
-        }
-      }
-    });
-
-    // Handle connection errors
-    ws.on('error', (error) => {
-      logger.error('Agent activity WebSocket error', error);
-    });
-  });
-}
-
 // Handle chat WebSocket upgrade
 function handleChatUpgrade(
   request: import('http').IncomingMessage,
@@ -1260,17 +996,12 @@ function handleChatUpgrade(
 // ============================================================================
 
 // Handle WebSocket upgrade requests
-server.on('upgrade', async (request, socket, head) => {
+server.on('upgrade', (request, socket, head) => {
   const url = new URL(request.url || '', `http://${request.headers.host}`);
 
   // Route to appropriate handler based on path
   if (url.pathname === '/chat') {
     handleChatUpgrade(request, socket, head, url);
-    return;
-  }
-
-  if (url.pathname === '/agent-activity') {
-    await handleAgentActivityUpgrade(request, socket, head, url);
     return;
   }
 
@@ -1301,7 +1032,6 @@ server.listen(PORT, async () => {
   console.log(`Inngest endpoint: http://localhost:${PORT}/api/inngest`);
   console.log(`tRPC endpoint: http://localhost:${PORT}/api/trpc`);
   console.log(`WebSocket chat: ws://localhost:${PORT}/chat`);
-  console.log(`WebSocket agent-activity: ws://localhost:${PORT}/agent-activity`);
 });
 
 // Graceful shutdown

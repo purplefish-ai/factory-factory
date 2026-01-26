@@ -1,18 +1,16 @@
 import { adminRouter } from './admin.trpc.js';
-import { agentRouter } from './agent.trpc.js';
 import { decisionLogRouter } from './decision-log.trpc.js';
-import { mailRouter } from './mail.trpc.js';
 import { projectRouter } from './project.trpc.js';
-import { taskRouter } from './task.trpc.js';
+import { sessionRouter } from './session.trpc.js';
 import { router } from './trpc.js';
+import { workspaceRouter } from './workspace.trpc.js';
 
 export const appRouter = router({
   project: projectRouter,
-  task: taskRouter,
-  agent: agentRouter,
-  mail: mailRouter,
   decisionLog: decisionLogRouter,
   admin: adminRouter,
+  workspace: workspaceRouter,
+  session: sessionRouter,
 });
 
 // Export type for use in frontend

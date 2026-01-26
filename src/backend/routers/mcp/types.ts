@@ -1,5 +1,3 @@
-import type { AgentType } from '@prisma-gen/client';
-
 /**
  * Context provided to MCP tool handlers
  */
@@ -50,29 +48,6 @@ export interface McpToolRegistryEntry {
   description: string;
   handler: McpToolHandler;
   schema?: unknown; // JSON schema for input validation
-}
-
-/**
- * Permission configuration for agent types
- */
-export interface AgentPermissionConfig {
-  allowed: string[]; // Tool name patterns (supports wildcards)
-  disallowed: string[]; // Tool name patterns to explicitly block
-}
-
-/**
- * Tool permissions by agent type
- */
-export type AgentToolPermissions = {
-  [K in AgentType]: AgentPermissionConfig;
-};
-
-/**
- * Permission check result
- */
-export interface PermissionCheckResult {
-  allowed: boolean;
-  reason?: string;
 }
 
 /**
