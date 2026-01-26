@@ -43,41 +43,37 @@ export class GitClient {
       ? ['worktree', 'add', worktreePath, branchName]
       : ['worktree', 'add', '-b', branchName, worktreePath, baseBranch];
 
-    try {
-      await gitCommandC(this.baseRepoPath, args);
-      return {
-        name,
-        path: worktreePath,
-        branchName,
-      };
-    } catch (error) {
-      throw new Error(
-        `Failed to create worktree: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const result = await gitCommandC(this.baseRepoPath, args);
+    if (result.code !== 0) {
+      throw new Error(`Failed to create worktree: ${result.stderr || result.stdout}`);
     }
+
+    return {
+      name,
+      path: worktreePath,
+      branchName,
+    };
   }
 
   /**
    * Check if a branch exists in the repository
    */
   async branchExists(branchName: string): Promise<boolean> {
-    try {
-      await gitCommandC(this.baseRepoPath, ['rev-parse', '--verify', branchName]);
-      return true;
-    } catch {
-      return false;
-    }
+    const result = await gitCommandC(this.baseRepoPath, ['rev-parse', '--verify', branchName]);
+    return result.code === 0;
   }
 
   async deleteWorktree(name: string): Promise<void> {
     const worktreePath = this.getWorktreePath(name);
 
-    try {
-      await gitCommandC(this.baseRepoPath, ['worktree', 'remove', worktreePath, '--force']);
-    } catch (error) {
-      throw new Error(
-        `Failed to delete worktree: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const result = await gitCommandC(this.baseRepoPath, [
+      'worktree',
+      'remove',
+      worktreePath,
+      '--force',
+    ]);
+    if (result.code !== 0) {
+      throw new Error(`Failed to delete worktree: ${result.stderr || result.stdout}`);
     }
   }
 
@@ -91,37 +87,33 @@ export class GitClient {
 
   async checkWorktreeExists(name: string): Promise<boolean> {
     const worktreePath = this.getWorktreePath(name);
-
-    try {
-      const { stdout } = await gitCommandC(this.baseRepoPath, ['worktree', 'list']);
-      return stdout.includes(worktreePath);
-    } catch {
+    const result = await gitCommandC(this.baseRepoPath, ['worktree', 'list']);
+    if (result.code !== 0) {
       return false;
     }
+    return result.stdout.includes(worktreePath);
   }
 
   async listWorktrees(): Promise<string[]> {
-    try {
-      const { stdout } = await gitCommandC(this.baseRepoPath, ['worktree', 'list', '--porcelain']);
-      const worktrees: string[] = [];
-      const lines = stdout.split('\n');
+    const result = await gitCommandC(this.baseRepoPath, ['worktree', 'list', '--porcelain']);
+    if (result.code !== 0) {
+      throw new Error(`Failed to list worktrees: ${result.stderr || result.stdout}`);
+    }
 
-      for (const line of lines) {
-        if (line.startsWith('worktree ')) {
-          const worktreePath = line.substring('worktree '.length);
-          if (worktreePath.startsWith(this.worktreeBase)) {
-            const name = path.basename(worktreePath);
-            worktrees.push(name);
-          }
+    const worktrees: string[] = [];
+    const lines = result.stdout.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('worktree ')) {
+        const worktreePath = line.substring('worktree '.length);
+        if (worktreePath.startsWith(this.worktreeBase)) {
+          const name = path.basename(worktreePath);
+          worktrees.push(name);
         }
       }
-
-      return worktrees;
-    } catch (error) {
-      throw new Error(
-        `Failed to list worktrees: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
+
+    return worktrees;
   }
 
   /**
@@ -133,26 +125,28 @@ export class GitClient {
     sourceBranch: string,
     commitMessage?: string
   ): Promise<{ success: boolean; mergeCommit: string }> {
-    try {
-      // Merge the source branch into the current branch using spawn (safe - no shell)
-      const mergeArgs = commitMessage
-        ? ['merge', sourceBranch, '-m', commitMessage]
-        : ['merge', sourceBranch];
+    // Merge the source branch into the current branch using spawn (safe - no shell)
+    const mergeArgs = commitMessage
+      ? ['merge', sourceBranch, '-m', commitMessage]
+      : ['merge', sourceBranch];
 
-      await gitCommand(mergeArgs, worktreePath);
-
-      // Get the merge commit SHA
-      const { stdout: commitSha } = await gitCommand(['rev-parse', 'HEAD'], worktreePath);
-
-      return {
-        success: true,
-        mergeCommit: commitSha.trim(),
-      };
-    } catch (error) {
+    const mergeResult = await gitCommand(mergeArgs, worktreePath);
+    if (mergeResult.code !== 0) {
       throw new Error(
-        `Failed to merge branch ${sourceBranch}: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to merge branch ${sourceBranch}: ${mergeResult.stderr || mergeResult.stdout}`
       );
     }
+
+    // Get the merge commit SHA
+    const revResult = await gitCommand(['rev-parse', 'HEAD'], worktreePath);
+    if (revResult.code !== 0) {
+      throw new Error(`Failed to get merge commit: ${revResult.stderr || revResult.stdout}`);
+    }
+
+    return {
+      success: true,
+      mergeCommit: revResult.stdout.trim(),
+    };
   }
 
   /**
@@ -160,13 +154,10 @@ export class GitClient {
    * Used by supervisor to push epic branch after merging
    */
   async pushBranch(worktreePath: string, branchName?: string): Promise<void> {
-    try {
-      const branch = branchName || 'HEAD';
-      await gitCommand(['push', 'origin', branch], worktreePath);
-    } catch (error) {
-      throw new Error(
-        `Failed to push branch: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const branch = branchName || 'HEAD';
+    const result = await gitCommand(['push', 'origin', branch], worktreePath);
+    if (result.code !== 0) {
+      throw new Error(`Failed to push branch: ${result.stderr || result.stdout}`);
     }
   }
 
@@ -174,12 +165,9 @@ export class GitClient {
    * Push a branch to origin, setting upstream if needed
    */
   async pushBranchWithUpstream(worktreePath: string): Promise<void> {
-    try {
-      await gitCommand(['push', '-u', 'origin', 'HEAD'], worktreePath);
-    } catch (error) {
-      throw new Error(
-        `Failed to push branch with upstream: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const result = await gitCommand(['push', '-u', 'origin', 'HEAD'], worktreePath);
+    if (result.code !== 0) {
+      throw new Error(`Failed to push branch with upstream: ${result.stderr || result.stdout}`);
     }
   }
 
@@ -187,10 +175,9 @@ export class GitClient {
    * Fetch latest from origin
    */
   async fetch(worktreePath: string): Promise<void> {
-    try {
-      await gitCommand(['fetch', 'origin'], worktreePath);
-    } catch (error) {
-      throw new Error(`Failed to fetch: ${error instanceof Error ? error.message : String(error)}`);
+    const result = await gitCommand(['fetch', 'origin'], worktreePath);
+    if (result.code !== 0) {
+      throw new Error(`Failed to fetch: ${result.stderr || result.stdout}`);
     }
   }
 
@@ -198,28 +185,22 @@ export class GitClient {
    * Get the current branch name
    */
   async getCurrentBranch(worktreePath: string): Promise<string> {
-    try {
-      const { stdout } = await gitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
-      return stdout.trim();
-    } catch (error) {
-      throw new Error(
-        `Failed to get current branch: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const result = await gitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
+    if (result.code !== 0) {
+      throw new Error(`Failed to get current branch: ${result.stderr || result.stdout}`);
     }
+    return result.stdout.trim();
   }
 
   /**
    * Get the latest commit message
    */
   async getLatestCommitMessage(worktreePath: string): Promise<string> {
-    try {
-      const { stdout } = await gitCommand(['log', '-1', '--format=%s'], worktreePath);
-      return stdout.trim();
-    } catch (error) {
-      throw new Error(
-        `Failed to get latest commit message: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const result = await gitCommand(['log', '-1', '--format=%s'], worktreePath);
+    if (result.code !== 0) {
+      throw new Error(`Failed to get latest commit message: ${result.stderr || result.stdout}`);
     }
+    return result.stdout.trim();
   }
 }
 
