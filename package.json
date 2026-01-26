@@ -126,6 +126,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.3.12",
     "@storybook/addon-a11y": "10.2.0",
+    "@storybook/addon-mcp": "^0.2.1",
     "@storybook/addon-themes": "10.2.0",
     "@storybook/nextjs-vite": "10.2.0",
     "@storybook/react": "10.2.0",
