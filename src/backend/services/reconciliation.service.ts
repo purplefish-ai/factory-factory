@@ -107,14 +107,18 @@ class ReconciliationService {
   }
 
   /**
-   * Check if a process is running by PID
+   * Check if a process is running by PID.
+   * Returns true if process exists (even if we can't signal it due to permissions).
    */
   private isProcessRunning(pid: number): boolean {
     try {
       process.kill(pid, 0); // Signal 0 just checks if process exists
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      // ESRCH = no such process (not running)
+      // EPERM = permission denied (process exists but we can't signal it)
+      const err = error as NodeJS.ErrnoException;
+      return err.code === 'EPERM';
     }
   }
 }

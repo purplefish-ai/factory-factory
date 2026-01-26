@@ -55,15 +55,30 @@ class SessionService {
 
     // Set up event handlers
     process.on('session_id', async (claudeSessionId) => {
-      await claudeSessionAccessor.update(sessionId, { claudeSessionId });
+      try {
+        await claudeSessionAccessor.update(sessionId, { claudeSessionId });
+      } catch (error) {
+        logger.warn('Failed to update session with Claude session ID', {
+          sessionId,
+          claudeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     });
 
     process.on('exit', async () => {
       activeClaudeProcesses.delete(sessionId);
-      await claudeSessionAccessor.update(sessionId, {
-        status: SessionStatus.COMPLETED,
-        claudeProcessPid: null,
-      });
+      try {
+        await claudeSessionAccessor.update(sessionId, {
+          status: SessionStatus.COMPLETED,
+          claudeProcessPid: null,
+        });
+      } catch (error) {
+        logger.warn('Failed to update session status on exit', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     });
 
     logger.info('Claude session started', { sessionId, pid });

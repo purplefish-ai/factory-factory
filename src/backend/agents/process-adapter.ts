@@ -122,8 +122,6 @@ export class AgentProcessAdapter extends EventEmitter {
   private agents = new Map<string, ClaudeClient>();
   // Track agent types for tool permissions
   private agentTypes = new Map<string, AgentType>();
-  // Flag to prevent multiple orphan cleanup runs
-  private orphanCleanupDone = false;
 
   /**
    * Set up listeners on a ClaudeClient instance
@@ -435,19 +433,6 @@ export class AgentProcessAdapter extends EventEmitter {
     for (const agentId of this.agents.keys()) {
       this.killAgent(agentId);
     }
-  }
-
-  /**
-   * Clean up orphan processes from previous crashes.
-   * Currently a no-op after migration to simplified model.
-   */
-  cleanupOrphanProcesses(): void {
-    if (this.orphanCleanupDone) {
-      logger.debug('Orphan cleanup already done, skipping');
-      return;
-    }
-    this.orphanCleanupDone = true;
-    logger.info('Orphan cleanup completed (no-op in simplified model)');
   }
 }
 

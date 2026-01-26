@@ -1,6 +1,6 @@
 'use client';
 
-import type { ClaudeSession, SessionStatus } from '@prisma-gen/browser';
+import type { ClaudeSession } from '@prisma-gen/browser';
 import { Archive, ArrowLeft, ExternalLink, GitBranch, Play, Plus, Square } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -43,6 +43,48 @@ const sessionStatusVariants: Record<string, 'default' | 'secondary' | 'destructi
   FAILED: 'destructive',
 };
 
+function SessionItem({
+  session,
+  onStart,
+  onStop,
+  isStarting,
+  isStopping,
+}: {
+  session: ClaudeSession;
+  onStart: () => void;
+  onStop: () => void;
+  isStarting: boolean;
+  isStopping: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+      <div className="flex-1">
+        <div className="font-medium">{session.name || `Session ${session.id.slice(0, 8)}`}</div>
+        <div className="flex items-center gap-3 mt-1">
+          <Badge variant={sessionStatusVariants[session.status] || 'default'} className="text-xs">
+            {session.status}
+          </Badge>
+          <span className="text-xs text-muted-foreground">Workflow: {session.workflow}</span>
+          <span className="text-xs text-muted-foreground">Model: {session.model}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {session.status === 'IDLE' || session.status === 'PAUSED' ? (
+          <Button variant="outline" size="sm" onClick={onStart} disabled={isStarting}>
+            <Play className="h-4 w-4 mr-1" />
+            {isStarting ? 'Starting...' : 'Start'}
+          </Button>
+        ) : session.status === 'RUNNING' ? (
+          <Button variant="outline" size="sm" onClick={onStop} disabled={isStopping}>
+            <Square className="h-4 w-4 mr-1" />
+            {isStopping ? 'Stopping...' : 'Stop'}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function WorkspaceDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -83,7 +125,13 @@ export default function WorkspaceDetailPage() {
     },
   });
 
-  const updateSession = trpc.session.updateClaudeSession.useMutation({
+  const startSession = trpc.session.startClaudeSession.useMutation({
+    onSuccess: () => {
+      utils.session.listClaudeSessions.invalidate({ workspaceId: id });
+    },
+  });
+
+  const stopSession = trpc.session.stopClaudeSession.useMutation({
     onSuccess: () => {
       utils.session.listClaudeSessions.invalidate({ workspaceId: id });
     },
@@ -99,11 +147,11 @@ export default function WorkspaceDetailPage() {
   };
 
   const handleStartSession = (sessionId: string) => {
-    updateSession.mutate({ id: sessionId, status: 'RUNNING' as SessionStatus });
+    startSession.mutate({ id: sessionId });
   };
 
   const handleStopSession = (sessionId: string) => {
-    updateSession.mutate({ id: sessionId, status: 'IDLE' as SessionStatus });
+    stopSession.mutate({ id: sessionId });
   };
 
   if (isLoading) {
@@ -287,51 +335,14 @@ export default function WorkspaceDetailPage() {
           ) : (
             <div className="space-y-3">
               {claudeSessions.map((session: ClaudeSession) => (
-                <div
+                <SessionItem
                   key={session.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex-1">
-                    <div className="font-medium">
-                      {session.name || `Session ${session.id.slice(0, 8)}`}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      <Badge
-                        variant={sessionStatusVariants[session.status] || 'default'}
-                        className="text-xs"
-                      >
-                        {session.status}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Workflow: {session.workflow}
-                      </span>
-                      <span className="text-xs text-muted-foreground">Model: {session.model}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {session.status === 'IDLE' || session.status === 'PAUSED' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleStartSession(session.id)}
-                        disabled={updateSession.isPending}
-                      >
-                        <Play className="h-4 w-4 mr-1" />
-                        Start
-                      </Button>
-                    ) : session.status === 'RUNNING' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleStopSession(session.id)}
-                        disabled={updateSession.isPending}
-                      >
-                        <Square className="h-4 w-4 mr-1" />
-                        Stop
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
+                  session={session}
+                  onStart={() => handleStartSession(session.id)}
+                  onStop={() => handleStopSession(session.id)}
+                  isStarting={startSession.isPending}
+                  isStopping={stopSession.isPending}
+                />
               ))}
             </div>
           )}

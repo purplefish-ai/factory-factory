@@ -2,6 +2,7 @@ import { SessionStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor.js';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor.js';
+import { sessionService } from '../services/session.service.js';
 import { publicProcedure, router } from './trpc.js';
 
 export const sessionRouter = router({
@@ -44,20 +45,42 @@ export const sessionRouter = router({
       return claudeSessionAccessor.create(input);
     }),
 
-  // Update a claude session
+  // Update a claude session (metadata only - use start/stop for status changes)
   updateClaudeSession: publicProcedure
     .input(
       z.object({
         id: z.string(),
         name: z.string().optional(),
-        status: z.nativeEnum(SessionStatus).optional(),
-        claudeSessionId: z.string().optional(),
-        claudeProcessPid: z.number().optional(),
+        workflow: z.string().optional(),
+        model: z.string().optional(),
       })
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
       return claudeSessionAccessor.update(id, updates);
+    }),
+
+  // Start a claude session (spawns the Claude process)
+  startClaudeSession: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        initialPrompt: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await sessionService.startClaudeSession(input.id, {
+        initialPrompt: input.initialPrompt,
+      });
+      return claudeSessionAccessor.findById(input.id);
+    }),
+
+  // Stop a claude session (gracefully stops the process)
+  stopClaudeSession: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input }) => {
+      await sessionService.stopClaudeSession(input.id);
+      return claudeSessionAccessor.findById(input.id);
     }),
 
   // Delete a claude session

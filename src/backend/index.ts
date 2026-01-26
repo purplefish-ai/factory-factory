@@ -11,7 +11,12 @@ import { prisma } from './db.js';
 import { inngest } from './inngest/client';
 import { projectRouter } from './routers/api/project.router.js';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index.js';
-import { configService, createLogger, rateLimiter } from './services/index.js';
+import {
+  configService,
+  createLogger,
+  rateLimiter,
+  reconciliationService,
+} from './services/index.js';
 import { appRouter, createContext } from './trpc/index.js';
 
 const logger = createLogger('server');
@@ -647,82 +652,6 @@ async function getOrCreateChatClient(
   }
 }
 
-// ============================================================================
-// Agent Process Event Forwarding
-// ============================================================================
-
-// Track WebSocket connections per agent
-const agentActivityConnections = new Map<string, Set<import('ws').WebSocket>>();
-
-// Forward agent process events to agent activity WebSocket clients
-agentProcessAdapter.on('message', ({ agentId, message }) => {
-  // Skip 'assistant' and 'user' messages - they duplicate the content from stream events.
-  // Stream events provide real-time updates; the final assistant message is redundant.
-  // The TypeScript types for message are ClaudeJson which includes type field.
-  const msgType = (message as { type?: string }).type;
-  if (msgType === 'assistant' || msgType === 'user') {
-    return;
-  }
-
-  const connections = agentActivityConnections.get(agentId);
-  if (connections) {
-    const data = JSON.stringify({ type: 'claude_message', data: message });
-    for (const ws of connections) {
-      if (ws.readyState === 1) {
-        ws.send(data);
-      }
-    }
-  }
-});
-
-// Forward result events to signal turn completion
-agentProcessAdapter.on(
-  'result',
-  ({ agentId, sessionId, claudeSessionId, usage, durationMs, numTurns }) => {
-    const connections = agentActivityConnections.get(agentId);
-    if (connections) {
-      // Forward as a ClaudeMessage with type 'result' so the frontend can detect turn completion
-      const resultMessage = {
-        type: 'result' as const,
-        session_id: claudeSessionId || sessionId,
-        usage,
-        duration_ms: durationMs,
-        num_turns: numTurns,
-      };
-      const data = JSON.stringify({ type: 'claude_message', data: resultMessage });
-      for (const ws of connections) {
-        if (ws.readyState === 1) {
-          ws.send(data);
-        }
-      }
-    }
-  }
-);
-
-agentProcessAdapter.on('exit', ({ agentId, code, sessionId }) => {
-  const connections = agentActivityConnections.get(agentId);
-  if (connections) {
-    const data = JSON.stringify({ type: 'process_exit', code, claudeSessionId: sessionId });
-    for (const ws of connections) {
-      if (ws.readyState === 1) {
-        ws.send(data);
-      }
-    }
-  }
-});
-
-agentProcessAdapter.on('error', ({ agentId, error }) => {
-  const connections = agentActivityConnections.get(agentId);
-  if (connections) {
-    const data = JSON.stringify({ type: 'error', message: error.message });
-    for (const ws of connections) {
-      if (ws.readyState === 1) {
-        ws.send(data);
-      }
-    }
-  }
-});
-
 // Handle individual chat messages
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles multiple message types with settings
 async function handleChatMessage(
@@ -1019,11 +948,11 @@ server.listen(PORT, async () => {
     environment: configService.getEnvironment(),
   });
 
-  // Clean up orphan processes from previous crashes
+  // Clean up orphan sessions from previous crashes
   try {
-    await agentProcessAdapter.cleanupOrphanProcesses();
+    await reconciliationService.cleanupOrphans();
   } catch (error) {
-    logger.error('Failed to cleanup orphan processes on startup', error as Error);
+    logger.error('Failed to cleanup orphan sessions on startup', error as Error);
   }
 
   console.log(`Backend server running on http://localhost:${PORT}`);
