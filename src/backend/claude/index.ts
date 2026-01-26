@@ -7,10 +7,10 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { AutoApproveHandler, ModeBasedHandler, type PermissionHandler } from './permissions.js';
-import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './process.js';
-import type { ControlResponseBody } from './protocol.js';
-import { type HistoryMessage, SessionManager } from './session.js';
+import { AutoApproveHandler, ModeBasedHandler, type PermissionHandler } from './permissions';
+import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './process';
+import type { ControlResponseBody } from './protocol';
+import { type HistoryMessage, SessionManager } from './session';
 import {
   type AssistantMessage,
   type ClaudeJson,
@@ -25,7 +25,7 @@ import {
   type StreamEventMessage,
   type ToolUseContent,
   type UserMessage,
-} from './types.js';
+} from './types';
 
 // =============================================================================
 // Types
@@ -449,8 +449,8 @@ export class ClaudeClient extends EventEmitter {
 // Re-exports
 // =============================================================================
 
-export * from './permissions.js';
-export * from './process.js';
-export * from './protocol.js';
-export * from './session.js';
-export * from './types.js';
+export * from './permissions';
+export * from './process';
+export * from './protocol';
+export * from './session';
+export * from './types';

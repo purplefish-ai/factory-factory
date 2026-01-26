@@ -1,8 +1,8 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseHistoryEntry, SessionManager } from './session.js';
-import type { ClaudeJson } from './types.js';
+import { parseHistoryEntry, SessionManager } from './session';
+import type { ClaudeJson } from './types';
 
 describe('SessionManager', () => {
   describe('getProjectPath', () => {

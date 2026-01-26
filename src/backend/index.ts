@@ -5,21 +5,16 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { serve } from 'inngest/express';
 import { WebSocketServer } from 'ws';
-import { agentProcessAdapter } from './agents/process-adapter.js';
-import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index.js';
-import { prisma } from './db.js';
-import { inngest } from './inngest/client.js';
-import { workspaceAccessor } from './resource_accessors/workspace.accessor.js';
-import { projectRouter } from './routers/api/project.router.js';
-import { executeMcpTool, initializeMcpTools } from './routers/mcp/index.js';
-import {
-  configService,
-  createLogger,
-  rateLimiter,
-  reconciliationService,
-} from './services/index.js';
-import { terminalService } from './services/terminal.service.js';
-import { appRouter, createContext } from './trpc/index.js';
+import { agentProcessAdapter } from './agents/process-adapter';
+import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index';
+import { prisma } from './db';
+import { inngest } from './inngest/client';
+import { workspaceAccessor } from './resource_accessors/workspace.accessor';
+import { projectRouter } from './routers/api/project.router';
+import { executeMcpTool, initializeMcpTools } from './routers/mcp/index';
+import { configService, createLogger, rateLimiter, reconciliationService } from './services/index';
+import { terminalService } from './services/terminal.service';
+import { appRouter, createContext } from './trpc/index';
 
 const logger = createLogger('server');
 const app = express();

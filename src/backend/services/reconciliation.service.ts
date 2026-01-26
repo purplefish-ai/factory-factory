@@ -1,11 +1,11 @@
-import { SessionStatus } from '@prisma-gen/client.js';
-import { GitClientFactory } from '../clients/git.client.js';
+import { SessionStatus } from '@prisma-gen/client';
+import { GitClientFactory } from '../clients/git.client';
 import {
   claudeSessionAccessor,
   terminalSessionAccessor,
   workspaceAccessor,
-} from '../resource_accessors/index.js';
-import { createLogger } from './logger.service.js';
+} from '../resource_accessors/index';
+import { createLogger } from './logger.service';
 
 const logger = createLogger('reconciliation');
 

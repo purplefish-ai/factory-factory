@@ -14,10 +14,10 @@ import {
   type ResultMessage,
   type StreamEventMessage,
   type ToolUseContent,
-} from '../claude/index.js';
-import { executeMcpTool } from '../routers/mcp/server.js';
-import type { McpToolResponse } from '../routers/mcp/types.js';
-import { createLogger } from '../services/logger.service.js';
+} from '../claude/index';
+import { executeMcpTool } from '../routers/mcp/server';
+import type { McpToolResponse } from '../routers/mcp/types';
+import { createLogger } from '../services/logger.service';
 
 const logger = createLogger('agent-process-adapter');
 

@@ -7,7 +7,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { createLogger } from './logger.service.js';
+import { createLogger } from './logger.service';
 
 const logger = createLogger('config');
 

@@ -22,7 +22,7 @@ import {
   isStreamEventMessage,
   type PermissionMode,
   type StreamEventMessage,
-} from './types.js';
+} from './types';
 
 // =============================================================================
 // Exported Types

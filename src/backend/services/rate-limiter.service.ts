@@ -5,7 +5,7 @@
  * Implements token bucket algorithm for API rate limiting.
  */
 
-import { createLogger } from './logger.service.js';
+import { createLogger } from './logger.service';
 
 const logger = createLogger('rate-limiter');
 

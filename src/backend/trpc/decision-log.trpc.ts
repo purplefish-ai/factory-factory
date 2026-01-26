@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { decisionLogAccessor } from '../resource_accessors/decision-log.accessor.js';
-import { publicProcedure, router } from './trpc.js';
+import { decisionLogAccessor } from '../resource_accessors/decision-log.accessor';
+import { publicProcedure, router } from './trpc';
 
 export const decisionLogRouter = router({
   // List decision logs by agent

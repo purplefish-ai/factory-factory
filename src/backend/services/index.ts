@@ -5,14 +5,14 @@
  */
 
 // Configuration service
-export { configService } from './config.service.js';
+export { configService } from './config.service';
 // Logger service
-export { createLogger } from './logger.service.js';
+export { createLogger } from './logger.service';
 // Notification service
-export { notificationService } from './notification.service.js';
+export { notificationService } from './notification.service';
 // Rate limiter service
-export { rateLimiter } from './rate-limiter.service.js';
+export { rateLimiter } from './rate-limiter.service';
 // Reconciliation service
-export { reconciliationService } from './reconciliation.service.js';
+export { reconciliationService } from './reconciliation.service';
 // Session service
-export { sessionService } from './session.service.js';
+export { sessionService } from './session.service';

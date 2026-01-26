@@ -7,7 +7,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { ControlResponseBody } from './protocol.js';
+import type { ControlResponseBody } from './protocol';
 import type {
   AllowResponseData,
   CanUseToolRequest,
@@ -16,7 +16,7 @@ import type {
   PermissionMode,
   PreToolUseHookResponseData,
   StopHookResponseData,
-} from './types.js';
+} from './types';
 
 // =============================================================================
 // Constants

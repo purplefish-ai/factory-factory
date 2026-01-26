@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { decisionLogAccessor } from '../../resource_accessors/index.js';
-import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server.js';
-import type { McpToolContext, McpToolResponse } from './types.js';
-import { McpErrorCode } from './types.js';
+import { decisionLogAccessor } from '../../resource_accessors/index';
+import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server';
+import type { McpToolContext, McpToolResponse } from './types';
+import { McpErrorCode } from './types';
 
 // ============================================================================
 // Input Schemas

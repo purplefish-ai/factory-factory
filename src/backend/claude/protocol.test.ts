@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaudeProtocol } from './protocol.js';
+import { ClaudeProtocol } from './protocol';
 import type {
   AssistantMessage,
   ClaudeJson,
@@ -8,7 +8,7 @@ import type {
   ControlRequest,
   ControlResponse,
   StreamEventMessage,
-} from './types.js';
+} from './types';
 
 // =============================================================================
 // Test Setup

@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { projectAccessor } from '../resource_accessors/project.accessor.js';
-import { configService } from '../services/config.service.js';
-import { publicProcedure, router } from './trpc.js';
+import { projectAccessor } from '../resource_accessors/project.accessor';
+import { configService } from '../services/config.service';
+import { publicProcedure, router } from './trpc';
 
 export const projectRouter = router({
   // List all projects

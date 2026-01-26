@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { middleware, publicProcedure } from '../trpc.js';
+import { middleware, publicProcedure } from '../trpc';
 
 /**
  * Middleware that validates project context is present.

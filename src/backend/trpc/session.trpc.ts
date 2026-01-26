@@ -1,9 +1,9 @@
-import { SessionStatus } from '@prisma-gen/client.js';
+import { SessionStatus } from '@prisma-gen/client';
 import { z } from 'zod';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor.js';
-import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor.js';
-import { sessionService } from '../services/session.service.js';
-import { publicProcedure, router } from './trpc.js';
+import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
+import { sessionService } from '../services/session.service';
+import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
   // Claude Sessions

@@ -1,5 +1,5 @@
-import type { Prisma, Workspace, WorkspaceStatus } from '@prisma-gen/client.js';
-import { prisma } from '../db.js';
+import type { Prisma, Workspace, WorkspaceStatus } from '@prisma-gen/client';
+import { prisma } from '../db';
 
 interface CreateWorkspaceInput {
   projectId: string;

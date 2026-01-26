@@ -1,9 +1,9 @@
-import { adminRouter } from './admin.trpc.js';
-import { decisionLogRouter } from './decision-log.trpc.js';
-import { projectRouter } from './project.trpc.js';
-import { sessionRouter } from './session.trpc.js';
-import { router } from './trpc.js';
-import { workspaceRouter } from './workspace.trpc.js';
+import { adminRouter } from './admin.trpc';
+import { decisionLogRouter } from './decision-log.trpc';
+import { projectRouter } from './project.trpc';
+import { sessionRouter } from './session.trpc';
+import { router } from './trpc';
+import { workspaceRouter } from './workspace.trpc';
 
 export const appRouter = router({
   project: projectRouter,
@@ -16,6 +16,6 @@ export const appRouter = router({
 // Export type for use in frontend
 export type AppRouter = typeof appRouter;
 
-export { projectScopedProcedure } from './procedures/index.js';
+export { projectScopedProcedure } from './procedures/index';
 // Re-export context and procedure helpers
-export { createContext, publicProcedure } from './trpc.js';
+export { createContext, publicProcedure } from './trpc';

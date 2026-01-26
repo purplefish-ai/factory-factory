@@ -7,7 +7,7 @@
  */
 
 import type { IPty } from 'node-pty';
-import { createLogger } from './logger.service.js';
+import { createLogger } from './logger.service';
 
 const logger = createLogger('terminal');
 

@@ -7,8 +7,8 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { ClaudeProtocol } from './protocol.js';
-import type { ClaudeJson, HooksConfig, InitializeResponseData, PermissionMode } from './types.js';
+import { ClaudeProtocol } from './protocol';
+import type { ClaudeJson, HooksConfig, InitializeResponseData, PermissionMode } from './types';
 
 // =============================================================================
 // Types

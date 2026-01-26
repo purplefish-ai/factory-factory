@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types.js';
+import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
 
 /**
  * Represents a message from session history

@@ -1,7 +1,7 @@
-import { decisionLogAccessor } from '../../resource_accessors/index.js';
-import { CRITICAL_TOOLS, isTransientError } from './errors.js';
-import type { McpToolContext, McpToolRegistryEntry, McpToolResponse } from './types.js';
-import { McpErrorCode } from './types.js';
+import { decisionLogAccessor } from '../../resource_accessors/index';
+import { CRITICAL_TOOLS, isTransientError } from './errors';
+import type { McpToolContext, McpToolRegistryEntry, McpToolResponse } from './types';
+import { McpErrorCode } from './types';
 
 /**
  * Global tool registry
