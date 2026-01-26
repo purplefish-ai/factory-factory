@@ -1,6 +1,7 @@
 'use client';
 
 import { ShieldCheck, ShieldX, Terminal } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { PermissionRequest } from '@/lib/claude-types';
@@ -67,6 +68,21 @@ function formatToolInput(input: Record<string, unknown>): string {
  * Appears above the chat input as a compact card.
  */
 export function PermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
+  const allowButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus the Allow button when the prompt appears for keyboard accessibility
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only re-focus when requestId changes
+  useEffect(() => {
+    if (!permission) {
+      return;
+    }
+    // Small delay to ensure the element is rendered and focusable
+    const timeoutId = setTimeout(() => {
+      allowButtonRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [permission?.requestId]);
+
   if (!permission) {
     return null;
   }
@@ -83,9 +99,13 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
   };
 
   return (
-    <div className="border-b bg-muted/50 p-3">
+    <div
+      className="border-b bg-muted/50 p-3"
+      role="alertdialog"
+      aria-label={`Permission request for ${toolName}`}
+    >
       <div className="flex items-start gap-3">
-        <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" />
+        <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" aria-hidden="true" />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium">Permission: {toolName}</div>
           <div
@@ -97,11 +117,11 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
         </div>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">
-            <ShieldX className="h-3.5 w-3.5" />
+            <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
             Deny
           </Button>
-          <Button size="sm" onClick={handleAllow} className="gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" />
+          <Button ref={allowButtonRef} size="sm" onClick={handleAllow} className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             Allow
           </Button>
         </div>
@@ -115,6 +135,20 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
  * Use when more context is needed before approval.
  */
 export function PermissionPromptExpanded({ permission, onApprove }: PermissionPromptProps) {
+  const allowButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus the Allow button when the prompt appears for keyboard accessibility
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only re-focus when requestId changes
+  useEffect(() => {
+    if (!permission) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      allowButtonRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [permission?.requestId]);
+
   if (!permission) {
     return null;
   }
@@ -130,9 +164,13 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
   };
 
   return (
-    <div className="border-b bg-muted/50 p-3">
+    <div
+      className="border-b bg-muted/50 p-3"
+      role="alertdialog"
+      aria-label={`Permission request for ${toolName}`}
+    >
       <div className="flex items-start gap-3">
-        <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" />
+        <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" aria-hidden="true" />
         <div className="flex-1 min-w-0 space-y-2">
           <div className="text-sm font-medium">Permission: {toolName}</div>
           <div className="bg-background rounded-md p-2 border">
@@ -143,11 +181,11 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
         </div>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">
-            <ShieldX className="h-3.5 w-3.5" />
+            <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
             Deny
           </Button>
-          <Button size="sm" onClick={handleAllow} className="gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" />
+          <Button ref={allowButtonRef} size="sm" onClick={handleAllow} className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             Allow
           </Button>
         </div>

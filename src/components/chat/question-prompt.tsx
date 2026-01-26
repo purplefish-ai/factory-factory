@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -141,9 +141,35 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
   // State for current question index (pagination)
   const [currentIndex, setCurrentIndex] = useState(0);
+  // Ref for focusing the question container
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Current request ID for key generation
   const currentRequestId = question?.requestId;
+
+  // Reset state when question changes (new question arrives)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reset only when request ID changes
+  useEffect(() => {
+    setAnswers({});
+    setCurrentIndex(0);
+  }, [currentRequestId]);
+
+  // Focus the container when a new question appears for keyboard accessibility
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Focus only when request ID changes
+  useEffect(() => {
+    if (!question) {
+      return;
+    }
+    // Small delay to ensure the element is rendered
+    const timeoutId = setTimeout(() => {
+      // Focus the first focusable element within the container
+      const firstFocusable = containerRef.current?.querySelector<HTMLElement>(
+        'input, button, [tabindex]:not([tabindex="-1"])'
+      );
+      firstFocusable?.focus();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [currentRequestId, question]);
 
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
     setAnswers((prev) => ({
@@ -212,9 +238,15 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   // For single question, render without pagination
   if (totalQuestions === 1) {
     return (
-      <div className="border-b bg-muted/50 p-3">
+      // biome-ignore lint/a11y/useSemanticElements: Using role="form" without form element since we handle submission via callback
+      <div
+        ref={containerRef}
+        className="border-b bg-muted/50 p-3"
+        role="form"
+        aria-label="Question from Claude"
+      >
         <div className="flex items-start gap-3">
-          <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" />
+          <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
           <div className="flex-1 min-w-0">
             {currentQuestion.multiSelect ? (
               <MultiSelectQuestion
@@ -244,9 +276,15 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
 
   // For multiple questions, render with pagination
   return (
-    <div className="border-b bg-muted/50 p-3">
+    // biome-ignore lint/a11y/useSemanticElements: Using role="form" without form element since we handle submission via callback
+    <div
+      ref={containerRef}
+      className="border-b bg-muted/50 p-3"
+      role="form"
+      aria-label="Questions from Claude"
+    >
       <div className="flex items-start gap-3">
-        <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" />
+        <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
         <div className="flex-1 min-w-0">
           {/* Progress indicator */}
           <div className="flex items-center justify-between mb-2">
@@ -299,6 +337,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
             onClick={() => setCurrentIndex((i) => i - 1)}
             disabled={isFirstQuestion}
             className="h-8 w-8 p-0"
+            aria-label="Previous question"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -323,6 +362,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
               size="sm"
               onClick={() => setCurrentIndex((i) => i + 1)}
               className="h-8 w-8 p-0"
+              aria-label="Next question"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

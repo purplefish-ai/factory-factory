@@ -19,6 +19,7 @@ import {
 import { StatsPanel } from './stats-panel';
 import { MinimalStatus, StatusBar } from './status-bar';
 import { ToolSequenceGroup } from './tool-renderers';
+import type { AgentMetadata, ConnectionState, TokenStats } from './types';
 import { useAgentWebSocket } from './use-agent-websocket';
 
 // =============================================================================
@@ -343,8 +344,6 @@ function findLastThinkingMessageId(messages: ChatMessage[]): string | null {
 // =============================================================================
 // Mock Agent Activity (for Storybook/testing)
 // =============================================================================
-
-import type { AgentMetadata, ConnectionState, TokenStats } from './types';
 
 export interface MockAgentActivityProps {
   /** Pre-loaded messages to display */
