@@ -1,12 +1,9 @@
-// Hook
-
-export { ChatInput } from './chat-input';
-export { MessageList } from './message-list';
-
 // Components
-export { MessageRenderer } from './message-renderer';
-export { PermissionModal } from './permission-modal';
-export { QuestionModal } from './question-modal';
+export { ChatInput } from './chat-input';
+export { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
+export { QuestionPrompt } from './question-prompt';
 export { SessionPicker } from './session-picker';
+
+// Hook
 export type { UseChatWebSocketOptions, UseChatWebSocketReturn } from './use-chat-websocket';
 export { useChatWebSocket } from './use-chat-websocket';

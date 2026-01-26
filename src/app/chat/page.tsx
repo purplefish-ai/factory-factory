@@ -2,17 +2,19 @@
 
 import { Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect } from 'react';
+import { Suspense, useCallback, useEffect, useRef } from 'react';
 
+import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import {
   ChatInput,
-  MessageList,
-  PermissionModal,
-  QuestionModal,
+  PermissionPrompt,
+  QuestionPrompt,
   SessionPicker,
   useChatWebSocket,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -60,6 +62,20 @@ function ChatLoading() {
       <div className="flex flex-col items-center gap-4">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         <p className="text-sm text-muted-foreground">Loading chat...</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Empty state when there are no messages.
+ */
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <div className="text-muted-foreground space-y-2">
+        <p className="text-lg font-medium">No messages yet</p>
+        <p className="text-sm">Start a conversation by typing a message below.</p>
       </div>
     </div>
   );
@@ -128,6 +144,25 @@ function ChatContent() {
       ? 'processing'
       : 'connected';
 
+  // Track if user is near bottom for auto-scroll
+  const isNearBottomRef = useRef(true);
+
+  // Auto-scroll to bottom when messages change, but only if user is near bottom
+  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
+  useEffect(() => {
+    if (isNearBottomRef.current && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length, messagesEndRef]);
+
+  // Handle scroll to detect if user is near bottom
+  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const threshold = 100; // pixels from bottom
+    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+    isNearBottomRef.current = isNearBottom;
+  };
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -151,12 +186,26 @@ function ChatContent() {
       </div>
 
       {/* Message List */}
-      <MessageList
-        messages={messages}
-        running={running}
-        messagesEndRef={messagesEndRef}
-        className="flex-1"
-      />
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-2" onScroll={handleScroll}>
+          {messages.length === 0 && !running && <EmptyState />}
+
+          {groupAdjacentToolCalls(messages).map((item) => (
+            <GroupedMessageItemRenderer
+              key={isToolSequence(item) ? item.id : item.id}
+              item={item}
+            />
+          ))}
+
+          {running && <LoadingIndicator className="py-4" />}
+
+          <div ref={messagesEndRef} className="h-px" />
+        </div>
+      </ScrollArea>
+
+      {/* Inline Prompts (above chat input) */}
+      <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
+      <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
 
       {/* Chat Input */}
       <div className="border-t">
@@ -173,12 +222,6 @@ function ChatContent() {
           </div>
         )}
       </div>
-
-      {/* Permission Modal Overlay */}
-      <PermissionModal permission={pendingPermission} onApprove={approvePermission} />
-
-      {/* Question Modal Overlay */}
-      <QuestionModal question={pendingQuestion} onAnswer={answerQuestion} />
     </div>
   );
 }

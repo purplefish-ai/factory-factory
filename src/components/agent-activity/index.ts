@@ -1,7 +1,16 @@
 // Main components
-
-export type { AgentActivityProps, CompactAgentActivityProps } from './agent-activity';
-export { AgentActivity, CompactAgentActivity } from './agent-activity';
+export type {
+  AgentActivityProps,
+  CompactAgentActivityProps,
+  GroupedMessageItemRendererProps,
+  MessageItemProps,
+} from './agent-activity';
+export {
+  AgentActivity,
+  CompactAgentActivity,
+  GroupedMessageItemRenderer,
+  MessageItem,
+} from './agent-activity';
 // Message renderers
 export {
   AssistantMessageRenderer,

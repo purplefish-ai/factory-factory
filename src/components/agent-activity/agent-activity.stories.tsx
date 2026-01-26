@@ -8,9 +8,12 @@ import {
   createManyToolsScenario,
   createManyToolsWithErrorsScenario,
   createMultiToolScenario,
+  createPermissionScenario,
   createReadFileScenario,
+  createStreamingConversation,
   createThinkingScenario,
   createTokenStats,
+  createUserQuestionScenario,
   resetIdCounters,
 } from '@/lib/claude-fixtures';
 import { MockAgentActivity, MockCompactAgentActivity } from './agent-activity';
@@ -625,4 +628,119 @@ export const StateComparison: Story = {
       </div>
     </div>
   ),
+};
+
+// =============================================================================
+// Additional Scenario Stories
+// =============================================================================
+
+/**
+ * Demonstrates streaming message updates:
+ * Shows the sequence of stream events as content is progressively built up.
+ *
+ * Includes: message_start, content_block_start, multiple text_deltas,
+ * content_block_stop, and message_stop events.
+ */
+export const StreamingConversation: Story = {
+  args: {
+    messages: createStreamingConversation(),
+    connectionState: 'connected',
+    running: true,
+    showStats: false,
+    showStatusBar: true,
+    tokenStats: createTokenStats({ inputTokens: 100, outputTokens: 50 }),
+    agentMetadata: createAgentMetadata({ executionState: 'RUNNING' }),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Demonstrates the permission request flow:
+ * User asks to delete files -> Assistant prepares to run a command.
+ *
+ * Shows the messages leading up to a permission request.
+ */
+export const PermissionRequestFlow: Story = {
+  args: {
+    messages: createPermissionScenario().messages,
+    connectionState: 'connected',
+    running: false,
+    showStats: false,
+    showStatusBar: false,
+    tokenStats: null,
+    agentMetadata: null,
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Demonstrates the AskUserQuestion flow:
+ * User asks to create a component -> Assistant needs more info.
+ *
+ * Shows the messages leading up to asking the user questions.
+ */
+export const UserQuestionFlow: Story = {
+  args: {
+    messages: createUserQuestionScenario().messages,
+    connectionState: 'connected',
+    running: false,
+    showStats: false,
+    showStatusBar: false,
+    tokenStats: null,
+    agentMetadata: null,
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * Demonstrates a realistic development workflow combining multiple operations:
+ * Reading files, editing, running tests, and handling results.
+ */
+export const FullDevelopmentWorkflow: Story = {
+  args: {
+    messages: [
+      ...createReadFileScenario(),
+      ...createEditFileScenario().slice(2), // Skip duplicate read, start from edit
+      ...createBashCommandScenario().slice(2), // Skip setup, just show test run
+    ],
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 3500,
+      outputTokens: 1800,
+      totalCostUsd: 0.027,
+      turnCount: 6,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
+};
+
+/**
+ * A long conversation demonstrating scroll behavior and message grouping.
+ * Contains multiple exchanges to test the message list's handling of extended conversations.
+ */
+export const LongConversation: Story = {
+  args: {
+    messages: [
+      ...createCompleteConversation(),
+      ...createMultiToolScenario().slice(1), // Add more content
+      ...createThinkingScenario(),
+      ...createBashCommandScenario(),
+    ],
+    connectionState: 'connected',
+    running: false,
+    showStats: true,
+    showStatusBar: true,
+    tokenStats: createTokenStats({
+      inputTokens: 8000,
+      outputTokens: 4500,
+      totalCostUsd: 0.065,
+      turnCount: 12,
+    }),
+    agentMetadata: createAgentMetadata(),
+    height: 'h-[500px]',
+  },
 };

@@ -173,11 +173,11 @@ export function CompactAgentActivity({
 // Message Item
 // =============================================================================
 
-interface MessageItemProps {
+export interface MessageItemProps {
   message: ChatMessage;
 }
 
-function MessageItem({ message }: MessageItemProps) {
+export function MessageItem({ message }: MessageItemProps) {
   // User messages
   if (message.source === 'user') {
     return (
@@ -205,14 +205,14 @@ function MessageItem({ message }: MessageItemProps) {
 // Grouped Message Item Renderer
 // =============================================================================
 
-interface GroupedMessageItemRendererProps {
+export interface GroupedMessageItemRendererProps {
   item: GroupedMessageItem;
 }
 
 /**
  * Renders either a regular message or a tool sequence group.
  */
-function GroupedMessageItemRenderer({ item }: GroupedMessageItemRendererProps) {
+export function GroupedMessageItemRenderer({ item }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     return <ToolSequenceGroup sequence={item} />;
   }
