@@ -37,6 +37,12 @@ class SessionService {
       throw new Error('Workspace has no worktree path');
     }
 
+    // Mark workspace as having had sessions (for kanban backlog/waiting distinction)
+    if (!workspace.hasHadSessions) {
+      await workspaceAccessor.markHasHadSessions(workspace.id);
+      logger.debug('Marked workspace as having had sessions', { workspaceId: workspace.id });
+    }
+
     // Build process options
     const processOptions: ClaudeProcessOptions = {
       workingDir,

@@ -26,6 +26,26 @@ enum SessionStatus {
   FAILED
 }
 
+enum PRState {
+  NONE
+  DRAFT
+  OPEN
+  CHANGES_REQUESTED
+  APPROVED
+  MERGED
+  CLOSED
+}
+
+enum KanbanColumn {
+  BACKLOG
+  IN_PROGRESS
+  WAITING
+  PR_OPEN
+  APPROVED
+  MERGED
+  DONE
+}
+
 // Models
 model Project {
   id                String      @id @default(cuid())
@@ -60,24 +80,38 @@ model DecisionLog {
 }
 
 model Workspace {
-  id                String            @id @default(cuid())
-  projectId         String
-  project           Project           @relation(fields: [projectId], references: [id])
-  name              String
-  description       String?
-  status            WorkspaceStatus   @default(ACTIVE)
-  worktreePath      String?
-  branchName        String?
-  prUrl             String?
-  githubIssueNumber Int?
-  githubIssueUrl    String?
-  claudeSessions    ClaudeSession[]
-  terminalSessions  TerminalSession[]
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id                  String            @id @default(cuid())
+  projectId           String
+  project             Project           @relation(fields: [projectId], references: [id])
+  name                String
+  description         String?
+  status              WorkspaceStatus   @default(ACTIVE)
+  worktreePath        String?
+  branchName          String?
+  prUrl               String?
+  githubIssueNumber   Int?
+  githubIssueUrl      String?
+  claudeSessions      ClaudeSession[]
+  terminalSessions    TerminalSession[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  // PR tracking (cached from GitHub)
+  prNumber            Int?
+  prState             PRState           @default(NONE)
+  prReviewState       String?           // Raw GitHub review state
+  prUpdatedAt         DateTime?         // Last PR sync time
+
+  // Activity tracking
+  hasHadSessions      Boolean           @default(false)
+
+  // Cached kanban column (for list performance)
+  cachedKanbanColumn  KanbanColumn      @default(BACKLOG)
+  stateComputedAt     DateTime?         // Last kanban column computation
 
   @@index([projectId])
   @@index([status])
+  @@index([cachedKanbanColumn])
 }
 
 model ClaudeSession {
