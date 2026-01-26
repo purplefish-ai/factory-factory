@@ -57,6 +57,8 @@ export interface ClaudeClientOptions {
   initialPrompt?: string;
   /** Include partial/streaming messages for real-time updates */
   includePartialMessages?: boolean;
+  /** Enable extended thinking mode */
+  thinkingEnabled?: boolean;
 }
 
 // =============================================================================
@@ -140,6 +142,7 @@ export class ClaudeClient extends EventEmitter {
       disallowedTools: options.disallowedTools,
       initialPrompt: options.initialPrompt,
       includePartialMessages: options.includePartialMessages,
+      thinkingEnabled: options.thinkingEnabled,
     };
 
     // Spawn the process

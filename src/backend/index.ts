@@ -17,6 +17,7 @@ import {
   taskCreatedHandler,
   topLevelTaskCreatedHandler,
 } from './inngest/functions/index.js';
+import { chatSessionSettingsAccessor } from './resource_accessors/chat-session-settings.accessor.js';
 import { orchestratorRouter } from './routers/api/orchestrator.router.js';
 import { projectRouter } from './routers/api/project.router.js';
 import { taskRouter } from './routers/api/task.router.js';
@@ -679,6 +680,8 @@ async function getOrCreateChatClient(
     resumeSessionId?: string;
     systemPrompt?: string;
     model?: string;
+    thinkingEnabled?: boolean;
+    permissionMode?: 'bypassPermissions' | 'plan';
   }
 ): Promise<ClaudeClient> {
   // Check for existing running client
@@ -714,8 +717,9 @@ async function getOrCreateChatClient(
       resumeSessionId: options.resumeSessionId,
       systemPrompt: options.systemPrompt,
       model: options.model,
-      permissionMode: 'bypassPermissions', // Auto-approve for chat
+      permissionMode: options.permissionMode ?? 'bypassPermissions',
       includePartialMessages: true, // Enable streaming events for real-time UI updates
+      thinkingEnabled: options.thinkingEnabled,
     };
 
     const newClient = await ClaudeClient.create(clientOptions);
@@ -811,6 +815,7 @@ agentProcessAdapter.on('error', ({ agentId, error }) => {
 });
 
 // Handle individual chat messages
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles multiple message types with settings
 async function handleChatMessage(
   ws: import('ws').WebSocket,
   sessionId: string,
@@ -823,15 +828,24 @@ async function handleChatMessage(
     systemPrompt?: string;
     model?: string;
     claudeSessionId?: string;
+    // Settings fields
+    thinkingEnabled?: boolean;
+    planModeEnabled?: boolean;
+    selectedModel?: string | null;
   }
 ) {
   switch (message.type) {
     case 'start': {
+      // Map planModeEnabled to permissionMode
+      const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
+
       await getOrCreateChatClient(sessionId, {
         workingDir: message.workingDir || workingDir,
         resumeSessionId: message.resumeSessionId,
         systemPrompt: message.systemPrompt,
-        model: message.model,
+        model: message.selectedModel || message.model,
+        thinkingEnabled: message.thinkingEnabled,
+        permissionMode,
       });
       ws.send(JSON.stringify({ type: 'started', sessionId }));
       break;
@@ -881,12 +895,46 @@ async function handleChatMessage(
       // Load session history without starting a process
       const targetSessionId = message.claudeSessionId;
       if (targetSessionId) {
-        const history = await SessionManager.getHistory(targetSessionId, workingDir);
+        const [history, settings] = await Promise.all([
+          SessionManager.getHistory(targetSessionId, workingDir),
+          chatSessionSettingsAccessor.getOrCreate(targetSessionId),
+        ]);
         ws.send(
           JSON.stringify({
             type: 'session_loaded',
             claudeSessionId: targetSessionId,
             messages: history,
+            settings: {
+              selectedModel: settings.selectedModel,
+              thinkingEnabled: settings.thinkingEnabled,
+              planModeEnabled: settings.planModeEnabled,
+            },
+          })
+        );
+      } else {
+        ws.send(JSON.stringify({ type: 'error', message: 'claudeSessionId required' }));
+      }
+      break;
+    }
+
+    case 'update_settings': {
+      // Update settings for the current session
+      const targetSessionId = message.claudeSessionId;
+      if (targetSessionId) {
+        const updatedSettings = await chatSessionSettingsAccessor.update(targetSessionId, {
+          selectedModel: message.selectedModel,
+          thinkingEnabled: message.thinkingEnabled,
+          planModeEnabled: message.planModeEnabled,
+        });
+        ws.send(
+          JSON.stringify({
+            type: 'settings_updated',
+            claudeSessionId: targetSessionId,
+            settings: {
+              selectedModel: updatedSettings.selectedModel,
+              thinkingEnabled: updatedSettings.thinkingEnabled,
+              planModeEnabled: updatedSettings.planModeEnabled,
+            },
           })
         );
       } else {

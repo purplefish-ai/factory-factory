@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChatMessage,
+  ChatSettings,
   ClaudeMessage,
   HistoryMessage,
   PermissionRequest,
@@ -10,7 +11,7 @@ import type {
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
-import { convertHistoryMessage } from '@/lib/claude-types';
+import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 import {
   buildWebSocketUrl,
   MAX_RECONNECT_ATTEMPTS,
@@ -39,12 +40,16 @@ export interface UseChatWebSocketReturn {
   pendingQuestion: UserQuestionRequest | null;
   // Session loading state
   loadingSession: boolean;
+  // Chat settings
+  chatSettings: ChatSettings;
   // Actions
   sendMessage: (text: string) => void;
+  stopChat: () => void;
   clearChat: () => void;
   loadSession: (claudeSessionId: string) => void;
   approvePermission: (requestId: string, allow: boolean) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
+  updateSettings: (settings: Partial<ChatSettings>) => void;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -58,6 +63,9 @@ interface StartMessage {
   type: 'start';
   workingDir?: string;
   resumeSessionId?: string;
+  selectedModel?: string | null;
+  thinkingEnabled?: boolean;
+  planModeEnabled?: boolean;
 }
 
 interface UserInputMessage {
@@ -90,6 +98,14 @@ interface QuestionResponseMessage {
   answers: Record<string, string | string[]>;
 }
 
+interface UpdateSettingsMessage {
+  type: 'update_settings';
+  claudeSessionId: string;
+  selectedModel?: string | null;
+  thinkingEnabled?: boolean;
+  planModeEnabled?: boolean;
+}
+
 type OutgoingMessage =
   | StartMessage
   | UserInputMessage
@@ -97,7 +113,8 @@ type OutgoingMessage =
   | ListSessionsMessage
   | LoadSessionMessage
   | PermissionResponseMessage
-  | QuestionResponseMessage;
+  | QuestionResponseMessage
+  | UpdateSettingsMessage;
 
 // =============================================================================
 // Debug Logging
@@ -176,6 +193,7 @@ interface MessageHandlerContext {
   setPendingPermission: (permission: PermissionRequest | null) => void;
   setPendingQuestion: (question: UserQuestionRequest | null) => void;
   setLoadingSession: (loading: boolean) => void;
+  setChatSettings: (settings: ChatSettings) => void;
   /** Ref to track accumulated tool input JSON per tool_use_id */
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
   /** Updates tool input for a specific tool_use_id */
@@ -412,7 +430,17 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
     // Clear tool input accumulator when loading a new session to prevent memory buildup
     ctx.toolInputAccumulatorRef.current.clear();
   }
+  // Load settings if present
+  if (data.settings) {
+    ctx.setChatSettings(data.settings);
+  }
   ctx.setLoadingSession(false);
+}
+
+function handleSettingsUpdatedMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
+  if (data.settings) {
+    ctx.setChatSettings(data.settings);
+  }
 }
 
 function handlePermissionRequestMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
@@ -452,6 +480,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<UserQuestionRequest | null>(null);
   const [loadingSession, setLoadingSession] = useState(false);
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
 
   // Refs
   const wsRef = useRef<WebSocket | null>(null);
@@ -542,6 +571,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       setPendingPermission,
       setPendingQuestion,
       setLoadingSession,
+      setChatSettings,
       toolInputAccumulatorRef,
       updateToolInput,
     }),
@@ -572,6 +602,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
           session_loaded: handleSessionLoadedMessage,
           permission_request: handlePermissionRequestMessage,
           user_question: handleUserQuestionMessage,
+          settings_updated: handleSettingsUpdatedMessage,
         };
 
         const handler = handlers[data.type];
@@ -683,6 +714,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       if (!running) {
         const startMsg: StartMessage = {
           type: 'start',
+          // Include current settings when starting
+          selectedModel: chatSettings.selectedModel,
+          thinkingEnabled: chatSettings.thinkingEnabled,
+          planModeEnabled: chatSettings.planModeEnabled,
         };
         // If we have a session, resume it
         if (claudeSessionId) {
@@ -694,8 +729,14 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       // Send the user input
       sendWsMessage({ type: 'user_input', text });
     },
-    [running, claudeSessionId, sendWsMessage]
+    [running, claudeSessionId, chatSettings, sendWsMessage]
   );
+
+  const stopChat = useCallback(() => {
+    if (running) {
+      sendWsMessage({ type: 'stop' });
+    }
+  }, [running, sendWsMessage]);
 
   const clearChat = useCallback(() => {
     // Stop any running Claude process
@@ -708,6 +749,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     setClaudeSessionId(null);
     setPendingPermission(null);
     setPendingQuestion(null);
+    setChatSettings(DEFAULT_CHAT_SETTINGS);
     toolInputAccumulatorRef.current.clear();
 
     // Generate new session ID
@@ -741,6 +783,23 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     [sendWsMessage]
   );
 
+  const updateSettings = useCallback(
+    (settings: Partial<ChatSettings>) => {
+      // Update local state immediately for responsive UI
+      setChatSettings((prev) => ({ ...prev, ...settings }));
+
+      // Persist to database if we have a session
+      if (claudeSessionId) {
+        sendWsMessage({
+          type: 'update_settings',
+          claudeSessionId,
+          ...settings,
+        });
+      }
+    },
+    [claudeSessionId, sendWsMessage]
+  );
+
   return {
     // State
     messages,
@@ -751,12 +810,15 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     pendingPermission,
     pendingQuestion,
     loadingSession,
+    chatSettings,
     // Actions
     sendMessage,
+    stopChat,
     clearChat,
     loadSession,
     approvePermission,
     answerQuestion,
+    updateSettings,
     // Refs
     inputRef,
     messagesEndRef,

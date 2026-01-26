@@ -122,11 +122,14 @@ function ChatContent() {
     pendingPermission,
     pendingQuestion,
     loadingSession,
+    chatSettings,
     sendMessage,
+    stopChat,
     clearChat,
     loadSession,
     approvePermission,
     answerQuestion,
+    updateSettings,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({ initialSessionId });
@@ -244,10 +247,13 @@ function ChatContent() {
         {/* Chat Input */}
         <ChatInput
           onSend={sendMessage}
+          onStop={stopChat}
           disabled={!connected}
           running={running}
           inputRef={inputRef}
           placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
+          settings={chatSettings}
+          onSettingsChange={updateSettings}
         />
         {claudeSessionId && (
           <div className="px-4 pb-2 text-xs text-muted-foreground">
