@@ -8,7 +8,7 @@ import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter.js';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index.js';
 import { prisma } from './db.js';
-import { inngest } from './inngest/client';
+import { inngest } from './inngest/client.js';
 import { workspaceAccessor } from './resource_accessors/workspace.accessor.js';
 import { projectRouter } from './routers/api/project.router.js';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index.js';

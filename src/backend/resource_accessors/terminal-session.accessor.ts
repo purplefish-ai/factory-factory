@@ -1,4 +1,4 @@
-import type { Prisma, SessionStatus, TerminalSession } from '@prisma-gen/client';
+import type { Prisma, SessionStatus, TerminalSession } from '@prisma-gen/client.js';
 import { prisma } from '../db.js';
 
 interface CreateTerminalSessionInput {

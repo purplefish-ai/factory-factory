@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@prisma-gen/client.js';
 import { GitClientFactory } from '../clients/git.client.js';
 import {
   claudeSessionAccessor,

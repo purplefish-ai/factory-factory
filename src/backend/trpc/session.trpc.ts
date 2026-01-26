@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@prisma-gen/client.js';
 import { z } from 'zod';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor.js';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor.js';

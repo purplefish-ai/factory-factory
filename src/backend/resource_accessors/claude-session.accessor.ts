@@ -1,4 +1,4 @@
-import type { ClaudeSession, Prisma, SessionStatus } from '@prisma-gen/client';
+import type { ClaudeSession, Prisma, SessionStatus } from '@prisma-gen/client.js';
 import { prisma } from '../db.js';
 
 interface CreateClaudeSessionInput {

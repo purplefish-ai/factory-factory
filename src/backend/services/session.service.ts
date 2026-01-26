@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@prisma-gen/client.js';
 import { ClaudeProcess, type ClaudeProcessOptions } from '../claude/process.js';
 import { claudeSessionAccessor, workspaceAccessor } from '../resource_accessors/index.js';
 import { createLogger } from './logger.service.js';

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
-import type { Prisma, Project } from '@prisma-gen/client';
+import type { Prisma, Project } from '@prisma-gen/client.js';
 import { GitClientFactory } from '../clients/git.client.js';
 import { prisma } from '../db.js';
 

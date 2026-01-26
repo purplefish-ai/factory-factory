@@ -1,6 +1,6 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { WorkspaceStatus } from '@prisma-gen/client';
+import { WorkspaceStatus } from '@prisma-gen/client.js';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { GitClientFactory } from '../clients/git.client.js';
