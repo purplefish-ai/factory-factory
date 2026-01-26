@@ -12,6 +12,13 @@ export const WEBSOCKET_PORT = Number(process.env.NEXT_PUBLIC_BACKEND_PORT) || 30
 
 /**
  * Maximum reconnection attempts before giving up.
+ *
+ * With exponential backoff (1s, 2s, 4s, 8s, 16s, then 30s cap), 10 attempts
+ * results in a maximum total wait time of approximately 3 minutes before
+ * displaying an error to the user. This duration is chosen to:
+ * - Handle brief network hiccups without user intervention
+ * - Survive backend restarts during development
+ * - Eventually fail and show clear feedback rather than trying indefinitely
  */
 export const MAX_RECONNECT_ATTEMPTS = 10;
 

@@ -1363,6 +1363,7 @@ const performCleanup = async () => {
   // Gracefully stop all chat clients with timeout
   const stopPromises: Promise<void>[] = [];
   for (const [sessionId, client] of chatClients) {
+    let didTimeout = false;
     const stopPromise = Promise.race([
       (async () => {
         try {
@@ -1371,8 +1372,16 @@ const performCleanup = async () => {
           client.kill();
         }
       })(),
-      new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          didTimeout = true;
+          resolve();
+        }, SHUTDOWN_TIMEOUT_MS)
+      ),
     ]).then(() => {
+      if (didTimeout) {
+        logger.warn('Client stop timed out, force killing', { sessionId });
+      }
       // Ensure kill is called as a final measure
       try {
         client.kill();
@@ -1403,8 +1412,8 @@ const performCleanup = async () => {
   // Clean up session file logger
   sessionFileLogger.cleanup();
 
-  // Stop periodic orphan cleanup
-  reconciliationService.stopPeriodicCleanup();
+  // Stop periodic orphan cleanup (waits for any in-flight cleanup)
+  await reconciliationService.stopPeriodicCleanup();
 
   // Disconnect from database
   await prisma.$disconnect();

@@ -122,6 +122,12 @@ const DEBUG_WEBSOCKET = process.env.NODE_ENV === 'development';
 const MAX_QUEUE_SIZE = 100;
 
 /**
+ * Maximum number of queued messages to send per flush to avoid overwhelming the server.
+ * Remaining messages will be sent on subsequent flushes.
+ */
+const MAX_FLUSH_BATCH_SIZE = 10;
+
+/**
  * Message types that are time-sensitive and should not be queued/replayed after reconnect.
  * These commands only make sense in the context of an active session at the time they were sent.
  */
@@ -532,8 +538,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   // (avoids stale closure issues when connect() is called during reconnect)
   const claudeSessionIdRef = useRef<string | null>(claudeSessionId);
 
-  // Keep claudeSessionIdRef in sync with state
+  // Keep claudeSessionIdRef in sync with state and clear queue on session change
   useEffect(() => {
+    // Clear queue when session changes to prevent cross-session message leaks
+    if (claudeSessionIdRef.current !== claudeSessionId) {
+      messageQueueRef.current = [];
+    }
     claudeSessionIdRef.current = claudeSessionId;
   }, [claudeSessionId]);
 
@@ -578,13 +588,25 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       );
     }
 
-    while (messageQueueRef.current.length > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+    // Send queued messages in batches to avoid overwhelming the server
+    let sentCount = 0;
+    while (
+      messageQueueRef.current.length > 0 &&
+      wsRef.current?.readyState === WebSocket.OPEN &&
+      sentCount < MAX_FLUSH_BATCH_SIZE
+    ) {
       const msg = messageQueueRef.current.shift();
       if (msg) {
         messageCounterRef.current += 1;
         logWsMessage('OUT (queued)', msg, messageCounterRef.current);
         wsRef.current.send(JSON.stringify(msg));
+        sentCount++;
       }
+    }
+    if (DEBUG_WEBSOCKET && messageQueueRef.current.length > 0) {
+      console.log(
+        `📤 ${messageQueueRef.current.length} messages remaining in queue after batch flush`
+      );
     }
   }, []);
 
