@@ -1,5 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
-import { ClaudeProcess, type ClaudeProcessOptions } from '../claude/process';
+import { ClaudeProcess, type ClaudeProcessOptions, type ResourceUsage } from '../claude/process';
 import { claudeSessionAccessor, workspaceAccessor } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
 
@@ -185,6 +185,40 @@ class SessionService {
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
     return sessionIds.some((id) => this.isSessionWorking(id));
+  }
+
+  /**
+   * Get all active Claude processes for admin view
+   */
+  getAllActiveProcesses(): Array<{
+    sessionId: string;
+    pid: number | undefined;
+    status: string;
+    isRunning: boolean;
+    resourceUsage: ResourceUsage | null;
+    idleTimeMs: number;
+  }> {
+    const processes: Array<{
+      sessionId: string;
+      pid: number | undefined;
+      status: string;
+      isRunning: boolean;
+      resourceUsage: ResourceUsage | null;
+      idleTimeMs: number;
+    }> = [];
+
+    for (const [sessionId, process] of activeClaudeProcesses) {
+      processes.push({
+        sessionId,
+        pid: process.getPid(),
+        status: process.getStatus(),
+        isRunning: process.isRunning(),
+        resourceUsage: process.getResourceUsage(),
+        idleTimeMs: process.getIdleTimeMs(),
+      });
+    }
+
+    return processes;
   }
 }
 

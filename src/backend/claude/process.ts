@@ -2,17 +2,52 @@
  * Claude CLI process lifecycle management.
  *
  * Manages spawning and controlling a Claude CLI process with proper
- * initialization, session tracking, and graceful shutdown.
+ * initialization, session tracking, graceful shutdown, resource monitoring,
+ * and hung process detection.
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import pidusage from 'pidusage';
+import { createLogger } from '../services/logger.service';
 import { ClaudeProtocol } from './protocol';
 import type { ClaudeJson, HooksConfig, InitializeResponseData, PermissionMode } from './types';
+
+const logger = createLogger('claude-process');
 
 // =============================================================================
 // Types
 // =============================================================================
+
+/**
+ * Options for resource monitoring.
+ */
+export interface ResourceMonitoringOptions {
+  /** Enable resource monitoring (default: true) */
+  enabled?: boolean;
+  /** Maximum memory in bytes before killing process (default: 2GB) */
+  maxMemoryBytes?: number;
+  /** Maximum CPU percentage to warn about (default: 90%) */
+  maxCpuPercent?: number;
+  /** Time in ms without activity before considering process hung (default: 30 minutes) */
+  activityTimeoutMs?: number;
+  /** Time in ms before timeout to emit a warning (default: 80% of activityTimeoutMs) */
+  hungWarningThresholdMs?: number;
+  /** Interval in ms between resource checks (default: 5 seconds) */
+  monitoringIntervalMs?: number;
+}
+
+/**
+ * Resource usage snapshot.
+ */
+export interface ResourceUsage {
+  /** CPU usage percentage (0-100+) */
+  cpu: number;
+  /** Memory usage in bytes */
+  memory: number;
+  /** Timestamp of measurement */
+  timestamp: Date;
+}
 
 /**
  * Options for spawning a Claude CLI process.
@@ -40,6 +75,8 @@ export interface ClaudeProcessOptions {
   hooks?: HooksConfig;
   /** Enable extended thinking mode */
   thinkingEnabled?: boolean;
+  /** Resource monitoring configuration */
+  resourceMonitoring?: ResourceMonitoringOptions;
 }
 
 /**
@@ -89,16 +126,63 @@ export class ClaudeProcess extends EventEmitter {
   /** Timeout for spawn/initialization in milliseconds */
   private static readonly SPAWN_TIMEOUT = 30_000;
 
+  /**
+   * Get the default activity timeout from environment variable.
+   * CLAUDE_HUNG_TIMEOUT_MS: Time in ms without activity before killing process (default: 30 minutes)
+   */
+  private static getDefaultActivityTimeoutMs(): number {
+    const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
+    if (envValue) {
+      const parsed = Number.parseInt(envValue, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+      logger.warn('Invalid CLAUDE_HUNG_TIMEOUT_MS value, using default', { envValue });
+    }
+    return 30 * 60 * 1000; // 30 minutes default
+  }
+
+  /**
+   * Build the default resource monitoring configuration.
+   * Warning threshold is computed as 80% of the activity timeout.
+   */
+  private static buildDefaultMonitoring(): Required<ResourceMonitoringOptions> {
+    const activityTimeoutMs = ClaudeProcess.getDefaultActivityTimeoutMs();
+    return {
+      enabled: true,
+      maxMemoryBytes: 2 * 1024 * 1024 * 1024, // 2GB
+      maxCpuPercent: 90,
+      activityTimeoutMs,
+      hungWarningThresholdMs: Math.floor(activityTimeoutMs * 0.8), // 80% of timeout
+      monitoringIntervalMs: 5000, // 5 seconds
+    };
+  }
+
   private process: ChildProcess;
   private sessionId: string | null = null;
   private status: ProcessStatus = 'starting';
   private initializeResponse: InitializeResponseData | null = null;
   private stderrBuffer: string[] = [];
 
-  private constructor(process: ChildProcess, protocol: ClaudeProtocol) {
+  // Resource monitoring state
+  private monitoringOptions: Required<ResourceMonitoringOptions>;
+  private monitoringInterval: NodeJS.Timeout | null = null;
+  private lastActivityAt: number = Date.now();
+  private lastResourceUsage: ResourceUsage | null = null;
+  private hungWarningEmitted: boolean = false;
+
+  private constructor(
+    process: ChildProcess,
+    protocol: ClaudeProtocol,
+    monitoringOptions?: ResourceMonitoringOptions
+  ) {
     super();
     this.process = process;
     this.protocol = protocol;
+    this.monitoringOptions = {
+      ...ClaudeProcess.buildDefaultMonitoring(),
+      ...monitoringOptions,
+    };
   }
 
   // ===========================================================================
@@ -135,7 +219,7 @@ export class ClaudeProcess extends EventEmitter {
     }
 
     const protocol = new ClaudeProtocol(childProcess.stdin, childProcess.stdout);
-    const claudeProcess = new ClaudeProcess(childProcess, protocol);
+    const claudeProcess = new ClaudeProcess(childProcess, protocol, options.resourceMonitoring);
 
     // Set up stderr collection for diagnostics
     childProcess.stderr.on('data', (data: Buffer) => {
@@ -167,6 +251,11 @@ export class ClaudeProcess extends EventEmitter {
       // Clean up on initialization failure
       claudeProcess.killProcessGroup();
       throw error;
+    }
+
+    // Start resource monitoring if enabled
+    if (claudeProcess.monitoringOptions.enabled) {
+      claudeProcess.startResourceMonitoring();
     }
 
     return claudeProcess;
@@ -237,6 +326,28 @@ export class ClaudeProcess extends EventEmitter {
    */
   isRunning(): boolean {
     return this.status !== 'exited';
+  }
+
+  /**
+   * Get the last recorded resource usage.
+   * Returns null until first monitoring check completes.
+   */
+  getResourceUsage(): ResourceUsage | null {
+    return this.lastResourceUsage;
+  }
+
+  /**
+   * Get the timestamp of last activity (message received).
+   */
+  getLastActivityAt(): number {
+    return this.lastActivityAt;
+  }
+
+  /**
+   * Get milliseconds since last activity.
+   */
+  getIdleTimeMs(): number {
+    return Date.now() - this.lastActivityAt;
   }
 
   // ===========================================================================
@@ -355,6 +466,16 @@ export class ClaudeProcess extends EventEmitter {
   override on(event: 'exit', handler: (result: ExitResult) => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'status', handler: (status: ProcessStatus) => void): this;
+  override on(
+    event: 'resource_exceeded',
+    handler: (data: { type: 'memory' | 'cpu'; value: number }) => void
+  ): this;
+  override on(
+    event: 'hung_warning',
+    handler: (data: { lastActivity: number; idleTimeMs: number; timeoutMs: number }) => void
+  ): this;
+  override on(event: 'hung_process', handler: (data: { lastActivity: number }) => void): this;
+  override on(event: 'resource_usage', handler: (usage: ResourceUsage) => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -365,6 +486,16 @@ export class ClaudeProcess extends EventEmitter {
   override emit(event: 'exit', result: ExitResult): boolean;
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'status', status: ProcessStatus): boolean;
+  override emit(
+    event: 'resource_exceeded',
+    data: { type: 'memory' | 'cpu'; value: number }
+  ): boolean;
+  override emit(
+    event: 'hung_warning',
+    data: { lastActivity: number; idleTimeMs: number; timeoutMs: number }
+  ): boolean;
+  override emit(event: 'hung_process', data: { lastActivity: number }): boolean;
+  override emit(event: 'resource_usage', usage: ResourceUsage): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -435,6 +566,7 @@ export class ClaudeProcess extends EventEmitter {
     this.protocol.on('message', (msg: ClaudeJson) => {
       this.emit('message', msg);
       this.extractSessionId(msg);
+      this.updateActivity(); // Track activity for hung detection
 
       // Update status based on message type
       if (msg.type === 'assistant' || msg.type === 'user') {
@@ -466,6 +598,7 @@ export class ClaudeProcess extends EventEmitter {
     this.process.on('exit', (code, signal) => {
       this.setStatus('exited');
       this.protocol.stop();
+      this.stopResourceMonitoring();
 
       const result: ExitResult = {
         code,
@@ -531,5 +664,124 @@ export class ClaudeProcess extends EventEmitter {
       this.status = status;
       this.emit('status', status);
     }
+  }
+
+  /**
+   * Start periodic resource monitoring.
+   */
+  private startResourceMonitoring(): void {
+    const { monitoringIntervalMs } = this.monitoringOptions;
+
+    this.monitoringInterval = setInterval(async () => {
+      await this.performResourceCheck();
+    }, monitoringIntervalMs);
+  }
+
+  /**
+   * Perform a single resource check iteration.
+   */
+  private async performResourceCheck(): Promise<void> {
+    const pid = this.process.pid;
+    if (!pid || this.status === 'exited') {
+      this.stopResourceMonitoring();
+      return;
+    }
+
+    try {
+      const usage = await pidusage(pid);
+      this.updateResourceUsage(usage, pid);
+      this.checkIdleTime(pid);
+    } catch (error) {
+      logger.debug('Failed to get resource usage, stopping monitoring', {
+        pid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.stopResourceMonitoring();
+    }
+  }
+
+  /**
+   * Update resource usage and check thresholds.
+   */
+  private updateResourceUsage(usage: { cpu: number; memory: number }, pid: number): void {
+    const { maxMemoryBytes, maxCpuPercent } = this.monitoringOptions;
+
+    const resourceUsage: ResourceUsage = {
+      cpu: usage.cpu,
+      memory: usage.memory,
+      timestamp: new Date(),
+    };
+    this.lastResourceUsage = resourceUsage;
+    this.emit('resource_usage', resourceUsage);
+
+    // Check memory threshold
+    if (usage.memory > maxMemoryBytes) {
+      logger.warn('Process exceeded memory threshold, killing', {
+        pid,
+        memoryBytes: usage.memory,
+        maxMemoryBytes,
+      });
+      this.emit('resource_exceeded', { type: 'memory', value: usage.memory });
+      this.kill();
+      return;
+    }
+
+    // Check CPU threshold (emit warning but don't kill)
+    if (usage.cpu > maxCpuPercent) {
+      this.emit('resource_exceeded', { type: 'cpu', value: usage.cpu });
+    }
+  }
+
+  /**
+   * Check idle time and emit warnings or kill hung processes.
+   */
+  private checkIdleTime(pid: number): void {
+    const { activityTimeoutMs, hungWarningThresholdMs } = this.monitoringOptions;
+    const idleTime = Date.now() - this.lastActivityAt;
+
+    // Check for hung process warning (before timeout)
+    if (idleTime > hungWarningThresholdMs && !this.hungWarningEmitted) {
+      logger.warn('Process approaching hung timeout', {
+        pid,
+        idleTimeMs: idleTime,
+        warningThresholdMs: hungWarningThresholdMs,
+        timeoutMs: activityTimeoutMs,
+      });
+      this.hungWarningEmitted = true;
+      this.emit('hung_warning', {
+        lastActivity: this.lastActivityAt,
+        idleTimeMs: idleTime,
+        timeoutMs: activityTimeoutMs,
+      });
+    }
+
+    // Check for hung process (kill after timeout)
+    if (idleTime > activityTimeoutMs) {
+      logger.warn('Process exceeded activity timeout, killing', {
+        pid,
+        idleTimeMs: idleTime,
+        activityTimeoutMs,
+      });
+      this.emit('hung_process', { lastActivity: this.lastActivityAt });
+      this.kill();
+    }
+  }
+
+  /**
+   * Stop resource monitoring.
+   */
+  private stopResourceMonitoring(): void {
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+  }
+
+  /**
+   * Update last activity timestamp and reset warning state.
+   */
+  private updateActivity(): void {
+    this.lastActivityAt = Date.now();
+    this.hungWarningEmitted = false;
   }
 }
