@@ -2,20 +2,20 @@
   <img src="public/logo-full.svg" alt="Factory Factory" width="300" height="200">
 </p>
 
-Autonomous software development orchestration system that uses AI agents to execute tasks.
+Workspace-based coding environment that lets you run multiple Claude Code sessions in parallel, each with their own isolated git worktree.
 
 ## Prerequisites
 
 - **Node.js 18+**
+- **pnpm** - Package manager
 - **Docker** (for PostgreSQL)
 - **GitHub CLI (`gh`)** - authenticated
-- **tmux**
 - **Claude Code** - authenticated via `claude login`
 
 ## Quick Start
 
 ```bash
-# 1. Install
+# 1. Install dependencies
 pnpm install
 
 # 2. Configure
@@ -45,20 +45,29 @@ pnpm dev:all
 
 ## Architecture
 
-Three-tier agent hierarchy:
-
 ```
-Orchestrator (1 per system) - system health, supervisor lifecycle
-    └── Supervisor (1 per top-level task) - breaks down tasks, reviews/merges PRs
-            └── Worker (1 per subtask) - implements in isolated git worktree
+Project (repository configuration)
+    └── Workspace (isolated git worktree)
+            ├── ClaudeSession (chat with Claude Code)
+            └── TerminalSession (PTY terminal)
 ```
 
-Agents communicate via:
-- **Mail System** - async messages between agents
-- **Inngest Events** - triggers workflows (`task.top_level.created` → supervisor, `task.created` → worker)
-- **Database** - shared state
+**Key features:**
+- **Isolated workspaces:** Each workspace gets its own git worktree and branch
+- **Real-time chat:** WebSocket-based streaming from Claude Code CLI
+- **Terminal access:** Full PTY terminals per workspace
+- **File browser:** View and diff files in each workspace
+- **Session persistence:** Resume previous Claude sessions
 
-PRs are merged sequentially to avoid complex conflicts. Workers rebase when requested.
+## Development
+
+```bash
+pnpm dev:all       # Start frontend + backend + Inngest
+pnpm typecheck     # TypeScript checking
+pnpm check:fix     # Lint + format with Biome
+pnpm test          # Run tests
+pnpm storybook     # Component development
+```
 
 ## Troubleshooting
 
@@ -80,20 +89,14 @@ pnpm exec prisma migrate reset    # Reset database (destroys data)
 pnpm db:generate                  # Regenerate client
 ```
 
-## Documentation
-
-- [User Guide](docs/USER_GUIDE.md)
-- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [MCP Tools](docs/MCP_TOOLS.md)
-
 ## Production
 
 ```bash
-docker-compose --profile production up -d
+pnpm build:all
+pnpm start:all
 ```
 
-See [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) for details.
+See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for production deployment details.
 
 ## License
 
