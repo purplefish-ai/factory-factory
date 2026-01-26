@@ -1,6 +1,6 @@
 'use client';
 
-import { GitBranch, Plus } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -9,7 +9,7 @@ import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
-  SessionPicker,
+  SessionTabBar,
   useChatWebSocket,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
@@ -117,6 +117,13 @@ function WorkspaceChatContent() {
     },
   });
 
+  // Delete session mutation
+  const deleteSession = trpc.session.deleteClaudeSession.useMutation({
+    onSuccess: () => {
+      utils.session.listClaudeSessions.invalidate({ workspaceId });
+    },
+  });
+
   // Get the first session (or most recent) to auto-load
   const initialSessionId = claudeSessions?.[0]?.id;
 
@@ -126,7 +133,6 @@ function WorkspaceChatContent() {
     connected,
     running,
     claudeSessionId,
-    availableSessions,
     pendingPermission,
     pendingQuestion,
     loadingSession,
@@ -142,29 +148,85 @@ function WorkspaceChatContent() {
     messagesEndRef,
   } = useChatWebSocket({ initialSessionId });
 
-  // Load session when sessions are fetched and we have one
+  // Load session when sessions are fetched and we have one with history
   useEffect(() => {
     if (initialSessionId && !claudeSessionId && !loadingSession) {
-      loadSession(initialSessionId);
+      // Find the session and only load if it has an actual Claude session ID
+      // (meaning it has history to load). New sessions won't have one yet.
+      const session = claudeSessions?.find((s) => s.id === initialSessionId);
+      if (session?.claudeSessionId) {
+        loadSession(session.claudeSessionId);
+      }
     }
-  }, [initialSessionId, claudeSessionId, loadingSession, loadSession]);
+  }, [initialSessionId, claudeSessionId, loadingSession, loadSession, claudeSessions]);
 
-  // Handle loading a session
-  const handleLoadSession = useCallback(
+  // Handle selecting a session by TRPC session ID
+  const handleSelectSession = useCallback(
     (sessionId: string) => {
-      loadSession(sessionId);
+      // Find the session and load it using the claudeSessionId
+      const session = claudeSessions?.find((s) => s.id === sessionId);
+      if (session?.claudeSessionId) {
+        loadSession(session.claudeSessionId);
+      } else {
+        // Session exists but has no claudeSessionId - it's a new session with no history
+        // Just clear the chat to show empty state
+        clearChat();
+      }
     },
-    [loadSession]
+    [loadSession, claudeSessions, clearChat]
+  );
+
+  // Handle closing/deleting a session
+  const handleCloseSession = useCallback(
+    (sessionId: string) => {
+      if (!claudeSessions || claudeSessions.length === 0) {
+        return;
+      }
+
+      // Find the session being closed
+      const sessionIndex = claudeSessions.findIndex((s) => s.id === sessionId);
+      if (sessionIndex === -1) {
+        return;
+      }
+
+      const closingSession = claudeSessions[sessionIndex];
+      const isCurrentSession = closingSession.claudeSessionId === claudeSessionId;
+
+      // Delete the session
+      deleteSession.mutate({ id: sessionId });
+
+      // If closing the current session, switch to an adjacent one
+      if (isCurrentSession && claudeSessions.length > 1) {
+        // Prefer next session, fallback to previous
+        const nextSession = claudeSessions[sessionIndex + 1] ?? claudeSessions[sessionIndex - 1];
+        if (nextSession?.claudeSessionId) {
+          loadSession(nextSession.claudeSessionId);
+        } else {
+          clearChat();
+        }
+      } else if (claudeSessions.length === 1) {
+        // Closing the last session
+        clearChat();
+      }
+    },
+    [claudeSessions, claudeSessionId, deleteSession, loadSession, clearChat]
   );
 
   // Handle new chat button - creates a new session for this workspace
   const handleNewChat = useCallback(() => {
-    clearChat();
-    createSession.mutate({
-      workspaceId,
-      workflow: 'explore',
-      model: 'sonnet',
-    });
+    createSession.mutate(
+      {
+        workspaceId,
+        workflow: 'explore',
+        model: 'sonnet',
+      },
+      {
+        onSuccess: () => {
+          // Clear chat after session is created - the new session has no history to load
+          clearChat();
+        },
+      }
+    );
   }, [clearChat, createSession, workspaceId]);
 
   // Determine connection status for indicator
@@ -214,16 +276,17 @@ function WorkspaceChatContent() {
     );
   }
 
-  // Filter available sessions to only show ones for this workspace
-  const workspaceSessions = availableSessions.filter((s) =>
-    claudeSessions?.some((cs) => cs.id === s.sessionId)
-  );
+  // Find the running session ID (session that is currently processing)
+  const runningSessionIdFromDb = running
+    ? claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id
+    : undefined;
 
   return (
     <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-3">
+      <div className="border-b">
+        {/* Row 1: Branch name and status */}
+        <div className="flex items-center gap-3 px-4 py-2">
           {workspace.branchName ? (
             <div className="flex items-center gap-2">
               <GitBranch className="h-4 w-4 text-muted-foreground" />
@@ -234,22 +297,20 @@ function WorkspaceChatContent() {
           )}
           <StatusDot status={status} />
         </div>
-        <div className="flex items-center gap-2">
-          <SessionPicker
-            sessions={workspaceSessions.length > 0 ? workspaceSessions : availableSessions}
-            currentSessionId={claudeSessionId}
-            onLoadSession={handleLoadSession}
-            disabled={running}
+
+        {/* Row 2: Session tabs */}
+        <div className="px-4 pb-2">
+          <SessionTabBar
+            sessions={claudeSessions ?? []}
+            currentSessionId={
+              claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id ?? null
+            }
+            runningSessionId={runningSessionIdFromDb}
+            onSelectSession={handleSelectSession}
+            onCreateSession={handleNewChat}
+            onCloseSession={handleCloseSession}
+            disabled={running || createSession.isPending || deleteSession.isPending}
           />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleNewChat}
-            disabled={running || createSession.isPending}
-            title="New Chat"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
