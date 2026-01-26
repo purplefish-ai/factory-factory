@@ -987,17 +987,17 @@ function handleTerminalUpgrade(
               rows: message.rows ?? 24,
             });
 
-            // Set up output forwarding
+            // Set up output forwarding - include terminalId so frontend can route to correct tab
             terminalService.onOutput(terminalId, (output) => {
               if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'output', data: output }));
+                ws.send(JSON.stringify({ type: 'output', terminalId, data: output }));
               }
             });
 
-            // Set up exit handler
+            // Set up exit handler - include terminalId so frontend can route to correct tab
             terminalService.onExit(terminalId, (exitCode) => {
               if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'exit', exitCode }));
+                ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
               }
             });
 

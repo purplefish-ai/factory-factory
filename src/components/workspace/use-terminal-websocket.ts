@@ -16,18 +16,18 @@ interface TerminalMessage {
 
 interface UseTerminalWebSocketOptions {
   workspaceId: string;
-  onOutput?: (data: string) => void;
-  onExit?: (exitCode: number) => void;
+  onOutput?: (terminalId: string, data: string) => void;
+  onCreated?: (terminalId: string) => void;
+  onExit?: (terminalId: string, exitCode: number) => void;
   onError?: (message: string) => void;
 }
 
 interface UseTerminalWebSocketReturn {
   connected: boolean;
-  terminalId: string | null;
   create: (cols?: number, rows?: number) => void;
-  sendInput: (data: string) => void;
-  resize: (cols: number, rows: number) => void;
-  destroy: () => void;
+  sendInput: (terminalId: string, data: string) => void;
+  resize: (terminalId: string, cols: number, rows: number) => void;
+  destroy: (terminalId: string) => void;
 }
 
 // =============================================================================
@@ -37,24 +37,26 @@ interface UseTerminalWebSocketReturn {
 export function useTerminalWebSocket({
   workspaceId,
   onOutput,
+  onCreated,
   onExit,
   onError,
 }: UseTerminalWebSocketOptions): UseTerminalWebSocketReturn {
   const [connected, setConnected] = useState(false);
-  const [terminalId, setTerminalId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Store callbacks in refs to avoid reconnection on callback changes
   const onOutputRef = useRef(onOutput);
+  const onCreatedRef = useRef(onCreated);
   const onExitRef = useRef(onExit);
   const onErrorRef = useRef(onError);
 
   useEffect(() => {
     onOutputRef.current = onOutput;
+    onCreatedRef.current = onCreated;
     onExitRef.current = onExit;
     onErrorRef.current = onError;
-  }, [onOutput, onExit, onError]);
+  }, [onOutput, onCreated, onExit, onError]);
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -82,21 +84,20 @@ export function useTerminalWebSocket({
 
         switch (message.type) {
           case 'output':
-            if (message.data) {
-              onOutputRef.current?.(message.data);
+            if (message.terminalId && message.data) {
+              onOutputRef.current?.(message.terminalId, message.data);
             }
             break;
 
           case 'created':
             if (message.terminalId) {
-              setTerminalId(message.terminalId);
+              onCreatedRef.current?.(message.terminalId);
             }
             break;
 
           case 'exit':
-            setTerminalId(null);
-            if (message.exitCode !== undefined) {
-              onExitRef.current?.(message.exitCode);
+            if (message.terminalId && message.exitCode !== undefined) {
+              onExitRef.current?.(message.terminalId, message.exitCode);
             }
             break;
 
@@ -148,37 +149,29 @@ export function useTerminalWebSocket({
     }
   }, []);
 
-  // Send input to terminal
-  const sendInput = useCallback(
-    (data: string) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN && terminalId) {
-        wsRef.current.send(JSON.stringify({ type: 'input', terminalId, data }));
-      }
-    },
-    [terminalId]
-  );
-
-  // Resize terminal
-  const resize = useCallback(
-    (cols: number, rows: number) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN && terminalId) {
-        wsRef.current.send(JSON.stringify({ type: 'resize', terminalId, cols, rows }));
-      }
-    },
-    [terminalId]
-  );
-
-  // Destroy terminal
-  const destroy = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN && terminalId) {
-      wsRef.current.send(JSON.stringify({ type: 'destroy', terminalId }));
-      setTerminalId(null);
+  // Send input to a specific terminal
+  const sendInput = useCallback((terminalId: string, data: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'input', terminalId, data }));
     }
-  }, [terminalId]);
+  }, []);
+
+  // Resize a specific terminal
+  const resize = useCallback((terminalId: string, cols: number, rows: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'resize', terminalId, cols, rows }));
+    }
+  }, []);
+
+  // Destroy a specific terminal
+  const destroy = useCallback((terminalId: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'destroy', terminalId }));
+    }
+  }, []);
 
   return {
     connected,
-    terminalId,
     create,
     sendInput,
     resize,

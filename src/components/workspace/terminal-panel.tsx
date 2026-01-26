@@ -1,7 +1,7 @@
 'use client';
 
 import { Terminal } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -16,6 +16,7 @@ import { useTerminalWebSocket } from './use-terminal-websocket';
 interface TerminalTab {
   id: string;
   label: string;
+  terminalId: string | null; // Server-assigned terminal ID
   output: string;
 }
 
@@ -32,65 +33,94 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
-  // Handle terminal output
-  const handleOutput = useCallback(
-    (data: string) => {
-      setTabs((prev) =>
-        prev.map((tab) => (tab.id === activeTabId ? { ...tab, output: tab.output + data } : tab))
-      );
-    },
-    [activeTabId]
-  );
+  // Track pending tab that's waiting for a terminalId from the server
+  const pendingTabIdRef = useRef<string | null>(null);
 
-  // Handle terminal exit
-  const handleExit = useCallback(
-    (exitCode: number) => {
+  // Buffer output for terminals that haven't been associated with a tab yet
+  // This handles the race condition where output arrives before the 'created' message
+  const outputBufferRef = useRef<Map<string, string>>(new Map());
+
+  // Handle terminal output - route to correct tab by terminalId
+  const handleOutput = useCallback((terminalId: string, data: string) => {
+    setTabs((prev) => {
+      const tab = prev.find((t) => t.terminalId === terminalId);
+      if (tab) {
+        // Terminal is associated with a tab - append output
+        return prev.map((t) =>
+          t.terminalId === terminalId ? { ...t, output: t.output + data } : t
+        );
+      }
+      // Terminal not yet associated - buffer the output
+      const existingBuffer = outputBufferRef.current.get(terminalId) ?? '';
+      outputBufferRef.current.set(terminalId, existingBuffer + data);
+      return prev;
+    });
+  }, []);
+
+  // Handle terminal created - associate server terminalId with pending tab
+  const handleCreated = useCallback((terminalId: string) => {
+    const pendingTabId = pendingTabIdRef.current;
+    if (pendingTabId) {
+      // Get any buffered output for this terminal
+      const bufferedOutput = outputBufferRef.current.get(terminalId) ?? '';
+      outputBufferRef.current.delete(terminalId);
+
       setTabs((prev) =>
         prev.map((tab) =>
-          tab.id === activeTabId
-            ? { ...tab, output: `${tab.output}\r\n[Process exited with code ${exitCode}]\r\n` }
-            : tab
+          tab.id === pendingTabId ? { ...tab, terminalId, output: bufferedOutput } : tab
         )
       );
-    },
-    [activeTabId]
-  );
+      pendingTabIdRef.current = null;
+    }
+  }, []);
+
+  // Handle terminal exit
+  const handleExit = useCallback((terminalId: string, exitCode: number) => {
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.terminalId === terminalId
+          ? { ...tab, output: `${tab.output}\r\n[Process exited with code ${exitCode}]\r\n` }
+          : tab
+      )
+    );
+  }, []);
 
   // Handle terminal error
-  const handleError = useCallback(
-    (message: string) => {
+  const handleError = useCallback((message: string) => {
+    // Show error in pending tab if there is one
+    const pendingTabId = pendingTabIdRef.current;
+    if (pendingTabId) {
       setTabs((prev) =>
         prev.map((tab) =>
-          tab.id === activeTabId
+          tab.id === pendingTabId
             ? { ...tab, output: `${tab.output}\r\n[Error: ${message}]\r\n` }
             : tab
         )
       );
-    },
-    [activeTabId]
-  );
+    }
+  }, []);
 
-  const {
-    connected,
-    terminalId: _terminalId,
-    create,
-    sendInput,
-    resize,
-  } = useTerminalWebSocket({
+  const { connected, create, sendInput, resize } = useTerminalWebSocket({
     workspaceId,
     onOutput: handleOutput,
+    onCreated: handleCreated,
     onExit: handleExit,
     onError: handleError,
   });
 
   // Create new terminal tab
   const handleNewTab = useCallback(() => {
-    const id = `term-${Date.now()}`;
+    const id = `tab-${Date.now()}`;
     const newTab: TerminalTab = {
       id,
       label: `Terminal ${tabs.length + 1}`,
+      terminalId: null,
       output: '',
     };
+
+    // Track this as the pending tab waiting for a terminalId
+    pendingTabIdRef.current = id;
+
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
     create();
@@ -107,20 +137,26 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
     [activeTabId, tabs]
   );
 
-  // Handle terminal input
+  // Handle terminal input - send to the active tab's terminal
   const handleData = useCallback(
     (data: string) => {
-      sendInput(data);
+      const activeTab = tabs.find((tab) => tab.id === activeTabId);
+      if (activeTab?.terminalId) {
+        sendInput(activeTab.terminalId, data);
+      }
     },
-    [sendInput]
+    [activeTabId, tabs, sendInput]
   );
 
-  // Handle terminal resize
+  // Handle terminal resize - resize the active tab's terminal
   const handleResize = useCallback(
     (cols: number, rows: number) => {
-      resize(cols, rows);
+      const activeTab = tabs.find((tab) => tab.id === activeTabId);
+      if (activeTab?.terminalId) {
+        resize(activeTab.terminalId, cols, rows);
+      }
     },
-    [resize]
+    [activeTabId, tabs, resize]
   );
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
