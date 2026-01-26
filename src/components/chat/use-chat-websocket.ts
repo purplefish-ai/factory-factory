@@ -11,6 +11,11 @@ import type {
   WebSocketMessage,
 } from '@/lib/claude-types';
 import { convertHistoryMessage } from '@/lib/claude-types';
+import {
+  buildWebSocketUrl,
+  MAX_RECONNECT_ATTEMPTS,
+  RECONNECT_DELAY_MS,
+} from '@/lib/websocket-config';
 
 // =============================================================================
 // Types
@@ -95,31 +100,20 @@ type OutgoingMessage =
   | QuestionResponseMessage;
 
 // =============================================================================
-// Constants
-// =============================================================================
-
-const MAX_RECONNECT_ATTEMPTS = 3;
-const RECONNECT_DELAY_MS = 2000;
-const WEBSOCKET_PORT = 3001;
-
-// =============================================================================
 // Debug Logging
 // =============================================================================
 
-const DEBUG_WEBSOCKET = true; // Set to false to disable logging
+const DEBUG_WEBSOCKET = process.env.NODE_ENV === 'development';
 
-let messageCounter = 0;
-
-function logWsMessage(direction: 'IN' | 'OUT', data: unknown): void {
+function logWsMessage(direction: 'IN' | 'OUT', data: unknown, counter: number): void {
   if (!DEBUG_WEBSOCKET) {
     return;
   }
 
-  messageCounter++;
   const timestamp = new Date().toISOString();
   const prefix = direction === 'IN' ? '⬇️ WS IN' : '⬆️ WS OUT';
 
-  console.group(`${prefix} #${messageCounter} @ ${timestamp}`);
+  console.group(`${prefix} #${counter} @ ${timestamp}`);
   console.log('Raw data:', JSON.stringify(data, null, 2));
 
   // Extract key info for quick scanning
@@ -415,6 +409,8 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
     }
 
     ctx.setMessages(chatMessages);
+    // Clear tool input accumulator when loading a new session to prevent memory buildup
+    ctx.toolInputAccumulatorRef.current.clear();
   }
   ctx.setLoadingSession(false);
 }
@@ -470,6 +466,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const hasLoadedInitialSessionRef = useRef(false);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
+  // Debug message counter (instance-scoped, not global)
+  const messageCounterRef = useRef(0);
 
   // Auto-scroll to bottom when messages change
   // biome-ignore lint/correctness/useExhaustiveDependencies: we want to trigger scroll on messages array change
@@ -483,7 +481,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const sendWsMessage = useCallback((message: OutgoingMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       // Debug logging for outgoing messages
-      logWsMessage('OUT', message);
+      messageCounterRef.current += 1;
+      logWsMessage('OUT', message, messageCounterRef.current);
       wsRef.current.send(JSON.stringify(message));
     }
   }, []);
@@ -556,7 +555,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         const data = JSON.parse(event.data) as WebSocketMessage;
 
         // Debug logging for incoming messages
-        logWsMessage('IN', data);
+        messageCounterRef.current += 1;
+        logWsMessage('IN', data, messageCounterRef.current);
 
         const handlers: Record<
           string,
@@ -599,8 +599,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       reconnectTimeoutRef.current = null;
     }
 
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const wsUrl = `ws://${host}:${WEBSOCKET_PORT}/chat?sessionId=${sessionIdRef.current}`;
+    const wsUrl = buildWebSocketUrl('/chat', { sessionId: sessionIdRef.current });
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

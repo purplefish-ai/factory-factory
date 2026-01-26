@@ -15,6 +15,7 @@ import {
   createEmptyTokenStats,
   updateTokenStatsFromResult,
 } from '@/lib/claude-types';
+import { buildWebSocketUrl } from '@/lib/websocket-config';
 
 // =============================================================================
 // Types
@@ -54,9 +55,10 @@ export interface UseAgentWebSocketReturn {
 // Constants
 // =============================================================================
 
+// Note: Agent activity uses longer delays/attempts than chat since agents
+// may be starting up or restarting
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY_MS = 3000;
-const WEBSOCKET_PORT = 3001;
 
 // =============================================================================
 // Helper Functions
@@ -211,8 +213,7 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
     setConnectionState('connecting');
     setError(null);
 
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const wsUrl = `ws://${host}:${WEBSOCKET_PORT}/agent-activity?agentId=${encodeURIComponent(agentId)}`;
+    const wsUrl = buildWebSocketUrl('/agent-activity', { agentId });
 
     try {
       const ws = new WebSocket(wsUrl);

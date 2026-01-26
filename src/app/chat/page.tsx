@@ -2,7 +2,7 @@
 
 import { Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import {
@@ -14,7 +14,7 @@ import {
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
+import { groupAdjacentToolCalls } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -28,31 +28,48 @@ type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
 // =============================================================================
 
 /**
+ * Gets the human-readable status text for screen readers.
+ */
+function getStatusText(status: ConnectionStatus): string {
+  switch (status) {
+    case 'connected':
+      return 'Connected';
+    case 'processing':
+      return 'Processing request';
+    case 'loading':
+      return 'Loading session';
+    case 'disconnected':
+      return 'Disconnected';
+  }
+}
+
+/**
  * Status indicator dot that shows connection state.
  * - Green: connected and idle
  * - Yellow: processing (running)
  * - Red: disconnected
  */
 function StatusDot({ status }: { status: ConnectionStatus }) {
+  const statusText = getStatusText(status);
+
   return (
-    <div
-      className={cn(
-        'h-2.5 w-2.5 rounded-full',
-        status === 'connected' && 'bg-green-500',
-        status === 'processing' && 'bg-yellow-500 animate-pulse',
-        status === 'loading' && 'bg-blue-500 animate-pulse',
-        status === 'disconnected' && 'bg-red-500'
-      )}
-      title={
-        status === 'connected'
-          ? 'Connected'
-          : status === 'processing'
-            ? 'Processing...'
-            : status === 'loading'
-              ? 'Loading session...'
-              : 'Disconnected'
-      }
-    />
+    <>
+      <div
+        className={cn(
+          'h-2.5 w-2.5 rounded-full',
+          status === 'connected' && 'bg-green-500',
+          status === 'processing' && 'bg-yellow-500 animate-pulse',
+          status === 'loading' && 'bg-blue-500 animate-pulse',
+          status === 'disconnected' && 'bg-red-500'
+        )}
+        title={statusText}
+        aria-hidden="true"
+      />
+      {/* Screen reader announcement for status changes */}
+      <output className="sr-only" aria-live="polite">
+        {statusText}
+      </output>
+    </>
   );
 }
 
@@ -162,12 +179,15 @@ function ChatContent() {
   }, [messages.length, messagesEndRef]);
 
   // Handle scroll to detect if user is near bottom
-  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
     const threshold = 100; // pixels from bottom
     const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
     isNearBottomRef.current = isNearBottom;
-  };
+  }, []);
+
+  // Memoize grouped messages to avoid recalculating on every render
+  const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
   return (
     <div className="flex h-full flex-col">
@@ -205,11 +225,8 @@ function ChatContent() {
             </div>
           )}
 
-          {groupAdjacentToolCalls(messages).map((item) => (
-            <GroupedMessageItemRenderer
-              key={isToolSequence(item) ? item.id : item.id}
-              item={item}
-            />
+          {groupedMessages.map((item) => (
+            <GroupedMessageItemRenderer key={item.id} item={item} />
           ))}
 
           {running && <LoadingIndicator className="py-4" />}

@@ -58,6 +58,7 @@ function formatDate(dateString: string): string {
       day: 'numeric',
     });
   } catch {
+    // Invalid date string - return as-is rather than crashing
     return dateString;
   }
 }

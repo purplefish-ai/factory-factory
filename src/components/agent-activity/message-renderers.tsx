@@ -285,10 +285,15 @@ export function ErrorRenderer({ message, className }: ErrorRendererProps) {
 // Thinking Renderer
 // =============================================================================
 
+/** Default number of characters to show before truncating thinking content */
+const DEFAULT_THINKING_TRUNCATE_LENGTH = 200;
+
 interface ThinkingRendererProps {
   text: string;
   /** The ID of the ChatMessage containing this thinking block (for completion tracking) */
   messageId?: string;
+  /** Number of characters to show before truncating (default: 200) */
+  truncateLength?: number;
   className?: string;
 }
 
@@ -299,13 +304,18 @@ interface ThinkingRendererProps {
  * - If there's subsequent content after this thinking block, it's complete
  * - Only the last thinking block (while agent is running) shows animation
  */
-function ThinkingRenderer({ text, messageId, className }: ThinkingRendererProps) {
+function ThinkingRenderer({
+  text,
+  messageId,
+  truncateLength = DEFAULT_THINKING_TRUNCATE_LENGTH,
+  className,
+}: ThinkingRendererProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const isInProgress = useIsThinkingInProgress(messageId);
 
   // Show truncated version if long
-  const shouldTruncate = text.length > 200;
-  const displayText = shouldTruncate && !isExpanded ? `${text.slice(0, 200)}...` : text;
+  const shouldTruncate = text.length > truncateLength;
+  const displayText = shouldTruncate && !isExpanded ? `${text.slice(0, truncateLength)}...` : text;
 
   return (
     <div
