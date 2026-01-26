@@ -453,24 +453,76 @@ export function isContentBlockDeltaEvent(
 
 /**
  * Converts a history message to a chat message.
+ * Properly structures tool_use and tool_result messages for rendering.
  */
 export function convertHistoryMessage(msg: HistoryMessage): ChatMessage {
-  const isUser = msg.type === 'user';
-
-  return {
+  const baseMessage = {
     id: msg.uuid || `history-${msg.timestamp}-${Math.random().toString(36).slice(2, 9)}`,
-    source: isUser ? 'user' : 'claude',
-    text: isUser ? msg.content : undefined,
-    message: isUser
-      ? undefined
-      : {
-          type: msg.type === 'tool_use' || msg.type === 'tool_result' ? 'assistant' : 'assistant',
-          message: {
-            role: 'assistant',
-            content: msg.content,
-          },
-        },
     timestamp: msg.timestamp,
+  };
+
+  // User text messages
+  if (msg.type === 'user') {
+    return {
+      ...baseMessage,
+      source: 'user',
+      text: msg.content,
+    };
+  }
+
+  // Tool use messages - create properly structured content block
+  if (msg.type === 'tool_use' && msg.toolName && msg.toolId) {
+    const toolUseContent: ToolUseContent = {
+      type: 'tool_use',
+      id: msg.toolId,
+      name: msg.toolName,
+      input: msg.toolInput ?? {},
+    };
+    return {
+      ...baseMessage,
+      source: 'claude',
+      message: {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [toolUseContent],
+        },
+      },
+    };
+  }
+
+  // Tool result messages - create properly structured content block
+  if (msg.type === 'tool_result' && msg.toolId) {
+    const toolResultContent: ToolResultContent = {
+      type: 'tool_result',
+      tool_use_id: msg.toolId,
+      content: msg.content,
+      is_error: msg.isError,
+    };
+    return {
+      ...baseMessage,
+      source: 'claude',
+      message: {
+        type: 'user', // tool_result comes from user in API protocol
+        message: {
+          role: 'user',
+          content: [toolResultContent],
+        },
+      },
+    };
+  }
+
+  // Assistant text messages
+  return {
+    ...baseMessage,
+    source: 'claude',
+    message: {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: msg.content,
+      },
+    },
   };
 }
 

@@ -160,6 +160,13 @@ function handleStartedMessage(data: WebSocketMessage, ctx: MessageHandlerContext
 function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
   if (data.data) {
     const claudeMsg = data.data as ClaudeMessage;
+
+    // When we receive a 'result' message, Claude has finished the current turn
+    // Set running to false so the UI no longer shows "Agent is working..."
+    if (claudeMsg.type === 'result') {
+      ctx.setRunning(false);
+    }
+
     ctx.setMessages((prev) => [...prev, createClaudeMessage(claudeMsg)]);
   }
 }
@@ -236,6 +243,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  // Store initial session ID in a ref so it's only used on first connect,
+  // not when URL changes after loading a different session
+  const initialSessionIdRef = useRef<string | undefined>(initialSessionId);
+  const hasLoadedInitialSessionRef = useRef(false);
 
   // Auto-scroll to bottom when messages change
   // biome-ignore lint/correctness/useExhaustiveDependencies: we want to trigger scroll on messages array change
@@ -325,9 +336,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       // Request list of available sessions
       sendWsMessage({ type: 'list_sessions' });
 
-      // If we have an initial session to load, load it
-      if (initialSessionId) {
-        sendWsMessage({ type: 'load_session', claudeSessionId: initialSessionId });
+      // Load initial session only once (on first connect from URL)
+      if (initialSessionIdRef.current && !hasLoadedInitialSessionRef.current) {
+        hasLoadedInitialSessionRef.current = true;
+        sendWsMessage({ type: 'load_session', claudeSessionId: initialSessionIdRef.current });
       }
     };
 
@@ -349,7 +361,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     };
 
     ws.onmessage = handleMessage;
-  }, [handleMessage, initialSessionId, sendWsMessage]);
+  }, [handleMessage, sendWsMessage]);
 
   // Initialize WebSocket connection
   useEffect(() => {
