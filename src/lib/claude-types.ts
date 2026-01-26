@@ -376,6 +376,7 @@ export interface WebSocketMessage {
   sessions?: SessionInfo[];
   messages?: HistoryMessage[];
   agentMetadata?: AgentMetadata;
+  gitBranch?: string | null;
   // Permission request fields (Phase 9)
   requestId?: string;
   toolName?: string;

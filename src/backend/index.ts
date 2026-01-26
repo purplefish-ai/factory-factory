@@ -895,15 +895,17 @@ async function handleChatMessage(
       // Load session history without starting a process
       const targetSessionId = message.claudeSessionId;
       if (targetSessionId) {
-        const [history, settings] = await Promise.all([
+        const [history, settings, gitBranch] = await Promise.all([
           SessionManager.getHistory(targetSessionId, workingDir),
           chatSessionSettingsAccessor.getOrCreate(targetSessionId),
+          SessionManager.getSessionGitBranch(targetSessionId, workingDir),
         ]);
         ws.send(
           JSON.stringify({
             type: 'session_loaded',
             claudeSessionId: targetSessionId,
             messages: history,
+            gitBranch,
             settings: {
               selectedModel: settings.selectedModel,
               thinkingEnabled: settings.thinkingEnabled,

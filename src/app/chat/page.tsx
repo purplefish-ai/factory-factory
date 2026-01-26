@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { GitBranch, Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -118,6 +118,7 @@ function ChatContent() {
     connected,
     running,
     claudeSessionId,
+    gitBranch,
     availableSessions,
     pendingPermission,
     pendingQuestion,
@@ -197,7 +198,14 @@ function ChatContent() {
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">Chat with Claude</h1>
+          {gitBranch ? (
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              <h1 className="text-lg font-semibold font-mono">{gitBranch}</h1>
+            </div>
+          ) : (
+            <h1 className="text-lg font-semibold">Chat with Claude</h1>
+          )}
           <StatusDot status={status} />
         </div>
         <div className="flex items-center gap-2">
@@ -207,9 +215,14 @@ function ChatContent() {
             onLoadSession={handleLoadSession}
             disabled={running}
           />
-          <Button variant="outline" size="sm" onClick={handleNewChat} disabled={running}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Chat
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleNewChat}
+            disabled={running}
+            title="New Chat"
+          >
+            <Plus className="h-4 w-4" />
           </Button>
         </div>
       </div>

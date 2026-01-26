@@ -33,6 +33,7 @@ export interface UseChatWebSocketReturn {
   connected: boolean;
   running: boolean;
   claudeSessionId: string | null;
+  gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Permission request state (Phase 9)
   pendingPermission: PermissionRequest | null;
@@ -188,6 +189,7 @@ function createClaudeMessage(message: ClaudeMessage): ChatMessage {
 interface MessageHandlerContext {
   setRunning: (running: boolean) => void;
   setClaudeSessionId: (id: string | null) => void;
+  setGitBranch: (branch: string | null) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setAvailableSessions: (sessions: SessionInfo[]) => void;
   setPendingPermission: (permission: PermissionRequest | null) => void;
@@ -409,6 +411,8 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
   if (data.claudeSessionId) {
     ctx.setClaudeSessionId(data.claudeSessionId);
   }
+  // Set git branch (may be null if session doesn't have branch info)
+  ctx.setGitBranch(data.gitBranch ?? null);
   if (data.messages) {
     const historyMessages = data.messages as HistoryMessage[];
     const chatMessages = historyMessages.map(convertHistoryMessage);
@@ -417,6 +421,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
     if (DEBUG_WEBSOCKET) {
       console.group('📚 Session loaded from history');
       console.log('Total messages:', chatMessages.length);
+      console.log('Git branch:', data.gitBranch);
       console.log(
         'Message types:',
         chatMessages.map((m) =>
@@ -476,6 +481,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
   const [claudeSessionId, setClaudeSessionId] = useState<string | null>(null);
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [availableSessions, setAvailableSessions] = useState<SessionInfo[]>([]);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<UserQuestionRequest | null>(null);
@@ -566,6 +572,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     () => ({
       setRunning,
       setClaudeSessionId,
+      setGitBranch,
       setMessages,
       setAvailableSessions,
       setPendingPermission,
@@ -727,7 +734,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       }
 
       // Send the user input
-      sendWsMessage({ type: 'user_input', text });
+      // Append "ultrathink" to enable extended thinking when thinking mode is enabled
+      const messageToSend = chatSettings.thinkingEnabled ? `${text} ultrathink` : text;
+      sendWsMessage({ type: 'user_input', text: messageToSend });
     },
     [running, claudeSessionId, chatSettings, sendWsMessage]
   );
@@ -747,6 +756,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     // Clear local state
     setMessages([]);
     setClaudeSessionId(null);
+    setGitBranch(null);
     setPendingPermission(null);
     setPendingQuestion(null);
     setChatSettings(DEFAULT_CHAT_SETTINGS);
@@ -806,6 +816,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     connected,
     running,
     claudeSessionId,
+    gitBranch,
     availableSessions,
     pendingPermission,
     pendingQuestion,

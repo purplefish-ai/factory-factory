@@ -81,6 +81,37 @@ export class SessionManager {
   }
 
   /**
+   * Get the git branch associated with a session.
+   * Reads the session file and extracts gitBranch from the first message that has it.
+   */
+  static async getSessionGitBranch(sessionId: string, workingDir: string): Promise<string | null> {
+    const sessionPath = SessionManager.getSessionPath(sessionId, workingDir);
+
+    try {
+      const content = await readFile(sessionPath, 'utf-8');
+      const lines = content.split('\n').filter((line) => line.trim());
+
+      // Check first few messages for gitBranch (it should be on most messages)
+      for (const line of lines.slice(0, 10)) {
+        try {
+          const entry = JSON.parse(line) as Record<string, unknown>;
+          if (typeof entry.gitBranch === 'string' && entry.gitBranch) {
+            return entry.gitBranch;
+          }
+        } catch {
+          // Skip malformed lines
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn(`Error reading session ${sessionId} for git branch:`, error);
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * List available sessions for a working directory
    */
   static async listSessions(workingDir: string): Promise<SessionInfo[]> {

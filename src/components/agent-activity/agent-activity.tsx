@@ -23,6 +23,24 @@ import type { AgentMetadata, ConnectionState, TokenStats } from './types';
 import { useAgentWebSocket } from './use-agent-websocket';
 
 // =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Strips the "ultrathink" suffix from user message text for display.
+ * This is appended when thinking mode is enabled but shouldn't be shown in the UI.
+ */
+function stripUltrathinkSuffix(text: string | undefined): string {
+  if (!text) {
+    return '';
+  }
+  if (text.endsWith(' ultrathink')) {
+    return text.slice(0, -11); // ' ultrathink' is 11 characters
+  }
+  return text;
+}
+
+// =============================================================================
 // Agent Activity Component
 // =============================================================================
 
@@ -199,7 +217,7 @@ export function MessageItem({ message }: MessageItemProps) {
     return (
       <MessageWrapper chatMessage={message}>
         <div className="rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block">
-          {message.text}
+          {stripUltrathinkSuffix(message.text)}
         </div>
       </MessageWrapper>
     );
@@ -247,7 +265,7 @@ function CompactMessageItem({ message }: CompactMessageItemProps) {
   if (message.source === 'user') {
     return (
       <div className="text-sm text-muted-foreground">
-        <span className="font-medium">User:</span> {message.text}
+        <span className="font-medium">User:</span> {stripUltrathinkSuffix(message.text)}
       </div>
     );
   }
