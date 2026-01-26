@@ -126,15 +126,37 @@ export class ClaudeProcess extends EventEmitter {
   /** Timeout for spawn/initialization in milliseconds */
   private static readonly SPAWN_TIMEOUT = 30_000;
 
-  /** Default resource monitoring configuration */
-  private static readonly DEFAULT_MONITORING: Required<ResourceMonitoringOptions> = {
-    enabled: true,
-    maxMemoryBytes: 2 * 1024 * 1024 * 1024, // 2GB
-    maxCpuPercent: 90,
-    activityTimeoutMs: 30 * 60 * 1000, // 30 minutes
-    hungWarningThresholdMs: 24 * 60 * 1000, // 80% of 30 minutes = 24 minutes
-    monitoringIntervalMs: 5000, // 5 seconds
-  };
+  /**
+   * Get the default activity timeout from environment variable.
+   * CLAUDE_HUNG_TIMEOUT_MS: Time in ms without activity before killing process (default: 30 minutes)
+   */
+  private static getDefaultActivityTimeoutMs(): number {
+    const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
+    if (envValue) {
+      const parsed = Number.parseInt(envValue, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+      logger.warn('Invalid CLAUDE_HUNG_TIMEOUT_MS value, using default', { envValue });
+    }
+    return 30 * 60 * 1000; // 30 minutes default
+  }
+
+  /**
+   * Build the default resource monitoring configuration.
+   * Warning threshold is computed as 80% of the activity timeout.
+   */
+  private static buildDefaultMonitoring(): Required<ResourceMonitoringOptions> {
+    const activityTimeoutMs = ClaudeProcess.getDefaultActivityTimeoutMs();
+    return {
+      enabled: true,
+      maxMemoryBytes: 2 * 1024 * 1024 * 1024, // 2GB
+      maxCpuPercent: 90,
+      activityTimeoutMs,
+      hungWarningThresholdMs: Math.floor(activityTimeoutMs * 0.8), // 80% of timeout
+      monitoringIntervalMs: 5000, // 5 seconds
+    };
+  }
 
   private process: ChildProcess;
   private sessionId: string | null = null;
@@ -158,7 +180,7 @@ export class ClaudeProcess extends EventEmitter {
     this.process = process;
     this.protocol = protocol;
     this.monitoringOptions = {
-      ...ClaudeProcess.DEFAULT_MONITORING,
+      ...ClaudeProcess.buildDefaultMonitoring(),
       ...monitoringOptions,
     };
   }

@@ -104,7 +104,13 @@ class TerminalService {
         return;
       }
 
-      await this.updateAllTerminalResources();
+      try {
+        await this.updateAllTerminalResources();
+      } catch (error) {
+        logger.error('Failed to update terminal resources', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }, TerminalService.MONITORING_INTERVAL_MS);
   }
 

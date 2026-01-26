@@ -1,10 +1,12 @@
 'use client';
 
+import type { inferRouterOutputs } from '@trpc/server';
 import { Bot, CheckCircle2, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -15,7 +17,11 @@ import {
 } from '@/components/ui/table';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
-import { trpc } from '../../frontend/lib/trpc';
+import { type AppRouter, trpc } from '../../frontend/lib/trpc';
+
+// Infer types from tRPC router outputs
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type ProcessesData = RouterOutputs['admin']['getActiveProcesses'];
 
 function StatCard({
   title,
@@ -137,51 +143,6 @@ function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) 
   );
 }
 
-interface ClaudeProcessInfo {
-  sessionId: string;
-  workspaceId: string;
-  workspaceName: string;
-  workspaceBranch: string | null;
-  name: string | null;
-  workflow: string;
-  model: string;
-  pid: number | null;
-  status: string;
-  inMemory: boolean;
-  memoryStatus: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  // Resource monitoring
-  cpuPercent: number | null;
-  memoryBytes: number | null;
-  idleTimeMs: number | null;
-}
-
-interface TerminalProcessInfo {
-  terminalId: string;
-  workspaceId: string;
-  workspaceName: string;
-  workspaceBranch: string | null;
-  pid: number;
-  cols: number;
-  rows: number;
-  createdAt: Date;
-  dbSessionId: string | null;
-  // Resource monitoring
-  cpuPercent: number | null;
-  memoryBytes: number | null;
-}
-
-interface ProcessesData {
-  claude: ClaudeProcessInfo[];
-  terminal: TerminalProcessInfo[];
-  summary: {
-    totalClaude: number;
-    totalTerminal: number;
-    total: number;
-  };
-}
-
 function getStatusBadgeVariant(
   status: string
 ): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -232,6 +193,30 @@ function formatIdleTime(ms: number | null): string {
     return `${(ms / 1000).toFixed(0)}s`;
   }
   return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+function ProcessesSectionSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Active Processes
+          <Skeleton className="h-5 w-16 ml-2" />
+        </CardTitle>
+        <CardDescription>Claude and Terminal processes currently running</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-48" />
+          <div className="border rounded-md p-4 space-y-3">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function ProcessesSection({ processes }: { processes?: ProcessesData }) {
@@ -421,7 +406,8 @@ export default function AdminDashboardPage() {
     },
   });
 
-  if (isLoadingStats || isLoadingProcesses) {
+  // Show full loading only when stats are loading (first load)
+  if (isLoadingStats) {
     return <Loading message="Loading admin dashboard..." />;
   }
 
@@ -442,7 +428,11 @@ export default function AdminDashboardPage() {
 
       <ConcurrencySection concurrency={stats?.concurrency} />
 
-      <ProcessesSection processes={processes} />
+      {isLoadingProcesses ? (
+        <ProcessesSectionSkeleton />
+      ) : (
+        <ProcessesSection processes={processes} />
+      )}
 
       {/* Quick Links */}
       <Card>
