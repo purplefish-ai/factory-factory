@@ -193,7 +193,7 @@ function ChatContent() {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-3">
@@ -215,8 +215,8 @@ function ChatContent() {
       </div>
 
       {/* Message List */}
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2" onScroll={handleScroll}>
+      <ScrollArea className="flex-1" onScroll={handleScroll}>
+        <div className="p-4 space-y-2">
           {messages.length === 0 && !running && !loadingSession && <EmptyState />}
 
           {loadingSession && messages.length === 0 && (
