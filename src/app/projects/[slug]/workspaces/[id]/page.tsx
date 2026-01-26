@@ -1,353 +1,315 @@
 'use client';
 
-import type { ClaudeSession } from '@prisma-gen/browser';
-import { Archive, ArrowLeft, ExternalLink, GitBranch, Play, Plus, Square } from 'lucide-react';
-import Link from 'next/link';
+import { GitBranch, Plus } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
+
+import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
+import {
+  ChatInput,
+  PermissionPrompt,
+  QuestionPrompt,
+  SessionPicker,
+  useChatWebSocket,
+} from '@/components/chat';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loading } from '@/frontend/components/loading';
-import { trpc } from '../../../../../frontend/lib/trpc';
+import { trpc } from '@/frontend/lib/trpc';
+import { groupAdjacentToolCalls } from '@/lib/claude-types';
+import { cn } from '@/lib/utils';
 
-const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
-  ACTIVE: 'default',
-  COMPLETED: 'secondary',
-  ARCHIVED: 'outline',
-};
+// =============================================================================
+// Types
+// =============================================================================
 
-const sessionStatusVariants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  IDLE: 'outline',
-  RUNNING: 'default',
-  PAUSED: 'secondary',
-  COMPLETED: 'secondary',
-  FAILED: 'destructive',
-};
+type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
 
-function SessionItem({
-  session,
-  onStart,
-  onStop,
-  isStarting,
-  isStopping,
-}: {
-  session: ClaudeSession;
-  onStart: () => void;
-  onStop: () => void;
-  isStarting: boolean;
-  isStopping: boolean;
-}) {
+// =============================================================================
+// Helper Components
+// =============================================================================
+
+function getStatusText(status: ConnectionStatus): string {
+  switch (status) {
+    case 'connected':
+      return 'Connected';
+    case 'processing':
+      return 'Processing request';
+    case 'loading':
+      return 'Loading session';
+    case 'disconnected':
+      return 'Disconnected';
+  }
+}
+
+function StatusDot({ status }: { status: ConnectionStatus }) {
+  const statusText = getStatusText(status);
+
   return (
-    <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-      <div className="flex-1">
-        <div className="font-medium">{session.name || `Session ${session.id.slice(0, 8)}`}</div>
-        <div className="flex items-center gap-3 mt-1">
-          <Badge variant={sessionStatusVariants[session.status] || 'default'} className="text-xs">
-            {session.status}
-          </Badge>
-          <span className="text-xs text-muted-foreground">Workflow: {session.workflow}</span>
-          <span className="text-xs text-muted-foreground">Model: {session.model}</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {session.status === 'IDLE' || session.status === 'PAUSED' ? (
-          <Button variant="outline" size="sm" onClick={onStart} disabled={isStarting}>
-            <Play className="h-4 w-4 mr-1" />
-            {isStarting ? 'Starting...' : 'Start'}
-          </Button>
-        ) : session.status === 'RUNNING' ? (
-          <Button variant="outline" size="sm" onClick={onStop} disabled={isStopping}>
-            <Square className="h-4 w-4 mr-1" />
-            {isStopping ? 'Stopping...' : 'Stop'}
-          </Button>
-        ) : null}
+    <>
+      <div
+        className={cn(
+          'h-2.5 w-2.5 rounded-full',
+          status === 'connected' && 'bg-green-500',
+          status === 'processing' && 'bg-yellow-500 animate-pulse',
+          status === 'loading' && 'bg-blue-500 animate-pulse',
+          status === 'disconnected' && 'bg-red-500'
+        )}
+        title={statusText}
+        aria-hidden="true"
+      />
+      <output className="sr-only" aria-live="polite">
+        {statusText}
+      </output>
+    </>
+  );
+}
+
+function ChatLoading() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">Loading chat...</p>
       </div>
     </div>
   );
 }
 
-export default function WorkspaceDetailPage() {
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <div className="text-muted-foreground space-y-2">
+        <p className="text-lg font-medium">No messages yet</p>
+        <p className="text-sm">Start a conversation by typing a message below.</p>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Main Workspace Chat Component
+// =============================================================================
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Chat component with multiple states and handlers
+function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
-  const id = params.id as string;
+  const workspaceId = params.id as string;
 
-  const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
-  const [sessionName, setSessionName] = useState('');
-  const [sessionWorkflow, setSessionWorkflow] = useState('explore');
-  const [sessionModel, setSessionModel] = useState('sonnet');
+  // Fetch workspace details
+  const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
+    { id: workspaceId },
+    { refetchInterval: 10_000 }
+  );
+
+  // Fetch Claude sessions for this workspace
+  const { data: claudeSessions, isLoading: sessionsLoading } =
+    trpc.session.listClaudeSessions.useQuery({ workspaceId }, { refetchInterval: 5000 });
 
   const utils = trpc.useUtils();
 
-  const {
-    data: workspace,
-    isLoading,
-    error,
-  } = trpc.workspace.get.useQuery({ id }, { refetchInterval: 5000 });
-
-  const { data: claudeSessions } = trpc.session.listClaudeSessions.useQuery(
-    { workspaceId: id },
-    { refetchInterval: 5000 }
-  );
-
-  const archiveWorkspace = trpc.workspace.archive.useMutation({
-    onSuccess: () => {
-      router.push(`/projects/${slug}/workspaces`);
-    },
-  });
-
+  // Create session mutation
   const createSession = trpc.session.createClaudeSession.useMutation({
     onSuccess: () => {
-      setIsCreateSessionOpen(false);
-      setSessionName('');
-      setSessionWorkflow('explore');
-      setSessionModel('sonnet');
-      utils.session.listClaudeSessions.invalidate({ workspaceId: id });
+      utils.session.listClaudeSessions.invalidate({ workspaceId });
     },
   });
 
-  const startSession = trpc.session.startClaudeSession.useMutation({
-    onSuccess: () => {
-      utils.session.listClaudeSessions.invalidate({ workspaceId: id });
-    },
-  });
+  // Get the first session (or most recent) to auto-load
+  const initialSessionId = claudeSessions?.[0]?.id;
 
-  const stopSession = trpc.session.stopClaudeSession.useMutation({
-    onSuccess: () => {
-      utils.session.listClaudeSessions.invalidate({ workspaceId: id });
-    },
-  });
+  // Initialize WebSocket connection with chat hook
+  const {
+    messages,
+    connected,
+    running,
+    claudeSessionId,
+    availableSessions,
+    pendingPermission,
+    pendingQuestion,
+    loadingSession,
+    chatSettings,
+    sendMessage,
+    stopChat,
+    clearChat,
+    loadSession,
+    approvePermission,
+    answerQuestion,
+    updateSettings,
+    inputRef,
+    messagesEndRef,
+  } = useChatWebSocket({ initialSessionId });
 
-  const handleCreateSession = () => {
+  // Load session when sessions are fetched and we have one
+  useEffect(() => {
+    if (initialSessionId && !claudeSessionId && !loadingSession) {
+      loadSession(initialSessionId);
+    }
+  }, [initialSessionId, claudeSessionId, loadingSession, loadSession]);
+
+  // Handle loading a session
+  const handleLoadSession = useCallback(
+    (sessionId: string) => {
+      loadSession(sessionId);
+    },
+    [loadSession]
+  );
+
+  // Handle new chat button - creates a new session for this workspace
+  const handleNewChat = useCallback(() => {
+    clearChat();
     createSession.mutate({
-      workspaceId: id,
-      name: sessionName || undefined,
-      workflow: sessionWorkflow,
-      model: sessionModel,
+      workspaceId,
+      workflow: 'explore',
+      model: 'sonnet',
     });
-  };
+  }, [clearChat, createSession, workspaceId]);
 
-  const handleStartSession = (sessionId: string) => {
-    startSession.mutate({ id: sessionId });
-  };
+  // Determine connection status for indicator
+  const status: ConnectionStatus = !connected
+    ? 'disconnected'
+    : loadingSession
+      ? 'loading'
+      : running
+        ? 'processing'
+        : 'connected';
 
-  const handleStopSession = (sessionId: string) => {
-    stopSession.mutate({ id: sessionId });
-  };
+  // Track if user is near bottom for auto-scroll
+  const isNearBottomRef = useRef(true);
 
-  if (isLoading) {
+  // Auto-scroll to bottom when messages change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
+  useEffect(() => {
+    if (isNearBottomRef.current && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length, messagesEndRef]);
+
+  // Handle scroll to detect if user is near bottom
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const threshold = 100;
+    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+    isNearBottomRef.current = isNearBottom;
+  }, []);
+
+  // Memoize grouped messages
+  const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
+
+  // Show loading while fetching workspace and sessions
+  if (workspaceLoading || sessionsLoading) {
     return <Loading message="Loading workspace..." />;
   }
 
-  if (error || !workspace) {
+  if (!workspace) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <p className="text-destructive">Workspace not found</p>
-        <Button variant="outline" asChild>
-          <Link href={`/projects/${slug}/workspaces`}>Back to workspaces</Link>
+        <Button variant="outline" onClick={() => router.push(`/projects/${slug}/workspaces`)}>
+          Back to workspaces
         </Button>
       </div>
     );
   }
 
+  // Filter available sessions to only show ones for this workspace
+  const workspaceSessions = availableSessions.filter((s) =>
+    claudeSessions?.some((cs) => cs.id === s.sessionId)
+  );
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href={`/projects/${slug}/workspaces`}>
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{workspace.name}</h1>
-            <div className="flex items-center gap-3 mt-2">
-              <Badge variant={statusVariants[workspace.status] || 'default'}>
-                {workspace.status}
-              </Badge>
-              <span className="text-sm text-muted-foreground">
-                Created {new Date(workspace.createdAt).toLocaleDateString()}
-              </span>
+    <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex items-center gap-3">
+          {workspace.branchName ? (
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
             </div>
-          </div>
+          ) : (
+            <h1 className="text-lg font-semibold">{workspace.name}</h1>
+          )}
+          <StatusDot status={status} />
         </div>
-        {workspace.status !== 'ARCHIVED' && (
+        <div className="flex items-center gap-2">
+          <SessionPicker
+            sessions={workspaceSessions.length > 0 ? workspaceSessions : availableSessions}
+            currentSessionId={claudeSessionId}
+            onLoadSession={handleLoadSession}
+            disabled={running}
+          />
           <Button
             variant="outline"
-            onClick={() => archiveWorkspace.mutate({ id })}
-            disabled={archiveWorkspace.isPending}
+            size="icon"
+            onClick={handleNewChat}
+            disabled={running || createSession.isPending}
+            title="New Chat"
           >
-            <Archive className="h-4 w-4 mr-2" />
-            {archiveWorkspace.isPending ? 'Archiving...' : 'Archive'}
+            <Plus className="h-4 w-4" />
           </Button>
-        )}
+        </div>
       </div>
 
-      {workspace.description && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Description</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="whitespace-pre-wrap text-sm font-sans">{workspace.description}</pre>
-          </CardContent>
-        </Card>
-      )}
+      {/* Message List */}
+      <ScrollArea className="flex-1" onScroll={handleScroll}>
+        <div className="p-4 space-y-2">
+          {messages.length === 0 && !running && !loadingSession && <EmptyState />}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            {workspace.branchName && (
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Branch:</span>
-                <span className="font-mono">{workspace.branchName}</span>
+          {loadingSession && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <span className="text-sm">Loading session...</span>
               </div>
-            )}
-            {workspace.worktreePath && (
-              <div>
-                <span className="text-muted-foreground">Worktree Path:</span>
-                <span className="font-mono ml-2">{workspace.worktreePath}</span>
-              </div>
-            )}
-            {workspace.prUrl && (
-              <div className="flex items-center gap-2">
-                <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">PR:</span>
-                <a
-                  href={workspace.prUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  View Pull Request
-                </a>
-              </div>
-            )}
-            {workspace.githubIssueUrl && (
-              <div className="flex items-center gap-2">
-                <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">GitHub Issue:</span>
-                <a
-                  href={workspace.githubIssueUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  #{workspace.githubIssueNumber}
-                </a>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Claude Sessions ({claudeSessions?.length ?? 0})</CardTitle>
-          <Dialog open={isCreateSessionOpen} onOpenChange={setIsCreateSessionOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                New Session
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create Claude Session</DialogTitle>
-                <DialogDescription>
-                  Create a new Claude session for this workspace.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="session-name">Name (optional)</Label>
-                  <Input
-                    id="session-name"
-                    value={sessionName}
-                    onChange={(e) => setSessionName(e.target.value)}
-                    placeholder="E.g., Exploration Session"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="session-workflow">Workflow</Label>
-                  <Select value={sessionWorkflow} onValueChange={setSessionWorkflow}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="explore">Explore</SelectItem>
-                      <SelectItem value="implement">Implement</SelectItem>
-                      <SelectItem value="test">Test</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="session-model">Model</Label>
-                  <Select value={sessionModel} onValueChange={setSessionModel}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sonnet">Sonnet</SelectItem>
-                      <SelectItem value="opus">Opus</SelectItem>
-                      <SelectItem value="haiku">Haiku</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateSessionOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateSession} disabled={createSession.isPending}>
-                  {createSession.isPending ? 'Creating...' : 'Create Session'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </CardHeader>
-        <CardContent>
-          {!claudeSessions || claudeSessions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No Claude sessions yet</p>
-          ) : (
-            <div className="space-y-3">
-              {claudeSessions.map((session: ClaudeSession) => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  onStart={() => handleStartSession(session.id)}
-                  onStop={() => handleStopSession(session.id)}
-                  isStarting={startSession.isPending}
-                  isStopping={stopSession.isPending}
-                />
-              ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+
+          {groupedMessages.map((item) => (
+            <GroupedMessageItemRenderer key={item.id} item={item} />
+          ))}
+
+          {running && <LoadingIndicator className="py-4" />}
+
+          <div ref={messagesEndRef} className="h-px" />
+        </div>
+      </ScrollArea>
+
+      {/* Input Section with Prompts */}
+      <div className="border-t">
+        <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
+        <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
+
+        <ChatInput
+          onSend={sendMessage}
+          onStop={stopChat}
+          disabled={!connected}
+          running={running}
+          inputRef={inputRef}
+          placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
+          settings={chatSettings}
+          onSettingsChange={updateSettings}
+        />
+        {claudeSessionId && (
+          <div className="px-4 pb-2 text-xs text-muted-foreground">
+            Session: {claudeSessionId.slice(0, 16)}...
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+// =============================================================================
+// Page Component with Suspense
+// =============================================================================
+
+export default function WorkspaceDetailPage() {
+  return (
+    <Suspense fallback={<ChatLoading />}>
+      <WorkspaceChatContent />
+    </Suspense>
   );
 }
