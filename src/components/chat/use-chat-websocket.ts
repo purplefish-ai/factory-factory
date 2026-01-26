@@ -14,8 +14,8 @@ import type {
 import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
 import {
   buildWebSocketUrl,
+  getReconnectDelay,
   MAX_RECONNECT_ATTEMPTS,
-  RECONNECT_DELAY_MS,
 } from '@/lib/websocket-config';
 
 // =============================================================================
@@ -116,13 +116,39 @@ type OutgoingMessage =
 
 const DEBUG_WEBSOCKET = process.env.NODE_ENV === 'development';
 
-function logWsMessage(direction: 'IN' | 'OUT', data: unknown, counter: number): void {
+/**
+ * Maximum number of messages to queue while disconnected.
+ */
+const MAX_QUEUE_SIZE = 100;
+
+/**
+ * Maximum number of queued messages to send per flush to avoid overwhelming the server.
+ * Remaining messages will be sent on subsequent flushes.
+ */
+const MAX_FLUSH_BATCH_SIZE = 10;
+
+/**
+ * Message types that are time-sensitive and should not be queued/replayed after reconnect.
+ * These commands only make sense in the context of an active session at the time they were sent.
+ */
+const STALE_MESSAGE_TYPES = new Set(['stop', 'interrupt']);
+
+function logWsMessage(
+  direction: 'IN' | 'OUT' | 'OUT (queued)',
+  data: unknown,
+  counter: number
+): void {
   if (!DEBUG_WEBSOCKET) {
     return;
   }
 
   const timestamp = new Date().toISOString();
-  const prefix = direction === 'IN' ? '⬇️ WS IN' : '⬆️ WS OUT';
+  const prefix =
+    direction === 'IN'
+      ? '⬇️ WS IN'
+      : direction === 'OUT (queued)'
+        ? '⬆️ WS OUT (queued)'
+        : '⬆️ WS OUT';
 
   console.group(`${prefix} #${counter} @ ${timestamp}`);
   console.log('Raw data:', JSON.stringify(data, null, 2));
@@ -506,6 +532,20 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
   // Debug message counter (instance-scoped, not global)
   const messageCounterRef = useRef(0);
+  // Message queue for messages sent while disconnected
+  const messageQueueRef = useRef<OutgoingMessage[]>([]);
+  // Track current claudeSessionId in a ref for use in reconnect logic
+  // (avoids stale closure issues when connect() is called during reconnect)
+  const claudeSessionIdRef = useRef<string | null>(claudeSessionId);
+
+  // Keep claudeSessionIdRef in sync with state and clear queue on session change
+  useEffect(() => {
+    // Clear queue when session changes to prevent cross-session message leaks
+    if (claudeSessionIdRef.current !== claudeSessionId) {
+      messageQueueRef.current = [];
+    }
+    claudeSessionIdRef.current = claudeSessionId;
+  }, [claudeSessionId]);
 
   // Auto-scroll to bottom when messages change
   // biome-ignore lint/correctness/useExhaustiveDependencies: we want to trigger scroll on messages array change
@@ -529,15 +569,69 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     }
   }, [initialSessionId]);
 
-  // Send message to WebSocket
-  const sendWsMessage = useCallback((message: OutgoingMessage) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Debug logging for outgoing messages
-      messageCounterRef.current += 1;
-      logWsMessage('OUT', message, messageCounterRef.current);
-      wsRef.current.send(JSON.stringify(message));
+  // Flush queued messages when connection is open
+  const flushMessageQueue = useCallback(() => {
+    // Filter out stale time-sensitive messages that don't make sense after reconnect
+    const originalLength = messageQueueRef.current.length;
+    messageQueueRef.current = messageQueueRef.current.filter((msg) => {
+      if (STALE_MESSAGE_TYPES.has(msg.type)) {
+        if (DEBUG_WEBSOCKET) {
+          console.log('🗑️ Dropping stale queued message:', msg.type);
+        }
+        return false;
+      }
+      return true;
+    });
+    if (DEBUG_WEBSOCKET && originalLength !== messageQueueRef.current.length) {
+      console.log(
+        `📤 Filtered ${originalLength - messageQueueRef.current.length} stale messages from queue`
+      );
+    }
+
+    // Send queued messages in batches to avoid overwhelming the server
+    let sentCount = 0;
+    while (
+      messageQueueRef.current.length > 0 &&
+      wsRef.current?.readyState === WebSocket.OPEN &&
+      sentCount < MAX_FLUSH_BATCH_SIZE
+    ) {
+      const msg = messageQueueRef.current.shift();
+      if (msg) {
+        messageCounterRef.current += 1;
+        logWsMessage('OUT (queued)', msg, messageCounterRef.current);
+        wsRef.current.send(JSON.stringify(msg));
+        sentCount++;
+      }
+    }
+    if (DEBUG_WEBSOCKET && messageQueueRef.current.length > 0) {
+      console.log(
+        `📤 ${messageQueueRef.current.length} messages remaining in queue after batch flush`
+      );
     }
   }, []);
+
+  // Send message to WebSocket (or queue if disconnected)
+  const sendWsMessage = useCallback(
+    (message: OutgoingMessage) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        // Flush any queued messages first
+        flushMessageQueue();
+        // Debug logging for outgoing messages
+        messageCounterRef.current += 1;
+        logWsMessage('OUT', message, messageCounterRef.current);
+        wsRef.current.send(JSON.stringify(message));
+      } else if (messageQueueRef.current.length < MAX_QUEUE_SIZE) {
+        // Queue message for later delivery
+        if (DEBUG_WEBSOCKET) {
+          console.log('📥 Queuing message for later delivery:', message.type);
+        }
+        messageQueueRef.current.push(message);
+      } else if (DEBUG_WEBSOCKET) {
+        console.warn('⚠️ Message queue full, dropping message:', message.type);
+      }
+    },
+    [flushMessageQueue]
+  );
 
   // Update tool input for a specific tool_use_id in stored messages
   // This is called when we accumulate input_json_delta events
@@ -667,26 +761,43 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket onopen handler requires handling multiple reconnection scenarios
     ws.onopen = () => {
+      const wasReconnect = reconnectAttemptsRef.current > 0;
       setConnected(true);
       reconnectAttemptsRef.current = 0;
 
       if (DEBUG_WEBSOCKET) {
         console.log('🔌 WebSocket connected to:', wsUrl);
         console.log('📊 Debug logging is ENABLED. Watch for ⬇️ IN and ⬆️ OUT messages.');
+        if (wasReconnect) {
+          console.log('🔄 Reconnected successfully');
+        }
       }
+
+      // Flush any queued messages from while we were disconnected
+      flushMessageQueue();
 
       // Request list of available sessions
       sendWsMessage({ type: 'list_sessions' });
 
-      // Load initial session only once (on first connect from URL)
+      // Load initial session on first connect, or reload on reconnect if we had a session
       if (initialSessionIdRef.current && !hasLoadedInitialSessionRef.current) {
         hasLoadedInitialSessionRef.current = true;
         setLoadingSession(true);
         sendWsMessage({ type: 'load_session', claudeSessionId: initialSessionIdRef.current });
+      } else if (wasReconnect && claudeSessionIdRef.current) {
+        // On reconnect, reload the current session to restore state
+        // Use ref to get the current value, not stale closure value
+        if (DEBUG_WEBSOCKET) {
+          console.log('🔄 Reloading session after reconnect:', claudeSessionIdRef.current);
+        }
+        setLoadingSession(true);
+        sendWsMessage({ type: 'load_session', claudeSessionId: claudeSessionIdRef.current });
       }
     };
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket onclose handler requires handling stale connection detection and exponential backoff
     ws.onclose = () => {
       // Only handle this close event if this WebSocket is still the current one.
       // If wsRef.current is different or null, we've already moved on to a new connection
@@ -701,12 +812,20 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       setConnected(false);
       wsRef.current = null;
 
-      // Attempt reconnect if we haven't exceeded max attempts
+      // Attempt reconnect with exponential backoff
       if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        const delay = getReconnectDelay(reconnectAttemptsRef.current);
+        if (DEBUG_WEBSOCKET) {
+          console.log(
+            `🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current + 1}/${MAX_RECONNECT_ATTEMPTS})`
+          );
+        }
         reconnectAttemptsRef.current += 1;
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
-        }, RECONNECT_DELAY_MS);
+        }, delay);
+      } else if (DEBUG_WEBSOCKET) {
+        console.warn('❌ Max reconnection attempts reached');
       }
     };
 
@@ -715,7 +834,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     };
 
     ws.onmessage = handleMessage;
-  }, [handleMessage, sendWsMessage]);
+  }, [flushMessageQueue, handleMessage, sendWsMessage]);
 
   // Initialize WebSocket connection
   useEffect(() => {

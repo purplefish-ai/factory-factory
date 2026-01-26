@@ -8,6 +8,9 @@ const logger = createLogger('session');
 // Store active Claude processes by session ID
 const activeClaudeProcesses = new Map<string, ClaudeProcess>();
 
+// Track sessions currently being stopped to prevent race conditions
+const stoppingInProgress = new Set<string>();
+
 class SessionService {
   /**
    * Start a Claude session
@@ -19,6 +22,9 @@ class SessionService {
     }
     if (session.status === SessionStatus.RUNNING) {
       throw new Error('Session is already running');
+    }
+    if (stoppingInProgress.has(sessionId)) {
+      throw new Error('Session is currently being stopped');
     }
 
     const workspace = await workspaceAccessor.findById(session.workspaceId);
@@ -88,6 +94,12 @@ class SessionService {
    * Stop a Claude session gracefully
    */
   async stopClaudeSession(sessionId: string): Promise<void> {
+    // Check if already stopping to prevent concurrent stop attempts
+    if (stoppingInProgress.has(sessionId)) {
+      logger.debug('Session stop already in progress', { sessionId });
+      return;
+    }
+
     const process = activeClaudeProcesses.get(sessionId);
     if (!process) {
       // Process not in memory, just update DB
@@ -98,8 +110,21 @@ class SessionService {
       return;
     }
 
-    await process.interrupt();
-    activeClaudeProcesses.delete(sessionId);
+    // Mark as stopping to prevent concurrent access
+    stoppingInProgress.add(sessionId);
+
+    try {
+      await process.interrupt();
+    } catch (error) {
+      logger.error('Failed to interrupt process', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      // Clean up after interrupt completes (success or failure)
+      activeClaudeProcesses.delete(sessionId);
+      stoppingInProgress.delete(sessionId);
+    }
 
     await claudeSessionAccessor.update(sessionId, {
       status: SessionStatus.IDLE,
@@ -107,6 +132,29 @@ class SessionService {
     });
 
     logger.info('Claude session stopped', { sessionId });
+  }
+
+  /**
+   * Stop all Claude sessions for a workspace
+   */
+  async stopWorkspaceSessions(workspaceId: string): Promise<void> {
+    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
+
+    for (const session of sessions) {
+      if (session.status === SessionStatus.RUNNING || activeClaudeProcesses.has(session.id)) {
+        try {
+          await this.stopClaudeSession(session.id);
+        } catch (error) {
+          logger.error('Failed to stop workspace session', {
+            sessionId: session.id,
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
   }
 
   /**

@@ -9,12 +9,64 @@ import { createLogger } from './logger.service';
 
 const logger = createLogger('reconciliation');
 
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 class ReconciliationService {
+  private cleanupInterval: NodeJS.Timeout | null = null;
+  private isShuttingDown = false;
+  private cleanupInProgress: Promise<void> | null = null;
+
   /**
    * Main reconciliation - just ensures workspaces have worktrees
    */
   async reconcile(): Promise<void> {
     await this.reconcileWorkspaces();
+  }
+
+  /**
+   * Start periodic orphan cleanup
+   */
+  startPeriodicCleanup(): void {
+    if (this.cleanupInterval) {
+      return; // Already running
+    }
+
+    this.cleanupInterval = setInterval(() => {
+      // Skip if shutdown has started
+      if (this.isShuttingDown) {
+        return;
+      }
+      // Track the cleanup promise so we can wait for it during shutdown
+      this.cleanupInProgress = this.cleanupOrphans()
+        .catch((err) => {
+          logger.error('Periodic orphan cleanup failed', err as Error);
+        })
+        .finally(() => {
+          this.cleanupInProgress = null;
+        });
+    }, CLEANUP_INTERVAL_MS);
+
+    logger.info('Started periodic orphan cleanup', { intervalMs: CLEANUP_INTERVAL_MS });
+  }
+
+  /**
+   * Stop periodic orphan cleanup and wait for any in-flight cleanup to complete
+   */
+  async stopPeriodicCleanup(): Promise<void> {
+    this.isShuttingDown = true;
+
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
+    // Wait for any in-flight cleanup to complete
+    if (this.cleanupInProgress) {
+      logger.debug('Waiting for in-flight cleanup to complete');
+      await this.cleanupInProgress;
+    }
+
+    logger.info('Stopped periodic orphan cleanup');
   }
 
   /**
@@ -70,6 +122,12 @@ class ReconciliationService {
    * Cleanup orphaned Claude processes on startup
    */
   async cleanupOrphans(): Promise<void> {
+    // Bail early if shutdown has started to avoid accessing prisma after disconnect
+    if (this.isShuttingDown) {
+      logger.debug('Skipping orphan cleanup - shutdown in progress');
+      return;
+    }
+
     // Find Claude sessions that claim to be running
     const sessionsWithPid = await claudeSessionAccessor.findWithPid();
 
