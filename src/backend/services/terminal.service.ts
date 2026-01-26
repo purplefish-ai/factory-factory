@@ -3,10 +3,16 @@
  *
  * Manages PTY (pseudo-terminal) instances for workspaces using node-pty.
  * Each workspace can have multiple terminal sessions that persist across
- * WebSocket reconnections.
+ * WebSocket reconnections. Includes resource monitoring for CPU and memory usage.
+ *
+ * NOTE: Unlike Claude processes, terminals are NEVER auto-killed based on
+ * resource usage or idle time. Terminals cannot be resumed once killed,
+ * so cleanup only happens on explicit user action or server shutdown.
+ * Resource monitoring here is purely informational for the admin dashboard.
  */
 
 import type { IPty } from 'node-pty';
+import pidusage from 'pidusage';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('terminal');
@@ -14,6 +20,18 @@ const logger = createLogger('terminal');
 // =============================================================================
 // Types
 // =============================================================================
+
+/**
+ * Resource usage snapshot for a terminal.
+ */
+export interface TerminalResourceUsage {
+  /** CPU usage percentage (0-100+) */
+  cpu: number;
+  /** Memory usage in bytes */
+  memory: number;
+  /** Timestamp of measurement */
+  timestamp: Date;
+}
 
 export interface TerminalInstance {
   id: string;
@@ -24,6 +42,8 @@ export interface TerminalInstance {
   createdAt: Date;
   // Disposables for cleaning up event listeners
   disposables: (() => void)[];
+  // Last resource usage snapshot
+  lastResourceUsage?: TerminalResourceUsage;
 }
 
 export interface CreateTerminalOptions {
@@ -52,6 +72,89 @@ class TerminalService {
 
   // Exit listeners by terminalId
   private exitListeners = new Map<string, Set<(exitCode: number) => void>>();
+
+  // Resource monitoring interval
+  private monitoringInterval: NodeJS.Timeout | null = null;
+  private static readonly MONITORING_INTERVAL_MS = 5000; // 5 seconds
+
+  /**
+   * Ensure resource monitoring is running if there are terminals.
+   * Called after creating a terminal.
+   */
+  private ensureResourceMonitoring(): void {
+    if (this.monitoringInterval || this.getActiveTerminalCount() === 0) {
+      return;
+    }
+    this.startResourceMonitoring();
+  }
+
+  /**
+   * Start periodic resource monitoring for all terminals.
+   */
+  private startResourceMonitoring(): void {
+    if (this.monitoringInterval) {
+      return; // Already running
+    }
+
+    logger.debug('Starting terminal resource monitoring');
+    this.monitoringInterval = setInterval(async () => {
+      // Stop monitoring if no terminals
+      if (this.getActiveTerminalCount() === 0) {
+        this.stopResourceMonitoring();
+        return;
+      }
+
+      await this.updateAllTerminalResources();
+    }, TerminalService.MONITORING_INTERVAL_MS);
+  }
+
+  /**
+   * Update resource usage for all terminals.
+   */
+  private async updateAllTerminalResources(): Promise<void> {
+    for (const workspaceTerminals of this.terminals.values()) {
+      for (const instance of workspaceTerminals.values()) {
+        await this.updateTerminalResource(instance);
+      }
+    }
+  }
+
+  /**
+   * Update resource usage for a single terminal.
+   */
+  private async updateTerminalResource(instance: TerminalInstance): Promise<void> {
+    const pid = instance.pty.pid;
+    if (!pid) {
+      return;
+    }
+
+    try {
+      const usage = await pidusage(pid);
+      instance.lastResourceUsage = {
+        cpu: usage.cpu,
+        memory: usage.memory,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      logger.debug('Failed to get terminal resource usage', {
+        terminalId: instance.id,
+        pid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      instance.lastResourceUsage = undefined;
+    }
+  }
+
+  /**
+   * Stop resource monitoring (for graceful shutdown or when no terminals exist).
+   */
+  private stopResourceMonitoring(): void {
+    if (this.monitoringInterval) {
+      logger.debug('Stopping terminal resource monitoring');
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+  }
 
   /**
    * Lazy load node-pty to handle cases where it's not installed
@@ -150,6 +253,9 @@ class TerminalService {
       this.terminals.set(workspaceId, new Map());
     }
     this.terminals.get(workspaceId)?.set(terminalId, instance);
+
+    // Start resource monitoring if this is the first terminal
+    this.ensureResourceMonitoring();
 
     logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
 
@@ -310,6 +416,7 @@ class TerminalService {
    * Clean up all terminals (for graceful shutdown)
    */
   cleanup(): void {
+    this.stopResourceMonitoring();
     for (const workspaceId of this.terminals.keys()) {
       this.destroyWorkspaceTerminals(workspaceId);
     }
@@ -325,6 +432,45 @@ class TerminalService {
       count += workspaceTerminals.size;
     }
     return count;
+  }
+
+  /**
+   * Get all active terminals for admin view
+   */
+  getAllTerminals(): Array<{
+    id: string;
+    workspaceId: string;
+    pid: number;
+    cols: number;
+    rows: number;
+    createdAt: Date;
+    resourceUsage?: TerminalResourceUsage;
+  }> {
+    const terminals: Array<{
+      id: string;
+      workspaceId: string;
+      pid: number;
+      cols: number;
+      rows: number;
+      createdAt: Date;
+      resourceUsage?: TerminalResourceUsage;
+    }> = [];
+
+    for (const workspaceTerminals of this.terminals.values()) {
+      for (const instance of workspaceTerminals.values()) {
+        terminals.push({
+          id: instance.id,
+          workspaceId: instance.workspaceId,
+          pid: instance.pty.pid,
+          cols: instance.cols,
+          rows: instance.rows,
+          createdAt: instance.createdAt,
+          resourceUsage: instance.lastResourceUsage,
+        });
+      }
+    }
+
+    return terminals;
   }
 }
 
