@@ -98,8 +98,17 @@ class SessionService {
       return;
     }
 
-    await process.interrupt();
+    // Delete from map first to prevent concurrent access issues
     activeClaudeProcesses.delete(sessionId);
+
+    try {
+      await process.interrupt();
+    } catch (error) {
+      logger.error('Failed to interrupt process', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     await claudeSessionAccessor.update(sessionId, {
       status: SessionStatus.IDLE,
@@ -107,6 +116,29 @@ class SessionService {
     });
 
     logger.info('Claude session stopped', { sessionId });
+  }
+
+  /**
+   * Stop all Claude sessions for a workspace
+   */
+  async stopWorkspaceSessions(workspaceId: string): Promise<void> {
+    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
+
+    for (const session of sessions) {
+      if (session.status === SessionStatus.RUNNING || activeClaudeProcesses.has(session.id)) {
+        try {
+          await this.stopClaudeSession(session.id);
+        } catch (error) {
+          logger.error('Failed to stop workspace session', {
+            sessionId: session.id,
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
   }
 
   /**

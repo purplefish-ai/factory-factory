@@ -15,7 +15,11 @@ import {
   createEmptyTokenStats,
   updateTokenStatsFromResult,
 } from '@/lib/claude-types';
-import { buildWebSocketUrl } from '@/lib/websocket-config';
+import {
+  buildWebSocketUrl,
+  getReconnectDelay,
+  MAX_RECONNECT_ATTEMPTS,
+} from '@/lib/websocket-config';
 
 // =============================================================================
 // Types
@@ -50,15 +54,6 @@ export interface UseAgentWebSocketReturn {
   /** Ref to attach to the end of the message list for auto-scroll */
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-// Note: Agent activity uses longer delays/attempts than chat since agents
-// may be starting up or restarting
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_DELAY_MS = 3000;
 
 // =============================================================================
 // Helper Functions
@@ -239,14 +234,15 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
         setConnectionState('disconnected');
         wsRef.current = null;
 
-        // Attempt reconnect if we haven't exceeded max attempts
+        // Attempt reconnect with exponential backoff if we haven't exceeded max attempts
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          const delay = getReconnectDelay(reconnectAttemptsRef.current);
           reconnectAttemptsRef.current += 1;
           reconnectTimeoutRef.current = setTimeout(() => {
             if (!isUnmountedRef.current) {
               connect();
             }
-          }, RECONNECT_DELAY_MS);
+          }, delay);
         } else {
           setConnectionState('error');
           setError('Max reconnection attempts reached');

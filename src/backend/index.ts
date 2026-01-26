@@ -1,4 +1,12 @@
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
@@ -23,6 +31,24 @@ const PORT = process.env.BACKEND_PORT || 3001;
 // Create HTTP server and WebSocket server
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+
+// ============================================================================
+// WebSocket Heartbeat - Detect zombie connections
+// ============================================================================
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const wsAliveMap = new WeakMap<import('ws').WebSocket, boolean>();
+
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (wsAliveMap.get(ws) === false) {
+      logger.info('Terminating unresponsive WebSocket connection');
+      ws.terminate();
+      return;
+    }
+    wsAliveMap.set(ws, false);
+    ws.ping();
+  });
+}, HEARTBEAT_INTERVAL_MS);
 
 // Security headers middleware
 app.use((_req, res, next) => {
@@ -448,6 +474,49 @@ class SessionFileLogger {
       logger.info('[SessionFileLogger] Closed log file', { sessionId, logFile });
     }
   }
+
+  /**
+   * Close all active session logs (called during shutdown)
+   */
+  cleanup(): void {
+    for (const sessionId of this.sessionLogs.keys()) {
+      this.closeSession(sessionId);
+    }
+  }
+
+  /**
+   * Delete log files older than maxAgeDays (default 7 days)
+   */
+  cleanupOldLogs(maxAgeDays: number = 7): void {
+    try {
+      if (!existsSync(this.logDir)) {
+        return;
+      }
+
+      const files = readdirSync(this.logDir);
+      const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+      let deletedCount = 0;
+
+      for (const file of files) {
+        const filePath = join(this.logDir, file);
+        try {
+          const stat = statSync(filePath);
+          if (stat.mtimeMs < cutoff) {
+            unlinkSync(filePath);
+            deletedCount++;
+          }
+        } catch {
+          // Ignore individual file errors
+        }
+      }
+
+      if (deletedCount > 0) {
+        logger.info('[SessionFileLogger] Cleaned up old log files', { deletedCount, maxAgeDays });
+      }
+    } catch (error) {
+      logger.error('[SessionFileLogger] Failed to cleanup old logs', { error });
+    }
+  }
 }
 
 // Global session file logger instance
@@ -572,6 +641,8 @@ function setupChatClientEvents(sessionId: string, client: ClaudeClient): void {
       code: result.code,
       claudeSessionId: result.sessionId,
     });
+    // Clean up all listeners to prevent memory leaks if client is recreated
+    client.removeAllListeners();
     chatClients.delete(sessionId);
   });
 
@@ -630,13 +701,21 @@ async function getOrCreateChatClient(
       thinkingEnabled: options.thinkingEnabled,
     };
 
-    const newClient = await ClaudeClient.create(clientOptions);
+    try {
+      const newClient = await ClaudeClient.create(clientOptions);
 
-    // Set up event forwarding before storing in map to ensure events aren't missed
-    setupChatClientEvents(sessionId, newClient);
-    chatClients.set(sessionId, newClient);
+      // Set up event forwarding before storing in map to ensure events aren't missed
+      setupChatClientEvents(sessionId, newClient);
+      chatClients.set(sessionId, newClient);
 
-    return newClient;
+      return newClient;
+    } catch (error) {
+      // Defensive cleanup - client may not be in map if create() failed before
+      // chatClients.set() was reached, but ensures no partial state remains
+      // if future code changes the order of operations
+      chatClients.delete(sessionId);
+      throw error;
+    }
   })();
 
   pendingClientCreation.set(sessionId, createPromise);
@@ -825,6 +904,10 @@ function handleChatUpgrade(
   wss.handleUpgrade(request, socket, head, (ws) => {
     logger.info('Chat WebSocket connection established', { sessionId, claudeSessionId });
 
+    // Setup heartbeat tracking
+    wsAliveMap.set(ws, true);
+    ws.on('pong', () => wsAliveMap.set(ws, true));
+
     // Initialize session file logging
     sessionFileLogger.initSession(sessionId);
     sessionFileLogger.log(sessionId, 'INFO', {
@@ -934,6 +1017,10 @@ const terminalConnections = new Map<string, Set<import('ws').WebSocket>>();
 // Map: WebSocket -> Map<terminalId, unsubscribe functions[]>
 const terminalListenerCleanup = new WeakMap<import('ws').WebSocket, Map<string, (() => void)[]>>();
 
+// Track terminal grace periods to allow reconnection
+const TERMINAL_GRACE_PERIOD_MS = 30_000;
+const terminalGracePeriods = new Map<string, NodeJS.Timeout>();
+
 /**
  * Clean up all terminal listener subscriptions for a WebSocket connection
  */
@@ -970,6 +1057,18 @@ function handleTerminalUpgrade(
 
   wss.handleUpgrade(request, socket, head, (ws) => {
     logger.info('Terminal WebSocket connection established', { workspaceId });
+
+    // Setup heartbeat tracking
+    wsAliveMap.set(ws, true);
+    ws.on('pong', () => wsAliveMap.set(ws, true));
+
+    // Cancel any pending grace period cleanup for this workspace
+    const existingGracePeriod = terminalGracePeriods.get(workspaceId);
+    if (existingGracePeriod) {
+      clearTimeout(existingGracePeriod);
+      terminalGracePeriods.delete(workspaceId);
+      logger.info('Cancelled terminal grace period due to reconnection', { workspaceId });
+    }
 
     // Track connection
     if (!terminalConnections.has(workspaceId)) {
@@ -1023,8 +1122,13 @@ function handleTerminalUpgrade(
               rows: message.rows ?? 24,
             });
 
-            // Track unsubscribe functions for this terminal
+            // Initialize cleanup map entry BEFORE registering listeners to prevent race condition
+            // If WebSocket closes between listener registration and map storage, listeners would leak
+            const cleanupMap = terminalListenerCleanup.get(ws);
             const unsubscribers: (() => void)[] = [];
+            if (cleanupMap) {
+              cleanupMap.set(terminalId, unsubscribers);
+            }
 
             // Set up output forwarding - include terminalId so frontend can route to correct tab
             logger.debug('Setting up output forwarding', { terminalId });
@@ -1051,18 +1155,12 @@ function handleTerminalUpgrade(
                 ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
               }
               // Clean up listeners for this terminal when it exits
-              const cleanupMap = terminalListenerCleanup.get(ws);
-              if (cleanupMap) {
-                cleanupMap.delete(terminalId);
+              const exitCleanupMap = terminalListenerCleanup.get(ws);
+              if (exitCleanupMap) {
+                exitCleanupMap.delete(terminalId);
               }
             });
             unsubscribers.push(unsubExit);
-
-            // Store unsubscribers for cleanup
-            const cleanupMap = terminalListenerCleanup.get(ws);
-            if (cleanupMap) {
-              cleanupMap.set(terminalId, unsubscribers);
-            }
 
             logger.info('Sending created message to client', { terminalId });
             ws.send(JSON.stringify({ type: 'created', terminalId }));
@@ -1162,8 +1260,20 @@ function handleTerminalUpgrade(
         connections.delete(ws);
         if (connections.size === 0) {
           terminalConnections.delete(workspaceId);
-          // Clean up all terminals for this workspace when last connection closes
-          terminalService.destroyWorkspaceTerminals(workspaceId);
+          // Instead of immediately destroying terminals, allow a grace period for reconnection
+          logger.info('Starting terminal grace period', {
+            workspaceId,
+            gracePeriodMs: TERMINAL_GRACE_PERIOD_MS,
+          });
+          const gracePeriodTimeout = setTimeout(() => {
+            // Only destroy if no new connections have been established
+            if (!terminalConnections.has(workspaceId)) {
+              logger.info('Grace period expired, destroying workspace terminals', { workspaceId });
+              terminalService.destroyWorkspaceTerminals(workspaceId);
+            }
+            terminalGracePeriods.delete(workspaceId);
+          }, TERMINAL_GRACE_PERIOD_MS);
+          terminalGracePeriods.set(workspaceId, gracePeriodTimeout);
         }
       }
     });
@@ -1215,6 +1325,12 @@ server.listen(PORT, async () => {
     logger.error('Failed to cleanup orphan sessions on startup', error as Error);
   }
 
+  // Clean up old log files (older than 7 days)
+  sessionFileLogger.cleanupOldLogs();
+
+  // Start periodic orphan cleanup
+  reconciliationService.startPeriodicCleanup();
+
   console.log(`Backend server running on http://localhost:${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Health check (all): http://localhost:${PORT}/health/all`);
@@ -1225,24 +1341,75 @@ server.listen(PORT, async () => {
 });
 
 // Shared cleanup logic
+const SHUTDOWN_TIMEOUT_MS = 5000;
+
 const performCleanup = async () => {
-  // Clean up all chat clients
+  logger.info('Starting graceful cleanup');
+
+  // Stop heartbeat interval
+  clearInterval(heartbeatInterval);
+
+  // Cancel all terminal grace periods
+  for (const [workspaceId, timeout] of terminalGracePeriods) {
+    clearTimeout(timeout);
+    logger.debug('Cancelled terminal grace period during shutdown', { workspaceId });
+  }
+  terminalGracePeriods.clear();
+
+  // Stop accepting new connections
+  wss.close();
+  server.close();
+
+  // Gracefully stop all chat clients with timeout
+  const stopPromises: Promise<void>[] = [];
+  for (const [sessionId, client] of chatClients) {
+    const stopPromise = Promise.race([
+      (async () => {
+        try {
+          await client.stop();
+        } catch {
+          client.kill();
+        }
+      })(),
+      new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+    ]).then(() => {
+      // Ensure kill is called as a final measure
+      try {
+        client.kill();
+      } catch {
+        // Ignore kill errors
+      }
+    });
+    stopPromises.push(stopPromise);
+    logger.debug('Stopping chat client', { sessionId });
+  }
+
+  // Wait for all clients to stop (or timeout)
+  await Promise.all(stopPromises);
+
+  // Explicitly remove all listeners from clients in case exit events didn't fire
+  // (e.g., timeout reached, client already dead, or kill() failed to emit exit)
   for (const client of chatClients.values()) {
-    client.kill();
+    client.removeAllListeners();
   }
   chatClients.clear();
+
   // Clean up all terminals (disposes listeners before killing)
   terminalService.cleanup();
+
   // Clean up all agent processes
   agentProcessAdapter.cleanup();
-  // Close WebSocket server
-  wss.close();
-  // Close HTTP server
-  server.close();
+
+  // Clean up session file logger
+  sessionFileLogger.cleanup();
+
+  // Stop periodic orphan cleanup
+  reconciliationService.stopPeriodicCleanup();
+
   // Disconnect from database
   await prisma.$disconnect();
-  // Give child processes a moment to terminate
-  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  logger.info('Graceful cleanup completed');
 };
 
 // Graceful shutdown
@@ -1261,15 +1428,25 @@ process.on('SIGINT', async () => {
 // Handle uncaught exceptions - ensure process cleanup before crash
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught exception, cleaning up processes', error);
+  // Synchronous cleanup
+  clearInterval(heartbeatInterval);
+  // Cancel all terminal grace periods
+  for (const timeout of terminalGracePeriods.values()) {
+    clearTimeout(timeout);
+  }
+  terminalGracePeriods.clear();
   // Synchronous cleanup of agent processes to prevent orphans
   agentProcessAdapter.cleanup();
-  // Clean up chat clients
+  // Clean up chat clients - remove listeners before kill to prevent any callbacks
   for (const client of chatClients.values()) {
+    client.removeAllListeners();
     client.kill();
   }
   chatClients.clear();
   // Clean up all terminals
   terminalService.cleanup();
+  // Clean up session file logger
+  sessionFileLogger.cleanup();
   // Exit with error code
   process.exit(1);
 });

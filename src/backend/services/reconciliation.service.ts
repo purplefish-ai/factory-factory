@@ -9,12 +9,44 @@ import { createLogger } from './logger.service';
 
 const logger = createLogger('reconciliation');
 
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 class ReconciliationService {
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
   /**
    * Main reconciliation - just ensures workspaces have worktrees
    */
   async reconcile(): Promise<void> {
     await this.reconcileWorkspaces();
+  }
+
+  /**
+   * Start periodic orphan cleanup
+   */
+  startPeriodicCleanup(): void {
+    if (this.cleanupInterval) {
+      return; // Already running
+    }
+
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupOrphans().catch((err) => {
+        logger.error('Periodic orphan cleanup failed', err as Error);
+      });
+    }, CLEANUP_INTERVAL_MS);
+
+    logger.info('Started periodic orphan cleanup', { intervalMs: CLEANUP_INTERVAL_MS });
+  }
+
+  /**
+   * Stop periodic orphan cleanup
+   */
+  stopPeriodicCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      logger.info('Stopped periodic orphan cleanup');
+    }
   }
 
   /**

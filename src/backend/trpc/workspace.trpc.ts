@@ -7,6 +7,8 @@ import { GitClientFactory } from '../clients/git.client';
 import { gitCommand } from '../lib/shell';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { createLogger } from '../services/logger.service';
+import { sessionService } from '../services/session.service';
+import { terminalService } from '../services/terminal.service';
 import { publicProcedure, router } from './trpc';
 
 const logger = createLogger('workspace-trpc');
@@ -275,12 +277,32 @@ export const workspaceRouter = router({
     }),
 
   // Archive a workspace
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    // Clean up running sessions and terminals before archiving
+    try {
+      await sessionService.stopWorkspaceSessions(input.id);
+      terminalService.destroyWorkspaceTerminals(input.id);
+    } catch (error) {
+      logger.error('Failed to cleanup workspace resources before archive', {
+        workspaceId: input.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return workspaceAccessor.archive(input.id);
   }),
 
   // Delete a workspace
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    // Clean up running sessions and terminals before deleting
+    try {
+      await sessionService.stopWorkspaceSessions(input.id);
+      terminalService.destroyWorkspaceTerminals(input.id);
+    } catch (error) {
+      logger.error('Failed to cleanup workspace resources before delete', {
+        workspaceId: input.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return workspaceAccessor.delete(input.id);
   }),
 

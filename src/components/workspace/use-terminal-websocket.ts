@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getReconnectDelay, MAX_RECONNECT_ATTEMPTS } from '@/lib/websocket-config';
 
 // =============================================================================
 // Types
@@ -44,6 +45,7 @@ export function useTerminalWebSocket({
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
   // Track intentional closes to prevent reconnection during React Strict Mode unmount
   const intentionalCloseRef = useRef(false);
 
@@ -80,6 +82,7 @@ export function useTerminalWebSocket({
 
     ws.onopen = () => {
       setConnected(true);
+      reconnectAttemptsRef.current = 0;
     };
 
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket message handler requires handling multiple message types
@@ -123,10 +126,12 @@ export function useTerminalWebSocket({
 
       // Only attempt to reconnect if this wasn't an intentional close
       // (e.g., from React Strict Mode unmount)
-      if (!intentionalCloseRef.current) {
+      if (!intentionalCloseRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        const delay = getReconnectDelay(reconnectAttemptsRef.current);
+        reconnectAttemptsRef.current += 1;
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
-        }, 3000);
+        }, delay);
       }
     };
 
