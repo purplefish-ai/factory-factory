@@ -20,33 +20,57 @@ import { cn } from '@/lib/utils';
 import { ToolInfoRenderer } from './tool-renderers';
 
 // =============================================================================
-// Agent Running Context
+// Thinking Completion Context
 // =============================================================================
 
-/**
- * Context to track whether the agent is currently running.
- * Used by ThinkingRenderer to only animate the spinner when actively streaming.
- */
-const AgentRunningContext = React.createContext<boolean>(false);
+interface ThinkingCompletionState {
+  /**
+   * The ID of the last message that contains thinking content.
+   * Only this message's thinking could potentially be "in progress".
+   */
+  lastThinkingMessageId: string | null;
+  /**
+   * Whether the agent is currently running/streaming.
+   */
+  running: boolean;
+}
+
+const ThinkingCompletionContext = React.createContext<ThinkingCompletionState>({
+  lastThinkingMessageId: null,
+  running: false,
+});
 
 /**
- * Provider component for the agent running state.
+ * Provider component for thinking completion state.
+ * Determines which thinking blocks should show as "in progress" vs "complete".
  */
-export function AgentRunningProvider({
+export function ThinkingCompletionProvider({
+  lastThinkingMessageId,
   running,
   children,
-}: {
-  running: boolean;
-  children: React.ReactNode;
-}) {
-  return <AgentRunningContext.Provider value={running}>{children}</AgentRunningContext.Provider>;
+}: ThinkingCompletionState & { children: React.ReactNode }) {
+  const value = React.useMemo(
+    () => ({ lastThinkingMessageId, running }),
+    [lastThinkingMessageId, running]
+  );
+  return (
+    <ThinkingCompletionContext.Provider value={value}>
+      {children}
+    </ThinkingCompletionContext.Provider>
+  );
 }
 
 /**
- * Hook to access the agent running state.
+ * Hook to check if a thinking block is still in progress.
+ * @param messageId - The ID of the message containing the thinking block
+ * @returns true if the thinking is in progress (should animate), false if complete
  */
-function useAgentRunning() {
-  return React.useContext(AgentRunningContext);
+function useIsThinkingInProgress(messageId: string | undefined): boolean {
+  const { lastThinkingMessageId, running } = React.useContext(ThinkingCompletionContext);
+  // Thinking is only "in progress" if:
+  // 1. The agent is running
+  // 2. AND this is the last message with thinking content
+  return running && messageId != null && messageId === lastThinkingMessageId;
 }
 
 // =============================================================================
@@ -55,13 +79,19 @@ function useAgentRunning() {
 
 interface AssistantMessageRendererProps {
   message: ClaudeMessage;
+  /** The ID of the ChatMessage containing this ClaudeMessage (for thinking completion tracking) */
+  messageId?: string;
   className?: string;
 }
 
 /**
  * Renders an assistant message, handling different message types.
  */
-export function AssistantMessageRenderer({ message, className }: AssistantMessageRendererProps) {
+export function AssistantMessageRenderer({
+  message,
+  messageId,
+  className,
+}: AssistantMessageRendererProps) {
   // Handle tool use/result messages
   if (isToolUseMessage(message) || isToolResultMessage(message)) {
     return <ToolCallRenderer message={message} className={className} />;
@@ -79,7 +109,9 @@ export function AssistantMessageRenderer({ message, className }: AssistantMessag
 
   // Handle stream events
   if (message.type === 'stream_event' && message.event) {
-    return <StreamEventRenderer event={message.event} className={className} />;
+    return (
+      <StreamEventRenderer event={message.event} messageId={messageId} className={className} />
+    );
   }
 
   // Handle regular assistant/user messages with content
@@ -151,13 +183,15 @@ export function ResultRenderer({ message, className }: ResultRendererProps) {
 
 interface StreamEventRendererProps {
   event: ClaudeStreamEvent;
+  /** The ID of the ChatMessage containing this event (for thinking completion tracking) */
+  messageId?: string;
   className?: string;
 }
 
 /**
  * Renders a stream event, handling different event types.
  */
-function StreamEventRenderer({ event, className }: StreamEventRendererProps) {
+function StreamEventRenderer({ event, messageId, className }: StreamEventRendererProps) {
   switch (event.type) {
     case 'content_block_start': {
       const block = event.content_block;
@@ -169,7 +203,9 @@ function StreamEventRenderer({ event, className }: StreamEventRendererProps) {
         );
       }
       if (isThinkingContent(block)) {
-        return <ThinkingRenderer text={block.thinking} className={className} />;
+        return (
+          <ThinkingRenderer text={block.thinking} messageId={messageId} className={className} />
+        );
       }
       // Tool use blocks are handled by ToolInfoRenderer
       return null;
@@ -248,16 +284,21 @@ export function ErrorRenderer({ message, className }: ErrorRendererProps) {
 
 interface ThinkingRendererProps {
   text: string;
+  /** The ID of the ChatMessage containing this thinking block (for completion tracking) */
+  messageId?: string;
   className?: string;
 }
 
 /**
  * Renders thinking/reasoning content.
- * Only shows animated spinner when agent is actively running.
+ * Only shows animated spinner when the thinking is actively in progress.
+ * Completion is inferred from the chat context:
+ * - If there's subsequent content after this thinking block, it's complete
+ * - Only the last thinking block (while agent is running) shows animation
  */
-function ThinkingRenderer({ text, className }: ThinkingRendererProps) {
+function ThinkingRenderer({ text, messageId, className }: ThinkingRendererProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
-  const isRunning = useAgentRunning();
+  const isInProgress = useIsThinkingInProgress(messageId);
 
   // Show truncated version if long
   const shouldTruncate = text.length > 200;
@@ -271,7 +312,7 @@ function ThinkingRenderer({ text, className }: ThinkingRendererProps) {
       )}
     >
       <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-        <Loader2 className={cn('h-3 w-3', isRunning && 'animate-spin')} />
+        <Loader2 className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
         <span>Thinking</span>
       </div>
       <div className="text-sm text-muted-foreground italic whitespace-pre-wrap">{displayText}</div>

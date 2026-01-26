@@ -3,9 +3,19 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
-import { extractTextFromMessage, groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
+import {
+  extractTextFromMessage,
+  groupAdjacentToolCalls,
+  isThinkingContent,
+  isToolSequence,
+} from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
-import { AssistantMessageRenderer, LoadingIndicator, MessageWrapper } from './message-renderers';
+import {
+  AssistantMessageRenderer,
+  LoadingIndicator,
+  MessageWrapper,
+  ThinkingCompletionProvider,
+} from './message-renderers';
 import { StatsPanel } from './stats-panel';
 import { MinimalStatus, StatusBar } from './status-bar';
 import { ToolSequenceGroup } from './tool-renderers';
@@ -58,56 +68,61 @@ export function AgentActivity({
     messagesEndRef,
   } = useAgentWebSocket({ agentId, autoConnect });
 
+  // Find the last message with thinking content for completion tracking
+  const lastThinkingMessageId = findLastThinkingMessageId(messages);
+
   return (
-    <div className={cn('flex flex-col', className)}>
-      {/* Status Bar */}
-      {showStatusBar && (
-        <StatusBar
-          connectionState={connectionState}
-          running={running}
-          agentMetadata={agentMetadata}
-          error={error}
-          onReconnect={reconnect}
-          className="mb-3"
-        />
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex gap-4">
-        {/* Message List */}
-        <div className="flex-1 min-w-0">
-          <ScrollArea className={cn('rounded-md border', height)}>
-            <div className="p-4 space-y-2">
-              {/* Empty State */}
-              {messages.length === 0 && !running && (
-                <EmptyState connectionState={connectionState} />
-              )}
-
-              {/* Messages (with tool call grouping) */}
-              {groupAdjacentToolCalls(messages).map((item) => (
-                <GroupedMessageItemRenderer
-                  key={isToolSequence(item) ? item.id : item.id}
-                  item={item}
-                />
-              ))}
-
-              {/* Loading Indicator */}
-              {running && <LoadingIndicator className="py-4" />}
-
-              {/* Scroll Anchor */}
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
-        </div>
-
-        {/* Stats Panel (side) */}
-        {showStats && (
-          <div className="w-64 shrink-0">
-            <StatsPanel stats={tokenStats} />
-          </div>
+    <ThinkingCompletionProvider lastThinkingMessageId={lastThinkingMessageId} running={running}>
+      <div className={cn('flex flex-col', className)}>
+        {/* Status Bar */}
+        {showStatusBar && (
+          <StatusBar
+            connectionState={connectionState}
+            running={running}
+            agentMetadata={agentMetadata}
+            error={error}
+            onReconnect={reconnect}
+            className="mb-3"
+          />
         )}
+
+        {/* Main Content Area */}
+        <div className="flex gap-4">
+          {/* Message List */}
+          <div className="flex-1 min-w-0">
+            <ScrollArea className={cn('rounded-md border', height)}>
+              <div className="p-4 space-y-2">
+                {/* Empty State */}
+                {messages.length === 0 && !running && (
+                  <EmptyState connectionState={connectionState} />
+                )}
+
+                {/* Messages (with tool call grouping) */}
+                {groupAdjacentToolCalls(messages).map((item) => (
+                  <GroupedMessageItemRenderer
+                    key={isToolSequence(item) ? item.id : item.id}
+                    item={item}
+                  />
+                ))}
+
+                {/* Loading Indicator */}
+                {running && <LoadingIndicator className="py-4" />}
+
+                {/* Scroll Anchor */}
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Stats Panel (side) */}
+          {showStats && (
+            <div className="w-64 shrink-0">
+              <StatsPanel stats={tokenStats} />
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </ThinkingCompletionProvider>
   );
 }
 
@@ -193,7 +208,7 @@ export function MessageItem({ message }: MessageItemProps) {
   if (message.message) {
     return (
       <MessageWrapper chatMessage={message}>
-        <AssistantMessageRenderer message={message.message} />
+        <AssistantMessageRenderer message={message.message} messageId={message.id} />
       </MessageWrapper>
     );
   }
@@ -298,6 +313,34 @@ function EmptyState({ connectionState }: EmptyStateProps) {
 }
 
 // =============================================================================
+// Helper: Find last thinking message
+// =============================================================================
+
+/**
+ * Finds the ID of the last message that contains thinking content.
+ * This is used to determine which thinking block is potentially "in progress".
+ */
+function findLastThinkingMessageId(messages: ChatMessage[]): string | null {
+  // Iterate backwards to find the last thinking message
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.source === 'claude' && msg.message) {
+      const claudeMsg = msg.message;
+      // Check if this is a stream event with thinking content
+      if (claudeMsg.type === 'stream_event' && claudeMsg.event) {
+        if (
+          claudeMsg.event.type === 'content_block_start' &&
+          isThinkingContent(claudeMsg.event.content_block)
+        ) {
+          return msg.id;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// =============================================================================
 // Mock Agent Activity (for Storybook/testing)
 // =============================================================================
 
@@ -342,55 +385,60 @@ export function MockAgentActivity({
   className,
   height = 'h-[500px]',
 }: MockAgentActivityProps) {
+  // Find the last message with thinking content for completion tracking
+  const lastThinkingMessageId = findLastThinkingMessageId(messages);
+
   return (
-    <div className={cn('flex flex-col', className)}>
-      {/* Status Bar */}
-      {showStatusBar && (
-        <StatusBar
-          connectionState={connectionState}
-          running={running}
-          agentMetadata={agentMetadata}
-          error={error}
-          onReconnect={() => {
-            // No-op for mock component
-          }}
-          className="mb-3"
-        />
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex gap-4">
-        {/* Message List */}
-        <div className="flex-1 min-w-0">
-          <ScrollArea className={cn('rounded-md border', height)}>
-            <div className="p-4 space-y-2">
-              {/* Empty State */}
-              {messages.length === 0 && !running && (
-                <EmptyState connectionState={connectionState} />
-              )}
-
-              {/* Messages (with tool call grouping) */}
-              {groupAdjacentToolCalls(messages).map((item) => (
-                <GroupedMessageItemRenderer
-                  key={isToolSequence(item) ? item.id : item.id}
-                  item={item}
-                />
-              ))}
-
-              {/* Loading Indicator */}
-              {running && <LoadingIndicator className="py-4" />}
-            </div>
-          </ScrollArea>
-        </div>
-
-        {/* Stats Panel (side) */}
-        {showStats && tokenStats && (
-          <div className="w-64 shrink-0">
-            <StatsPanel stats={tokenStats} />
-          </div>
+    <ThinkingCompletionProvider lastThinkingMessageId={lastThinkingMessageId} running={running}>
+      <div className={cn('flex flex-col', className)}>
+        {/* Status Bar */}
+        {showStatusBar && (
+          <StatusBar
+            connectionState={connectionState}
+            running={running}
+            agentMetadata={agentMetadata}
+            error={error}
+            onReconnect={() => {
+              // No-op for mock component
+            }}
+            className="mb-3"
+          />
         )}
+
+        {/* Main Content Area */}
+        <div className="flex gap-4">
+          {/* Message List */}
+          <div className="flex-1 min-w-0">
+            <ScrollArea className={cn('rounded-md border', height)}>
+              <div className="p-4 space-y-2">
+                {/* Empty State */}
+                {messages.length === 0 && !running && (
+                  <EmptyState connectionState={connectionState} />
+                )}
+
+                {/* Messages (with tool call grouping) */}
+                {groupAdjacentToolCalls(messages).map((item) => (
+                  <GroupedMessageItemRenderer
+                    key={isToolSequence(item) ? item.id : item.id}
+                    item={item}
+                  />
+                ))}
+
+                {/* Loading Indicator */}
+                {running && <LoadingIndicator className="py-4" />}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Stats Panel (side) */}
+          {showStats && tokenStats && (
+            <div className="w-64 shrink-0">
+              <StatsPanel stats={tokenStats} />
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </ThinkingCompletionProvider>
   );
 }
 
