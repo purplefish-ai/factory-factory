@@ -522,6 +522,43 @@ class AgentAccessor {
       },
     });
   }
+
+  /**
+   * Update CLI process info including PID for orphan tracking
+   */
+  updateCliProcess(
+    agentId: string,
+    data: {
+      cliProcessId?: string | null;
+      cliProcessStatus?: CliProcessStatus | null;
+      cliProcessPid?: number | null;
+      cliProcessStartedAt?: Date | null;
+      cliProcessExitCode?: number | null;
+    }
+  ): Promise<Agent> {
+    return prisma.agent.update({
+      where: { id: agentId },
+      data,
+    });
+  }
+
+  /**
+   * Find agents with running or starting CLI processes.
+   * Used for orphan cleanup on startup.
+   */
+  findRunningProcesses(): Promise<Agent[]> {
+    return prisma.agent.findMany({
+      where: {
+        cliProcessStatus: {
+          in: ['RUNNING', 'STARTING'],
+        },
+      },
+      include: {
+        currentTask: true,
+        assignedTasks: true,
+      },
+    });
+  }
 }
 
 export const agentAccessor = new AgentAccessor();

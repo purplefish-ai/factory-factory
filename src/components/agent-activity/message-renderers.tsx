@@ -1,99 +1,425 @@
 'use client';
 
+import { AlertTriangle, Bot, Loader2 } from 'lucide-react';
+import * as React from 'react';
+import { MarkdownRenderer } from '@/components/ui/markdown';
+import type {
+  ChatMessage,
+  ClaudeMessage,
+  ClaudeStreamEvent,
+  ContentBlockDelta,
+} from '@/lib/claude-types';
+import {
+  extractTextFromMessage,
+  isTextContent,
+  isThinkingContent,
+  isToolResultMessage,
+  isToolUseMessage,
+} from '@/lib/claude-types';
+import { cn } from '@/lib/utils';
+import { ToolInfoRenderer } from './tool-renderers';
+
+// =============================================================================
+// Thinking Completion Context
+// =============================================================================
+
+interface ThinkingCompletionState {
+  /**
+   * The ID of the last message that contains thinking content.
+   * Only this message's thinking could potentially be "in progress".
+   */
+  lastThinkingMessageId: string | null;
+  /**
+   * Whether the agent is currently running/streaming.
+   */
+  running: boolean;
+}
+
+const ThinkingCompletionContext = React.createContext<ThinkingCompletionState>({
+  lastThinkingMessageId: null,
+  running: false,
+});
+
 /**
- * Message type renderers for agent activity
- * Extends chat renderers with agent-specific formatting
+ * Provider component for thinking completion state.
+ * Determines which thinking blocks should show as "in progress" vs "complete".
  */
+export function ThinkingCompletionProvider({
+  lastThinkingMessageId,
+  running,
+  children,
+}: ThinkingCompletionState & { children: React.ReactNode }) {
+  const value = React.useMemo(
+    () => ({ lastThinkingMessageId, running }),
+    [lastThinkingMessageId, running]
+  );
+  return (
+    <ThinkingCompletionContext.Provider value={value}>
+      {children}
+    </ThinkingCompletionContext.Provider>
+  );
+}
 
-import type { ClaudeMessage } from '../chat/types';
+/**
+ * Hook to check if a thinking block is still in progress.
+ * @param messageId - The ID of the message containing the thinking block
+ * @returns true if the thinking is in progress (should animate), false if complete
+ */
+function useIsThinkingInProgress(messageId: string | undefined): boolean {
+  const { lastThinkingMessageId, running } = React.useContext(ThinkingCompletionContext);
+  // Thinking is only "in progress" if:
+  // 1. The agent is running
+  // 2. AND this is the last message with thinking content
+  return running && messageId != null && messageId === lastThinkingMessageId;
+}
 
-/** Render assistant text message */
-export function AssistantMessageRenderer({ message }: { message: ClaudeMessage }) {
-  const content = (message.message as { content?: Array<{ type?: string; text?: string }> })
-    ?.content;
-  // Filter to only text blocks (skip tool_use, thinking, etc.)
-  const text =
-    content
-      ?.filter((c) => c.type === 'text' || !c.type)
-      ?.map((c) => c.text)
-      .filter(Boolean)
-      .join('') || '';
+// =============================================================================
+// Assistant Message Renderer
+// =============================================================================
 
-  // Don't render if no text content
-  if (!text) {
-    return null;
+interface AssistantMessageRendererProps {
+  message: ClaudeMessage;
+  /** The ID of the ChatMessage containing this ClaudeMessage (for thinking completion tracking) */
+  messageId?: string;
+  className?: string;
+}
+
+/**
+ * Renders an assistant message, handling different message types.
+ */
+export function AssistantMessageRenderer({
+  message,
+  messageId,
+  className,
+}: AssistantMessageRendererProps) {
+  // Handle tool use/result messages
+  if (isToolUseMessage(message) || isToolResultMessage(message)) {
+    return <ToolCallRenderer message={message} className={className} />;
   }
 
-  return (
-    <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">{text}</div>
-  );
-}
-
-/** Render result stats (tokens, duration, cost) */
-export function ResultRenderer({ message }: { message: ClaudeMessage }) {
-  const usage = message.usage as { input_tokens?: number; output_tokens?: number };
-  const durationMs = message.duration_ms as number;
-  const costUsd = message.total_cost_usd as number;
-
-  const totalTokens = (usage?.input_tokens || 0) + (usage?.output_tokens || 0);
-  // Format cost - show cents if < $0.01
-  const costDisplay = costUsd < 0.01 ? `${(costUsd * 100).toFixed(2)}c` : `$${costUsd.toFixed(4)}`;
-
-  return (
-    <div className="text-xs text-muted-foreground flex items-center gap-3 py-1 border-t border-border/50 mt-2 pt-2">
-      <span>{totalTokens.toLocaleString()} tokens</span>
-      <span className="text-border">|</span>
-      <span>{((durationMs || 0) / 1000).toFixed(1)}s</span>
-      <span className="text-border">|</span>
-      <span>{costDisplay}</span>
-    </div>
-  );
-}
-
-/** Render system message */
-export function SystemMessageRenderer({ message }: { message: ClaudeMessage }) {
-  return (
-    <div className="p-2 text-xs text-muted-foreground italic text-center">
-      {message.message as string}
-    </div>
-  );
-}
-
-/** Render error message */
-export function ErrorRenderer({ message }: { message: ClaudeMessage }) {
-  return (
-    <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
-      <div className="text-sm font-medium text-red-700 dark:text-red-300">Error</div>
-      <div className="text-sm text-red-600 dark:text-red-400 mt-1">{message.error as string}</div>
-    </div>
-  );
-}
-
-/** Render streaming text delta */
-export function StreamDeltaRenderer({ message }: { message: ClaudeMessage }) {
-  const delta = message.delta as { text?: string };
-  if (!delta?.text) {
-    return null;
+  // Handle result messages with stats
+  if (message.type === 'result') {
+    return <ResultRenderer message={message} className={className} />;
   }
 
-  return <span className="prose prose-sm dark:prose-invert whitespace-pre-wrap">{delta.text}</span>;
+  // Handle error messages
+  if (message.type === 'error') {
+    return <ErrorRenderer message={message} className={className} />;
+  }
+
+  // Handle stream events
+  if (message.type === 'stream_event' && message.event) {
+    return (
+      <StreamEventRenderer event={message.event} messageId={messageId} className={className} />
+    );
+  }
+
+  // Handle regular assistant/user messages with content
+  const text = extractTextFromMessage(message);
+  if (text) {
+    return (
+      <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+        <TextRenderer text={text} />
+      </div>
+    );
+  }
+
+  // Fallback for system messages
+  if (message.type === 'system') {
+    return <SystemMessageRenderer message={message} className={className} />;
+  }
+
+  return null;
 }
 
-/** Dispatch to appropriate renderer based on message type */
-export function MessageRenderer({ message }: { message: ClaudeMessage }) {
-  switch (message.type) {
-    case 'assistant':
-      return <AssistantMessageRenderer message={message} />;
-    case 'result':
-      return <ResultRenderer message={message} />;
-    case 'system':
-      return <SystemMessageRenderer message={message} />;
-    case 'error':
-      return <ErrorRenderer message={message} />;
+// =============================================================================
+// Tool Call Renderer
+// =============================================================================
+
+interface ToolCallRendererProps {
+  message: ClaudeMessage;
+  className?: string;
+}
+
+/**
+ * Renders a tool use or tool result message.
+ */
+export function ToolCallRenderer({ message, className }: ToolCallRendererProps) {
+  return (
+    <div className={cn('my-1', className)}>
+      <ToolInfoRenderer message={message} />
+    </div>
+  );
+}
+
+// =============================================================================
+// Result Renderer
+// =============================================================================
+
+interface ResultRendererProps {
+  message: ClaudeMessage;
+  className?: string;
+}
+
+/**
+ * Renders a result message, typically showing completion info.
+ * Uses markdown rendering to match history-loaded message display.
+ */
+export function ResultRenderer({ message, className }: ResultRendererProps) {
+  // Result messages often just indicate completion; we may not need to render them visibly
+  // But if there's result content, show it with proper markdown formatting
+  if (message.result && typeof message.result === 'string') {
+    return (
+      <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+        <MarkdownRenderer content={message.result} />
+      </div>
+    );
+  }
+
+  // Don't render empty result messages
+  return null;
+}
+
+// =============================================================================
+// Stream Event Renderer
+// =============================================================================
+
+interface StreamEventRendererProps {
+  event: ClaudeStreamEvent;
+  /** The ID of the ChatMessage containing this event (for thinking completion tracking) */
+  messageId?: string;
+  className?: string;
+}
+
+/**
+ * Renders a stream event, handling different event types.
+ */
+function StreamEventRenderer({ event, messageId, className }: StreamEventRendererProps) {
+  switch (event.type) {
+    case 'content_block_start': {
+      const block = event.content_block;
+      if (isTextContent(block)) {
+        return (
+          <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+            <TextRenderer text={block.text} />
+          </div>
+        );
+      }
+      if (isThinkingContent(block)) {
+        return (
+          <ThinkingRenderer text={block.thinking} messageId={messageId} className={className} />
+        );
+      }
+      // Tool use blocks are handled by ToolInfoRenderer
+      return null;
+    }
+
     case 'content_block_delta':
-      return <StreamDeltaRenderer message={message} />;
+      return <StreamDeltaRenderer delta={event.delta} className={className} />;
+
+    case 'message_start':
+    case 'message_delta':
+    case 'message_stop':
+    case 'content_block_stop':
+      // These are structural events, no need to render
+      return null;
+
     default:
-      // Skip unknown message types silently
       return null;
   }
+}
+
+// =============================================================================
+// Stream Delta Renderer
+// =============================================================================
+
+interface StreamDeltaRendererProps {
+  delta: ContentBlockDelta;
+  className?: string;
+}
+
+/**
+ * Renders a stream delta (partial content update).
+ */
+export function StreamDeltaRenderer({ delta, className }: StreamDeltaRendererProps) {
+  if (delta.type === 'text_delta') {
+    return <span className={cn('', className)}>{delta.text}</span>;
+  }
+
+  if (delta.type === 'thinking_delta') {
+    return <span className={cn('text-muted-foreground italic', className)}>{delta.thinking}</span>;
+  }
+
+  return null;
+}
+
+// =============================================================================
+// Error Renderer
+// =============================================================================
+
+interface ErrorRendererProps {
+  message: ClaudeMessage;
+  className?: string;
+}
+
+/**
+ * Renders an error message.
+ */
+export function ErrorRenderer({ message, className }: ErrorRendererProps) {
+  const errorText = message.error || 'An unknown error occurred';
+
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3',
+        className
+      )}
+    >
+      <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+      <div className="text-sm text-destructive">{errorText}</div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Thinking Renderer
+// =============================================================================
+
+interface ThinkingRendererProps {
+  text: string;
+  /** The ID of the ChatMessage containing this thinking block (for completion tracking) */
+  messageId?: string;
+  className?: string;
+}
+
+/**
+ * Renders thinking/reasoning content.
+ * Only shows animated spinner when the thinking is actively in progress.
+ * Completion is inferred from the chat context:
+ * - If there's subsequent content after this thinking block, it's complete
+ * - Only the last thinking block (while agent is running) shows animation
+ */
+function ThinkingRenderer({ text, messageId, className }: ThinkingRendererProps) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const isInProgress = useIsThinkingInProgress(messageId);
+
+  // Show truncated version if long
+  const shouldTruncate = text.length > 200;
+  const displayText = shouldTruncate && !isExpanded ? `${text.slice(0, 200)}...` : text;
+
+  return (
+    <div
+      className={cn(
+        'rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-2',
+        className
+      )}
+    >
+      <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+        <Loader2 className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
+        <span>Thinking</span>
+      </div>
+      <div className="text-sm text-muted-foreground italic whitespace-pre-wrap">{displayText}</div>
+      {shouldTruncate && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-xs text-primary hover:underline mt-1"
+        >
+          {isExpanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// System Message Renderer
+// =============================================================================
+
+interface SystemMessageRendererProps {
+  message: ClaudeMessage;
+  className?: string;
+}
+
+/**
+ * Renders system messages (init, status, etc.).
+ */
+function SystemMessageRenderer({ message, className }: SystemMessageRendererProps) {
+  // System init messages with tools
+  if (message.subtype === 'init' && message.tools) {
+    return (
+      <div className={cn('text-xs text-muted-foreground', className)}>
+        <span>Session initialized with {message.tools.length} tools</span>
+        {message.model && <span className="ml-2">Model: {message.model}</span>}
+      </div>
+    );
+  }
+
+  // Other system messages - usually don't need to be shown
+  return null;
+}
+
+// =============================================================================
+// Text Renderer
+// =============================================================================
+
+interface TextRendererProps {
+  text: string;
+}
+
+/**
+ * Renders text content with full markdown support.
+ */
+function TextRenderer({ text }: TextRendererProps) {
+  return <MarkdownRenderer content={text} />;
+}
+
+// =============================================================================
+// Message Wrapper
+// =============================================================================
+
+interface MessageWrapperProps {
+  chatMessage: ChatMessage;
+  children: React.ReactNode;
+  className?: string;
+}
+
+/**
+ * Wrapper component for consistent message styling.
+ */
+export function MessageWrapper({ chatMessage, children, className }: MessageWrapperProps) {
+  const isUser = chatMessage.source === 'user';
+
+  return (
+    <div className={cn('flex gap-3 py-2', isUser ? 'flex-row-reverse' : '', className)}>
+      <div
+        className={cn(
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
+        )}
+      >
+        {isUser ? <span className="text-xs font-medium">U</span> : <Bot className="h-4 w-4" />}
+      </div>
+      <div className={cn('flex-1 min-w-0', isUser ? 'text-right' : '')}>{children}</div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Loading Indicator
+// =============================================================================
+
+interface LoadingIndicatorProps {
+  className?: string;
+}
+
+/**
+ * Shows a loading/typing indicator when the agent is processing.
+ */
+export function LoadingIndicator({ className }: LoadingIndicatorProps) {
+  return (
+    <div className={cn('flex items-center gap-2 text-muted-foreground', className)}>
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span className="text-sm">Agent is working...</span>
+    </div>
+  );
 }

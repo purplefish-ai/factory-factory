@@ -1,229 +1,497 @@
 'use client';
 
-/**
- * Main agent activity container component
- * Displays Claude messages, tool calls, and agent metadata
- */
-
-import { groupMessages } from '../chat/message-utils';
-import type { ChatMessage, ClaudeMessage } from '../chat/types';
-import { MessageRenderer } from './message-renderers';
-import { CompactStats, StatsPanel } from './stats-panel';
-import { StatusBar } from './status-bar';
-import { ToolCallGroupRenderer } from './tool-renderers';
-import type { AgentMetadata } from './types';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
+import {
+  extractTextFromMessage,
+  groupAdjacentToolCalls,
+  isThinkingContent,
+  isToolSequence,
+} from '@/lib/claude-types';
+import { cn } from '@/lib/utils';
+import {
+  AssistantMessageRenderer,
+  LoadingIndicator,
+  MessageWrapper,
+  ThinkingCompletionProvider,
+} from './message-renderers';
+import { StatsPanel } from './stats-panel';
+import { MinimalStatus, StatusBar } from './status-bar';
+import { ToolSequenceGroup } from './tool-renderers';
 import { useAgentWebSocket } from './use-agent-websocket';
 
-interface AgentActivityProps {
-  /** Agent ID to connect to */
+// =============================================================================
+// Agent Activity Component
+// =============================================================================
+
+export interface AgentActivityProps {
+  /** The agent ID to connect to */
   agentId: string;
-  /** Optional project slug for file links */
+  /** Optional project slug for file path context */
   projectSlug?: string;
   /** Whether to show the stats panel */
   showStats?: boolean;
   /** Whether to show the status bar */
   showStatusBar?: boolean;
-  /** Optional custom class name */
+  /** Additional CSS classes */
   className?: string;
+  /** Height of the scroll area (default: 'h-[500px]') */
+  height?: string;
+  /** Whether to auto-connect on mount */
+  autoConnect?: boolean;
 }
 
-interface AssistantGroupRendererProps {
-  messages: ChatMessage[];
-}
+/**
+ * Main component for viewing agent Claude sessions.
+ * This is a read-only view - agents are controlled by the backend.
+ */
+export function AgentActivity({
+  agentId,
+  projectSlug: _projectSlug,
+  showStats = true,
+  showStatusBar = true,
+  className,
+  height = 'h-[500px]',
+  autoConnect = true,
+}: AgentActivityProps) {
+  const {
+    messages,
+    connected: _connected,
+    connectionState,
+    running,
+    agentMetadata,
+    tokenStats,
+    claudeSessionId: _claudeSessionId,
+    error,
+    reconnect,
+    messagesEndRef,
+  } = useAgentWebSocket({ agentId, autoConnect });
 
-/** Render a group of assistant messages */
-function AssistantGroupRenderer({ messages }: AssistantGroupRendererProps) {
-  const renderedMessages = messages
-    .map((m) => m.message)
-    .filter((m): m is ClaudeMessage => m !== undefined);
-
-  // Check if there's any visible content
-  const hasContent = renderedMessages.some((msg) => {
-    if (msg.type === 'assistant') {
-      const content = (msg.message as { content?: Array<{ type?: string; text?: string }> })
-        ?.content;
-      return content?.some((c) => (c.type === 'text' || !c.type) && c.text);
-    }
-    if (msg.type === 'content_block_delta') {
-      return (msg.delta as { text?: string })?.text;
-    }
-    if (msg.type === 'result') {
-      return true; // Result messages have stats to display
-    }
-    if (msg.type === 'system') {
-      return typeof msg.message === 'string' && msg.message.length > 0;
-    }
-    if (msg.type === 'error') {
-      return !!(msg.error as string);
-    }
-    return false;
-  });
-
-  if (!hasContent) {
-    return null;
-  }
+  // Find the last message with thinking content for completion tracking
+  const lastThinkingMessageId = findLastThinkingMessageId(messages);
 
   return (
-    <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-      <div className="text-xs text-muted-foreground font-medium">Claude</div>
-      {renderedMessages.map((msg) => (
-        <MessageRenderer key={`${msg.type}-${msg.timestamp}`} message={msg} />
-      ))}
+    <ThinkingCompletionProvider lastThinkingMessageId={lastThinkingMessageId} running={running}>
+      <div className={cn('flex flex-col', className)}>
+        {/* Status Bar */}
+        {showStatusBar && (
+          <StatusBar
+            connectionState={connectionState}
+            running={running}
+            agentMetadata={agentMetadata}
+            error={error}
+            onReconnect={reconnect}
+            className="mb-3"
+          />
+        )}
+
+        {/* Main Content Area */}
+        <div className="flex gap-4">
+          {/* Message List */}
+          <div className="flex-1 min-w-0">
+            <ScrollArea className={cn('rounded-md border', height)}>
+              <div className="p-4 space-y-2">
+                {/* Empty State */}
+                {messages.length === 0 && !running && (
+                  <EmptyState connectionState={connectionState} />
+                )}
+
+                {/* Messages (with tool call grouping) */}
+                {groupAdjacentToolCalls(messages).map((item) => (
+                  <GroupedMessageItemRenderer
+                    key={isToolSequence(item) ? item.id : item.id}
+                    item={item}
+                  />
+                ))}
+
+                {/* Loading Indicator */}
+                {running && <LoadingIndicator className="py-4" />}
+
+                {/* Scroll Anchor */}
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Stats Panel (side) */}
+          {showStats && (
+            <div className="w-64 shrink-0">
+              <StatsPanel stats={tokenStats} />
+            </div>
+          )}
+        </div>
+      </div>
+    </ThinkingCompletionProvider>
+  );
+}
+
+// =============================================================================
+// Compact Agent Activity
+// =============================================================================
+
+export interface CompactAgentActivityProps {
+  agentId: string;
+  className?: string;
+  maxMessages?: number;
+}
+
+/**
+ * A compact version of the agent activity viewer.
+ * Shows fewer messages and uses inline stats.
+ */
+export function CompactAgentActivity({
+  agentId,
+  className,
+  maxMessages = 10,
+}: CompactAgentActivityProps) {
+  const {
+    messages,
+    connectionState,
+    running,
+    tokenStats,
+    reconnect: _reconnect,
+    messagesEndRef,
+  } = useAgentWebSocket({ agentId });
+
+  // Only show the last N messages
+  const displayMessages = messages.slice(-maxMessages);
+
+  return (
+    <div className={cn('rounded-md border', className)}>
+      {/* Header with status */}
+      <div className="flex items-center justify-between border-b px-3 py-2">
+        <div className="flex items-center gap-2">
+          <MinimalStatus connectionState={connectionState} running={running} />
+          <span className="text-sm font-medium">Agent Activity</span>
+        </div>
+        <StatsPanel stats={tokenStats} variant="compact" />
+      </div>
+
+      {/* Message List */}
+      <ScrollArea className="h-48">
+        <div className="p-3 space-y-2">
+          {displayMessages.map((message) => (
+            <CompactMessageItem key={message.id} message={message} />
+          ))}
+
+          {running && <LoadingIndicator className="py-2" />}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
     </div>
   );
 }
 
-interface MessageListProps {
-  messages: ChatMessage[];
-  projectSlug?: string;
+// =============================================================================
+// Message Item
+// =============================================================================
+
+export interface MessageItemProps {
+  message: ChatMessage;
 }
 
-/** Render grouped messages */
-function MessageList({ messages, projectSlug }: MessageListProps) {
-  const groups = groupMessages(messages);
-
-  if (messages.length === 0) {
+export function MessageItem({ message }: MessageItemProps) {
+  // User messages
+  if (message.source === 'user') {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <p className="text-sm">No messages yet</p>
-          <p className="text-xs mt-1">Waiting for agent activity...</p>
+      <MessageWrapper chatMessage={message}>
+        <div className="rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block">
+          {message.text}
         </div>
+      </MessageWrapper>
+    );
+  }
+
+  // Claude messages
+  if (message.message) {
+    return (
+      <MessageWrapper chatMessage={message}>
+        <AssistantMessageRenderer message={message.message} messageId={message.id} />
+      </MessageWrapper>
+    );
+  }
+
+  return null;
+}
+
+// =============================================================================
+// Grouped Message Item Renderer
+// =============================================================================
+
+export interface GroupedMessageItemRendererProps {
+  item: GroupedMessageItem;
+}
+
+/**
+ * Renders either a regular message or a tool sequence group.
+ */
+export function GroupedMessageItemRenderer({ item }: GroupedMessageItemRendererProps) {
+  if (isToolSequence(item)) {
+    return <ToolSequenceGroup sequence={item} />;
+  }
+  return <MessageItem message={item} />;
+}
+
+// =============================================================================
+// Compact Message Item
+// =============================================================================
+
+interface CompactMessageItemProps {
+  message: ChatMessage;
+}
+
+function CompactMessageItem({ message }: CompactMessageItemProps) {
+  if (message.source === 'user') {
+    return (
+      <div className="text-sm text-muted-foreground">
+        <span className="font-medium">User:</span> {message.text}
+      </div>
+    );
+  }
+
+  if (message.message) {
+    const text = extractTextFromMessage(message.message);
+    if (!text) {
+      return null;
+    }
+
+    // Truncate long messages
+    const displayText = text.length > 100 ? `${text.slice(0, 100)}...` : text;
+
+    return (
+      <div className="text-sm">
+        <span className="font-medium text-muted-foreground">Agent:</span> <span>{displayText}</span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// =============================================================================
+// Empty State
+// =============================================================================
+
+interface EmptyStateProps {
+  connectionState: string;
+}
+
+function EmptyState({ connectionState }: EmptyStateProps) {
+  if (connectionState === 'connecting') {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Skeleton className="h-12 w-12 rounded-full mb-4" />
+        <Skeleton className="h-4 w-32 mb-2" />
+        <Skeleton className="h-3 w-48" />
+      </div>
+    );
+  }
+
+  if (connectionState === 'error' || connectionState === 'disconnected') {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+          <span className="text-2xl">!</span>
+        </div>
+        <p className="font-medium">Connection Lost</p>
+        <p className="text-sm">Unable to connect to agent activity stream</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {groups.map((group) => {
-        if (group.type === 'user') {
-          // User messages shouldn't appear in agent activity, but handle gracefully
-          return (
-            <div key={group.id} className="p-4 bg-primary/10 rounded-lg ml-8">
-              <div className="text-xs text-muted-foreground mb-2 font-medium">User</div>
-              <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                {group.messages[0].text || ''}
-              </div>
-            </div>
-          );
-        }
-        if (group.type === 'tool_group') {
-          const toolMessages = group.messages
-            .map((m) => m.message)
-            .filter((m): m is ClaudeMessage => m !== undefined);
-          return (
-            <ToolCallGroupRenderer
-              key={group.id}
-              messages={toolMessages}
-              projectSlug={projectSlug}
-            />
-          );
-        }
-        return <AssistantGroupRenderer key={group.id} messages={group.messages} />;
-      })}
-    </div>
-  );
-}
-
-interface AgentInfoProps {
-  metadata: AgentMetadata;
-}
-
-/** Display agent metadata */
-function AgentInfo({ metadata }: AgentInfoProps) {
-  return (
-    <div className="px-4 py-3 bg-muted/30 border-b space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium">{metadata.type}</span>
-          {metadata.currentTask && (
-            <span className="text-sm text-muted-foreground">
-              Working on: {metadata.currentTask.title}
-            </span>
-          )}
-        </div>
-        <span className="text-xs font-mono text-muted-foreground">
-          {metadata.id.slice(0, 8)}...
-        </span>
+    <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+      <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+        <span className="text-2xl">-</span>
       </div>
-      {metadata.worktreePath && (
-        <div className="text-xs text-muted-foreground font-mono truncate">
-          {metadata.worktreePath}
-        </div>
-      )}
+      <p className="font-medium">No Activity Yet</p>
+      <p className="text-sm">Agent output will appear here when activity starts</p>
     </div>
   );
 }
 
-/** Main agent activity component */
-export function AgentActivity({
-  agentId,
-  projectSlug,
+// =============================================================================
+// Helper: Find last thinking message
+// =============================================================================
+
+/**
+ * Finds the ID of the last message that contains thinking content.
+ * This is used to determine which thinking block is potentially "in progress".
+ */
+function findLastThinkingMessageId(messages: ChatMessage[]): string | null {
+  // Iterate backwards to find the last thinking message
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.source === 'claude' && msg.message) {
+      const claudeMsg = msg.message;
+      // Check if this is a stream event with thinking content
+      if (claudeMsg.type === 'stream_event' && claudeMsg.event) {
+        if (
+          claudeMsg.event.type === 'content_block_start' &&
+          isThinkingContent(claudeMsg.event.content_block)
+        ) {
+          return msg.id;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// =============================================================================
+// Mock Agent Activity (for Storybook/testing)
+// =============================================================================
+
+import type { AgentMetadata, ConnectionState, TokenStats } from './types';
+
+export interface MockAgentActivityProps {
+  /** Pre-loaded messages to display */
+  messages: ChatMessage[];
+  /** Connection state to simulate */
+  connectionState?: ConnectionState;
+  /** Whether the agent appears to be running */
+  running?: boolean;
+  /** Agent metadata to display */
+  agentMetadata?: AgentMetadata | null;
+  /** Token stats to display */
+  tokenStats?: TokenStats | null;
+  /** Error message to display */
+  error?: string | null;
+  /** Whether to show the stats panel */
+  showStats?: boolean;
+  /** Whether to show the status bar */
+  showStatusBar?: boolean;
+  /** Additional CSS classes */
+  className?: string;
+  /** Height of the scroll area */
+  height?: string;
+}
+
+/**
+ * Mock version of AgentActivity for Storybook testing.
+ * Accepts messages and state as props instead of using WebSocket.
+ */
+export function MockAgentActivity({
+  messages,
+  connectionState = 'connected',
+  running = false,
+  agentMetadata = null,
+  tokenStats = null,
+  error = null,
   showStats = true,
   showStatusBar = true,
-  className = '',
-}: AgentActivityProps) {
-  const {
-    messages,
-    connectionState,
-    running,
-    agentMetadata,
-    tokenStats,
-    error,
-    reconnect,
-    messagesEndRef,
-  } = useAgentWebSocket({ agentId });
+  className,
+  height = 'h-[500px]',
+}: MockAgentActivityProps) {
+  // Find the last message with thinking content for completion tracking
+  const lastThinkingMessageId = findLastThinkingMessageId(messages);
 
   return (
-    <div className={`flex flex-col h-full ${className}`}>
-      {/* Status bar */}
-      {showStatusBar && (
-        <StatusBar
-          connectionState={connectionState}
-          running={running}
-          agentMetadata={agentMetadata}
-          onReconnect={reconnect}
-        />
-      )}
+    <ThinkingCompletionProvider lastThinkingMessageId={lastThinkingMessageId} running={running}>
+      <div className={cn('flex flex-col', className)}>
+        {/* Status Bar */}
+        {showStatusBar && (
+          <StatusBar
+            connectionState={connectionState}
+            running={running}
+            agentMetadata={agentMetadata}
+            error={error}
+            onReconnect={() => {
+              // No-op for mock component
+            }}
+            className="mb-3"
+          />
+        )}
 
-      {/* Agent info */}
-      {agentMetadata && <AgentInfo metadata={agentMetadata} />}
+        {/* Main Content Area */}
+        <div className="flex gap-4">
+          {/* Message List */}
+          <div className="flex-1 min-w-0">
+            <ScrollArea className={cn('rounded-md border', height)}>
+              <div className="p-4 space-y-2">
+                {/* Empty State */}
+                {messages.length === 0 && !running && (
+                  <EmptyState connectionState={connectionState} />
+                )}
 
-      {/* Main content area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
-              <div className="text-sm font-medium text-red-700 dark:text-red-300">Error</div>
-              <div className="text-sm text-red-600 dark:text-red-400 mt-1">{error}</div>
+                {/* Messages (with tool call grouping) */}
+                {groupAdjacentToolCalls(messages).map((item) => (
+                  <GroupedMessageItemRenderer
+                    key={isToolSequence(item) ? item.id : item.id}
+                    item={item}
+                  />
+                ))}
+
+                {/* Loading Indicator */}
+                {running && <LoadingIndicator className="py-4" />}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Stats Panel (side) */}
+          {showStats && tokenStats && (
+            <div className="w-64 shrink-0">
+              <StatsPanel stats={tokenStats} />
             </div>
           )}
-
-          <MessageList messages={messages} projectSlug={projectSlug} />
-
-          {/* Scroll anchor */}
-          <div ref={messagesEndRef} />
         </div>
-
-        {/* Stats sidebar */}
-        {showStats && (
-          <div className="w-64 border-l p-4 hidden lg:block">
-            <StatsPanel stats={tokenStats} />
-          </div>
-        )}
       </div>
-
-      {/* Compact stats for mobile */}
-      {showStats && (
-        <div className="px-4 py-2 border-t bg-muted/30 lg:hidden">
-          <CompactStats stats={tokenStats} />
-        </div>
-      )}
-    </div>
+    </ThinkingCompletionProvider>
   );
 }
 
-/** Export hook for custom implementations */
-export { useAgentWebSocket };
-export type { AgentActivityProps };
+export interface MockCompactAgentActivityProps {
+  /** Pre-loaded messages to display */
+  messages: ChatMessage[];
+  /** Connection state to simulate */
+  connectionState?: ConnectionState;
+  /** Whether the agent appears to be running */
+  running?: boolean;
+  /** Token stats to display */
+  tokenStats?: TokenStats | null;
+  /** Maximum messages to show */
+  maxMessages?: number;
+  /** Additional CSS classes */
+  className?: string;
+}
+
+/**
+ * Mock version of CompactAgentActivity for Storybook testing.
+ */
+export function MockCompactAgentActivity({
+  messages,
+  connectionState = 'connected',
+  running = false,
+  tokenStats = null,
+  maxMessages = 10,
+  className,
+}: MockCompactAgentActivityProps) {
+  // Only show the last N messages
+  const displayMessages = messages.slice(-maxMessages);
+
+  return (
+    <div className={cn('rounded-md border', className)}>
+      {/* Header with status */}
+      <div className="flex items-center justify-between border-b px-3 py-2">
+        <div className="flex items-center gap-2">
+          <MinimalStatus connectionState={connectionState} running={running} />
+          <span className="text-sm font-medium">Agent Activity</span>
+        </div>
+        {tokenStats && <StatsPanel stats={tokenStats} variant="compact" />}
+      </div>
+
+      {/* Message List */}
+      <ScrollArea className="h-48">
+        <div className="p-3 space-y-2">
+          {displayMessages.map((message) => (
+            <CompactMessageItem key={message.id} message={message} />
+          ))}
+
+          {running && <LoadingIndicator className="py-2" />}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}

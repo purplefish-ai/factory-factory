@@ -153,6 +153,7 @@ model Agent {
   cliProcessStatus        CliProcessStatus?   // Process state
   cliProcessStartedAt     DateTime?           // When process was started
   cliProcessExitCode      Int?                // Exit code if process exited
+  cliProcessPid           Int?                // OS process ID for orphan cleanup
 
   // Health tracking
   lastHeartbeat           DateTime?           // Last agent heartbeat (set by agent itself)
@@ -175,6 +176,7 @@ model Agent {
   @@index([desiredExecutionState])
   @@index([currentTaskId])
   @@index([lastHeartbeat])
+  @@index([cliProcessStatus])
 }
 
 model Mail {

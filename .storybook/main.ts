@@ -11,7 +11,7 @@ const config: StorybookConfig = {
     '../src/frontend/components/**/*.stories.@(js|jsx|ts|tsx)',
   ],
 
-  addons: ['@storybook/addon-themes', '@storybook/addon-a11y'],
+  addons: ['@storybook/addon-themes', '@storybook/addon-a11y', '@storybook/addon-mcp'],
 
   framework: {
     name: '@storybook/nextjs-vite',

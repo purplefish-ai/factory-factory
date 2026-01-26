@@ -1,213 +1,676 @@
 'use client';
 
+import {
+  AlertCircle,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  FileCode,
+  Loader2,
+  Terminal,
+} from 'lucide-react';
+import * as React from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import type {
+  ClaudeMessage,
+  PairedToolCall,
+  ToolResultContentValue,
+  ToolSequence,
+} from '@/lib/claude-types';
+import {
+  extractToolInfo,
+  extractToolResultInfo,
+  isToolResultMessage,
+  isToolUseMessage,
+} from '@/lib/claude-types';
+import { cn } from '@/lib/utils';
+import type { FileReference, ToolCallInfo } from './types';
+
+// =============================================================================
+// File Reference Extraction
+// =============================================================================
+
 /**
- * Tool rendering components for agent activity
- * Adds file links for Read/Edit tool results
+ * Known tools that operate on files and their input field names.
  */
+const FILE_TOOL_FIELDS: Record<string, string[]> = {
+  Read: ['file_path'],
+  Write: ['file_path'],
+  Edit: ['file_path'],
+  Glob: ['pattern', 'path'],
+  Grep: ['pattern', 'path'],
+  Bash: ['command'],
+};
 
-import { FileCode, FileText, Search } from 'lucide-react';
-import { useState } from 'react';
-import { extractToolInfo } from '../chat/message-utils';
-import type { ClaudeMessage, ToolInfo } from '../chat/types';
-import { extractFileReference, type FileReference } from './types';
+/**
+ * Extracts file references from tool input.
+ */
+export function extractFileReferences(
+  toolName: string,
+  toolId: string,
+  input: Record<string, unknown>
+): FileReference[] {
+  const references: FileReference[] = [];
+  const fields = FILE_TOOL_FIELDS[toolName];
 
-interface FileReferenceLinkProps {
-  fileRef: FileReference;
-}
-
-/** Render a file reference as a clickable link */
-function FileReferenceLink({ fileRef }: FileReferenceLinkProps) {
-  // For now, just display the file path. In the future, this could link to a file viewer.
-  const lineInfo = fileRef.lineNumber
-    ? `:${fileRef.lineNumber}${fileRef.lineCount ? `-${fileRef.lineNumber + fileRef.lineCount}` : ''}`
-    : '';
-
-  return (
-    <span className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer">
-      <FileCode className="h-3 w-3" />
-      <span className="font-mono">
-        {fileRef.displayPath}
-        {lineInfo}
-      </span>
-    </span>
-  );
-}
-
-/** Get icon for tool type */
-function getToolIcon(toolName: string) {
-  switch (toolName) {
-    case 'Read':
-      return <FileText className="h-3 w-3" />;
-    case 'Edit':
-    case 'Write':
-      return <FileCode className="h-3 w-3" />;
-    case 'Grep':
-    case 'Glob':
-      return <Search className="h-3 w-3" />;
-    default:
-      return null;
+  if (!fields) {
+    return references;
   }
+
+  for (const field of fields) {
+    const value = input[field];
+    if (typeof value === 'string' && value.startsWith('/')) {
+      const offset = input.offset as number | undefined;
+      const limit = input.limit as number | undefined;
+      references.push({
+        path: value,
+        lineStart: typeof offset === 'number' ? offset : undefined,
+        lineEnd:
+          typeof offset === 'number' && typeof limit === 'number' ? offset + limit : undefined,
+        toolName,
+        toolCallId: toolId,
+      });
+    }
+  }
+
+  return references;
 }
 
-interface ToolUseRendererProps {
-  info: ToolInfo;
-  expanded: boolean;
-  onToggle: () => void;
-}
-
-/** Render a tool_use block */
-function ToolUseRenderer({ info, expanded, onToggle }: ToolUseRendererProps) {
-  const icon = getToolIcon(info.name || '');
-  const fileRef = info.name ? extractFileReference(info.name, info.input) : null;
-
-  return (
-    <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded border border-blue-200 dark:border-blue-800">
-      <button type="button" onClick={onToggle} className="flex items-center gap-2 w-full text-left">
-        {icon}
-        <span className="text-xs font-medium text-blue-700 dark:text-blue-300">{info.name}</span>
-        {fileRef && <FileReferenceLink fileRef={fileRef} />}
-        <span className="text-xs text-blue-500 ml-auto">{expanded ? '[-]' : '[+]'}</span>
-      </button>
-      {expanded && info.input && (
-        <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-900/50 p-2 rounded overflow-x-auto">
-          {JSON.stringify(info.input, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-interface ToolResultRendererProps {
-  info: ToolInfo;
-  expanded: boolean;
-  onToggle: () => void;
-}
-
-/** Render a tool_result block */
-function ToolResultRenderer({ info, expanded, onToggle }: ToolResultRendererProps) {
-  const resultText = info.result || '';
-  const isTruncated = resultText.length > 500;
-
-  const containerClass = info.isError
-    ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
-    : 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800';
-
-  const textClass = info.isError
-    ? 'text-red-700 dark:text-red-300'
-    : 'text-green-700 dark:text-green-300';
-
-  const preClass = info.isError
-    ? 'bg-red-100 dark:bg-red-900/50'
-    : 'bg-green-100 dark:bg-green-900/50';
-
-  return (
-    <div className={`p-3 rounded border ${containerClass}`}>
-      <button type="button" onClick={onToggle} className="flex items-center gap-2 w-full text-left">
-        <span className={`text-xs font-medium ${textClass}`}>
-          {info.isError ? 'Error' : 'Result'}
-        </span>
-        {isTruncated && (
-          <span className="text-xs text-muted-foreground ml-auto">{expanded ? '[-]' : '[+]'}</span>
-        )}
-      </button>
-      <pre className={`mt-2 text-xs p-2 rounded overflow-x-auto ${preClass}`}>
-        {expanded || !isTruncated ? resultText : `${resultText.slice(0, 500)}...`}
-      </pre>
-    </div>
-  );
-}
+// =============================================================================
+// Tool Info Renderer
+// =============================================================================
 
 interface ToolInfoRendererProps {
-  info: ToolInfo;
-  projectSlug?: string;
+  message: ClaudeMessage;
+  defaultOpen?: boolean;
+  isPending?: boolean;
 }
 
-/** Render tool info (works for both tool_use and tool_result) */
-export function ToolInfoRenderer({ info }: ToolInfoRendererProps) {
-  const [expanded, setExpanded] = useState(false);
-  const onToggle = () => setExpanded(!expanded);
+/**
+ * Renders tool use or tool result information.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but readable conditional rendering
+export function ToolInfoRenderer({
+  message,
+  defaultOpen = false,
+  isPending = false,
+}: ToolInfoRendererProps) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
-  if (info.type === 'tool_use') {
-    return <ToolUseRenderer info={info} expanded={expanded} onToggle={onToggle} />;
+  // Check if this is a tool use message
+  if (isToolUseMessage(message)) {
+    const toolInfo = extractToolInfo(message);
+    if (!toolInfo) {
+      return null;
+    }
+
+    return (
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div className="rounded border bg-muted/30">
+          <CollapsibleTrigger asChild>
+            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
+              {isOpen ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              {isPending ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+              ) : (
+                <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              <span className="font-mono text-xs">{toolInfo.name}</span>
+              {isPending ? (
+                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
+                  Running...
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0">
+                  Tool Call
+                </Badge>
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-2 py-1.5">
+              <ToolInputRenderer name={toolInfo.name} input={toolInfo.input} />
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    );
   }
 
-  return <ToolResultRenderer info={info} expanded={expanded} onToggle={onToggle} />;
+  // Check if this is a tool result message
+  if (isToolResultMessage(message)) {
+    const resultInfo = extractToolResultInfo(message);
+    if (!resultInfo) {
+      return null;
+    }
+
+    return (
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div
+          className={cn(
+            'rounded border',
+            resultInfo.isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
+          )}
+        >
+          <CollapsibleTrigger asChild>
+            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
+              {isOpen ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              {resultInfo.isError ? (
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              ) : (
+                <CheckCircle className="h-4 w-4 shrink-0 text-success" />
+              )}
+              <span className="text-xs text-muted-foreground">Tool Result</span>
+              <Badge
+                variant={resultInfo.isError ? 'destructive' : 'success'}
+                className="ml-auto text-[10px] px-1 py-0"
+              >
+                {resultInfo.isError ? 'Error' : 'Success'}
+              </Badge>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-2 py-1.5">
+              <ToolResultContentRenderer
+                content={resultInfo.content}
+                isError={resultInfo.isError}
+              />
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    );
+  }
+
+  return null;
 }
 
-interface ToolCallGroupRendererProps {
-  messages: ClaudeMessage[];
-  projectSlug?: string;
+// =============================================================================
+// Tool Sequence Group Renderer
+// =============================================================================
+
+interface ToolSequenceGroupProps {
+  sequence: ToolSequence;
+  defaultOpen?: boolean;
 }
 
-/** Grouped tool calls renderer - shows multiple tool calls collapsed */
-export function ToolCallGroupRenderer({ messages, projectSlug }: ToolCallGroupRendererProps) {
-  const [expanded, setExpanded] = useState(false);
+/**
+ * Renders a group of adjacent tool calls.
+ * Each tool_use is paired with its corresponding tool_result.
+ * - Single tool: Shows inline with status, expands to show input + result
+ * - Multiple tools: Shows summary "3 tools: Read, Edit, Bash [✓][✓][✓]", expands to show all
+ */
+export function ToolSequenceGroup({ sequence, defaultOpen = false }: ToolSequenceGroupProps) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
-  // Extract tool info from all messages
-  const toolInfos = messages.map(extractToolInfo).filter((t): t is ToolInfo => t !== null);
-  const toolUses = toolInfos.filter((t) => t.type === 'tool_use');
-  const toolResults = toolInfos.filter((t) => t.type === 'tool_result');
-  const hasErrors = toolResults.some((t) => t.isError);
+  const { pairedCalls } = sequence;
 
-  // Get unique tool names
-  const toolNames = [...new Set(toolUses.map((t) => t.name).filter(Boolean))];
-  const summary =
-    toolNames.length <= 3 ? toolNames.join(', ') : `${toolNames.slice(0, 3).join(', ')}...`;
+  if (pairedCalls.length === 0) {
+    return null;
+  }
 
-  // Get file references for summary
-  const fileRefs = toolUses
-    .filter((t): t is ToolInfo & { name: string } => Boolean(t.name))
-    .map((t) => extractFileReference(t.name, t.input))
-    .filter((ref): ref is FileReference => ref !== null);
+  // Single tool call - render inline without grouping wrapper
+  if (pairedCalls.length === 1) {
+    return <PairedToolCallRenderer call={pairedCalls[0]} defaultOpen={defaultOpen} />;
+  }
 
-  const borderClass = hasErrors
-    ? 'border-red-200 dark:border-red-800'
-    : 'border-blue-200 dark:border-blue-800';
+  // Multiple tool calls - render as collapsible group
+  const renderStatusIndicators = () => {
+    return pairedCalls.map((call) => {
+      const key = `${sequence.id}-status-${call.id}`;
+      switch (call.status) {
+        case 'success':
+          return (
+            <span key={key} title="Success">
+              <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success" />
+            </span>
+          );
+        case 'error':
+          return (
+            <span key={key} title="Error">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+            </span>
+          );
+        case 'pending':
+          return (
+            <span key={key} title="Pending">
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+            </span>
+          );
+      }
+    });
+  };
 
-  const headerBgClass = hasErrors
-    ? 'bg-red-50 dark:bg-red-950/30'
-    : 'bg-blue-50 dark:bg-blue-950/30';
+  // Format tool names for display (truncate if too many)
+  // Returns styled elements where error tools show in red
+  const formatToolNames = () => {
+    const displayCalls = pairedCalls.length <= 4 ? pairedCalls : pairedCalls.slice(0, 3);
+    const remaining = pairedCalls.length > 4 ? pairedCalls.length - 3 : 0;
 
-  const textClass = hasErrors
-    ? 'text-red-700 dark:text-red-300'
-    : 'text-blue-700 dark:text-blue-300';
+    return (
+      <>
+        {displayCalls.map((call, index) => (
+          <React.Fragment key={call.id}>
+            <span className={call.status === 'error' ? 'text-destructive' : undefined}>
+              {call.name}
+            </span>
+            {index < displayCalls.length - 1 && ', '}
+          </React.Fragment>
+        ))}
+        {remaining > 0 && `, +${remaining} more`}
+      </>
+    );
+  };
 
   return (
-    <div className={`rounded-lg border ${borderClass}`}>
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className={`w-full p-3 flex items-center justify-between text-left ${headerBgClass} rounded-t-lg ${!expanded ? 'rounded-b-lg' : ''}`}
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded border bg-muted/20">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/50 transition-colors">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-xs">
+              {pairedCalls.length} tools: {formatToolNames()}
+            </span>
+            <span className="ml-auto flex gap-1 text-xs">{renderStatusIndicators()}</span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t space-y-1 p-1.5">
+            {pairedCalls.map((call) => (
+              <div key={call.id} className="pl-2">
+                <PairedToolCallRenderer call={call} defaultOpen={false} />
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
+// =============================================================================
+// Paired Tool Call Renderer
+// =============================================================================
+
+interface PairedToolCallRendererProps {
+  call: PairedToolCall;
+  defaultOpen?: boolean;
+}
+
+/**
+ * Renders a single tool call paired with its result.
+ * Shows: ToolName [status] - expands to show input and result.
+ */
+function PairedToolCallRenderer({ call, defaultOpen = false }: PairedToolCallRendererProps) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
+  const isPending = call.status === 'pending';
+  const isError = call.status === 'error';
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div
+        className={cn(
+          'rounded border',
+          isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
+        )}
       >
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-xs font-medium ${textClass}`}>
-            {toolUses.length} tool call{toolUses.length !== 1 ? 's' : ''}: {summary}
-          </span>
-          {hasErrors && (
-            <span className="text-xs px-1.5 py-0.5 bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200 rounded">
-              error
-            </span>
-          )}
-          {fileRefs.length > 0 && fileRefs.length <= 2 && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <FileCode className="h-3 w-3" />
-              {fileRefs.map((ref) => ref.displayPath).join(', ')}
-            </span>
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            {isPending ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+            ) : isError ? (
+              <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+            ) : (
+              <CheckCircle className="h-4 w-4 shrink-0 text-success" />
+            )}
+            <span className="font-mono text-xs">{call.name}</span>
+            {isPending ? (
+              <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
+                Running...
+              </Badge>
+            ) : (
+              <Badge
+                variant={isError ? 'destructive' : 'success'}
+                className="ml-auto text-[10px] px-1 py-0"
+              >
+                {isError ? 'Error' : 'Success'}
+              </Badge>
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-2 py-1.5 space-y-2">
+            {/* Tool Input */}
+            <div>
+              <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Input</div>
+              <ToolInputRenderer name={call.name} input={call.input} />
+            </div>
+            {/* Tool Result */}
+            {call.result && (
+              <div>
+                <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Result</div>
+                <ToolResultContentRenderer
+                  content={call.result.content}
+                  isError={call.result.isError}
+                />
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
+// =============================================================================
+// Tool Input Renderer
+// =============================================================================
+
+interface ToolInputRendererProps {
+  name: string;
+  input: Record<string, unknown>;
+}
+
+function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
+  // Special rendering for common tools
+  switch (name) {
+    case 'Read':
+      return (
+        <div className="space-y-1">
+          <FilePathDisplay path={input.file_path as string} />
+          {input.offset !== undefined && (
+            <div className="text-xs text-muted-foreground">
+              Lines {String(input.offset)} - {Number(input.offset) + (Number(input.limit) || 100)}
+            </div>
           )}
         </div>
-        <span className="text-xs text-muted-foreground">{expanded ? '[-]' : '[+]'}</span>
-      </button>
-      {expanded && (
-        <div className="p-2 space-y-2 bg-muted/20">
-          {toolInfos.map((info) => (
-            <ToolInfoRenderer
-              key={info.id || `${info.type}-${info.name}`}
-              info={info}
-              projectSlug={projectSlug}
-            />
-          ))}
+      );
+
+    case 'Write':
+      return (
+        <div className="space-y-1">
+          <FilePathDisplay path={input.file_path as string} />
+          <div className="rounded bg-muted px-1.5 py-1">
+            <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto">
+              {truncateContent(input.content as string, 500)}
+            </pre>
+          </div>
         </div>
-      )}
+      );
+
+    case 'Edit':
+      return (
+        <div className="space-y-1">
+          <FilePathDisplay path={input.file_path as string} />
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className="rounded bg-destructive/10 px-1.5 py-1">
+              <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
+              <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                {truncateContent(input.old_string as string, 200)}
+              </pre>
+            </div>
+            <div className="rounded bg-success/10 px-1.5 py-1">
+              <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
+              <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
+                {truncateContent(input.new_string as string, 200)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      );
+
+    case 'Bash':
+      return (
+        <div className="space-y-0.5">
+          <div className="rounded bg-muted px-1.5 py-1 font-mono">
+            <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+              {String(input.command ?? '')}
+            </pre>
+          </div>
+          {input.description != null && (
+            <div className="text-[10px] text-muted-foreground">{String(input.description)}</div>
+          )}
+        </div>
+      );
+
+    case 'Glob':
+    case 'Grep':
+      return (
+        <div className="space-y-0.5">
+          <div className="font-mono text-xs">{String(input.pattern ?? '')}</div>
+          {input.path != null && <FilePathDisplay path={String(input.path)} />}
+        </div>
+      );
+
+    default:
+      // Generic JSON display for unknown tools
+      return (
+        <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
+          {JSON.stringify(input, null, 2)}
+        </pre>
+      );
+  }
+}
+
+// =============================================================================
+// Tool Result Content Renderer
+// =============================================================================
+
+interface ToolResultContentRendererProps {
+  content: ToolResultContentValue;
+  isError: boolean;
+}
+
+function ToolResultContentRenderer({ content, isError }: ToolResultContentRendererProps) {
+  if (typeof content === 'string') {
+    return (
+      <pre
+        className={cn(
+          'text-xs overflow-x-auto max-h-40 overflow-y-auto rounded px-1.5 py-1',
+          isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
+        )}
+      >
+        {truncateContent(content, 2000)}
+      </pre>
+    );
+  }
+
+  // Handle array of text/image items
+  return (
+    <div className="space-y-1">
+      {content.map((item, index) => {
+        const key =
+          item.type === 'text' ? `text-${index}-${(item.text ?? '').slice(0, 20)}` : `img-${index}`;
+        if (item.type === 'text') {
+          return (
+            <pre
+              key={key}
+              className={cn(
+                'text-xs overflow-x-auto max-h-40 overflow-y-auto rounded px-1.5 py-1',
+                isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
+              )}
+            >
+              {truncateContent(item.text ?? '', 2000)}
+            </pre>
+          );
+        }
+        // Image items could be rendered here if needed
+        return (
+          <div key={key} className="text-xs text-muted-foreground">
+            [Image content]
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+// =============================================================================
+// Tool Call Group Renderer
+// =============================================================================
+
+interface ToolCallGroupRendererProps {
+  toolCalls: ToolCallInfo[];
+  defaultOpen?: boolean;
+}
+
+/**
+ * Renders a group of related tool calls.
+ */
+export function ToolCallGroupRenderer({
+  toolCalls,
+  defaultOpen = false,
+}: ToolCallGroupRendererProps) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
+  if (toolCalls.length === 0) {
+    return null;
+  }
+
+  const successCount = toolCalls.filter((tc) => tc.result && !tc.result.isError).length;
+  const errorCount = toolCalls.filter((tc) => tc.result?.isError).length;
+  const pendingCount = toolCalls.filter((tc) => !tc.result).length;
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded border bg-muted/20">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-xs">{toolCalls.length} tool calls</span>
+            <div className="ml-auto flex gap-1">
+              {successCount > 0 && (
+                <Badge variant="success" className="text-[10px] px-1 py-0">
+                  {successCount}
+                </Badge>
+              )}
+              {errorCount > 0 && (
+                <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                  {errorCount}
+                </Badge>
+              )}
+              {pendingCount > 0 && (
+                <Badge variant="outline" className="text-[10px] px-1 py-0">
+                  {pendingCount}
+                </Badge>
+              )}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t divide-y">
+            {toolCalls.map((toolCall) => (
+              <ToolCallItem key={toolCall.id} toolCall={toolCall} />
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
+// =============================================================================
+// Tool Call Item
+// =============================================================================
+
+interface ToolCallItemProps {
+  toolCall: ToolCallInfo;
+}
+
+function ToolCallItem({ toolCall }: ToolCallItemProps) {
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/30 transition-colors">
+          {isOpen ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="font-mono text-xs">{toolCall.name}</span>
+          {toolCall.result && (
+            <span className="ml-auto">
+              {toolCall.result.isError ? (
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              ) : (
+                <CheckCircle className="h-4 w-4 shrink-0 text-success" />
+              )}
+            </span>
+          )}
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-4 pb-1.5 space-y-1">
+          <ToolInputRenderer name={toolCall.name} input={toolCall.input} />
+          {toolCall.result && (
+            <ToolResultContentRenderer
+              content={toolCall.result.content}
+              isError={toolCall.result.isError}
+            />
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// =============================================================================
+// Helper Components
+// =============================================================================
+
+function FilePathDisplay({ path }: { path: string }) {
+  if (!path) {
+    return null;
+  }
+
+  // Extract filename from path
+  const parts = path.split('/');
+  const filename = parts[parts.length - 1];
+  const directory = parts.slice(0, -1).join('/');
+
+  return (
+    <div className="flex items-center gap-1 text-sm">
+      <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="text-muted-foreground">{directory}/</span>
+      <span className="font-medium">{filename}</span>
+    </div>
+  );
+}
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+function truncateContent(content: string, maxLength: number): string {
+  if (content.length <= maxLength) {
+    return content;
+  }
+  return `${content.slice(0, maxLength)}\n... (truncated)`;
 }

@@ -102,7 +102,12 @@
   "plugins": ["biome-rules/no-await-import.grit"],
   "overrides": [
     {
-      "includes": ["src/backend/**/*.ts", "scripts/**/*.ts", "test-*.ts"],
+      "includes": [
+        "src/backend/**/*.ts",
+        "scripts/**/*.ts",
+        "test-*.ts",
+        "src/components/chat/use-chat-websocket.ts"
+      ],
       "linter": {
         "rules": {
           "suspicious": {

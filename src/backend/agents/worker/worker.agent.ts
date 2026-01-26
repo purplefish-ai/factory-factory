@@ -196,18 +196,9 @@ export async function runWorker(agentId: string): Promise<void> {
     const msg = event.message;
 
     // Log messages for debugging based on type
-    switch (msg.type) {
-      case 'assistant':
-        console.log(`Worker ${agentId}: Assistant message received`);
-        break;
-      case 'tool_use':
-        console.log(`Worker ${agentId}: Tool use - ${'tool' in msg ? msg.tool : 'unknown'}`);
-        break;
-      case 'tool_result':
-        console.log(
-          `Worker ${agentId}: Tool result - ${'is_error' in msg && msg.is_error ? 'error' : 'success'}`
-        );
-        break;
+    // Note: tool_use and tool_result are now separate events, not message types
+    if (msg.type === 'assistant') {
+      console.log(`Worker ${agentId}: Assistant message received`);
     }
   };
 
