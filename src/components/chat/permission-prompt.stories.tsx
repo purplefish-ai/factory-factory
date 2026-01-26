@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
 
-import { createPermissionRequest, SAMPLE_FILE_PATHS } from '@/lib/claude-fixtures';
+import {
+  createPermissionRequest,
+  createPlanApprovalRequest,
+  SAMPLE_FILE_PATHS,
+} from '@/lib/claude-fixtures';
 
 import { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 
@@ -96,6 +100,20 @@ export const GlobSearch: Story = {
       pattern: '**/*.tsx',
       path: '/Users/developer/project/src',
     }),
+  },
+};
+
+export const PlanApproval: Story = {
+  args: {
+    permission: createPlanApprovalRequest('/Users/developer/.claude/plans/refactor-auth-system.md'),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Plan approval request when the agent is in plan mode and needs user approval to proceed with implementation.',
+      },
+    },
   },
 };
 
@@ -194,5 +212,19 @@ export function Button({ label, onClick }: ButtonProps) {
   );
 }`,
     }),
+  },
+};
+
+export const ExpandedPlanApproval: ExpandedStory = {
+  render: (args) => <PermissionPromptExpanded {...args} />,
+  args: {
+    permission: createPlanApprovalRequest('/Users/developer/.claude/plans/implement-dark-mode.md'),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Expanded plan approval showing the full plan file path and requested permissions.',
+      },
+    },
   },
 };

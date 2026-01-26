@@ -1,6 +1,6 @@
 'use client';
 
-import { HelpCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -134,10 +134,13 @@ function MultiSelectQuestion({ question, index, value, onChange }: SingleQuestio
 /**
  * Inline prompt for answering AskUserQuestion requests.
  * Appears above the chat input as a compact card.
+ * Paginates multiple questions to save vertical space.
  */
 export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   // State for answers - keyed by question index
   const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
+  // State for current question index (pagination)
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   // Current request ID for key generation
   const currentRequestId = question?.requestId;
@@ -170,8 +173,9 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
 
     onAnswer(question.requestId, formattedAnswers);
 
-    // Reset answers after submit
+    // Reset answers and pagination after submit
     setAnswers({});
+    setCurrentIndex(0);
   }, [question, answers, onAnswer]);
 
   // Check if all questions have been answered
@@ -183,41 +187,146 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     return typeof answer === 'string' && answer.length > 0;
   });
 
+  // Check if current question has been answered
+  const isCurrentAnswered = (() => {
+    if (!question) {
+      return false;
+    }
+    const q = question.questions[currentIndex];
+    const answer = answers[currentIndex];
+    if (q.multiSelect) {
+      return Array.isArray(answer) && answer.length > 0;
+    }
+    return typeof answer === 'string' && answer.length > 0;
+  })();
+
   if (!question) {
     return null;
   }
 
+  const totalQuestions = question.questions.length;
+  const currentQuestion = question.questions[currentIndex];
+  const isLastQuestion = currentIndex === totalQuestions - 1;
+  const isFirstQuestion = currentIndex === 0;
+
+  // For single question, render without pagination
+  if (totalQuestions === 1) {
+    return (
+      <div className="border-b bg-muted/50 p-3">
+        <div className="flex items-start gap-3">
+          <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            {currentQuestion.multiSelect ? (
+              <MultiSelectQuestion
+                question={currentQuestion}
+                index={0}
+                value={answers[0] ?? []}
+                onChange={(value) => handleAnswerChange(0, value)}
+              />
+            ) : (
+              <SingleSelectQuestion
+                question={currentQuestion}
+                index={0}
+                value={answers[0] ?? ''}
+                onChange={(value) => handleAnswerChange(0, value)}
+              />
+            )}
+          </div>
+          <div className="shrink-0 self-end">
+            <Button size="sm" onClick={handleSubmit} disabled={!isComplete}>
+              Submit
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // For multiple questions, render with pagination
   return (
-    <div className="border-t bg-muted/50 p-3">
+    <div className="border-b bg-muted/50 p-3">
       <div className="flex items-start gap-3">
         <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" />
-        <div className="flex-1 min-w-0 space-y-3">
-          {question.questions.map((q, index) => (
-            <div key={`${currentRequestId}-${q.question}`}>
-              {q.multiSelect ? (
-                <MultiSelectQuestion
-                  question={q}
-                  index={index}
-                  value={answers[index] ?? []}
-                  onChange={(value) => handleAnswerChange(index, value)}
+        <div className="flex-1 min-w-0">
+          {/* Progress indicator */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-muted-foreground">
+              Question {currentIndex + 1} of {totalQuestions}
+            </span>
+            <div className="flex gap-1">
+              {question.questions.map((q, idx) => (
+                <button
+                  type="button"
+                  key={`dot-${currentRequestId}-${q.question}`}
+                  onClick={() => setCurrentIndex(idx)}
+                  className={cn(
+                    'w-2 h-2 rounded-full transition-colors',
+                    idx === currentIndex
+                      ? 'bg-primary'
+                      : answers[idx] !== undefined
+                        ? 'bg-primary/50'
+                        : 'bg-muted-foreground/30'
+                  )}
+                  aria-label={`Go to question ${idx + 1}`}
                 />
-              ) : (
-                <SingleSelectQuestion
-                  question={q}
-                  index={index}
-                  value={answers[index] ?? ''}
-                  onChange={(value) => handleAnswerChange(index, value)}
-                />
-              )}
-
-              {index < question.questions.length - 1 && <div className="border-t my-3" />}
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Current question */}
+          {currentQuestion.multiSelect ? (
+            <MultiSelectQuestion
+              question={currentQuestion}
+              index={currentIndex}
+              value={answers[currentIndex] ?? []}
+              onChange={(value) => handleAnswerChange(currentIndex, value)}
+            />
+          ) : (
+            <SingleSelectQuestion
+              question={currentQuestion}
+              index={currentIndex}
+              value={answers[currentIndex] ?? ''}
+              onChange={(value) => handleAnswerChange(currentIndex, value)}
+            />
+          )}
         </div>
-        <div className="shrink-0 self-end">
-          <Button size="sm" onClick={handleSubmit} disabled={!isComplete}>
-            Submit
+
+        {/* Navigation and submit */}
+        <div className="shrink-0 self-end flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentIndex((i) => i - 1)}
+            disabled={isFirstQuestion}
+            className="h-8 w-8 p-0"
+          >
+            <ChevronLeft className="h-4 w-4" />
           </Button>
+
+          {isLastQuestion ? (
+            <Button size="sm" onClick={handleSubmit} disabled={!isComplete}>
+              Submit
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => setCurrentIndex((i) => i + 1)}
+              disabled={!isCurrentAnswered}
+            >
+              Next
+            </Button>
+          )}
+
+          {!isLastQuestion && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentIndex((i) => i + 1)}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

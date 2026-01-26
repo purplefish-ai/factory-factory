@@ -400,6 +400,27 @@ interface UserQuestionRequest {
   timestamp: string;
 }
 
+/**
+ * Creates a plan approval permission request.
+ * Used when the agent is in plan mode and needs user approval.
+ */
+export function createPlanApprovalRequest(
+  planFile = '/Users/developer/.claude/plans/example-plan.md'
+): PermissionRequest {
+  return {
+    requestId: generateRequestId(),
+    toolName: 'ExitPlanMode',
+    toolInput: {
+      planFile,
+      allowedPrompts: [
+        { tool: 'Bash', prompt: 'run tests' },
+        { tool: 'Bash', prompt: 'install dependencies' },
+      ],
+    },
+    timestamp: generateTimestamp(),
+  };
+}
+
 // =============================================================================
 // Stats Factories
 // =============================================================================

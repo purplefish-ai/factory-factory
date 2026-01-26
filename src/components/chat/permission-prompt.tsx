@@ -83,7 +83,7 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
   };
 
   return (
-    <div className="border-t bg-muted/50 p-3">
+    <div className="border-b bg-muted/50 p-3">
       <div className="flex items-start gap-3">
         <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" />
         <div className="flex-1 min-w-0">
@@ -130,7 +130,7 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
   };
 
   return (
-    <div className="border-t bg-muted/50 p-3">
+    <div className="border-b bg-muted/50 p-3">
       <div className="flex items-start gap-3">
         <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" />
         <div className="flex-1 min-w-0 space-y-2">

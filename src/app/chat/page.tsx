@@ -203,12 +203,13 @@ function ChatContent() {
         </div>
       </ScrollArea>
 
-      {/* Inline Prompts (above chat input) */}
-      <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
-      <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
-
-      {/* Chat Input */}
+      {/* Input Section with Prompts */}
       <div className="border-t">
+        {/* Inline Prompts (above chat input) */}
+        <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
+        <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
+
+        {/* Chat Input */}
         <ChatInput
           onSend={sendMessage}
           disabled={!connected}

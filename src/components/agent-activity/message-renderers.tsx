@@ -20,6 +20,36 @@ import { cn } from '@/lib/utils';
 import { ToolInfoRenderer } from './tool-renderers';
 
 // =============================================================================
+// Agent Running Context
+// =============================================================================
+
+/**
+ * Context to track whether the agent is currently running.
+ * Used by ThinkingRenderer to only animate the spinner when actively streaming.
+ */
+const AgentRunningContext = React.createContext<boolean>(false);
+
+/**
+ * Provider component for the agent running state.
+ */
+export function AgentRunningProvider({
+  running,
+  children,
+}: {
+  running: boolean;
+  children: React.ReactNode;
+}) {
+  return <AgentRunningContext.Provider value={running}>{children}</AgentRunningContext.Provider>;
+}
+
+/**
+ * Hook to access the agent running state.
+ */
+function useAgentRunning() {
+  return React.useContext(AgentRunningContext);
+}
+
+// =============================================================================
 // Assistant Message Renderer
 // =============================================================================
 
@@ -223,9 +253,11 @@ interface ThinkingRendererProps {
 
 /**
  * Renders thinking/reasoning content.
+ * Only shows animated spinner when agent is actively running.
  */
 function ThinkingRenderer({ text, className }: ThinkingRendererProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const isRunning = useAgentRunning();
 
   // Show truncated version if long
   const shouldTruncate = text.length > 200;
@@ -239,7 +271,7 @@ function ThinkingRenderer({ text, className }: ThinkingRendererProps) {
       )}
     >
       <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Loader2 className={cn('h-3 w-3', isRunning && 'animate-spin')} />
         <span>Thinking</span>
       </div>
       <div className="text-sm text-muted-foreground italic whitespace-pre-wrap">{displayText}</div>
