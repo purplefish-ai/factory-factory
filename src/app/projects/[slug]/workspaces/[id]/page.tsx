@@ -13,11 +13,9 @@ import {
   useChatWebSocket,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   MainViewContent,
-  MainViewTabBar,
   RightPanel,
   useWorkspacePanel,
   WorkspacePanelProvider,
@@ -26,12 +24,6 @@ import { Loading } from '@/frontend/components/loading';
 import { trpc } from '@/frontend/lib/trpc';
 import { groupAdjacentToolCalls } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const STORAGE_KEY_HORIZONTAL_SPLIT = 'workspace-horizontal-split';
 
 // =============================================================================
 // Types
@@ -386,27 +378,6 @@ function WorkspaceChatContent() {
     isNearBottomRef.current = isNearBottom;
   }, []);
 
-  // Handle horizontal resize layout persistence
-  const handleHorizontalLayoutChange = useCallback((layout: Record<string, number>) => {
-    localStorage.setItem(STORAGE_KEY_HORIZONTAL_SPLIT, JSON.stringify(layout));
-  }, []);
-
-  // Load initial horizontal layout from localStorage
-  const getDefaultHorizontalLayout = useCallback((): Record<string, number> | undefined => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-    const stored = localStorage.getItem(STORAGE_KEY_HORIZONTAL_SPLIT);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return undefined;
-      }
-    }
-    return undefined;
-  }, []);
-
   // Show loading while fetching workspace and sessions
   if (workspaceLoading || sessionsLoading) {
     return <Loading message="Loading workspace..." />;
@@ -430,52 +401,43 @@ function WorkspaceChatContent() {
 
   return (
     <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
-      {/* Header */}
-      <div className="border-b">
-        {/* Row 1: Branch name, status, and toggle button */}
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex items-center gap-3">
-            {workspace.branchName ? (
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-4 w-4 text-muted-foreground" />
-                <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
-              </div>
-            ) : (
-              <h1 className="text-lg font-semibold">{workspace.name}</h1>
-            )}
-            <StatusDot status={status} />
-          </div>
-          <ToggleRightPanelButton />
+      {/* Header: Branch name, status, and toggle button */}
+      <div className="flex items-center justify-between px-4 py-2 border-b">
+        <div className="flex items-center gap-3">
+          {workspace.branchName ? (
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
+            </div>
+          ) : (
+            <h1 className="text-lg font-semibold">{workspace.name}</h1>
+          )}
+          <StatusDot status={status} />
         </div>
-
-        {/* Row 2: Session tabs and Main view tabs */}
-        <div className="px-4 pb-2 flex items-center gap-4">
-          <SessionTabBar
-            sessions={claudeSessions ?? []}
-            currentSessionId={
-              claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id ?? null
-            }
-            runningSessionId={runningSessionIdFromDb}
-            onSelectSession={handleSelectSession}
-            onCreateSession={handleNewChat}
-            onCloseSession={handleCloseSession}
-            disabled={running || createSession.isPending || deleteSession.isPending}
-            className="flex-1"
-          />
-          <MainViewTabBar />
-        </div>
+        <ToggleRightPanelButton />
       </div>
 
-      {/* Main Content Area with Resizable Panels */}
-      <ResizablePanelGroup
-        orientation="horizontal"
-        onLayoutChange={handleHorizontalLayoutChange}
-        defaultLayout={getDefaultHorizontalLayout()}
-        className="flex-1"
-      >
-        {/* Left Panel: Main View Content */}
-        <ResizablePanel id="main-view-panel" defaultSize={70} minSize={30}>
-          <MainViewContent workspaceId={workspaceId}>
+      {/* Main Content Area: Two-column layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Panel: Session tabs + Main View Content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Session tabs (only above left panel) */}
+          <div className="px-4 py-2 border-b">
+            <SessionTabBar
+              sessions={claudeSessions ?? []}
+              currentSessionId={
+                claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id ?? null
+              }
+              runningSessionId={runningSessionIdFromDb}
+              onSelectSession={handleSelectSession}
+              onCreateSession={handleNewChat}
+              onCloseSession={handleCloseSession}
+              disabled={running || createSession.isPending || deleteSession.isPending}
+            />
+          </div>
+
+          {/* Main View Content */}
+          <MainViewContent workspaceId={workspaceId} className="flex-1">
             <ChatContent
               messages={messages}
               running={running}
@@ -495,18 +457,15 @@ function WorkspaceChatContent() {
               claudeSessionId={claudeSessionId}
             />
           </MainViewContent>
-        </ResizablePanel>
+        </div>
 
-        {/* Right Panel (conditionally rendered) */}
+        {/* Right Panel (conditionally rendered, fixed width) */}
         {rightPanelVisible && (
-          <>
-            <ResizableHandle withHandle />
-            <ResizablePanel id="right-panel" defaultSize={30} minSize={20}>
-              <RightPanel workspaceId={workspaceId} />
-            </ResizablePanel>
-          </>
+          <div className="w-[400px] border-l flex-shrink-0">
+            <RightPanel workspaceId={workspaceId} />
+          </div>
         )}
-      </ResizablePanelGroup>
+      </div>
     </div>
   );
 }

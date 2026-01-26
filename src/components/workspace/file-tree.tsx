@@ -172,8 +172,19 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
   }
 
   const entries = data?.entries ?? [];
+  const hasWorktree = data?.hasWorktree ?? false;
 
   if (entries.length === 0) {
+    // Show different message based on whether workspace has a worktree
+    if (!hasWorktree && depth === 0) {
+      return (
+        <div className="px-3 py-4 text-sm text-muted-foreground">
+          <p className="font-medium mb-1">No files available</p>
+          <p className="text-xs">This workspace doesn't have a directory configured yet.</p>
+        </div>
+      );
+    }
+
     return (
       <div
         className="px-2 py-1 text-sm text-muted-foreground italic"

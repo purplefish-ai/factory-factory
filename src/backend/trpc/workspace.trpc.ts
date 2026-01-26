@@ -2,9 +2,13 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { GitClientFactory } from '../clients/git.client.js';
 import { gitCommand } from '../lib/shell.js';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor.js';
+import { createLogger } from '../services/logger.service.js';
 import { publicProcedure, router } from './trpc.js';
+
+const logger = createLogger('workspace-trpc');
 
 // =============================================================================
 // Helper Types
@@ -173,8 +177,41 @@ export const workspaceRouter = router({
         branchName: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
-      return workspaceAccessor.create(input);
+    .mutation(async ({ input }) => {
+      // Create the workspace record
+      const workspace = await workspaceAccessor.create(input);
+
+      // Create the worktree for this workspace
+      try {
+        const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspace.id);
+        if (!workspaceWithProject?.project) {
+          throw new Error('Workspace project not found');
+        }
+
+        const project = workspaceWithProject.project;
+        const gitClient = GitClientFactory.forProject({
+          repoPath: project.repoPath,
+          worktreeBasePath: project.worktreeBasePath,
+        });
+
+        const worktreeName = `workspace-${workspace.id}`;
+        const baseBranch = input.branchName ?? project.defaultBranch;
+
+        const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch);
+        const worktreePath = gitClient.getWorktreePath(worktreeName);
+
+        // Update workspace with worktree info
+        return workspaceAccessor.update(workspace.id, {
+          worktreePath,
+          branchName: worktreeInfo.branchName,
+        });
+      } catch (error) {
+        logger.error('Failed to create worktree for workspace', error as Error, {
+          workspaceId: workspace.id,
+        });
+        // Return workspace without worktree - user can see the error in Files tab
+        return workspace;
+      }
     }),
 
   // Update a workspace
@@ -312,7 +349,7 @@ export const workspaceRouter = router({
       }
 
       if (!workspace.worktreePath) {
-        return { entries: [] };
+        return { entries: [], hasWorktree: false };
       }
 
       const relativePath = input.path ?? '';
@@ -353,10 +390,10 @@ export const workspaceRouter = router({
           return a.name.localeCompare(b.name);
         });
 
-        return { entries };
+        return { entries, hasWorktree: true };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          return { entries: [] };
+          return { entries: [], hasWorktree: true };
         }
         throw error;
       }
