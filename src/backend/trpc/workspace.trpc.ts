@@ -233,7 +233,9 @@ export const workspaceRouter = router({
           }
         }
 
-        const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch);
+        const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
+          branchPrefix: project.githubOwner ?? undefined,
+        });
         const worktreePath = gitClient.getWorktreePath(worktreeName);
 
         // Update workspace with worktree info

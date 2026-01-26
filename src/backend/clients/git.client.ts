@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { gitCommand, gitCommandC } from '../lib/shell';
@@ -6,6 +7,11 @@ export interface GitWorktreeInfo {
   name: string;
   path: string;
   branchName: string;
+}
+
+export interface CreateWorktreeOptions {
+  /** GitHub username or org for branch prefix (e.g., 'martin-purplefish') */
+  branchPrefix?: string;
 }
 
 export interface GitClientConfig {
@@ -29,9 +35,13 @@ export class GitClient {
     this.worktreeBase = config.worktreeBase;
   }
 
-  async createWorktree(name: string, baseBranch = 'main'): Promise<GitWorktreeInfo> {
+  async createWorktree(
+    name: string,
+    baseBranch = 'main',
+    options: CreateWorktreeOptions = {}
+  ): Promise<GitWorktreeInfo> {
     const worktreePath = this.getWorktreePath(name);
-    const branchName = `factoryfactory/${name}`;
+    const branchName = this.generateBranchName(options.branchPrefix);
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
@@ -81,6 +91,19 @@ export class GitClient {
     return path.join(this.worktreeBase, name);
   }
 
+  /**
+   * Generate a short branch name with optional prefix.
+   * Format: {prefix}/{hash} or just {hash} if no prefix.
+   * Example: martin-purplefish/a38djnb
+   */
+  generateBranchName(prefix?: string): string {
+    const hash = crypto.randomBytes(3).toString('hex'); // 6 hex chars
+    return prefix ? `${prefix}/${hash}` : hash;
+  }
+
+  /**
+   * @deprecated Use generateBranchName instead. This method is kept for backwards compatibility.
+   */
   getBranchName(worktreeName: string): string {
     return `factoryfactory/${worktreeName}`;
   }
