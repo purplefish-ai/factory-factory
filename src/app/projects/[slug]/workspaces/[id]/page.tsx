@@ -190,8 +190,7 @@ function WorkspaceChatContent() {
       }
 
       const closingSession = claudeSessions[sessionIndex];
-      const isCurrentSession =
-        closingSession.claudeSessionId === claudeSessionId || closingSession.id === claudeSessionId;
+      const isCurrentSession = closingSession.claudeSessionId === claudeSessionId;
 
       // Delete the session
       deleteSession.mutate({ id: sessionId });
@@ -279,8 +278,7 @@ function WorkspaceChatContent() {
 
   // Find the running session ID (session that is currently processing)
   const runningSessionIdFromDb = running
-    ? claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId || s.id === claudeSessionId)
-        ?.id
+    ? claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id
     : undefined;
 
   return (
@@ -305,9 +303,7 @@ function WorkspaceChatContent() {
           <SessionTabBar
             sessions={claudeSessions ?? []}
             currentSessionId={
-              claudeSessions?.find(
-                (s) => s.claudeSessionId === claudeSessionId || s.id === claudeSessionId
-              )?.id ?? null
+              claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id ?? null
             }
             runningSessionId={runningSessionIdFromDb}
             onSelectSession={handleSelectSession}

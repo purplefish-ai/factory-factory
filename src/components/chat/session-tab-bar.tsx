@@ -231,8 +231,7 @@ export function SessionTabBar({
         ) : (
           sortedSessions.map((session, index) => {
             const isActive = session.id === currentSessionId;
-            const isRunning =
-              session.id === runningSessionId || session.claudeSessionId === runningSessionId;
+            const isRunning = session.id === runningSessionId;
 
             return (
               <SessionTab
