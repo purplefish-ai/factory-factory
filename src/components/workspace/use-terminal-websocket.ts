@@ -44,6 +44,8 @@ export function useTerminalWebSocket({
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Track intentional closes to prevent reconnection during React Strict Mode unmount
+  const intentionalCloseRef = useRef(false);
 
   // Store callbacks in refs to avoid reconnection on callback changes
   const onOutputRef = useRef(onOutput);
@@ -63,6 +65,9 @@ export function useTerminalWebSocket({
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
+
+    // Reset intentional close flag when establishing a new connection
+    intentionalCloseRef.current = false;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = process.env.NEXT_PUBLIC_WS_HOST || window.location.host;
@@ -116,10 +121,13 @@ export function useTerminalWebSocket({
       setConnected(false);
       wsRef.current = null;
 
-      // Attempt to reconnect after 3 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
-      }, 3000);
+      // Only attempt to reconnect if this wasn't an intentional close
+      // (e.g., from React Strict Mode unmount)
+      if (!intentionalCloseRef.current) {
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect();
+        }, 3000);
+      }
     };
 
     ws.onerror = () => {
@@ -132,6 +140,8 @@ export function useTerminalWebSocket({
     connect();
 
     return () => {
+      // Mark as intentional close to prevent reconnection in onclose handler
+      intentionalCloseRef.current = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
