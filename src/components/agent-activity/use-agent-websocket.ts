@@ -141,8 +141,9 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
             const claudeMsg = data.data as ClaudeMessage;
             setMessages((prev) => [...prev, createClaudeMessage(claudeMsg)]);
 
-            // Update token stats from result messages
+            // When we receive a 'result' message, Claude has finished the current turn
             if (claudeMsg.type === 'result') {
+              setRunning(false);
               setTokenStats((prev) => updateTokenStatsFromResult(prev, claudeMsg));
             }
           }

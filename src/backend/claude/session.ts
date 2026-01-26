@@ -180,6 +180,10 @@ function extractToolResultContent(item: ClaudeContentItem & { type: 'tool_result
  */
 function parseUserContentItem(item: ClaudeContentItem, meta: EntryMetadata): HistoryMessage | null {
   if (item.type === 'text') {
+    // Skip system content in text items
+    if (isSystemContent(item.text)) {
+      return null;
+    }
     return { type: 'user', content: item.text, ...meta };
   }
   if (item.type === 'tool_result') {
@@ -225,6 +229,10 @@ function parseUserEntry(message: ClaudeMessage, meta: EntryMetadata): HistoryMes
   const { content } = message;
 
   if (typeof content === 'string') {
+    // Skip system content (instructions, local command output)
+    if (isSystemContent(content)) {
+      return [];
+    }
     return [{ type: 'user', content, ...meta }];
   }
 
@@ -257,9 +265,24 @@ function parseAssistantEntry(message: ClaudeMessage, meta: EntryMetadata): Histo
 }
 
 /**
+ * Checks if content is system/meta content that shouldn't be shown in the UI.
+ * These include:
+ * - System instructions injected by Conductor
+ * - Local command output (caveats, stdout, etc.)
+ */
+function isSystemContent(text: string): boolean {
+  return text.startsWith('<system_instruction>') || text.startsWith('<local-command');
+}
+
+/**
  * Parse a single JSONL entry into HistoryMessage(s)
  */
 export function parseHistoryEntry(entry: Record<string, unknown>): HistoryMessage[] {
+  // Skip meta messages (local command caveats, etc.)
+  if (entry.isMeta === true) {
+    return [];
+  }
+
   const type = entry.type as string;
   const meta: EntryMetadata = {
     timestamp: (entry.timestamp as string) || new Date().toISOString(),

@@ -400,12 +400,19 @@ function forwardToConnections(sessionId: string, data: unknown): void {
 
 // Set up event forwarding from ClaudeClient to WebSocket connections
 function setupChatClientEvents(sessionId: string, client: ClaudeClient): void {
-  client.on('message', (msg) => {
-    forwardToConnections(sessionId, { type: 'claude_message', data: msg });
-  });
+  // Note: We only forward stream events, not 'message' events.
+  // Stream events provide real-time content (text deltas).
+  // The final 'assistant' message would duplicate the streamed content,
+  // causing messages to appear twice in the UI.
 
   client.on('stream', (event) => {
     forwardToConnections(sessionId, { type: 'claude_message', data: event });
+  });
+
+  // Forward result events to signal turn completion
+  // This allows the frontend to know when Claude is done responding
+  client.on('result', (result) => {
+    forwardToConnections(sessionId, { type: 'claude_message', data: result });
   });
 
   client.on('exit', (result) => {
@@ -460,6 +467,14 @@ async function getOrCreateChatClient(
 
 // Forward agent process events to agent activity WebSocket clients
 agentProcessAdapter.on('message', ({ agentId, message }) => {
+  // Skip 'assistant' and 'user' messages - they duplicate the content from stream events.
+  // Stream events provide real-time updates; the final assistant message is redundant.
+  // The TypeScript types for message are ClaudeJson which includes type field.
+  const msgType = (message as { type?: string }).type;
+  if (msgType === 'assistant' || msgType === 'user') {
+    return;
+  }
+
   const connections = agentActivityConnections.get(agentId);
   if (connections) {
     const data = JSON.stringify({ type: 'claude_message', data: message });
@@ -470,6 +485,30 @@ agentProcessAdapter.on('message', ({ agentId, message }) => {
     }
   }
 });
+
+// Forward result events to signal turn completion
+agentProcessAdapter.on(
+  'result',
+  ({ agentId, sessionId, claudeSessionId, usage, durationMs, numTurns }) => {
+    const connections = agentActivityConnections.get(agentId);
+    if (connections) {
+      // Forward as a ClaudeMessage with type 'result' so the frontend can detect turn completion
+      const resultMessage = {
+        type: 'result' as const,
+        session_id: claudeSessionId || sessionId,
+        usage,
+        duration_ms: durationMs,
+        num_turns: numTurns,
+      };
+      const data = JSON.stringify({ type: 'claude_message', data: resultMessage });
+      for (const ws of connections) {
+        if (ws.readyState === 1) {
+          ws.send(data);
+        }
+      }
+    }
+  }
+);
 
 agentProcessAdapter.on('exit', ({ agentId, code, sessionId }) => {
   const connections = agentActivityConnections.get(agentId);
