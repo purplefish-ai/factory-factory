@@ -163,13 +163,16 @@ interface ResultRendererProps {
 
 /**
  * Renders a result message, typically showing completion info.
+ * Uses markdown rendering to match history-loaded message display.
  */
 export function ResultRenderer({ message, className }: ResultRendererProps) {
   // Result messages often just indicate completion; we may not need to render them visibly
-  // But if there's result content, show it
+  // But if there's result content, show it with proper markdown formatting
   if (message.result && typeof message.result === 'string') {
     return (
-      <div className={cn('text-sm text-muted-foreground italic', className)}>{message.result}</div>
+      <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+        <MarkdownRenderer content={message.result} />
+      </div>
     );
   }
 

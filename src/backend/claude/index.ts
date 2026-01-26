@@ -55,6 +55,8 @@ export interface ClaudeClientOptions {
   disallowedTools?: string[];
   /** Initial prompt to send via -p flag */
   initialPrompt?: string;
+  /** Include partial/streaming messages for real-time updates */
+  includePartialMessages?: boolean;
 }
 
 // =============================================================================
@@ -137,6 +139,7 @@ export class ClaudeClient extends EventEmitter {
       hooks: options.hooks,
       disallowedTools: options.disallowedTools,
       initialPrompt: options.initialPrompt,
+      includePartialMessages: options.includePartialMessages,
     };
 
     // Spawn the process
