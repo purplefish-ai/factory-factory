@@ -27,7 +27,6 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { setProjectContext, trpc } from '../lib/trpc';
 import { Logo } from './logo';
 
@@ -63,6 +62,13 @@ export function AppSidebar() {
   const { data: workspaces } = trpc.workspace.list.useQuery(
     { projectId: selectedProjectId ?? '', status: 'ACTIVE' },
     { enabled: !!selectedProjectId, refetchInterval: 5000 }
+  );
+
+  // Fetch working status for all workspaces
+  const workspaceIds = workspaces?.map((w) => w.id) ?? [];
+  const { data: workingStatus } = trpc.session.getWorkspacesWorkingStatus.useQuery(
+    { workspaceIds },
+    { enabled: workspaceIds.length > 0, refetchInterval: 1000 }
   );
 
   const utils = trpc.useUtils();
@@ -250,15 +256,12 @@ export function AppSidebar() {
                               </div>
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <span className="truncate">{workspace.name}</span>
-                                <span>·</span>
-                                <span
-                                  className={cn(
-                                    workspace.status === 'ACTIVE' && 'text-green-500',
-                                    workspace.status === 'COMPLETED' && 'text-blue-500'
-                                  )}
-                                >
-                                  {workspace.status === 'ACTIVE' ? 'Working...' : workspace.status}
-                                </span>
+                                {workingStatus?.[workspace.id] && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="text-green-500">Working...</span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </Link>

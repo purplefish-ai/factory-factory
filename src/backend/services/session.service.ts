@@ -123,6 +123,33 @@ class SessionService {
     const process = activeClaudeProcesses.get(sessionId);
     return process?.isRunning() ?? false;
   }
+
+  /**
+   * Check if a session is actively working (not just alive, but processing)
+   */
+  isSessionWorking(sessionId: string): boolean {
+    const process = activeClaudeProcesses.get(sessionId);
+    return process?.getStatus() === 'running';
+  }
+
+  /**
+   * Get working status for all sessions in a workspace.
+   * Returns a map of sessionId -> isWorking
+   */
+  getWorkspaceWorkingStatus(sessionIds: string[]): Map<string, boolean> {
+    const result = new Map<string, boolean>();
+    for (const sessionId of sessionIds) {
+      result.set(sessionId, this.isSessionWorking(sessionId));
+    }
+    return result;
+  }
+
+  /**
+   * Check if any session in the given list is actively working
+   */
+  isAnySessionWorking(sessionIds: string[]): boolean {
+    return sessionIds.some((id) => this.isSessionWorking(id));
+  }
 }
 
 export const sessionService = new SessionService();

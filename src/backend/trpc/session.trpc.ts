@@ -148,4 +148,28 @@ export const sessionRouter = router({
     .mutation(({ input }) => {
       return terminalSessionAccessor.delete(input.id);
     }),
+
+  // Working Status
+
+  // Check if any session in a workspace is actively working
+  isWorkspaceWorking: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(async ({ input }) => {
+      const sessions = await claudeSessionAccessor.findByWorkspaceId(input.workspaceId);
+      const sessionIds = sessions.map((s) => s.id);
+      return sessionService.isAnySessionWorking(sessionIds);
+    }),
+
+  // Get working status for multiple workspaces at once
+  getWorkspacesWorkingStatus: publicProcedure
+    .input(z.object({ workspaceIds: z.array(z.string()) }))
+    .query(async ({ input }) => {
+      const result: Record<string, boolean> = {};
+      for (const workspaceId of input.workspaceIds) {
+        const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
+        const sessionIds = sessions.map((s) => s.id);
+        result[workspaceId] = sessionService.isAnySessionWorking(sessionIds);
+      }
+      return result;
+    }),
 });
