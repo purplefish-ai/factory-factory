@@ -1,6 +1,6 @@
 'use client';
 
-import { GitBranch } from 'lucide-react';
+import { GitBranch, PanelRight } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -13,11 +13,25 @@ import {
   useChatWebSocket,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  MainViewContent,
+  MainViewTabBar,
+  RightPanel,
+  useWorkspacePanel,
+  WorkspacePanelProvider,
+} from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
 import { trpc } from '@/frontend/lib/trpc';
 import { groupAdjacentToolCalls } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const STORAGE_KEY_HORIZONTAL_SPLIT = 'workspace-horizontal-split';
 
 // =============================================================================
 // Types
@@ -88,15 +102,130 @@ function EmptyState() {
 }
 
 // =============================================================================
+// Toggle Right Panel Button
+// =============================================================================
+
+function ToggleRightPanelButton() {
+  const { rightPanelVisible, toggleRightPanel } = useWorkspacePanel();
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggleRightPanel}
+      className="h-8 w-8"
+      title={rightPanelVisible ? 'Hide right panel' : 'Show right panel'}
+    >
+      <PanelRight className={cn('h-4 w-4', rightPanelVisible && 'text-primary')} />
+    </Button>
+  );
+}
+
+// =============================================================================
+// Chat Content Component (extracted for use with MainViewContent)
+// =============================================================================
+
+interface ChatContentProps {
+  messages: ReturnType<typeof useChatWebSocket>['messages'];
+  running: boolean;
+  loadingSession: boolean;
+  messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
+  pendingPermission: ReturnType<typeof useChatWebSocket>['pendingPermission'];
+  pendingQuestion: ReturnType<typeof useChatWebSocket>['pendingQuestion'];
+  approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
+  answerQuestion: ReturnType<typeof useChatWebSocket>['answerQuestion'];
+  connected: boolean;
+  sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
+  stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
+  inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
+  chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
+  updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
+  claudeSessionId: string | null;
+}
+
+function ChatContent({
+  messages,
+  running,
+  loadingSession,
+  messagesEndRef,
+  handleScroll,
+  pendingPermission,
+  pendingQuestion,
+  approvePermission,
+  answerQuestion,
+  connected,
+  sendMessage,
+  stopChat,
+  inputRef,
+  chatSettings,
+  updateSettings,
+  claudeSessionId,
+}: ChatContentProps) {
+  const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Message List */}
+      <ScrollArea className="flex-1" onScroll={handleScroll}>
+        <div className="p-4 space-y-2">
+          {messages.length === 0 && !running && !loadingSession && <EmptyState />}
+
+          {loadingSession && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <span className="text-sm">Loading session...</span>
+              </div>
+            </div>
+          )}
+
+          {groupedMessages.map((item) => (
+            <GroupedMessageItemRenderer key={item.id} item={item} />
+          ))}
+
+          {running && <LoadingIndicator className="py-4" />}
+
+          <div ref={messagesEndRef} className="h-px" />
+        </div>
+      </ScrollArea>
+
+      {/* Input Section with Prompts */}
+      <div className="border-t">
+        <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
+        <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
+
+        <ChatInput
+          onSend={sendMessage}
+          onStop={stopChat}
+          disabled={!connected}
+          running={running}
+          inputRef={inputRef}
+          placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
+          settings={chatSettings}
+          onSettingsChange={updateSettings}
+        />
+        {claudeSessionId && (
+          <div className="px-4 pb-2 text-xs text-muted-foreground">
+            Session: {claudeSessionId.slice(0, 16)}...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Main Workspace Chat Component
 // =============================================================================
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Chat component with multiple states and handlers
 function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
   const workspaceId = params.id as string;
+
+  const { rightPanelVisible } = useWorkspacePanel();
 
   // Fetch workspace details
   const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
@@ -257,8 +386,26 @@ function WorkspaceChatContent() {
     isNearBottomRef.current = isNearBottom;
   }, []);
 
-  // Memoize grouped messages
-  const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
+  // Handle horizontal resize layout persistence
+  const handleHorizontalLayoutChange = useCallback((layout: Record<string, number>) => {
+    localStorage.setItem(STORAGE_KEY_HORIZONTAL_SPLIT, JSON.stringify(layout));
+  }, []);
+
+  // Load initial horizontal layout from localStorage
+  const getDefaultHorizontalLayout = useCallback((): Record<string, number> | undefined => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+    const stored = localStorage.getItem(STORAGE_KEY_HORIZONTAL_SPLIT);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }, []);
 
   // Show loading while fetching workspace and sessions
   if (workspaceLoading || sessionsLoading) {
@@ -285,21 +432,24 @@ function WorkspaceChatContent() {
     <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
       {/* Header */}
       <div className="border-b">
-        {/* Row 1: Branch name and status */}
-        <div className="flex items-center gap-3 px-4 py-2">
-          {workspace.branchName ? (
-            <div className="flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
-            </div>
-          ) : (
-            <h1 className="text-lg font-semibold">{workspace.name}</h1>
-          )}
-          <StatusDot status={status} />
+        {/* Row 1: Branch name, status, and toggle button */}
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-3">
+            {workspace.branchName ? (
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-4 w-4 text-muted-foreground" />
+                <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
+              </div>
+            ) : (
+              <h1 className="text-lg font-semibold">{workspace.name}</h1>
+            )}
+            <StatusDot status={status} />
+          </div>
+          <ToggleRightPanelButton />
         </div>
 
-        {/* Row 2: Session tabs */}
-        <div className="px-4 pb-2">
+        {/* Row 2: Session tabs and Main view tabs */}
+        <div className="px-4 pb-2 flex items-center gap-4">
           <SessionTabBar
             sessions={claudeSessions ?? []}
             currentSessionId={
@@ -310,67 +460,67 @@ function WorkspaceChatContent() {
             onCreateSession={handleNewChat}
             onCloseSession={handleCloseSession}
             disabled={running || createSession.isPending || deleteSession.isPending}
+            className="flex-1"
           />
+          <MainViewTabBar />
         </div>
       </div>
 
-      {/* Message List */}
-      <ScrollArea className="flex-1" onScroll={handleScroll}>
-        <div className="p-4 space-y-2">
-          {messages.length === 0 && !running && !loadingSession && <EmptyState />}
+      {/* Main Content Area with Resizable Panels */}
+      <ResizablePanelGroup
+        orientation="horizontal"
+        onLayoutChange={handleHorizontalLayoutChange}
+        defaultLayout={getDefaultHorizontalLayout()}
+        className="flex-1"
+      >
+        {/* Left Panel: Main View Content */}
+        <ResizablePanel id="main-view-panel" defaultSize={70} minSize={30}>
+          <MainViewContent workspaceId={workspaceId}>
+            <ChatContent
+              messages={messages}
+              running={running}
+              loadingSession={loadingSession}
+              messagesEndRef={messagesEndRef}
+              handleScroll={handleScroll}
+              pendingPermission={pendingPermission}
+              pendingQuestion={pendingQuestion}
+              approvePermission={approvePermission}
+              answerQuestion={answerQuestion}
+              connected={connected}
+              sendMessage={sendMessage}
+              stopChat={stopChat}
+              inputRef={inputRef}
+              chatSettings={chatSettings}
+              updateSettings={updateSettings}
+              claudeSessionId={claudeSessionId}
+            />
+          </MainViewContent>
+        </ResizablePanel>
 
-          {loadingSession && messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                <span className="text-sm">Loading session...</span>
-              </div>
-            </div>
-          )}
-
-          {groupedMessages.map((item) => (
-            <GroupedMessageItemRenderer key={item.id} item={item} />
-          ))}
-
-          {running && <LoadingIndicator className="py-4" />}
-
-          <div ref={messagesEndRef} className="h-px" />
-        </div>
-      </ScrollArea>
-
-      {/* Input Section with Prompts */}
-      <div className="border-t">
-        <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
-        <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
-
-        <ChatInput
-          onSend={sendMessage}
-          onStop={stopChat}
-          disabled={!connected}
-          running={running}
-          inputRef={inputRef}
-          placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
-          settings={chatSettings}
-          onSettingsChange={updateSettings}
-        />
-        {claudeSessionId && (
-          <div className="px-4 pb-2 text-xs text-muted-foreground">
-            Session: {claudeSessionId.slice(0, 16)}...
-          </div>
+        {/* Right Panel (conditionally rendered) */}
+        {rightPanelVisible && (
+          <>
+            <ResizableHandle withHandle />
+            <ResizablePanel id="right-panel" defaultSize={30} minSize={20}>
+              <RightPanel workspaceId={workspaceId} />
+            </ResizablePanel>
+          </>
         )}
-      </div>
+      </ResizablePanelGroup>
     </div>
   );
 }
 
 // =============================================================================
-// Page Component with Suspense
+// Page Component with Suspense and Provider
 // =============================================================================
 
 export default function WorkspaceDetailPage() {
   return (
-    <Suspense fallback={<ChatLoading />}>
-      <WorkspaceChatContent />
-    </Suspense>
+    <WorkspacePanelProvider>
+      <Suspense fallback={<ChatLoading />}>
+        <WorkspaceChatContent />
+      </Suspense>
+    </WorkspacePanelProvider>
   );
 }

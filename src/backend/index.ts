@@ -9,6 +9,7 @@ import { agentProcessAdapter } from './agents/process-adapter.js';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index.js';
 import { prisma } from './db.js';
 import { inngest } from './inngest/client';
+import { workspaceAccessor } from './resource_accessors/workspace.accessor.js';
 import { projectRouter } from './routers/api/project.router.js';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index.js';
 import {
@@ -17,6 +18,7 @@ import {
   rateLimiter,
   reconciliationService,
 } from './services/index.js';
+import { terminalService } from './services/terminal.service.js';
 import { appRouter, createContext } from './trpc/index.js';
 
 const logger = createLogger('server');
@@ -927,6 +929,136 @@ function handleChatUpgrade(
 }
 
 // ============================================================================
+// Terminal WebSocket Handler
+// ============================================================================
+
+// Track terminal WebSocket connections per workspace
+const terminalConnections = new Map<string, Set<import('ws').WebSocket>>();
+
+// Handle terminal WebSocket upgrade
+function handleTerminalUpgrade(
+  request: import('http').IncomingMessage,
+  socket: import('stream').Duplex,
+  head: Buffer,
+  url: URL
+) {
+  const workspaceId = url.searchParams.get('workspaceId');
+
+  if (!workspaceId) {
+    logger.warn('Terminal WebSocket missing workspaceId');
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    logger.info('Terminal WebSocket connection established', { workspaceId });
+
+    // Track connection
+    if (!terminalConnections.has(workspaceId)) {
+      terminalConnections.set(workspaceId, new Set());
+    }
+    terminalConnections.get(workspaceId)?.add(ws);
+
+    // Send initial status
+    ws.send(JSON.stringify({ type: 'status', connected: true }));
+
+    // Handle messages
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket handler needs to handle multiple message types
+    ws.on('message', async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+
+        switch (message.type) {
+          case 'create': {
+            // Get workspace to find working directory
+            const workspace = await workspaceAccessor.findById(workspaceId);
+            if (!workspace?.worktreePath) {
+              ws.send(
+                JSON.stringify({ type: 'error', message: 'Workspace not found or has no worktree' })
+              );
+              return;
+            }
+
+            const terminalId = await terminalService.createTerminal({
+              workspaceId,
+              workingDir: workspace.worktreePath,
+              cols: message.cols ?? 80,
+              rows: message.rows ?? 24,
+            });
+
+            // Set up output forwarding
+            terminalService.onOutput(terminalId, (output) => {
+              if (ws.readyState === 1) {
+                ws.send(JSON.stringify({ type: 'output', data: output }));
+              }
+            });
+
+            // Set up exit handler
+            terminalService.onExit(terminalId, (exitCode) => {
+              if (ws.readyState === 1) {
+                ws.send(JSON.stringify({ type: 'exit', exitCode }));
+              }
+            });
+
+            ws.send(JSON.stringify({ type: 'created', terminalId }));
+            break;
+          }
+
+          case 'input': {
+            if (message.terminalId && message.data) {
+              terminalService.writeToTerminal(workspaceId, message.terminalId, message.data);
+            }
+            break;
+          }
+
+          case 'resize': {
+            if (message.terminalId && message.cols && message.rows) {
+              terminalService.resizeTerminal(
+                workspaceId,
+                message.terminalId,
+                message.cols,
+                message.rows
+              );
+            }
+            break;
+          }
+
+          case 'destroy': {
+            if (message.terminalId) {
+              terminalService.destroyTerminal(workspaceId, message.terminalId);
+            }
+            break;
+          }
+        }
+      } catch (error) {
+        logger.error('Error handling terminal message', error as Error);
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+      }
+    });
+
+    // Handle close
+    ws.on('close', () => {
+      logger.info('Terminal WebSocket connection closed', { workspaceId });
+      const connections = terminalConnections.get(workspaceId);
+      if (connections) {
+        connections.delete(ws);
+        if (connections.size === 0) {
+          terminalConnections.delete(workspaceId);
+          // Clean up all terminals for this workspace when last connection closes
+          terminalService.destroyWorkspaceTerminals(workspaceId);
+        }
+      }
+    });
+
+    // Handle errors
+    ws.on('error', (error) => {
+      logger.error('Terminal WebSocket error', error);
+    });
+  });
+}
+
+// ============================================================================
 // WebSocket Upgrade Handler
 // ============================================================================
 
@@ -937,6 +1069,11 @@ server.on('upgrade', (request, socket, head) => {
   // Route to appropriate handler based on path
   if (url.pathname === '/chat') {
     handleChatUpgrade(request, socket, head, url);
+    return;
+  }
+
+  if (url.pathname === '/terminal') {
+    handleTerminalUpgrade(request, socket, head, url);
     return;
   }
 
@@ -967,6 +1104,7 @@ server.listen(PORT, async () => {
   console.log(`Inngest endpoint: http://localhost:${PORT}/api/inngest`);
   console.log(`tRPC endpoint: http://localhost:${PORT}/api/trpc`);
   console.log(`WebSocket chat: ws://localhost:${PORT}/chat`);
+  console.log(`WebSocket terminal: ws://localhost:${PORT}/terminal`);
 });
 
 // Graceful shutdown
@@ -977,6 +1115,8 @@ process.on('SIGTERM', async () => {
     client.kill();
   }
   chatClients.clear();
+  // Clean up all terminals
+  terminalService.cleanup();
   // Clean up all agent processes
   agentProcessAdapter.cleanup();
   wss.close();
@@ -992,6 +1132,8 @@ process.on('SIGINT', async () => {
     client.kill();
   }
   chatClients.clear();
+  // Clean up all terminals
+  terminalService.cleanup();
   // Clean up all agent processes
   agentProcessAdapter.cleanup();
   wss.close();
@@ -1010,6 +1152,8 @@ process.on('uncaughtException', (error) => {
     client.kill();
   }
   chatClients.clear();
+  // Clean up all terminals
+  terminalService.cleanup();
   // Exit with error code
   process.exit(1);
 });
