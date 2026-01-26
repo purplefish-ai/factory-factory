@@ -12,6 +12,27 @@ import { createLogger } from './logger.service.js';
 const logger = createLogger('config');
 
 /**
+ * Expand environment variables in a string.
+ * Handles $VAR and ${VAR} syntax, including $USER and other common variables.
+ */
+function expandEnvVars(value: string): string {
+  // Replace $USER with actual home directory username
+  let result = value.replace(/\$USER|\$\{USER\}/g, homedir().split('/').pop() || 'user');
+
+  // Replace other environment variables
+  result = result.replace(/\$\{?([A-Z_][A-Z0-9_]*)\}?/gi, (match, varName) => {
+    const envValue = process.env[varName];
+    if (envValue !== undefined) {
+      // Recursively expand in case env vars reference other env vars
+      return expandEnvVars(envValue);
+    }
+    return match; // Leave unexpanded if not found
+  });
+
+  return result;
+}
+
+/**
  * Permission modes for sessions
  */
 type PermissionMode = 'strict' | 'relaxed' | 'yolo';
@@ -138,12 +159,20 @@ function getDefaultBaseDir(): string {
  * Load system configuration from environment
  */
 function loadSystemConfig(): SystemConfig {
-  const baseDir = process.env.BASE_DIR || getDefaultBaseDir();
+  // Expand any environment variables in BASE_DIR (e.g., $USER, $HOME)
+  const rawBaseDir = process.env.BASE_DIR;
+  const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : getDefaultBaseDir();
+
+  // Expand any environment variables in WORKTREE_BASE_DIR
+  const rawWorktreeDir = process.env.WORKTREE_BASE_DIR;
+  const worktreeBaseDir = rawWorktreeDir
+    ? expandEnvVars(rawWorktreeDir)
+    : join(baseDir, 'worktrees');
 
   const config: SystemConfig = {
     // Directory paths
     baseDir,
-    worktreeBaseDir: process.env.WORKTREE_BASE_DIR || join(baseDir, 'worktrees'),
+    worktreeBaseDir,
     debugLogDir: join(baseDir, 'debug'),
 
     // Server settings
