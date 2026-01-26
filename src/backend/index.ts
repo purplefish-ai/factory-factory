@@ -674,6 +674,9 @@ async function handleChatMessage(
 ) {
   switch (message.type) {
     case 'start': {
+      // Notify client that session is starting (Claude CLI spinning up)
+      ws.send(JSON.stringify({ type: 'starting', sessionId }));
+
       // Map planModeEnabled to permissionMode
       const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
 
@@ -700,8 +703,11 @@ async function handleChatMessage(
       if (client) {
         client.sendMessage(message.text || '');
       } else {
+        // Notify client that session is starting (Claude CLI spinning up)
+        ws.send(JSON.stringify({ type: 'starting', sessionId }));
         // Auto-start if not running
         const newClient = await getOrCreateChatClient(sessionId, { workingDir });
+        ws.send(JSON.stringify({ type: 'started', sessionId }));
         newClient.sendMessage(message.text || '');
       }
       break;
