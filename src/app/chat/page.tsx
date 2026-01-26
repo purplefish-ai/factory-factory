@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 // Types
 // =============================================================================
 
-type ConnectionStatus = 'connected' | 'processing' | 'disconnected';
+type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
 
 // =============================================================================
 // Helper Components
@@ -40,6 +40,7 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
         'h-2.5 w-2.5 rounded-full',
         status === 'connected' && 'bg-green-500',
         status === 'processing' && 'bg-yellow-500 animate-pulse',
+        status === 'loading' && 'bg-blue-500 animate-pulse',
         status === 'disconnected' && 'bg-red-500'
       )}
       title={
@@ -47,7 +48,9 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
           ? 'Connected'
           : status === 'processing'
             ? 'Processing...'
-            : 'Disconnected'
+            : status === 'loading'
+              ? 'Loading session...'
+              : 'Disconnected'
       }
     />
   );
@@ -101,6 +104,7 @@ function ChatContent() {
     availableSessions,
     pendingPermission,
     pendingQuestion,
+    loadingSession,
     sendMessage,
     clearChat,
     loadSession,
@@ -140,9 +144,11 @@ function ChatContent() {
   // Determine connection status for indicator
   const status: ConnectionStatus = !connected
     ? 'disconnected'
-    : running
-      ? 'processing'
-      : 'connected';
+    : loadingSession
+      ? 'loading'
+      : running
+        ? 'processing'
+        : 'connected';
 
   // Track if user is near bottom for auto-scroll
   const isNearBottomRef = useRef(true);
@@ -188,7 +194,16 @@ function ChatContent() {
       {/* Message List */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-2" onScroll={handleScroll}>
-          {messages.length === 0 && !running && <EmptyState />}
+          {messages.length === 0 && !running && !loadingSession && <EmptyState />}
+
+          {loadingSession && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <span className="text-sm">Loading session...</span>
+              </div>
+            </div>
+          )}
 
           {groupAdjacentToolCalls(messages).map((item) => (
             <GroupedMessageItemRenderer

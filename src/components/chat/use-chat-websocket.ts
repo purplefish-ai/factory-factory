@@ -32,6 +32,8 @@ export interface UseChatWebSocketReturn {
   pendingPermission: PermissionRequest | null;
   // User question state (Phase 11)
   pendingQuestion: UserQuestionRequest | null;
+  // Session loading state
+  loadingSession: boolean;
   // Actions
   sendMessage: (text: string) => void;
   clearChat: () => void;
@@ -179,6 +181,7 @@ interface MessageHandlerContext {
   setAvailableSessions: (sessions: SessionInfo[]) => void;
   setPendingPermission: (permission: PermissionRequest | null) => void;
   setPendingQuestion: (question: UserQuestionRequest | null) => void;
+  setLoadingSession: (loading: boolean) => void;
   /** Ref to track accumulated tool input JSON per tool_use_id */
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
   /** Updates tool input for a specific tool_use_id */
@@ -413,6 +416,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
 
     ctx.setMessages(chatMessages);
   }
+  ctx.setLoadingSession(false);
 }
 
 function handlePermissionRequestMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
@@ -451,6 +455,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   const [availableSessions, setAvailableSessions] = useState<SessionInfo[]>([]);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<UserQuestionRequest | null>(null);
+  const [loadingSession, setLoadingSession] = useState(false);
 
   // Refs
   const wsRef = useRef<WebSocket | null>(null);
@@ -537,6 +542,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       setAvailableSessions,
       setPendingPermission,
       setPendingQuestion,
+      setLoadingSession,
       toolInputAccumulatorRef,
       updateToolInput,
     }),
@@ -614,6 +620,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       // Load initial session only once (on first connect from URL)
       if (initialSessionIdRef.current && !hasLoadedInitialSessionRef.current) {
         hasLoadedInitialSessionRef.current = true;
+        setLoadingSession(true);
         sendWsMessage({ type: 'load_session', claudeSessionId: initialSessionIdRef.current });
       }
     };
@@ -713,6 +720,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
 
   const loadSession = useCallback(
     (sessionId: string) => {
+      setLoadingSession(true);
       sendWsMessage({ type: 'load_session', claudeSessionId: sessionId });
     },
     [sendWsMessage]
@@ -743,6 +751,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     availableSessions,
     pendingPermission,
     pendingQuestion,
+    loadingSession,
     // Actions
     sendMessage,
     clearChat,
