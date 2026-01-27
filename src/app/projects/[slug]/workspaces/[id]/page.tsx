@@ -31,6 +31,23 @@ type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
 // Helper Components
 // =============================================================================
 
+function getConnectionStatusFromState(
+  connected: boolean,
+  loadingSession: boolean,
+  running: boolean
+): ConnectionStatus {
+  if (!connected) {
+    return 'disconnected';
+  }
+  if (loadingSession) {
+    return 'loading';
+  }
+  if (running) {
+    return 'processing';
+  }
+  return 'connected';
+}
+
 function getStatusText(status: ConnectionStatus): string {
   switch (status) {
     case 'connected':
@@ -551,13 +568,7 @@ function WorkspaceChatContent() {
   }, [initialSessionId, selectedSessionId, setSelectedSessionId]);
 
   // Determine connection status for indicator
-  const status: ConnectionStatus = !connected
-    ? 'disconnected'
-    : loadingSession
-      ? 'loading'
-      : running
-        ? 'processing'
-        : 'connected';
+  const status = getConnectionStatusFromState(connected, loadingSession, running);
 
   // Show loading while fetching workspace and sessions
   if (workspaceLoading || sessionsLoading) {

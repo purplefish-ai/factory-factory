@@ -54,26 +54,24 @@ const CHAT_TAB: MainViewTab = {
 // =============================================================================
 
 function isValidTab(tab: unknown): tab is MainViewTab {
-  if (
-    typeof tab !== 'object' ||
-    tab === null ||
-    !('id' in tab) ||
-    typeof (tab as MainViewTab).id !== 'string' ||
-    !('type' in tab) ||
-    !['chat', 'file', 'diff'].includes((tab as MainViewTab).type) ||
-    !('label' in tab) ||
-    typeof (tab as MainViewTab).label !== 'string'
-  ) {
+  if (typeof tab !== 'object' || tab === null) {
+    return false;
+  }
+
+  const t = tab as Record<string, unknown>;
+  if (typeof t.id !== 'string') {
+    return false;
+  }
+  if (typeof t.label !== 'string') {
+    return false;
+  }
+  if (!['chat', 'file', 'diff'].includes(t.type as string)) {
     return false;
   }
 
   // For file/diff tabs, path must be a non-empty string
-  const tabType = (tab as MainViewTab).type;
-  if (tabType === 'file' || tabType === 'diff') {
-    const path = (tab as MainViewTab).path;
-    if (typeof path !== 'string' || path.length === 0) {
-      return false;
-    }
+  if ((t.type === 'file' || t.type === 'diff') && (typeof t.path !== 'string' || t.path === '')) {
+    return false;
   }
 
   return true;
