@@ -33,12 +33,6 @@ export const RECONNECT_BASE_DELAY_MS = 1000;
 export const RECONNECT_MAX_DELAY_MS = 30_000;
 
 /**
- * Legacy constant for backwards compatibility.
- * @deprecated Use getReconnectDelay() instead for exponential backoff.
- */
-export const RECONNECT_DELAY_MS = 2000;
-
-/**
  * Calculate reconnection delay with exponential backoff and jitter.
  * @param attempt - The current reconnection attempt number (0-indexed)
  * @returns Delay in milliseconds

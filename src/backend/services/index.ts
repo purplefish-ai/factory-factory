@@ -20,5 +20,7 @@ export { rateLimiter } from './rate-limiter.service';
 export { reconciliationService } from './reconciliation.service';
 // Session service
 export { sessionService } from './session.service';
+// Startup script service
+export { startupScriptService } from './startup-script.service';
 // Terminal service
 export { terminalService } from './terminal.service';
