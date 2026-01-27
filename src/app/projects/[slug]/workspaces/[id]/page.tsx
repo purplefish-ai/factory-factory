@@ -471,16 +471,6 @@ function WorkspaceChatContent() {
     }
   }, [initialSessionId, selectedSessionId, setSelectedSessionId]);
 
-  // Load session when sessions are fetched and we have one with history
-  useEffect(() => {
-    if (initialSessionId && !claudeSessionId && !loadingSession) {
-      const session = claudeSessions?.find((s) => s.id === initialSessionId);
-      if (session?.claudeSessionId) {
-        loadSession(session.claudeSessionId);
-      }
-    }
-  }, [initialSessionId, claudeSessionId, loadingSession, loadSession, claudeSessions]);
-
   // Determine connection status for indicator
   const status: ConnectionStatus = !connected
     ? 'disconnected'

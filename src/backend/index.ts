@@ -894,7 +894,14 @@ function validateWorkingDir(workingDir: string): string | null {
   }
 
   // Ensure the real path (with symlinks resolved) is within the worktree base directory
-  const worktreeBaseDir = configService.getWorktreeBaseDir();
+  // Also resolve symlinks in worktreeBaseDir to handle cases where the base dir itself contains symlinks
+  let worktreeBaseDir: string;
+  try {
+    worktreeBaseDir = realpathSync(configService.getWorktreeBaseDir());
+  } catch {
+    // If worktree base dir doesn't exist or can't be resolved, reject all paths
+    return null;
+  }
   if (!realPath.startsWith(`${worktreeBaseDir}/`) && realPath !== worktreeBaseDir) {
     return null;
   }
