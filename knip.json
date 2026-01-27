@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["src/app/**/*.{ts,tsx}"],
+  "entry": ["src/app/**/*.{ts,tsx}", "src/cli/index.ts", "src/backend/index.ts"],
   "project": ["src/**/*.{ts,tsx}"],
   "paths": {
     "@/*": ["src/*"],
@@ -41,10 +41,10 @@
     "recharts",
     "tailwindcss-animate",
     "vaul",
-    "wait-on",
-    "@hookform/resolvers"
+    "@hookform/resolvers",
+    "ws",
+    "@types/ws"
   ],
-  "ignoreBinaries": ["jq"],
   "vitest": {
     "entry": ["src/**/*.test.ts", "vitest.config.ts"]
   },

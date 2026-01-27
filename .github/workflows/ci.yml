@@ -65,8 +65,8 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Build all
-        run: pnpm build:all
+      - name: Build
+        run: pnpm build
 
   test:
     name: Test

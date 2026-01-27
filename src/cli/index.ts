@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { createConnection } from 'node:net';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { createConnection, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { Command } from 'commander';
+import open from 'open';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -70,12 +71,75 @@ async function waitForPort(
   throw new Error(`Timed out waiting for port ${port} after ${timeout}ms`);
 }
 
+// Check if a port is available
+function isPortAvailable(port: number, host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.once('listening', () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, host);
+  });
+}
+
+// Find an available port starting from the given port
+async function findAvailablePort(
+  startPort: number,
+  host: string,
+  maxAttempts = 10
+): Promise<number> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const port = startPort + i;
+    if (await isPortAvailable(port, host)) {
+      return port;
+    }
+  }
+  throw new Error(`Could not find an available port starting from ${startPort}`);
+}
+
+// Ensure data directory exists
+function ensureDataDir(databasePath: string): void {
+  const dir = dirname(databasePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+
+// Run database migrations
+function runMigrations(databasePath: string, verbose: boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const migrate = spawn('npx', ['prisma', 'migrate', 'deploy'], {
+      cwd: PROJECT_ROOT,
+      env: {
+        ...process.env,
+        DATABASE_URL: `file:${databasePath}`,
+      },
+      stdio: verbose ? 'inherit' : 'pipe',
+    });
+
+    migrate.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Migration failed with exit code ${code}`));
+      }
+    });
+
+    migrate.on('error', reject);
+  });
+}
+
 interface ServeOptions {
   port: string;
   backendPort: string;
   databasePath?: string;
   host: string;
   dev?: boolean;
+  open?: boolean;
+  verbose?: boolean;
 }
 
 interface MigrateOptions {
@@ -101,105 +165,240 @@ program
   .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
   .option('--host <host>', 'Host to bind to', 'localhost')
   .option('--dev', 'Run in development mode with hot reloading')
+  .option('--no-open', 'Do not open browser automatically')
+  .option('-v, --verbose', 'Enable verbose logging')
   .action(async (options: ServeOptions) => {
-    // Database path is optional - defaults to ~/factory-factory/data.db
-    const databasePath = options.databasePath || process.env.DATABASE_PATH;
+    const verbose = options.verbose ?? false;
+    const shouldOpen = options.open !== false;
 
-    console.log(chalk.cyan('\n  FactoryFactory'));
-    console.log(chalk.gray('  ─────────────────────────────────────'));
-    console.log(chalk.gray(`  Frontend:  http://${options.host}:${options.port}`));
-    console.log(chalk.gray(`  Backend:   http://${options.host}:${options.backendPort}`));
-    console.log(chalk.gray(`  Database:  ${databasePath || '(default)'}`));
-    console.log(chalk.gray(`  Mode:      ${options.dev ? 'development' : 'production'}`));
-    console.log(chalk.gray('  ─────────────────────────────────────\n'));
+    // Database path - defaults to ~/factory-factory/data.db
+    const defaultDbPath = join(homedir(), 'factory-factory', 'data.db');
+    const databasePath = options.databasePath || process.env.DATABASE_PATH || defaultDbPath;
+
+    // Show startup banner
+    console.log(chalk.bold.cyan('\n  🏭 FactoryFactory\n'));
+
+    // Ensure data directory exists
+    if (verbose) {
+      console.log(chalk.gray('  Ensuring data directory exists...'));
+    }
+    ensureDataDir(databasePath);
+
+    // Find available ports
+    const requestedFrontendPort = Number.parseInt(options.port, 10);
+    const requestedBackendPort = Number.parseInt(options.backendPort, 10);
+
+    let frontendPort: number;
+    let backendPort: number;
+
+    try {
+      if (verbose) {
+        console.log(chalk.gray('  Checking port availability...'));
+      }
+      backendPort = await findAvailablePort(requestedBackendPort, options.host);
+      if (backendPort !== requestedBackendPort) {
+        console.log(
+          chalk.yellow(`  ⚠ Backend port ${requestedBackendPort} in use, using ${backendPort}`)
+        );
+      }
+
+      frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
+      if (frontendPort !== requestedFrontendPort) {
+        console.log(
+          chalk.yellow(`  ⚠ Frontend port ${requestedFrontendPort} in use, using ${frontendPort}`)
+        );
+      }
+    } catch (error) {
+      console.error(chalk.red(`\n  ✗ ${(error as Error).message}`));
+      process.exit(1);
+    }
+
+    // Run database migrations
+    console.log(chalk.blue('  📦 Running database migrations...'));
+    try {
+      await runMigrations(databasePath, verbose);
+      console.log(chalk.green('  ✓ Migrations completed'));
+    } catch (error) {
+      console.error(chalk.red(`\n  ✗ Migration failed: ${(error as Error).message}`));
+      process.exit(1);
+    }
 
     // Set environment variables
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      ...(databasePath && { DATABASE_PATH: databasePath }),
-      FRONTEND_PORT: options.port,
-      BACKEND_PORT: options.backendPort,
-      NEXT_PUBLIC_BACKEND_PORT: options.backendPort,
+      DATABASE_PATH: databasePath,
+      FRONTEND_PORT: frontendPort.toString(),
+      BACKEND_PORT: backendPort.toString(),
+      NEXT_PUBLIC_BACKEND_PORT: backendPort.toString(),
       NODE_ENV: options.dev ? 'development' : 'production',
     };
 
     const processes: ChildProcess[] = [];
+    const shutdownState = { shuttingDown: false };
 
     // Handle shutdown
     const shutdown = (signal: string) => {
-      console.log(chalk.yellow(`\n${signal} received, shutting down...`));
+      if (shutdownState.shuttingDown) {
+        return;
+      }
+      shutdownState.shuttingDown = true;
+
+      console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
       for (const proc of processes) {
         proc.kill('SIGTERM');
       }
+
+      // Force kill after timeout
+      setTimeout(() => {
+        console.log(chalk.red('  Force killing remaining processes...'));
+        for (const proc of processes) {
+          proc.kill('SIGKILL');
+        }
+        process.exit(1);
+      }, 5000);
     };
 
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
+    const url = `http://${options.host}:${frontendPort}`;
+
+    const onReady = async () => {
+      console.log(chalk.gray('\n  ─────────────────────────────────────'));
+      console.log(chalk.gray(`  Frontend:  http://${options.host}:${frontendPort}`));
+      console.log(chalk.gray(`  Backend:   http://${options.host}:${backendPort}`));
+      console.log(chalk.gray(`  Database:  ${databasePath}`));
+      console.log(chalk.gray(`  Mode:      ${options.dev ? 'development' : 'production'}`));
+      console.log(chalk.gray('  ─────────────────────────────────────'));
+      console.log(chalk.bold.green(`\n  ✅ Ready at ${chalk.cyan(url)}\n`));
+      console.log(chalk.dim('  Press Ctrl+C to stop\n'));
+
+      if (shouldOpen) {
+        try {
+          await open(url);
+        } catch (error) {
+          console.log(chalk.yellow(`  ⚠ Could not open browser: ${(error as Error).message}`));
+        }
+      }
+    };
+
     if (options.dev) {
       // Development mode - use tsx watch for backend, next dev for frontend
-      await startDevelopmentMode(options, env, processes);
+      await startDevelopmentMode(
+        options,
+        env,
+        processes,
+        backendPort,
+        frontendPort,
+        onReady,
+        shutdownState
+      );
     } else {
       // Production mode - use compiled backend and next start
-      await startProductionMode(options, env, processes);
+      await startProductionMode(
+        options,
+        env,
+        processes,
+        backendPort,
+        frontendPort,
+        onReady,
+        shutdownState
+      );
     }
   });
 
 async function startDevelopmentMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
-  processes: ChildProcess[]
+  processes: ChildProcess[],
+  backendPort: number,
+  frontendPort: number,
+  onReady: () => Promise<void>,
+  shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
-  // Note: This does not start Inngest. For full development with Inngest,
-  // use `pnpm dev:all` instead, or start Inngest separately with `pnpm inngest:dev`.
-  console.log(chalk.blue('Starting backend (development mode)...'));
+  console.log(chalk.blue('  🔧 Starting backend (development mode)...'));
 
   const backend = spawn('npx', ['tsx', 'watch', 'src/backend/index.ts'], {
     cwd: PROJECT_ROOT,
     env,
-    stdio: 'inherit',
+    stdio: options.verbose ? 'inherit' : 'pipe',
   });
   processes.push(backend);
 
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && backend.stderr) {
+    backend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
+    });
+  }
+
   // Wait for backend to be ready
-  const backendPort = Number.parseInt(options.backendPort, 10);
   try {
     await waitForPort(backendPort, options.host);
+    console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
   } catch {
-    console.error(chalk.red(`Backend failed to start on port ${backendPort}`));
+    console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
     for (const proc of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
   }
 
-  console.log(chalk.blue('Starting frontend (development mode)...'));
+  console.log(chalk.blue('  🎨 Starting frontend (development mode)...'));
 
-  const frontend = spawn('npx', ['next', 'dev', '-p', options.port], {
+  const frontend = spawn('npx', ['next', 'dev', '-p', frontendPort.toString()], {
     cwd: PROJECT_ROOT,
     env,
-    stdio: 'inherit',
+    stdio: options.verbose ? 'inherit' : 'pipe',
   });
   processes.push(frontend);
 
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && frontend.stderr) {
+    frontend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
+    });
+  }
+
+  // Wait for frontend to be ready
+  try {
+    await waitForPort(frontendPort, options.host);
+    console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
+  } catch {
+    console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
+    for (const proc of processes) {
+      proc.kill('SIGTERM');
+    }
+    process.exit(1);
+  }
+
+  // Call onReady callback (opens browser, shows final status)
+  await onReady();
+
   // Wait for either process to exit
   await Promise.race([
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       backend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Backend exited with code ${code}`));
         }
       });
     }),
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       frontend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Frontend exited with code ${code}`));
         }
       });
     }),
   ]).catch((error) => {
-    console.error(chalk.red(error.message));
+    console.error(chalk.red(`\n  ✗ ${error.message}`));
     for (const proc of processes) {
       proc.kill('SIGTERM');
     }
@@ -210,46 +409,61 @@ async function startDevelopmentMode(
 async function startProductionMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
-  processes: ChildProcess[]
+  processes: ChildProcess[],
+  backendPort: number,
+  frontendPort: number,
+  onReady: () => Promise<void>,
+  shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
   // Check if built
   const nextStandalone = join(PROJECT_ROOT, '.next', 'standalone');
   const backendDist = join(PROJECT_ROOT, 'dist', 'backend', 'index.js');
 
   if (!existsSync(nextStandalone)) {
-    console.error(chalk.red('Error: Frontend not built. Run `pnpm build:frontend` first.'));
-    console.error(chalk.gray('Or use --dev flag for development mode.'));
+    console.error(
+      chalk.red('\n  ✗ Frontend not built. Run `ff build` or `pnpm build:frontend` first.')
+    );
+    console.error(chalk.gray('    Or use --dev flag for development mode.'));
     process.exit(1);
   }
 
   if (!existsSync(backendDist)) {
-    console.error(chalk.red('Error: Backend not built. Run `pnpm build:backend` first.'));
-    console.error(chalk.gray('Or use --dev flag for development mode.'));
+    console.error(
+      chalk.red('\n  ✗ Backend not built. Run `ff build` or `pnpm build:backend` first.')
+    );
+    console.error(chalk.gray('    Or use --dev flag for development mode.'));
     process.exit(1);
   }
 
-  console.log(chalk.blue('Starting backend (production mode)...'));
+  console.log(chalk.blue('  🔧 Starting backend (production mode)...'));
 
   const backend = spawn('node', [backendDist], {
     cwd: PROJECT_ROOT,
     env,
-    stdio: 'inherit',
+    stdio: options.verbose ? 'inherit' : 'pipe',
   });
   processes.push(backend);
 
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && backend.stderr) {
+    backend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
+    });
+  }
+
   // Wait for backend to be ready
-  const backendPort = Number.parseInt(options.backendPort, 10);
   try {
     await waitForPort(backendPort, options.host);
+    console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
   } catch {
-    console.error(chalk.red(`Backend failed to start on port ${backendPort}`));
+    console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
     for (const proc of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
   }
 
-  console.log(chalk.blue('Starting frontend (production mode)...'));
+  console.log(chalk.blue('  🎨 Starting frontend (production mode)...'));
 
   // Next.js standalone server
   const standaloneServer = join(nextStandalone, 'server.js');
@@ -257,31 +471,59 @@ async function startProductionMode(
     cwd: PROJECT_ROOT,
     env: {
       ...env,
-      PORT: options.port,
+      PORT: frontendPort.toString(),
       HOSTNAME: options.host,
     },
-    stdio: 'inherit',
+    stdio: options.verbose ? 'inherit' : 'pipe',
   });
   processes.push(frontend);
 
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && frontend.stderr) {
+    frontend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
+    });
+  }
+
+  // Wait for frontend to be ready
+  try {
+    await waitForPort(frontendPort, options.host);
+    console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
+  } catch {
+    console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
+    for (const proc of processes) {
+      proc.kill('SIGTERM');
+    }
+    process.exit(1);
+  }
+
+  // Call onReady callback (opens browser, shows final status)
+  await onReady();
+
   // Wait for either process to exit with error handling
   await Promise.race([
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       backend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Backend exited with code ${code}`));
         }
       });
     }),
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       frontend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Frontend exited with code ${code}`));
         }
       });
     }),
   ]).catch((error) => {
-    console.error(chalk.red(error.message));
+    console.error(chalk.red(`\n  ✗ ${error.message}`));
     for (const proc of processes) {
       proc.kill('SIGTERM');
     }

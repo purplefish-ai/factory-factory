@@ -4,44 +4,82 @@
 
 Workspace-based coding environment that lets you run multiple Claude Code sessions in parallel, each with their own isolated git worktree.
 
-## Prerequisites
+## Installation
 
-- **Node.js 18+**
-- **pnpm** - Package manager
-- **Docker** (for PostgreSQL)
-- **GitHub CLI (`gh`)** - authenticated
-- **Claude Code** - authenticated via `claude login`
-
-## Quick Start
+**Prerequisites:**
+- Node.js 18+
+- pnpm
+- GitHub CLI (`gh`) - authenticated
+- Claude Code - authenticated via `claude login`
 
 ```bash
-# 1. Install dependencies
+# Clone and install
+git clone <repo-url>
+cd factory-factory
 pnpm install
 
-# 2. Configure
-cp .env.example .env
-# Edit .env: set DATABASE_URL (default works with docker-compose)
-
-# 3. Start PostgreSQL
-docker-compose up -d
-
-# 4. Run migrations
-pnpm db:migrate
-
-# 5. Start all servers
-pnpm dev:all
-
-# 6. Create a project
-# Open http://localhost:3000/projects/new
-# Enter your repository path and worktree base path
+# Optional: Install CLI globally
+pnpm link --global
 ```
 
-## Verify Installation
+## Running
 
-- Frontend: http://localhost:3000
-- Backend: http://localhost:3001/health
-- Inngest: http://localhost:8288
-- Prisma Studio: `pnpm db:studio`
+```bash
+# Using pnpm (recommended for development)
+pnpm dev
+
+# Or using the CLI directly (if installed globally)
+ff serve --dev
+```
+
+The server automatically:
+- Creates the data directory (`~/factory-factory/`)
+- Runs database migrations
+- Finds available ports if defaults are in use
+- Opens your browser when ready
+
+## CLI Reference
+
+```
+Usage: ff serve [options]
+
+Options:
+  -p, --port <port>           Frontend port (default: 3000)
+  --backend-port <port>       Backend port (default: 3001)
+  -d, --database-path <path>  SQLite database path (default: ~/factory-factory/data.db)
+  --host <host>               Host to bind to (default: localhost)
+  --dev                       Development mode with hot reloading
+  --no-open                   Don't open browser automatically
+  -v, --verbose               Enable verbose logging
+```
+
+**Other CLI commands:**
+```bash
+ff build        # Build for production
+ff db:migrate   # Run database migrations
+ff db:studio    # Open Prisma Studio
+```
+
+## Development Commands
+
+```bash
+# Server
+pnpm dev              # Start dev server
+pnpm dev --no-open    # Without browser auto-open
+pnpm dev --verbose    # With detailed logging
+pnpm build            # Build for production
+pnpm start            # Start production server
+
+# Quality
+pnpm test             # Run tests
+pnpm typecheck        # TypeScript checking
+pnpm check:fix        # Lint + format
+
+# Database
+pnpm db:migrate       # Run migrations
+pnpm db:studio        # Prisma Studio
+pnpm db:generate      # Regenerate Prisma client
+```
 
 ## Architecture
 
@@ -56,26 +94,9 @@ Project (repository configuration)
 - **Isolated workspaces:** Each workspace gets its own git worktree and branch
 - **Real-time chat:** WebSocket-based streaming from Claude Code CLI
 - **Terminal access:** Full PTY terminals per workspace
-- **File browser:** View and diff files in each workspace
 - **Session persistence:** Resume previous Claude sessions
 
-## Development
-
-```bash
-pnpm dev:all       # Start frontend + backend + Inngest
-pnpm typecheck     # TypeScript checking
-pnpm check:fix     # Lint + format with Biome
-pnpm test          # Run tests
-pnpm storybook     # Component development
-```
-
 ## Troubleshooting
-
-**PostgreSQL connection:**
-```bash
-docker ps                        # Ensure Docker is running
-docker-compose logs postgres     # Check logs
-```
 
 **GitHub CLI:**
 ```bash
@@ -83,20 +104,14 @@ gh auth status
 gh auth login
 ```
 
-**Prisma issues:**
+**Database issues:**
 ```bash
-pnpm exec prisma migrate reset    # Reset database (destroys data)
-pnpm db:generate                  # Regenerate client
+pnpm db:migrate                  # Run migrations
+pnpm exec prisma migrate reset   # Reset database (destroys data)
 ```
 
-## Production
-
-```bash
-pnpm build:all
-pnpm start:all
-```
-
-See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for production deployment details.
+**Port conflicts:**
+The server automatically finds available ports. Use `--verbose` to see which ports are used.
 
 ## License
 
