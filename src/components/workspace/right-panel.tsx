@@ -38,7 +38,7 @@ function PanelTab({ label, icon, isActive, onClick }: PanelTabProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+        'flex items-center gap-1 px-2 py-1 text-sm font-medium rounded-md transition-colors',
         isActive
           ? 'bg-background text-foreground shadow-sm border border-border'
           : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -96,16 +96,16 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
       {/* Top Panel: Git Status / File Browser (60% height) */}
       <div className="flex-[6] flex flex-col min-h-0">
         {/* Tab bar */}
-        <div className="flex items-center gap-1 p-2 bg-muted/50 border-b">
+        <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
           <PanelTab
             label="Git"
-            icon={<GitBranch className="h-4 w-4" />}
+            icon={<GitBranch className="h-3.5 w-3.5" />}
             isActive={activeTopTab === 'git'}
             onClick={() => handleTabChange('git')}
           />
           <PanelTab
             label="Files"
-            icon={<Files className="h-4 w-4" />}
+            icon={<Files className="h-3.5 w-3.5" />}
             isActive={activeTopTab === 'files'}
             onClick={() => handleTabChange('files')}
           />

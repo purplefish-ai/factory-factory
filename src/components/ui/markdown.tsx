@@ -1,5 +1,6 @@
 'use client';
 
+import { ExternalLink } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,7 +13,9 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none break-words', className)}>
+    <div
+      className={cn('prose prose-sm dark:prose-invert max-w-none break-words text-xs', className)}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -29,7 +32,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             }
             // Inline code
             return (
-              <code className="bg-muted px-1.5 py-0.5 rounded text-sm" {...props}>
+              <code className="bg-muted px-1.5 py-0.5 rounded text-xs" {...props}>
                 {children}
               </code>
             );
@@ -46,9 +49,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary underline hover:no-underline"
+              className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
             >
               {children}
+              <ExternalLink className="h-3 w-3 shrink-0" />
             </a>
           ),
           // Override paragraph to avoid extra margins

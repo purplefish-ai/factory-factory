@@ -1,6 +1,6 @@
 'use client';
 
-import { Archive, GitBranch, PanelRight } from 'lucide-react';
+import { Archive, GitBranch, Loader2, PanelRight } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -115,6 +115,7 @@ interface ChatContentProps {
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   running: boolean;
   loadingSession: boolean;
+  startingSession: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
   pendingPermission: ReturnType<typeof useChatWebSocket>['pendingPermission'];
@@ -134,6 +135,7 @@ function ChatContent({
   messages,
   running,
   loadingSession,
+  startingSession,
   messagesEndRef,
   handleScroll,
   pendingPermission,
@@ -150,12 +152,24 @@ function ChatContent({
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
-  // Focus input when clicking anywhere in the chat area
-  const handleChatClick = useCallback(() => {
-    if (inputRef?.current && !running) {
-      inputRef.current.focus();
-    }
-  }, [inputRef, running]);
+  // Focus input when clicking anywhere in the chat area (but not on interactive elements)
+  const handleChatClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Don't steal focus from interactive elements (buttons, inputs, etc.)
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(
+          'button, input, textarea, select, [role="button"], [data-radix-collection-item]'
+        )
+      ) {
+        return;
+      }
+      if (inputRef?.current && !running) {
+        inputRef.current.focus();
+      }
+    },
+    [inputRef, running]
+  );
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction
@@ -164,7 +178,9 @@ function ChatContent({
       {/* Message List */}
       <ScrollArea className="flex-1" onScroll={handleScroll}>
         <div className="p-4 space-y-2">
-          {messages.length === 0 && !running && !loadingSession && <EmptyState />}
+          {messages.length === 0 && !running && !loadingSession && !startingSession && (
+            <EmptyState />
+          )}
 
           {loadingSession && messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -180,6 +196,13 @@ function ChatContent({
           ))}
 
           {running && <LoadingIndicator className="py-4" />}
+
+          {startingSession && !running && (
+            <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-xs">Starting agent...</span>
+            </div>
+          )}
 
           <div ref={messagesEndRef} className="h-px" />
         </div>
@@ -354,7 +377,12 @@ function useSessionManagement({
   const handleNewChat = useCallback(() => {
     createSession.mutate(
       { workspaceId, workflow: 'followup', model: 'sonnet' },
-      { onSuccess: () => clearChat() }
+      {
+        onSuccess: (session) => {
+          setSelectedSessionId(session.id);
+          clearChat();
+        },
+      }
     );
   }, [clearChat, createSession, workspaceId]);
 
@@ -426,6 +454,7 @@ function WorkspaceChatContent() {
     pendingPermission,
     pendingQuestion,
     loadingSession,
+    startingSession,
     chatSettings,
     sendMessage,
     stopChat,
@@ -558,6 +587,7 @@ function WorkspaceChatContent() {
               messages={messages}
               running={running}
               loadingSession={loadingSession}
+              startingSession={startingSession}
               messagesEndRef={messagesEndRef}
               handleScroll={handleScroll}
               pendingPermission={pendingPermission}

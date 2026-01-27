@@ -1,6 +1,6 @@
 'use client';
 
-import { GitBranch, GitPullRequest, Kanban, Plus, Settings } from 'lucide-react';
+import { GitBranch, GitPullRequest, Kanban, Loader2, Plus, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -253,11 +253,32 @@ export function AppSidebar() {
                 className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
                 title="New Workspace"
               >
-                <Plus className="h-3.5 w-3.5" />
+                {isCreatingWorkspace ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
               </button>
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
               <SidebarMenu>
+                {isCreatingWorkspace && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton className="h-auto py-2 cursor-default">
+                      <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                          <span className="truncate font-medium text-sm text-muted-foreground">
+                            Creating workspace...
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
                   return (
