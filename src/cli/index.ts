@@ -3,6 +3,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -72,13 +73,13 @@ async function waitForPort(
 interface ServeOptions {
   port: string;
   backendPort: string;
-  databaseUrl?: string;
+  databasePath?: string;
   host: string;
   dev?: boolean;
 }
 
 interface MigrateOptions {
-  databaseUrl?: string;
+  databasePath?: string;
 }
 
 const program = new Command();
@@ -97,36 +98,25 @@ program
   .description('Start the FactoryFactory server')
   .option('-p, --port <port>', 'Frontend port', '3000')
   .option('--backend-port <port>', 'Backend port', '3001')
-  .option('-d, --database-url <url>', 'PostgreSQL connection URL (or set DATABASE_URL env)')
+  .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
   .option('--host <host>', 'Host to bind to', 'localhost')
   .option('--dev', 'Run in development mode with hot reloading')
   .action(async (options: ServeOptions) => {
-    const databaseUrl = options.databaseUrl || process.env.DATABASE_URL;
-
-    if (!databaseUrl) {
-      console.error(chalk.red('Error: Database URL is required'));
-      console.error(
-        chalk.yellow('Provide it via --database-url or DATABASE_URL environment variable')
-      );
-      console.error(chalk.gray('\nExample:'));
-      console.error(
-        chalk.gray('  ff serve --database-url postgresql://user:pass@localhost:5432/factoryfactory')
-      );
-      console.error(chalk.gray('  DATABASE_URL=postgresql://... ff serve'));
-      process.exit(1);
-    }
+    // Database path is optional - defaults to ~/factory-factory/data.db
+    const databasePath = options.databasePath || process.env.DATABASE_PATH;
 
     console.log(chalk.cyan('\n  FactoryFactory'));
     console.log(chalk.gray('  ─────────────────────────────────────'));
     console.log(chalk.gray(`  Frontend:  http://${options.host}:${options.port}`));
     console.log(chalk.gray(`  Backend:   http://${options.host}:${options.backendPort}`));
+    console.log(chalk.gray(`  Database:  ${databasePath || '(default)'}`));
     console.log(chalk.gray(`  Mode:      ${options.dev ? 'development' : 'production'}`));
     console.log(chalk.gray('  ─────────────────────────────────────\n'));
 
     // Set environment variables
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      DATABASE_URL: databaseUrl,
+      ...(databasePath && { DATABASE_PATH: databasePath }),
       FRONTEND_PORT: options.port,
       BACKEND_PORT: options.backendPort,
       NEXT_PUBLIC_BACKEND_PORT: options.backendPort,
@@ -306,25 +296,20 @@ async function startProductionMode(
 program
   .command('db:migrate')
   .description('Run database migrations')
-  .option('-d, --database-url <url>', 'PostgreSQL connection URL (or set DATABASE_URL env)')
+  .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
   .action(async (options: MigrateOptions) => {
-    const databaseUrl = options.databaseUrl || process.env.DATABASE_URL;
+    // Database path is optional - defaults to ~/factory-factory/data.db
+    const databasePath = options.databasePath || process.env.DATABASE_PATH;
+    const defaultPath = join(homedir(), 'factory-factory', 'data.db');
+    const effectivePath = databasePath || defaultPath;
 
-    if (!databaseUrl) {
-      console.error(chalk.red('Error: Database URL is required'));
-      console.error(
-        chalk.yellow('Provide it via --database-url or DATABASE_URL environment variable')
-      );
-      process.exit(1);
-    }
-
-    console.log(chalk.blue('Running database migrations...'));
+    console.log(chalk.blue(`Running database migrations on ${effectivePath}...`));
 
     const migrate = spawn('npx', ['prisma', 'migrate', 'deploy'], {
       cwd: PROJECT_ROOT,
       env: {
         ...process.env,
-        DATABASE_URL: databaseUrl,
+        DATABASE_URL: `file:${effectivePath}`,
       },
       stdio: 'inherit',
     });
@@ -348,22 +333,20 @@ program
 program
   .command('db:studio')
   .description('Open Prisma Studio for database management')
-  .option('-d, --database-url <url>', 'PostgreSQL connection URL (or set DATABASE_URL env)')
+  .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
   .action(async (options: MigrateOptions) => {
-    const databaseUrl = options.databaseUrl || process.env.DATABASE_URL;
+    // Database path is optional - defaults to ~/factory-factory/data.db
+    const databasePath = options.databasePath || process.env.DATABASE_PATH;
+    const defaultPath = join(homedir(), 'factory-factory', 'data.db');
+    const effectivePath = databasePath || defaultPath;
 
-    if (!databaseUrl) {
-      console.error(chalk.red('Error: Database URL is required'));
-      process.exit(1);
-    }
-
-    console.log(chalk.blue('Opening Prisma Studio...'));
+    console.log(chalk.blue(`Opening Prisma Studio for ${effectivePath}...`));
 
     const studio = spawn('npx', ['prisma', 'studio'], {
       cwd: PROJECT_ROOT,
       env: {
         ...process.env,
-        DATABASE_URL: databaseUrl,
+        DATABASE_URL: `file:${effectivePath}`,
       },
       stdio: 'inherit',
     });

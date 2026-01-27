@@ -7,30 +7,10 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { expandEnvVars } from '../lib/env';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('config');
-
-/**
- * Expand environment variables in a string.
- * Handles $VAR and ${VAR} syntax, including $USER and other common variables.
- */
-function expandEnvVars(value: string): string {
-  // Replace $USER with actual home directory username
-  let result = value.replace(/\$USER|\$\{USER\}/g, homedir().split('/').pop() || 'user');
-
-  // Replace other environment variables
-  result = result.replace(/\$\{?([A-Z_][A-Z0-9_]*)\}?/gi, (match, varName) => {
-    const envValue = process.env[varName];
-    if (envValue !== undefined) {
-      // Recursively expand in case env vars reference other env vars
-      return expandEnvVars(envValue);
-    }
-    return match; // Leave unexpanded if not found
-  });
-
-  return result;
-}
 
 /**
  * Permission modes for sessions
@@ -61,8 +41,8 @@ interface SystemConfig {
   frontendPort: number;
   nodeEnv: 'development' | 'production' | 'test';
 
-  // Database
-  databaseUrl: string;
+  // Database (SQLite)
+  databasePath: string;
 
   // Default session profile
   defaultSessionProfile: SessionProfile;
@@ -176,8 +156,8 @@ function loadSystemConfig(): SystemConfig {
     frontendPort: Number.parseInt(process.env.FRONTEND_PORT || '3000', 10),
     nodeEnv: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
 
-    // Database
-    databaseUrl: process.env.DATABASE_URL || '',
+    // Database (SQLite - defaults to ~/factory-factory/data.db)
+    databasePath: process.env.DATABASE_PATH || join(baseDir, 'data.db'),
 
     // Default session profile
     defaultSessionProfile: buildDefaultSessionProfile(),
@@ -214,9 +194,7 @@ class ConfigService {
     const warnings: string[] = [];
     const errors: string[] = [];
 
-    if (!this.config.databaseUrl) {
-      errors.push('DATABASE_URL is not set');
-    }
+    // SQLite database path is always set (has default), no validation needed
 
     // Log warnings
     warnings.forEach((w) => logger.warn(w));
@@ -298,6 +276,13 @@ class ConfigService {
    */
   getDebugLogDir(): string {
     return this.config.debugLogDir;
+  }
+
+  /**
+   * Get database file path (SQLite)
+   */
+  getDatabasePath(): string {
+    return this.config.databasePath;
   }
 
   /**
