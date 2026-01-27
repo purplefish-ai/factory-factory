@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <TRPCProvider>
             <SidebarProvider>
               <AppSidebar />
-              <SidebarInset className="p-3">{children}</SidebarInset>
+              <SidebarInset>{children}</SidebarInset>
             </SidebarProvider>
             <Toaster />
           </TRPCProvider>
