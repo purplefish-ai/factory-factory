@@ -152,12 +152,24 @@ function ChatContent({
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
-  // Focus input when clicking anywhere in the chat area
-  const handleChatClick = useCallback(() => {
-    if (inputRef?.current && !running) {
-      inputRef.current.focus();
-    }
-  }, [inputRef, running]);
+  // Focus input when clicking anywhere in the chat area (but not on interactive elements)
+  const handleChatClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Don't steal focus from interactive elements (buttons, inputs, etc.)
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(
+          'button, input, textarea, select, [role="button"], [data-radix-collection-item]'
+        )
+      ) {
+        return;
+      }
+      if (inputRef?.current && !running) {
+        inputRef.current.focus();
+      }
+    },
+    [inputRef, running]
+  );
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction

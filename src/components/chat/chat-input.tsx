@@ -1,7 +1,7 @@
 'use client';
 
 import { Brain, ChevronDown, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
-import { type KeyboardEvent, useCallback, useEffect } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -115,14 +115,18 @@ function ThinkingToggle({
             onPressedChange={onPressedChange}
             disabled={disabled}
             size="sm"
-            className="h-6 w-6 p-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            className={cn(
+              'h-6 w-6 p-0',
+              pressed &&
+                'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+            )}
             aria-label="Toggle thinking mode"
           >
             <Brain className="h-3.5 w-3.5" />
           </Toggle>
         </TooltipTrigger>
         <TooltipContent side="top">
-          <p>Extended thinking mode</p>
+          <p>Extended thinking mode {pressed ? '(on)' : '(off)'}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -150,14 +154,18 @@ function PlanModeToggle({
             onPressedChange={onPressedChange}
             disabled={disabled}
             size="sm"
-            className="h-6 w-6 p-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            className={cn(
+              'h-6 w-6 p-0',
+              pressed &&
+                'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+            )}
             aria-label="Toggle plan mode"
           >
             <MapIcon className="h-3.5 w-3.5" />
           </Toggle>
         </TooltipTrigger>
         <TooltipContent side="top">
-          <p>Plan mode - requires approval before actions</p>
+          <p>Plan mode {pressed ? '(on)' : '(off)'}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -234,10 +242,24 @@ export function ChatInput({
     target.style.overflowY = target.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, []);
 
-  // Focus input when component mounts, when running state changes to false, or when session changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is intentionally included to trigger focus on session change
+  // Track previous state to only auto-focus on specific transitions
+  const prevRunningRef = useRef(running);
+  const prevDisabledRef = useRef(disabled);
+  const prevSessionIdRef = useRef(sessionId);
+
+  // Focus input only when transitioning from running/disabled to idle, or when session changes
   useEffect(() => {
-    if (!(running || disabled) && inputRef?.current) {
+    const wasRunningOrDisabled = prevRunningRef.current || prevDisabledRef.current;
+    const isNowIdle = !(running || disabled);
+    const sessionChanged = prevSessionIdRef.current !== sessionId;
+
+    // Update refs for next render
+    prevRunningRef.current = running;
+    prevDisabledRef.current = disabled;
+    prevSessionIdRef.current = sessionId;
+
+    // Only focus when transitioning to idle state OR when session changes
+    if (inputRef?.current && isNowIdle && (wasRunningOrDisabled || sessionChanged)) {
       inputRef.current.focus();
     }
   }, [running, disabled, inputRef, sessionId]);
