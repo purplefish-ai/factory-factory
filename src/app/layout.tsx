@@ -3,6 +3,7 @@ import { GeistSans } from 'geist/font/sans';
 import type { Metadata } from 'next';
 import './globals.css';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { Toaster } from '@/components/ui/sonner';
 import { AppSidebar } from '../frontend/components/app-sidebar';
 import { ThemeProvider } from '../frontend/components/theme-provider';
 import { TRPCProvider } from '../frontend/lib/providers';
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <AppSidebar />
               <SidebarInset className="p-3">{children}</SidebarInset>
             </SidebarProvider>
+            <Toaster />
           </TRPCProvider>
         </ThemeProvider>
       </body>

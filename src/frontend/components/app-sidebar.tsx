@@ -1,9 +1,10 @@
 'use client';
 
-import { GitBranch, Kanban, Plus, Settings, Terminal } from 'lucide-react';
+import { GitBranch, GitPullRequest, Kanban, Plus, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -69,6 +70,12 @@ export function AppSidebar() {
     { workspaceIds },
     { enabled: workspaceIds.length > 0, refetchInterval: 1000 }
   );
+
+  // Fetch review requests count for badge (only count unapproved PRs)
+  const { data: reviewData } = trpc.prReview.listReviewRequests.useQuery(undefined, {
+    refetchInterval: 60_000, // Poll every 60 seconds
+  });
+  const reviewCount = reviewData?.prs?.filter((pr) => pr.reviewDecision !== 'APPROVED').length ?? 0;
 
   const utils = trpc.useUtils();
 
@@ -147,17 +154,10 @@ export function AppSidebar() {
     router.push(`/projects/${value}/workspaces`);
   };
 
-  const projectNavItems = selectedProjectSlug
-    ? [
-        {
-          href: `/projects/${selectedProjectSlug}/logs`,
-          label: 'Logs',
-          icon: Terminal,
-        },
-      ]
-    : [];
-
-  const globalNavItems = [{ href: '/admin', label: 'Admin', icon: Settings }];
+  const globalNavItems = [
+    { href: '/reviews', label: 'Reviews', icon: GitPullRequest },
+    { href: '/admin', label: 'Admin', icon: Settings },
+  ];
 
   // Show loading skeleton while checking for projects
   if (!hasCheckedProjects) {
@@ -300,40 +300,26 @@ export function AppSidebar() {
 
         <SidebarSeparator />
 
-        {/* Other nav items */}
-        {projectNavItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {projectNavItems.map((item) => {
-                  const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild isActive={isActive}>
-                        <Link href={item.href}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
               {globalNavItems.map((item) => {
                 const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                const showBadge = item.href === '/reviews' && reviewCount > 0;
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.href}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.label}</span>
+                        {showBadge && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
+                          >
+                            {reviewCount}
+                          </Badge>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
