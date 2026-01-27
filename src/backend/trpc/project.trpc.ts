@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { prisma } from '../db';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { configService } from '../services/config.service';
 import { publicProcedure, router } from './trpc';
@@ -63,21 +64,27 @@ export const projectRouter = router({
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
 
-      // Create the project first
-      const project = await projectAccessor.create(createInput, {
-        worktreeBaseDir: configService.getWorktreeBaseDir(),
-      });
-
-      // If startup script config was provided, update the project
-      if (startupScriptCommand || startupScriptPath || startupScriptTimeout) {
-        return projectAccessor.update(project.id, {
-          startupScriptCommand: startupScriptCommand ?? null,
-          startupScriptPath: startupScriptPath ?? null,
-          startupScriptTimeout: startupScriptTimeout ?? 300,
+      // Use transaction to ensure atomic creation with startup script config
+      return prisma.$transaction(async (tx) => {
+        // Create the project
+        const project = await projectAccessor.create(createInput, {
+          worktreeBaseDir: configService.getWorktreeBaseDir(),
         });
-      }
 
-      return project;
+        // If startup script config was provided, update the project within the transaction
+        if (startupScriptCommand || startupScriptPath || startupScriptTimeout) {
+          return tx.project.update({
+            where: { id: project.id },
+            data: {
+              startupScriptCommand: startupScriptCommand ?? null,
+              startupScriptPath: startupScriptPath ?? null,
+              startupScriptTimeout: startupScriptTimeout ?? 300,
+            },
+          });
+        }
+
+        return project;
+      });
     }),
 
   // Update a project

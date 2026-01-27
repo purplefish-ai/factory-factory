@@ -373,7 +373,7 @@ export const workspaceRouter = router({
 
   // Get workspace initialization status
   getInitStatus: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const workspace = await workspaceAccessor.findById(input.id);
+    const workspace = await workspaceAccessor.findByIdWithProject(input.id);
     if (!workspace) {
       throw new TRPCError({
         code: 'NOT_FOUND',
@@ -385,6 +385,9 @@ export const workspaceRouter = router({
       initErrorMessage: workspace.initErrorMessage,
       initStartedAt: workspace.initStartedAt,
       initCompletedAt: workspace.initCompletedAt,
+      hasStartupScript: !!(
+        workspace.project?.startupScriptCommand || workspace.project?.startupScriptPath
+      ),
     };
   }),
 
@@ -412,7 +415,21 @@ export const workspaceRouter = router({
       });
     }
 
-    await startupScriptService.runStartupScript(workspace, workspace.project);
+    // Atomically increment retry count (max 3 retries)
+    const maxRetries = 3;
+    const updatedWorkspace = await workspaceAccessor.incrementRetryCount(input.id, maxRetries);
+    if (!updatedWorkspace) {
+      throw new TRPCError({
+        code: 'TOO_MANY_REQUESTS',
+        message: `Maximum retry attempts (${maxRetries}) exceeded`,
+      });
+    }
+
+    // Run script with the updated workspace (retry count already incremented)
+    await startupScriptService.runStartupScript(
+      { ...workspace, ...updatedWorkspace },
+      workspace.project
+    );
 
     return workspaceAccessor.findById(input.id);
   }),

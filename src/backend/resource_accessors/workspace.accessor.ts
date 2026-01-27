@@ -39,6 +39,7 @@ interface UpdateWorkspaceInput {
   initErrorMessage?: string | null;
   initStartedAt?: Date | null;
   initCompletedAt?: Date | null;
+  initRetryCount?: number;
 }
 
 interface FindByProjectIdFilters {
@@ -259,6 +260,34 @@ class WorkspaceAccessor {
       where: { id },
       data,
     });
+  }
+
+  /**
+   * Increment retry count and reset init status for a retry attempt.
+   * Returns null if max retries exceeded.
+   *
+   * @param maxRetries - Maximum number of retries allowed (default 3)
+   */
+  async incrementRetryCount(id: string, maxRetries = 3): Promise<Workspace | null> {
+    // Use raw update to atomically check and increment
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        initRetryCount: { lt: maxRetries },
+      },
+      data: {
+        initRetryCount: { increment: 1 },
+        initStatus: 'INITIALIZING',
+        initStartedAt: new Date(),
+        initErrorMessage: null,
+      },
+    });
+
+    if (result.count === 0) {
+      return null; // Max retries exceeded
+    }
+
+    return prisma.workspace.findUnique({ where: { id } });
   }
 }
 

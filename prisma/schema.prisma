@@ -107,6 +107,7 @@ model Workspace {
   initErrorMessage    String?             @db.Text
   initStartedAt       DateTime?
   initCompletedAt     DateTime?
+  initRetryCount      Int                 @default(0)
 
   prUrl               String?
   githubIssueNumber   Int?

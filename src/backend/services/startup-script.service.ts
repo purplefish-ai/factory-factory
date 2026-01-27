@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Project, Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
@@ -133,34 +134,49 @@ class StartupScriptService {
   /**
    * Execute the script using spawn.
    * Commands are configured by project owners and run through bash.
+   *
+   * @param gracePeriodMs - Time between SIGTERM and SIGKILL (default 5000ms)
    */
-  private executeScript(
+  private async executeScript(
     cwd: string,
     command: string | null,
     scriptPath: string | null,
-    timeoutMs: number
+    timeoutMs: number,
+    gracePeriodMs = 5000
   ): Promise<Omit<StartupScriptResult, 'durationMs'>> {
-    return new Promise((resolve) => {
-      // Build the bash arguments based on script type
-      const bashArgs = this.buildBashArgs(cwd, command, scriptPath);
+    // Build the bash arguments based on script type
+    const bashArgs = this.buildBashArgs(cwd, command, scriptPath);
 
-      if (bashArgs === null) {
-        // Neither command nor scriptPath provided
-        resolve({ success: true, exitCode: 0, stdout: '', stderr: '', timedOut: false });
-        return;
-      }
+    if (bashArgs === null) {
+      // Neither command nor scriptPath provided
+      return { success: true, exitCode: 0, stdout: '', stderr: '', timedOut: false };
+    }
 
-      if (bashArgs.error) {
-        resolve({
+    if (bashArgs.error) {
+      return {
+        success: false,
+        exitCode: null,
+        stdout: '',
+        stderr: bashArgs.error,
+        timedOut: false,
+      };
+    }
+
+    // For script paths, verify the file is readable before execution
+    if (scriptPath) {
+      const readCheck = await this.validateScriptReadable(scriptPath, cwd);
+      if (!readCheck.readable) {
+        return {
           success: false,
           exitCode: null,
           stdout: '',
-          stderr: bashArgs.error,
+          stderr: readCheck.error || 'Script not readable',
           timedOut: false,
-        });
-        return;
+        };
       }
+    }
 
+    return new Promise((resolve) => {
       const spawnOptions = { cwd, env: { ...process.env, WORKSPACE_PATH: cwd } };
       const proc = spawn('bash', bashArgs.args, spawnOptions);
 
@@ -179,7 +195,7 @@ class StartupScriptService {
       const timeoutHandle = setTimeout(() => {
         timedOut = true;
         proc.kill('SIGTERM');
-        killTimeoutHandle = setTimeout(() => proc.kill('SIGKILL'), 5000);
+        killTimeoutHandle = setTimeout(() => proc.kill('SIGKILL'), gracePeriodMs);
       }, timeoutMs);
 
       const appendOutput = (target: 'stdout' | 'stderr', data: Buffer): void => {
@@ -237,6 +253,30 @@ class StartupScriptService {
     }
 
     return null;
+  }
+
+  /**
+   * Check if a script file exists and is readable.
+   * Called before execution to provide better error messages.
+   */
+  async validateScriptReadable(
+    scriptPath: string,
+    repoRoot: string
+  ): Promise<{ readable: boolean; error?: string }> {
+    const fullPath = path.resolve(repoRoot, scriptPath);
+    try {
+      await access(fullPath, constants.R_OK);
+      return { readable: true };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        return { readable: false, error: `Script not found: ${scriptPath}` };
+      }
+      if (code === 'EACCES') {
+        return { readable: false, error: `Script not readable: ${scriptPath}` };
+      }
+      return { readable: false, error: `Cannot access script: ${scriptPath}` };
+    }
   }
 
   /**
