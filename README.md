@@ -8,7 +8,6 @@ Workspace-based coding environment that lets you run multiple Claude Code sessio
 
 - **Node.js 18+**
 - **pnpm** - Package manager
-- **Docker** (for PostgreSQL)
 - **GitHub CLI (`gh`)** - authenticated
 - **Claude Code** - authenticated via `claude login`
 
@@ -18,30 +17,70 @@ Workspace-based coding environment that lets you run multiple Claude Code sessio
 # 1. Install dependencies
 pnpm install
 
-# 2. Configure
-cp .env.example .env
-# Edit .env: set DATABASE_URL (default works with docker-compose)
+# 2. Start the server (migrations run automatically)
+pnpm cli serve --dev
 
-# 3. Start PostgreSQL
-docker-compose up -d
-
-# 4. Run migrations
-pnpm db:migrate
-
-# 5. Start all servers
-pnpm dev:all
-
-# 6. Create a project
-# Open http://localhost:3000/projects/new
-# Enter your repository path and worktree base path
+# Browser opens automatically to http://localhost:3000
 ```
+
+That's it! The CLI will:
+- Create the data directory (`~/factory-factory/`)
+- Run database migrations automatically
+- Start backend and frontend servers
+- Open your browser when ready
+
+## CLI Usage
+
+The `ff` (or `factory-factory`) command provides a unified interface for running FactoryFactory:
+
+```bash
+# Start in development mode (with hot reloading)
+pnpm cli serve --dev
+
+# Start in production mode (requires build first)
+pnpm cli build
+pnpm cli serve
+
+# Start without opening browser
+pnpm cli serve --dev --no-open
+
+# Use custom ports
+pnpm cli serve --dev --port 4000 --backend-port 4001
+
+# Enable verbose logging
+pnpm cli serve --dev --verbose
+
+# Run database migrations manually
+pnpm cli db:migrate
+
+# Open Prisma Studio for database management
+pnpm cli db:studio
+```
+
+### CLI Options
+
+```
+Usage: ff serve [options]
+
+Options:
+  -p, --port <port>           Frontend port (default: "3000")
+  --backend-port <port>       Backend port (default: "3001")
+  -d, --database-path <path>  SQLite database file path (default: ~/factory-factory/data.db)
+  --host <host>               Host to bind to (default: "localhost")
+  --dev                       Run in development mode with hot reloading
+  --no-open                   Do not open browser automatically
+  -v, --verbose               Enable verbose logging
+```
+
+### Port Detection
+
+If the default ports (3000/3001) are in use, the CLI will automatically find the next available ports.
 
 ## Verify Installation
 
 - Frontend: http://localhost:3000
 - Backend: http://localhost:3001/health
-- Inngest: http://localhost:8288
-- Prisma Studio: `pnpm db:studio`
+- Prisma Studio: `pnpm cli db:studio`
 
 ## Architecture
 
@@ -62,7 +101,7 @@ Project (repository configuration)
 ## Development
 
 ```bash
-pnpm dev:all       # Start frontend + backend + Inngest
+pnpm dev:all       # Start frontend + backend (alternative to CLI)
 pnpm typecheck     # TypeScript checking
 pnpm check:fix     # Lint + format with Biome
 pnpm test          # Run tests
@@ -71,32 +110,31 @@ pnpm storybook     # Component development
 
 ## Troubleshooting
 
-**PostgreSQL connection:**
-```bash
-docker ps                        # Ensure Docker is running
-docker-compose logs postgres     # Check logs
-```
-
 **GitHub CLI:**
 ```bash
 gh auth status
 gh auth login
 ```
 
-**Prisma issues:**
+**Database issues:**
 ```bash
-pnpm exec prisma migrate reset    # Reset database (destroys data)
-pnpm db:generate                  # Regenerate client
+pnpm cli db:migrate              # Run migrations
+pnpm exec prisma migrate reset   # Reset database (destroys data)
+pnpm db:generate                 # Regenerate Prisma client
 ```
+
+**Port conflicts:**
+The CLI automatically finds available ports. Use `--verbose` to see which ports are being used.
 
 ## Production
 
 ```bash
-pnpm build:all
-pnpm start:all
-```
+# Build for production
+pnpm cli build
 
-See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for production deployment details.
+# Start production server
+pnpm cli serve
+```
 
 ## License
 
