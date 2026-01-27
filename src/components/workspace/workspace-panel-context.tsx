@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 // =============================================================================
 // Types
@@ -31,13 +39,74 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
 // Constants
 // =============================================================================
 
-const STORAGE_KEY = 'workspace-panel-right-visible';
+const STORAGE_KEY_RIGHT_PANEL = 'workspace-panel-right-visible';
+const STORAGE_KEY_TABS_PREFIX = 'workspace-panel-tabs-';
+const STORAGE_KEY_ACTIVE_TAB_PREFIX = 'workspace-panel-active-tab-';
 
 const CHAT_TAB: MainViewTab = {
   id: 'chat',
   type: 'chat',
   label: 'Chat',
 };
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
+  if (typeof window === 'undefined') {
+    return [CHAT_TAB];
+  }
+  try {
+    const stored = localStorage.getItem(`${STORAGE_KEY_TABS_PREFIX}${workspaceId}`);
+    if (!stored) {
+      return [CHAT_TAB];
+    }
+    const parsed = JSON.parse(stored) as MainViewTab[];
+    // Ensure chat tab is always first
+    const hasChat = parsed.some((tab) => tab.id === 'chat');
+    if (!hasChat) {
+      return [CHAT_TAB, ...parsed];
+    }
+    return parsed;
+  } catch {
+    return [CHAT_TAB];
+  }
+}
+
+function loadActiveTabFromStorage(workspaceId: string): string {
+  if (typeof window === 'undefined') {
+    return 'chat';
+  }
+  try {
+    const stored = localStorage.getItem(`${STORAGE_KEY_ACTIVE_TAB_PREFIX}${workspaceId}`);
+    return stored ?? 'chat';
+  } catch {
+    return 'chat';
+  }
+}
+
+function saveTabsToStorage(workspaceId: string, tabs: MainViewTab[]): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    localStorage.setItem(`${STORAGE_KEY_TABS_PREFIX}${workspaceId}`, JSON.stringify(tabs));
+  } catch {
+    // Ignore storage errors (quota, private browsing, etc.)
+  }
+}
+
+function saveActiveTabToStorage(workspaceId: string, activeTabId: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    localStorage.setItem(`${STORAGE_KEY_ACTIVE_TAB_PREFIX}${workspaceId}`, activeTabId);
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 // =============================================================================
 // Context
@@ -50,26 +119,61 @@ const WorkspacePanelContext = createContext<WorkspacePanelContextValue | null>(n
 // =============================================================================
 
 interface WorkspacePanelProviderProps {
+  workspaceId: string;
   children: React.ReactNode;
 }
 
-export function WorkspacePanelProvider({ children }: WorkspacePanelProviderProps) {
+export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanelProviderProps) {
+  // Track if initial load from localStorage has happened
+  const initializedRef = useRef(false);
+
   const [tabs, setTabs] = useState<MainViewTab[]>([CHAT_TAB]);
   const [activeTabId, setActiveTabId] = useState<string>('chat');
   const [rightPanelVisible, setRightPanelVisibleState] = useState<boolean>(false);
 
-  // Load persisted visibility from localStorage on mount
+  // Load persisted state from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    if (initializedRef.current) {
+      return;
+    }
+    initializedRef.current = true;
+
+    // Load tabs and active tab (workspace-scoped)
+    const storedTabs = loadTabsFromStorage(workspaceId);
+    const storedActiveTab = loadActiveTabFromStorage(workspaceId);
+
+    setTabs(storedTabs);
+    // Ensure active tab exists in tabs, fallback to 'chat'
+    const activeExists = storedTabs.some((tab) => tab.id === storedActiveTab);
+    setActiveTabId(activeExists ? storedActiveTab : 'chat');
+
+    // Load right panel visibility (global)
+    const stored = localStorage.getItem(STORAGE_KEY_RIGHT_PANEL);
     if (stored !== null) {
       setRightPanelVisibleState(stored === 'true');
     }
-  }, []);
+  }, [workspaceId]);
+
+  // Persist tabs when they change (skip initial render)
+  useEffect(() => {
+    if (!initializedRef.current) {
+      return;
+    }
+    saveTabsToStorage(workspaceId, tabs);
+  }, [workspaceId, tabs]);
+
+  // Persist active tab when it changes (skip initial render)
+  useEffect(() => {
+    if (!initializedRef.current) {
+      return;
+    }
+    saveActiveTabToStorage(workspaceId, activeTabId);
+  }, [workspaceId, activeTabId]);
 
   // Persist visibility changes to localStorage
   const setRightPanelVisible = useCallback((visible: boolean) => {
     setRightPanelVisibleState(visible);
-    localStorage.setItem(STORAGE_KEY, String(visible));
+    localStorage.setItem(STORAGE_KEY_RIGHT_PANEL, String(visible));
   }, []);
 
   const toggleRightPanel = useCallback(() => {

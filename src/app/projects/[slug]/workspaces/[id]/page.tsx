@@ -548,8 +548,11 @@ function WorkspaceChatContent() {
 // =============================================================================
 
 export default function WorkspaceDetailPage() {
+  const params = useParams();
+  const workspaceId = params.id as string;
+
   return (
-    <WorkspacePanelProvider>
+    <WorkspacePanelProvider workspaceId={workspaceId}>
       <Suspense fallback={<ChatLoading />}>
         <WorkspaceChatContent />
       </Suspense>
