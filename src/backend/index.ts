@@ -524,6 +524,19 @@ function setupChatClientEvents(sessionId: string, client: ClaudeClient): void {
     logger.info('[Chat WS] Setting up event forwarding for session', { sessionId });
   }
 
+  // Forward Claude CLI session ID to frontend when it becomes available
+  // This is the actual Claude session ID used to store history in ~/.claude/projects/
+  client.on('session_id', (claudeSessionId) => {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Received session_id from Claude CLI', { sessionId, claudeSessionId });
+    }
+    forwardToConnections(sessionId, {
+      type: 'status',
+      running: true,
+      claudeSessionId,
+    });
+  });
+
   // Forward stream events for real-time content (text deltas, tool_use blocks).
   // Note: We skip 'assistant' messages as they duplicate stream event content.
   // However, we DO forward 'user' messages that contain tool_result content,

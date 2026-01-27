@@ -79,6 +79,7 @@ export const sessionRouter = router({
         name: z.string().optional(),
         workflow: z.string().optional(),
         model: z.string().optional(),
+        claudeSessionId: z.string().optional(),
       })
     )
     .mutation(({ input }) => {

@@ -280,7 +280,9 @@ function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   );
 
   const firstSession = claudeSessions?.[0];
-  const initialSessionId = firstSession?.id;
+  // Database record ID for the first session
+  const initialDbSessionId = firstSession?.id;
+  // Claude CLI session ID (stored in ~/.claude/projects/)
   const initialClaudeSessionId = firstSession?.claudeSessionId ?? undefined;
 
   return {
@@ -290,7 +292,7 @@ function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     sessionsLoading,
     workflows,
     recommendedWorkflow,
-    initialSessionId,
+    initialDbSessionId,
     initialClaudeSessionId,
   };
 }
@@ -316,19 +318,20 @@ function useSessionManagement({
 }: UseSessionManagementOptions) {
   const router = useRouter();
   const utils = trpc.useUtils();
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  // Database ClaudeSession.id of the currently selected session
+  const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
 
   // Ref to store pending quick action prompt (to send after session is ready)
-  const pendingQuickActionRef = useRef<{ sessionId: string; prompt: string } | null>(null);
+  const pendingQuickActionRef = useRef<{ dbSessionId: string; prompt: string } | null>(null);
 
   // Effect to send pending quick action prompt when session is selected
   useEffect(() => {
     const pending = pendingQuickActionRef.current;
-    if (pending && pending.sessionId === selectedSessionId) {
+    if (pending && pending.dbSessionId === selectedDbSessionId) {
       pendingQuickActionRef.current = null;
       sendMessage(pending.prompt);
     }
-  }, [selectedSessionId, sendMessage]);
+  }, [selectedDbSessionId, sendMessage]);
 
   const createSession = trpc.session.createClaudeSession.useMutation({
     onSuccess: () => {
@@ -358,9 +361,9 @@ function useSessionManagement({
   const availableIdes = availableIdesData?.ides ?? [];
 
   const handleSelectSession = useCallback(
-    (sessionId: string) => {
-      setSelectedSessionId(sessionId);
-      const session = claudeSessions?.find((s) => s.id === sessionId);
+    (dbSessionId: string) => {
+      setSelectedDbSessionId(dbSessionId);
+      const session = claudeSessions?.find((s) => s.id === dbSessionId);
       if (session?.claudeSessionId) {
         loadSession(session.claudeSessionId);
       } else {
@@ -372,33 +375,33 @@ function useSessionManagement({
   );
 
   const handleCloseSession = useCallback(
-    (sessionId: string) => {
+    (dbSessionId: string) => {
       if (!claudeSessions || claudeSessions.length === 0) {
         return;
       }
 
-      const sessionIndex = claudeSessions.findIndex((s) => s.id === sessionId);
+      const sessionIndex = claudeSessions.findIndex((s) => s.id === dbSessionId);
       if (sessionIndex === -1) {
         return;
       }
 
-      const isSelectedSession = sessionId === selectedSessionId;
-      deleteSession.mutate({ id: sessionId });
+      const isSelectedSession = dbSessionId === selectedDbSessionId;
+      deleteSession.mutate({ id: dbSessionId });
 
       if (isSelectedSession && claudeSessions.length > 1) {
         const nextSession = claudeSessions[sessionIndex + 1] ?? claudeSessions[sessionIndex - 1];
-        setSelectedSessionId(nextSession?.id ?? null);
+        setSelectedDbSessionId(nextSession?.id ?? null);
         if (nextSession?.claudeSessionId) {
           loadSession(nextSession.claudeSessionId);
         } else {
           clearChat();
         }
       } else if (claudeSessions.length === 1) {
-        setSelectedSessionId(null);
+        setSelectedDbSessionId(null);
         clearChat();
       }
     },
-    [claudeSessions, selectedSessionId, deleteSession, loadSession, clearChat]
+    [claudeSessions, selectedDbSessionId, deleteSession, loadSession, clearChat]
   );
 
   const handleWorkflowSelect = useCallback(
@@ -407,7 +410,7 @@ function useSessionManagement({
         { workspaceId, workflow: workflowId, model: 'sonnet' },
         {
           onSuccess: (session) => {
-            setSelectedSessionId(session.id);
+            setSelectedDbSessionId(session.id);
             clearChat();
           },
         }
@@ -421,7 +424,7 @@ function useSessionManagement({
       { workspaceId, workflow: 'followup', model: 'sonnet' },
       {
         onSuccess: (session) => {
-          setSelectedSessionId(session.id);
+          setSelectedDbSessionId(session.id);
           clearChat();
         },
       }
@@ -435,8 +438,8 @@ function useSessionManagement({
         {
           onSuccess: (session) => {
             // Store the pending prompt to be sent once the session state settles
-            pendingQuickActionRef.current = { sessionId: session.id, prompt };
-            setSelectedSessionId(session.id);
+            pendingQuickActionRef.current = { dbSessionId: session.id, prompt };
+            setSelectedDbSessionId(session.id);
             clearChat();
           },
         }
@@ -446,8 +449,8 @@ function useSessionManagement({
   );
 
   return {
-    selectedSessionId,
-    setSelectedSessionId,
+    selectedDbSessionId,
+    setSelectedDbSessionId,
     createSession,
     deleteSession,
     archiveWorkspace,
@@ -503,7 +506,7 @@ function WorkspaceChatContent() {
     sessionsLoading,
     workflows,
     recommendedWorkflow,
-    initialSessionId,
+    initialDbSessionId,
     initialClaudeSessionId,
   } = useWorkspaceData({ workspaceId });
 
@@ -528,14 +531,14 @@ function WorkspaceChatContent() {
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
-    initialSessionId: initialClaudeSessionId,
+    initialClaudeSessionId,
     workingDir: workspace?.worktreePath ?? undefined,
   });
 
   // Session management
   const {
-    selectedSessionId,
-    setSelectedSessionId,
+    selectedDbSessionId,
+    setSelectedDbSessionId,
     createSession,
     deleteSession,
     archiveWorkspace,
@@ -559,12 +562,27 @@ function WorkspaceChatContent() {
   // Auto-scroll behavior
   const { handleScroll } = useAutoScroll(messages, messagesEndRef);
 
-  // Initialize selectedSessionId when sessions first load
+  // Mutation to update session with Claude session ID
+  const updateSession = trpc.session.updateClaudeSession.useMutation();
+
+  // Sync Claude CLI session ID to database when it becomes available
+  // This links the database ClaudeSession record to the actual Claude CLI session
   useEffect(() => {
-    if (initialSessionId && selectedSessionId === null) {
-      setSelectedSessionId(initialSessionId);
+    if (selectedDbSessionId && claudeSessionId) {
+      // Find the current session and check if it already has this claudeSessionId
+      const currentSession = claudeSessions?.find((s) => s.id === selectedDbSessionId);
+      if (currentSession && currentSession.claudeSessionId !== claudeSessionId) {
+        updateSession.mutate({ id: selectedDbSessionId, claudeSessionId });
+      }
     }
-  }, [initialSessionId, selectedSessionId, setSelectedSessionId]);
+  }, [selectedDbSessionId, claudeSessionId, claudeSessions, updateSession]);
+
+  // Initialize selectedDbSessionId when sessions first load
+  useEffect(() => {
+    if (initialDbSessionId && selectedDbSessionId === null) {
+      setSelectedDbSessionId(initialDbSessionId);
+    }
+  }, [initialDbSessionId, selectedDbSessionId, setSelectedDbSessionId]);
 
   // Determine connection status for indicator
   const status = getConnectionStatusFromState(connected, loadingSession, running);
@@ -657,7 +675,7 @@ function WorkspaceChatContent() {
             claudeSessions={claudeSessions}
             workflows={workflows}
             recommendedWorkflow={recommendedWorkflow}
-            selectedSessionId={selectedSessionId}
+            selectedSessionId={selectedDbSessionId}
             runningSessionId={runningSessionId}
             running={running}
             isCreatingSession={createSession.isPending}
