@@ -229,6 +229,7 @@ program
       DATABASE_PATH: databasePath,
       FRONTEND_PORT: frontendPort.toString(),
       BACKEND_PORT: backendPort.toString(),
+      BACKEND_URL: `http://${options.host}:${backendPort}`,
       NEXT_PUBLIC_BACKEND_PORT: backendPort.toString(),
       NODE_ENV: options.dev ? 'development' : 'production',
     };
