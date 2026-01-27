@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { PRWithFullDetails } from '@/shared/github-types';
@@ -10,6 +10,14 @@ import { PRInboxItem } from '../../frontend/components/pr-inbox-item';
 import { trpc } from '../../frontend/lib/trpc';
 
 export default function ReviewsPage() {
+  return (
+    <Suspense fallback={<ReviewsDashboardSkeleton />}>
+      <ReviewsPageContent />
+    </Suspense>
+  );
+}
+
+function ReviewsPageContent() {
   const searchParams = useSearchParams();
   const initialRepo = searchParams.get('repo');
   const initialPR = searchParams.get('pr');

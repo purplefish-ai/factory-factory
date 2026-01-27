@@ -7,6 +7,31 @@ import { createLogger } from './logger.service';
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
+/**
+ * Execute async functions with limited concurrency, preserving order.
+ */
+async function mapWithConcurrencyLimit<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  limit: number
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await fn(items[index]);
+    }
+  }
+
+  // Start `limit` workers
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+
+  return results;
+}
+
 export type GitHubCLIErrorType =
   | 'cli_not_installed'
   | 'auth_required'
@@ -289,9 +314,10 @@ class GitHubCLIService {
       'reviewDecision' | 'additions' | 'deletions' | 'changedFiles'
     >[];
 
-    // Fetch reviewDecision and stats for each PR in parallel (same API call)
-    const prsWithDetails = await Promise.all(
-      basePRs.map(async (pr) => {
+    // Fetch reviewDecision and stats for each PR with limited concurrency to avoid rate limits
+    const prsWithDetails = await mapWithConcurrencyLimit(
+      basePRs,
+      async (pr) => {
         try {
           const { stdout: prDetails } = await execFileAsync(
             'gh',
@@ -318,7 +344,8 @@ class GitHubCLIService {
           // If we can't fetch details, use defaults
           return { ...pr, reviewDecision: null, additions: 0, deletions: 0, changedFiles: 0 };
         }
-      })
+      },
+      5 // Limit to 5 concurrent requests to avoid GitHub rate limits
     );
 
     return prsWithDetails;

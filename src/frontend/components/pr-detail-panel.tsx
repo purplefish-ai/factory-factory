@@ -147,10 +147,14 @@ export function PRDetailPanel({
 }: PRDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('info');
 
+  // Create a stable key for the current PR to detect changes
+  const prKey = pr ? `${pr.repository.nameWithOwner}#${pr.number}` : null;
+
   // Reset tab when PR changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when prKey changes
   useEffect(() => {
     setActiveTab('info');
-  }, []);
+  }, [prKey]);
 
   // Fetch diff when diff tab is selected
   useEffect(() => {

@@ -48,7 +48,11 @@ export const PRInboxItem = forwardRef<HTMLDivElement, PRInboxItemProps>(function
         }
       }}
       className={`cursor-pointer transition-all outline-none border-l-2 px-2 py-1.5 rounded-sm w-full max-w-full overflow-hidden ${
-        isSelected ? 'bg-blue-500/10 border-l-blue-500' : 'border-l-orange-500 hover:bg-muted/50'
+        isSelected
+          ? 'bg-blue-500/10 border-l-blue-500'
+          : isApproved
+            ? 'border-l-green-500 hover:bg-muted/50'
+            : 'border-l-orange-500 hover:bg-muted/50'
       }`}
     >
       <div className="flex items-start gap-2 w-full">
