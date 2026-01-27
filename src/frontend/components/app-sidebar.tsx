@@ -236,7 +236,7 @@ export function AppSidebar() {
       <SidebarContent className="flex flex-col">
         {/* Workspaces section */}
         {selectedProjectSlug && (
-          <SidebarGroup className="flex-1 min-h-0 flex flex-col">
+          <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <SidebarGroupLabel>
               <Link
                 href={`/projects/${selectedProjectSlug}/workspaces`}
