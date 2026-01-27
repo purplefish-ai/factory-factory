@@ -844,8 +844,14 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     ws.onmessage = handleMessage;
   }, [flushMessageQueue, handleMessage, sendWsMessage, workingDir]);
 
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection only when workingDir is available
+  // This prevents failed connections during initial render when workspace data hasn't loaded yet
   useEffect(() => {
+    if (!workingDir) {
+      // Don't connect until we have a valid workingDir
+      return;
+    }
+
     connect();
 
     return () => {
@@ -857,7 +863,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         wsRef.current = null;
       }
     };
-  }, [connect]);
+  }, [connect, workingDir]);
 
   // Actions
   const sendMessage = useCallback(

@@ -212,78 +212,210 @@ function ChatContent({
 }
 
 // =============================================================================
-// Main Workspace Chat Component
+// Custom Hooks for Workspace Page
 // =============================================================================
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Workspace page component with multiple state and effect handlers
-function WorkspaceChatContent() {
-  const params = useParams();
-  const router = useRouter();
-  const slug = params.slug as string;
-  const workspaceId = params.id as string;
+interface UseWorkspaceDataOptions {
+  workspaceId: string;
+}
 
-  const { rightPanelVisible } = useWorkspacePanel();
-
-  // Fetch workspace details
+function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
     { id: workspaceId },
     { refetchInterval: 10_000 }
   );
 
-  // Fetch Claude sessions for this workspace
   const { data: claudeSessions, isLoading: sessionsLoading } =
     trpc.session.listClaudeSessions.useQuery({ workspaceId }, { refetchInterval: 5000 });
 
-  // Fetch workflows for workflow selection (only if no sessions exist yet)
   const { data: workflows } = trpc.session.listWorkflows.useQuery(undefined, {
     enabled: claudeSessions !== undefined && claudeSessions.length === 0,
   });
 
-  // Fetch recommended workflow for this workspace
   const { data: recommendedWorkflow } = trpc.session.getRecommendedWorkflow.useQuery(
     { workspaceId },
     { enabled: claudeSessions !== undefined && claudeSessions.length === 0 }
   );
 
-  // Track selected session locally for immediate UI feedback
+  const firstSession = claudeSessions?.[0];
+  const initialSessionId = firstSession?.id;
+  const initialClaudeSessionId = firstSession?.claudeSessionId ?? undefined;
+
+  return {
+    workspace,
+    workspaceLoading,
+    claudeSessions,
+    sessionsLoading,
+    workflows,
+    recommendedWorkflow,
+    initialSessionId,
+    initialClaudeSessionId,
+  };
+}
+
+interface UseSessionManagementOptions {
+  workspaceId: string;
+  slug: string;
+  claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
+  loadSession: (claudeSessionId: string) => void;
+  clearChat: () => void;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+}
+
+function useSessionManagement({
+  workspaceId,
+  slug,
+  claudeSessions,
+  loadSession,
+  clearChat,
+  inputRef,
+}: UseSessionManagementOptions) {
+  const router = useRouter();
+  const utils = trpc.useUtils();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
-  const utils = trpc.useUtils();
-
-  // Create session mutation
   const createSession = trpc.session.createClaudeSession.useMutation({
     onSuccess: () => {
       utils.session.listClaudeSessions.invalidate({ workspaceId });
     },
   });
 
-  // Delete session mutation
   const deleteSession = trpc.session.deleteClaudeSession.useMutation({
     onSuccess: () => {
       utils.session.listClaudeSessions.invalidate({ workspaceId });
     },
   });
 
-  // Archive workspace mutation
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: () => {
       router.push(`/projects/${slug}/workspaces`);
     },
   });
 
-  // Get the first session (or most recent) to auto-load
-  // initialSessionId is the database record ID (CUID) for UI state tracking
-  // initialClaudeSessionId is the Claude CLI session UUID for session loading
-  const firstSession = claudeSessions?.[0];
-  const initialSessionId = firstSession?.id;
-  const initialClaudeSessionId = firstSession?.claudeSessionId ?? undefined;
+  const handleSelectSession = useCallback(
+    (sessionId: string) => {
+      setSelectedSessionId(sessionId);
+      const session = claudeSessions?.find((s) => s.id === sessionId);
+      if (session?.claudeSessionId) {
+        loadSession(session.claudeSessionId);
+      } else {
+        clearChat();
+      }
+      setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    [loadSession, claudeSessions, clearChat, inputRef]
+  );
 
-  // Initialize selectedSessionId when sessions first load
+  const handleCloseSession = useCallback(
+    (sessionId: string) => {
+      if (!claudeSessions || claudeSessions.length === 0) {
+        return;
+      }
+
+      const sessionIndex = claudeSessions.findIndex((s) => s.id === sessionId);
+      if (sessionIndex === -1) {
+        return;
+      }
+
+      const isSelectedSession = sessionId === selectedSessionId;
+      deleteSession.mutate({ id: sessionId });
+
+      if (isSelectedSession && claudeSessions.length > 1) {
+        const nextSession = claudeSessions[sessionIndex + 1] ?? claudeSessions[sessionIndex - 1];
+        setSelectedSessionId(nextSession?.id ?? null);
+        if (nextSession?.claudeSessionId) {
+          loadSession(nextSession.claudeSessionId);
+        } else {
+          clearChat();
+        }
+      } else if (claudeSessions.length === 1) {
+        setSelectedSessionId(null);
+        clearChat();
+      }
+    },
+    [claudeSessions, selectedSessionId, deleteSession, loadSession, clearChat]
+  );
+
+  const handleWorkflowSelect = useCallback(
+    (workflowId: string) => {
+      createSession.mutate(
+        { workspaceId, workflow: workflowId, model: 'sonnet' },
+        {
+          onSuccess: (session) => {
+            setSelectedSessionId(session.id);
+            clearChat();
+          },
+        }
+      );
+    },
+    [createSession, workspaceId, clearChat]
+  );
+
+  const handleNewChat = useCallback(() => {
+    createSession.mutate(
+      { workspaceId, workflow: 'followup', model: 'sonnet' },
+      { onSuccess: () => clearChat() }
+    );
+  }, [clearChat, createSession, workspaceId]);
+
+  return {
+    selectedSessionId,
+    setSelectedSessionId,
+    createSession,
+    deleteSession,
+    archiveWorkspace,
+    handleSelectSession,
+    handleCloseSession,
+    handleWorkflowSelect,
+    handleNewChat,
+  };
+}
+
+function useAutoScroll(
+  messages: unknown[],
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
+) {
+  const isNearBottomRef = useRef(true);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
   useEffect(() => {
-    if (initialSessionId && selectedSessionId === null) {
-      setSelectedSessionId(initialSessionId);
+    if (isNearBottomRef.current && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [initialSessionId, selectedSessionId]);
+  }, [messages.length, messagesEndRef]);
+
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const threshold = 100;
+    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+    isNearBottomRef.current = isNearBottom;
+  }, []);
+
+  return { handleScroll };
+}
+
+// =============================================================================
+// Main Workspace Chat Component
+// =============================================================================
+
+function WorkspaceChatContent() {
+  const params = useParams();
+  const router = useRouter();
+  const slug = params.slug as string;
+  const workspaceId = params.id as string;
+  const { rightPanelVisible } = useWorkspacePanel();
+
+  // Fetch workspace and session data
+  const {
+    workspace,
+    workspaceLoading,
+    claudeSessions,
+    sessionsLoading,
+    workflows,
+    recommendedWorkflow,
+    initialSessionId,
+    initialClaudeSessionId,
+  } = useWorkspaceData({ workspaceId });
 
   // Initialize WebSocket connection with chat hook
   const {
@@ -309,113 +441,45 @@ function WorkspaceChatContent() {
     workingDir: workspace?.worktreePath ?? undefined,
   });
 
+  // Session management
+  const {
+    selectedSessionId,
+    setSelectedSessionId,
+    createSession,
+    deleteSession,
+    archiveWorkspace,
+    handleSelectSession,
+    handleCloseSession,
+    handleWorkflowSelect,
+    handleNewChat,
+  } = useSessionManagement({
+    workspaceId,
+    slug,
+    claudeSessions,
+    loadSession,
+    clearChat,
+    inputRef,
+  });
+
+  // Auto-scroll behavior
+  const { handleScroll } = useAutoScroll(messages, messagesEndRef);
+
+  // Initialize selectedSessionId when sessions first load
+  useEffect(() => {
+    if (initialSessionId && selectedSessionId === null) {
+      setSelectedSessionId(initialSessionId);
+    }
+  }, [initialSessionId, selectedSessionId, setSelectedSessionId]);
+
   // Load session when sessions are fetched and we have one with history
   useEffect(() => {
     if (initialSessionId && !claudeSessionId && !loadingSession) {
-      // Find the session and only load if it has an actual Claude session ID
-      // (meaning it has history to load). New sessions won't have one yet.
       const session = claudeSessions?.find((s) => s.id === initialSessionId);
       if (session?.claudeSessionId) {
         loadSession(session.claudeSessionId);
       }
     }
   }, [initialSessionId, claudeSessionId, loadingSession, loadSession, claudeSessions]);
-
-  // Handle selecting a session by TRPC session ID
-  const handleSelectSession = useCallback(
-    (sessionId: string) => {
-      // Update selected session immediately for UI feedback
-      setSelectedSessionId(sessionId);
-
-      // Find the session and load it using the claudeSessionId
-      const session = claudeSessions?.find((s) => s.id === sessionId);
-      if (session?.claudeSessionId) {
-        loadSession(session.claudeSessionId);
-      } else {
-        // Session exists but has no claudeSessionId - it's a new session with no history
-        // Just clear the chat to show empty state
-        clearChat();
-      }
-
-      // Focus input when switching sessions (use setTimeout to ensure it happens after React updates)
-      setTimeout(() => inputRef.current?.focus(), 0);
-    },
-    [loadSession, claudeSessions, clearChat, inputRef]
-  );
-
-  // Handle closing/deleting a session
-  const handleCloseSession = useCallback(
-    (sessionId: string) => {
-      if (!claudeSessions || claudeSessions.length === 0) {
-        return;
-      }
-
-      // Find the session being closed
-      const sessionIndex = claudeSessions.findIndex((s) => s.id === sessionId);
-      if (sessionIndex === -1) {
-        return;
-      }
-
-      const isSelectedSession = sessionId === selectedSessionId;
-
-      // Delete the session
-      deleteSession.mutate({ id: sessionId });
-
-      // If closing the selected session, switch to an adjacent one
-      if (isSelectedSession && claudeSessions.length > 1) {
-        // Prefer next session, fallback to previous
-        const nextSession = claudeSessions[sessionIndex + 1] ?? claudeSessions[sessionIndex - 1];
-        setSelectedSessionId(nextSession?.id ?? null);
-        if (nextSession?.claudeSessionId) {
-          loadSession(nextSession.claudeSessionId);
-        } else {
-          clearChat();
-        }
-      } else if (claudeSessions.length === 1) {
-        // Closing the last session
-        setSelectedSessionId(null);
-        clearChat();
-      }
-    },
-    [claudeSessions, selectedSessionId, deleteSession, loadSession, clearChat]
-  );
-
-  // Handle workflow selection (when no sessions exist yet)
-  const handleWorkflowSelect = useCallback(
-    (workflowId: string) => {
-      createSession.mutate(
-        {
-          workspaceId,
-          workflow: workflowId,
-          model: 'sonnet',
-        },
-        {
-          onSuccess: (session) => {
-            setSelectedSessionId(session.id);
-            clearChat();
-          },
-        }
-      );
-    },
-    [createSession, workspaceId, clearChat]
-  );
-
-  // Handle new chat button - creates a new session for this workspace
-  const handleNewChat = useCallback(() => {
-    createSession.mutate(
-      {
-        workspaceId,
-        workflow: 'followup',
-        model: 'sonnet',
-      },
-      {
-        onSuccess: () => {
-          // Clear chat after session is created - the new session has no history to load
-          clearChat();
-        },
-      }
-    );
-  }, [clearChat, createSession, workspaceId]);
 
   // Determine connection status for indicator
   const status: ConnectionStatus = !connected
@@ -425,25 +489,6 @@ function WorkspaceChatContent() {
       : running
         ? 'processing'
         : 'connected';
-
-  // Track if user is near bottom for auto-scroll
-  const isNearBottomRef = useRef(true);
-
-  // Auto-scroll to bottom when messages change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
-  useEffect(() => {
-    if (isNearBottomRef.current && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages.length, messagesEndRef]);
-
-  // Handle scroll to detect if user is near bottom
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const target = event.currentTarget;
-    const threshold = 100;
-    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
-    isNearBottomRef.current = isNearBottom;
-  }, []);
 
   // Show loading while fetching workspace and sessions
   if (workspaceLoading || sessionsLoading) {
