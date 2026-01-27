@@ -111,9 +111,13 @@ export const sessionRouter = router({
     }),
 
   // Delete a claude session
-  deleteClaudeSession: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
-    return claudeSessionAccessor.delete(input.id);
-  }),
+  deleteClaudeSession: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input }) => {
+      // Stop process first to prevent orphaned Claude processes
+      await sessionService.stopClaudeSession(input.id);
+      return claudeSessionAccessor.delete(input.id);
+    }),
 
   // Terminal Sessions
 
