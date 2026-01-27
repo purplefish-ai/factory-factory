@@ -1,7 +1,7 @@
 'use client';
 
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, CheckCircle2, Terminal } from 'lucide-react';
+import { Bot, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -413,12 +413,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin Dashboard" description="System monitoring and management">
-        <Badge variant="outline" className="flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" />
-          Simplified Model
-        </Badge>
-      </PageHeader>
+      <PageHeader title="Admin Dashboard" description="System monitoring and management" />
 
       <ApiUsageSection
         apiUsage={stats?.apiUsage}
