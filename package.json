@@ -101,7 +101,7 @@
     "zod": "^4.3.6"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json}": [
+    "*.{js,jsx,ts,tsx,json,css}": [
       "biome check --write"
     ]
   },
