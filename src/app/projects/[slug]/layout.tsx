@@ -2,12 +2,14 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { setProjectContext, trpc } from '../../../frontend/lib/trpc';
+import { useProjectContext } from '../../../frontend/lib/providers';
+import { trpc } from '../../../frontend/lib/trpc';
 
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
+  const { setProjectContext } = useProjectContext();
 
   const {
     data: project,
@@ -24,7 +26,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
       // Clear project context when leaving project pages
       setProjectContext(undefined);
     };
-  }, [project?.id]);
+  }, [project?.id, setProjectContext]);
 
   useEffect(() => {
     if (!(isLoading || project || error)) {
