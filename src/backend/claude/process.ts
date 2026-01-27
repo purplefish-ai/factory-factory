@@ -559,11 +559,6 @@ export class ClaudeProcess extends EventEmitter {
       args.push('--disallowed-tools', options.disallowedTools.join(','));
     }
 
-    // Extended thinking mode
-    if (options.thinkingEnabled) {
-      args.push('--thinking');
-    }
-
     return args;
   }
 
