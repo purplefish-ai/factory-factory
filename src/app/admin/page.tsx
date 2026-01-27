@@ -110,39 +110,6 @@ function ApiUsageSection({
   );
 }
 
-interface ConcurrencyData {
-  activeWorkers: number;
-  activeSupervisors: number;
-  activeTopLevelTasks: number;
-  limits: { maxWorkers: number; maxSupervisors: number; maxTopLevelTasks: number };
-}
-
-function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Concurrency</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard
-            title="Active Workers"
-            value={`${concurrency?.activeWorkers || 0} / ${concurrency?.limits?.maxWorkers || 0}`}
-          />
-          <StatCard
-            title="Active Supervisors"
-            value={`${concurrency?.activeSupervisors || 0} / ${concurrency?.limits?.maxSupervisors || 0}`}
-          />
-          <StatCard
-            title="Active Top-Level Tasks"
-            value={`${concurrency?.activeTopLevelTasks || 0} / ${concurrency?.limits?.maxTopLevelTasks || 0}`}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function getStatusBadgeVariant(
   status: string
 ): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -420,8 +387,6 @@ export default function AdminDashboardPage() {
         onReset={() => resetApiStats.mutate()}
         isResetting={resetApiStats.isPending}
       />
-
-      <ConcurrencySection concurrency={stats?.concurrency} />
 
       {isLoadingProcesses ? (
         <ProcessesSectionSkeleton />

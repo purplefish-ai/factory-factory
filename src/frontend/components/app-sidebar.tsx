@@ -263,7 +263,7 @@ export function AppSidebar() {
                 <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
-            <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto">
+            <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
               <SidebarMenu>
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
