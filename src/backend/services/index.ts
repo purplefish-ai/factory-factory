@@ -7,7 +7,7 @@
 // Configuration service
 export { configService } from './config.service';
 // GitHub CLI service
-export { githubCLIService } from './github-cli.service';
+export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.service';
 // Kanban state service
 export { computeKanbanColumn, kanbanStateService } from './kanban-state.service';
 // Logger service

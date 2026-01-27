@@ -48,13 +48,28 @@ function saveHiddenColumnsToStorage(projectId: string, columns: KanbanColumnType
   }
 }
 
+function formatTimeSince(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ago`;
+}
+
 export function KanbanBoard({ projectId, projectSlug }: KanbanBoardProps) {
   const [hiddenColumns, setHiddenColumns] = useState<KanbanColumnType[]>([]);
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
   // Load hidden columns from localStorage on mount
   useEffect(() => {
     setHiddenColumns(getHiddenColumnsFromStorage(projectId));
   }, [projectId]);
+
+  // Update current time every second for live "updated X ago" display
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const {
     data: workspaces,
@@ -96,8 +111,8 @@ export function KanbanBoard({ projectId, projectSlug }: KanbanBoardProps) {
     });
   };
 
-  // Calculate time since last update
-  const timeSinceUpdate = dataUpdatedAt ? Math.round((Date.now() - dataUpdatedAt) / 1000) : null;
+  // Calculate time since last update (uses currentTime for live updates)
+  const timeSinceUpdate = dataUpdatedAt ? Math.round((currentTime - dataUpdatedAt) / 1000) : null;
   const isStale = timeSinceUpdate !== null && timeSinceUpdate > 300; // 5 minutes
 
   if (isLoading) {
@@ -134,7 +149,7 @@ export function KanbanBoard({ projectId, projectSlug }: KanbanBoardProps) {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {timeSinceUpdate !== null && (
             <span className={isStale ? 'text-yellow-600 dark:text-yellow-400' : ''}>
-              Updated {timeSinceUpdate}s ago
+              Updated {formatTimeSince(timeSinceUpdate)}
             </span>
           )}
         </div>

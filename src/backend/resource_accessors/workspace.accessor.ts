@@ -31,6 +31,7 @@ interface UpdateWorkspaceInput {
 
 interface FindByProjectIdFilters {
   status?: WorkspaceStatus;
+  excludeStatuses?: WorkspaceStatus[];
   kanbanColumn?: KanbanColumn;
   limit?: number;
   offset?: number;
@@ -98,6 +99,10 @@ class WorkspaceAccessor {
 
     if (filters?.status) {
       where.status = filters.status;
+    }
+
+    if (filters?.excludeStatuses && filters.excludeStatuses.length > 0) {
+      where.status = { notIn: filters.excludeStatuses };
     }
 
     if (filters?.kanbanColumn) {

@@ -150,11 +150,10 @@ class KanbanStateService {
 
   /**
    * Batch update cached kanban columns for multiple workspaces.
+   * Updates are performed in parallel for better performance.
    */
   async updateCachedKanbanColumns(workspaceIds: string[]): Promise<void> {
-    for (const workspaceId of workspaceIds) {
-      await this.updateCachedKanbanColumn(workspaceId);
-    }
+    await Promise.all(workspaceIds.map((id) => this.updateCachedKanbanColumn(id)));
   }
 }
 

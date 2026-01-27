@@ -6,6 +6,13 @@ import { createLogger } from './logger.service';
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
+export type GitHubCLIErrorType =
+  | 'cli_not_installed'
+  | 'auth_required'
+  | 'pr_not_found'
+  | 'network_error'
+  | 'unknown';
+
 export interface PRStatusFromGitHub {
   number: number;
   state: 'OPEN' | 'CLOSED' | 'MERGED';
@@ -21,11 +28,94 @@ export interface PRInfo {
   number: number;
 }
 
+export interface GitHubCLIHealthStatus {
+  isInstalled: boolean;
+  isAuthenticated: boolean;
+  version?: string;
+  error?: string;
+  errorType?: GitHubCLIErrorType;
+}
+
 /**
  * Service for interacting with GitHub via the `gh` CLI.
  * Uses the locally authenticated gh CLI instead of API tokens.
  */
 class GitHubCLIService {
+  /**
+   * Classify an error from gh CLI execution.
+   */
+  private classifyError(error: unknown): GitHubCLIErrorType {
+    const message = error instanceof Error ? error.message : String(error);
+    const lowerMessage = message.toLowerCase();
+
+    // Check for CLI not installed (ENOENT = file not found)
+    if (lowerMessage.includes('enoent') || lowerMessage.includes('not found')) {
+      return 'cli_not_installed';
+    }
+
+    // Check for auth issues
+    if (
+      lowerMessage.includes('authentication') ||
+      lowerMessage.includes('not logged in') ||
+      lowerMessage.includes('gh auth login')
+    ) {
+      return 'auth_required';
+    }
+
+    // Check for PR not found
+    if (lowerMessage.includes('could not resolve') || lowerMessage.includes('not found')) {
+      return 'pr_not_found';
+    }
+
+    // Check for network issues
+    if (
+      lowerMessage.includes('network') ||
+      lowerMessage.includes('timeout') ||
+      lowerMessage.includes('connection')
+    ) {
+      return 'network_error';
+    }
+
+    return 'unknown';
+  }
+
+  /**
+   * Check if gh CLI is installed and authenticated.
+   */
+  async checkHealth(): Promise<GitHubCLIHealthStatus> {
+    // Check if gh is installed
+    try {
+      const { stdout: versionOutput } = await execFileAsync('gh', ['--version'], { timeout: 5000 });
+      const versionMatch = versionOutput.match(/gh version ([\d.]+)/);
+      const version = versionMatch?.[1];
+
+      // Check if authenticated
+      try {
+        await execFileAsync('gh', ['auth', 'status'], { timeout: 10_000 });
+        return { isInstalled: true, isAuthenticated: true, version };
+      } catch {
+        return {
+          isInstalled: true,
+          isAuthenticated: false,
+          version,
+          error: 'GitHub CLI is not authenticated. Run `gh auth login` to authenticate.',
+          errorType: 'auth_required',
+        };
+      }
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      return {
+        isInstalled: false,
+        isAuthenticated: false,
+        error:
+          errorType === 'cli_not_installed'
+            ? 'GitHub CLI (gh) is not installed. Install from https://cli.github.com/'
+            : `Failed to check gh CLI: ${error instanceof Error ? error.message : String(error)}`,
+        errorType,
+      };
+    }
+  }
+
   /**
    * Extract PR info (owner, repo, number) from a GitHub PR URL.
    */
@@ -83,10 +173,29 @@ class GitHubCLIService {
         updatedAt: data.updatedAt,
       };
     } catch (error) {
-      logger.error('Failed to fetch PR status via gh CLI', {
-        prUrl,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Log with appropriate level based on error type
+      if (errorType === 'cli_not_installed' || errorType === 'auth_required') {
+        logger.error('GitHub CLI configuration issue', {
+          prUrl,
+          errorType,
+          error: errorMessage,
+          hint:
+            errorType === 'cli_not_installed'
+              ? 'Install gh CLI from https://cli.github.com/'
+              : 'Run `gh auth login` to authenticate',
+        });
+      } else if (errorType === 'pr_not_found') {
+        logger.warn('PR not found', { prUrl, errorType });
+      } else {
+        logger.error('Failed to fetch PR status via gh CLI', {
+          prUrl,
+          errorType,
+          error: errorMessage,
+        });
+      }
       return null;
     }
   }
