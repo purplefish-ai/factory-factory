@@ -1,13 +1,19 @@
 'use client';
 
 import { Files, GitBranch } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import { FileBrowserPanel } from './file-browser-panel';
 import { GitSummaryPanel } from './git-summary-panel';
 import { TerminalPanel } from './terminal-panel';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 
 // =============================================================================
 // Types
@@ -54,7 +60,36 @@ interface RightPanelProps {
 }
 
 export function RightPanel({ workspaceId, className }: RightPanelProps) {
+  // Track which workspaceId has been loaded to handle workspace changes
+  const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('git');
+
+  // Load persisted tab from localStorage on mount or workspaceId change
+  useEffect(() => {
+    if (loadedForWorkspaceRef.current === workspaceId) {
+      return;
+    }
+    loadedForWorkspaceRef.current = workspaceId;
+
+    try {
+      const stored = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
+      if (stored === 'git' || stored === 'files') {
+        setActiveTopTab(stored);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [workspaceId]);
+
+  // Persist tab selection to localStorage
+  const handleTabChange = (tab: TopPanelTab) => {
+    setActiveTopTab(tab);
+    try {
+      localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, tab);
+    } catch {
+      // Ignore storage errors
+    }
+  };
 
   return (
     <div className={cn('h-full flex flex-col', className)}>
@@ -66,13 +101,13 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
             label="Git"
             icon={<GitBranch className="h-4 w-4" />}
             isActive={activeTopTab === 'git'}
-            onClick={() => setActiveTopTab('git')}
+            onClick={() => handleTabChange('git')}
           />
           <PanelTab
             label="Files"
             icon={<Files className="h-4 w-4" />}
             isActive={activeTopTab === 'files'}
-            onClick={() => setActiveTopTab('files')}
+            onClick={() => handleTabChange('files')}
           />
         </div>
 
