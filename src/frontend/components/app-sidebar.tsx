@@ -26,7 +26,8 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { setProjectContext, trpc } from '../lib/trpc';
+import { useProjectContext } from '../lib/providers';
+import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
 
@@ -51,6 +52,7 @@ export function AppSidebar() {
   const router = useRouter();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('');
   const [hasCheckedProjects, setHasCheckedProjects] = useState(false);
+  const { setProjectContext } = useProjectContext();
 
   const { data: projects, isLoading: projectsLoading } = trpc.project.list.useQuery({
     isArchived: false,
@@ -126,7 +128,7 @@ export function AppSidebar() {
     if (selectedProjectId) {
       setProjectContext(selectedProjectId);
     }
-  }, [selectedProjectId]);
+  }, [selectedProjectId, setProjectContext]);
 
   useEffect(() => {
     const slugFromPath = getProjectSlugFromPath(pathname);

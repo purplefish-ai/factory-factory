@@ -1,5 +1,6 @@
 'use client';
 
+import type { TRPCClient } from '@trpc/client';
 import type { CreateTRPCReact } from '@trpc/react-query';
 import { createTRPCReact, httpBatchLink } from '@trpc/react-query';
 import superjson from 'superjson';
@@ -10,7 +11,7 @@ export type { AppRouter };
 
 export const trpc: CreateTRPCReact<AppRouter, unknown> = createTRPCReact<AppRouter>();
 
-const getBaseUrl = () => {
+export const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
     // Browser should use current path
     return '';
@@ -20,32 +21,29 @@ const getBaseUrl = () => {
 };
 
 /**
- * Global store for project context.
- * Set via setProjectContext() and automatically included in tRPC request headers.
+ * Creates a tRPC client with a context getter function.
+ * The getter is called on each request to get fresh context values.
  */
-let currentProjectId: string | undefined;
-let currentTaskId: string | undefined;
-
-export function setProjectContext(projectId?: string, taskId?: string) {
-  currentProjectId = projectId;
-  currentTaskId = taskId;
+export function createTrpcClient(
+  getContext: () => { projectId?: string; taskId?: string }
+): TRPCClient<AppRouter> {
+  return trpc.createClient({
+    links: [
+      httpBatchLink({
+        url: `${getBaseUrl()}/api/trpc`,
+        transformer: superjson,
+        headers() {
+          const { projectId, taskId } = getContext();
+          const headers: Record<string, string> = {};
+          if (projectId) {
+            headers['X-Project-Id'] = projectId;
+          }
+          if (taskId) {
+            headers['X-Task-Id'] = taskId;
+          }
+          return headers;
+        },
+      }),
+    ],
+  });
 }
-
-export const trpcClient = trpc.createClient({
-  links: [
-    httpBatchLink({
-      url: `${getBaseUrl()}/api/trpc`,
-      transformer: superjson,
-      headers() {
-        const headers: Record<string, string> = {};
-        if (currentProjectId) {
-          headers['X-Project-Id'] = currentProjectId;
-        }
-        if (currentTaskId) {
-          headers['X-Task-Id'] = currentTaskId;
-        }
-        return headers;
-      },
-    }),
-  ],
-});
