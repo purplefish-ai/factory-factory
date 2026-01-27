@@ -54,16 +54,29 @@ const CHAT_TAB: MainViewTab = {
 // =============================================================================
 
 function isValidTab(tab: unknown): tab is MainViewTab {
-  return (
-    typeof tab === 'object' &&
-    tab !== null &&
-    'id' in tab &&
-    typeof (tab as MainViewTab).id === 'string' &&
-    'type' in tab &&
-    ['chat', 'file', 'diff'].includes((tab as MainViewTab).type) &&
-    'label' in tab &&
-    typeof (tab as MainViewTab).label === 'string'
-  );
+  if (
+    typeof tab !== 'object' ||
+    tab === null ||
+    !('id' in tab) ||
+    typeof (tab as MainViewTab).id !== 'string' ||
+    !('type' in tab) ||
+    !['chat', 'file', 'diff'].includes((tab as MainViewTab).type) ||
+    !('label' in tab) ||
+    typeof (tab as MainViewTab).label !== 'string'
+  ) {
+    return false;
+  }
+
+  // For file/diff tabs, path must be a non-empty string
+  const tabType = (tab as MainViewTab).type;
+  if (tabType === 'file' || tabType === 'diff') {
+    const path = (tab as MainViewTab).path;
+    if (typeof path !== 'string' || path.length === 0) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
@@ -170,29 +183,20 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         setRightPanelVisibleState(stored === 'true');
       }
     }
+
+    // Mark as loaded at the end of this effect, so persist effect skips the
+    // re-render triggered by the setState calls above
+    loadedForWorkspaceRef.current = workspaceId;
   }, [workspaceId]);
 
-  // Persist tabs when they change (skip until load is complete)
+  // Persist tabs and active tab when they change (skip until load is complete)
   useEffect(() => {
     if (loadedForWorkspaceRef.current !== workspaceId) {
       return;
     }
     saveTabsToStorage(workspaceId, tabs);
-  }, [workspaceId, tabs]);
-
-  // Persist active tab when it changes (skip until load is complete)
-  useEffect(() => {
-    if (loadedForWorkspaceRef.current !== workspaceId) {
-      return;
-    }
     saveActiveTabToStorage(workspaceId, activeTabId);
-  }, [workspaceId, activeTabId]);
-
-  // Mark workspace as loaded AFTER persist effects have had a chance to skip
-  // This effect must be declared after persist effects to run last
-  useEffect(() => {
-    loadedForWorkspaceRef.current = workspaceId;
-  }, [workspaceId]);
+  }, [workspaceId, tabs, activeTabId]);
 
   // Persist visibility changes to localStorage
   const setRightPanelVisible = useCallback((visible: boolean) => {
