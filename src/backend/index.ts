@@ -881,6 +881,56 @@ function handleTerminalUpgrade(
     logger.debug('Sending initial status message', { workspaceId });
     ws.send(JSON.stringify({ type: 'status', connected: true }));
 
+    // Send list of existing terminals for this workspace (for restoration after page refresh)
+    const existingTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
+    if (existingTerminals.length > 0) {
+      logger.info('Sending existing terminal list for restoration', {
+        workspaceId,
+        terminalCount: existingTerminals.length,
+      });
+
+      // Send the terminal list to the client
+      ws.send(
+        JSON.stringify({
+          type: 'terminal_list',
+          terminals: existingTerminals.map((t) => ({
+            id: t.id,
+            createdAt: t.createdAt.toISOString(),
+          })),
+        })
+      );
+
+      // Set up output/exit listeners for each existing terminal
+      const cleanupMap = terminalListenerCleanup.get(ws);
+      for (const terminal of existingTerminals) {
+        const unsubscribers: (() => void)[] = [];
+        if (cleanupMap) {
+          cleanupMap.set(terminal.id, unsubscribers);
+        }
+
+        // Set up output forwarding
+        const unsubOutput = terminalService.onOutput(terminal.id, (output) => {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'output', terminalId: terminal.id, data: output }));
+          }
+        });
+        unsubscribers.push(unsubOutput);
+
+        // Set up exit handler
+        const unsubExit = terminalService.onExit(terminal.id, (exitCode) => {
+          logger.info('Terminal process exited', { terminalId: terminal.id, exitCode });
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'exit', terminalId: terminal.id, exitCode }));
+          }
+          const exitCleanupMap = terminalListenerCleanup.get(ws);
+          if (exitCleanupMap) {
+            exitCleanupMap.delete(terminal.id);
+          }
+        });
+        unsubscribers.push(unsubExit);
+      }
+    }
+
     // Handle messages
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket handler needs to handle multiple message types
     ws.on('message', async (data) => {
