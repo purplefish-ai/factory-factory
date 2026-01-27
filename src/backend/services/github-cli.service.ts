@@ -38,6 +38,9 @@ export interface ReviewRequestedPR {
   createdAt: string;
   isDraft: boolean;
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
 }
 
 export interface GitHubCLIHealthStatus {
@@ -281,10 +284,13 @@ class GitHubCLIService {
       { timeout: 30_000 }
     );
 
-    const basePRs = JSON.parse(stdout) as Omit<ReviewRequestedPR, 'reviewDecision'>[];
+    const basePRs = JSON.parse(stdout) as Omit<
+      ReviewRequestedPR,
+      'reviewDecision' | 'additions' | 'deletions' | 'changedFiles'
+    >[];
 
-    // Fetch reviewDecision for each PR in parallel
-    const prsWithReviewStatus = await Promise.all(
+    // Fetch reviewDecision and stats for each PR in parallel (same API call)
+    const prsWithDetails = await Promise.all(
       basePRs.map(async (pr) => {
         try {
           const { stdout: prDetails } = await execFileAsync(
@@ -296,20 +302,26 @@ class GitHubCLIService {
               '--repo',
               pr.repository.nameWithOwner,
               '--json',
-              'reviewDecision',
+              'reviewDecision,additions,deletions,changedFiles',
             ],
             { timeout: 10_000 }
           );
-          const { reviewDecision } = JSON.parse(prDetails);
-          return { ...pr, reviewDecision: reviewDecision || null };
+          const details = JSON.parse(prDetails);
+          return {
+            ...pr,
+            reviewDecision: details.reviewDecision || null,
+            additions: details.additions ?? 0,
+            deletions: details.deletions ?? 0,
+            changedFiles: details.changedFiles ?? 0,
+          };
         } catch {
-          // If we can't fetch review status, assume it needs review
-          return { ...pr, reviewDecision: null };
+          // If we can't fetch details, use defaults
+          return { ...pr, reviewDecision: null, additions: 0, deletions: 0, changedFiles: 0 };
         }
       })
     );
 
-    return prsWithReviewStatus;
+    return prsWithDetails;
   }
 
   /**

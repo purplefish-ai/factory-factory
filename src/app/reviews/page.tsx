@@ -198,7 +198,7 @@ export default function ReviewsPage() {
             const repoName =
               pr.repository.nameWithOwner.split('/')[1] || pr.repository.nameWithOwner;
             // Merge basic PR data with full details if available
-            // Use reviewDecision from list data if no full details yet
+            // Use reviewDecision and stats from list data if no full details yet
             const prData: PRWithFullDetails = details ?? {
               number: pr.number,
               title: pr.title,
@@ -217,9 +217,9 @@ export default function ReviewsPage() {
               reviews: [],
               comments: [],
               labels: [],
-              additions: 0,
-              deletions: 0,
-              changedFiles: 0,
+              additions: pr.additions,
+              deletions: pr.deletions,
+              changedFiles: pr.changedFiles,
               headRefName: '',
               baseRefName: '',
               mergeStateStatus: 'UNKNOWN',
