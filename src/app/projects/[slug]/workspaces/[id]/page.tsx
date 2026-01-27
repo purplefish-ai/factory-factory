@@ -401,8 +401,18 @@ function useSessionManagement({
 
   const handleWorkflowSelect = useCallback(
     (workflowId: string) => {
+      // Generate next available "Chat N" name
+      const existingNumbers = (claudeSessions ?? [])
+        .map((s) => {
+          const match = s.name?.match(/^Chat (\d+)$/);
+          return match ? Number.parseInt(match[1], 10) : 0;
+        })
+        .filter((n) => n > 0);
+      const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+      const chatName = `Chat ${nextNumber}`;
+
       createSession.mutate(
-        { workspaceId, workflow: workflowId, model: 'sonnet' },
+        { workspaceId, workflow: workflowId, model: 'sonnet', name: chatName },
         {
           onSuccess: (session) => {
             setSelectedDbSessionId(session.id);
@@ -411,7 +421,7 @@ function useSessionManagement({
         }
       );
     },
-    [createSession, workspaceId, clearChat]
+    [createSession, workspaceId, clearChat, claudeSessions]
   );
 
   const handleNewChat = useCallback(() => {

@@ -100,9 +100,10 @@ function SessionTab({
         'group relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium cursor-pointer',
         'rounded-md transition-all whitespace-nowrap',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'border',
         isActive
-          ? 'bg-background text-foreground shadow-md border border-border'
-          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          ? 'bg-background text-foreground shadow-md border-border'
+          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent',
         disabled && 'pointer-events-none opacity-50 cursor-default'
       )}
     >

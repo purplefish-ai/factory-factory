@@ -38,10 +38,10 @@ function PanelTab({ label, icon, isActive, onClick }: PanelTabProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1 px-2 py-1 text-sm font-medium rounded-md transition-colors',
+        'flex items-center gap-1 px-2 py-1 text-sm font-medium rounded-md transition-colors border',
         isActive
-          ? 'bg-background text-foreground shadow-sm border border-border'
-          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+          ? 'bg-background text-foreground shadow-sm border-border'
+          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent'
       )}
     >
       {icon}
