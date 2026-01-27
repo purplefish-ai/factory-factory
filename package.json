@@ -5,7 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@10.28.1",
   "bin": {
-    "ff": "./dist/src/cli/index.js"
+    "ff": "./dist/src/cli/index.js",
+    "factory-factory": "./dist/src/cli/index.js"
   },
   "scripts": {
     "cli": "tsx src/cli/index.ts",
@@ -101,6 +102,7 @@
     "next": "^16.1.5",
     "next-themes": "^0.4.6",
     "node-pty": "^1.1.0",
+    "open": "^11.0.0",
     "p-limit": "^6.2.0",
     "pidusage": "^4.0.1",
     "react": "^19.2.4",
