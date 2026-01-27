@@ -608,6 +608,39 @@ export const workspaceRouter = router({
       return { files: parseGitStatusOutput(result.stdout) };
     }),
 
+  // Get batch git stats for multiple workspaces (for sidebar)
+  getBatchGitStats: publicProcedure
+    .input(z.object({ workspaceIds: z.array(z.string()) }))
+    .query(async ({ input }) => {
+      const workspaces = await workspaceAccessor.findByIds(input.workspaceIds);
+
+      const results: Record<string, { total: number } | null> = {};
+
+      await Promise.all(
+        workspaces.map(async (workspace) => {
+          if (!workspace.worktreePath) {
+            results[workspace.id] = null;
+            return;
+          }
+
+          try {
+            const result = await gitCommand(['status', '--porcelain'], workspace.worktreePath);
+            if (result.code !== 0) {
+              results[workspace.id] = null;
+              return;
+            }
+
+            const files = parseGitStatusOutput(result.stdout);
+            results[workspace.id] = { total: files.length };
+          } catch {
+            results[workspace.id] = null;
+          }
+        })
+      );
+
+      return results;
+    }),
+
   // Get file diff for workspace
   getFileDiff: publicProcedure
     .input(
