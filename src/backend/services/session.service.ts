@@ -1,5 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { ClaudeProcess, type ClaudeProcessOptions, type ResourceUsage } from '../claude/process';
+import { getWorkflowContent } from '../prompts/workflows';
 import { claudeSessionAccessor, workspaceAccessor } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
 
@@ -41,6 +42,9 @@ class SessionService {
     // Uses atomic conditional update - safe to call even if already true
     await workspaceAccessor.markHasHadSessions(workspace.id);
 
+    // Get workflow prompt content
+    const workflowPrompt = getWorkflowContent(session.workflow);
+
     // Build process options
     const processOptions: ClaudeProcessOptions = {
       workingDir,
@@ -48,6 +52,7 @@ class SessionService {
       resumeSessionId: session.claudeSessionId ?? undefined,
       initialPrompt: options?.initialPrompt ?? 'Continue with the task.',
       permissionMode: 'bypassPermissions',
+      systemPrompt: workflowPrompt ?? undefined,
     };
 
     // Spawn Claude process

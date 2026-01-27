@@ -13,6 +13,7 @@ import {
   MainViewTabBar,
   RightPanel,
   useWorkspacePanel,
+  WorkflowSelector,
   WorkspacePanelProvider,
 } from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
@@ -206,6 +207,7 @@ function ChatContent({
 // Main Workspace Chat Component
 // =============================================================================
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Page component with many hooks and conditional rendering
 function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();
@@ -223,6 +225,17 @@ function WorkspaceChatContent() {
   // Fetch Claude sessions for this workspace
   const { data: claudeSessions, isLoading: sessionsLoading } =
     trpc.session.listClaudeSessions.useQuery({ workspaceId }, { refetchInterval: 5000 });
+
+  // Fetch workflows for workflow selection (only if no sessions exist yet)
+  const { data: workflows } = trpc.session.listWorkflows.useQuery(undefined, {
+    enabled: claudeSessions !== undefined && claudeSessions.length === 0,
+  });
+
+  // Fetch recommended workflow for this workspace
+  const { data: recommendedWorkflow } = trpc.session.getRecommendedWorkflow.useQuery(
+    { workspaceId },
+    { enabled: claudeSessions !== undefined && claudeSessions.length === 0 }
+  );
 
   // Track selected session locally for immediate UI feedback
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -349,12 +362,32 @@ function WorkspaceChatContent() {
     [claudeSessions, selectedSessionId, deleteSession, loadSession, clearChat]
   );
 
+  // Handle workflow selection (when no sessions exist yet)
+  const handleWorkflowSelect = useCallback(
+    (workflowId: string) => {
+      createSession.mutate(
+        {
+          workspaceId,
+          workflow: workflowId,
+          model: 'sonnet',
+        },
+        {
+          onSuccess: (session) => {
+            setSelectedSessionId(session.id);
+            clearChat();
+          },
+        }
+      );
+    },
+    [createSession, workspaceId, clearChat]
+  );
+
   // Handle new chat button - creates a new session for this workspace
   const handleNewChat = useCallback(() => {
     createSession.mutate(
       {
         workspaceId,
-        workflow: 'explore',
+        workflow: 'followup',
         model: 'sonnet',
       },
       {
@@ -453,40 +486,60 @@ function WorkspaceChatContent() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel: Session tabs + Main View Content */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Tab bar */}
-          <div className="px-4 py-2 border-b">
-            <MainViewTabBar
-              sessions={claudeSessions}
-              currentSessionId={selectedSessionId}
-              runningSessionId={runningSessionId}
-              onSelectSession={handleSelectSession}
-              onCreateSession={handleNewChat}
-              onCloseSession={handleCloseSession}
-              disabled={running || createSession.isPending || deleteSession.isPending}
-            />
-          </div>
+          {/* Show workflow selector when no sessions exist, otherwise show tab bar */}
+          {claudeSessions && claudeSessions.length === 0 ? (
+            <MainViewContent workspaceId={workspaceId} className="flex-1">
+              {workflows && recommendedWorkflow ? (
+                <WorkflowSelector
+                  workflows={workflows}
+                  recommendedWorkflow={recommendedWorkflow}
+                  onSelect={handleWorkflowSelect}
+                  disabled={createSession.isPending}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                </div>
+              )}
+            </MainViewContent>
+          ) : (
+            <>
+              {/* Tab bar */}
+              <div className="px-4 py-2 border-b">
+                <MainViewTabBar
+                  sessions={claudeSessions}
+                  currentSessionId={selectedSessionId}
+                  runningSessionId={runningSessionId}
+                  onSelectSession={handleSelectSession}
+                  onCreateSession={handleNewChat}
+                  onCloseSession={handleCloseSession}
+                  disabled={running || createSession.isPending || deleteSession.isPending}
+                />
+              </div>
 
-          {/* Main View Content */}
-          <MainViewContent workspaceId={workspaceId} className="flex-1">
-            <ChatContent
-              messages={messages}
-              running={running}
-              loadingSession={loadingSession}
-              messagesEndRef={messagesEndRef}
-              handleScroll={handleScroll}
-              pendingPermission={pendingPermission}
-              pendingQuestion={pendingQuestion}
-              approvePermission={approvePermission}
-              answerQuestion={answerQuestion}
-              connected={connected}
-              sendMessage={sendMessage}
-              stopChat={stopChat}
-              inputRef={inputRef}
-              chatSettings={chatSettings}
-              updateSettings={updateSettings}
-              claudeSessionId={claudeSessionId}
-            />
-          </MainViewContent>
+              {/* Main View Content */}
+              <MainViewContent workspaceId={workspaceId} className="flex-1">
+                <ChatContent
+                  messages={messages}
+                  running={running}
+                  loadingSession={loadingSession}
+                  messagesEndRef={messagesEndRef}
+                  handleScroll={handleScroll}
+                  pendingPermission={pendingPermission}
+                  pendingQuestion={pendingQuestion}
+                  approvePermission={approvePermission}
+                  answerQuestion={answerQuestion}
+                  connected={connected}
+                  sendMessage={sendMessage}
+                  stopChat={stopChat}
+                  inputRef={inputRef}
+                  chatSettings={chatSettings}
+                  updateSettings={updateSettings}
+                  claudeSessionId={claudeSessionId}
+                />
+              </MainViewContent>
+            </>
+          )}
         </div>
 
         {/* Right Panel (conditionally rendered, fixed width) */}
