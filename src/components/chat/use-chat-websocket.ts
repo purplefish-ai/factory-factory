@@ -28,6 +28,8 @@ export interface UseChatWebSocketOptions {
   initialClaudeSessionId?: string;
   /** Working directory for Claude CLI (workspace worktree path) */
   workingDir?: string;
+  /** Database session ID for linking Claude CLI session to database record */
+  dbSessionId?: string | null;
 }
 
 export interface UseChatWebSocketReturn {
@@ -72,6 +74,8 @@ interface StartMessage {
   selectedModel?: string | null;
   thinkingEnabled?: boolean;
   planModeEnabled?: boolean;
+  /** Database session ID for linking Claude CLI session to database record */
+  dbSessionId?: string;
 }
 
 interface UserInputMessage {
@@ -181,10 +185,6 @@ function logWsMessage(
 
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function generateSessionId(): string {
-  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function createUserMessage(text: string): ChatMessage {
@@ -494,7 +494,13 @@ function handleUserQuestionMessage(data: WebSocketMessage, ctx: MessageHandlerCo
 // =============================================================================
 
 export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChatWebSocketReturn {
-  const { initialClaudeSessionId, workingDir } = options;
+  const { initialClaudeSessionId, workingDir, dbSessionId } = options;
+
+  // Track dbSessionId in a ref to use in sendMessage without stale closures
+  const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
+  useEffect(() => {
+    dbSessionIdRef.current = dbSessionId ?? null;
+  }, [dbSessionId]);
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -511,7 +517,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
 
   // Refs
   const wsRef = useRef<WebSocket | null>(null);
-  const wsSessionIdRef = useRef<string>(generateSessionId());
+  // Unique connection ID for this browser window (stable across reconnects)
+  const connectionIdRef = useRef<string>(
+    `conn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  );
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -746,7 +755,13 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       reconnectTimeoutRef.current = null;
     }
 
-    const wsParams: Record<string, string> = { sessionId: wsSessionIdRef.current };
+    // Use dbSessionId as the session key for Claude processes
+    // connectionId is unique per browser window for routing messages
+    const sessionId = dbSessionIdRef.current || `temp-${Date.now()}`;
+    const wsParams: Record<string, string> = {
+      sessionId,
+      connectionId: connectionIdRef.current,
+    };
     if (workingDir) {
       wsParams.workingDir = workingDir;
     }
@@ -867,6 +882,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         if (claudeSessionId) {
           startMsg.resumeSessionId = claudeSessionId;
         }
+        // Include database session ID for backend to link Claude session to DB record
+        if (dbSessionIdRef.current) {
+          startMsg.dbSessionId = dbSessionIdRef.current;
+        }
         sendWsMessage(startMsg);
       }
 
@@ -905,10 +924,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     hasLoadedInitialSessionRef.current = false;
     initialClaudeSessionIdRef.current = null;
 
-    // Generate new WebSocket session ID
-    wsSessionIdRef.current = generateSessionId();
-
-    // Reconnect with new session
+    // Reconnect with new dbSessionId (will be picked up from dbSessionIdRef)
     connect();
   }, [running, sendWsMessage, connect]);
 

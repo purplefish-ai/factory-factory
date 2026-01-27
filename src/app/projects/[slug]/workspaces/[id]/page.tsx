@@ -300,6 +300,8 @@ interface UseSessionManagementOptions {
   clearChat: () => void;
   sendMessage: (text: string) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  selectedDbSessionId: string | null;
+  setSelectedDbSessionId: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 function useSessionManagement({
@@ -310,11 +312,11 @@ function useSessionManagement({
   clearChat,
   sendMessage,
   inputRef,
+  selectedDbSessionId,
+  setSelectedDbSessionId,
 }: UseSessionManagementOptions) {
   const router = useRouter();
   const utils = trpc.useUtils();
-  // Database ClaudeSession.id of the currently selected session
-  const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
 
   // Ref to store pending quick action prompt (to send after session is ready)
   const pendingQuickActionRef = useRef<{ dbSessionId: string; prompt: string } | null>(null);
@@ -366,7 +368,7 @@ function useSessionManagement({
       }
       setTimeout(() => inputRef.current?.focus(), 0);
     },
-    [loadSession, claudeSessions, clearChat, inputRef]
+    [loadSession, claudeSessions, clearChat, inputRef, setSelectedDbSessionId]
   );
 
   const handleCloseSession = useCallback(
@@ -396,7 +398,14 @@ function useSessionManagement({
         clearChat();
       }
     },
-    [claudeSessions, selectedDbSessionId, deleteSession, loadSession, clearChat]
+    [
+      claudeSessions,
+      selectedDbSessionId,
+      deleteSession,
+      loadSession,
+      clearChat,
+      setSelectedDbSessionId,
+    ]
   );
 
   const handleWorkflowSelect = useCallback(
@@ -421,7 +430,7 @@ function useSessionManagement({
         }
       );
     },
-    [createSession, workspaceId, clearChat, claudeSessions]
+    [createSession, workspaceId, clearChat, claudeSessions, setSelectedDbSessionId]
   );
 
   const handleNewChat = useCallback(() => {
@@ -444,7 +453,7 @@ function useSessionManagement({
         },
       }
     );
-  }, [clearChat, createSession, workspaceId, claudeSessions]);
+  }, [clearChat, createSession, workspaceId, claudeSessions, setSelectedDbSessionId]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
@@ -460,12 +469,10 @@ function useSessionManagement({
         }
       );
     },
-    [clearChat, createSession, workspaceId]
+    [clearChat, createSession, workspaceId, setSelectedDbSessionId]
   );
 
   return {
-    selectedDbSessionId,
-    setSelectedDbSessionId,
     createSession,
     deleteSession,
     archiveWorkspace,
@@ -525,6 +532,16 @@ function WorkspaceChatContent() {
     initialClaudeSessionId,
   } = useWorkspaceData({ workspaceId });
 
+  // Manage selected session state here so it's available for useChatWebSocket
+  const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
+
+  // Initialize selectedDbSessionId when sessions first load
+  useEffect(() => {
+    if (initialDbSessionId && selectedDbSessionId === null) {
+      setSelectedDbSessionId(initialDbSessionId);
+    }
+  }, [initialDbSessionId, selectedDbSessionId]);
+
   // Initialize WebSocket connection with chat hook
   const {
     messages,
@@ -548,12 +565,11 @@ function WorkspaceChatContent() {
   } = useChatWebSocket({
     initialClaudeSessionId,
     workingDir: workspace?.worktreePath ?? undefined,
+    dbSessionId: selectedDbSessionId,
   });
 
   // Session management
   const {
-    selectedDbSessionId,
-    setSelectedDbSessionId,
     createSession,
     deleteSession,
     archiveWorkspace,
@@ -572,6 +588,8 @@ function WorkspaceChatContent() {
     clearChat,
     sendMessage,
     inputRef,
+    selectedDbSessionId,
+    setSelectedDbSessionId,
   });
 
   // Auto-scroll behavior
@@ -597,13 +615,6 @@ function WorkspaceChatContent() {
       }
     }
   }, [selectedDbSessionId, claudeSessionId, claudeSessions]);
-
-  // Initialize selectedDbSessionId when sessions first load
-  useEffect(() => {
-    if (initialDbSessionId && selectedDbSessionId === null) {
-      setSelectedDbSessionId(initialDbSessionId);
-    }
-  }, [initialDbSessionId, selectedDbSessionId, setSelectedDbSessionId]);
 
   // Determine connection status for indicator
   const status = getConnectionStatusFromState(connected, loadingSession, running);

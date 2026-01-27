@@ -16,6 +16,7 @@ import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index';
 import { prisma } from './db';
+import { claudeSessionAccessor } from './resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from './resource_accessors/workspace.accessor';
 import { projectRouter } from './routers/api/project.router';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index';
@@ -519,17 +520,44 @@ function forwardToConnections(sessionId: string, data: unknown): void {
 }
 
 // Set up event forwarding from ClaudeClient to WebSocket connections
-function setupChatClientEvents(sessionId: string, client: ClaudeClient): void {
+function setupChatClientEvents(
+  sessionId: string,
+  client: ClaudeClient,
+  dbSessionId?: string
+): void {
   if (DEBUG_CHAT_WS) {
-    logger.info('[Chat WS] Setting up event forwarding for session', { sessionId });
+    logger.info('[Chat WS] Setting up event forwarding for session', { sessionId, dbSessionId });
   }
 
   // Forward Claude CLI session ID to frontend when it becomes available
   // This is the actual Claude session ID used to store history in ~/.claude/projects/
-  client.on('session_id', (claudeSessionId) => {
+  client.on('session_id', async (claudeSessionId) => {
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Received session_id from Claude CLI', { sessionId, claudeSessionId });
+      logger.info('[Chat WS] Received session_id from Claude CLI', {
+        sessionId,
+        claudeSessionId,
+        dbSessionId,
+      });
     }
+
+    // Update database with Claude CLI session ID if dbSessionId was provided
+    // This ensures the link persists even if user navigates away before frontend receives the message
+    if (dbSessionId) {
+      try {
+        await claudeSessionAccessor.update(dbSessionId, { claudeSessionId });
+        logger.info('[Chat WS] Updated database with claudeSessionId', {
+          dbSessionId,
+          claudeSessionId,
+        });
+      } catch (error) {
+        logger.warn('[Chat WS] Failed to update database with claudeSessionId', {
+          dbSessionId,
+          claudeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     forwardToConnections(sessionId, {
       type: 'status',
       running: true,
@@ -641,6 +669,8 @@ async function getOrCreateChatClient(
     model?: string;
     thinkingEnabled?: boolean;
     permissionMode?: 'bypassPermissions' | 'plan';
+    /** Database session ID for linking Claude CLI session to database record */
+    dbSessionId?: string;
   }
 ): Promise<ClaudeClient> {
   // Check for existing running client
@@ -685,7 +715,7 @@ async function getOrCreateChatClient(
       const newClient = await ClaudeClient.create(clientOptions);
 
       // Set up event forwarding before storing in map to ensure events aren't missed
-      setupChatClientEvents(sessionId, newClient);
+      setupChatClientEvents(sessionId, newClient, options.dbSessionId);
       chatClients.set(sessionId, newClient);
 
       return newClient;
@@ -726,6 +756,8 @@ async function handleChatMessage(
     thinkingEnabled?: boolean;
     planModeEnabled?: boolean;
     selectedModel?: string | null;
+    // Database session ID for linking Claude CLI session to database record
+    dbSessionId?: string;
   }
 ) {
   switch (message.type) {
@@ -749,6 +781,7 @@ async function handleChatMessage(
         model,
         thinkingEnabled: message.thinkingEnabled,
         permissionMode,
+        dbSessionId: message.dbSessionId,
       });
       ws.send(JSON.stringify({ type: 'started', sessionId }));
       break;
