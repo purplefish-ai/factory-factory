@@ -1,13 +1,20 @@
 'use client';
 
 import { Terminal } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useCallback, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
-import { TerminalInstance } from './terminal-instance';
 import { TerminalTabBar } from './terminal-tab-bar';
 import { useTerminalWebSocket } from './use-terminal-websocket';
+
+// Dynamic import with SSR disabled to allow xterm.js to use static imports
+// xterm.js requires DOM APIs that aren't available during server-side rendering
+const TerminalInstance = dynamic(
+  () => import('./terminal-instance').then((m) => ({ default: m.TerminalInstance })),
+  { ssr: false }
+);
 
 // =============================================================================
 // Types
@@ -107,12 +114,38 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
     outputBufferRef.current.clear();
   }, []);
 
+  // Handle terminal list restoration (after page refresh)
+  const handleTerminalList = useCallback((terminals: Array<{ id: string; createdAt: string }>) => {
+    // Only restore if we don't already have tabs (avoid duplicates on reconnect)
+    setTabs((prev) => {
+      if (prev.length > 0) {
+        return prev;
+      }
+
+      // Create tabs for each existing terminal
+      const restoredTabs: TerminalTab[] = terminals.map((terminal, index) => ({
+        id: `tab-${terminal.id}`,
+        label: `Terminal ${index + 1}`,
+        terminalId: terminal.id,
+        output: '', // Output will stream in as new data arrives
+      }));
+
+      // Set the first tab as active
+      if (restoredTabs.length > 0) {
+        setTimeout(() => setActiveTabId(restoredTabs[0].id), 0);
+      }
+
+      return restoredTabs;
+    });
+  }, []);
+
   const { connected, create, sendInput, resize, destroy } = useTerminalWebSocket({
     workspaceId,
     onOutput: handleOutput,
     onCreated: handleCreated,
     onExit: handleExit,
     onError: handleError,
+    onTerminalList: handleTerminalList,
   });
 
   // Create new terminal tab
@@ -243,10 +276,12 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
       <div className="flex-1 overflow-hidden bg-zinc-900">
         {activeTab && (
           <TerminalInstance
+            key={activeTab.id}
             output={activeTab.output}
             onData={handleData}
             onResize={handleResize}
             className="h-full"
+            isActive
           />
         )}
       </div>

@@ -1,0 +1,323 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { GitClient, GitClientFactory } from './git.client';
+
+// =============================================================================
+// GitClient Unit Tests (non-mocked)
+// These tests cover functionality that doesn't require git command execution
+// =============================================================================
+
+describe('GitClient', () => {
+  const testConfig = {
+    baseRepoPath: '/test/repo',
+    worktreeBase: '/test/worktrees',
+  };
+
+  let client: GitClient;
+
+  beforeEach(() => {
+    client = new GitClient(testConfig);
+  });
+
+  // ===========================================================================
+  // Constructor Tests
+  // ===========================================================================
+
+  describe('constructor', () => {
+    it('should create a client with valid config', () => {
+      expect(client).toBeInstanceOf(GitClient);
+    });
+
+    it('should throw if baseRepoPath is missing', () => {
+      expect(() => new GitClient({ baseRepoPath: '', worktreeBase: '/test' })).toThrow(
+        'baseRepoPath is required'
+      );
+    });
+
+    it('should throw if worktreeBase is missing', () => {
+      expect(() => new GitClient({ baseRepoPath: '/test', worktreeBase: '' })).toThrow(
+        'worktreeBase is required'
+      );
+    });
+
+    it('should throw if baseRepoPath is undefined', () => {
+      expect(
+        () => new GitClient({ baseRepoPath: undefined as unknown as string, worktreeBase: '/test' })
+      ).toThrow('baseRepoPath is required');
+    });
+
+    it('should throw if worktreeBase is undefined', () => {
+      expect(
+        () => new GitClient({ baseRepoPath: '/test', worktreeBase: undefined as unknown as string })
+      ).toThrow('worktreeBase is required');
+    });
+  });
+
+  // ===========================================================================
+  // getWorktreePath Tests
+  // ===========================================================================
+
+  describe('getWorktreePath', () => {
+    it('should return correct path', () => {
+      const path = client.getWorktreePath('my-workspace');
+      expect(path).toBe('/test/worktrees/my-workspace');
+    });
+
+    it('should handle workspace names with hyphens', () => {
+      const path = client.getWorktreePath('workspace-123-abc');
+      expect(path).toBe('/test/worktrees/workspace-123-abc');
+    });
+
+    it('should handle workspace names with underscores', () => {
+      const path = client.getWorktreePath('workspace_test');
+      expect(path).toBe('/test/worktrees/workspace_test');
+    });
+
+    it('should handle long workspace names', () => {
+      const longName = 'a'.repeat(100);
+      const path = client.getWorktreePath(longName);
+      expect(path).toBe(`/test/worktrees/${longName}`);
+    });
+
+    it('should handle single character workspace name', () => {
+      const path = client.getWorktreePath('x');
+      expect(path).toBe('/test/worktrees/x');
+    });
+  });
+
+  // ===========================================================================
+  // generateBranchName Tests
+  // ===========================================================================
+
+  describe('generateBranchName', () => {
+    it('should generate a branch name without prefix', () => {
+      const name = client.generateBranchName();
+      // Should be 6 hex characters
+      expect(name).toMatch(/^[0-9a-f]{6}$/);
+    });
+
+    it('should generate a branch name with prefix', () => {
+      const name = client.generateBranchName('martin-purplefish');
+      expect(name).toMatch(/^martin-purplefish\/[0-9a-f]{6}$/);
+    });
+
+    it('should generate a branch name with complex prefix', () => {
+      const name = client.generateBranchName('user-name/feature');
+      expect(name).toMatch(/^user-name\/feature\/[0-9a-f]{6}$/);
+    });
+
+    it('should generate unique names on successive calls', () => {
+      const names = new Set<string>();
+      for (let i = 0; i < 100; i++) {
+        names.add(client.generateBranchName());
+      }
+      // All 100 names should be unique (extremely unlikely to have collisions)
+      expect(names.size).toBe(100);
+    });
+
+    it('should generate 6 character hex hash', () => {
+      const name = client.generateBranchName();
+      expect(name).toHaveLength(6);
+      expect(name).toMatch(/^[0-9a-f]+$/);
+    });
+
+    it('should handle empty prefix by generating just hash', () => {
+      const name = client.generateBranchName('');
+      // Empty string is falsy, so it should just return the hash
+      expect(name).toMatch(/^[0-9a-f]{6}$/);
+    });
+  });
+
+  // ===========================================================================
+  // getBranchName Tests (deprecated)
+  // ===========================================================================
+
+  describe('getBranchName (deprecated)', () => {
+    it('should return legacy format branch name', () => {
+      const name = client.getBranchName('workspace-abc123');
+      expect(name).toBe('factoryfactory/workspace-abc123');
+    });
+
+    it('should handle simple workspace names', () => {
+      const name = client.getBranchName('test');
+      expect(name).toBe('factoryfactory/test');
+    });
+
+    it('should preserve workspace name exactly', () => {
+      const name = client.getBranchName('My-Workspace_123');
+      expect(name).toBe('factoryfactory/My-Workspace_123');
+    });
+  });
+});
+
+// =============================================================================
+// GitClientFactory Tests
+// =============================================================================
+
+describe('GitClientFactory', () => {
+  afterEach(() => {
+    GitClientFactory.clearCache();
+  });
+
+  describe('forProject', () => {
+    it('should create a new client for a project', () => {
+      const client = GitClientFactory.forProject({
+        repoPath: '/test/repo',
+        worktreeBasePath: '/test/worktrees',
+      });
+
+      expect(client).toBeInstanceOf(GitClient);
+    });
+
+    it('should return cached client for same project', () => {
+      const project = {
+        repoPath: '/test/repo',
+        worktreeBasePath: '/test/worktrees',
+      };
+
+      const client1 = GitClientFactory.forProject(project);
+      const client2 = GitClientFactory.forProject(project);
+
+      expect(client1).toBe(client2);
+    });
+
+    it('should create different clients for different projects', () => {
+      const client1 = GitClientFactory.forProject({
+        repoPath: '/test/repo1',
+        worktreeBasePath: '/test/worktrees1',
+      });
+      const client2 = GitClientFactory.forProject({
+        repoPath: '/test/repo2',
+        worktreeBasePath: '/test/worktrees2',
+      });
+
+      expect(client1).not.toBe(client2);
+    });
+
+    it('should differentiate by repoPath', () => {
+      const client1 = GitClientFactory.forProject({
+        repoPath: '/test/repo1',
+        worktreeBasePath: '/test/worktrees',
+      });
+      const client2 = GitClientFactory.forProject({
+        repoPath: '/test/repo2',
+        worktreeBasePath: '/test/worktrees',
+      });
+
+      expect(client1).not.toBe(client2);
+    });
+
+    it('should differentiate by worktreeBasePath', () => {
+      const client1 = GitClientFactory.forProject({
+        repoPath: '/test/repo',
+        worktreeBasePath: '/test/worktrees1',
+      });
+      const client2 = GitClientFactory.forProject({
+        repoPath: '/test/repo',
+        worktreeBasePath: '/test/worktrees2',
+      });
+
+      expect(client1).not.toBe(client2);
+    });
+  });
+
+  describe('removeProject', () => {
+    it('should remove cached client', () => {
+      const project = {
+        repoPath: '/test/repo',
+        worktreeBasePath: '/test/worktrees',
+      };
+
+      GitClientFactory.forProject(project);
+      expect(GitClientFactory.cacheSize).toBe(1);
+
+      const removed = GitClientFactory.removeProject(project);
+      expect(removed).toBe(true);
+      expect(GitClientFactory.cacheSize).toBe(0);
+    });
+
+    it('should return false if project not cached', () => {
+      const removed = GitClientFactory.removeProject({
+        repoPath: '/nonexistent',
+        worktreeBasePath: '/nonexistent',
+      });
+
+      expect(removed).toBe(false);
+    });
+
+    it('should only remove the specified project', () => {
+      const project1 = { repoPath: '/repo1', worktreeBasePath: '/wt1' };
+      const project2 = { repoPath: '/repo2', worktreeBasePath: '/wt2' };
+
+      GitClientFactory.forProject(project1);
+      GitClientFactory.forProject(project2);
+      expect(GitClientFactory.cacheSize).toBe(2);
+
+      GitClientFactory.removeProject(project1);
+      expect(GitClientFactory.cacheSize).toBe(1);
+
+      // project2 should still be cached
+      const client = GitClientFactory.forProject(project2);
+      expect(client).toBeInstanceOf(GitClient);
+    });
+  });
+
+  describe('clearCache', () => {
+    it('should clear all cached clients', () => {
+      GitClientFactory.forProject({ repoPath: '/repo1', worktreeBasePath: '/wt1' });
+      GitClientFactory.forProject({ repoPath: '/repo2', worktreeBasePath: '/wt2' });
+      GitClientFactory.forProject({ repoPath: '/repo3', worktreeBasePath: '/wt3' });
+
+      expect(GitClientFactory.cacheSize).toBe(3);
+
+      GitClientFactory.clearCache();
+      expect(GitClientFactory.cacheSize).toBe(0);
+    });
+
+    it('should work on empty cache', () => {
+      expect(GitClientFactory.cacheSize).toBe(0);
+      GitClientFactory.clearCache();
+      expect(GitClientFactory.cacheSize).toBe(0);
+    });
+
+    it('should allow new clients to be created after clear', () => {
+      const project = { repoPath: '/repo', worktreeBasePath: '/wt' };
+
+      const client1 = GitClientFactory.forProject(project);
+      GitClientFactory.clearCache();
+      const client2 = GitClientFactory.forProject(project);
+
+      // Should be different instances since cache was cleared
+      expect(client1).not.toBe(client2);
+    });
+  });
+
+  describe('cacheSize', () => {
+    it('should return 0 for empty cache', () => {
+      expect(GitClientFactory.cacheSize).toBe(0);
+    });
+
+    it('should return correct count after adding clients', () => {
+      GitClientFactory.forProject({ repoPath: '/repo1', worktreeBasePath: '/wt1' });
+      expect(GitClientFactory.cacheSize).toBe(1);
+
+      GitClientFactory.forProject({ repoPath: '/repo2', worktreeBasePath: '/wt2' });
+      expect(GitClientFactory.cacheSize).toBe(2);
+
+      GitClientFactory.forProject({ repoPath: '/repo3', worktreeBasePath: '/wt3' });
+      expect(GitClientFactory.cacheSize).toBe(3);
+    });
+
+    it('should not increase when getting same project', () => {
+      const project = { repoPath: '/repo', worktreeBasePath: '/wt' };
+
+      GitClientFactory.forProject(project);
+      expect(GitClientFactory.cacheSize).toBe(1);
+
+      GitClientFactory.forProject(project);
+      expect(GitClientFactory.cacheSize).toBe(1);
+
+      GitClientFactory.forProject(project);
+      expect(GitClientFactory.cacheSize).toBe(1);
+    });
+  });
+});

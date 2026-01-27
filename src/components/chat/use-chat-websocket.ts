@@ -114,7 +114,7 @@ type OutgoingMessage =
 // Debug Logging
 // =============================================================================
 
-const DEBUG_WEBSOCKET = process.env.NODE_ENV === 'development';
+const DEBUG_WEBSOCKET = false;
 
 /**
  * Maximum number of messages to queue while disconnected.

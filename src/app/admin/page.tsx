@@ -230,12 +230,16 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
                     <TableRow key={process.sessionId}>
                       <TableCell>
                         <div className="flex flex-col">
-                          <Link
-                            href={`/workspace/${process.workspaceId}`}
-                            className="font-medium hover:underline"
-                          >
-                            {process.workspaceName}
-                          </Link>
+                          {process.projectSlug ? (
+                            <Link
+                              href={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
+                              className="font-medium hover:underline"
+                            >
+                              {process.workspaceName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{process.workspaceName}</span>
+                          )}
                           {process.workspaceBranch && (
                             <span className="text-xs text-muted-foreground font-mono">
                               {process.workspaceBranch}
@@ -308,12 +312,16 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
                     <TableRow key={process.terminalId}>
                       <TableCell>
                         <div className="flex flex-col">
-                          <Link
-                            href={`/workspace/${process.workspaceId}`}
-                            className="font-medium hover:underline"
-                          >
-                            {process.workspaceName}
-                          </Link>
+                          {process.projectSlug ? (
+                            <Link
+                              href={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
+                              className="font-medium hover:underline"
+                            >
+                              {process.workspaceName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{process.workspaceName}</span>
+                          )}
                           {process.workspaceBranch && (
                             <span className="text-xs text-muted-foreground font-mono">
                               {process.workspaceBranch}

@@ -137,13 +137,13 @@ export const adminRouter = router({
     // Get terminal sessions with PIDs from database
     const terminalSessionsWithPid = await terminalSessionAccessor.findWithPid();
 
-    // Get workspace info for all related workspaces
+    // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([
       ...claudeSessionsWithPid.map((s) => s.workspaceId),
       ...terminalSessionsWithPid.map((s) => s.workspaceId),
       ...activeTerminals.map((t) => t.workspaceId),
     ]);
-    const workspaces = await workspaceAccessor.findByIds(Array.from(workspaceIds));
+    const workspaces = await workspaceAccessor.findByIdsWithProject(Array.from(workspaceIds));
     const workspaceMap = new Map(workspaces.map((w) => [w.id, w]));
 
     // Build enriched Claude process list from DB sessions
@@ -156,6 +156,7 @@ export const adminRouter = router({
         workspaceId: session.workspaceId,
         workspaceName: workspace?.name ?? 'Unknown',
         workspaceBranch: workspace?.branchName ?? null,
+        projectSlug: workspace?.project.slug ?? null,
         name: session.name,
         workflow: session.workflow,
         model: session.model,
@@ -192,6 +193,7 @@ export const adminRouter = router({
           workspaceId: 'unknown',
           workspaceName: 'Unknown (orphan)',
           workspaceBranch: null,
+          projectSlug: null,
           name: null,
           workflow: 'unknown',
           model: 'unknown',
@@ -219,6 +221,7 @@ export const adminRouter = router({
         workspaceId: terminal.workspaceId,
         workspaceName: workspace?.name ?? 'Unknown',
         workspaceBranch: workspace?.branchName ?? null,
+        projectSlug: workspace?.project.slug ?? null,
         pid: terminal.pid,
         cols: terminal.cols,
         rows: terminal.rows,

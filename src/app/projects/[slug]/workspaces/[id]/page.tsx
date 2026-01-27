@@ -150,8 +150,17 @@ function ChatContent({
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
+  // Focus input when clicking anywhere in the chat area
+  const handleChatClick = useCallback(() => {
+    if (inputRef?.current && !running) {
+      inputRef.current.focus();
+    }
+  }, [inputRef, running]);
+
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction
+    // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
+    <div className="flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
       <ScrollArea className="flex-1" onScroll={handleScroll}>
         <div className="p-4 space-y-2">
@@ -190,6 +199,7 @@ function ChatContent({
           placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
           settings={chatSettings}
           onSettingsChange={updateSettings}
+          sessionId={claudeSessionId}
         />
         {claudeSessionId && (
           <div className="px-4 pb-2 text-xs text-muted-foreground">
@@ -318,8 +328,11 @@ function WorkspaceChatContent() {
         // Just clear the chat to show empty state
         clearChat();
       }
+
+      // Focus input when switching sessions (use setTimeout to ensure it happens after React updates)
+      setTimeout(() => inputRef.current?.focus(), 0);
     },
-    [loadSession, claudeSessions, clearChat]
+    [loadSession, claudeSessions, clearChat, inputRef]
   );
 
   // Handle closing/deleting a session

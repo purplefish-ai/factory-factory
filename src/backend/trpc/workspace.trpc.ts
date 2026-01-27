@@ -38,10 +38,14 @@ export interface FileEntry {
 // =============================================================================
 
 /**
- * Parse git status --porcelain output into structured data
+ * Parse git status --porcelain output into structured data.
+ * Exported for testing.
  */
-function parseGitStatusOutput(output: string): GitStatusFile[] {
-  const lines = output.trim().split('\n').filter(Boolean);
+export function parseGitStatusOutput(output: string): GitStatusFile[] {
+  // Split by newlines and filter empty lines. Don't use trim() on the whole output
+  // as that removes the leading space which is part of the git status format
+  // (a leading space in position 0 indicates the file is not staged).
+  const lines = output.split('\n').filter((line) => line.length > 0);
   const files: GitStatusFile[] = [];
 
   for (const line of lines) {

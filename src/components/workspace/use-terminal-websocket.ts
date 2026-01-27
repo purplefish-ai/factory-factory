@@ -8,11 +8,12 @@ import { getReconnectDelay, MAX_RECONNECT_ATTEMPTS } from '@/lib/websocket-confi
 // =============================================================================
 
 interface TerminalMessage {
-  type: 'output' | 'created' | 'exit' | 'error' | 'status';
+  type: 'output' | 'created' | 'exit' | 'error' | 'status' | 'terminal_list';
   data?: string;
   terminalId?: string;
   exitCode?: number;
   message?: string;
+  terminals?: Array<{ id: string; createdAt: string }>;
 }
 
 interface UseTerminalWebSocketOptions {
@@ -21,6 +22,7 @@ interface UseTerminalWebSocketOptions {
   onCreated?: (terminalId: string) => void;
   onExit?: (terminalId: string, exitCode: number) => void;
   onError?: (message: string) => void;
+  onTerminalList?: (terminals: Array<{ id: string; createdAt: string }>) => void;
 }
 
 interface UseTerminalWebSocketReturn {
@@ -41,6 +43,7 @@ export function useTerminalWebSocket({
   onCreated,
   onExit,
   onError,
+  onTerminalList,
 }: UseTerminalWebSocketOptions): UseTerminalWebSocketReturn {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -54,13 +57,15 @@ export function useTerminalWebSocket({
   const onCreatedRef = useRef(onCreated);
   const onExitRef = useRef(onExit);
   const onErrorRef = useRef(onError);
+  const onTerminalListRef = useRef(onTerminalList);
 
   useEffect(() => {
     onOutputRef.current = onOutput;
     onCreatedRef.current = onCreated;
     onExitRef.current = onExit;
     onErrorRef.current = onError;
-  }, [onOutput, onCreated, onExit, onError]);
+    onTerminalListRef.current = onTerminalList;
+  }, [onOutput, onCreated, onExit, onError, onTerminalList]);
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -112,6 +117,12 @@ export function useTerminalWebSocket({
           case 'error':
             if (message.message) {
               onErrorRef.current?.(message.message);
+            }
+            break;
+
+          case 'terminal_list':
+            if (message.terminals) {
+              onTerminalListRef.current?.(message.terminals);
             }
             break;
         }
