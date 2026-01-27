@@ -17,83 +17,44 @@ Workspace-based coding environment that lets you run multiple Claude Code sessio
 # 1. Install dependencies
 pnpm install
 
-# 2. Start the server (migrations run automatically)
-pnpm dev:cli
+# 2. Start the server
+pnpm dev
 
 # Browser opens automatically to http://localhost:3000
 ```
 
-That's it! The server will:
+The server will automatically:
 - Create the data directory (`~/factory-factory/`)
-- Run database migrations automatically
-- Start backend and frontend servers
+- Run database migrations
+- Find available ports if defaults are in use
 - Open your browser when ready
 
-## Running the Server
-
-### Development
+## Commands
 
 ```bash
-# Start with hot reloading (recommended for development)
-pnpm dev:cli
+# Development
+pnpm dev              # Start dev server (hot reload, auto-migrations, browser open)
+pnpm dev --no-open    # Start without opening browser
+pnpm dev --verbose    # Start with detailed logging
 
-# Start without opening browser
-pnpm dev:cli --no-open
+# Production
+pnpm build            # Build for production
+pnpm start            # Start production server
 
-# Use custom ports
-pnpm dev:cli --port 4000 --backend-port 4001
+# Testing & Quality
+pnpm test             # Run tests
+pnpm test:watch       # Run tests in watch mode
+pnpm check:fix        # Lint + format with Biome
+pnpm typecheck        # TypeScript checking
 
-# Enable verbose logging
-pnpm dev:cli --verbose
+# Database
+pnpm db:migrate       # Run migrations
+pnpm db:studio        # Open Prisma Studio
+pnpm db:generate      # Regenerate Prisma client
+
+# Other
+pnpm storybook        # Component development
 ```
-
-### Production
-
-```bash
-# Build first
-pnpm build:all
-
-# Start production server
-pnpm start:cli
-```
-
-### Options
-
-```
-Options:
-  -p, --port <port>           Frontend port (default: "3000")
-  --backend-port <port>       Backend port (default: "3001")
-  -d, --database-path <path>  SQLite database file path (default: ~/factory-factory/data.db)
-  --host <host>               Host to bind to (default: "localhost")
-  --no-open                   Do not open browser automatically
-  -v, --verbose               Enable verbose logging
-```
-
-### Port Detection
-
-If the default ports (3000/3001) are in use, the server will automatically find the next available ports.
-
-## Database Commands
-
-```bash
-# Run migrations manually
-pnpm db:migrate
-
-# Open Prisma Studio for database management
-pnpm db:studio
-
-# Reset database (destroys data)
-pnpm exec prisma migrate reset
-
-# Regenerate Prisma client
-pnpm db:generate
-```
-
-## Verify Installation
-
-- Frontend: http://localhost:3000
-- Backend: http://localhost:3001/health
-- Prisma Studio: `pnpm db:studio`
 
 ## Architecture
 
@@ -111,22 +72,18 @@ Project (repository configuration)
 - **File browser:** View and diff files in each workspace
 - **Session persistence:** Resume previous Claude sessions
 
-## Development
-
-```bash
-pnpm dev:all       # Alternative: start frontend + backend separately
-pnpm typecheck     # TypeScript checking
-pnpm check:fix     # Lint + format with Biome
-pnpm test          # Run tests
-pnpm storybook     # Component development
-```
-
 ## Troubleshooting
 
 **GitHub CLI:**
 ```bash
 gh auth status
 gh auth login
+```
+
+**Database issues:**
+```bash
+pnpm db:migrate                  # Run migrations
+pnpm exec prisma migrate reset   # Reset database (destroys data)
 ```
 
 **Port conflicts:**

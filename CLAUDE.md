@@ -5,13 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm dev:all       # Start frontend + backend + Inngest
-pnpm db:migrate    # Run Prisma migrations
-pnpm db:generate   # Regenerate Prisma client after schema changes
+pnpm dev           # Start dev server (backend + frontend + migrations)
+pnpm build         # Build for production
+pnpm start         # Start production server
+pnpm test          # Run tests with Vitest
 pnpm check:fix     # Lint + format with Biome
 pnpm typecheck     # TypeScript checking
-pnpm build:all     # Build for production
-pnpm test          # Run tests with Vitest
+pnpm db:migrate    # Run Prisma migrations
+pnpm db:generate   # Regenerate Prisma client after schema changes
 pnpm storybook     # Start Storybook for component development
 ```
 
@@ -29,7 +30,7 @@ Project (repo configuration)
 **Key components:**
 - **Frontend (Next.js 16):** Project management, workspace UI, real-time chat
 - **Backend (Express + tRPC):** API, WebSocket handlers for chat/terminal, git operations
-- **Database (PostgreSQL + Prisma):** Project, Workspace, Session persistence
+- **Database (SQLite + Prisma):** Project, Workspace, Session persistence
 
 **Real-time communication:**
 - `/chat` WebSocket: Claude Code CLI streaming (JSON protocol)
