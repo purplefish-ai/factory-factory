@@ -1,6 +1,6 @@
 'use client';
 
-import { GitBranch, GitPullRequest, Kanban, Plus, Settings, Terminal } from 'lucide-react';
+import { GitBranch, GitPullRequest, Kanban, Plus, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -154,16 +154,6 @@ export function AppSidebar() {
     router.push(`/projects/${value}/workspaces`);
   };
 
-  const projectNavItems = selectedProjectSlug
-    ? [
-        {
-          href: `/projects/${selectedProjectSlug}/logs`,
-          label: 'Logs',
-          icon: Terminal,
-        },
-      ]
-    : [];
-
   const globalNavItems = [
     { href: '/reviews', label: 'Reviews', icon: GitPullRequest },
     { href: '/admin', label: 'Admin', icon: Settings },
@@ -309,29 +299,6 @@ export function AppSidebar() {
         )}
 
         <SidebarSeparator />
-
-        {/* Other nav items */}
-        {projectNavItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {projectNavItems.map((item) => {
-                  const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild isActive={isActive}>
-                        <Link href={item.href}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
 
         <SidebarGroup>
           <SidebarGroupContent>
