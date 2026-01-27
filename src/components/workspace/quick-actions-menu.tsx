@@ -39,7 +39,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   check: Check,
 };
 
-function getActionIcon(iconName?: string): LucideIcon {
+function getActionIcon(iconName?: string | null): LucideIcon {
   return (iconName && ICON_MAP[iconName]) || Zap;
 }
 
@@ -72,7 +72,7 @@ export function QuickActionsMenu({ onExecuteAgent, disabled = false }: QuickActi
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
         {agentActions.map((action) => {
-          const Icon = getActionIcon(action.icon ?? undefined);
+          const Icon = getActionIcon(action.icon);
           return (
             <DropdownMenuItem
               key={action.id}

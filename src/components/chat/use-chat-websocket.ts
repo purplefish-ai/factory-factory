@@ -336,9 +336,7 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
       ) {
         const toolUseId = event.content_block.id;
         ctx.toolInputAccumulatorRef.current.set(toolUseId, '');
-        if (DEBUG_WEBSOCKET) {
-          debug.log('🔧 Tool use started:', toolUseId, event.content_block.name);
-        }
+        debug.log('🔧 Tool use started:', toolUseId, event.content_block.name);
       }
 
       // content_block_delta with input_json_delta: Accumulate and update
@@ -360,9 +358,7 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
           try {
             const parsedInput = JSON.parse(newJson) as Record<string, unknown>;
             ctx.updateToolInput(toolUseId, parsedInput);
-            if (DEBUG_WEBSOCKET) {
-              debug.log('🔧 Tool input updated:', toolUseId, Object.keys(parsedInput));
-            }
+            debug.log('🔧 Tool input updated:', toolUseId, Object.keys(parsedInput));
           } catch {
             // JSON not complete yet, that's expected during streaming
           }
@@ -380,45 +376,41 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
 
     // Filter messages - only store meaningful ones
     if (!shouldStoreMessage(claudeMsg)) {
-      if (DEBUG_WEBSOCKET) {
-        const event = (claudeMsg as { event?: { type?: string } }).event;
-        debug.log('⏭️ Skipping message:', claudeMsg.type, event?.type);
-      }
+      const event = (claudeMsg as { event?: { type?: string } }).event;
+      debug.log('⏭️ Skipping message:', claudeMsg.type, event?.type);
       return;
     }
 
     // Debug: Log when we're adding a message to state with detailed info
-    if (DEBUG_WEBSOCKET) {
-      const debugInfo: Record<string, unknown> = {
-        type: claudeMsg.type,
-      };
+    const debugInfo: Record<string, unknown> = {
+      type: claudeMsg.type,
+    };
 
-      // For stream events, log the event type and content block type
-      if (claudeMsg.type === 'stream_event') {
-        const event = (
-          claudeMsg as {
-            event?: { type?: string; content_block?: { type?: string; name?: string } };
-          }
-        ).event;
-        debugInfo.eventType = event?.type;
-        if (event?.content_block) {
-          debugInfo.contentBlockType = event.content_block.type;
-          if (event.content_block.name) {
-            debugInfo.toolName = event.content_block.name;
-          }
+    // For stream events, log the event type and content block type
+    if (claudeMsg.type === 'stream_event') {
+      const event = (
+        claudeMsg as {
+          event?: { type?: string; content_block?: { type?: string; name?: string } };
+        }
+      ).event;
+      debugInfo.eventType = event?.type;
+      if (event?.content_block) {
+        debugInfo.contentBlockType = event.content_block.type;
+        if (event.content_block.name) {
+          debugInfo.toolName = event.content_block.name;
         }
       }
-
-      // For assistant messages, log content types
-      if (claudeMsg.type === 'assistant') {
-        const msg = (claudeMsg as { message?: { content?: Array<{ type?: string }> } }).message;
-        if (msg?.content) {
-          debugInfo.contentTypes = msg.content.map((c) => c.type);
-        }
-      }
-
-      debug.log('📝 Adding message to state:', debugInfo);
     }
+
+    // For assistant messages, log content types
+    if (claudeMsg.type === 'assistant') {
+      const msg = (claudeMsg as { message?: { content?: Array<{ type?: string }> } }).message;
+      if (msg?.content) {
+        debugInfo.contentTypes = msg.content.map((c) => c.type);
+      }
+    }
+
+    debug.log('📝 Adding message to state:', debugInfo);
 
     ctx.setMessages((prev) => [...prev, createClaudeMessage(claudeMsg)]);
   }
@@ -454,18 +446,16 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
     const chatMessages = historyMessages.map(convertHistoryMessage);
 
     // Debug: Log session load details
-    if (DEBUG_WEBSOCKET) {
-      debug.group('📚 Session loaded from history');
-      debug.log('Total messages:', chatMessages.length);
-      debug.log('Git branch:', data.gitBranch);
-      debug.log(
-        'Message types:',
-        chatMessages.map((m) =>
-          m.source === 'user' ? 'user' : (m.message as { type?: string })?.type
-        )
-      );
-      debug.groupEnd();
-    }
+    debug.group('📚 Session loaded from history');
+    debug.log('Total messages:', chatMessages.length);
+    debug.log('Git branch:', data.gitBranch);
+    debug.log(
+      'Message types:',
+      chatMessages.map((m) =>
+        m.source === 'user' ? 'user' : (m.message as { type?: string })?.type
+      )
+    );
+    debug.groupEnd();
 
     ctx.setMessages(chatMessages);
     // Clear tool input accumulator when loading a new session to prevent memory buildup
@@ -579,14 +569,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     const originalLength = messageQueueRef.current.length;
     messageQueueRef.current = messageQueueRef.current.filter((msg) => {
       if (STALE_MESSAGE_TYPES.has(msg.type)) {
-        if (DEBUG_WEBSOCKET) {
-          debug.log('🗑️ Dropping stale queued message:', msg.type);
-        }
+        debug.log('🗑️ Dropping stale queued message:', msg.type);
         return false;
       }
       return true;
     });
-    if (DEBUG_WEBSOCKET && originalLength !== messageQueueRef.current.length) {
+    if (originalLength !== messageQueueRef.current.length) {
       debug.log(
         `📤 Filtered ${originalLength - messageQueueRef.current.length} stale messages from queue`
       );
@@ -607,7 +595,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         sentCount++;
       }
     }
-    if (DEBUG_WEBSOCKET && messageQueueRef.current.length > 0) {
+    if (messageQueueRef.current.length > 0) {
       debug.log(
         `📤 ${messageQueueRef.current.length} messages remaining in queue after batch flush`
       );
@@ -626,11 +614,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         wsRef.current.send(JSON.stringify(message));
       } else if (messageQueueRef.current.length < MAX_QUEUE_SIZE) {
         // Queue message for later delivery
-        if (DEBUG_WEBSOCKET) {
-          debug.log('📥 Queuing message for later delivery:', message.type);
-        }
+        debug.log('📥 Queuing message for later delivery:', message.type);
         messageQueueRef.current.push(message);
-      } else if (DEBUG_WEBSOCKET) {
+      } else {
         debug.log('⚠️ Message queue full, dropping message:', message.type);
       }
     },
@@ -775,12 +761,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       setConnected(true);
       reconnectAttemptsRef.current = 0;
 
-      if (DEBUG_WEBSOCKET) {
-        debug.log('🔌 WebSocket connected to:', wsUrl);
-        debug.log('📊 Debug logging is ENABLED. Watch for ⬇️ IN and ⬆️ OUT messages.');
-        if (wasReconnect) {
-          debug.log('🔄 Reconnected successfully');
-        }
+      debug.log('🔌 WebSocket connected to:', wsUrl);
+      debug.log('📊 Debug logging is ENABLED. Watch for ⬇️ IN and ⬆️ OUT messages.');
+      if (wasReconnect) {
+        debug.log('🔄 Reconnected successfully');
       }
 
       // Flush any queued messages from while we were disconnected
@@ -797,9 +781,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       } else if (wasReconnect && claudeSessionIdRef.current) {
         // On reconnect, reload the current session to restore state
         // Use ref to get the current value, not stale closure value
-        if (DEBUG_WEBSOCKET) {
-          debug.log('🔄 Reloading session after reconnect:', claudeSessionIdRef.current);
-        }
+        debug.log('🔄 Reloading session after reconnect:', claudeSessionIdRef.current);
         setLoadingSession(true);
         sendWsMessage({ type: 'load_session', claudeSessionId: claudeSessionIdRef.current });
       }
@@ -811,9 +793,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       // If wsRef.current is different or null, we've already moved on to a new connection
       // and should not reconnect from this stale close event.
       if (wsRef.current !== ws) {
-        if (DEBUG_WEBSOCKET) {
-          debug.log('🚫 Ignoring close event from replaced WebSocket');
-        }
+        debug.log('🚫 Ignoring close event from replaced WebSocket');
         return;
       }
 
@@ -823,16 +803,14 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       // Attempt reconnect with exponential backoff
       if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         const delay = getReconnectDelay(reconnectAttemptsRef.current);
-        if (DEBUG_WEBSOCKET) {
-          debug.log(
-            `🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current + 1}/${MAX_RECONNECT_ATTEMPTS})`
-          );
-        }
+        debug.log(
+          `🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current + 1}/${MAX_RECONNECT_ATTEMPTS})`
+        );
         reconnectAttemptsRef.current += 1;
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
         }, delay);
-      } else if (DEBUG_WEBSOCKET) {
+      } else {
         debug.log('❌ Max reconnection attempts reached');
       }
     };
