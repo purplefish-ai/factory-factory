@@ -44,6 +44,8 @@ export interface TerminalInstance {
   disposables: (() => void)[];
   // Last resource usage snapshot
   lastResourceUsage?: TerminalResourceUsage;
+  // Rolling output buffer for restoration after reconnect
+  outputBuffer: string;
 }
 
 export interface CreateTerminalOptions {
@@ -76,6 +78,9 @@ class TerminalService {
   // Resource monitoring interval
   private monitoringInterval: NodeJS.Timeout | null = null;
   private static readonly MONITORING_INTERVAL_MS = 5000; // 5 seconds
+
+  // Max output buffer size per terminal (100KB) for restoration after reconnect
+  private static readonly MAX_OUTPUT_BUFFER_SIZE = 100 * 1024;
 
   /**
    * Ensure resource monitoring is running if there are terminals.
@@ -216,8 +221,20 @@ class TerminalService {
     // Track disposables for cleanup
     const disposables: (() => void)[] = [];
 
-    // Set up output listener
+    // Set up output listener - also accumulates output in buffer for restoration
     const dataDisposable = pty.onData((data: string) => {
+      // Accumulate output in buffer for restoration after reconnect
+      const instance = this.terminals.get(workspaceId)?.get(terminalId);
+      if (instance) {
+        instance.outputBuffer += data;
+        // Limit buffer size by trimming from the beginning
+        if (instance.outputBuffer.length > TerminalService.MAX_OUTPUT_BUFFER_SIZE) {
+          instance.outputBuffer = instance.outputBuffer.slice(
+            -TerminalService.MAX_OUTPUT_BUFFER_SIZE
+          );
+        }
+      }
+
       const listeners = this.outputListeners.get(terminalId);
       if (listeners) {
         for (const listener of listeners) {
@@ -252,6 +269,7 @@ class TerminalService {
       rows,
       createdAt: new Date(),
       disposables,
+      outputBuffer: '',
     };
 
     // Store in workspace terminals map

@@ -36,9 +36,9 @@ export function TerminalTabBar({
   className,
 }: TerminalTabBarProps) {
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    <div className={cn('flex items-center gap-1 min-w-0 overflow-hidden', className)}>
       {/* Scrollable tabs container */}
-      <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
+      <div className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
         {tabs.map((tab) => (
           <div
             key={tab.id}

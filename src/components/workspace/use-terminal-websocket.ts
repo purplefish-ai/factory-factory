@@ -13,7 +13,7 @@ interface TerminalMessage {
   terminalId?: string;
   exitCode?: number;
   message?: string;
-  terminals?: Array<{ id: string; createdAt: string }>;
+  terminals?: Array<{ id: string; createdAt: string; outputBuffer?: string }>;
 }
 
 interface UseTerminalWebSocketOptions {
@@ -22,7 +22,9 @@ interface UseTerminalWebSocketOptions {
   onCreated?: (terminalId: string) => void;
   onExit?: (terminalId: string, exitCode: number) => void;
   onError?: (message: string) => void;
-  onTerminalList?: (terminals: Array<{ id: string; createdAt: string }>) => void;
+  onTerminalList?: (
+    terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
+  ) => void;
 }
 
 interface UseTerminalWebSocketReturn {

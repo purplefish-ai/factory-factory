@@ -1093,13 +1093,14 @@ function handleTerminalUpgrade(
         terminalCount: existingTerminals.length,
       });
 
-      // Send the terminal list to the client
+      // Send the terminal list to the client (including buffered output for restoration)
       ws.send(
         JSON.stringify({
           type: 'terminal_list',
           terminals: existingTerminals.map((t) => ({
             id: t.id,
             createdAt: t.createdAt.toISOString(),
+            outputBuffer: t.outputBuffer,
           })),
         })
       );
