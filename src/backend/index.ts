@@ -17,6 +17,7 @@ import { agentProcessAdapter } from './agents/process-adapter';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index';
 import { prisma } from './db';
 import { claudeSessionAccessor } from './resource_accessors/claude-session.accessor';
+import { terminalSessionAccessor } from './resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from './resource_accessors/workspace.accessor';
 import { projectRouter } from './routers/api/project.router';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index';
@@ -1271,6 +1272,10 @@ function handleTerminalUpgrade(
           if (exitCleanupMap) {
             exitCleanupMap.delete(terminal.id);
           }
+          // Clear PID in database since process is no longer running
+          terminalSessionAccessor.clearPid(terminal.id).catch((err) => {
+            logger.warn('Failed to clear terminal PID', { terminalId: terminal.id, error: err });
+          });
         });
         unsubscribers.push(unsubExit);
       }
@@ -1308,11 +1313,18 @@ function handleTerminalUpgrade(
               workspaceId,
               worktreePath: workspace.worktreePath,
             });
-            const terminalId = await terminalService.createTerminal({
+            const { terminalId, pid } = await terminalService.createTerminal({
               workspaceId,
               workingDir: workspace.worktreePath,
               cols: message.cols ?? 80,
               rows: message.rows ?? 24,
+            });
+
+            // Persist the terminal session with PID for orphan process detection
+            await terminalSessionAccessor.create({
+              workspaceId,
+              name: terminalId,
+              pid,
             });
 
             // Initialize cleanup map entry BEFORE registering listeners to prevent race condition
@@ -1352,6 +1364,10 @@ function handleTerminalUpgrade(
               if (exitCleanupMap) {
                 exitCleanupMap.delete(terminalId);
               }
+              // Clear PID in database since process is no longer running
+              terminalSessionAccessor.clearPid(terminalId).catch((err) => {
+                logger.warn('Failed to clear terminal PID', { terminalId, error: err });
+              });
             });
             unsubscribers.push(unsubExit);
 

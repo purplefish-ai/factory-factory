@@ -56,6 +56,11 @@ export interface CreateTerminalOptions {
   shell?: string;
 }
 
+export interface CreateTerminalResult {
+  terminalId: string;
+  pid: number;
+}
+
 export interface TerminalOutput {
   terminalId: string;
   data: string;
@@ -184,7 +189,7 @@ class TerminalService {
   /**
    * Create a new terminal instance for a workspace
    */
-  async createTerminal(options: CreateTerminalOptions): Promise<string> {
+  async createTerminal(options: CreateTerminalOptions): Promise<CreateTerminalResult> {
     const { workspaceId, workingDir, cols = 80, rows = 24, shell } = options;
 
     const nodePty = await this.getNodePty();
@@ -283,7 +288,7 @@ class TerminalService {
 
     logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
 
-    return terminalId;
+    return { terminalId, pid: pty.pid };
   }
 
   /**
