@@ -17,7 +17,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
@@ -199,7 +198,17 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="none">
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <Logo iconClassName="size-6" textClassName="text-sm" />
+        {selectedProjectSlug ? (
+          <Link href={`/projects/${selectedProjectSlug}/workspaces`}>
+            <Logo
+              iconClassName="size-6"
+              textClassName="text-sm"
+              className="hover:opacity-80 transition-opacity"
+            />
+          </Link>
+        ) : (
+          <Logo iconClassName="size-6" textClassName="text-sm" />
+        )}
 
         {projects && projects.length > 0 && (
           <div className="mt-3">
@@ -229,25 +238,32 @@ export function AppSidebar() {
         {/* Workspaces section */}
         {selectedProjectSlug && (
           <SidebarGroup className="flex-1 min-h-0 flex flex-col">
-            <SidebarGroupLabel className="flex items-center gap-1">
+            <SidebarGroupLabel>
               <Link
                 href={`/projects/${selectedProjectSlug}/workspaces`}
                 className="hover:text-foreground transition-colors"
               >
                 Workspaces
               </Link>
+            </SidebarGroupLabel>
+            <div className="absolute right-1 top-2 flex items-center gap-0.5">
               <Link
                 href={`/projects/${selectedProjectSlug}/workspaces`}
-                className="ml-auto mr-1 p-1 rounded hover:bg-sidebar-accent transition-colors"
+                className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
                 title="View Kanban board"
               >
                 <Kanban className="h-3.5 w-3.5" />
               </Link>
-            </SidebarGroupLabel>
-            <SidebarGroupAction onClick={handleCreateWorkspace} disabled={isCreatingWorkspace}>
-              <Plus className="h-4 w-4" />
-              <span className="sr-only">New Workspace</span>
-            </SidebarGroupAction>
+              <button
+                type="button"
+                onClick={handleCreateWorkspace}
+                disabled={isCreatingWorkspace}
+                className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
+                title="New Workspace"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
             <SidebarGroupContent className="flex-1 min-h-0">
               <ScrollArea className="h-full">
                 <SidebarMenu>

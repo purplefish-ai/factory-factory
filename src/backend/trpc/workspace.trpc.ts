@@ -199,8 +199,9 @@ export const workspaceRouter = router({
     .query(async ({ input }) => {
       const { projectId, ...filters } = input;
 
-      // Get workspaces with sessions included
-      const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, filters);
+      // Get workspaces with sessions included (exclude archived from kanban view)
+      const allWorkspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, filters);
+      const workspaces = allWorkspaces.filter((w) => w.status !== WorkspaceStatus.ARCHIVED);
 
       // Get working status for all workspaces
       const workspacesWithKanban = workspaces.map((workspace) => {

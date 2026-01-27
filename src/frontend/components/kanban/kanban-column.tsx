@@ -37,7 +37,7 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
   const isEmpty = workspaces.length === 0;
 
   return (
-    <div className="flex flex-col h-full min-w-[280px] max-w-[320px]">
+    <div className="flex flex-col h-full w-[280px] shrink-0">
       {/* Column Header */}
       <div className="flex items-center justify-between px-2 py-3 border-b bg-muted/30 rounded-t-lg">
         <div className="flex items-center gap-2">
