@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, Clock, Loader2 } from 'lucide-react';
+import { AlertCircle, Clock, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -13,15 +13,15 @@ interface InitStatusBadgeProps {
   className?: string;
 }
 
-const statusConfig: Record<
-  InitStatus,
-  {
-    icon: typeof Clock;
-    label: string;
-    variant: 'outline' | 'secondary' | 'success' | 'destructive';
-    iconClassName?: string;
-  }
-> = {
+interface StatusConfig {
+  icon: typeof Clock;
+  label: string;
+  variant: 'outline' | 'secondary' | 'destructive';
+  iconClassName?: string;
+}
+
+// Only include statuses that are actually rendered (READY returns null)
+const statusConfig: Record<Exclude<InitStatus, 'READY'>, StatusConfig> = {
   PENDING: {
     icon: Clock,
     label: 'Pending',
@@ -33,11 +33,6 @@ const statusConfig: Record<
     variant: 'secondary',
     iconClassName: 'animate-spin',
   },
-  READY: {
-    icon: CheckCircle2,
-    label: 'Ready',
-    variant: 'success',
-  },
   FAILED: {
     icon: AlertCircle,
     label: 'Setup failed',
@@ -45,8 +40,11 @@ const statusConfig: Record<
   },
 };
 
-export function InitStatusBadge({ status, errorMessage, className }: InitStatusBadgeProps) {
-  // Don't render anything for READY status
+export function InitStatusBadge({
+  status,
+  errorMessage,
+  className,
+}: InitStatusBadgeProps): React.ReactNode {
   if (status === 'READY') {
     return null;
   }

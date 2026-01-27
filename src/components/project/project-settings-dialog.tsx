@@ -52,16 +52,10 @@ export function ProjectSettingsDialog({
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      if (currentStartupScriptPath) {
-        setStartupScript(currentStartupScriptPath);
-        setScriptType('path');
-      } else if (currentStartupScriptCommand) {
-        setStartupScript(currentStartupScriptCommand);
-        setScriptType('command');
-      } else {
-        setStartupScript('');
-        setScriptType('command');
-      }
+      // Determine initial values based on which script type is configured
+      const hasPath = Boolean(currentStartupScriptPath);
+      setScriptType(hasPath ? 'path' : 'command');
+      setStartupScript(currentStartupScriptPath ?? currentStartupScriptCommand ?? '');
       setError('');
     }
   }, [open, currentStartupScriptCommand, currentStartupScriptPath]);

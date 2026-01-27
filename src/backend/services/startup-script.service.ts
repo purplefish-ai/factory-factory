@@ -5,7 +5,7 @@
  * Supports both inline shell commands and script file paths.
  */
 
-import { type ChildProcess, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { Project, Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
@@ -132,8 +132,7 @@ class StartupScriptService {
 
   /**
    * Execute the script using spawn.
-   * Note: Commands are configured by project owners and run through bash.
-   * Supports both inline commands and script file paths.
+   * Commands are configured by project owners and run through bash.
    */
   private executeScript(
     cwd: string,
@@ -142,101 +141,102 @@ class StartupScriptService {
     timeoutMs: number
   ): Promise<Omit<StartupScriptResult, 'durationMs'>> {
     return new Promise((resolve) => {
-      let proc: ChildProcess;
-      let timedOut = false;
-      let stdout = '';
-      let stderr = '';
-      let killTimeoutHandle: NodeJS.Timeout | undefined;
+      // Build the bash arguments based on script type
+      const bashArgs = this.buildBashArgs(cwd, command, scriptPath);
 
-      // Determine how to run the script
-      if (scriptPath) {
-        // Validate script path before execution
-        const validation = this.validateScriptPath(scriptPath, cwd);
-        if (!validation.valid) {
-          resolve({
-            success: false,
-            exitCode: null,
-            stdout: '',
-            stderr: validation.error || 'Invalid script path',
-            timedOut: false,
-          });
-          return;
-        }
+      if (bashArgs === null) {
+        // Neither command nor scriptPath provided
+        resolve({ success: true, exitCode: 0, stdout: '', stderr: '', timedOut: false });
+        return;
+      }
 
-        // Script file - run with bash for shebang support
-        const fullPath = path.join(cwd, scriptPath);
-        proc = spawn('bash', [fullPath], {
-          cwd,
-          env: { ...process.env, WORKSPACE_PATH: cwd },
-        });
-      } else if (command) {
-        // Inline command - run through bash -c
-        proc = spawn('bash', ['-c', command], {
-          cwd,
-          env: { ...process.env, WORKSPACE_PATH: cwd },
-        });
-      } else {
+      if (bashArgs.error) {
         resolve({
-          success: true,
-          exitCode: 0,
+          success: false,
+          exitCode: null,
           stdout: '',
-          stderr: '',
+          stderr: bashArgs.error,
           timedOut: false,
         });
         return;
       }
 
-      // Set timeout
+      const spawnOptions = { cwd, env: { ...process.env, WORKSPACE_PATH: cwd } };
+      const proc = spawn('bash', bashArgs.args, spawnOptions);
+
+      let timedOut = false;
+      let stdout = '';
+      let stderr = '';
+      let killTimeoutHandle: NodeJS.Timeout | undefined;
+
+      const cleanupTimeouts = (): void => {
+        clearTimeout(timeoutHandle);
+        if (killTimeoutHandle) {
+          clearTimeout(killTimeoutHandle);
+        }
+      };
+
       const timeoutHandle = setTimeout(() => {
         timedOut = true;
         proc.kill('SIGTERM');
-        // Force kill after grace period
         killTimeoutHandle = setTimeout(() => proc.kill('SIGKILL'), 5000);
       }, timeoutMs);
 
-      proc.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString();
-        // Limit captured output to prevent memory issues
-        if (stdout.length > 1024 * 1024) {
-          stdout = `[...truncated...]\n${stdout.slice(-512 * 1024)}`;
-        }
-      });
+      const appendOutput = (target: 'stdout' | 'stderr', data: Buffer): void => {
+        const str = data.toString();
+        const maxSize = 1024 * 1024;
+        const keepSize = 512 * 1024;
 
-      proc.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-        if (stderr.length > 1024 * 1024) {
-          stderr = `[...truncated...]\n${stderr.slice(-512 * 1024)}`;
+        if (target === 'stdout') {
+          stdout += str;
+          if (stdout.length > maxSize) {
+            stdout = `[...truncated...]\n${stdout.slice(-keepSize)}`;
+          }
+        } else {
+          stderr += str;
+          if (stderr.length > maxSize) {
+            stderr = `[...truncated...]\n${stderr.slice(-keepSize)}`;
+          }
         }
-      });
+      };
+
+      proc.stdout?.on('data', (data: Buffer) => appendOutput('stdout', data));
+      proc.stderr?.on('data', (data: Buffer) => appendOutput('stderr', data));
 
       proc.on('close', (code) => {
-        clearTimeout(timeoutHandle);
-        if (killTimeoutHandle) {
-          clearTimeout(killTimeoutHandle);
-        }
-        resolve({
-          success: code === 0 && !timedOut,
-          exitCode: code,
-          stdout,
-          stderr,
-          timedOut,
-        });
+        cleanupTimeouts();
+        resolve({ success: code === 0 && !timedOut, exitCode: code, stdout, stderr, timedOut });
       });
 
       proc.on('error', (error) => {
-        clearTimeout(timeoutHandle);
-        if (killTimeoutHandle) {
-          clearTimeout(killTimeoutHandle);
-        }
-        resolve({
-          success: false,
-          exitCode: null,
-          stdout,
-          stderr: error.message,
-          timedOut: false,
-        });
+        cleanupTimeouts();
+        resolve({ success: false, exitCode: null, stdout, stderr: error.message, timedOut: false });
       });
     });
+  }
+
+  /**
+   * Build bash arguments for the script execution.
+   * Returns null if no script is configured, or an error object if validation fails.
+   */
+  private buildBashArgs(
+    cwd: string,
+    command: string | null,
+    scriptPath: string | null
+  ): { args: string[]; error?: never } | { args?: never; error: string } | null {
+    if (scriptPath) {
+      const validation = this.validateScriptPath(scriptPath, cwd);
+      if (!validation.valid) {
+        return { error: validation.error || 'Invalid script path' };
+      }
+      return { args: [path.join(cwd, scriptPath)] };
+    }
+
+    if (command) {
+      return { args: ['-c', command] };
+    }
+
+    return null;
   }
 
   /**

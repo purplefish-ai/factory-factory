@@ -41,6 +41,12 @@ const workspaceStatuses: WorkspaceStatus[] = ['ACTIVE', 'COMPLETED', 'ARCHIVED']
 
 type ViewMode = 'list' | 'board';
 
+type WorkspaceWithSessions = Workspace & {
+  claudeSessions?: unknown[];
+  initStatus: WorkspaceInitStatus;
+  initErrorMessage?: string | null;
+};
+
 export default function ProjectWorkspacesPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -140,62 +146,54 @@ export default function ProjectWorkspacesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workspaces.map(
-                    (
-                      workspace: Workspace & {
-                        claudeSessions?: unknown[];
-                        initStatus: WorkspaceInitStatus;
-                        initErrorMessage?: string | null;
-                      }
-                    ) => (
-                      <TableRow key={workspace.id}>
-                        <TableCell>
-                          <Link
-                            href={`/projects/${slug}/workspaces/${workspace.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {workspace.name}
-                          </Link>
-                          {workspace.description && (
-                            <p className="text-sm text-muted-foreground truncate max-w-md">
-                              {workspace.description.length > 100
-                                ? `${workspace.description.slice(0, 100)}...`
-                                : workspace.description}
-                            </p>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={statusVariants[workspace.status] || 'default'}>
-                            {workspace.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {workspace.initStatus === 'READY' ? (
-                            <span className="text-xs text-muted-foreground">Ready</span>
-                          ) : (
-                            <InitStatusBadge
-                              status={workspace.initStatus}
-                              errorMessage={workspace.initErrorMessage}
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {workspace.claudeSessions?.length ?? 0} sessions
-                        </TableCell>
-                        <TableCell className="text-muted-foreground font-mono text-sm">
-                          {workspace.branchName || '-'}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {new Date(workspace.createdAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/projects/${slug}/workspaces/${workspace.id}`}>View</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  )}
+                  {workspaces.map((workspace: WorkspaceWithSessions) => (
+                    <TableRow key={workspace.id}>
+                      <TableCell>
+                        <Link
+                          href={`/projects/${slug}/workspaces/${workspace.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {workspace.name}
+                        </Link>
+                        {workspace.description && (
+                          <p className="text-sm text-muted-foreground truncate max-w-md">
+                            {workspace.description.length > 100
+                              ? `${workspace.description.slice(0, 100)}...`
+                              : workspace.description}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariants[workspace.status] || 'default'}>
+                          {workspace.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {workspace.initStatus === 'READY' ? (
+                          <span className="text-xs text-muted-foreground">Ready</span>
+                        ) : (
+                          <InitStatusBadge
+                            status={workspace.initStatus}
+                            errorMessage={workspace.initErrorMessage}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {workspace.claudeSessions?.length ?? 0} sessions
+                      </TableCell>
+                      <TableCell className="text-muted-foreground font-mono text-sm">
+                        {workspace.branchName || '-'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(workspace.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/projects/${slug}/workspaces/${workspace.id}`}>View</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             )}
