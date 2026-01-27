@@ -150,7 +150,7 @@ const program = new Command();
 
 program
   .name('ff')
-  .description('FactoryFactory - Workspace-based coding environment')
+  .description('FACTORY FACTORY - Workspace-based coding environment')
   .version(getVersion());
 
 // ============================================================================
@@ -159,7 +159,7 @@ program
 
 program
   .command('serve')
-  .description('Start the FactoryFactory server')
+  .description('Start the FACTORY FACTORY server')
   .option('-p, --port <port>', 'Frontend port', '3000')
   .option('--backend-port <port>', 'Backend port', '3001')
   .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
@@ -176,7 +176,7 @@ program
     const databasePath = options.databasePath || process.env.DATABASE_PATH || defaultDbPath;
 
     // Show startup banner
-    console.log(chalk.bold.cyan('\n  🏭 FactoryFactory\n'));
+    console.log(chalk.cyan(`\n  🔲 FACTORY ${chalk.bold('FACTORY')}\n`));
 
     // Ensure data directory exists
     if (verbose) {
@@ -608,29 +608,47 @@ program
   .action(async () => {
     console.log(chalk.blue('Building backend...'));
 
-    const buildBackend = spawn('npx', ['pnpm', 'build:backend'], {
+    // Compile TypeScript backend
+    const tsc = spawn('npx', ['tsc', '-p', 'tsconfig.backend.json'], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     });
 
     let exitCode = await new Promise<number>((resolve) => {
-      buildBackend.on('exit', (code) => resolve(code ?? 1));
+      tsc.on('exit', (code) => resolve(code ?? 1));
     });
 
     if (exitCode !== 0) {
-      console.error(chalk.red('Backend build failed'));
+      console.error(chalk.red('Backend TypeScript compilation failed'));
       process.exit(exitCode);
     }
 
-    console.log(chalk.blue('Building frontend...'));
-
-    const buildFrontend = spawn('npx', ['pnpm', 'build:frontend'], {
+    // Run tsc-alias to resolve path aliases
+    const tscAlias = spawn('npx', ['tsc-alias', '-p', 'tsconfig.backend.json'], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     });
 
     exitCode = await new Promise<number>((resolve) => {
-      buildFrontend.on('exit', (code) => resolve(code ?? 1));
+      tscAlias.on('exit', (code) => resolve(code ?? 1));
+    });
+
+    if (exitCode !== 0) {
+      console.error(chalk.red('Backend path alias resolution failed'));
+      process.exit(exitCode);
+    }
+
+    console.log(chalk.green('  ✓ Backend built'));
+    console.log(chalk.blue('Building frontend...'));
+
+    // Build Next.js frontend
+    const nextBuild = spawn('npx', ['next', 'build'], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+    });
+
+    exitCode = await new Promise<number>((resolve) => {
+      nextBuild.on('exit', (code) => resolve(code ?? 1));
     });
 
     if (exitCode !== 0) {
@@ -638,7 +656,7 @@ program
       process.exit(exitCode);
     }
 
-    console.log(chalk.green('\nBuild completed successfully!'));
+    console.log(chalk.green('\n✅ Build completed successfully!'));
     console.log(chalk.gray('Run `ff serve` to start the production server'));
   });
 

@@ -46,7 +46,7 @@ FactoryFactory orchestrates multiple AI agents to autonomously implement softwar
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                   │
 │  ┌────────────┐    ┌────────────┐    ┌────────────┐              │
-│  │ PostgreSQL │    │    Git     │    │   Claude   │              │
+│  │   SQLite   │    │    Git     │    │   Claude   │              │
 │  │  Database  │    │ Worktrees  │    │    Code    │              │
 │  └────────────┘    └────────────┘    └────────────┘              │
 └─────────────────────────────────────────────────────────────────┘
@@ -446,7 +446,7 @@ IDLE ←→ BUSY ←→ WAITING
 | API | tRPC | Type-safe API calls |
 | Backend | Express.js | HTTP server |
 | Events | Inngest | Event processing |
-| Database | PostgreSQL | Persistent storage |
+| Database | SQLite | Persistent storage |
 | ORM | Prisma | Database access |
 | AI | Claude Code CLI | Agent intelligence |
 | Process | tmux | Agent terminals |

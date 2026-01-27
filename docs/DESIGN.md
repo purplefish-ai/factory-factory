@@ -36,7 +36,7 @@ FactoryFactory is an autonomous multi-agent software development system that use
 └─────────────────────────┼───────────────────────────────────┘
                           │
 ┌─────────────────────────▼─────────────────────────────────┐
-│                  PostgreSQL Database                       │
+│                    SQLite Database                         │
 │  - Epics    - Tasks    - Agents    - Mail                 │
 └────────────────────────────────────────────────────────────┘
 
@@ -54,7 +54,7 @@ FactoryFactory is an autonomous multi-agent software development system that use
 ### Core
 - **Next.js 14+**: App Router, React Server Components
 - **TypeScript**: Full type safety
-- **PostgreSQL**: Primary database
+- **SQLite**: Primary database (zero-config, file-based)
 - **Prisma**: ORM and migrations
 
 ### Backend
@@ -81,8 +81,8 @@ FactoryFactory is an autonomous multi-agent software development system that use
 ### Environment Variables
 
 ```bash
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/factoryfactory"
+# Database (SQLite - optional, defaults to ~/factory-factory/data.db)
+DATABASE_PATH="/path/to/data.db"
 
 # Claude API
 CLAUDE_API_KEY="sk-..."
