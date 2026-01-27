@@ -12,6 +12,7 @@ import type {
   WebSocketMessage,
 } from '@/lib/claude-types';
 import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
+import { createDebugLogger } from '@/lib/debug';
 import {
   buildWebSocketUrl,
   getReconnectDelay,
@@ -115,6 +116,7 @@ type OutgoingMessage =
 // =============================================================================
 
 const DEBUG_WEBSOCKET = false;
+const debug = createDebugLogger(DEBUG_WEBSOCKET);
 
 /**
  * Maximum number of messages to queue while disconnected.
@@ -150,25 +152,25 @@ function logWsMessage(
         ? '⬆️ WS OUT (queued)'
         : '⬆️ WS OUT';
 
-  console.group(`${prefix} #${counter} @ ${timestamp}`);
-  console.log('Raw data:', JSON.stringify(data, null, 2));
+  debug.group(`${prefix} #${counter} @ ${timestamp}`);
+  debug.log('Raw data:', JSON.stringify(data, null, 2));
 
   // Extract key info for quick scanning
   if (typeof data === 'object' && data !== null) {
     const obj = data as Record<string, unknown>;
-    console.log('Type:', obj.type);
+    debug.log('Type:', obj.type);
     if (obj.data && typeof obj.data === 'object') {
       const innerData = obj.data as Record<string, unknown>;
-      console.log('Inner type:', innerData.type);
+      debug.log('Inner type:', innerData.type);
       if (innerData.type === 'assistant') {
-        console.log(
+        debug.log(
           'Content blocks:',
           (innerData.message as { content?: unknown[] })?.content?.length ?? 0
         );
       }
     }
   }
-  console.groupEnd();
+  debug.groupEnd();
 }
 
 // =============================================================================
@@ -333,7 +335,7 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
         const toolUseId = event.content_block.id;
         ctx.toolInputAccumulatorRef.current.set(toolUseId, '');
         if (DEBUG_WEBSOCKET) {
-          console.log('🔧 Tool use started:', toolUseId, event.content_block.name);
+          debug.log('🔧 Tool use started:', toolUseId, event.content_block.name);
         }
       }
 
@@ -357,7 +359,7 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
             const parsedInput = JSON.parse(newJson) as Record<string, unknown>;
             ctx.updateToolInput(toolUseId, parsedInput);
             if (DEBUG_WEBSOCKET) {
-              console.log('🔧 Tool input updated:', toolUseId, Object.keys(parsedInput));
+              debug.log('🔧 Tool input updated:', toolUseId, Object.keys(parsedInput));
             }
           } catch {
             // JSON not complete yet, that's expected during streaming
@@ -378,7 +380,7 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
     if (!shouldStoreMessage(claudeMsg)) {
       if (DEBUG_WEBSOCKET) {
         const event = (claudeMsg as { event?: { type?: string } }).event;
-        console.log('⏭️ Skipping message:', claudeMsg.type, event?.type);
+        debug.log('⏭️ Skipping message:', claudeMsg.type, event?.type);
       }
       return;
     }
@@ -413,7 +415,7 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
         }
       }
 
-      console.log('📝 Adding message to state:', debugInfo);
+      debug.log('📝 Adding message to state:', debugInfo);
     }
 
     ctx.setMessages((prev) => [...prev, createClaudeMessage(claudeMsg)]);
@@ -451,16 +453,16 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
 
     // Debug: Log session load details
     if (DEBUG_WEBSOCKET) {
-      console.group('📚 Session loaded from history');
-      console.log('Total messages:', chatMessages.length);
-      console.log('Git branch:', data.gitBranch);
-      console.log(
+      debug.group('📚 Session loaded from history');
+      debug.log('Total messages:', chatMessages.length);
+      debug.log('Git branch:', data.gitBranch);
+      debug.log(
         'Message types:',
         chatMessages.map((m) =>
           m.source === 'user' ? 'user' : (m.message as { type?: string })?.type
         )
       );
-      console.groupEnd();
+      debug.groupEnd();
     }
 
     ctx.setMessages(chatMessages);
@@ -576,14 +578,14 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     messageQueueRef.current = messageQueueRef.current.filter((msg) => {
       if (STALE_MESSAGE_TYPES.has(msg.type)) {
         if (DEBUG_WEBSOCKET) {
-          console.log('🗑️ Dropping stale queued message:', msg.type);
+          debug.log('🗑️ Dropping stale queued message:', msg.type);
         }
         return false;
       }
       return true;
     });
     if (DEBUG_WEBSOCKET && originalLength !== messageQueueRef.current.length) {
-      console.log(
+      debug.log(
         `📤 Filtered ${originalLength - messageQueueRef.current.length} stale messages from queue`
       );
     }
@@ -604,7 +606,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       }
     }
     if (DEBUG_WEBSOCKET && messageQueueRef.current.length > 0) {
-      console.log(
+      debug.log(
         `📤 ${messageQueueRef.current.length} messages remaining in queue after batch flush`
       );
     }
@@ -623,11 +625,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       } else if (messageQueueRef.current.length < MAX_QUEUE_SIZE) {
         // Queue message for later delivery
         if (DEBUG_WEBSOCKET) {
-          console.log('📥 Queuing message for later delivery:', message.type);
+          debug.log('📥 Queuing message for later delivery:', message.type);
         }
         messageQueueRef.current.push(message);
       } else if (DEBUG_WEBSOCKET) {
-        console.warn('⚠️ Message queue full, dropping message:', message.type);
+        debug.log('⚠️ Message queue full, dropping message:', message.type);
       }
     },
     [flushMessageQueue]
@@ -768,10 +770,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       reconnectAttemptsRef.current = 0;
 
       if (DEBUG_WEBSOCKET) {
-        console.log('🔌 WebSocket connected to:', wsUrl);
-        console.log('📊 Debug logging is ENABLED. Watch for ⬇️ IN and ⬆️ OUT messages.');
+        debug.log('🔌 WebSocket connected to:', wsUrl);
+        debug.log('📊 Debug logging is ENABLED. Watch for ⬇️ IN and ⬆️ OUT messages.');
         if (wasReconnect) {
-          console.log('🔄 Reconnected successfully');
+          debug.log('🔄 Reconnected successfully');
         }
       }
 
@@ -790,7 +792,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         // On reconnect, reload the current session to restore state
         // Use ref to get the current value, not stale closure value
         if (DEBUG_WEBSOCKET) {
-          console.log('🔄 Reloading session after reconnect:', claudeSessionIdRef.current);
+          debug.log('🔄 Reloading session after reconnect:', claudeSessionIdRef.current);
         }
         setLoadingSession(true);
         sendWsMessage({ type: 'load_session', claudeSessionId: claudeSessionIdRef.current });
@@ -804,7 +806,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       // and should not reconnect from this stale close event.
       if (wsRef.current !== ws) {
         if (DEBUG_WEBSOCKET) {
-          console.log('🚫 Ignoring close event from replaced WebSocket');
+          debug.log('🚫 Ignoring close event from replaced WebSocket');
         }
         return;
       }
@@ -816,7 +818,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         const delay = getReconnectDelay(reconnectAttemptsRef.current);
         if (DEBUG_WEBSOCKET) {
-          console.log(
+          debug.log(
             `🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current + 1}/${MAX_RECONNECT_ATTEMPTS})`
           );
         }
@@ -825,7 +827,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
           connect();
         }, delay);
       } else if (DEBUG_WEBSOCKET) {
-        console.warn('❌ Max reconnection attempts reached');
+        debug.log('❌ Max reconnection attempts reached');
       }
     };
 

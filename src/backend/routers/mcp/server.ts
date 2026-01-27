@@ -1,7 +1,10 @@
 import { decisionLogAccessor } from '../../resource_accessors/index';
+import { createLogger } from '../../services/logger.service';
 import { CRITICAL_TOOLS, isTransientError } from './errors';
 import type { McpToolContext, McpToolRegistryEntry, McpToolResponse } from './types';
 import { McpErrorCode } from './types';
+
+const logger = createLogger('mcp');
 
 /**
  * Global tool registry
@@ -14,10 +17,10 @@ const toolRegistry = new Map<string, McpToolRegistryEntry>();
  */
 export function registerMcpTool(entry: McpToolRegistryEntry): void {
   if (toolRegistry.has(entry.name)) {
-    console.warn(`Tool '${entry.name}' is already registered. Overwriting.`);
+    logger.warn('Tool already registered, overwriting', { tool: entry.name });
   }
   toolRegistry.set(entry.name, entry);
-  console.log(`Registered MCP tool: ${entry.name}`);
+  logger.debug('Registered MCP tool', { tool: entry.name });
 }
 
 /**
@@ -119,7 +122,7 @@ async function handleToolFailure(
 
   // Log critical tool failures
   if (CRITICAL_TOOLS.includes(toolName)) {
-    console.error(`Critical tool failure: ${toolName}`, error);
+    logger.error('Critical tool failure', error, { toolName, agentId });
   }
 
   return {
