@@ -4,7 +4,7 @@ import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { GitClientFactory } from '../clients/git.client';
-import { gitCommand } from '../lib/shell';
+import { execCommand, gitCommand } from '../lib/shell';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
@@ -169,6 +169,87 @@ function isBinaryContent(buffer: Buffer): boolean {
 }
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+
+/**
+ * IDE configurations for detection and launching
+ */
+const IDE_CONFIGS: Record<
+  string,
+  {
+    cliCommand: string;
+    macAppName?: string;
+    macBundleId?: string;
+  }
+> = {
+  cursor: {
+    cliCommand: 'cursor',
+    macAppName: 'Cursor',
+    macBundleId: 'com.todesktop.230313mzl4w4u92',
+  },
+  vscode: {
+    cliCommand: 'code',
+    macAppName: 'Visual Studio Code',
+    macBundleId: 'com.microsoft.VSCode',
+  },
+};
+
+/**
+ * Check if an IDE is available on the system
+ */
+async function checkIdeAvailable(ide: string): Promise<boolean> {
+  const config = IDE_CONFIGS[ide];
+  if (!config) {
+    return false;
+  }
+
+  // Check if CLI is in PATH
+  try {
+    await execCommand('which', [config.cliCommand]);
+    return true;
+  } catch {
+    // CLI not in PATH, check for macOS app
+    if (process.platform === 'darwin' && config.macBundleId) {
+      try {
+        const result = await execCommand('mdfind', [
+          `kMDItemCFBundleIdentifier == "${config.macBundleId}"`,
+        ]);
+        if (result.stdout.trim()) {
+          return true;
+        }
+      } catch {
+        // mdfind failed
+      }
+    }
+    return false;
+  }
+}
+
+/**
+ * Open a path in the specified IDE
+ */
+async function openPathInIde(ide: string, targetPath: string): Promise<boolean> {
+  const config = IDE_CONFIGS[ide];
+  if (!config) {
+    return false;
+  }
+
+  // Try CLI command first
+  try {
+    await execCommand(config.cliCommand, [targetPath]);
+    return true;
+  } catch {
+    // Fallback to 'open -a' on macOS
+    if (process.platform === 'darwin' && config.macAppName) {
+      try {
+        await execCommand('open', ['-a', config.macAppName, targetPath]);
+        return true;
+      } catch {
+        // Failed to open
+      }
+    }
+    return false;
+  }
+}
 
 // =============================================================================
 // Router
@@ -374,6 +455,55 @@ export const workspaceRouter = router({
     }
     return workspaceAccessor.archive(input.id);
   }),
+
+  // Get list of available IDEs
+  getAvailableIdes: publicProcedure.query(async () => {
+    const ides: Array<{ id: string; name: string }> = [];
+
+    // Check Cursor
+    const cursorAvailable = await checkIdeAvailable('cursor');
+    if (cursorAvailable) {
+      ides.push({ id: 'cursor', name: 'Cursor' });
+    }
+
+    // Check VS Code
+    const vscodeAvailable = await checkIdeAvailable('vscode');
+    if (vscodeAvailable) {
+      ides.push({ id: 'vscode', name: 'VS Code' });
+    }
+
+    return { ides };
+  }),
+
+  // Open workspace in specified IDE
+  openInIde: publicProcedure
+    .input(z.object({ id: z.string(), ide: z.string() }))
+    .mutation(async ({ input }) => {
+      const workspace = await workspaceAccessor.findById(input.id);
+      if (!workspace) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Workspace not found: ${input.id}`,
+        });
+      }
+
+      if (!workspace.worktreePath) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Workspace has no worktree path',
+        });
+      }
+
+      const opened = await openPathInIde(input.ide, workspace.worktreePath);
+      if (!opened) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Failed to open ${input.ide}. Make sure it is installed.`,
+        });
+      }
+
+      return { success: true };
+    }),
 
   // Get workspace initialization status
   getInitStatus: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
