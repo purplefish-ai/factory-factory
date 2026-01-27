@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -13,7 +14,8 @@ const __dirname = dirname(__filename);
 // Find project root (where package.json is)
 function findProjectRoot(): string {
   let dir = __dirname;
-  while (dir !== '/') {
+  // Cross-platform: check if we've reached the filesystem root
+  while (dir !== dirname(dir)) {
     if (existsSync(join(dir, 'package.json'))) {
       return dir;
     }
@@ -24,6 +26,48 @@ function findProjectRoot(): string {
 }
 
 const PROJECT_ROOT = findProjectRoot();
+
+// Read version from package.json
+function getVersion(): string {
+  try {
+    const pkgPath = join(PROJECT_ROOT, 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+// Wait for a port to be available
+async function waitForPort(
+  port: number,
+  host = 'localhost',
+  timeout = 30_000,
+  interval = 500
+): Promise<void> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const socket = createConnection({ port, host }, () => {
+          socket.destroy();
+          resolve();
+        });
+        socket.on('error', () => {
+          socket.destroy();
+          reject();
+        });
+      });
+      return; // Port is available
+    } catch {
+      // Port not ready, wait and retry
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+  }
+
+  throw new Error(`Timed out waiting for port ${port} after ${timeout}ms`);
+}
 
 interface ServeOptions {
   port: string;
@@ -42,7 +86,7 @@ const program = new Command();
 program
   .name('ff')
   .description('FactoryFactory - Workspace-based coding environment')
-  .version('0.1.0');
+  .version(getVersion());
 
 // ============================================================================
 // serve command
@@ -116,6 +160,8 @@ async function startDevelopmentMode(
   env: NodeJS.ProcessEnv,
   processes: ChildProcess[]
 ): Promise<void> {
+  // Note: This does not start Inngest. For full development with Inngest,
+  // use `pnpm dev:all` instead, or start Inngest separately with `pnpm inngest:dev`.
   console.log(chalk.blue('Starting backend (development mode)...'));
 
   const backend = spawn('npx', ['tsx', 'watch', 'src/backend/index.ts'], {
@@ -125,8 +171,17 @@ async function startDevelopmentMode(
   });
   processes.push(backend);
 
-  // Wait a moment for backend to start
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  // Wait for backend to be ready
+  const backendPort = Number.parseInt(options.backendPort, 10);
+  try {
+    await waitForPort(backendPort, options.host);
+  } catch {
+    console.error(chalk.red(`Backend failed to start on port ${backendPort}`));
+    for (const proc of processes) {
+      proc.kill('SIGTERM');
+    }
+    process.exit(1);
+  }
 
   console.log(chalk.blue('Starting frontend (development mode)...'));
 
@@ -192,8 +247,17 @@ async function startProductionMode(
   });
   processes.push(backend);
 
-  // Wait a moment for backend to start
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  // Wait for backend to be ready
+  const backendPort = Number.parseInt(options.backendPort, 10);
+  try {
+    await waitForPort(backendPort, options.host);
+  } catch {
+    console.error(chalk.red(`Backend failed to start on port ${backendPort}`));
+    for (const proc of processes) {
+      proc.kill('SIGTERM');
+    }
+    process.exit(1);
+  }
 
   console.log(chalk.blue('Starting frontend (production mode)...'));
 
@@ -210,11 +274,29 @@ async function startProductionMode(
   });
   processes.push(frontend);
 
-  // Wait for either process to exit
+  // Wait for either process to exit with error handling
   await Promise.race([
-    new Promise<void>((resolve) => backend.on('exit', () => resolve())),
-    new Promise<void>((resolve) => frontend.on('exit', () => resolve())),
-  ]);
+    new Promise<void>((_, reject) => {
+      backend.on('exit', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Backend exited with code ${code}`));
+        }
+      });
+    }),
+    new Promise<void>((_, reject) => {
+      frontend.on('exit', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Frontend exited with code ${code}`));
+        }
+      });
+    }),
+  ]).catch((error) => {
+    console.error(chalk.red(error.message));
+    for (const proc of processes) {
+      proc.kill('SIGTERM');
+    }
+    process.exit(1);
+  });
 }
 
 // ============================================================================
@@ -301,7 +383,7 @@ program
   .action(async () => {
     console.log(chalk.blue('Building backend...'));
 
-    const buildBackend = spawn('pnpm', ['build:backend'], {
+    const buildBackend = spawn('npx', ['pnpm', 'build:backend'], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     });
@@ -317,7 +399,7 @@ program
 
     console.log(chalk.blue('Building frontend...'));
 
-    const buildFrontend = spawn('pnpm', ['build:frontend'], {
+    const buildFrontend = spawn('npx', ['pnpm', 'build:frontend'], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     });
