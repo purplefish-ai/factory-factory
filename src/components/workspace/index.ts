@@ -5,6 +5,7 @@ export * from './file-viewer';
 export * from './git-summary-panel';
 export * from './main-view-content';
 export * from './main-view-tab-bar';
+export * from './quick-actions-menu';
 export * from './right-panel';
 export * from './terminal-instance';
 export * from './terminal-panel';

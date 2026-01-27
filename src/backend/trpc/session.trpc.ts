@@ -1,5 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
 import { DEFAULT_FIRST_SESSION, DEFAULT_FOLLOWUP, listWorkflows } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
@@ -20,6 +21,16 @@ export const sessionRouter = router({
       const workspace = await workspaceAccessor.findById(input.workspaceId);
       return workspace?.hasHadSessions ? DEFAULT_FOLLOWUP : DEFAULT_FIRST_SESSION;
     }),
+
+  // Quick Actions
+
+  // List all available quick actions
+  listQuickActions: publicProcedure.query(() => listQuickActions()),
+
+  // Get a specific quick action by ID
+  getQuickAction: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => getQuickAction(input.id)),
 
   // Claude Sessions
 
