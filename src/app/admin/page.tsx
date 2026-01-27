@@ -1,7 +1,7 @@
 'use client';
 
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, CheckCircle2, Terminal } from 'lucide-react';
+import { Bot, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -103,39 +103,6 @@ function ApiUsageSection({
             title="Queue Depth"
             value={apiUsage?.queueDepth || 0}
             status={apiUsage?.queueDepth && apiUsage.queueDepth > 10 ? 'warning' : 'ok'}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface ConcurrencyData {
-  activeWorkers: number;
-  activeSupervisors: number;
-  activeTopLevelTasks: number;
-  limits: { maxWorkers: number; maxSupervisors: number; maxTopLevelTasks: number };
-}
-
-function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Concurrency</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard
-            title="Active Workers"
-            value={`${concurrency?.activeWorkers || 0} / ${concurrency?.limits?.maxWorkers || 0}`}
-          />
-          <StatCard
-            title="Active Supervisors"
-            value={`${concurrency?.activeSupervisors || 0} / ${concurrency?.limits?.maxSupervisors || 0}`}
-          />
-          <StatCard
-            title="Active Top-Level Tasks"
-            value={`${concurrency?.activeTopLevelTasks || 0} / ${concurrency?.limits?.maxTopLevelTasks || 0}`}
           />
         </div>
       </CardContent>
@@ -413,12 +380,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin Dashboard" description="System monitoring and management">
-        <Badge variant="outline" className="flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" />
-          Simplified Model
-        </Badge>
-      </PageHeader>
+      <PageHeader title="Admin Dashboard" description="System monitoring and management" />
 
       <ApiUsageSection
         apiUsage={stats?.apiUsage}
@@ -426,27 +388,11 @@ export default function AdminDashboardPage() {
         isResetting={resetApiStats.isPending}
       />
 
-      <ConcurrencySection concurrency={stats?.concurrency} />
-
       {isLoadingProcesses ? (
         <ProcessesSectionSkeleton />
       ) : (
         <ProcessesSection processes={processes} />
       )}
-
-      {/* Quick Links */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 flex-wrap">
-            <Button variant="secondary" asChild>
-              <Link href="/admin/system">System Settings</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Environment Info */}
       <Card className="bg-muted/50">

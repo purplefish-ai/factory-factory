@@ -17,6 +17,7 @@ import { agentProcessAdapter } from './agents/process-adapter';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index';
 import { prisma } from './db';
 import { inngest } from './inngest/client';
+import { syncPRStatus, syncPRStatusBatch } from './inngest/functions/index';
 import { workspaceAccessor } from './resource_accessors/workspace.accessor';
 import { projectRouter } from './routers/api/project.router';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index';
@@ -276,12 +277,12 @@ app.post('/mcp/execute', async (req, res) => {
 // Project API routes
 app.use('/api/projects', projectRouter);
 
-// Inngest webhook handler (empty functions array for now)
+// Inngest webhook handler
 app.use(
   '/api/inngest',
   serve({
     client: inngest,
-    functions: [],
+    functions: [syncPRStatus, syncPRStatusBatch],
   })
 );
 

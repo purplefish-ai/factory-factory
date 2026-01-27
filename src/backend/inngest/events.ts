@@ -96,4 +96,24 @@ export type Events = {
       timestamp: number;
     };
   };
+
+  /**
+   * Triggered periodically to sync PR status for all active workspaces.
+   */
+  'github.pr.sync.batch': {
+    data: {
+      timestamp: number;
+    };
+  };
+
+  /**
+   * Triggered to sync PR status for a specific workspace.
+   */
+  'github.pr.sync': {
+    data: {
+      workspaceId: string;
+      /** Skip freshness check and always fetch */
+      force?: boolean;
+    };
+  };
 };

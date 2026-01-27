@@ -1,10 +1,9 @@
 'use client';
 
-import { GitBranch, Plus, Settings, Terminal } from 'lucide-react';
+import { GitBranch, Kanban, Plus, Settings, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -17,7 +16,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
@@ -199,7 +197,17 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="none">
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <Logo iconClassName="size-6" textClassName="text-sm" />
+        {selectedProjectSlug ? (
+          <Link href={`/projects/${selectedProjectSlug}/workspaces`}>
+            <Logo
+              iconClassName="size-6"
+              textClassName="text-sm"
+              className="hover:opacity-80 transition-opacity"
+            />
+          </Link>
+        ) : (
+          <Logo iconClassName="size-6" textClassName="text-sm" />
+        )}
 
         {projects && projects.length > 0 && (
           <div className="mt-3">
@@ -228,54 +236,71 @@ export function AppSidebar() {
       <SidebarContent className="flex flex-col">
         {/* Workspaces section */}
         {selectedProjectSlug && (
-          <SidebarGroup className="flex-1 min-h-0 flex flex-col">
-            <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
-            <SidebarGroupAction onClick={handleCreateWorkspace} disabled={isCreatingWorkspace}>
-              <Plus className="h-4 w-4" />
-              <span className="sr-only">New Workspace</span>
-            </SidebarGroupAction>
-            <SidebarGroupContent className="flex-1 min-h-0">
-              <ScrollArea className="h-full">
-                <SidebarMenu>
-                  {workspaces?.map((workspace) => {
-                    const isActive = currentWorkspaceId === workspace.id;
-                    return (
-                      <SidebarMenuItem key={workspace.id}>
-                        <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
-                          <Link
-                            href={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
-                          >
-                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                {workspace.branchName && (
-                                  <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
-                                )}
-                                <span className="truncate font-medium text-sm">
-                                  {workspace.branchName || workspace.name}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <span className="truncate">{workspace.name}</span>
-                                {workingStatus?.[workspace.id] && (
-                                  <>
-                                    <span>·</span>
-                                    <span className="text-green-500">Working...</span>
-                                  </>
-                                )}
-                              </div>
+          <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <SidebarGroupLabel>
+              <Link
+                href={`/projects/${selectedProjectSlug}/workspaces`}
+                className="hover:text-foreground transition-colors"
+              >
+                Workspaces
+              </Link>
+            </SidebarGroupLabel>
+            <div className="absolute right-1 top-2 flex items-center gap-0.5">
+              <Link
+                href={`/projects/${selectedProjectSlug}/workspaces`}
+                className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                title="View Kanban board"
+              >
+                <Kanban className="h-3.5 w-3.5" />
+              </Link>
+              <button
+                type="button"
+                onClick={handleCreateWorkspace}
+                disabled={isCreatingWorkspace}
+                className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
+                title="New Workspace"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+              <SidebarMenu>
+                {workspaces?.map((workspace) => {
+                  const isActive = currentWorkspaceId === workspace.id;
+                  return (
+                    <SidebarMenuItem key={workspace.id}>
+                      <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
+                        <Link href={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
+                          <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
+                            <div className="flex items-center gap-1.5">
+                              {workspace.branchName && (
+                                <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
+                              )}
+                              <span className="truncate font-medium text-sm">
+                                {workspace.branchName || workspace.name}
+                              </span>
                             </div>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                  {workspaces?.length === 0 && (
-                    <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                      No active workspaces
-                    </div>
-                  )}
-                </SidebarMenu>
-              </ScrollArea>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span className="truncate">{workspace.name}</span>
+                              {workingStatus?.[workspace.id] && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-green-500">Working...</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+                {workspaces?.length === 0 && (
+                  <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                    No active workspaces
+                  </div>
+                )}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
