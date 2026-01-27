@@ -104,9 +104,9 @@ class Logger {
       timestamp: this.config.includeTimestamp ? new Date().toISOString() : '',
       message,
       context: {
+        ...context,
         service: this.config.serviceName,
         component: this.component,
-        ...context,
       },
     };
 
