@@ -38,6 +38,8 @@ interface ChatInputProps {
   // Settings
   settings?: ChatSettings;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
+  // Session tracking for auto-focus on new sessions
+  sessionId?: string | null;
 }
 
 // =============================================================================
@@ -181,6 +183,7 @@ export function ChatInput({
   className,
   settings,
   onSettingsChange,
+  sessionId,
 }: ChatInputProps) {
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
@@ -231,12 +234,13 @@ export function ChatInput({
     target.style.overflowY = target.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, []);
 
-  // Focus input when component mounts or when running state changes to false
+  // Focus input when component mounts, when running state changes to false, or when session changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is intentionally included to trigger focus on session change
   useEffect(() => {
     if (!(running || disabled) && inputRef?.current) {
       inputRef.current.focus();
     }
-  }, [running, disabled, inputRef]);
+  }, [running, disabled, inputRef, sessionId]);
 
   const isDisabled = disabled || !inputRef;
 
