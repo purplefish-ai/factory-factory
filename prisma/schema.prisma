@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 // Enums
@@ -66,7 +66,7 @@ model Project {
   isArchived        Boolean     @default(false)
 
   // Startup script configuration
-  startupScriptCommand  String?   @db.Text  // Inline shell command
+  startupScriptCommand  String?   // Inline shell command
   startupScriptPath     String?             // Path to script in repo
   startupScriptTimeout  Int       @default(300)  // Timeout in seconds
 
@@ -83,9 +83,9 @@ model Project {
 model DecisionLog {
   id                String      @id @default(cuid())
   agentId           String      // Can be sessionId or any identifier
-  decision          String      @db.Text
-  reasoning         String      @db.Text
-  context           String?     @db.Text
+  decision          String
+  reasoning         String
+  context           String?
   timestamp         DateTime    @default(now())
 
   @@index([agentId, timestamp])
@@ -104,7 +104,7 @@ model Workspace {
 
   // Initialization tracking
   initStatus          WorkspaceInitStatus @default(PENDING)
-  initErrorMessage    String?             @db.Text
+  initErrorMessage    String?
   initStartedAt       DateTime?
   initCompletedAt     DateTime?
   initRetryCount      Int                 @default(0)

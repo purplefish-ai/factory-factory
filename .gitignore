@@ -43,9 +43,6 @@ next-env.d.ts
 *~
 .DS_Store
 
-# Prisma
-prisma/migrations/**/*.sql
-
 # Worktrees
 worktrees/
 

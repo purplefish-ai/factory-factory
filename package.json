@@ -51,8 +51,9 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "@prisma/adapter-pg": "^7.3.0",
+    "@prisma/adapter-better-sqlite3": "^7.3.0",
     "@prisma/client": "^7.3.0",
+    "better-sqlite3": "^11.7.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -128,6 +129,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@prisma/engines",
+      "better-sqlite3",
       "esbuild",
       "inngest-cli",
       "node-pty",
@@ -138,6 +140,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.13",
+    "@types/better-sqlite3": "^7.6.12",
     "@storybook/addon-a11y": "10.2.0",
     "@storybook/addon-mcp": "^0.2.2",
     "@storybook/addon-themes": "10.2.0",
