@@ -115,7 +115,7 @@ function ThinkingToggle({
             onPressedChange={onPressedChange}
             disabled={disabled}
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-6 w-6 p-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
             aria-label="Toggle thinking mode"
           >
             <Brain className="h-3.5 w-3.5" />
@@ -150,7 +150,7 @@ function PlanModeToggle({
             onPressedChange={onPressedChange}
             disabled={disabled}
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-6 w-6 p-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
             aria-label="Toggle plan mode"
           >
             <MapIcon className="h-3.5 w-3.5" />
