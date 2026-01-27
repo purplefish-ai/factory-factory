@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PRState } from '@prisma-gen/client';
+import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { createLogger } from './logger.service';
 
 const execFileAsync = promisify(execFile);
@@ -304,6 +305,151 @@ class GitHubCLIService {
       });
 
       throw new Error(`Failed to approve PR: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get full PR details including reviews, comments, labels, and CI status.
+   */
+  async getPRFullDetails(repo: string, prNumber: number): Promise<PRWithFullDetails> {
+    const fields = [
+      'number',
+      'title',
+      'url',
+      'author',
+      'createdAt',
+      'updatedAt',
+      'isDraft',
+      'state',
+      'reviewDecision',
+      'statusCheckRollup',
+      'reviews',
+      'comments',
+      'labels',
+      'additions',
+      'deletions',
+      'changedFiles',
+      'headRefName',
+      'baseRefName',
+      'mergeStateStatus',
+    ].join(',');
+
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
+        { timeout: 30_000 }
+      );
+
+      const data = JSON.parse(stdout);
+
+      // Extract repository info from the repo string
+      const [, repoName] = repo.split('/');
+
+      return {
+        number: data.number,
+        title: data.title,
+        url: data.url,
+        author: data.author,
+        repository: {
+          name: repoName,
+          nameWithOwner: repo,
+        },
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        isDraft: data.isDraft,
+        state: data.state,
+        reviewDecision: data.reviewDecision || null,
+        statusCheckRollup: data.statusCheckRollup || null,
+        reviews: data.reviews || [],
+        comments: data.comments || [],
+        labels: data.labels || [],
+        additions: data.additions || 0,
+        deletions: data.deletions || 0,
+        changedFiles: data.changedFiles || 0,
+        headRefName: data.headRefName || '',
+        baseRefName: data.baseRefName || '',
+        mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
+      };
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to fetch PR details via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to fetch PR details: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get the diff for a PR.
+   */
+  async getPRDiff(repo: string, prNumber: number): Promise<string> {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['pr', 'diff', String(prNumber), '--repo', repo],
+        { timeout: 60_000, maxBuffer: 10 * 1024 * 1024 } // 10MB buffer for large diffs
+      );
+
+      return stdout;
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to fetch PR diff via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to fetch PR diff: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Submit a review for a PR (approve, request changes, or comment).
+   */
+  async submitReview(
+    repo: string,
+    prNumber: number,
+    action: ReviewAction,
+    body?: string
+  ): Promise<void> {
+    const actionFlags: Record<ReviewAction, string> = {
+      approve: '--approve',
+      'request-changes': '--request-changes',
+      comment: '--comment',
+    };
+
+    const args = ['pr', 'review', String(prNumber), '--repo', repo, actionFlags[action]];
+
+    if (body && (action === 'request-changes' || action === 'comment')) {
+      args.push('--body', body);
+    }
+
+    try {
+      await execFileAsync('gh', args, { timeout: 30_000 });
+      logger.info('PR review submitted successfully', { repo, prNumber, action });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to submit PR review via gh CLI', {
+        repo,
+        prNumber,
+        action,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to submit review: ${errorMessage}`);
     }
   }
 }
