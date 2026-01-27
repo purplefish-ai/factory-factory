@@ -72,7 +72,7 @@ async function waitForPort(
 }
 
 // Check if a port is available
-function isPortAvailable(port: number): Promise<boolean> {
+function isPortAvailable(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const server = createServer();
     server.once('error', () => {
@@ -81,15 +81,19 @@ function isPortAvailable(port: number): Promise<boolean> {
     server.once('listening', () => {
       server.close(() => resolve(true));
     });
-    server.listen(port, '127.0.0.1');
+    server.listen(port, host);
   });
 }
 
 // Find an available port starting from the given port
-async function findAvailablePort(startPort: number, maxAttempts = 10): Promise<number> {
+async function findAvailablePort(
+  startPort: number,
+  host: string,
+  maxAttempts = 10
+): Promise<number> {
   for (let i = 0; i < maxAttempts; i++) {
     const port = startPort + i;
-    if (await isPortAvailable(port)) {
+    if (await isPortAvailable(port, host)) {
       return port;
     }
   }
@@ -191,14 +195,14 @@ program
       if (verbose) {
         console.log(chalk.gray('  Checking port availability...'));
       }
-      backendPort = await findAvailablePort(requestedBackendPort);
+      backendPort = await findAvailablePort(requestedBackendPort, options.host);
       if (backendPort !== requestedBackendPort) {
         console.log(
           chalk.yellow(`  ⚠ Backend port ${requestedBackendPort} in use, using ${backendPort}`)
         );
       }
 
-      frontendPort = await findAvailablePort(requestedFrontendPort);
+      frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
       if (frontendPort !== requestedFrontendPort) {
         console.log(
           chalk.yellow(`  ⚠ Frontend port ${requestedFrontendPort} in use, using ${frontendPort}`)
@@ -230,14 +234,14 @@ program
     };
 
     const processes: ChildProcess[] = [];
-    let shuttingDown = false;
+    const shutdownState = { shuttingDown: false };
 
     // Handle shutdown
     const shutdown = (signal: string) => {
-      if (shuttingDown) {
+      if (shutdownState.shuttingDown) {
         return;
       }
-      shuttingDown = true;
+      shutdownState.shuttingDown = true;
 
       console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
       for (const proc of processes) {
@@ -270,16 +274,36 @@ program
       console.log(chalk.dim('  Press Ctrl+C to stop\n'));
 
       if (shouldOpen) {
-        await open(url);
+        try {
+          await open(url);
+        } catch (error) {
+          console.log(chalk.yellow(`  ⚠ Could not open browser: ${(error as Error).message}`));
+        }
       }
     };
 
     if (options.dev) {
       // Development mode - use tsx watch for backend, next dev for frontend
-      await startDevelopmentMode(options, env, processes, backendPort, frontendPort, onReady);
+      await startDevelopmentMode(
+        options,
+        env,
+        processes,
+        backendPort,
+        frontendPort,
+        onReady,
+        shutdownState
+      );
     } else {
       // Production mode - use compiled backend and next start
-      await startProductionMode(options, env, processes, backendPort, frontendPort, onReady);
+      await startProductionMode(
+        options,
+        env,
+        processes,
+        backendPort,
+        frontendPort,
+        onReady,
+        shutdownState
+      );
     }
   });
 
@@ -289,7 +313,8 @@ async function startDevelopmentMode(
   processes: ChildProcess[],
   backendPort: number,
   frontendPort: number,
-  onReady: () => Promise<void>
+  onReady: () => Promise<void>,
+  shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
   console.log(chalk.blue('  🔧 Starting backend (development mode)...'));
 
@@ -299,6 +324,13 @@ async function startDevelopmentMode(
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
   processes.push(backend);
+
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && backend.stderr) {
+    backend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
+    });
+  }
 
   // Wait for backend to be ready
   try {
@@ -321,6 +353,13 @@ async function startDevelopmentMode(
   });
   processes.push(frontend);
 
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && frontend.stderr) {
+    frontend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
+    });
+  }
+
   // Wait for frontend to be ready
   try {
     await waitForPort(frontendPort, options.host);
@@ -338,16 +377,22 @@ async function startDevelopmentMode(
 
   // Wait for either process to exit
   await Promise.race([
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       backend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Backend exited with code ${code}`));
         }
       });
     }),
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       frontend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Frontend exited with code ${code}`));
         }
       });
@@ -367,7 +412,8 @@ async function startProductionMode(
   processes: ChildProcess[],
   backendPort: number,
   frontendPort: number,
-  onReady: () => Promise<void>
+  onReady: () => Promise<void>,
+  shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
   // Check if built
   const nextStandalone = join(PROJECT_ROOT, '.next', 'standalone');
@@ -398,6 +444,13 @@ async function startProductionMode(
   });
   processes.push(backend);
 
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && backend.stderr) {
+    backend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
+    });
+  }
+
   // Wait for backend to be ready
   try {
     await waitForPort(backendPort, options.host);
@@ -425,6 +478,13 @@ async function startProductionMode(
   });
   processes.push(frontend);
 
+  // Log stderr even in non-verbose mode
+  if (!options.verbose && frontend.stderr) {
+    frontend.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
+    });
+  }
+
   // Wait for frontend to be ready
   try {
     await waitForPort(frontendPort, options.host);
@@ -442,16 +502,22 @@ async function startProductionMode(
 
   // Wait for either process to exit with error handling
   await Promise.race([
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       backend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Backend exited with code ${code}`));
         }
       });
     }),
-    new Promise<void>((_, reject) => {
+    new Promise<void>((resolve, reject) => {
       frontend.on('exit', (code) => {
-        if (code !== 0) {
+        // Resolve cleanly during shutdown, reject on unexpected exit
+        if (shutdownState.shuttingDown) {
+          resolve();
+        } else if (code !== 0) {
           reject(new Error(`Frontend exited with code ${code}`));
         }
       });
