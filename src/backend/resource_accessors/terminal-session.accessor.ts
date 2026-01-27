@@ -4,6 +4,7 @@ import { prisma } from '../db';
 interface CreateTerminalSessionInput {
   workspaceId: string;
   name?: string;
+  pid?: number;
 }
 
 interface UpdateTerminalSessionInput {
@@ -28,6 +29,7 @@ class TerminalSessionAccessor {
       data: {
         workspaceId: data.workspaceId,
         name: data.name,
+        pid: data.pid,
       },
     });
   }
@@ -55,6 +57,19 @@ class TerminalSessionAccessor {
       where,
       take: filters?.limit,
       orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  findByName(name: string): Promise<TerminalSession | null> {
+    return prisma.terminalSession.findFirst({
+      where: { name },
+    });
+  }
+
+  async clearPid(name: string): Promise<void> {
+    await prisma.terminalSession.updateMany({
+      where: { name },
+      data: { pid: null },
     });
   }
 
