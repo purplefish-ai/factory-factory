@@ -1,8 +1,9 @@
 'use client';
 
-import { Archive, GitBranch, Loader2, PanelRight } from 'lucide-react';
+import { AppWindow, Archive, GitBranch, Loader2, PanelRight } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@/components/chat';
@@ -315,6 +316,15 @@ function useSessionManagement({
     },
   });
 
+  const openInIde = trpc.workspace.openInIde.useMutation({
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const { data: availableIdesData } = trpc.workspace.getAvailableIdes.useQuery();
+  const availableIdes = availableIdesData?.ides ?? [];
+
   const handleSelectSession = useCallback(
     (sessionId: string) => {
       setSelectedSessionId(sessionId);
@@ -392,6 +402,8 @@ function useSessionManagement({
     createSession,
     deleteSession,
     archiveWorkspace,
+    openInIde,
+    availableIdes,
     handleSelectSession,
     handleCloseSession,
     handleWorkflowSelect,
@@ -426,6 +438,7 @@ function useAutoScroll(
 // Main Workspace Chat Component
 // =============================================================================
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Large component with many UI states
 function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();
@@ -477,6 +490,8 @@ function WorkspaceChatContent() {
     createSession,
     deleteSession,
     archiveWorkspace,
+    openInIde,
+    availableIdes,
     handleSelectSession,
     handleCloseSession,
     handleWorkflowSelect,
@@ -546,6 +561,22 @@ function WorkspaceChatContent() {
           <StatusDot status={status} />
         </div>
         <div className="flex items-center gap-1">
+          {availableIdes.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              title={`Open in ${availableIdes[0].name}`}
+              onClick={() => openInIde.mutate({ id: workspaceId, ide: availableIdes[0].id })}
+              disabled={openInIde.isPending || !workspace.worktreePath}
+            >
+              {openInIde.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <AppWindow className="h-4 w-4" />
+              )}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
