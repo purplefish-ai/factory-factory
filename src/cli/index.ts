@@ -619,11 +619,15 @@ program
       process.exit(exitCode);
     }
 
-    // Run tsc-alias to resolve path aliases
-    const tscAlias = spawn('npx', ['tsc-alias', '-p', 'tsconfig.backend.json'], {
-      cwd: PROJECT_ROOT,
-      stdio: 'inherit',
-    });
+    // Run tsc-alias to resolve path aliases and add .js extensions for ESM
+    const tscAlias = spawn(
+      'npx',
+      ['tsc-alias', '-p', 'tsconfig.backend.json', '--resolve-full-paths'],
+      {
+        cwd: PROJECT_ROOT,
+        stdio: 'inherit',
+      }
+    );
 
     exitCode = await new Promise<number>((resolve) => {
       tscAlias.on('exit', (code) => resolve(code ?? 1));

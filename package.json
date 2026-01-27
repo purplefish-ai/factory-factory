@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "tsx src/cli/index.ts serve --dev",
-    "build": "tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json && next build",
+    "build": "tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && next build",
     "start": "tsx src/cli/index.ts serve",
     "test": "vitest run",
     "test:watch": "vitest",
