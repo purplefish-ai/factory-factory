@@ -1056,6 +1056,7 @@ function handleTerminalUpgrade(
     return;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Terminal WebSocket handler requires handling multiple connection states, message types, and cleanup scenarios
   wss.handleUpgrade(request, socket, head, (ws) => {
     logger.info('Terminal WebSocket connection established', { workspaceId });
 
@@ -1102,6 +1103,18 @@ function handleTerminalUpgrade(
           })),
         })
       );
+
+      // Clean up listeners from any existing WebSocket connections to prevent duplicates
+      // This handles the case where a client reconnects before the old connection fully closes
+      const existingConnections = terminalConnections.get(workspaceId);
+      if (existingConnections) {
+        for (const existingWs of existingConnections) {
+          if (existingWs !== ws) {
+            logger.debug('Cleaning up listeners from existing connection', { workspaceId });
+            cleanupTerminalListeners(existingWs);
+          }
+        }
+      }
 
       // Set up output/exit listeners for each existing terminal
       const cleanupMap = terminalListenerCleanup.get(ws);

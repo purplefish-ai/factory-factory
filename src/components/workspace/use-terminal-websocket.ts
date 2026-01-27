@@ -69,8 +69,16 @@ export function useTerminalWebSocket({
 
   // Connect to WebSocket
   const connect = useCallback(() => {
+    // Don't create new connection if one is already open
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
+    }
+
+    // Close any existing WebSocket in a transitional state (CONNECTING, CLOSING)
+    // to prevent having multiple connections
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
     }
 
     // Reset intentional close flag when establishing a new connection
