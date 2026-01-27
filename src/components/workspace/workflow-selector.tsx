@@ -1,22 +1,21 @@
 'use client';
 
+import type { inferRouterOutputs } from '@trpc/server';
 import { Bug, Code, Compass, MessageSquare, Play } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import type { AppRouter } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-interface Workflow {
-  id: string;
-  name: string;
-  description: string;
-  expectsPR: boolean;
-}
+// Infer Workflow type from tRPC router to avoid duplication with backend
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type Workflow = RouterOutputs['session']['listWorkflows'][number];
 
 interface WorkflowSelectorProps {
   workflows: Workflow[];

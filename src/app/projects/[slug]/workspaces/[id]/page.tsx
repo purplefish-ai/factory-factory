@@ -9,11 +9,9 @@ import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  MainViewContent,
-  MainViewTabBar,
   RightPanel,
   useWorkspacePanel,
-  WorkflowSelector,
+  WorkspaceContentView,
   WorkspacePanelProvider,
 } from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
@@ -207,7 +205,6 @@ function ChatContent({
 // Main Workspace Chat Component
 // =============================================================================
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Page component with many hooks and conditional rendering
 function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();
@@ -486,60 +483,40 @@ function WorkspaceChatContent() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel: Session tabs + Main View Content */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Show workflow selector when no sessions exist, otherwise show tab bar */}
-          {claudeSessions && claudeSessions.length === 0 ? (
-            <MainViewContent workspaceId={workspaceId} className="flex-1">
-              {workflows && recommendedWorkflow ? (
-                <WorkflowSelector
-                  workflows={workflows}
-                  recommendedWorkflow={recommendedWorkflow}
-                  onSelect={handleWorkflowSelect}
-                  disabled={createSession.isPending}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                </div>
-              )}
-            </MainViewContent>
-          ) : (
-            <>
-              {/* Tab bar */}
-              <div className="px-4 py-2 border-b">
-                <MainViewTabBar
-                  sessions={claudeSessions}
-                  currentSessionId={selectedSessionId}
-                  runningSessionId={runningSessionId}
-                  onSelectSession={handleSelectSession}
-                  onCreateSession={handleNewChat}
-                  onCloseSession={handleCloseSession}
-                  disabled={running || createSession.isPending || deleteSession.isPending}
-                />
-              </div>
-
-              {/* Main View Content */}
-              <MainViewContent workspaceId={workspaceId} className="flex-1">
-                <ChatContent
-                  messages={messages}
-                  running={running}
-                  loadingSession={loadingSession}
-                  messagesEndRef={messagesEndRef}
-                  handleScroll={handleScroll}
-                  pendingPermission={pendingPermission}
-                  pendingQuestion={pendingQuestion}
-                  approvePermission={approvePermission}
-                  answerQuestion={answerQuestion}
-                  connected={connected}
-                  sendMessage={sendMessage}
-                  stopChat={stopChat}
-                  inputRef={inputRef}
-                  chatSettings={chatSettings}
-                  updateSettings={updateSettings}
-                  claudeSessionId={claudeSessionId}
-                />
-              </MainViewContent>
-            </>
-          )}
+          <WorkspaceContentView
+            workspaceId={workspaceId}
+            claudeSessions={claudeSessions}
+            workflows={workflows}
+            recommendedWorkflow={recommendedWorkflow}
+            selectedSessionId={selectedSessionId}
+            runningSessionId={runningSessionId}
+            running={running}
+            isCreatingSession={createSession.isPending}
+            isDeletingSession={deleteSession.isPending}
+            onWorkflowSelect={handleWorkflowSelect}
+            onSelectSession={handleSelectSession}
+            onCreateSession={handleNewChat}
+            onCloseSession={handleCloseSession}
+          >
+            <ChatContent
+              messages={messages}
+              running={running}
+              loadingSession={loadingSession}
+              messagesEndRef={messagesEndRef}
+              handleScroll={handleScroll}
+              pendingPermission={pendingPermission}
+              pendingQuestion={pendingQuestion}
+              approvePermission={approvePermission}
+              answerQuestion={answerQuestion}
+              connected={connected}
+              sendMessage={sendMessage}
+              stopChat={stopChat}
+              inputRef={inputRef}
+              chatSettings={chatSettings}
+              updateSettings={updateSettings}
+              claudeSessionId={claudeSessionId}
+            />
+          </WorkspaceContentView>
         </div>
 
         {/* Right Panel (conditionally rendered, fixed width) */}

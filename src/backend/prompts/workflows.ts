@@ -38,13 +38,9 @@ export const DEFAULT_FIRST_SESSION = 'feature';
 /** Default workflow for subsequent sessions */
 export const DEFAULT_FOLLOWUP = 'followup';
 
-// Path to workflows directory (relative to project root)
-// Use process.cwd() as it's more reliable than __dirname with tsx
-const WORKFLOWS_DIR = resolve(process.cwd(), 'prompts/workflows');
-
-// Log the resolved path on module load
-console.log('[workflows] cwd:', process.cwd());
-console.log('[workflows] WORKFLOWS_DIR:', WORKFLOWS_DIR);
+// Path to workflows directory (relative to this file's location)
+// From src/backend/prompts/ → src/backend → src → project root
+const WORKFLOWS_DIR = resolve(import.meta.dirname, '../../..', 'prompts/workflows');
 
 // =============================================================================
 // Frontmatter Parser
