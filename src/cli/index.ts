@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -229,11 +229,12 @@ program
       DATABASE_PATH: databasePath,
       FRONTEND_PORT: frontendPort.toString(),
       BACKEND_PORT: backendPort.toString(),
+      BACKEND_URL: `http://${options.host}:${backendPort}`,
       NEXT_PUBLIC_BACKEND_PORT: backendPort.toString(),
       NODE_ENV: options.dev ? 'development' : 'production',
     };
 
-    const processes: ChildProcess[] = [];
+    const processes: { name: string; proc: ChildProcess }[] = [];
     const shutdownState = { shuttingDown: false };
 
     // Handle shutdown
@@ -244,15 +245,20 @@ program
       shutdownState.shuttingDown = true;
 
       console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
-      for (const proc of processes) {
+      for (const { proc } of processes) {
         proc.kill('SIGTERM');
       }
 
       // Force kill after timeout
       setTimeout(() => {
-        console.log(chalk.red('  Force killing remaining processes...'));
-        for (const proc of processes) {
-          proc.kill('SIGKILL');
+        const alive = processes.filter(({ proc }) => !proc.killed && proc.exitCode === null);
+        if (alive.length > 0) {
+          console.log(
+            chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
+          );
+          for (const { proc } of alive) {
+            proc.kill('SIGKILL');
+          }
         }
         process.exit(1);
       }, 5000);
@@ -310,7 +316,7 @@ program
 async function startDevelopmentMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
-  processes: ChildProcess[],
+  processes: { name: string; proc: ChildProcess }[],
   backendPort: number,
   frontendPort: number,
   onReady: () => Promise<void>,
@@ -323,7 +329,7 @@ async function startDevelopmentMode(
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(backend);
+  processes.push({ name: 'backend', proc: backend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && backend.stderr) {
@@ -338,7 +344,7 @@ async function startDevelopmentMode(
     console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -351,7 +357,7 @@ async function startDevelopmentMode(
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(frontend);
+  processes.push({ name: 'frontend', proc: frontend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && frontend.stderr) {
@@ -366,7 +372,7 @@ async function startDevelopmentMode(
     console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -399,7 +405,7 @@ async function startDevelopmentMode(
     }),
   ]).catch((error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -409,7 +415,7 @@ async function startDevelopmentMode(
 async function startProductionMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
-  processes: ChildProcess[],
+  processes: { name: string; proc: ChildProcess }[],
   backendPort: number,
   frontendPort: number,
   onReady: () => Promise<void>,
@@ -417,20 +423,16 @@ async function startProductionMode(
 ): Promise<void> {
   // Check if built
   const nextStandalone = join(PROJECT_ROOT, '.next', 'standalone');
-  const backendDist = join(PROJECT_ROOT, 'dist', 'backend', 'index.js');
+  const backendDist = join(PROJECT_ROOT, 'dist', 'src', 'backend', 'index.js');
 
   if (!existsSync(nextStandalone)) {
-    console.error(
-      chalk.red('\n  ✗ Frontend not built. Run `ff build` or `pnpm build:frontend` first.')
-    );
+    console.error(chalk.red('\n  ✗ Frontend not built. Run `ff build` or `pnpm build` first.'));
     console.error(chalk.gray('    Or use --dev flag for development mode.'));
     process.exit(1);
   }
 
   if (!existsSync(backendDist)) {
-    console.error(
-      chalk.red('\n  ✗ Backend not built. Run `ff build` or `pnpm build:backend` first.')
-    );
+    console.error(chalk.red('\n  ✗ Backend not built. Run `ff build` or `pnpm build` first.'));
     console.error(chalk.gray('    Or use --dev flag for development mode.'));
     process.exit(1);
   }
@@ -442,7 +444,7 @@ async function startProductionMode(
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(backend);
+  processes.push({ name: 'backend', proc: backend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && backend.stderr) {
@@ -457,7 +459,7 @@ async function startProductionMode(
     console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -476,7 +478,7 @@ async function startProductionMode(
     },
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(frontend);
+  processes.push({ name: 'frontend', proc: frontend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && frontend.stderr) {
@@ -491,7 +493,7 @@ async function startProductionMode(
     console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -524,7 +526,7 @@ async function startProductionMode(
     }),
   ]).catch((error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -623,11 +625,15 @@ program
       process.exit(exitCode);
     }
 
-    // Run tsc-alias to resolve path aliases
-    const tscAlias = spawn('npx', ['tsc-alias', '-p', 'tsconfig.backend.json'], {
-      cwd: PROJECT_ROOT,
-      stdio: 'inherit',
-    });
+    // Run tsc-alias to resolve path aliases and add .js extensions for ESM
+    const tscAlias = spawn(
+      'npx',
+      ['tsc-alias', '-p', 'tsconfig.backend.json', '--resolve-full-paths'],
+      {
+        cwd: PROJECT_ROOT,
+        stdio: 'inherit',
+      }
+    );
 
     exitCode = await new Promise<number>((resolve) => {
       tscAlias.on('exit', (code) => resolve(code ?? 1));
@@ -636,6 +642,13 @@ program
     if (exitCode !== 0) {
       console.error(chalk.red('Backend path alias resolution failed'));
       process.exit(exitCode);
+    }
+
+    // Copy prompts directory to dist (markdown files referenced at runtime)
+    const promptsSrc = join(PROJECT_ROOT, 'prompts');
+    const promptsDest = join(PROJECT_ROOT, 'dist', 'prompts');
+    if (existsSync(promptsSrc)) {
+      cpSync(promptsSrc, promptsDest, { recursive: true });
     }
 
     console.log(chalk.green('  ✓ Backend built'));
@@ -654,6 +667,13 @@ program
     if (exitCode !== 0) {
       console.error(chalk.red('Frontend build failed'));
       process.exit(exitCode);
+    }
+
+    // Copy static files to standalone output (required for Next.js standalone mode)
+    const staticSrc = join(PROJECT_ROOT, '.next', 'static');
+    const staticDest = join(PROJECT_ROOT, '.next', 'standalone', '.next', 'static');
+    if (existsSync(staticSrc)) {
+      cpSync(staticSrc, staticDest, { recursive: true });
     }
 
     console.log(chalk.green('\n✅ Build completed successfully!'));

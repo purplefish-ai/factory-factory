@@ -25,8 +25,8 @@ export default function NewProjectPage() {
   const hasExistingProjects = projects && projects.length > 0;
 
   const createProject = trpc.project.create.useMutation({
-    onSuccess: () => {
-      router.push('/projects');
+    onSuccess: (project) => {
+      router.push(`/projects/${project.slug}`);
     },
     onError: (err) => {
       setError(err.message);

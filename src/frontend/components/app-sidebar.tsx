@@ -80,12 +80,14 @@ export function AppSidebar() {
   const utils = trpc.useUtils();
 
   const createWorkspace = trpc.workspace.create.useMutation();
+  const [pendingWorkspaceName, setPendingWorkspaceName] = useState<string | null>(null);
 
   const handleCreateWorkspace = async () => {
     if (!selectedProjectId) {
       return;
     }
     const name = generateWorkspaceName();
+    setPendingWorkspaceName(name);
 
     // Create workspace (branchName defaults to project's default branch)
     // Don't create a session - user will choose workflow in workspace page
@@ -97,6 +99,9 @@ export function AppSidebar() {
     // Invalidate workspace list cache
     utils.workspace.list.invalidate({ projectId: selectedProjectId });
 
+    // Clear the pending name
+    setPendingWorkspaceName(null);
+
     // Navigate to workspace (workflow selection will be shown)
     router.push(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
   };
@@ -104,6 +109,12 @@ export function AppSidebar() {
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
   const isCreatingWorkspace = createWorkspace.isPending;
+
+  // Check if the workspace we're creating already appeared in the list (via polling)
+  // to avoid showing both the "Creating workspace..." placeholder and the actual workspace
+  const pendingWorkspaceAlreadyExists =
+    pendingWorkspaceName && workspaces?.some((w) => w.name === pendingWorkspaceName);
+  const showCreatingPlaceholder = isCreatingWorkspace && !pendingWorkspaceAlreadyExists;
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -262,7 +273,7 @@ export function AppSidebar() {
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
               <SidebarMenu>
-                {isCreatingWorkspace && (
+                {showCreatingPlaceholder && (
                   <SidebarMenuItem>
                     <SidebarMenuButton className="h-auto py-2 cursor-default">
                       <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">

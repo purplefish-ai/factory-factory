@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import {
   Select,
@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { InitStatusBadge } from '@/components/workspace/init-status-badge';
-import { KanbanBoard } from '@/frontend/components/kanban';
+import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../../../frontend/lib/trpc';
@@ -68,138 +68,155 @@ export default function ProjectWorkspacesPage() {
     return <Loading message="Loading project..." />;
   }
 
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Workspaces" description={project.name}>
-        <div className="flex items-center gap-2">
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(value) => value && setViewMode(value as ViewMode)}
-            size="sm"
-          >
-            <ToggleGroupItem value="board" aria-label="Board view">
-              <Kanban className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="list" aria-label="List view">
-              <List className="h-4 w-4" />
-            </ToggleGroupItem>
-          </ToggleGroup>
-          <Button asChild>
-            <Link href={`/projects/${slug}/workspaces/new`}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Workspace
-            </Link>
-          </Button>
+  if (viewMode === 'board') {
+    return (
+      <KanbanProvider projectId={project.id} projectSlug={slug}>
+        <div className="space-y-4 p-6">
+          <PageHeader title="Workspaces">
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(value) => value && setViewMode(value as ViewMode)}
+              size="sm"
+            >
+              <ToggleGroupItem value="board" aria-label="Board view">
+                <Kanban className="h-4 w-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="List view">
+                <List className="h-4 w-4" />
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <KanbanControls />
+            <Button asChild>
+              <Link href={`/projects/${slug}/workspaces/new`}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Workspace
+              </Link>
+            </Button>
+          </PageHeader>
+
+          <KanbanBoard />
         </div>
+      </KanbanProvider>
+    );
+  }
+
+  return (
+    <div className="space-y-4 p-6">
+      <PageHeader title="Workspaces">
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          onValueChange={(value) => value && setViewMode(value as ViewMode)}
+          size="sm"
+        >
+          <ToggleGroupItem value="board" aria-label="Board view">
+            <Kanban className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" aria-label="List view">
+            <List className="h-4 w-4" />
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            {workspaceStatuses.map((status) => (
+              <SelectItem key={status} value={status}>
+                {status}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button asChild>
+          <Link href={`/projects/${slug}/workspaces/new`}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Workspace
+          </Link>
+        </Button>
       </PageHeader>
 
-      {viewMode === 'board' ? (
-        <KanbanBoard projectId={project.id} projectSlug={slug} />
-      ) : (
-        <>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex gap-4 items-center">
-                <label className="text-sm font-medium">Filter by status:</label>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="All Statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    {workspaceStatuses.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            {isLoading ? (
-              <Loading message="Loading workspaces..." />
-            ) : !workspaces || workspaces.length === 0 ? (
-              <Empty className="py-12">
-                <EmptyHeader>
-                  <EmptyTitle>No workspaces found</EmptyTitle>
-                  <EmptyDescription>Get started by creating your first workspace.</EmptyDescription>
-                </EmptyHeader>
-                <Button asChild>
-                  <Link href={`/projects/${slug}/workspaces/new`}>Create your first workspace</Link>
-                </Button>
-              </Empty>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Init</TableHead>
-                    <TableHead>Sessions</TableHead>
-                    <TableHead>Branch</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {workspaces.map((workspace: WorkspaceWithSessions) => (
-                    <TableRow key={workspace.id}>
-                      <TableCell>
-                        <Link
-                          href={`/projects/${slug}/workspaces/${workspace.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {workspace.name}
-                        </Link>
-                        {workspace.description && (
-                          <p className="text-sm text-muted-foreground truncate max-w-md">
-                            {workspace.description.length > 100
-                              ? `${workspace.description.slice(0, 100)}...`
-                              : workspace.description}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariants[workspace.status] || 'default'}>
-                          {workspace.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {workspace.initStatus === 'READY' ? (
-                          <span className="text-xs text-muted-foreground">Ready</span>
-                        ) : (
-                          <InitStatusBadge
-                            status={workspace.initStatus}
-                            errorMessage={workspace.initErrorMessage}
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {workspace.claudeSessions?.length ?? 0} sessions
-                      </TableCell>
-                      <TableCell className="text-muted-foreground font-mono text-sm">
-                        {workspace.branchName || '-'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(workspace.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/projects/${slug}/workspaces/${workspace.id}`}>View</Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Card>
-        </>
-      )}
+      <Card>
+        {isLoading ? (
+          <Loading message="Loading workspaces..." />
+        ) : !workspaces || workspaces.length === 0 ? (
+          <Empty className="py-12">
+            <EmptyHeader>
+              <EmptyTitle>No workspaces found</EmptyTitle>
+              <EmptyDescription>Get started by creating your first workspace.</EmptyDescription>
+            </EmptyHeader>
+            <Button asChild>
+              <Link href={`/projects/${slug}/workspaces/new`}>Create your first workspace</Link>
+            </Button>
+          </Empty>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Init</TableHead>
+                <TableHead>Sessions</TableHead>
+                <TableHead>Branch</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {workspaces.map((workspace: WorkspaceWithSessions) => (
+                <TableRow key={workspace.id}>
+                  <TableCell>
+                    <Link
+                      href={`/projects/${slug}/workspaces/${workspace.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {workspace.name}
+                    </Link>
+                    {workspace.description && (
+                      <p className="text-sm text-muted-foreground truncate max-w-md">
+                        {workspace.description.length > 100
+                          ? `${workspace.description.slice(0, 100)}...`
+                          : workspace.description}
+                      </p>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={statusVariants[workspace.status] || 'default'}>
+                      {workspace.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {workspace.initStatus === 'READY' ? (
+                      <span className="text-xs text-muted-foreground">Ready</span>
+                    ) : (
+                      <InitStatusBadge
+                        status={workspace.initStatus}
+                        errorMessage={workspace.initErrorMessage}
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {workspace.claudeSessions?.length ?? 0} sessions
+                  </TableCell>
+                  <TableCell className="text-muted-foreground font-mono text-sm">
+                    {workspace.branchName || '-'}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(workspace.createdAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/projects/${slug}/workspaces/${workspace.id}`}>View</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
     </div>
   );
 }

@@ -10,16 +10,7 @@ const nextConfig = {
   output: 'standalone',
   // Enable Turbopack (default in Next.js 16)
   turbopack: {},
-  // Proxy API requests to backend server
-  async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ];
-  },
+  // API proxying is handled by middleware.ts for runtime flexibility
 };
 
 export default nextConfig;
