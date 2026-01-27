@@ -767,6 +767,59 @@ describe('ClaudeProtocol', () => {
   });
 
   // ===========================================================================
+  // Backpressure Tests
+  // ===========================================================================
+
+  describe('backpressure handling', () => {
+    it('should reject pending send when stop() is called during backpressure', async () => {
+      // Create a stream with very low highWaterMark to trigger backpressure
+      const smallStdin = new PassThrough({ highWaterMark: 16 });
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(smallStdin, stdout2);
+      protocol2.start();
+
+      // Pause to prevent draining
+      smallStdin.pause();
+
+      // Start a send that will hit backpressure (message larger than highWaterMark)
+      const sendPromise = protocol2.sendUserMessage('x'.repeat(100));
+
+      // Give time for the send to reach backpressure
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Stop the protocol while send is waiting for drain
+      protocol2.stop();
+
+      // The promise should reject with "Protocol stopped"
+      await expect(sendPromise).rejects.toThrow('Protocol stopped');
+    });
+
+    it('should reject queued sends when stop() is called', async () => {
+      const smallStdin = new PassThrough({ highWaterMark: 16 });
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(smallStdin, stdout2);
+      protocol2.start();
+
+      // Pause to prevent draining
+      smallStdin.pause();
+
+      // Queue multiple sends
+      const sendPromise1 = protocol2.sendUserMessage('first'.repeat(20));
+      const sendPromise2 = protocol2.sendUserMessage('second'.repeat(20));
+
+      // Give time for sends to queue up
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Stop the protocol
+      protocol2.stop();
+
+      // Both promises should reject
+      await expect(sendPromise1).rejects.toThrow('Protocol stopped');
+      await expect(sendPromise2).rejects.toThrow('Protocol stopped');
+    });
+  });
+
+  // ===========================================================================
   // Edge Cases Tests
   // ===========================================================================
 

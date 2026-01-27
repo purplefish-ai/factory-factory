@@ -91,6 +91,7 @@ export class ClaudeProtocol extends EventEmitter {
   private maxLineLength: number;
   private started: boolean;
   private drainPromise: Promise<void> | null;
+  private drainReject: ((error: Error) => void) | null;
 
   constructor(stdin: Writable, stdout: Readable, options?: ClaudeProtocolOptions) {
     super();
@@ -102,6 +103,7 @@ export class ClaudeProtocol extends EventEmitter {
     this.maxLineLength = options?.maxLineLength ?? 1_000_000; // 1MB default
     this.started = false;
     this.drainPromise = null;
+    this.drainReject = null;
   }
 
   // ===========================================================================
@@ -278,6 +280,13 @@ export class ClaudeProtocol extends EventEmitter {
       pending.reject(new Error('Protocol stopped'));
     }
     this.pendingRequests.clear();
+
+    // Clean up pending drain promise
+    if (this.drainReject) {
+      this.drainReject(new Error('Protocol stopped'));
+      this.drainReject = null;
+      this.drainPromise = null;
+    }
   }
 
   // ===========================================================================
@@ -296,14 +305,21 @@ export class ClaudeProtocol extends EventEmitter {
       await this.drainPromise;
     }
 
+    // Check if stopped after waiting for drain
+    if (!this.started) {
+      throw new Error('Protocol stopped');
+    }
+
     const line = `${JSON.stringify(message)}\n`;
     const canContinue = this.stdin.write(line);
 
     if (!canContinue) {
       // Buffer is full, wait for drain
-      this.drainPromise = new Promise<void>((resolve) => {
+      this.drainPromise = new Promise<void>((resolve, reject) => {
+        this.drainReject = reject;
         this.stdin.once('drain', () => {
           this.drainPromise = null;
+          this.drainReject = null;
           resolve();
         });
       });
