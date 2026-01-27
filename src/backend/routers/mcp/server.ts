@@ -76,6 +76,26 @@ function validateToolExecution(
 }
 
 /**
+ * Safely log to decision log without throwing
+ */
+async function safeLogToDecisionLog(
+  agentId: string,
+  toolName: string,
+  type: 'invocation' | 'result' | 'error',
+  data: unknown
+): Promise<void> {
+  try {
+    await decisionLogAccessor.createAutomatic(agentId, toolName, type, data);
+  } catch (logError) {
+    logger.warn(`Failed to log tool ${type}`, {
+      agentId,
+      toolName,
+      error: logError instanceof Error ? logError.message : String(logError),
+    });
+  }
+}
+
+/**
  * Execute tool with retry logic
  */
 async function executeWithRetry<TInput, TOutput>(
@@ -90,7 +110,7 @@ async function executeWithRetry<TInput, TOutput>(
     try {
       const context: McpToolContext = { agentId };
       const result = await toolEntry.handler(context, toolInput);
-      await decisionLogAccessor.createAutomatic(agentId, toolName, 'result', result);
+      await safeLogToDecisionLog(agentId, toolName, 'result', result);
       return { success: true, result: result as McpToolResponse<TOutput> };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -115,7 +135,7 @@ async function handleToolFailure(
   error: Error,
   timestamp: Date
 ): Promise<McpToolResponse> {
-  await decisionLogAccessor.createAutomatic(agentId, toolName, 'error', {
+  await safeLogToDecisionLog(agentId, toolName, 'error', {
     message: error.message,
     stack: error.stack,
   });
@@ -153,7 +173,7 @@ export async function executeMcpTool<TInput = unknown, TOutput = unknown>(
     }
     const { toolEntry } = validation;
 
-    await decisionLogAccessor.createAutomatic(agentId, toolName, 'invocation', toolInput);
+    await safeLogToDecisionLog(agentId, toolName, 'invocation', toolInput);
 
     const execution = await executeWithRetry<TInput, TOutput>(
       agentId,
