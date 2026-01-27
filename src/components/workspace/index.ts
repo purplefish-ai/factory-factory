@@ -10,4 +10,6 @@ export * from './terminal-instance';
 export * from './terminal-panel';
 export * from './terminal-tab-bar';
 export * from './use-terminal-websocket';
+export * from './workflow-selector';
+export * from './workspace-content-view';
 export * from './workspace-panel-context';

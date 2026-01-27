@@ -1,11 +1,12 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { WorkspaceStatus } from '@prisma-gen/client';
+import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { GitClientFactory } from '../clients/git.client';
 import { gitCommand } from '../lib/shell';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
 import { terminalService } from '../services/terminal.service';
@@ -182,6 +183,49 @@ export const workspaceRouter = router({
     .query(({ input }) => {
       const { projectId, ...filters } = input;
       return workspaceAccessor.findByProjectId(projectId, filters);
+    }),
+
+  // List workspaces with kanban state (for board view)
+  listWithKanbanState: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        status: z.nativeEnum(WorkspaceStatus).optional(),
+        kanbanColumn: z.nativeEnum(KanbanColumn).optional(),
+        limit: z.number().min(1).max(100).optional(),
+        offset: z.number().min(0).optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const { projectId, ...filters } = input;
+
+      // Get workspaces with sessions included (exclude archived from kanban view at DB level)
+      const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
+        ...filters,
+        excludeStatuses: [WorkspaceStatus.ARCHIVED],
+      });
+
+      // Get working status for all workspaces
+      const workspacesWithKanban = workspaces.map((workspace) => {
+        const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+        const isWorking = sessionService.isAnySessionWorking(sessionIds);
+
+        // Compute live kanban column
+        const kanbanColumn = computeKanbanColumn({
+          lifecycle: workspace.status,
+          isWorking,
+          prState: workspace.prState,
+          hasHadSessions: workspace.hasHadSessions,
+        });
+
+        return {
+          ...workspace,
+          kanbanColumn,
+          isWorking,
+        };
+      });
+
+      return workspacesWithKanban;
     }),
 
   // Get workspace by ID

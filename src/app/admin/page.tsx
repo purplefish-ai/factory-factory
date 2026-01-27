@@ -1,13 +1,27 @@
 'use client';
 
-import { CheckCircle2 } from 'lucide-react';
+import type { inferRouterOutputs } from '@trpc/server';
+import { Bot, Terminal } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
-import { trpc } from '../../frontend/lib/trpc';
+import { type AppRouter, trpc } from '../../frontend/lib/trpc';
+
+// Infer types from tRPC router outputs
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type ProcessesData = RouterOutputs['admin']['getActiveProcesses'];
 
 function StatCard({
   title,
@@ -96,34 +110,242 @@ function ApiUsageSection({
   );
 }
 
-interface ConcurrencyData {
-  activeWorkers: number;
-  activeSupervisors: number;
-  activeTopLevelTasks: number;
-  limits: { maxWorkers: number; maxSupervisors: number; maxTopLevelTasks: number };
+function getStatusBadgeVariant(
+  status: string
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status.toUpperCase()) {
+    case 'RUNNING':
+      return 'default';
+    case 'IDLE':
+    case 'COMPLETED':
+      return 'secondary';
+    case 'FAILED':
+      return 'destructive';
+    default:
+      return 'outline';
+  }
 }
 
-function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) {
+function formatBytes(bytes: number | null): string {
+  if (bytes === null) {
+    return '-';
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatCpu(cpu: number | null): string {
+  if (cpu === null) {
+    return '-';
+  }
+  return `${cpu.toFixed(1)}%`;
+}
+
+function formatIdleTime(ms: number | null): string {
+  if (ms === null) {
+    return '-';
+  }
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  if (ms < 60_000) {
+    return `${(ms / 1000).toFixed(0)}s`;
+  }
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+function ProcessesSectionSkeleton() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Concurrency</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Active Processes
+          <Skeleton className="h-5 w-16 ml-2" />
+        </CardTitle>
+        <CardDescription>Claude and Terminal processes currently running</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard
-            title="Active Workers"
-            value={`${concurrency?.activeWorkers || 0} / ${concurrency?.limits?.maxWorkers || 0}`}
-          />
-          <StatCard
-            title="Active Supervisors"
-            value={`${concurrency?.activeSupervisors || 0} / ${concurrency?.limits?.maxSupervisors || 0}`}
-          />
-          <StatCard
-            title="Active Top-Level Tasks"
-            value={`${concurrency?.activeTopLevelTasks || 0} / ${concurrency?.limits?.maxTopLevelTasks || 0}`}
-          />
+      <CardContent className="space-y-6">
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-48" />
+          <div className="border rounded-md p-4 space-y-3">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProcessesSection({ processes }: { processes?: ProcessesData }) {
+  const hasClaudeProcesses = processes?.claude && processes.claude.length > 0;
+  const hasTerminalProcesses = processes?.terminal && processes.terminal.length > 0;
+  const hasNoProcesses = !(hasClaudeProcesses || hasTerminalProcesses);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Active Processes
+          {processes?.summary && (
+            <Badge variant="secondary" className="ml-2">
+              {processes.summary.total} total
+            </Badge>
+          )}
+        </CardTitle>
+        <CardDescription>Claude and Terminal processes currently running</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {hasNoProcesses && <p className="text-muted-foreground text-sm">No active processes</p>}
+
+        {hasClaudeProcesses && (
+          <div>
+            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+              <Bot className="w-4 h-4" />
+              Claude Processes ({processes.claude.length})
+            </h4>
+            <div className="border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Workspace</TableHead>
+                    <TableHead>Session</TableHead>
+                    <TableHead>Workflow</TableHead>
+                    <TableHead>PID</TableHead>
+                    <TableHead>Resources</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {processes.claude.map((process) => (
+                    <TableRow key={process.sessionId}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <Link
+                            href={`/workspace/${process.workspaceId}`}
+                            className="font-medium hover:underline"
+                          >
+                            {process.workspaceName}
+                          </Link>
+                          {process.workspaceBranch && (
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {process.workspaceBranch}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-mono text-muted-foreground">
+                            {process.name || process.sessionId.slice(0, 8)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">{process.model}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{process.workflow}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{process.pid ?? '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col text-xs font-mono">
+                          <span>CPU: {formatCpu(process.cpuPercent)}</span>
+                          <span>Mem: {formatBytes(process.memoryBytes)}</span>
+                          <span className="text-muted-foreground">
+                            Idle: {formatIdleTime(process.idleTimeMs)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant={getStatusBadgeVariant(process.status)}>
+                            {process.status}
+                          </Badge>
+                          {process.memoryStatus &&
+                            process.memoryStatus !== process.status.toLowerCase() && (
+                              <span className="text-xs text-muted-foreground">
+                                ({process.memoryStatus})
+                              </span>
+                            )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+
+        {hasTerminalProcesses && (
+          <div>
+            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+              <Terminal className="w-4 h-4" />
+              Terminal Processes ({processes.terminal.length})
+            </h4>
+            <div className="border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Workspace</TableHead>
+                    <TableHead>Terminal ID</TableHead>
+                    <TableHead>PID</TableHead>
+                    <TableHead>Resources</TableHead>
+                    <TableHead>Size</TableHead>
+                    <TableHead>Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {processes.terminal.map((process) => (
+                    <TableRow key={process.terminalId}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <Link
+                            href={`/workspace/${process.workspaceId}`}
+                            className="font-medium hover:underline"
+                          >
+                            {process.workspaceName}
+                          </Link>
+                          {process.workspaceBranch && (
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {process.workspaceBranch}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs font-mono text-muted-foreground">
+                          {process.terminalId.slice(0, 12)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{process.pid}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col text-xs font-mono">
+                          <span>CPU: {formatCpu(process.cpuPercent)}</span>
+                          <span>Mem: {formatBytes(process.memoryBytes)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {process.cols}x{process.rows}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(process.createdAt).toLocaleTimeString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -132,11 +354,18 @@ function ConcurrencySection({ concurrency }: { concurrency?: ConcurrencyData }) 
 export default function AdminDashboardPage() {
   const {
     data: stats,
-    isLoading,
+    isLoading: isLoadingStats,
     refetch,
   } = trpc.admin.getSystemStats.useQuery(undefined, {
     refetchInterval: 5000,
   });
+
+  const { data: processes, isLoading: isLoadingProcesses } = trpc.admin.getActiveProcesses.useQuery(
+    undefined,
+    {
+      refetchInterval: 5000,
+    }
+  );
 
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
@@ -144,18 +373,14 @@ export default function AdminDashboardPage() {
     },
   });
 
-  if (isLoading) {
+  // Show full loading only when stats are loading (first load)
+  if (isLoadingStats) {
     return <Loading message="Loading admin dashboard..." />;
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin Dashboard" description="System monitoring and management">
-        <Badge variant="outline" className="flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" />
-          Simplified Model
-        </Badge>
-      </PageHeader>
+      <PageHeader title="Admin Dashboard" description="System monitoring and management" />
 
       <ApiUsageSection
         apiUsage={stats?.apiUsage}
@@ -163,21 +388,11 @@ export default function AdminDashboardPage() {
         isResetting={resetApiStats.isPending}
       />
 
-      <ConcurrencySection concurrency={stats?.concurrency} />
-
-      {/* Quick Links */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 flex-wrap">
-            <Button variant="secondary" asChild>
-              <Link href="/admin/system">System Settings</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {isLoadingProcesses ? (
+        <ProcessesSectionSkeleton />
+      ) : (
+        <ProcessesSection processes={processes} />
+      )}
 
       {/* Environment Info */}
       <Card className="bg-muted/50">

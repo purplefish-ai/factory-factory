@@ -1,4 +1,4 @@
-import type { Prisma, Workspace, WorkspaceStatus } from '@prisma-gen/client';
+import type { KanbanColumn, PRState, Prisma, Workspace, WorkspaceStatus } from '@prisma-gen/client';
 import { prisma } from '../db';
 
 interface CreateWorkspaceInput {
@@ -17,10 +17,22 @@ interface UpdateWorkspaceInput {
   prUrl?: string | null;
   githubIssueNumber?: number | null;
   githubIssueUrl?: string | null;
+  // PR tracking fields
+  prNumber?: number | null;
+  prState?: PRState;
+  prReviewState?: string | null;
+  prUpdatedAt?: Date | null;
+  // Activity tracking
+  hasHadSessions?: boolean;
+  // Cached kanban column
+  cachedKanbanColumn?: KanbanColumn;
+  stateComputedAt?: Date | null;
 }
 
 interface FindByProjectIdFilters {
   status?: WorkspaceStatus;
+  excludeStatuses?: WorkspaceStatus[];
+  kanbanColumn?: KanbanColumn;
   limit?: number;
   offset?: number;
 }
@@ -64,11 +76,48 @@ class WorkspaceAccessor {
       where.status = filters.status;
     }
 
+    if (filters?.kanbanColumn) {
+      where.cachedKanbanColumn = filters.kanbanColumn;
+    }
+
     return prisma.workspace.findMany({
       where,
       take: filters?.limit,
       skip: filters?.offset,
       orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Find workspaces with sessions included (for kanban state computation).
+   */
+  findByProjectIdWithSessions(
+    projectId: string,
+    filters?: FindByProjectIdFilters
+  ): Promise<WorkspaceWithSessions[]> {
+    const where: Prisma.WorkspaceWhereInput = { projectId };
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.excludeStatuses && filters.excludeStatuses.length > 0) {
+      where.status = { notIn: filters.excludeStatuses };
+    }
+
+    if (filters?.kanbanColumn) {
+      where.cachedKanbanColumn = filters.kanbanColumn;
+    }
+
+    return prisma.workspace.findMany({
+      where,
+      take: filters?.limit,
+      skip: filters?.offset,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        claudeSessions: true,
+        terminalSessions: true,
+      },
     });
   }
 
@@ -119,6 +168,52 @@ class WorkspaceAccessor {
       where: { id },
       include: {
         project: true,
+      },
+    });
+  }
+
+  /**
+   * Find ACTIVE workspaces with PR URLs that need sync.
+   * Used for Inngest PR status sync job.
+   */
+  findNeedingPRSync(staleThresholdMinutes = 5): Promise<WorkspaceWithProject[]> {
+    const staleThreshold = new Date(Date.now() - staleThresholdMinutes * 60 * 1000);
+
+    return prisma.workspace.findMany({
+      where: {
+        status: 'ACTIVE',
+        prUrl: { not: null },
+        OR: [{ prUpdatedAt: null }, { prUpdatedAt: { lt: staleThreshold } }],
+      },
+      include: {
+        project: true,
+      },
+      orderBy: { prUpdatedAt: 'asc' }, // Oldest first
+    });
+  }
+
+  /**
+   * Mark workspace as having had sessions (for kanban backlog/waiting distinction).
+   * Uses atomic conditional update to prevent race conditions when multiple sessions start.
+   */
+  async markHasHadSessions(id: string): Promise<void> {
+    await prisma.workspace.updateMany({
+      where: { id, hasHadSessions: false },
+      data: { hasHadSessions: true },
+    });
+  }
+
+  /**
+   * Find multiple workspaces by their IDs.
+   * Used for batch lookups when enriching process info.
+   */
+  findByIds(ids: string[]): Promise<Workspace[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return prisma.workspace.findMany({
+      where: {
+        id: { in: ids },
       },
     });
   }

@@ -1,5 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
-import { ClaudeProcess, type ClaudeProcessOptions } from '../claude/process';
+import { ClaudeProcess, type ClaudeProcessOptions, type ResourceUsage } from '../claude/process';
+import { getWorkflowContent } from '../prompts/workflows';
 import { claudeSessionAccessor, workspaceAccessor } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
 
@@ -37,6 +38,13 @@ class SessionService {
       throw new Error('Workspace has no worktree path');
     }
 
+    // Mark workspace as having had sessions (for kanban backlog/waiting distinction)
+    // Uses atomic conditional update - safe to call even if already true
+    await workspaceAccessor.markHasHadSessions(workspace.id);
+
+    // Get workflow prompt content
+    const workflowPrompt = getWorkflowContent(session.workflow);
+
     // Build process options
     const processOptions: ClaudeProcessOptions = {
       workingDir,
@@ -44,6 +52,7 @@ class SessionService {
       resumeSessionId: session.claudeSessionId ?? undefined,
       initialPrompt: options?.initialPrompt ?? 'Continue with the task.',
       permissionMode: 'bypassPermissions',
+      systemPrompt: workflowPrompt ?? undefined,
     };
 
     // Spawn Claude process
@@ -185,6 +194,40 @@ class SessionService {
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
     return sessionIds.some((id) => this.isSessionWorking(id));
+  }
+
+  /**
+   * Get all active Claude processes for admin view
+   */
+  getAllActiveProcesses(): Array<{
+    sessionId: string;
+    pid: number | undefined;
+    status: string;
+    isRunning: boolean;
+    resourceUsage: ResourceUsage | null;
+    idleTimeMs: number;
+  }> {
+    const processes: Array<{
+      sessionId: string;
+      pid: number | undefined;
+      status: string;
+      isRunning: boolean;
+      resourceUsage: ResourceUsage | null;
+      idleTimeMs: number;
+    }> = [];
+
+    for (const [sessionId, process] of activeClaudeProcesses) {
+      processes.push({
+        sessionId,
+        pid: process.getPid(),
+        status: process.getStatus(),
+        isRunning: process.isRunning(),
+        resourceUsage: process.getResourceUsage(),
+        idleTimeMs: process.getIdleTimeMs(),
+      });
+    }
+
+    return processes;
   }
 }
 
