@@ -9,6 +9,7 @@ import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
+import { startupScriptService } from '../services/startup-script.service';
 import { terminalService } from '../services/terminal.service';
 import { publicProcedure, router } from './trpc';
 
@@ -285,10 +286,43 @@ export const workspaceRouter = router({
         const worktreePath = gitClient.getWorktreePath(worktreeName);
 
         // Update workspace with worktree info
-        return workspaceAccessor.update(workspace.id, {
+        const updatedWorkspace = await workspaceAccessor.update(workspace.id, {
           worktreePath,
           branchName: worktreeInfo.branchName,
         });
+
+        // Run startup script if configured
+        if (startupScriptService.hasStartupScript(project)) {
+          logger.info('Running startup script for workspace', {
+            workspaceId: workspace.id,
+            hasCommand: !!project.startupScriptCommand,
+            hasScriptPath: !!project.startupScriptPath,
+          });
+
+          const scriptResult = await startupScriptService.runStartupScript(
+            { ...updatedWorkspace, worktreePath },
+            project
+          );
+
+          // Re-fetch workspace to get updated init status
+          const finalWorkspace = await workspaceAccessor.findById(workspace.id);
+          if (!finalWorkspace) {
+            throw new Error('Workspace not found after initialization');
+          }
+
+          // If script failed, log but don't throw (workspace is still usable)
+          if (!scriptResult.success) {
+            logger.warn('Startup script failed but workspace created', {
+              workspaceId: workspace.id,
+              error: finalWorkspace.initErrorMessage,
+            });
+          }
+
+          return finalWorkspace;
+        }
+
+        // No startup script - mark as ready
+        return workspaceAccessor.updateInitStatus(workspace.id, 'READY');
       } catch (error) {
         logger.error('Failed to create worktree for workspace', error as Error, {
           workspaceId: workspace.id,
@@ -335,6 +369,52 @@ export const workspaceRouter = router({
       });
     }
     return workspaceAccessor.archive(input.id);
+  }),
+
+  // Get workspace initialization status
+  getInitStatus: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+    const workspace = await workspaceAccessor.findById(input.id);
+    if (!workspace) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: `Workspace not found: ${input.id}`,
+      });
+    }
+    return {
+      initStatus: workspace.initStatus,
+      initErrorMessage: workspace.initErrorMessage,
+      initStartedAt: workspace.initStartedAt,
+      initCompletedAt: workspace.initCompletedAt,
+    };
+  }),
+
+  // Retry failed initialization
+  retryInit: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    const workspace = await workspaceAccessor.findByIdWithProject(input.id);
+    if (!workspace?.project) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: `Workspace not found: ${input.id}`,
+      });
+    }
+
+    if (workspace.initStatus !== 'FAILED') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Can only retry failed initializations',
+      });
+    }
+
+    if (!workspace.worktreePath) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Workspace has no worktree path',
+      });
+    }
+
+    await startupScriptService.runStartupScript(workspace, workspace.project);
+
+    return workspaceAccessor.findById(input.id);
   }),
 
   // Delete a workspace

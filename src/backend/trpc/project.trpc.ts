@@ -42,18 +42,42 @@ export const projectRouter = router({
     .input(
       z.object({
         repoPath: z.string().min(1, 'Repository path is required'),
+        // Startup script configuration (optional at creation time)
+        startupScriptCommand: z.string().optional(),
+        startupScriptPath: z.string().optional(),
+        startupScriptTimeout: z.number().min(1).max(3600).optional(),
       })
     )
     .mutation(async ({ input }) => {
+      const { startupScriptCommand, startupScriptPath, startupScriptTimeout, ...createInput } =
+        input;
+
+      // Validate only one of command or path is set
+      if (startupScriptCommand && startupScriptPath) {
+        throw new Error('Cannot specify both startupScriptCommand and startupScriptPath');
+      }
+
       // Validate repo path
       const repoValidation = await projectAccessor.validateRepoPath(input.repoPath);
       if (!repoValidation.valid) {
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
 
-      return projectAccessor.create(input, {
+      // Create the project first
+      const project = await projectAccessor.create(createInput, {
         worktreeBaseDir: configService.getWorktreeBaseDir(),
       });
+
+      // If startup script config was provided, update the project
+      if (startupScriptCommand || startupScriptPath || startupScriptTimeout) {
+        return projectAccessor.update(project.id, {
+          startupScriptCommand: startupScriptCommand ?? null,
+          startupScriptPath: startupScriptPath ?? null,
+          startupScriptTimeout: startupScriptTimeout ?? 300,
+        });
+      }
+
+      return project;
     }),
 
   // Update a project
@@ -66,6 +90,10 @@ export const projectRouter = router({
         defaultBranch: z.string().optional(),
         githubOwner: z.string().optional(),
         githubRepo: z.string().optional(),
+        // Startup script configuration
+        startupScriptCommand: z.string().nullable().optional(),
+        startupScriptPath: z.string().nullable().optional(),
+        startupScriptTimeout: z.number().min(1).max(3600).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -77,6 +105,11 @@ export const projectRouter = router({
         if (!repoValidation.valid) {
           throw new Error(`Invalid repository path: ${repoValidation.error}`);
         }
+      }
+
+      // Validate only one of command or path is set
+      if (updates.startupScriptCommand && updates.startupScriptPath) {
+        throw new Error('Cannot specify both startupScriptCommand and startupScriptPath');
       }
 
       return projectAccessor.update(id, updates);

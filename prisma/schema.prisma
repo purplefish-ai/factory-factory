@@ -46,6 +46,13 @@ enum KanbanColumn {
   DONE
 }
 
+enum WorkspaceInitStatus {
+  PENDING       // Initial state after DB record creation
+  INITIALIZING  // Startup script is running
+  READY         // Successfully initialized
+  FAILED        // Script execution failed
+}
+
 // Models
 model Project {
   id                String      @id @default(cuid())
@@ -57,6 +64,12 @@ model Project {
   githubOwner       String?
   githubRepo        String?
   isArchived        Boolean     @default(false)
+
+  // Startup script configuration
+  startupScriptCommand  String?   @db.Text  // Inline shell command
+  startupScriptPath     String?             // Path to script in repo
+  startupScriptTimeout  Int       @default(300)  // Timeout in seconds
+
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
@@ -88,6 +101,13 @@ model Workspace {
   status              WorkspaceStatus   @default(ACTIVE)
   worktreePath        String?
   branchName          String?
+
+  // Initialization tracking
+  initStatus          WorkspaceInitStatus @default(PENDING)
+  initErrorMessage    String?             @db.Text
+  initStartedAt       DateTime?
+  initCompletedAt     DateTime?
+
   prUrl               String?
   githubIssueNumber   Int?
   githubIssueUrl      String?

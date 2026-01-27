@@ -1,4 +1,11 @@
-import type { KanbanColumn, PRState, Prisma, Workspace, WorkspaceStatus } from '@prisma-gen/client';
+import type {
+  KanbanColumn,
+  PRState,
+  Prisma,
+  Workspace,
+  WorkspaceInitStatus,
+  WorkspaceStatus,
+} from '@prisma-gen/client';
 import { prisma } from '../db';
 
 interface CreateWorkspaceInput {
@@ -27,6 +34,11 @@ interface UpdateWorkspaceInput {
   // Cached kanban column
   cachedKanbanColumn?: KanbanColumn;
   stateComputedAt?: Date | null;
+  // Initialization tracking
+  initStatus?: WorkspaceInitStatus;
+  initErrorMessage?: string | null;
+  initStartedAt?: Date | null;
+  initCompletedAt?: Date | null;
 }
 
 interface FindByProjectIdFilters {
@@ -215,6 +227,37 @@ class WorkspaceAccessor {
       where: {
         id: { in: ids },
       },
+    });
+  }
+
+  /**
+   * Update workspace initialization status atomically.
+   * Includes timestamps for tracking.
+   */
+  updateInitStatus(
+    id: string,
+    status: WorkspaceInitStatus,
+    errorMessage?: string | null
+  ): Promise<Workspace> {
+    const now = new Date();
+    const data: Prisma.WorkspaceUpdateInput = {
+      initStatus: status,
+    };
+
+    if (status === 'INITIALIZING') {
+      data.initStartedAt = now;
+      data.initErrorMessage = null;
+    } else if (status === 'READY' || status === 'FAILED') {
+      data.initCompletedAt = now;
+    }
+
+    if (errorMessage !== undefined) {
+      data.initErrorMessage = errorMessage;
+    }
+
+    return prisma.workspace.update({
+      where: { id },
+      data,
     });
   }
 }

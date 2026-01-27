@@ -5,6 +5,7 @@ import { ExternalLink, GitBranch } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { InitStatusBadge } from '@/components/workspace/init-status-badge';
 import { cn } from '@/lib/utils';
 
 export interface WorkspaceWithKanban extends Workspace {
@@ -52,6 +53,12 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
                 <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                 Working
               </span>
+            )}
+            {!workspace.isWorking && workspace.initStatus !== 'READY' && (
+              <InitStatusBadge
+                status={workspace.initStatus}
+                errorMessage={workspace.initErrorMessage}
+              />
             )}
           </div>
         </CardHeader>
