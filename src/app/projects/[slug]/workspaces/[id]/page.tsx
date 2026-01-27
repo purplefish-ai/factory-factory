@@ -215,6 +215,7 @@ function ChatContent({
 // Main Workspace Chat Component
 // =============================================================================
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Workspace page component with multiple state and effect handlers
 function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();
@@ -271,7 +272,11 @@ function WorkspaceChatContent() {
   });
 
   // Get the first session (or most recent) to auto-load
-  const initialSessionId = claudeSessions?.[0]?.id;
+  // initialSessionId is the database record ID (CUID) for UI state tracking
+  // initialClaudeSessionId is the Claude CLI session UUID for session loading
+  const firstSession = claudeSessions?.[0];
+  const initialSessionId = firstSession?.id;
+  const initialClaudeSessionId = firstSession?.claudeSessionId ?? undefined;
 
   // Initialize selectedSessionId when sessions first load
   useEffect(() => {
@@ -299,7 +304,10 @@ function WorkspaceChatContent() {
     updateSettings,
     inputRef,
     messagesEndRef,
-  } = useChatWebSocket({ initialSessionId });
+  } = useChatWebSocket({
+    initialSessionId: initialClaudeSessionId,
+    workingDir: workspace?.worktreePath ?? undefined,
+  });
 
   // Load session when sessions are fetched and we have one with history
   useEffect(() => {

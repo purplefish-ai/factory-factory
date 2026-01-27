@@ -26,6 +26,8 @@ import {
 export interface UseChatWebSocketOptions {
   /** Claude session ID to load on connect */
   initialSessionId?: string;
+  /** Working directory for Claude CLI (workspace worktree path) */
+  workingDir?: string;
 }
 
 export interface UseChatWebSocketReturn {
@@ -502,7 +504,7 @@ function handleUserQuestionMessage(data: WebSocketMessage, ctx: MessageHandlerCo
 // =============================================================================
 
 export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChatWebSocketReturn {
-  const { initialSessionId } = options;
+  const { initialSessionId, workingDir } = options;
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -758,7 +760,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       reconnectTimeoutRef.current = null;
     }
 
-    const wsUrl = buildWebSocketUrl('/chat', { sessionId: sessionIdRef.current });
+    const wsParams: Record<string, string> = { sessionId: sessionIdRef.current };
+    if (workingDir) {
+      wsParams.workingDir = workingDir;
+    }
+    const wsUrl = buildWebSocketUrl('/chat', wsParams);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -836,7 +842,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     };
 
     ws.onmessage = handleMessage;
-  }, [flushMessageQueue, handleMessage, sendWsMessage]);
+  }, [flushMessageQueue, handleMessage, sendWsMessage, workingDir]);
 
   // Initialize WebSocket connection
   useEffect(() => {

@@ -860,21 +860,26 @@ async function handleChatMessage(
 }
 
 /**
- * Validate that workingDir is safe (no path traversal).
+ * Validate that workingDir is safe and within the worktree base directory.
  * Returns resolved path if valid, or null if invalid.
  */
 function validateWorkingDir(workingDir: string): string | null {
-  const baseDir = process.cwd();
-  const resolved = resolve(baseDir, workingDir);
-
-  // Ensure the resolved path is within the base directory
-  // or is the base directory itself
-  if (!resolved.startsWith(baseDir)) {
+  // Reject paths with path traversal attempts
+  if (workingDir.includes('..')) {
     return null;
   }
 
-  // Reject paths with obvious traversal attempts
-  if (workingDir.includes('..')) {
+  // Must be an absolute path
+  if (!workingDir.startsWith('/')) {
+    return null;
+  }
+
+  // Resolve the path to normalize it (removes double slashes, etc.)
+  const resolved = resolve(workingDir);
+
+  // Ensure the path is within the worktree base directory
+  const worktreeBaseDir = configService.getWorktreeBaseDir();
+  if (!resolved.startsWith(`${worktreeBaseDir}/`) && resolved !== worktreeBaseDir) {
     return null;
   }
 

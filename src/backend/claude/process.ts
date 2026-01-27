@@ -199,6 +199,12 @@ export class ClaudeProcess extends EventEmitter {
   static async spawn(options: ClaudeProcessOptions): Promise<ClaudeProcess> {
     const args = ClaudeProcess.buildArgs(options);
 
+    logger.info('Spawning Claude process', {
+      workingDir: options.workingDir,
+      args: args.join(' '),
+      resumeSessionId: options.resumeSessionId,
+    });
+
     const childProcess = spawn('claude', args, {
       cwd: options.workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -212,6 +218,8 @@ export class ClaudeProcess extends EventEmitter {
       detached: true,
     });
 
+    logger.info('Claude process spawned', { pid: childProcess.pid });
+
     // Verify stdio handles exist
     if (!(childProcess.stdin && childProcess.stdout && childProcess.stderr)) {
       childProcess.kill();
@@ -224,6 +232,7 @@ export class ClaudeProcess extends EventEmitter {
     // Set up stderr collection for diagnostics
     childProcess.stderr.on('data', (data: Buffer) => {
       const text = data.toString();
+      logger.warn('Claude process stderr', { pid: childProcess.pid, stderr: text.trim() });
       claudeProcess.stderrBuffer.push(text);
       // Keep buffer size reasonable
       if (claudeProcess.stderrBuffer.length > 100) {
@@ -584,8 +593,19 @@ export class ClaudeProcess extends EventEmitter {
     // Handle protocol close (stdout EOF)
     this.protocol.on('close', () => {
       // Process crash or unexpected close
+      logger.warn('Claude protocol closed', {
+        pid: this.process.pid,
+        status: this.status,
+        sessionId: this.sessionId,
+      });
       if (this.status !== 'exited') {
         const stderr = this.stderrBuffer.join('');
+        logger.error('Claude process closed unexpectedly', {
+          pid: this.process.pid,
+          status: this.status,
+          stderr: stderr || '(empty)',
+          stderrBufferLength: this.stderrBuffer.length,
+        });
         this.emit('error', new Error(`Claude process closed unexpectedly. Stderr: ${stderr}`));
       }
     });
@@ -596,6 +616,15 @@ export class ClaudeProcess extends EventEmitter {
    */
   private setupExitHandling(): void {
     this.process.on('exit', (code, signal) => {
+      const stderr = this.stderrBuffer.join('');
+      logger.info('Claude process exited', {
+        pid: this.process.pid,
+        code,
+        signal,
+        sessionId: this.sessionId,
+        stderr: stderr || '(empty)',
+      });
+
       this.setStatus('exited');
       this.protocol.stop();
       this.stopResourceMonitoring();
@@ -610,6 +639,11 @@ export class ClaudeProcess extends EventEmitter {
     });
 
     this.process.on('error', (error) => {
+      logger.error('Claude process error event', {
+        pid: this.process.pid,
+        error: error.message,
+        sessionId: this.sessionId,
+      });
       this.emit('error', error);
     });
   }
