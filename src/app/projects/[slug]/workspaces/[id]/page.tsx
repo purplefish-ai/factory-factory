@@ -408,20 +408,22 @@ function useSessionManagement({
     ]
   );
 
+  // Generate next available "Chat N" name based on existing sessions
+  const getNextChatName = useCallback(() => {
+    const existingNumbers = (claudeSessions ?? [])
+      .map((s) => {
+        const match = s.name?.match(/^Chat (\d+)$/);
+        return match ? Number.parseInt(match[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+    return `Chat ${nextNumber}`;
+  }, [claudeSessions]);
+
   const handleWorkflowSelect = useCallback(
     (workflowId: string) => {
-      // Generate next available "Chat N" name
-      const existingNumbers = (claudeSessions ?? [])
-        .map((s) => {
-          const match = s.name?.match(/^Chat (\d+)$/);
-          return match ? Number.parseInt(match[1], 10) : 0;
-        })
-        .filter((n) => n > 0);
-      const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
-      const chatName = `Chat ${nextNumber}`;
-
       createSession.mutate(
-        { workspaceId, workflow: workflowId, model: 'sonnet', name: chatName },
+        { workspaceId, workflow: workflowId, model: 'sonnet', name: getNextChatName() },
         {
           onSuccess: (session) => {
             setSelectedDbSessionId(session.id);
@@ -430,19 +432,11 @@ function useSessionManagement({
         }
       );
     },
-    [createSession, workspaceId, clearChat, claudeSessions, setSelectedDbSessionId]
+    [createSession, workspaceId, clearChat, getNextChatName, setSelectedDbSessionId]
   );
 
   const handleNewChat = useCallback(() => {
-    // Generate next available "Chat N" name
-    const existingNumbers = (claudeSessions ?? [])
-      .map((s) => {
-        const match = s.name?.match(/^Chat (\d+)$/);
-        return match ? Number.parseInt(match[1], 10) : 0;
-      })
-      .filter((n) => n > 0);
-    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
-    const name = `Chat ${nextNumber}`;
+    const name = getNextChatName();
 
     createSession.mutate(
       { workspaceId, workflow: 'followup', model: 'sonnet', name },
@@ -453,7 +447,7 @@ function useSessionManagement({
         },
       }
     );
-  }, [clearChat, createSession, workspaceId, claudeSessions, setSelectedDbSessionId]);
+  }, [clearChat, createSession, workspaceId, getNextChatName, setSelectedDbSessionId]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {

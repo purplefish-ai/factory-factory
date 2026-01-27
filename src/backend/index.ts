@@ -589,7 +589,9 @@ function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void 
     }
 
     // Drain pending messages now that Claude process is ready
+    // Delete first to prevent re-entry if session_id fires multiple times
     const pending = pendingMessages.get(dbSessionId);
+    pendingMessages.delete(dbSessionId);
     if (pending && pending.length > 0) {
       logger.info('[Chat WS] Draining pending messages', {
         dbSessionId,
@@ -598,7 +600,6 @@ function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void 
       for (const msg of pending) {
         client.sendMessage(msg.text);
       }
-      pendingMessages.delete(dbSessionId);
     }
 
     forwardToConnections(dbSessionId, {

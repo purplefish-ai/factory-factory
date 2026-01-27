@@ -556,7 +556,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     claudeSessionIdRef.current = claudeSessionId;
   }, [claudeSessionId]);
 
-  // When dbSessionId changes, reset state for the new session
+  // Reset local UI state when switching to a different database session.
+  // Messages will be reloaded from the backend for the new session.
+  // This effect intentionally resets multiple state variables to ensure
+  // clean separation between sessions.
   useEffect(() => {
     const prevDbSessionId = prevDbSessionIdRef.current;
     const newDbSessionId = dbSessionId ?? null;
