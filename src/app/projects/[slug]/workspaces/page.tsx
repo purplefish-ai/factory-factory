@@ -1,6 +1,6 @@
 'use client';
 
-import type { Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import type { Workspace, WorkspaceInitStatus, WorkspaceStatus } from '@prisma-gen/browser';
 import { Kanban, List, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -25,6 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { InitStatusBadge } from '@/components/workspace/init-status-badge';
 import { KanbanBoard } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
@@ -39,6 +40,12 @@ const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
 const workspaceStatuses: WorkspaceStatus[] = ['ACTIVE', 'COMPLETED', 'ARCHIVED'];
 
 type ViewMode = 'list' | 'board';
+
+type WorkspaceWithSessions = Workspace & {
+  claudeSessions?: unknown[];
+  initStatus: WorkspaceInitStatus;
+  initErrorMessage?: string | null;
+};
 
 export default function ProjectWorkspacesPage() {
   const params = useParams();
@@ -131,6 +138,7 @@ export default function ProjectWorkspacesPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Init</TableHead>
                     <TableHead>Sessions</TableHead>
                     <TableHead>Branch</TableHead>
                     <TableHead>Created</TableHead>
@@ -138,7 +146,7 @@ export default function ProjectWorkspacesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workspaces.map((workspace: Workspace & { claudeSessions?: unknown[] }) => (
+                  {workspaces.map((workspace: WorkspaceWithSessions) => (
                     <TableRow key={workspace.id}>
                       <TableCell>
                         <Link
@@ -159,6 +167,16 @@ export default function ProjectWorkspacesPage() {
                         <Badge variant={statusVariants[workspace.status] || 'default'}>
                           {workspace.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {workspace.initStatus === 'READY' ? (
+                          <span className="text-xs text-muted-foreground">Ready</span>
+                        ) : (
+                          <InitStatusBadge
+                            status={workspace.initStatus}
+                            errorMessage={workspace.initErrorMessage}
+                          />
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {workspace.claudeSessions?.length ?? 0} sessions

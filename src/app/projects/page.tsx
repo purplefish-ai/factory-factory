@@ -2,6 +2,7 @@
 
 import { Archive, Plus } from 'lucide-react';
 import Link from 'next/link';
+import { ProjectSettingsDialog } from '@/components/project/project-settings-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -96,29 +97,37 @@ export default function ProjectsPage() {
                     {'_count' in project ? (project._count as { epics: number }).epics : '-'}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        if (confirm('Are you sure you want to archive this project?')) {
-                          archiveMutation.mutate({ id: project.id });
-                        }
-                      }}
-                      disabled={archiveMutation.isPending}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      {archiveMutation.isPending ? (
-                        <>
-                          <Spinner className="size-4" />
-                          Archiving...
-                        </>
-                      ) : (
-                        <>
-                          <Archive className="size-4" />
-                          Archive
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <ProjectSettingsDialog
+                        projectId={project.id}
+                        projectName={project.name}
+                        currentStartupScriptCommand={project.startupScriptCommand}
+                        currentStartupScriptPath={project.startupScriptPath}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm('Are you sure you want to archive this project?')) {
+                            archiveMutation.mutate({ id: project.id });
+                          }
+                        }}
+                        disabled={archiveMutation.isPending}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        {archiveMutation.isPending ? (
+                          <>
+                            <Spinner className="size-4" />
+                            Archiving...
+                          </>
+                        ) : (
+                          <>
+                            <Archive className="size-4" />
+                            Archive
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

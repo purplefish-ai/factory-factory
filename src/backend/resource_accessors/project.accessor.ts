@@ -51,6 +51,10 @@ interface UpdateProjectInput {
   githubOwner?: string;
   githubRepo?: string;
   isArchived?: boolean;
+  // Startup script configuration
+  startupScriptCommand?: string | null;
+  startupScriptPath?: string | null;
+  startupScriptTimeout?: number;
 }
 
 interface ListProjectsFilters {

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { Loading } from '@/frontend/components/loading';
 import { trpc } from '../../../../../frontend/lib/trpc';
@@ -122,11 +123,22 @@ export default function NewWorkspacePage() {
               />
             </div>
 
+            {createWorkspace.isPending &&
+              (project.startupScriptCommand || project.startupScriptPath) && (
+                <Alert>
+                  <AlertDescription className="flex items-center gap-2">
+                    <Spinner className="h-4 w-4" />
+                    Running startup script... This may take a few minutes.
+                  </AlertDescription>
+                </Alert>
+              )}
+
             <div className="flex justify-end gap-4">
-              <Button variant="outline" asChild>
+              <Button variant="outline" asChild disabled={createWorkspace.isPending}>
                 <Link href={`/projects/${slug}/workspaces`}>Cancel</Link>
               </Button>
               <Button type="submit" disabled={createWorkspace.isPending}>
+                {createWorkspace.isPending && <Spinner className="mr-2 h-4 w-4" />}
                 {createWorkspace.isPending ? 'Creating...' : 'Create Workspace'}
               </Button>
             </div>

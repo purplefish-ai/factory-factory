@@ -4,6 +4,7 @@ import { ArrowLeftIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,8 @@ export default function NewProjectPage() {
   const router = useRouter();
   const [repoPath, setRepoPath] = useState('');
   const [error, setError] = useState('');
+  const [startupScript, setStartupScript] = useState('');
+  const [scriptType, setScriptType] = useState<ScriptType>('command');
 
   const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
   const hasExistingProjects = projects && projects.length > 0;
@@ -39,7 +42,12 @@ export default function NewProjectPage() {
       return;
     }
 
-    createProject.mutate({ repoPath });
+    const trimmedScript = startupScript.trim();
+    createProject.mutate({
+      repoPath,
+      startupScriptCommand: scriptType === 'command' && trimmedScript ? trimmedScript : undefined,
+      startupScriptPath: scriptType === 'path' && trimmedScript ? trimmedScript : undefined,
+    });
   };
 
   // Onboarding view when no projects exist
@@ -84,6 +92,14 @@ export default function NewProjectPage() {
                     Path to a git repository on your local machine.
                   </p>
                 </div>
+
+                <StartupScriptForm
+                  scriptType={scriptType}
+                  onScriptTypeChange={setScriptType}
+                  startupScript={startupScript}
+                  onStartupScriptChange={setStartupScript}
+                  idPrefix="onboard"
+                />
 
                 <Button type="submit" className="w-full" disabled={createProject.isPending}>
                   {createProject.isPending && <Spinner className="mr-2" />}
@@ -145,6 +161,14 @@ export default function NewProjectPage() {
                 from the directory name.
               </p>
             </div>
+
+            <StartupScriptForm
+              scriptType={scriptType}
+              onScriptTypeChange={setScriptType}
+              startupScript={startupScript}
+              onStartupScriptChange={setStartupScript}
+              idPrefix="new"
+            />
 
             <div className="flex justify-end gap-4">
               <Button variant="secondary" asChild>
