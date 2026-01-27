@@ -638,6 +638,13 @@ program
       process.exit(exitCode);
     }
 
+    // Copy prompts directory to dist (markdown files referenced at runtime)
+    const promptsSrc = join(PROJECT_ROOT, 'prompts');
+    const promptsDest = join(PROJECT_ROOT, 'dist', 'prompts');
+    if (existsSync(promptsSrc)) {
+      cpSync(promptsSrc, promptsDest, { recursive: true });
+    }
+
     console.log(chalk.green('  ✓ Backend built'));
     console.log(chalk.blue('Building frontend...'));
 
