@@ -64,10 +64,6 @@ interface SystemConfig {
   // Database
   databaseUrl: string;
 
-  // Inngest
-  inngestEventKey?: string;
-  inngestSigningKey?: string;
-
   // Default session profile
   defaultSessionProfile: SessionProfile;
 
@@ -183,10 +179,6 @@ function loadSystemConfig(): SystemConfig {
     // Database
     databaseUrl: process.env.DATABASE_URL || '',
 
-    // Inngest
-    inngestEventKey: process.env.INNGEST_EVENT_KEY,
-    inngestSigningKey: process.env.INNGEST_SIGNING_KEY,
-
     // Default session profile
     defaultSessionProfile: buildDefaultSessionProfile(),
 
@@ -224,15 +216,6 @@ class ConfigService {
 
     if (!this.config.databaseUrl) {
       errors.push('DATABASE_URL is not set');
-    }
-
-    if (this.config.nodeEnv === 'production') {
-      if (!this.config.inngestEventKey) {
-        warnings.push('INNGEST_EVENT_KEY is not set (required for production)');
-      }
-      if (!this.config.inngestSigningKey) {
-        warnings.push('INNGEST_SIGNING_KEY is not set (required for production)');
-      }
     }
 
     // Log warnings

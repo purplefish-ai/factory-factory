@@ -12,17 +12,20 @@ import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
-import { serve } from 'inngest/express';
 import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index';
 import { prisma } from './db';
-import { inngest } from './inngest/client';
-import { syncPRStatus, syncPRStatusBatch } from './inngest/functions/index';
 import { workspaceAccessor } from './resource_accessors/workspace.accessor';
 import { projectRouter } from './routers/api/project.router';
 import { executeMcpTool, initializeMcpTools } from './routers/mcp/index';
-import { configService, createLogger, rateLimiter, reconciliationService } from './services/index';
+import {
+  configService,
+  createLogger,
+  rateLimiter,
+  reconciliationService,
+  schedulerService,
+} from './services/index';
 import { terminalService } from './services/terminal.service';
 import { appRouter, createContext } from './trpc/index';
 
@@ -153,27 +156,6 @@ app.get('/health/database', async (_req, res) => {
 });
 
 /**
- * Inngest health check
- */
-app.get('/health/inngest', (_req, res) => {
-  // Check if Inngest client is configured
-  const hasEventKey = !!process.env.INNGEST_EVENT_KEY || configService.isDevelopment();
-  const hasSigningKey = !!process.env.INNGEST_SIGNING_KEY || configService.isDevelopment();
-
-  const status = hasEventKey && hasSigningKey ? 'ok' : 'degraded';
-
-  res.status(status === 'ok' ? 200 : 503).json({
-    status,
-    timestamp: new Date().toISOString(),
-    inngest: {
-      eventKeyConfigured: hasEventKey,
-      signingKeyConfigured: hasSigningKey,
-      mode: configService.isDevelopment() ? 'development' : 'production',
-    },
-  });
-});
-
-/**
  * Comprehensive health check (all systems)
  */
 app.get('/health/all', async (_req, res) => {
@@ -189,14 +171,6 @@ app.get('/health/all', async (_req, res) => {
       details: error instanceof Error ? error.message : 'Unknown error',
     };
   }
-
-  // Inngest check
-  const hasInngestKeys =
-    (!!process.env.INNGEST_EVENT_KEY && !!process.env.INNGEST_SIGNING_KEY) ||
-    configService.isDevelopment();
-  checks.inngest = {
-    status: hasInngestKeys ? 'ok' : 'degraded',
-  };
 
   // Rate limiter check
   const apiUsage = rateLimiter.getApiUsageStats();
@@ -277,15 +251,6 @@ app.post('/mcp/execute', async (req, res) => {
 
 // Project API routes
 app.use('/api/projects', projectRouter);
-
-// Inngest webhook handler
-app.use(
-  '/api/inngest',
-  serve({
-    client: inngest,
-    functions: [syncPRStatus, syncPRStatusBatch],
-  })
-);
 
 // tRPC API endpoint
 app.use(
@@ -1432,11 +1397,13 @@ server.listen(PORT, async () => {
   // Start periodic orphan cleanup
   reconciliationService.startPeriodicCleanup();
 
+  // Start background scheduler (PR sync, etc.)
+  schedulerService.start();
+
   logger.info('Server endpoints available', {
     server: `http://localhost:${PORT}`,
     health: `http://localhost:${PORT}/health`,
     healthAll: `http://localhost:${PORT}/health/all`,
-    inngest: `http://localhost:${PORT}/api/inngest`,
     trpc: `http://localhost:${PORT}/api/trpc`,
     wsChat: `ws://localhost:${PORT}/chat`,
     wsTerminal: `ws://localhost:${PORT}/terminal`,
@@ -1514,6 +1481,9 @@ const performCleanup = async () => {
 
   // Clean up session file logger
   sessionFileLogger.cleanup();
+
+  // Stop background scheduler (waits for any in-flight tasks)
+  await schedulerService.stop();
 
   // Stop periodic orphan cleanup (waits for any in-flight cleanup)
   await reconciliationService.stopPeriodicCleanup();
