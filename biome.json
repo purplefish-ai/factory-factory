@@ -104,6 +104,7 @@
     {
       "includes": [
         "src/backend/**/*.ts",
+        "src/cli/**/*.ts",
         "scripts/**/*.ts",
         "test-*.ts",
         "src/components/chat/use-chat-websocket.ts"

@@ -10,6 +10,6 @@
     "sourceMap": true,
     "noEmit": false
   },
-  "include": ["src/backend/**/*", "prisma/generated/**/*"],
+  "include": ["src/backend/**/*", "src/cli/**/*", "prisma/generated/**/*"],
   "exclude": ["node_modules", ".next", "dist"]
 }
