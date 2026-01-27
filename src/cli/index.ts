@@ -417,20 +417,16 @@ async function startProductionMode(
 ): Promise<void> {
   // Check if built
   const nextStandalone = join(PROJECT_ROOT, '.next', 'standalone');
-  const backendDist = join(PROJECT_ROOT, 'dist', 'backend', 'index.js');
+  const backendDist = join(PROJECT_ROOT, 'dist', 'src', 'backend', 'index.js');
 
   if (!existsSync(nextStandalone)) {
-    console.error(
-      chalk.red('\n  ✗ Frontend not built. Run `ff build` or `pnpm build:frontend` first.')
-    );
+    console.error(chalk.red('\n  ✗ Frontend not built. Run `ff build` or `pnpm build` first.'));
     console.error(chalk.gray('    Or use --dev flag for development mode.'));
     process.exit(1);
   }
 
   if (!existsSync(backendDist)) {
-    console.error(
-      chalk.red('\n  ✗ Backend not built. Run `ff build` or `pnpm build:backend` first.')
-    );
+    console.error(chalk.red('\n  ✗ Backend not built. Run `ff build` or `pnpm build` first.'));
     console.error(chalk.gray('    Or use --dev flag for development mode.'));
     process.exit(1);
   }
