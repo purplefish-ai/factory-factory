@@ -76,7 +76,7 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
         'rounded-md transition-all whitespace-nowrap',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
-          ? 'bg-background text-foreground shadow-md border border-border'
+          ? 'bg-background text-foreground shadow-sm border border-border'
           : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
       )}
     >
@@ -146,7 +146,7 @@ function SessionTabItem({ label, isActive, isRunning, onSelect, onClose }: Sessi
         'rounded-md transition-all whitespace-nowrap',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
-          ? 'bg-background text-foreground shadow-md border border-border'
+          ? 'bg-background text-foreground shadow-sm border border-border'
           : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
       )}
     >
@@ -208,7 +208,7 @@ export function MainViewTabBar({
   return (
     <div
       role="tablist"
-      className={cn('flex items-center gap-0.5 bg-muted rounded-lg p-1 overflow-x-auto', className)}
+      className={cn('flex items-center gap-0.5 bg-muted/50 p-1 overflow-x-auto', className)}
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
       {/* Session tabs (Chat 1, Chat 2, etc.) */}
