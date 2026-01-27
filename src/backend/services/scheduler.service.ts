@@ -20,7 +20,7 @@ const MAX_CONCURRENT_PR_SYNCS = 5;
 class SchedulerService {
   private syncInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
-  private syncInProgress: Promise<void> | null = null;
+  private syncInProgress: Promise<unknown> | null = null;
   private readonly prSyncLimit = pLimit(MAX_CONCURRENT_PR_SYNCS);
 
   /**
@@ -31,13 +31,15 @@ class SchedulerService {
       return; // Already running
     }
 
+    // Reset shutdown flag in case we're restarting
+    this.isShuttingDown = false;
+
     this.syncInterval = setInterval(() => {
       if (this.isShuttingDown) {
         return;
       }
 
       this.syncInProgress = this.syncPRStatuses()
-        .then(() => undefined)
         .catch((err) => {
           logger.error('PR sync batch failed', err as Error);
         })
