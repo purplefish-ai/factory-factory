@@ -37,7 +37,7 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
   const isEmpty = workspaces.length === 0;
 
   return (
-    <div className="flex flex-col h-full w-[280px] shrink-0">
+    <div className="flex flex-col h-full w-[280px] shrink-0 overflow-hidden">
       {/* Column Header */}
       <div className="flex items-center justify-between px-2 py-3 border-b bg-muted/30 rounded-t-lg">
         <div className="flex items-center gap-2">
@@ -49,7 +49,7 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
       </div>
 
       {/* Column Content */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 w-full">
         <div
           className={cn(
             'p-2 space-y-2 min-h-[200px] rounded-b-lg border border-t-0',

@@ -38,7 +38,7 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
     <Link href={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
         className={cn(
-          'cursor-pointer hover:border-primary/50 transition-colors',
+          'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
           workspace.isWorking && 'border-green-500/50 bg-green-500/5'
         )}
       >
@@ -57,8 +57,8 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
         </CardHeader>
         <CardContent className="space-y-2">
           {workspace.branchName && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <GitBranch className="h-3 w-3" />
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+              <GitBranch className="h-3 w-3 shrink-0" />
               <span className="font-mono truncate">{workspace.branchName}</span>
             </div>
           )}
