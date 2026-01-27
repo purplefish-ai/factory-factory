@@ -28,8 +28,12 @@ export interface UseChatWebSocketOptions {
   initialClaudeSessionId?: string;
   /** Working directory for Claude CLI (workspace worktree path) */
   workingDir?: string;
-  /** Database session ID for linking Claude CLI session to database record */
-  dbSessionId?: string | null;
+  /**
+   * Database session ID (required).
+   * This is the primary key for the ClaudeSession record.
+   * Must be provided before connecting - the hook will not connect without it.
+   */
+  dbSessionId: string | null;
 }
 
 export interface UseChatWebSocketReturn {
@@ -74,8 +78,6 @@ interface StartMessage {
   selectedModel?: string | null;
   thinkingEnabled?: boolean;
   planModeEnabled?: boolean;
-  /** Database session ID for linking Claude CLI session to database record */
-  dbSessionId?: string;
 }
 
 interface UserInputMessage {
@@ -489,18 +491,18 @@ function handleUserQuestionMessage(data: WebSocketMessage, ctx: MessageHandlerCo
   }
 }
 
+function handleMessageQueuedMessage(data: WebSocketMessage, _ctx: MessageHandlerContext): void {
+  // Message was queued on backend, waiting for Claude process to start
+  // The user message is already in local state (optimistic UI), so just log
+  debug.log('📥 Message queued on backend:', data.text);
+}
+
 // =============================================================================
 // Hook Implementation
 // =============================================================================
 
-export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChatWebSocketReturn {
+export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSocketReturn {
   const { initialClaudeSessionId, workingDir, dbSessionId } = options;
-
-  // Track dbSessionId in a ref to use in sendMessage without stale closures
-  const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
-  useEffect(() => {
-    dbSessionIdRef.current = dbSessionId ?? null;
-  }, [dbSessionId]);
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -529,6 +531,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
   // not when URL changes after loading a different session
   const initialClaudeSessionIdRef = useRef<string | null>(initialClaudeSessionId ?? null);
   const hasLoadedInitialSessionRef = useRef(false);
+  // Track dbSessionId in a ref to use in connect without stale closures
+  const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
+  // Track previous dbSessionId to detect session switches
+  const prevDbSessionIdRef = useRef<string | null>(null);
   // Track which Claude CLI session ID has been successfully loaded (via URL or picker)
   const loadedClaudeSessionIdRef = useRef<string | null>(null);
   // Track accumulated tool input JSON per tool_use_id for streaming
@@ -549,6 +555,41 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     }
     claudeSessionIdRef.current = claudeSessionId;
   }, [claudeSessionId]);
+
+  // When dbSessionId changes, reset state for the new session
+  useEffect(() => {
+    const prevDbSessionId = prevDbSessionIdRef.current;
+    const newDbSessionId = dbSessionId ?? null;
+
+    // Update refs
+    dbSessionIdRef.current = newDbSessionId;
+    prevDbSessionIdRef.current = newDbSessionId;
+
+    // If switching to a different session, reset local state
+    if (prevDbSessionId !== null && prevDbSessionId !== newDbSessionId) {
+      debug.log('🔄 Session switch detected, resetting state', {
+        from: prevDbSessionId,
+        to: newDbSessionId,
+      });
+
+      // Clear messages - will be reloaded from backend
+      setMessages([]);
+      setClaudeSessionId(null);
+      setGitBranch(null);
+      setPendingPermission(null);
+      setPendingQuestion(null);
+      setStartingSession(false);
+      setLoadingSession(false);
+      setChatSettings(DEFAULT_CHAT_SETTINGS);
+      setRunning(false);
+
+      // Clear refs
+      toolInputAccumulatorRef.current.clear();
+      messageQueueRef.current = [];
+      hasLoadedInitialSessionRef.current = false;
+      loadedClaudeSessionIdRef.current = null;
+    }
+  }, [dbSessionId]);
 
   // Auto-scroll to bottom when messages change
   // biome-ignore lint/correctness/useExhaustiveDependencies: we want to trigger scroll on messages array change
@@ -728,6 +769,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
           session_loaded: handleSessionLoadedMessage,
           permission_request: handlePermissionRequestMessage,
           user_question: handleUserQuestionMessage,
+          message_queued: handleMessageQueuedMessage,
         };
 
         const handler = handlers[data.type];
@@ -743,6 +785,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
 
   // Connect to WebSocket
   const connect = useCallback(() => {
+    // Don't connect without a valid dbSessionId
+    if (!dbSessionIdRef.current) {
+      debug.log('⏳ Waiting for dbSessionId before connecting');
+      return;
+    }
+
     // Clean up existing connection
     if (wsRef.current) {
       wsRef.current.close();
@@ -755,11 +803,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       reconnectTimeoutRef.current = null;
     }
 
-    // Use dbSessionId as the session key for Claude processes
-    // connectionId is unique per browser window for routing messages
-    const sessionId = dbSessionIdRef.current || `temp-${Date.now()}`;
+    // sessionId = dbSessionId (required, no temp IDs)
+    // connectionId = unique per browser window for routing messages
     const wsParams: Record<string, string> = {
-      sessionId,
+      sessionId: dbSessionIdRef.current,
       connectionId: connectionIdRef.current,
     };
     if (workingDir) {
@@ -835,11 +882,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     ws.onmessage = handleMessage;
   }, [flushMessageQueue, handleMessage, sendWsMessage, workingDir]);
 
-  // Initialize WebSocket connection only when workingDir is available
+  // Initialize WebSocket connection only when both workingDir AND dbSessionId are available
   // This prevents failed connections during initial render when workspace data hasn't loaded yet
   useEffect(() => {
-    if (!workingDir) {
-      // Don't connect until we have a valid workingDir
+    if (!(workingDir && dbSessionId)) {
+      // Don't connect until we have both valid workingDir and dbSessionId
       return;
     }
 
@@ -854,7 +901,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         wsRef.current = null;
       }
     };
-  }, [connect, workingDir]);
+  }, [connect, workingDir, dbSessionId]);
 
   // Actions
   const sendMessage = useCallback(
@@ -863,7 +910,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         return;
       }
 
-      // Add user message to local state
+      // Add user message to local state immediately (optimistic UI)
       setMessages((prev) => [...prev, createUserMessage(text)]);
 
       // If Claude is not running, start it first
@@ -878,18 +925,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
           thinkingEnabled: chatSettings.thinkingEnabled,
           planModeEnabled: chatSettings.planModeEnabled,
         };
-        // If we have a session, resume it
+        // If we have a Claude CLI session, resume it
         if (claudeSessionId) {
           startMsg.resumeSessionId = claudeSessionId;
         }
-        // Include database session ID for backend to link Claude session to DB record
-        if (dbSessionIdRef.current) {
-          startMsg.dbSessionId = dbSessionIdRef.current;
-        }
+        // Note: dbSessionId is now part of the WebSocket URL, not sent in messages
         sendWsMessage(startMsg);
       }
 
       // Send the user input
+      // The backend will queue this if Claude process isn't ready yet
       // Append thinking suffix to enable extended thinking when thinking mode is enabled
       const messageToSend = chatSettings.thinkingEnabled ? `${text}${THINKING_SUFFIX}` : text;
       sendWsMessage({ type: 'user_input', text: messageToSend });

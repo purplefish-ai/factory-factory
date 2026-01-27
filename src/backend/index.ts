@@ -279,14 +279,36 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // WebSocket Chat Handler (Claude CLI JSON Streaming)
 // ============================================================================
 
-// Track WebSocket connections per session
-const chatConnections = new Map<string, Set<import('ws').WebSocket>>();
+/**
+ * Connection info for a WebSocket connection.
+ * Each browser window has a unique connectionId and views one dbSessionId at a time.
+ */
+interface ConnectionInfo {
+  ws: import('ws').WebSocket;
+  dbSessionId: string;
+  workingDir: string;
+}
+
+/**
+ * Pending message queued before Claude process is ready.
+ */
+interface PendingMessage {
+  text: string;
+  sentAt: Date;
+}
+
+// Track WebSocket connections by connectionId (unique per browser window)
+// This allows multiple windows to view the same session
+const chatConnections = new Map<string, ConnectionInfo>();
+
+// Pending messages per dbSessionId (queued before Claude process is ready)
+const pendingMessages = new Map<string, PendingMessage[]>();
 
 // ============================================================================
 // Chat Client Manager
 // ============================================================================
 
-// Simple manager for chat WebSocket clients
+// Chat clients keyed by dbSessionId (always real database IDs, never temp IDs)
 const chatClients = new Map<string, ClaudeClient>();
 // Track pending client creation to prevent duplicate creation from race conditions
 const pendingClientCreation = new Map<string, Promise<ClaudeClient>>();
@@ -490,43 +512,54 @@ class SessionFileLogger {
 // Global session file logger instance
 const sessionFileLogger = new SessionFileLogger();
 
-// Helper to forward data to WebSocket connections for a session
-function forwardToConnections(sessionId: string, data: unknown): void {
-  const connections = chatConnections.get(sessionId);
-  if (connections) {
-    chatWsMsgCounter++;
-    const msgNum = chatWsMsgCounter;
+/**
+ * Forward data to all WebSocket connections viewing a specific dbSessionId.
+ * This broadcasts to all browser windows that have this session open.
+ */
+function forwardToConnections(dbSessionId: string, data: unknown): void {
+  chatWsMsgCounter++;
+  const msgNum = chatWsMsgCounter;
 
-    if (DEBUG_CHAT_WS) {
-      const dataObj = data as { type?: string; data?: { type?: string; uuid?: string } };
-      logger.info(`[Chat WS #${msgNum}] Sending to ${connections.size} connection(s)`, {
-        sessionId,
-        type: dataObj.type,
-        innerType: dataObj.data?.type,
-        uuid: dataObj.data?.uuid,
-      });
+  // Find all connections viewing this session
+  let connectionCount = 0;
+  for (const info of chatConnections.values()) {
+    if (info.dbSessionId === dbSessionId && info.ws.readyState === 1) {
+      connectionCount++;
     }
+  }
 
-    // Log to session file
-    sessionFileLogger.log(sessionId, 'OUT_TO_CLIENT', data);
+  if (connectionCount === 0) {
+    if (DEBUG_CHAT_WS) {
+      logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
+    }
+    return;
+  }
 
-    const json = JSON.stringify(data);
-    for (const ws of connections) {
-      if (ws.readyState === 1) {
-        ws.send(json);
-      }
+  if (DEBUG_CHAT_WS) {
+    const dataObj = data as { type?: string; data?: { type?: string; uuid?: string } };
+    logger.info(`[Chat WS #${msgNum}] Sending to ${connectionCount} connection(s)`, {
+      dbSessionId,
+      type: dataObj.type,
+      innerType: dataObj.data?.type,
+      uuid: dataObj.data?.uuid,
+    });
+  }
+
+  // Log to session file
+  sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', data);
+
+  const json = JSON.stringify(data);
+  for (const info of chatConnections.values()) {
+    if (info.dbSessionId === dbSessionId && info.ws.readyState === 1) {
+      info.ws.send(json);
     }
   }
 }
 
 // Set up event forwarding from ClaudeClient to WebSocket connections
-function setupChatClientEvents(
-  sessionId: string,
-  client: ClaudeClient,
-  dbSessionId?: string
-): void {
+function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void {
   if (DEBUG_CHAT_WS) {
-    logger.info('[Chat WS] Setting up event forwarding for session', { sessionId, dbSessionId });
+    logger.info('[Chat WS] Setting up event forwarding for session', { dbSessionId });
   }
 
   // Forward Claude CLI session ID to frontend when it becomes available
@@ -534,31 +567,41 @@ function setupChatClientEvents(
   client.on('session_id', async (claudeSessionId) => {
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Received session_id from Claude CLI', {
-        sessionId,
-        claudeSessionId,
         dbSessionId,
+        claudeSessionId,
       });
     }
 
-    // Update database with Claude CLI session ID if dbSessionId was provided
+    // Update database with Claude CLI session ID
     // This ensures the link persists even if user navigates away before frontend receives the message
-    if (dbSessionId) {
-      try {
-        await claudeSessionAccessor.update(dbSessionId, { claudeSessionId });
-        logger.info('[Chat WS] Updated database with claudeSessionId', {
-          dbSessionId,
-          claudeSessionId,
-        });
-      } catch (error) {
-        logger.warn('[Chat WS] Failed to update database with claudeSessionId', {
-          dbSessionId,
-          claudeSessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+    try {
+      await claudeSessionAccessor.update(dbSessionId, { claudeSessionId });
+      logger.info('[Chat WS] Updated database with claudeSessionId', {
+        dbSessionId,
+        claudeSessionId,
+      });
+    } catch (error) {
+      logger.warn('[Chat WS] Failed to update database with claudeSessionId', {
+        dbSessionId,
+        claudeSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
-    forwardToConnections(sessionId, {
+    // Drain pending messages now that Claude process is ready
+    const pending = pendingMessages.get(dbSessionId);
+    if (pending && pending.length > 0) {
+      logger.info('[Chat WS] Draining pending messages', {
+        dbSessionId,
+        count: pending.length,
+      });
+      for (const msg of pending) {
+        client.sendMessage(msg.text);
+      }
+      pendingMessages.delete(dbSessionId);
+    }
+
+    forwardToConnections(dbSessionId, {
       type: 'status',
       running: true,
       claudeSessionId,
@@ -575,26 +618,26 @@ function setupChatClientEvents(
     if (DEBUG_CHAT_WS) {
       const evt = event as { type?: string };
       logger.info('[Chat WS] Received stream event from client', {
-        sessionId,
+        dbSessionId,
         eventType: evt.type,
       });
     }
     // Log the raw event from CLI before wrapping
-    sessionFileLogger.log(sessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
-    forwardToConnections(sessionId, { type: 'claude_message', data: event });
+    sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
+    forwardToConnections(dbSessionId, { type: 'claude_message', data: event });
   });
 
   // Forward user messages that contain tool_result content.
   // This allows the frontend to pair tool_use with tool_result and show correct status.
   client.on('message', (msg) => {
     // Log ALL messages from CLI (even ones we don't forward)
-    sessionFileLogger.log(sessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });
+    sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });
 
     // Only forward user messages with tool_result content
     // Skip assistant messages as they duplicate stream events
     const msgWithType = msg as { type?: string; message?: { content?: Array<{ type?: string }> } };
     if (msgWithType.type !== 'user') {
-      sessionFileLogger.log(sessionId, 'INFO', {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
         reason: 'not_user_type',
         type: msgWithType.type,
@@ -605,7 +648,7 @@ function setupChatClientEvents(
     // Check if this user message contains tool_result
     const content = msgWithType.message?.content;
     if (!Array.isArray(content)) {
-      sessionFileLogger.log(sessionId, 'INFO', {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
         reason: 'no_array_content',
       });
@@ -614,7 +657,7 @@ function setupChatClientEvents(
 
     const hasToolResult = content.some((item) => item.type === 'tool_result');
     if (!hasToolResult) {
-      sessionFileLogger.log(sessionId, 'INFO', {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
         reason: 'no_tool_result_content',
         content_types: content.map((c) => c.type),
@@ -623,12 +666,12 @@ function setupChatClientEvents(
     }
 
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Forwarding user message with tool_result', { sessionId });
+      logger.info('[Chat WS] Forwarding user message with tool_result', { dbSessionId });
     }
-    sessionFileLogger.log(sessionId, 'INFO', {
+    sessionFileLogger.log(dbSessionId, 'INFO', {
       action: 'forwarding_user_message_with_tool_result',
     });
-    forwardToConnections(sessionId, { type: 'claude_message', data: msg });
+    forwardToConnections(dbSessionId, { type: 'claude_message', data: msg });
   });
 
   // Forward result events to signal turn completion
@@ -636,32 +679,34 @@ function setupChatClientEvents(
   client.on('result', (result) => {
     if (DEBUG_CHAT_WS) {
       const res = result as { uuid?: string };
-      logger.info('[Chat WS] Received result event from client', { sessionId, uuid: res.uuid });
+      logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
     }
     // Log the raw result from CLI
-    sessionFileLogger.log(sessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
-    forwardToConnections(sessionId, { type: 'claude_message', data: result });
+    sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
+    forwardToConnections(dbSessionId, { type: 'claude_message', data: result });
   });
 
   client.on('exit', (result) => {
-    forwardToConnections(sessionId, {
+    forwardToConnections(dbSessionId, {
       type: 'process_exit',
       code: result.code,
       claudeSessionId: result.sessionId,
     });
     // Clean up all listeners to prevent memory leaks if client is recreated
     client.removeAllListeners();
-    chatClients.delete(sessionId);
+    chatClients.delete(dbSessionId);
+    // Clean up any remaining pending messages
+    pendingMessages.delete(dbSessionId);
   });
 
   client.on('error', (error) => {
-    forwardToConnections(sessionId, { type: 'error', message: error.message });
+    forwardToConnections(dbSessionId, { type: 'error', message: error.message });
   });
 }
 
-// Get or create a chat client for a session
+// Get or create a chat client for a database session
 async function getOrCreateChatClient(
-  sessionId: string,
+  dbSessionId: string,
   options: {
     workingDir: string;
     resumeSessionId?: string;
@@ -669,31 +714,29 @@ async function getOrCreateChatClient(
     model?: string;
     thinkingEnabled?: boolean;
     permissionMode?: 'bypassPermissions' | 'plan';
-    /** Database session ID for linking Claude CLI session to database record */
-    dbSessionId?: string;
   }
 ): Promise<ClaudeClient> {
   // Check for existing running client
-  let client = chatClients.get(sessionId);
+  let client = chatClients.get(dbSessionId);
   if (client?.isRunning()) {
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Reusing existing running client', { sessionId });
+      logger.info('[Chat WS] Reusing existing running client', { dbSessionId });
     }
     return client;
   }
 
   // Check if there's already a pending creation for this session (race condition prevention)
-  const pendingCreation = pendingClientCreation.get(sessionId);
+  const pendingCreation = pendingClientCreation.get(dbSessionId);
   if (pendingCreation) {
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Waiting for pending client creation', { sessionId });
+      logger.info('[Chat WS] Waiting for pending client creation', { dbSessionId });
     }
     return pendingCreation;
   }
 
   if (DEBUG_CHAT_WS) {
     logger.info('[Chat WS] Creating new client', {
-      sessionId,
+      dbSessionId,
       hadExistingClient: !!client,
       resumeSessionId: options.resumeSessionId,
     });
@@ -715,26 +758,26 @@ async function getOrCreateChatClient(
       const newClient = await ClaudeClient.create(clientOptions);
 
       // Set up event forwarding before storing in map to ensure events aren't missed
-      setupChatClientEvents(sessionId, newClient, options.dbSessionId);
-      chatClients.set(sessionId, newClient);
+      setupChatClientEvents(dbSessionId, newClient);
+      chatClients.set(dbSessionId, newClient);
 
       return newClient;
     } catch (error) {
       // Defensive cleanup - client may not be in map if create() failed before
       // chatClients.set() was reached, but ensures no partial state remains
       // if future code changes the order of operations
-      chatClients.delete(sessionId);
+      chatClients.delete(dbSessionId);
       throw error;
     }
   })();
 
-  pendingClientCreation.set(sessionId, createPromise);
+  pendingClientCreation.set(dbSessionId, createPromise);
 
   try {
     client = await createPromise;
     return client;
   } finally {
-    pendingClientCreation.delete(sessionId);
+    pendingClientCreation.delete(dbSessionId);
   }
 }
 
@@ -742,7 +785,8 @@ async function getOrCreateChatClient(
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles multiple message types with settings
 async function handleChatMessage(
   ws: import('ws').WebSocket,
-  sessionId: string,
+  _connectionId: string,
+  dbSessionId: string,
   workingDir: string,
   message: {
     type: string;
@@ -756,14 +800,12 @@ async function handleChatMessage(
     thinkingEnabled?: boolean;
     planModeEnabled?: boolean;
     selectedModel?: string | null;
-    // Database session ID for linking Claude CLI session to database record
-    dbSessionId?: string;
   }
 ) {
   switch (message.type) {
     case 'start': {
       // Notify client that session is starting (Claude CLI spinning up)
-      ws.send(JSON.stringify({ type: 'starting', sessionId }));
+      ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
 
       // Map planModeEnabled to permissionMode
       const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
@@ -774,52 +816,77 @@ async function handleChatMessage(
       const model =
         requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
 
-      await getOrCreateChatClient(sessionId, {
+      await getOrCreateChatClient(dbSessionId, {
         workingDir: message.workingDir || workingDir,
         resumeSessionId: message.resumeSessionId,
         systemPrompt: message.systemPrompt,
         model,
         thinkingEnabled: message.thinkingEnabled,
         permissionMode,
-        dbSessionId: message.dbSessionId,
       });
-      ws.send(JSON.stringify({ type: 'started', sessionId }));
+      ws.send(JSON.stringify({ type: 'started', dbSessionId }));
       break;
     }
 
     case 'user_input': {
-      const client = chatClients.get(sessionId);
-      if (client) {
-        client.sendMessage(message.text || '');
+      const text = message.text || '';
+      if (!text.trim()) {
+        break;
+      }
+
+      const client = chatClients.get(dbSessionId);
+      if (client?.isRunning()) {
+        // Client is running, send message directly
+        client.sendMessage(text);
       } else {
+        // Client not running - queue message and start client
+        // This handles the case where user sends before Claude is ready
+        let queue = pendingMessages.get(dbSessionId);
+        if (!queue) {
+          queue = [];
+          pendingMessages.set(dbSessionId, queue);
+        }
+        queue.push({ text, sentAt: new Date() });
+
+        logger.info('[Chat WS] Queued message for pending session', {
+          dbSessionId,
+          queueLength: queue.length,
+        });
+
+        // Send acknowledgment that message was queued
+        ws.send(JSON.stringify({ type: 'message_queued', text }));
+
         // Notify client that session is starting (Claude CLI spinning up)
-        ws.send(JSON.stringify({ type: 'starting', sessionId }));
+        ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
+
         // Auto-start if not running
-        const newClient = await getOrCreateChatClient(sessionId, { workingDir });
-        ws.send(JSON.stringify({ type: 'started', sessionId }));
-        newClient.sendMessage(message.text || '');
+        await getOrCreateChatClient(dbSessionId, { workingDir });
+        ws.send(JSON.stringify({ type: 'started', dbSessionId }));
+        // Note: The queued message will be sent when 'session_id' event fires
       }
       break;
     }
 
     case 'stop': {
-      const client = chatClients.get(sessionId);
+      const client = chatClients.get(dbSessionId);
       if (client) {
         client.kill();
-        chatClients.delete(sessionId);
+        chatClients.delete(dbSessionId);
       }
-      ws.send(JSON.stringify({ type: 'stopped', sessionId }));
+      // Clean up pending messages
+      pendingMessages.delete(dbSessionId);
+      ws.send(JSON.stringify({ type: 'stopped', dbSessionId }));
       break;
     }
 
     case 'get_history': {
-      const client = chatClients.get(sessionId);
+      const client = chatClients.get(dbSessionId);
       const claudeSessionId = client?.getSessionId();
       if (claudeSessionId) {
         const history = await SessionManager.getHistory(claudeSessionId, workingDir);
-        ws.send(JSON.stringify({ type: 'history', sessionId, messages: history }));
+        ws.send(JSON.stringify({ type: 'history', dbSessionId, messages: history }));
       } else {
-        ws.send(JSON.stringify({ type: 'history', sessionId, messages: [] }));
+        ws.send(JSON.stringify({ type: 'history', dbSessionId, messages: [] }));
       }
       break;
     }
@@ -927,13 +994,24 @@ function handleChatUpgrade(
   head: Buffer,
   url: URL
 ) {
-  const sessionId = url.searchParams.get('sessionId') || `chat-${Date.now()}`;
+  // connectionId: unique per browser window, used for routing messages
+  const connectionId = url.searchParams.get('connectionId') || `conn-${Date.now()}`;
+  // dbSessionId: database session ID, required for linking to Claude process
+  const dbSessionId = url.searchParams.get('sessionId');
   const rawWorkingDir = url.searchParams.get('workingDir');
   const claudeSessionId = url.searchParams.get('claudeSessionId');
 
+  // Require dbSessionId parameter - no temp IDs allowed
+  if (!dbSessionId) {
+    logger.warn('Missing sessionId (dbSessionId) parameter', { connectionId });
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\nMissing sessionId parameter');
+    socket.destroy();
+    return;
+  }
+
   // Require workingDir parameter - no fallback to process.cwd()
   if (!rawWorkingDir) {
-    logger.warn('Missing workingDir parameter', { sessionId });
+    logger.warn('Missing workingDir parameter', { dbSessionId, connectionId });
     socket.write('HTTP/1.1 400 Bad Request\r\n\r\nMissing workingDir parameter');
     socket.destroy();
     return;
@@ -942,7 +1020,7 @@ function handleChatUpgrade(
   // Validate workingDir to prevent path traversal
   const workingDir = validateWorkingDir(rawWorkingDir);
   if (!workingDir) {
-    logger.warn('Invalid workingDir rejected', { rawWorkingDir, sessionId });
+    logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
     socket.write('HTTP/1.1 400 Bad Request\r\n\r\nInvalid workingDir');
     socket.destroy();
     return;
@@ -950,67 +1028,73 @@ function handleChatUpgrade(
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket connection handler with multiple event handlers
   wss.handleUpgrade(request, socket, head, (ws) => {
-    logger.info('Chat WebSocket connection established', { sessionId, claudeSessionId });
+    logger.info('Chat WebSocket connection established', {
+      connectionId,
+      dbSessionId,
+      claudeSessionId,
+    });
 
     // Setup heartbeat tracking
     wsAliveMap.set(ws, true);
     ws.on('pong', () => wsAliveMap.set(ws, true));
 
     // Initialize session file logging
-    sessionFileLogger.initSession(sessionId);
-    sessionFileLogger.log(sessionId, 'INFO', {
+    sessionFileLogger.initSession(dbSessionId);
+    sessionFileLogger.log(dbSessionId, 'INFO', {
       event: 'connection_established',
-      sessionId,
+      connectionId,
+      dbSessionId,
       claudeSessionId,
       workingDir,
     });
 
-    // Track this connection - close any existing connections for this session first
-    // This handles React StrictMode double-mounting and stale connections
-    const existingConnections = chatConnections.get(sessionId);
-    if (existingConnections && existingConnections.size > 0) {
+    // Close any existing connection with the same connectionId (handles React StrictMode)
+    const existingConnection = chatConnections.get(connectionId);
+    if (existingConnection) {
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Closing existing connections for session', {
-          sessionId,
-          count: existingConnections.size,
+        logger.info('[Chat WS] Closing existing connection', {
+          connectionId,
+          oldDbSessionId: existingConnection.dbSessionId,
         });
       }
-      sessionFileLogger.log(sessionId, 'INFO', {
-        event: 'closing_existing_connections',
-        count: existingConnections.size,
-      });
-      for (const existingWs of existingConnections) {
-        existingWs.close(1000, 'New connection replacing old one');
-      }
-      existingConnections.clear();
+      existingConnection.ws.close(1000, 'New connection replacing old one');
     }
 
-    if (!chatConnections.has(sessionId)) {
-      chatConnections.set(sessionId, new Set());
-    }
-    const connections = chatConnections.get(sessionId);
-    connections?.add(ws);
+    // Register this connection
+    chatConnections.set(connectionId, {
+      ws,
+      dbSessionId,
+      workingDir,
+    });
 
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Connection added', {
-        sessionId,
-        totalConnections: connections?.size ?? 0,
+      // Count connections viewing this session
+      let viewingCount = 0;
+      for (const info of chatConnections.values()) {
+        if (info.dbSessionId === dbSessionId) {
+          viewingCount++;
+        }
+      }
+      logger.info('[Chat WS] Connection registered', {
+        connectionId,
+        dbSessionId,
+        totalConnectionsViewingSession: viewingCount,
       });
     }
 
     // Get running status from chatClients
-    const client = chatClients.get(sessionId);
+    const client = chatClients.get(dbSessionId);
     const isRunning = client?.isRunning() ?? false;
     const currentClaudeSessionId = client?.getSessionId() ?? claudeSessionId ?? null;
 
     // Send initial status
     const initialStatus = {
       type: 'status',
-      sessionId,
+      dbSessionId,
       running: isRunning,
       claudeSessionId: currentClaudeSessionId,
     };
-    sessionFileLogger.log(sessionId, 'OUT_TO_CLIENT', initialStatus);
+    sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
     ws.send(JSON.stringify(initialStatus));
 
     // Handle incoming messages from client
@@ -1018,36 +1102,32 @@ function handleChatUpgrade(
       try {
         const message = JSON.parse(data.toString());
         // Log incoming message from client
-        sessionFileLogger.log(sessionId, 'IN_FROM_CLIENT', message);
-        await handleChatMessage(ws, sessionId, workingDir, message);
+        sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
+        await handleChatMessage(ws, connectionId, dbSessionId, workingDir, message);
       } catch (error) {
         logger.error('Error handling chat message', error as Error);
         const errorResponse = { type: 'error', message: 'Invalid message format' };
-        sessionFileLogger.log(sessionId, 'OUT_TO_CLIENT', errorResponse);
+        sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
         ws.send(JSON.stringify(errorResponse));
       }
     });
 
     // Handle connection close
     ws.on('close', () => {
-      logger.info('Chat WebSocket connection closed', { sessionId });
-      sessionFileLogger.log(sessionId, 'INFO', { event: 'connection_closed' });
-      sessionFileLogger.closeSession(sessionId);
+      logger.info('Chat WebSocket connection closed', { connectionId, dbSessionId });
+      sessionFileLogger.log(dbSessionId, 'INFO', { event: 'connection_closed', connectionId });
+      sessionFileLogger.closeSession(dbSessionId);
 
-      const connections = chatConnections.get(sessionId);
-      if (connections) {
-        connections.delete(ws);
-        if (connections.size === 0) {
-          chatConnections.delete(sessionId);
-        }
-      }
+      // Remove this connection
+      chatConnections.delete(connectionId);
     });
 
     // Handle connection errors
     ws.on('error', (error) => {
       logger.error('Chat WebSocket error', error);
-      sessionFileLogger.log(sessionId, 'INFO', {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
         event: 'connection_error',
+        connectionId,
         error: error.message,
       });
     });
