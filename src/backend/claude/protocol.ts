@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import * as readline from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
+import { createLogger } from '../services/logger.service';
 import {
   type ClaudeContentItem,
   type ClaudeJson,
@@ -23,6 +24,8 @@ import {
   type PermissionMode,
   type StreamEventMessage,
 } from './types';
+
+const logger = createLogger('protocol');
 
 // =============================================================================
 // Exported Types
@@ -331,11 +334,9 @@ export class ClaudeProtocol extends EventEmitter {
       parsed = JSON.parse(trimmed) as ClaudeJson;
     } catch (error) {
       // Log and skip malformed JSON
-      console.error(
-        '[ClaudeProtocol] Failed to parse JSON:',
-        error instanceof Error ? error.message : error
-      );
-      console.error('[ClaudeProtocol] Raw line:', trimmed.slice(0, 200));
+      logger.error('Failed to parse JSON', error as Error, {
+        rawLine: trimmed.slice(0, 200),
+      });
       return;
     }
 

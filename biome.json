@@ -103,11 +103,10 @@
   "overrides": [
     {
       "includes": [
-        "src/backend/**/*.ts",
+        "src/backend/services/logger.service.ts",
+        "src/lib/debug.ts",
         "src/cli/**/*.ts",
-        "scripts/**/*.ts",
-        "test-*.ts",
-        "src/components/chat/use-chat-websocket.ts"
+        "scripts/**/*.ts"
       ],
       "linter": {
         "rules": {

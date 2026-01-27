@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { projectAccessor } from '../../resource_accessors/index';
 import { configService } from '../../services/config.service';
+import { createLogger } from '../../services/logger.service';
 
 const router = Router();
+const logger = createLogger('api:project');
 
 // ============================================================================
 // Input Schemas
@@ -76,7 +78,7 @@ router.post('/create', async (req, res) => {
       });
     }
 
-    console.error('Error creating project:', error);
+    logger.error('Error creating project', error as Error);
     return res.status(500).json({
       success: false,
       error: {
@@ -115,7 +117,7 @@ router.get('/list', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error listing projects:', error);
+    logger.error('Error listing projects', error as Error);
     return res.status(500).json({
       success: false,
       error: {
@@ -163,7 +165,7 @@ router.get('/:projectId', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error getting project:', error);
+    logger.error('Error getting project', error as Error);
     return res.status(500).json({
       success: false,
       error: {
@@ -235,7 +237,7 @@ router.put('/:projectId', async (req, res) => {
       });
     }
 
-    console.error('Error updating project:', error);
+    logger.error('Error updating project', error as Error);
     return res.status(500).json({
       success: false,
       error: {
@@ -277,7 +279,7 @@ router.delete('/:projectId', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error archiving project:', error);
+    logger.error('Error archiving project', error as Error);
     return res.status(500).json({
       success: false,
       error: {
@@ -319,7 +321,7 @@ router.post('/:projectId/validate', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error validating project:', error);
+    logger.error('Error validating project', error as Error);
     return res.status(500).json({
       success: false,
       error: {

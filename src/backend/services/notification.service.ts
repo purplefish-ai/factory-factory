@@ -6,6 +6,9 @@
  */
 
 import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/shell';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('notification');
 
 /**
  * Notification configuration
@@ -65,9 +68,9 @@ async function sendMacOSNotificationLocal(
 ): Promise<void> {
   try {
     await sendMacNotification(title, message, soundEnabled ? 'Glass' : undefined);
-    console.log(`macOS notification sent: ${title}`);
+    logger.debug('macOS notification sent', { title });
   } catch (error) {
-    console.error('Failed to send macOS notification:', error);
+    logger.error('Failed to send macOS notification', error as Error, { title });
     throw error;
   }
 }
@@ -78,16 +81,17 @@ async function sendMacOSNotificationLocal(
 async function sendLinuxNotificationLocal(title: string, message: string): Promise<void> {
   try {
     await sendLinuxNotification(title, message);
-    console.log(`Linux notification sent: ${title}`);
+    logger.debug('Linux notification sent', { title });
   } catch (error) {
     // Try alternative tools if notify-send is not available
     try {
       await execCommand('zenity', ['--notification', `--text=${title}: ${message}`]);
-      console.log(`Linux notification sent via zenity: ${title}`);
+      logger.debug('Linux notification sent via zenity', { title });
     } catch {
-      console.error(
-        'Failed to send Linux notification (notify-send and zenity unavailable):',
-        error
+      logger.error(
+        'Failed to send Linux notification (notify-send and zenity unavailable)',
+        error as Error,
+        { title }
       );
       throw error;
     }
@@ -127,9 +131,9 @@ async function sendWindowsNotification(title: string, message: string): Promise<
   try {
     // Use spawn with array args for safety
     await execCommand('powershell', ['-Command', psScript]);
-    console.log(`Windows notification sent: ${title}`);
+    logger.debug('Windows notification sent', { title });
   } catch (error) {
-    console.error('Failed to send Windows notification:', error);
+    logger.error('Failed to send Windows notification', error as Error, { title });
     throw error;
   }
 }
@@ -158,7 +162,7 @@ async function playSound(soundFile?: string): Promise<void> {
           if (soundFile) {
             await execCommand('aplay', [file]);
           } else {
-            console.log('No system sound available on Linux');
+            logger.debug('No system sound available on Linux');
           }
         }
         break;
@@ -183,10 +187,10 @@ async function playSound(soundFile?: string): Promise<void> {
       }
 
       default:
-        console.log(`Sound playback not supported on platform: ${platform}`);
+        logger.debug('Sound playback not supported', { platform });
     }
   } catch (error) {
-    console.error('Failed to play sound:', error);
+    logger.error('Failed to play sound', error as Error);
     // Don't throw - sound is optional
   }
 }
@@ -215,7 +219,7 @@ async function sendPushNotification(
       break;
 
     default:
-      console.log(`Notifications not supported on platform: ${platform}`);
+      logger.debug('Notifications not supported', { platform });
   }
 }
 
@@ -249,13 +253,13 @@ class NotificationService {
   ): Promise<{ sent: boolean; reason?: string }> {
     // Check quiet hours
     if (!options?.forceSend && isQuietHours(this.config)) {
-      console.log(`Notification suppressed (quiet hours): ${title}`);
+      logger.debug('Notification suppressed (quiet hours)', { title });
       return { sent: false, reason: 'quiet_hours' };
     }
 
     // Check if push notifications are enabled
     if (!this.config.pushEnabled) {
-      console.log(`Notification suppressed (disabled): ${title}`);
+      logger.debug('Notification suppressed (disabled)', { title });
       return { sent: false, reason: 'disabled' };
     }
 
@@ -269,10 +273,10 @@ class NotificationService {
         await playSound(this.config.soundFile);
       }
 
-      console.log(`Notification sent: ${title}`);
+      logger.debug('Notification sent', { title });
       return { sent: true };
     } catch (error) {
-      console.error(`Failed to send notification: ${title}`, error);
+      logger.error('Failed to send notification', error as Error, { title });
       return { sent: false, reason: 'error' };
     }
   }

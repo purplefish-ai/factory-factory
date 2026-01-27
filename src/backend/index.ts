@@ -1382,13 +1382,15 @@ server.listen(PORT, async () => {
   // Start periodic orphan cleanup
   reconciliationService.startPeriodicCleanup();
 
-  console.log(`Backend server running on http://localhost:${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Health check (all): http://localhost:${PORT}/health/all`);
-  console.log(`Inngest endpoint: http://localhost:${PORT}/api/inngest`);
-  console.log(`tRPC endpoint: http://localhost:${PORT}/api/trpc`);
-  console.log(`WebSocket chat: ws://localhost:${PORT}/chat`);
-  console.log(`WebSocket terminal: ws://localhost:${PORT}/terminal`);
+  logger.info('Server endpoints available', {
+    server: `http://localhost:${PORT}`,
+    health: `http://localhost:${PORT}/health`,
+    healthAll: `http://localhost:${PORT}/health/all`,
+    inngest: `http://localhost:${PORT}/api/inngest`,
+    trpc: `http://localhost:${PORT}/api/trpc`,
+    wsChat: `ws://localhost:${PORT}/chat`,
+    wsTerminal: `ws://localhost:${PORT}/terminal`,
+  });
 });
 
 // Shared cleanup logic
