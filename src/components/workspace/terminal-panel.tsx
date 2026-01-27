@@ -115,29 +115,32 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
   }, []);
 
   // Handle terminal list restoration (after page refresh)
-  const handleTerminalList = useCallback((terminals: Array<{ id: string; createdAt: string }>) => {
-    // Only restore if we don't already have tabs (avoid duplicates on reconnect)
-    setTabs((prev) => {
-      if (prev.length > 0) {
-        return prev;
-      }
+  const handleTerminalList = useCallback(
+    (terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>) => {
+      // Only restore if we don't already have tabs (avoid duplicates on reconnect)
+      setTabs((prev) => {
+        if (prev.length > 0) {
+          return prev;
+        }
 
-      // Create tabs for each existing terminal
-      const restoredTabs: TerminalTab[] = terminals.map((terminal, index) => ({
-        id: `tab-${terminal.id}`,
-        label: `Terminal ${index + 1}`,
-        terminalId: terminal.id,
-        output: '', // Output will stream in as new data arrives
-      }));
+        // Create tabs for each existing terminal, restoring buffered output
+        const restoredTabs: TerminalTab[] = terminals.map((terminal, index) => ({
+          id: `tab-${terminal.id}`,
+          label: `Terminal ${index + 1}`,
+          terminalId: terminal.id,
+          output: terminal.outputBuffer ?? '',
+        }));
 
-      // Set the first tab as active
-      if (restoredTabs.length > 0) {
-        setTimeout(() => setActiveTabId(restoredTabs[0].id), 0);
-      }
+        // Set the first tab as active
+        if (restoredTabs.length > 0) {
+          setTimeout(() => setActiveTabId(restoredTabs[0].id), 0);
+        }
 
-      return restoredTabs;
-    });
-  }, []);
+        return restoredTabs;
+      });
+    },
+    []
+  );
 
   const { connected, create, sendInput, resize, destroy } = useTerminalWebSocket({
     workspaceId,

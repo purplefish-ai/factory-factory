@@ -534,7 +534,7 @@ function WorkspaceChatContent() {
 
         {/* Right Panel (conditionally rendered, fixed width) */}
         {rightPanelVisible && (
-          <div className="w-[400px] border-l flex-shrink-0">
+          <div className="w-[480px] border-l flex-shrink-0">
             <RightPanel workspaceId={workspaceId} />
           </div>
         )}

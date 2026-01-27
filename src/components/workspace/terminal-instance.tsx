@@ -47,6 +47,7 @@ export function TerminalInstance({
   }, [onData, onResize]);
 
   // Initialize terminal synchronously
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Intentionally capture initial output at mount time only - subsequent output changes are handled by the output effect below
   useEffect(() => {
     if (!containerRef.current) {
       return;
@@ -94,6 +95,13 @@ export function TerminalInstance({
 
     // Report initial size via ref to get latest callback
     onResizeRef.current(terminal.cols, terminal.rows);
+
+    // Write initial output immediately during init to prevent blank terminal on tab switch
+    // The output prop is captured via closure at mount time
+    if (output) {
+      terminal.write(output);
+      lastOutputLengthRef.current = output.length;
+    }
 
     // Handle user input via ref to always use latest callback
     terminal.onData((data) => {
