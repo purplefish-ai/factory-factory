@@ -53,6 +53,19 @@ const CHAT_TAB: MainViewTab = {
 // Helper Functions
 // =============================================================================
 
+function isValidTab(tab: unknown): tab is MainViewTab {
+  return (
+    typeof tab === 'object' &&
+    tab !== null &&
+    'id' in tab &&
+    typeof (tab as MainViewTab).id === 'string' &&
+    'type' in tab &&
+    ['chat', 'file', 'diff'].includes((tab as MainViewTab).type) &&
+    'label' in tab &&
+    typeof (tab as MainViewTab).label === 'string'
+  );
+}
+
 function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
   if (typeof window === 'undefined') {
     return [CHAT_TAB];
@@ -62,7 +75,11 @@ function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
     if (!stored) {
       return [CHAT_TAB];
     }
-    const parsed = JSON.parse(stored) as MainViewTab[];
+    const parsed: unknown = JSON.parse(stored);
+    // Validate that parsed data is an array of valid tabs
+    if (!(Array.isArray(parsed) && parsed.every(isValidTab))) {
+      return [CHAT_TAB];
+    }
     // Ensure chat tab is always first
     const hasChat = parsed.some((tab) => tab.id === 'chat');
     if (!hasChat) {
@@ -124,19 +141,18 @@ interface WorkspacePanelProviderProps {
 }
 
 export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanelProviderProps) {
-  // Track if initial load from localStorage has happened
-  const initializedRef = useRef(false);
+  // Track which workspaceId has completed loading (enables persistence)
+  const loadedForWorkspaceRef = useRef<string | null>(null);
 
   const [tabs, setTabs] = useState<MainViewTab[]>([CHAT_TAB]);
   const [activeTabId, setActiveTabId] = useState<string>('chat');
   const [rightPanelVisible, setRightPanelVisibleState] = useState<boolean>(false);
 
-  // Load persisted state from localStorage on mount
+  // Load persisted state from localStorage on mount or workspaceId change
   useEffect(() => {
-    if (initializedRef.current) {
+    if (loadedForWorkspaceRef.current === workspaceId) {
       return;
     }
-    initializedRef.current = true;
 
     // Load tabs and active tab (workspace-scoped)
     const storedTabs = loadTabsFromStorage(workspaceId);
@@ -147,28 +163,36 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     const activeExists = storedTabs.some((tab) => tab.id === storedActiveTab);
     setActiveTabId(activeExists ? storedActiveTab : 'chat');
 
-    // Load right panel visibility (global)
-    const stored = localStorage.getItem(STORAGE_KEY_RIGHT_PANEL);
-    if (stored !== null) {
-      setRightPanelVisibleState(stored === 'true');
+    // Load right panel visibility (global, with SSR check)
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(STORAGE_KEY_RIGHT_PANEL);
+      if (stored !== null) {
+        setRightPanelVisibleState(stored === 'true');
+      }
     }
   }, [workspaceId]);
 
-  // Persist tabs when they change (skip initial render)
+  // Persist tabs when they change (skip until load is complete)
   useEffect(() => {
-    if (!initializedRef.current) {
+    if (loadedForWorkspaceRef.current !== workspaceId) {
       return;
     }
     saveTabsToStorage(workspaceId, tabs);
   }, [workspaceId, tabs]);
 
-  // Persist active tab when it changes (skip initial render)
+  // Persist active tab when it changes (skip until load is complete)
   useEffect(() => {
-    if (!initializedRef.current) {
+    if (loadedForWorkspaceRef.current !== workspaceId) {
       return;
     }
     saveActiveTabToStorage(workspaceId, activeTabId);
   }, [workspaceId, activeTabId]);
+
+  // Mark workspace as loaded AFTER persist effects have had a chance to skip
+  // This effect must be declared after persist effects to run last
+  useEffect(() => {
+    loadedForWorkspaceRef.current = workspaceId;
+  }, [workspaceId]);
 
   // Persist visibility changes to localStorage
   const setRightPanelVisible = useCallback((visible: boolean) => {

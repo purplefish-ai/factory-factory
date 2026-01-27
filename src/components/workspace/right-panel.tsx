@@ -60,15 +60,16 @@ interface RightPanelProps {
 }
 
 export function RightPanel({ workspaceId, className }: RightPanelProps) {
-  const initializedRef = useRef(false);
+  // Track which workspaceId has been loaded to handle workspace changes
+  const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('git');
 
-  // Load persisted tab from localStorage on mount
+  // Load persisted tab from localStorage on mount or workspaceId change
   useEffect(() => {
-    if (initializedRef.current) {
+    if (loadedForWorkspaceRef.current === workspaceId) {
       return;
     }
-    initializedRef.current = true;
+    loadedForWorkspaceRef.current = workspaceId;
 
     try {
       const stored = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
