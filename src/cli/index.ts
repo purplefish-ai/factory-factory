@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -654,6 +654,13 @@ program
     if (exitCode !== 0) {
       console.error(chalk.red('Frontend build failed'));
       process.exit(exitCode);
+    }
+
+    // Copy static files to standalone output (required for Next.js standalone mode)
+    const staticSrc = join(PROJECT_ROOT, '.next', 'static');
+    const staticDest = join(PROJECT_ROOT, '.next', 'standalone', '.next', 'static');
+    if (existsSync(staticSrc)) {
+      cpSync(staticSrc, staticDest, { recursive: true });
     }
 
     console.log(chalk.green('\n✅ Build completed successfully!'));
