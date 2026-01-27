@@ -5,6 +5,9 @@ const nextConfig = {
   // Point Next.js to the frontend directory
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
   distDir: '.next',
+  // Enable standalone output for production deployments
+  // This creates a self-contained build in .next/standalone
+  output: 'standalone',
   // Enable Turbopack (default in Next.js 16)
   turbopack: {},
   // Proxy API requests to backend server
