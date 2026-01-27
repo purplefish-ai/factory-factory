@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  realpathSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -860,25 +861,52 @@ async function handleChatMessage(
 }
 
 /**
- * Validate that workingDir is safe (no path traversal).
+ * Validate that workingDir is safe and within the worktree base directory.
+ * Resolves symlinks to prevent escaping the allowed directory via symlink traversal.
  * Returns resolved path if valid, or null if invalid.
  */
 function validateWorkingDir(workingDir: string): string | null {
-  const baseDir = process.cwd();
-  const resolved = resolve(baseDir, workingDir);
-
-  // Ensure the resolved path is within the base directory
-  // or is the base directory itself
-  if (!resolved.startsWith(baseDir)) {
-    return null;
-  }
-
-  // Reject paths with obvious traversal attempts
+  // Reject paths with path traversal attempts
   if (workingDir.includes('..')) {
     return null;
   }
 
-  return resolved;
+  // Must be an absolute path
+  if (!workingDir.startsWith('/')) {
+    return null;
+  }
+
+  // Resolve the path to normalize it (removes double slashes, etc.)
+  const normalized = resolve(workingDir);
+
+  // The path must exist to resolve symlinks
+  if (!existsSync(normalized)) {
+    return null;
+  }
+
+  // Resolve symlinks to get the real path - this prevents symlink-based escapes
+  let realPath: string;
+  try {
+    realPath = realpathSync(normalized);
+  } catch {
+    // realpathSync can fail if path becomes invalid during resolution
+    return null;
+  }
+
+  // Ensure the real path (with symlinks resolved) is within the worktree base directory
+  // Also resolve symlinks in worktreeBaseDir to handle cases where the base dir itself contains symlinks
+  let worktreeBaseDir: string;
+  try {
+    worktreeBaseDir = realpathSync(configService.getWorktreeBaseDir());
+  } catch {
+    // If worktree base dir doesn't exist or can't be resolved, reject all paths
+    return null;
+  }
+  if (!realPath.startsWith(`${worktreeBaseDir}/`) && realPath !== worktreeBaseDir) {
+    return null;
+  }
+
+  return realPath;
 }
 
 // Handle chat WebSocket upgrade
@@ -889,14 +917,22 @@ function handleChatUpgrade(
   url: URL
 ) {
   const sessionId = url.searchParams.get('sessionId') || `chat-${Date.now()}`;
-  const rawWorkingDir = url.searchParams.get('workingDir') || process.cwd();
+  const rawWorkingDir = url.searchParams.get('workingDir');
   const claudeSessionId = url.searchParams.get('claudeSessionId');
+
+  // Require workingDir parameter - no fallback to process.cwd()
+  if (!rawWorkingDir) {
+    logger.warn('Missing workingDir parameter', { sessionId });
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\nMissing workingDir parameter');
+    socket.destroy();
+    return;
+  }
 
   // Validate workingDir to prevent path traversal
   const workingDir = validateWorkingDir(rawWorkingDir);
   if (!workingDir) {
     logger.warn('Invalid workingDir rejected', { rawWorkingDir, sessionId });
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\nInvalid workingDir');
     socket.destroy();
     return;
   }
