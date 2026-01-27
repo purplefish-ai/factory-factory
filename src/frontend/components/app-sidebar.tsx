@@ -271,8 +271,8 @@ export function AppSidebar() {
                     <SidebarMenuItem key={workspace.id}>
                       <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
                         <Link href={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
-                          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
+                            <div className="flex items-center gap-1.5">
                               {workspace.branchName && (
                                 <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
                               )}
@@ -280,7 +280,7 @@ export function AppSidebar() {
                                 {workspace.branchName || workspace.name}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <span className="truncate">{workspace.name}</span>
                               {workingStatus?.[workspace.id] && (
                                 <>
