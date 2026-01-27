@@ -234,7 +234,7 @@ program
       NODE_ENV: options.dev ? 'development' : 'production',
     };
 
-    const processes: ChildProcess[] = [];
+    const processes: { name: string; proc: ChildProcess }[] = [];
     const shutdownState = { shuttingDown: false };
 
     // Handle shutdown
@@ -245,15 +245,20 @@ program
       shutdownState.shuttingDown = true;
 
       console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
-      for (const proc of processes) {
+      for (const { proc } of processes) {
         proc.kill('SIGTERM');
       }
 
       // Force kill after timeout
       setTimeout(() => {
-        console.log(chalk.red('  Force killing remaining processes...'));
-        for (const proc of processes) {
-          proc.kill('SIGKILL');
+        const alive = processes.filter(({ proc }) => !proc.killed && proc.exitCode === null);
+        if (alive.length > 0) {
+          console.log(
+            chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
+          );
+          for (const { proc } of alive) {
+            proc.kill('SIGKILL');
+          }
         }
         process.exit(1);
       }, 5000);
@@ -311,7 +316,7 @@ program
 async function startDevelopmentMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
-  processes: ChildProcess[],
+  processes: { name: string; proc: ChildProcess }[],
   backendPort: number,
   frontendPort: number,
   onReady: () => Promise<void>,
@@ -324,7 +329,7 @@ async function startDevelopmentMode(
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(backend);
+  processes.push({ name: 'backend', proc: backend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && backend.stderr) {
@@ -339,7 +344,7 @@ async function startDevelopmentMode(
     console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -352,7 +357,7 @@ async function startDevelopmentMode(
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(frontend);
+  processes.push({ name: 'frontend', proc: frontend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && frontend.stderr) {
@@ -367,7 +372,7 @@ async function startDevelopmentMode(
     console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -400,7 +405,7 @@ async function startDevelopmentMode(
     }),
   ]).catch((error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -410,7 +415,7 @@ async function startDevelopmentMode(
 async function startProductionMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
-  processes: ChildProcess[],
+  processes: { name: string; proc: ChildProcess }[],
   backendPort: number,
   frontendPort: number,
   onReady: () => Promise<void>,
@@ -439,7 +444,7 @@ async function startProductionMode(
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(backend);
+  processes.push({ name: 'backend', proc: backend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && backend.stderr) {
@@ -454,7 +459,7 @@ async function startProductionMode(
     console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -473,7 +478,7 @@ async function startProductionMode(
     },
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push(frontend);
+  processes.push({ name: 'frontend', proc: frontend });
 
   // Log stderr even in non-verbose mode
   if (!options.verbose && frontend.stderr) {
@@ -488,7 +493,7 @@ async function startProductionMode(
     console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
   } catch {
     console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);
@@ -521,7 +526,7 @@ async function startProductionMode(
     }),
   ]).catch((error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    for (const proc of processes) {
+    for (const { proc } of processes) {
       proc.kill('SIGTERM');
     }
     process.exit(1);

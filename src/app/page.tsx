@@ -24,7 +24,7 @@ export default function RootRedirect() {
       // Get stored project or use first one
       const stored = localStorage.getItem('factoryfactory_selected_project_slug');
       const slug = stored || projects[0].slug;
-      router.replace(`/projects/${slug}/epics`);
+      router.replace(`/projects/${slug}`);
     } else {
       router.replace('/projects/new');
     }
