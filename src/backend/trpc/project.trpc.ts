@@ -114,9 +114,32 @@ export const projectRouter = router({
         }
       }
 
-      // Validate only one of command or path is set
-      if (updates.startupScriptCommand && updates.startupScriptPath) {
-        throw new Error('Cannot specify both startupScriptCommand and startupScriptPath');
+      // Validate only one of command or path is set (check final state, not just request)
+      if (updates.startupScriptCommand !== undefined || updates.startupScriptPath !== undefined) {
+        const currentProject = await prisma.project.findUnique({
+          where: { id },
+          select: { startupScriptCommand: true, startupScriptPath: true },
+        });
+
+        if (!currentProject) {
+          throw new Error(`Project not found: ${id}`);
+        }
+
+        const finalCommand =
+          updates.startupScriptCommand !== undefined
+            ? updates.startupScriptCommand
+            : currentProject.startupScriptCommand;
+
+        const finalPath =
+          updates.startupScriptPath !== undefined
+            ? updates.startupScriptPath
+            : currentProject.startupScriptPath;
+
+        if (finalCommand && finalPath) {
+          throw new Error(
+            'Cannot have both startupScriptCommand and startupScriptPath set. Please clear one by setting it to null.'
+          );
+        }
       }
 
       return projectAccessor.update(id, updates);
