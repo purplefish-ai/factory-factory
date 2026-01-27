@@ -71,6 +71,12 @@ export function AppSidebar() {
     { enabled: workspaceIds.length > 0, refetchInterval: 1000 }
   );
 
+  // Fetch git stats for all workspaces (for showing change counts)
+  const { data: gitStats } = trpc.workspace.getBatchGitStats.useQuery(
+    { workspaceIds },
+    { enabled: workspaceIds.length > 0, refetchInterval: 10_000 }
+  );
+
   // Fetch review requests count for badge (only count unapproved PRs)
   const { data: reviewData } = trpc.prReview.listReviewRequests.useQuery(undefined, {
     refetchInterval: 60_000, // Poll every 60 seconds
@@ -292,6 +298,8 @@ export function AppSidebar() {
                 )}
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
+                  const isWorking = workingStatus?.[workspace.id];
+                  const changeCount = gitStats?.[workspace.id]?.total ?? 0;
                   return (
                     <SidebarMenuItem key={workspace.id}>
                       <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
@@ -304,13 +312,27 @@ export function AppSidebar() {
                               <span className="truncate font-medium text-sm">
                                 {workspace.branchName || workspace.name}
                               </span>
+                              {workspace.prNumber && workspace.prState !== 'NONE' && (
+                                <span className="ml-auto shrink-0 flex items-center gap-0.5 text-xs text-muted-foreground">
+                                  <GitPullRequest className="h-3 w-3" />
+                                  <span>#{workspace.prNumber}</span>
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <span className="truncate">{workspace.name}</span>
-                              {workingStatus?.[workspace.id] && (
+                              {isWorking && (
                                 <>
                                   <span>·</span>
-                                  <span className="text-green-500">Working...</span>
+                                  <Loader2 className="h-3 w-3 animate-spin text-green-500 shrink-0" />
+                                </>
+                              )}
+                              {changeCount > 0 && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-yellow-600 dark:text-yellow-500 shrink-0">
+                                    {changeCount} {changeCount === 1 ? 'file' : 'files'}
+                                  </span>
                                 </>
                               )}
                             </div>
