@@ -11,7 +11,7 @@ jobs:
     name: Lint, Type Check, Dependencies & Dead Code
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
+      DATABASE_URL: "file:./test.db"
     steps:
       - uses: actions/checkout@v4
 
@@ -46,7 +46,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
+      DATABASE_URL: "file:./test.db"
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +75,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
+      DATABASE_URL: "file:./test.db"
     steps:
       - uses: actions/checkout@v4
 

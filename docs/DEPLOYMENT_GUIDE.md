@@ -18,8 +18,7 @@ This guide covers deploying FactoryFactory to various environments, from local d
 
 ### Minimum Requirements
 
-- **Node.js**: 18.x or higher
-- **PostgreSQL**: 15.x or higher
+- **Node.js**: 20.x or higher
 - **Git**: 2.x or higher
 - **tmux**: 3.x or higher (for agent terminals)
 - **RAM**: 4GB minimum (8GB recommended)
@@ -29,7 +28,6 @@ This guide covers deploying FactoryFactory to various environments, from local d
 
 - **Docker**: 20.x or higher (for containerized deployment)
 - **Nginx**: For production reverse proxy
-- **Redis**: For session storage (if using authentication)
 
 ## Local Development Setup
 
@@ -43,133 +41,86 @@ cd factoryfactory
 ### 2. Install Dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
-### 3. Configure Environment
+### 3. Start Development Server
 
 ```bash
-# Copy example environment file
-cp .env.example .env
+# Easiest way - uses SQLite with sensible defaults
+pnpm dev
 
-# Edit with your values
-nano .env
+# Or using the CLI directly
+ff serve --dev
 ```
 
-Required variables for development:
-```env
-DATABASE_URL="postgresql://factoryfactory:factoryfactory_dev@localhost:5432/factoryfactory"
-```
+The default database location is `~/factory-factory/data.db`. No configuration required!
 
-Note: No API key needed - Claude uses OAuth via `claude login`.
-
-### 4. Start PostgreSQL
-
-Using Docker:
-```bash
-docker-compose up -d postgres
-```
-
-Or use an existing PostgreSQL instance.
-
-### 5. Initialize Database
-
-```bash
-# Generate Prisma client
-npm run db:generate
-
-# Run migrations
-npm run db:migrate
-```
-
-### 6. Start Development Servers
-
-In separate terminals:
-
-```bash
-# Terminal 1: Frontend
-npm run dev
-
-# Terminal 2: Backend
-npm run backend:dev
-
-# Terminal 3: Inngest Dev Server
-npm run inngest:dev
-```
-
-Or all at once (requires `concurrently`):
-```bash
-npm run dev:all
-```
-
-### 7. Access the Application
+### 4. Access the Application
 
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:3001
-- Inngest Dev UI: http://localhost:8288
 
 ## Production Deployment
 
-### Option 1: Manual Deployment
+### Option 1: Using the CLI (Recommended)
 
 #### 1. Build the Application
 
 ```bash
-# Build frontend
-npm run build
-
-# Build backend (optional, for TypeScript compilation)
-npm run build:backend
+ff build
 ```
 
-#### 2. Set Production Environment
-
-```env
-NODE_ENV=production
-DATABASE_URL="postgresql://user:password@production-db:5432/factoryfactory"
-INNGEST_EVENT_KEY="your-inngest-event-key"
-INNGEST_SIGNING_KEY="your-inngest-signing-key"
-```
-
-Note: No API key needed - Claude uses OAuth via `claude login`.
-
-#### 3. Run Migrations
+#### 2. Start Production Server
 
 ```bash
-npm run db:migrate:deploy
+ff serve
 ```
 
-#### 4. Start Production Servers
+The server will:
+- Automatically create the database at `~/factory-factory/data.db`
+- Run migrations on startup
+- Find available ports if defaults are in use
+- Open your browser automatically
+
+#### Custom Configuration
 
 ```bash
-# Start frontend
-npm run start
+# Custom database location
+ff serve --database-path /path/to/data.db
 
-# Start backend (in another process)
-npm run start:backend
+# Custom ports
+ff serve --port 8080 --backend-port 8081
+
+# Don't open browser
+ff serve --no-open
+
+# Verbose logging
+ff serve --verbose
 ```
 
-Use a process manager like PM2:
+### Option 2: Manual Deployment
+
+#### 1. Build the Application
+
 ```bash
-pm2 start npm --name "frontend" -- start
-pm2 start npm --name "backend" -- run start:backend
+pnpm build
 ```
 
-### Option 2: Docker Deployment
+#### 2. Set Environment Variables
 
-See [Docker Deployment](#docker-deployment) section.
+```bash
+export DATABASE_PATH="/path/to/data.db"
+export NODE_ENV=production
+```
+
+#### 3. Start the Server
+
+```bash
+pnpm start
+```
 
 ## Docker Deployment
-
-### Development with Docker
-
-```bash
-# Start database only
-docker-compose up -d postgres
-
-# Or with Inngest dev server
-docker-compose --profile dev up -d
-```
 
 ### Production with Docker
 
@@ -179,65 +130,40 @@ docker-compose --profile dev up -d
 docker-compose --profile production build
 ```
 
-#### 2. Configure Production Environment
-
-Create a `.env` file with production values:
-
-```env
-NODE_ENV=production
-INNGEST_EVENT_KEY=your-inngest-key
-INNGEST_SIGNING_KEY=your-inngest-signing-key
-POSTGRES_PASSWORD=secure-password-here
-```
-
-Note: No API key needed - Claude uses OAuth via `claude login`.
-
-#### 3. Start Services
+#### 2. Start Services
 
 ```bash
 docker-compose --profile production up -d
 ```
 
-#### 4. Run Migrations
-
-```bash
-docker-compose exec backend npm run db:migrate:deploy
-```
-
-### Docker Compose Profiles
-
-- **default**: PostgreSQL only (for local development)
-- **dev**: PostgreSQL + Inngest dev server
-- **production**: Full stack (PostgreSQL + Backend + Frontend + Nginx)
+The SQLite database will be stored in a Docker volume (`data`) for persistence.
 
 ## Configuration Reference
 
-### Required Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
-
-Note: No `ANTHROPIC_API_KEY` needed - Claude uses OAuth authentication via `claude login`.
-
-### Optional Environment Variables
-
-#### Server Configuration
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DATABASE_PATH` | `~/factory-factory/data.db` | SQLite database file path |
 | `BACKEND_PORT` | `3001` | Backend API port |
 | `FRONTEND_PORT` | `3000` | Frontend port |
 | `NODE_ENV` | `development` | Environment mode |
 
-#### Inngest (Required for Production)
+Note: No `ANTHROPIC_API_KEY` needed - Claude uses OAuth authentication via `claude login`.
 
-| Variable | Description |
-|----------|-------------|
-| `INNGEST_EVENT_KEY` | Event key from Inngest dashboard |
-| `INNGEST_SIGNING_KEY` | Signing key from Inngest dashboard |
+### CLI Options
 
-#### Agent Configuration
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --port` | `3000` | Frontend port |
+| `--backend-port` | `3001` | Backend API port |
+| `-d, --database-path` | `~/factory-factory/data.db` | SQLite database path |
+| `--host` | `localhost` | Host to bind to |
+| `--dev` | `false` | Run in development mode |
+| `--no-open` | `false` | Don't open browser |
+| `-v, --verbose` | `false` | Verbose logging |
+
+### Agent Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -248,73 +174,58 @@ Note: No `ANTHROPIC_API_KEY` needed - Claude uses OAuth authentication via `clau
 | `SUPERVISOR_PERMISSIONS` | `relaxed` | Permission mode |
 | `WORKER_PERMISSIONS` | `yolo` | Permission mode |
 
-#### Rate Limiting
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLAUDE_RATE_LIMIT_PER_MINUTE` | `60` | API calls per minute |
-| `CLAUDE_RATE_LIMIT_PER_HOUR` | `1000` | API calls per hour |
-| `MAX_CONCURRENT_WORKERS` | `10` | Max concurrent workers |
-| `MAX_CONCURRENT_SUPERVISORS` | `5` | Max concurrent supervisors |
-| `MAX_CONCURRENT_EPICS` | `5` | Max concurrent epics |
-
-#### Health & Recovery
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HEALTH_CHECK_INTERVAL_MS` | `300000` | Health check interval (5 min) |
-| `AGENT_HEARTBEAT_THRESHOLD_MINUTES` | `7` | Unhealthy threshold |
-| `MAX_WORKER_ATTEMPTS` | `5` | Max recovery attempts |
-| `CRASH_LOOP_THRESHOLD_MS` | `60000` | Crash loop window |
-| `MAX_RAPID_CRASHES` | `3` | Crashes before loop |
-
 ## Database Migrations
+
+### Automatic Migrations
+
+The `ff serve` command automatically runs migrations on startup. No manual intervention needed!
+
+### Manual Migrations
+
+```bash
+# Run migrations manually
+ff db:migrate
+
+# With custom database path
+ff db:migrate --database-path /path/to/data.db
+```
 
 ### Development Migrations
 
 ```bash
 # Create a new migration
-npm run db:migrate
+pnpm db:migrate
 
 # Reset database (destroys data!)
 npx prisma migrate reset
 ```
 
-### Production Migrations
+### Database Studio
 
 ```bash
-# Apply pending migrations
-npm run db:migrate:deploy
+# Open Prisma Studio to browse/edit data
+ff db:studio
 ```
-
-### Rollback Strategy
-
-Prisma doesn't support automatic rollback. For production:
-
-1. Always backup before migrating
-2. Test migrations in staging first
-3. Keep rollback scripts for critical changes
 
 ## Backup and Recovery
 
 ### Database Backup
 
-```bash
-# Backup database
-pg_dump -h localhost -U factoryfactory -d factoryfactory > backup.sql
+SQLite databases are simple files - just copy the file!
 
-# With Docker
-docker-compose exec postgres pg_dump -U factoryfactory factoryfactory > backup.sql
+```bash
+# Simple backup
+cp ~/factory-factory/data.db ~/factory-factory/backup-$(date +%Y%m%d).db
+
+# With CLI
+cp $(ff db:path 2>/dev/null || echo ~/factory-factory/data.db) backup.db
 ```
 
 ### Database Restore
 
 ```bash
-# Restore database
-psql -h localhost -U factoryfactory -d factoryfactory < backup.sql
-
-# With Docker
-docker-compose exec -T postgres psql -U factoryfactory factoryfactory < backup.sql
+# Stop the server first, then restore
+cp backup.db ~/factory-factory/data.db
 ```
 
 ### Automated Backups
@@ -326,7 +237,7 @@ Set up a cron job for regular backups:
 crontab -e
 
 # Add daily backup at 2 AM
-0 2 * * * pg_dump -h localhost -U factoryfactory factoryfactory > /backups/ff-$(date +\%Y\%m\%d).sql
+0 2 * * * cp ~/factory-factory/data.db ~/backups/ff-$(date +\%Y\%m\%d).db
 ```
 
 ## Monitoring
@@ -335,38 +246,27 @@ crontab -e
 
 - `/health` - Basic health check
 - `/health/database` - Database connection
-- `/health/inngest` - Inngest status
 - `/health/agents` - Agent health summary
 - `/health/all` - Comprehensive check
-
-### Check Health via CLI
-
-```bash
-# Quick check
-npm run health
-
-# Full check
-npm run health:all
-```
 
 ### Monitoring Recommendations
 
 1. **Set up health check monitoring**: Use uptime services to ping `/health`
 2. **Alert on failures**: Configure alerts for `/health/all` returning non-200
 3. **Log aggregation**: Ship logs to a centralized logging service
-4. **Database monitoring**: Monitor PostgreSQL connections and performance
+4. **Database size monitoring**: Monitor SQLite file size growth
 
 ## Security Considerations
 
 ### Production Checklist
 
-- [ ] Use strong database passwords
-- [ ] Enable HTTPS (configure nginx with SSL)
+- [ ] Use HTTPS (configure nginx with SSL)
 - [ ] Set appropriate CORS origins
-- [ ] Use environment variables for secrets
+- [ ] Use environment variables for configuration
 - [ ] Enable rate limiting
 - [ ] Set up firewall rules
 - [ ] Regular security updates
+- [ ] Backup database regularly
 
 ### CORS Configuration
 
@@ -379,14 +279,6 @@ CORS_ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
 1. Obtain SSL certificates (Let's Encrypt recommended)
 2. Place certificates in `./certs/` directory
 3. Use the provided nginx.conf for HTTPS configuration
-
-### Secrets Management
-
-For production, consider using:
-- AWS Secrets Manager
-- HashiCorp Vault
-- Doppler
-- Environment-specific `.env` files (never commit to git)
 
 ---
 
