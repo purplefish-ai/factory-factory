@@ -15,7 +15,15 @@ const globalForPrisma = globalThis as unknown as {
 function ensureDatabaseDirectory(dbPath: string): void {
   const dir = dirname(dbPath);
   if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+    try {
+      mkdirSync(dir, { recursive: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to create database directory "${dir}": ${message}. ` +
+          'Check that you have write permissions or set DATABASE_PATH to a writable location.'
+      );
+    }
   }
 }
 
@@ -26,7 +34,8 @@ function createPrismaClient(): PrismaClient {
   ensureDatabaseDirectory(databasePath);
 
   // Create Prisma adapter with SQLite configuration
-  // The adapter handles connection creation internally
+  // Note: The adapter expects a raw file path, not a file: URL
+  // (getDatabaseUrl() with file: prefix is for Prisma CLI configuration)
   const adapter = new PrismaBetterSqlite3({
     url: databasePath,
   });

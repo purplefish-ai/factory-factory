@@ -488,7 +488,6 @@ function useAutoScroll(
 // Main Workspace Chat Component
 // =============================================================================
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Large component with many UI states
 function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();

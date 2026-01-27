@@ -16,7 +16,13 @@ import { basename, join } from 'node:path';
  * expandEnvVars('$HOME/data') // '/Users/john/data'
  * expandEnvVars('${USER}') // 'john'
  */
-export function expandEnvVars(value: string): string {
+export function expandEnvVars(value: string, depth = 0): string {
+  // Prevent infinite recursion from circular env var references
+  const MAX_DEPTH = 10;
+  if (depth >= MAX_DEPTH) {
+    return value;
+  }
+
   // Replace $USER with actual home directory username (cross-platform)
   let result = value.replace(/\$USER|\$\{USER\}/g, basename(homedir()) || 'user');
 
@@ -24,7 +30,7 @@ export function expandEnvVars(value: string): string {
   result = result.replace(/\$\{?([A-Z_][A-Z0-9_]*)\}?/gi, (match, varName) => {
     const envValue = process.env[varName];
     if (envValue !== undefined) {
-      return expandEnvVars(envValue);
+      return expandEnvVars(envValue, depth + 1);
     }
     return match;
   });

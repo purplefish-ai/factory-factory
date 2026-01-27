@@ -755,7 +755,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket onopen handler requires handling multiple reconnection scenarios
     ws.onopen = () => {
       const wasReconnect = reconnectAttemptsRef.current > 0;
       setConnected(true);
@@ -787,7 +786,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       }
     };
 
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket onclose handler requires handling stale connection detection and exponential backoff
     ws.onclose = () => {
       // Only handle this close event if this WebSocket is still the current one.
       // If wsRef.current is different or null, we've already moved on to a new connection
