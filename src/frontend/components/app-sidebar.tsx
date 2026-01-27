@@ -73,7 +73,6 @@ export function AppSidebar() {
   const utils = trpc.useUtils();
 
   const createWorkspace = trpc.workspace.create.useMutation();
-  const createSession = trpc.session.createClaudeSession.useMutation();
 
   const handleCreateWorkspace = async () => {
     if (!selectedProjectId) {
@@ -82,28 +81,22 @@ export function AppSidebar() {
     const name = generateWorkspaceName();
 
     // Create workspace (branchName defaults to project's default branch)
+    // Don't create a session - user will choose workflow in workspace page
     const workspace = await createWorkspace.mutateAsync({
       projectId: selectedProjectId,
       name,
     });
 
-    // Create a Claude session for the workspace
-    await createSession.mutateAsync({
-      workspaceId: workspace.id,
-      workflow: 'explore',
-      model: 'sonnet',
-    });
-
     // Invalidate workspace list cache
     utils.workspace.list.invalidate({ projectId: selectedProjectId });
 
-    // Navigate to workspace
+    // Navigate to workspace (workflow selection will be shown)
     router.push(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
   };
 
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
-  const isCreatingWorkspace = createWorkspace.isPending || createSession.isPending;
+  const isCreatingWorkspace = createWorkspace.isPending;
 
   useEffect(() => {
     if (selectedProjectId) {

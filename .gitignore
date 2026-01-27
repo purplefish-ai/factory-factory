@@ -12,6 +12,9 @@ out/
 build/
 dist/
 
+# Playwright
+.playwright-mcp/
+
 # Production
 *.log
 npm-debug.log*
