@@ -434,20 +434,6 @@ export default function AdminDashboardPage() {
         <ProcessesSection processes={processes} />
       )}
 
-      {/* Quick Links */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 flex-wrap">
-            <Button variant="secondary" asChild>
-              <Link href="/admin/system">System Settings</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Environment Info */}
       <Card className="bg-muted/50">
         <CardContent className="py-4">

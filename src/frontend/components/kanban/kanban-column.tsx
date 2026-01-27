@@ -2,7 +2,6 @@
 
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
@@ -49,24 +48,22 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
       </div>
 
       {/* Column Content */}
-      <ScrollArea className="flex-1 w-full">
-        <div
-          className={cn(
-            'p-2 space-y-2 min-h-[200px] rounded-b-lg border border-t-0',
-            isEmpty && 'border-dashed'
-          )}
-        >
-          {isEmpty ? (
-            <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
-              {column.description}
-            </div>
-          ) : (
-            workspaces.map((workspace) => (
-              <KanbanCard key={workspace.id} workspace={workspace} projectSlug={projectSlug} />
-            ))
-          )}
-        </div>
-      </ScrollArea>
+      <div
+        className={cn(
+          'flex-1 overflow-y-auto p-2 space-y-2 min-h-[200px] rounded-b-lg border border-t-0',
+          isEmpty && 'border-dashed'
+        )}
+      >
+        {isEmpty ? (
+          <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
+            {column.description}
+          </div>
+        ) : (
+          workspaces.map((workspace) => (
+            <KanbanCard key={workspace.id} workspace={workspace} projectSlug={projectSlug} />
+          ))
+        )}
+      </div>
     </div>
   );
 }
