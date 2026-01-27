@@ -7,30 +7,10 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { expandEnvVars } from '../lib/env';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('config');
-
-/**
- * Expand environment variables in a string.
- * Handles $VAR and ${VAR} syntax, including $USER and other common variables.
- */
-function expandEnvVars(value: string): string {
-  // Replace $USER with actual home directory username
-  let result = value.replace(/\$USER|\$\{USER\}/g, homedir().split('/').pop() || 'user');
-
-  // Replace other environment variables
-  result = result.replace(/\$\{?([A-Z_][A-Z0-9_]*)\}?/gi, (match, varName) => {
-    const envValue = process.env[varName];
-    if (envValue !== undefined) {
-      // Recursively expand in case env vars reference other env vars
-      return expandEnvVars(envValue);
-    }
-    return match; // Leave unexpanded if not found
-  });
-
-  return result;
-}
 
 /**
  * Permission modes for sessions
