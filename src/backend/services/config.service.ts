@@ -44,10 +44,6 @@ interface SystemConfig {
   // Database (SQLite)
   databasePath: string;
 
-  // Inngest
-  inngestEventKey?: string;
-  inngestSigningKey?: string;
-
   // Default session profile
   defaultSessionProfile: SessionProfile;
 
@@ -163,10 +159,6 @@ function loadSystemConfig(): SystemConfig {
     // Database (SQLite - defaults to ~/factory-factory/data.db)
     databasePath: process.env.DATABASE_PATH || join(baseDir, 'data.db'),
 
-    // Inngest
-    inngestEventKey: process.env.INNGEST_EVENT_KEY,
-    inngestSigningKey: process.env.INNGEST_SIGNING_KEY,
-
     // Default session profile
     defaultSessionProfile: buildDefaultSessionProfile(),
 
@@ -203,15 +195,6 @@ class ConfigService {
     const errors: string[] = [];
 
     // SQLite database path is always set (has default), no validation needed
-
-    if (this.config.nodeEnv === 'production') {
-      if (!this.config.inngestEventKey) {
-        warnings.push('INNGEST_EVENT_KEY is not set (required for production)');
-      }
-      if (!this.config.inngestSigningKey) {
-        warnings.push('INNGEST_SIGNING_KEY is not set (required for production)');
-      }
-    }
 
     // Log warnings
     warnings.forEach((w) => logger.warn(w));

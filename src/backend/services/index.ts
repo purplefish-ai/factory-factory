@@ -18,6 +18,8 @@ export { notificationService } from './notification.service';
 export { rateLimiter } from './rate-limiter.service';
 // Reconciliation service
 export { reconciliationService } from './reconciliation.service';
+// Scheduler service
+export { schedulerService } from './scheduler.service';
 // Session service
 export { sessionService } from './session.service';
 // Terminal service
