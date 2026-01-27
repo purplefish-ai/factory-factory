@@ -367,6 +367,7 @@ export interface AgentMetadata {
 export interface WebSocketMessage {
   type:
     | 'status'
+    | 'starting'
     | 'started'
     | 'stopped'
     | 'process_exit'
@@ -376,8 +377,10 @@ export interface WebSocketMessage {
     | 'session_loaded'
     | 'agent_metadata'
     | 'permission_request'
-    | 'user_question';
+    | 'user_question'
+    | 'message_queued';
   sessionId?: string;
+  dbSessionId?: string;
   claudeSessionId?: string;
   running?: boolean;
   message?: string;
@@ -395,6 +398,8 @@ export interface WebSocketMessage {
   questions?: AskUserQuestion[];
   // Chat settings
   settings?: ChatSettings;
+  // Message queued acknowledgment
+  text?: string;
 }
 
 // =============================================================================

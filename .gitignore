@@ -48,5 +48,9 @@ worktrees/
 # Prisma generated client
 prisma/generated/
 
+# SQLite databases
+*.db
+*.db-journal
+
 # Storybook
 storybook-static/

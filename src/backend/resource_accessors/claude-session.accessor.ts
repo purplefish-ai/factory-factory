@@ -61,7 +61,7 @@ class ClaudeSessionAccessor {
     return prisma.claudeSession.findMany({
       where,
       take: filters?.limit,
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
     });
   }
 
@@ -99,7 +99,7 @@ class ClaudeSessionAccessor {
       where: {
         workspaceId: { in: workspaceIds },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
     });
   }
 }

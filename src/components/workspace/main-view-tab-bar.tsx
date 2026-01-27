@@ -14,6 +14,7 @@ import { useWorkspacePanel } from './workspace-panel-context';
 
 interface Session {
   id: string;
+  name: string | null;
 }
 
 // =============================================================================
@@ -73,9 +74,10 @@ function BaseTabItem({ icon, label, isActive, onSelect, onClose }: BaseTabItemPr
         'group relative flex items-center gap-1.5 px-2 py-1 text-sm font-medium cursor-pointer',
         'rounded-md transition-all whitespace-nowrap',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'border',
         isActive
-          ? 'bg-background text-foreground shadow-sm border border-border'
-          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+          ? 'bg-background text-foreground shadow-sm border-border'
+          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent'
       )}
     >
       {icon}
@@ -187,7 +189,7 @@ export function MainViewTabBar({
       {sessions?.map((session, index) => (
         <SessionTabItem
           key={session.id}
-          label={`Chat ${index + 1}`}
+          label={session.name ?? `Chat ${index + 1}`}
           isActive={session.id === currentSessionId && activeTabId === 'chat'}
           isRunning={session.id === runningSessionId}
           onSelect={() => {
