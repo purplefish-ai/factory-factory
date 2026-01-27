@@ -1,7 +1,10 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { createLogger } from '../services/logger.service';
 import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
+
+const logger = createLogger('session');
 
 /**
  * Represents a message from session history
@@ -127,13 +130,13 @@ export class SessionManager {
           messages.push(...parsedMessages);
         } catch {
           // Skip malformed JSONL lines
-          console.warn(`Skipping malformed JSONL line in session ${sessionId}`);
+          logger.warn('Skipping malformed JSONL line', { sessionId });
         }
       }
     } catch (error) {
       // Return empty array if file doesn't exist or can't be read
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn(`Error reading session ${sessionId}:`, error);
+        logger.warn('Error reading session', { sessionId, error });
       }
     }
 
@@ -167,7 +170,7 @@ export class SessionManager {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn(`Error reading session ${sessionId} for model:`, error);
+        logger.warn('Error reading session for model', { sessionId, error });
       }
     }
 
@@ -198,7 +201,7 @@ export class SessionManager {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn(`Error reading session ${sessionId} for thinking mode:`, error);
+        logger.warn('Error reading session for thinking mode', { sessionId, error });
       }
     }
 
@@ -229,7 +232,7 @@ export class SessionManager {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn(`Error reading session ${sessionId} for git branch:`, error);
+        logger.warn('Error reading session for git branch', { sessionId, error });
       }
     }
 
@@ -264,13 +267,13 @@ export class SessionManager {
           });
         } catch {
           // Skip files we can't stat
-          console.warn(`Could not stat session file: ${filePath}`);
+          logger.warn('Could not stat session file', { filePath });
         }
       }
     } catch (error) {
       // Return empty array if project directory doesn't exist
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn(`Error listing sessions for ${workingDir}:`, error);
+        logger.warn('Error listing sessions', { workingDir, error });
       }
     }
 
