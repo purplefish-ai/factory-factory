@@ -23,18 +23,18 @@ export interface ModelInfo {
 
 /**
  * Available models using Claude CLI aliases.
- * Sonnet is the default (when selectedModel is null).
+ * Opus is the default (when selectedModel is null).
  */
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  { value: 'sonnet', displayName: 'Sonnet' },
   { value: 'opus', displayName: 'Opus' },
+  { value: 'sonnet', displayName: 'Sonnet' },
 ];
 
 /**
  * Chat session settings that persist per-session.
  */
 export interface ChatSettings {
-  selectedModel: string | null; // null = use default (Sonnet)
+  selectedModel: string | null; // null = use default (Opus)
   thinkingEnabled: boolean;
   planModeEnabled: boolean;
 }
