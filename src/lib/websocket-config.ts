@@ -53,11 +53,14 @@ export function getReconnectDelay(attempt: number): number {
 
 /**
  * Constructs a WebSocket URL for the given endpoint with query parameters.
+ * Uses wss:// when the page is served over HTTPS, ws:// otherwise.
  * @param endpoint - The WebSocket endpoint path (e.g., '/chat', '/agent-activity')
  * @param params - Query parameters to append to the URL
  */
 export function buildWebSocketUrl(endpoint: string, params: Record<string, string>): string {
   const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  const protocol =
+    typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const queryString = new URLSearchParams(params).toString();
-  return `ws://${host}:${WEBSOCKET_PORT}${endpoint}?${queryString}`;
+  return `${protocol}//${host}:${WEBSOCKET_PORT}${endpoint}?${queryString}`;
 }
