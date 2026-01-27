@@ -243,11 +243,6 @@ function ChatContent({
           onSettingsChange={updateSettings}
           sessionId={claudeSessionId}
         />
-        {claudeSessionId && (
-          <div className="px-4 pb-2 text-xs text-muted-foreground">
-            Session: {claudeSessionId.slice(0, 16)}...
-          </div>
-        )}
       </div>
     </div>
   );
@@ -420,8 +415,18 @@ function useSessionManagement({
   );
 
   const handleNewChat = useCallback(() => {
+    // Generate next available "Chat N" name
+    const existingNumbers = (claudeSessions ?? [])
+      .map((s) => {
+        const match = s.name?.match(/^Chat (\d+)$/);
+        return match ? Number.parseInt(match[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+    const name = `Chat ${nextNumber}`;
+
     createSession.mutate(
-      { workspaceId, workflow: 'followup', model: 'sonnet' },
+      { workspaceId, workflow: 'followup', model: 'sonnet', name },
       {
         onSuccess: (session) => {
           setSelectedDbSessionId(session.id);
@@ -429,7 +434,7 @@ function useSessionManagement({
         },
       }
     );
-  }, [clearChat, createSession, workspaceId]);
+  }, [clearChat, createSession, workspaceId, claudeSessions]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
@@ -563,10 +568,16 @@ function WorkspaceChatContent() {
   const { handleScroll } = useAutoScroll(messages, messagesEndRef);
 
   // Mutation to update session with Claude session ID
-  const updateSession = trpc.session.updateClaudeSession.useMutation();
+  const updateSession = trpc.session.updateClaudeSession.useMutation({
+    onError: (err) => {
+      // biome-ignore lint/suspicious/noConsole: intentional error logging for failed DB sync
+      console.error('Failed to sync Claude session ID to database:', err);
+    },
+  });
 
   // Sync Claude CLI session ID to database when it becomes available
   // This links the database ClaudeSession record to the actual Claude CLI session
+  // biome-ignore lint/correctness/useExhaustiveDependencies: updateSession.mutate is stable from useMutation
   useEffect(() => {
     if (selectedDbSessionId && claudeSessionId) {
       // Find the current session and check if it already has this claudeSessionId
@@ -575,7 +586,7 @@ function WorkspaceChatContent() {
         updateSession.mutate({ id: selectedDbSessionId, claudeSessionId });
       }
     }
-  }, [selectedDbSessionId, claudeSessionId, claudeSessions, updateSession]);
+  }, [selectedDbSessionId, claudeSessionId, claudeSessions]);
 
   // Initialize selectedDbSessionId when sessions first load
   useEffect(() => {
