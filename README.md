@@ -18,69 +18,82 @@ Workspace-based coding environment that lets you run multiple Claude Code sessio
 pnpm install
 
 # 2. Start the server (migrations run automatically)
-pnpm cli serve --dev
+pnpm dev:cli
 
 # Browser opens automatically to http://localhost:3000
 ```
 
-That's it! The CLI will:
+That's it! The server will:
 - Create the data directory (`~/factory-factory/`)
 - Run database migrations automatically
 - Start backend and frontend servers
 - Open your browser when ready
 
-## CLI Usage
+## Running the Server
 
-The `ff` (or `factory-factory`) command provides a unified interface for running FactoryFactory:
+### Development
 
 ```bash
-# Start in development mode (with hot reloading)
-pnpm cli serve --dev
-
-# Start in production mode (requires build first)
-pnpm cli build
-pnpm cli serve
+# Start with hot reloading (recommended for development)
+pnpm dev:cli
 
 # Start without opening browser
-pnpm cli serve --dev --no-open
+pnpm dev:cli --no-open
 
 # Use custom ports
-pnpm cli serve --dev --port 4000 --backend-port 4001
+pnpm dev:cli --port 4000 --backend-port 4001
 
 # Enable verbose logging
-pnpm cli serve --dev --verbose
-
-# Run database migrations manually
-pnpm cli db:migrate
-
-# Open Prisma Studio for database management
-pnpm cli db:studio
+pnpm dev:cli --verbose
 ```
 
-### CLI Options
+### Production
+
+```bash
+# Build first
+pnpm build:all
+
+# Start production server
+pnpm start:cli
+```
+
+### Options
 
 ```
-Usage: ff serve [options]
-
 Options:
   -p, --port <port>           Frontend port (default: "3000")
   --backend-port <port>       Backend port (default: "3001")
   -d, --database-path <path>  SQLite database file path (default: ~/factory-factory/data.db)
   --host <host>               Host to bind to (default: "localhost")
-  --dev                       Run in development mode with hot reloading
   --no-open                   Do not open browser automatically
   -v, --verbose               Enable verbose logging
 ```
 
 ### Port Detection
 
-If the default ports (3000/3001) are in use, the CLI will automatically find the next available ports.
+If the default ports (3000/3001) are in use, the server will automatically find the next available ports.
+
+## Database Commands
+
+```bash
+# Run migrations manually
+pnpm db:migrate
+
+# Open Prisma Studio for database management
+pnpm db:studio
+
+# Reset database (destroys data)
+pnpm exec prisma migrate reset
+
+# Regenerate Prisma client
+pnpm db:generate
+```
 
 ## Verify Installation
 
 - Frontend: http://localhost:3000
 - Backend: http://localhost:3001/health
-- Prisma Studio: `pnpm cli db:studio`
+- Prisma Studio: `pnpm db:studio`
 
 ## Architecture
 
@@ -101,7 +114,7 @@ Project (repository configuration)
 ## Development
 
 ```bash
-pnpm dev:all       # Start frontend + backend (alternative to CLI)
+pnpm dev:all       # Alternative: start frontend + backend separately
 pnpm typecheck     # TypeScript checking
 pnpm check:fix     # Lint + format with Biome
 pnpm test          # Run tests
@@ -116,25 +129,8 @@ gh auth status
 gh auth login
 ```
 
-**Database issues:**
-```bash
-pnpm cli db:migrate              # Run migrations
-pnpm exec prisma migrate reset   # Reset database (destroys data)
-pnpm db:generate                 # Regenerate Prisma client
-```
-
 **Port conflicts:**
-The CLI automatically finds available ports. Use `--verbose` to see which ports are being used.
-
-## Production
-
-```bash
-# Build for production
-pnpm cli build
-
-# Start production server
-pnpm cli serve
-```
+The server automatically finds available ports. Use `--verbose` to see which ports are being used.
 
 ## License
 

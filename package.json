@@ -10,7 +10,8 @@
   },
   "scripts": {
     "cli": "tsx src/cli/index.ts",
-    "cli:dev": "tsx src/cli/index.ts serve --dev",
+    "dev:cli": "tsx src/cli/index.ts serve --dev",
+    "start:cli": "tsx src/cli/index.ts serve",
     "dev": "next dev -p ${FRONTEND_PORT:-3000}",
     "dev:all": "concurrently -n backend,next -c green,blue \"pnpm backend:dev\" \"wait-on tcp:${BACKEND_PORT:-3001} && pnpm dev\"",
     "build": "next build",
