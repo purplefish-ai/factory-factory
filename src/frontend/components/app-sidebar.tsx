@@ -71,11 +71,11 @@ export function AppSidebar() {
     { enabled: workspaceIds.length > 0, refetchInterval: 1000 }
   );
 
-  // Fetch review requests count for badge
+  // Fetch review requests count for badge (only count unapproved PRs)
   const { data: reviewData } = trpc.prReview.listReviewRequests.useQuery(undefined, {
     refetchInterval: 60_000, // Poll every 60 seconds
   });
-  const reviewCount = reviewData?.prs?.length ?? 0;
+  const reviewCount = reviewData?.prs?.filter((pr) => pr.reviewDecision !== 'APPROVED').length ?? 0;
 
   const utils = trpc.useUtils();
 

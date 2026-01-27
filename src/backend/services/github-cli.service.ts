@@ -37,6 +37,7 @@ export interface ReviewRequestedPR {
   author: { login: string };
   createdAt: string;
   isDraft: boolean;
+  reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
 }
 
 export interface GitHubCLIHealthStatus {
@@ -264,6 +265,7 @@ class GitHubCLIService {
 
   /**
    * List all PRs where the authenticated user is requested as a reviewer.
+   * Fetches reviewDecision for each PR to show accurate status.
    */
   async listReviewRequests(): Promise<ReviewRequestedPR[]> {
     const { stdout } = await execFileAsync(
@@ -279,8 +281,35 @@ class GitHubCLIService {
       { timeout: 30_000 }
     );
 
-    const data = JSON.parse(stdout);
-    return data as ReviewRequestedPR[];
+    const basePRs = JSON.parse(stdout) as Omit<ReviewRequestedPR, 'reviewDecision'>[];
+
+    // Fetch reviewDecision for each PR in parallel
+    const prsWithReviewStatus = await Promise.all(
+      basePRs.map(async (pr) => {
+        try {
+          const { stdout: prDetails } = await execFileAsync(
+            'gh',
+            [
+              'pr',
+              'view',
+              String(pr.number),
+              '--repo',
+              pr.repository.nameWithOwner,
+              '--json',
+              'reviewDecision',
+            ],
+            { timeout: 10_000 }
+          );
+          const { reviewDecision } = JSON.parse(prDetails);
+          return { ...pr, reviewDecision: reviewDecision || null };
+        } catch {
+          // If we can't fetch review status, assume it needs review
+          return { ...pr, reviewDecision: null };
+        }
+      })
+    );
+
+    return prsWithReviewStatus;
   }
 
   /**
