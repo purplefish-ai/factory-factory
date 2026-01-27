@@ -27,6 +27,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { setProjectContext, trpc } from '../lib/trpc';
 import { Logo } from './logo';
+import { PRReviewSection } from './pr-review-section';
 import { ThemeToggle } from './theme-toggle';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
@@ -304,6 +305,9 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
+        {/* PR Review Requests section */}
+        <PRReviewSection />
 
         <SidebarSeparator />
 

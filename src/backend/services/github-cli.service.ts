@@ -28,6 +28,16 @@ export interface PRInfo {
   number: number;
 }
 
+export interface ReviewRequestedPR {
+  number: number;
+  title: string;
+  url: string;
+  repository: { nameWithOwner: string };
+  author: { login: string };
+  createdAt: string;
+  isDraft: boolean;
+}
+
 export interface GitHubCLIHealthStatus {
   isInstalled: boolean;
   isAuthenticated: boolean;
@@ -249,6 +259,52 @@ class GitHubCLIService {
       prNumber: status.number,
       prReviewState: status.reviewDecision,
     };
+  }
+
+  /**
+   * List all PRs where the authenticated user is requested as a reviewer.
+   */
+  async listReviewRequests(): Promise<ReviewRequestedPR[]> {
+    const { stdout } = await execFileAsync(
+      'gh',
+      [
+        'search',
+        'prs',
+        '--review-requested=@me',
+        '--state=open',
+        '--json',
+        'number,title,url,repository,author,createdAt,isDraft',
+      ],
+      { timeout: 30_000 }
+    );
+
+    const data = JSON.parse(stdout);
+    return data as ReviewRequestedPR[];
+  }
+
+  /**
+   * Approve a PR.
+   */
+  async approvePR(owner: string, repo: string, prNumber: number): Promise<void> {
+    const args = ['pr', 'review', String(prNumber), '--repo', `${owner}/${repo}`, '--approve'];
+
+    try {
+      await execFileAsync('gh', args, { timeout: 30_000 });
+      logger.info('PR approved successfully', { owner, repo, prNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to approve PR via gh CLI', {
+        owner,
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to approve PR: ${errorMessage}`);
+    }
   }
 }
 
