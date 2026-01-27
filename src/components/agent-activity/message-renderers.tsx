@@ -118,7 +118,9 @@ export function AssistantMessageRenderer({
   const text = extractTextFromMessage(message);
   if (text) {
     return (
-      <div className={cn('prose prose-sm dark:prose-invert max-w-none break-words', className)}>
+      <div
+        className={cn('prose prose-sm dark:prose-invert max-w-none text-xs break-words', className)}
+      >
         <TextRenderer text={text} />
       </div>
     );
@@ -170,7 +172,7 @@ export function ResultRenderer({ message, className }: ResultRendererProps) {
   // But if there's result content, show it with proper markdown formatting
   if (message.result && typeof message.result === 'string') {
     return (
-      <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+      <div className={cn('prose prose-sm dark:prose-invert max-w-none text-xs', className)}>
         <MarkdownRenderer content={message.result} />
       </div>
     );
@@ -200,7 +202,7 @@ function StreamEventRenderer({ event, messageId, className }: StreamEventRendere
       const block = event.content_block;
       if (isTextContent(block)) {
         return (
-          <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+          <div className={cn('prose prose-sm dark:prose-invert max-w-none text-xs', className)}>
             <TextRenderer text={block.text} />
           </div>
         );

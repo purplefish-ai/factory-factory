@@ -72,7 +72,7 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
       onKeyDown={handleKeyDown}
       aria-selected={isActive}
       className={cn(
-        'group relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium cursor-pointer',
+        'group relative flex items-center gap-1.5 px-2 py-1 text-sm font-medium cursor-pointer',
         'rounded-md transition-all whitespace-nowrap',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
@@ -80,7 +80,7 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
           : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" />
+      <Icon className="h-3.5 w-3.5 shrink-0" />
 
       <span className="truncate max-w-[120px]">{tab.label}</span>
 
@@ -142,7 +142,7 @@ function SessionTabItem({ label, isActive, isRunning, onSelect, onClose }: Sessi
       onKeyDown={handleKeyDown}
       aria-selected={isActive}
       className={cn(
-        'group relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium cursor-pointer',
+        'group relative flex items-center gap-1.5 px-2 py-1 text-sm font-medium cursor-pointer',
         'rounded-md transition-all whitespace-nowrap',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
@@ -151,7 +151,7 @@ function SessionTabItem({ label, isActive, isRunning, onSelect, onClose }: Sessi
       )}
     >
       <MessageSquare
-        className={cn('h-4 w-4 shrink-0', isRunning && 'animate-pulse text-yellow-500')}
+        className={cn('h-3.5 w-3.5 shrink-0', isRunning && 'animate-pulse text-yellow-500')}
       />
 
       <span className="truncate max-w-[120px]">{label}</span>
@@ -208,7 +208,7 @@ export function MainViewTabBar({
   return (
     <div
       role="tablist"
-      className={cn('flex items-center gap-1 bg-muted rounded-lg p-1 overflow-x-auto', className)}
+      className={cn('flex items-center gap-0.5 bg-muted rounded-lg p-1 overflow-x-auto', className)}
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
       {/* Session tabs (Chat 1, Chat 2, etc.) */}
@@ -233,13 +233,13 @@ export function MainViewTabBar({
           onClick={onCreateSession}
           disabled={disabled}
           className={cn(
-            'flex items-center justify-center h-7 w-7 rounded-md',
+            'flex items-center justify-center h-6 w-6 rounded-md',
             'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
             'transition-colors disabled:opacity-50 disabled:pointer-events-none'
           )}
           aria-label="New chat session"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
         </button>
       )}
 
