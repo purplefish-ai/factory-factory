@@ -26,6 +26,8 @@ import {
 export interface UseChatWebSocketOptions {
   /** Claude session ID to load on connect */
   initialSessionId?: string;
+  /** Working directory for Claude CLI (workspace worktree path) */
+  workingDir?: string;
 }
 
 export interface UseChatWebSocketReturn {
@@ -502,7 +504,7 @@ function handleUserQuestionMessage(data: WebSocketMessage, ctx: MessageHandlerCo
 // =============================================================================
 
 export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChatWebSocketReturn {
-  const { initialSessionId } = options;
+  const { initialSessionId, workingDir } = options;
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -758,7 +760,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
       reconnectTimeoutRef.current = null;
     }
 
-    const wsUrl = buildWebSocketUrl('/chat', { sessionId: sessionIdRef.current });
+    const wsParams: Record<string, string> = { sessionId: sessionIdRef.current };
+    if (workingDir) {
+      wsParams.workingDir = workingDir;
+    }
+    const wsUrl = buildWebSocketUrl('/chat', wsParams);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -836,10 +842,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
     };
 
     ws.onmessage = handleMessage;
-  }, [flushMessageQueue, handleMessage, sendWsMessage]);
+  }, [flushMessageQueue, handleMessage, sendWsMessage, workingDir]);
 
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection only when workingDir is available
+  // This prevents failed connections during initial render when workspace data hasn't loaded yet
   useEffect(() => {
+    if (!workingDir) {
+      // Don't connect until we have a valid workingDir
+      return;
+    }
+
     connect();
 
     return () => {
@@ -851,7 +863,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions = {}): UseChat
         wsRef.current = null;
       }
     };
-  }, [connect]);
+  }, [connect, workingDir]);
 
   // Actions
   const sendMessage = useCallback(

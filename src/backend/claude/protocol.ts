@@ -419,6 +419,11 @@ export class ClaudeProtocol extends EventEmitter {
    * Handle stdout close event.
    */
   private handleClose(): void {
+    logger.info('Protocol connection closed', {
+      pendingRequests: this.pendingRequests.size,
+      started: this.started,
+    });
+
     // Clean up any pending requests
     for (const pending of this.pendingRequests.values()) {
       if (pending.timeoutId) {
