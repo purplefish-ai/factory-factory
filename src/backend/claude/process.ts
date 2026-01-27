@@ -559,6 +559,11 @@ export class ClaudeProcess extends EventEmitter {
       args.push('--disallowed-tools', options.disallowedTools.join(','));
     }
 
+    // Permission mode - must be set via CLI args to be active before initial prompt
+    if (options.permissionMode) {
+      args.push('--permission-mode', options.permissionMode);
+    }
+
     return args;
   }
 
