@@ -10,6 +10,7 @@ import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  QuickActionsMenu,
   RightPanel,
   useWorkspacePanel,
   WorkspaceContentView,
@@ -283,6 +284,7 @@ interface UseSessionManagementOptions {
   claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
   loadSession: (claudeSessionId: string) => void;
   clearChat: () => void;
+  sendMessage: (text: string) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -292,11 +294,24 @@ function useSessionManagement({
   claudeSessions,
   loadSession,
   clearChat,
+  sendMessage,
   inputRef,
 }: UseSessionManagementOptions) {
   const router = useRouter();
   const utils = trpc.useUtils();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  // Ref to store pending quick action prompt (to send after session is ready)
+  const pendingQuickActionRef = useRef<{ sessionId: string; prompt: string } | null>(null);
+
+  // Effect to send pending quick action prompt when session is selected
+  useEffect(() => {
+    const pending = pendingQuickActionRef.current;
+    if (pending && pending.sessionId === selectedSessionId) {
+      pendingQuickActionRef.current = null;
+      sendMessage(pending.prompt);
+    }
+  }, [selectedSessionId, sendMessage]);
 
   const createSession = trpc.session.createClaudeSession.useMutation({
     onSuccess: () => {
@@ -396,6 +411,23 @@ function useSessionManagement({
     );
   }, [clearChat, createSession, workspaceId]);
 
+  const handleQuickAction = useCallback(
+    (name: string, prompt: string) => {
+      createSession.mutate(
+        { workspaceId, workflow: 'followup', name, model: 'sonnet' },
+        {
+          onSuccess: (session) => {
+            // Store the pending prompt to be sent once the session state settles
+            pendingQuickActionRef.current = { sessionId: session.id, prompt };
+            setSelectedSessionId(session.id);
+            clearChat();
+          },
+        }
+      );
+    },
+    [clearChat, createSession, workspaceId]
+  );
+
   return {
     selectedSessionId,
     setSelectedSessionId,
@@ -408,6 +440,7 @@ function useSessionManagement({
     handleCloseSession,
     handleWorkflowSelect,
     handleNewChat,
+    handleQuickAction,
   };
 }
 
@@ -496,12 +529,14 @@ function WorkspaceChatContent() {
     handleCloseSession,
     handleWorkflowSelect,
     handleNewChat,
+    handleQuickAction,
   } = useSessionManagement({
     workspaceId,
     slug,
     claudeSessions,
     loadSession,
     clearChat,
+    sendMessage,
     inputRef,
   });
 
@@ -561,6 +596,14 @@ function WorkspaceChatContent() {
           <StatusDot status={status} />
         </div>
         <div className="flex items-center gap-1">
+          <QuickActionsMenu
+            onExecuteAgent={(action) => {
+              if (action.content) {
+                handleQuickAction(action.name, action.content);
+              }
+            }}
+            disabled={running || createSession.isPending}
+          />
           {availableIdes.length > 0 && (
             <Button
               variant="ghost"
