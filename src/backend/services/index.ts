@@ -18,6 +18,8 @@ export { notificationService } from './notification.service';
 export { rateLimiter } from './rate-limiter.service';
 // Reconciliation service
 export { reconciliationService } from './reconciliation.service';
+// Session file logger service
+export { sessionFileLogger, SessionFileLogger } from './session-file-logger.service';
 // Session service
 export { sessionService } from './session.service';
 // Startup script service

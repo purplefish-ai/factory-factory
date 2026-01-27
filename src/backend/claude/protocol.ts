@@ -23,6 +23,9 @@ import {
   type PermissionMode,
   type StreamEventMessage,
 } from './types';
+import { createLogger } from '../services/logger.service';
+
+const logger = createLogger('claude-protocol');
 
 // =============================================================================
 // Exported Types
@@ -331,11 +334,10 @@ export class ClaudeProtocol extends EventEmitter {
       parsed = JSON.parse(trimmed) as ClaudeJson;
     } catch (error) {
       // Log and skip malformed JSON
-      console.error(
-        '[ClaudeProtocol] Failed to parse JSON:',
-        error instanceof Error ? error.message : error
-      );
-      console.error('[ClaudeProtocol] Raw line:', trimmed.slice(0, 200));
+      logger.warn('Failed to parse JSON from CLI', {
+        error: error instanceof Error ? error.message : String(error),
+        rawLine: trimmed.slice(0, 200),
+      });
       return;
     }
 
