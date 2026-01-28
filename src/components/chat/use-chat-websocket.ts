@@ -24,8 +24,6 @@ import {
 // =============================================================================
 
 export interface UseChatWebSocketOptions {
-  /** Claude CLI session ID to load on connect (stored in ~/.claude/projects/) */
-  initialClaudeSessionId?: string;
   /** Working directory for Claude CLI (workspace worktree path) */
   workingDir?: string;
   /**
@@ -41,7 +39,6 @@ export interface UseChatWebSocketReturn {
   messages: ChatMessage[];
   connected: boolean;
   running: boolean;
-  claudeSessionId: string | null;
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Permission request state (Phase 9)
@@ -58,7 +55,6 @@ export interface UseChatWebSocketReturn {
   sendMessage: (text: string) => void;
   stopChat: () => void;
   clearChat: () => void;
-  loadSession: (claudeSessionId: string) => void;
   approvePermission: (requestId: string, allow: boolean) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
@@ -74,7 +70,6 @@ export interface UseChatWebSocketReturn {
 interface StartMessage {
   type: 'start';
   workingDir?: string;
-  resumeSessionId?: string;
   selectedModel?: string | null;
   thinkingEnabled?: boolean;
   planModeEnabled?: boolean;
@@ -95,7 +90,6 @@ interface ListSessionsMessage {
 
 interface LoadSessionMessage {
   type: 'load_session';
-  claudeSessionId: string;
 }
 
 interface PermissionResponseMessage {
@@ -213,7 +207,6 @@ function createClaudeMessage(message: ClaudeMessage): ChatMessage {
 
 interface MessageHandlerContext {
   setRunning: (running: boolean) => void;
-  setClaudeSessionId: (id: string | null) => void;
   setGitBranch: (branch: string | null) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setAvailableSessions: (sessions: SessionInfo[]) => void;
@@ -226,27 +219,19 @@ interface MessageHandlerContext {
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
   /** Updates tool input for a specific tool_use_id */
   updateToolInput: (toolUseId: string, input: Record<string, unknown>) => void;
-  /** Ref to track which Claude CLI session has been successfully loaded */
-  loadedClaudeSessionIdRef: React.MutableRefObject<string | null>;
 }
 
 function handleStatusMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
   ctx.setRunning(data.running ?? false);
-  if (data.claudeSessionId) {
-    ctx.setClaudeSessionId(data.claudeSessionId);
-  }
 }
 
 function handleStartingMessage(_data: WebSocketMessage, ctx: MessageHandlerContext): void {
   ctx.setStartingSession(true);
 }
 
-function handleStartedMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
+function handleStartedMessage(_data: WebSocketMessage, ctx: MessageHandlerContext): void {
   ctx.setStartingSession(false);
   ctx.setRunning(true);
-  if (data.claudeSessionId) {
-    ctx.setClaudeSessionId(data.claudeSessionId);
-  }
 }
 
 /**
@@ -436,11 +421,6 @@ function handleSessionsMessage(data: WebSocketMessage, ctx: MessageHandlerContex
 }
 
 function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
-  if (data.claudeSessionId) {
-    ctx.setClaudeSessionId(data.claudeSessionId);
-    // Track that this Claude CLI session has been successfully loaded
-    ctx.loadedClaudeSessionIdRef.current = data.claudeSessionId;
-  }
   // Set git branch (may be null if session doesn't have branch info)
   ctx.setGitBranch(data.gitBranch ?? null);
   if (data.messages) {
@@ -502,13 +482,12 @@ function handleMessageQueuedMessage(data: WebSocketMessage, _ctx: MessageHandler
 // =============================================================================
 
 export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSocketReturn {
-  const { initialClaudeSessionId, workingDir, dbSessionId } = options;
+  const { workingDir, dbSessionId } = options;
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
-  const [claudeSessionId, setClaudeSessionId] = useState<string | null>(null);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [availableSessions, setAvailableSessions] = useState<SessionInfo[]>([]);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
@@ -527,35 +506,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  // Store initial Claude CLI session ID in a ref so it's only used on first connect,
-  // not when URL changes after loading a different session
-  const initialClaudeSessionIdRef = useRef<string | null>(initialClaudeSessionId ?? null);
-  const hasLoadedInitialSessionRef = useRef(false);
   // Track dbSessionId in a ref to use in connect without stale closures
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   // Track previous dbSessionId to detect session switches
   const prevDbSessionIdRef = useRef<string | null>(null);
-  // Track which Claude CLI session ID has been successfully loaded (via URL or picker)
-  const loadedClaudeSessionIdRef = useRef<string | null>(null);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
   // Debug message counter (instance-scoped, not global)
   const messageCounterRef = useRef(0);
   // Message queue for messages sent while disconnected
   const messageQueueRef = useRef<OutgoingMessage[]>([]);
-  // Track current claudeSessionId in a ref for use in reconnect logic
-  // (avoids stale closure issues when connect() is called during reconnect)
-  const claudeSessionIdRef = useRef<string | null>(claudeSessionId);
-
-  // Keep claudeSessionIdRef in sync with state and clear queue on session change
-  useEffect(() => {
-    // Clear queue when session changes to prevent cross-session message leaks
-    if (claudeSessionIdRef.current !== claudeSessionId) {
-      messageQueueRef.current = [];
-    }
-    claudeSessionIdRef.current = claudeSessionId;
-  }, [claudeSessionId]);
-
   // Reset local UI state when switching to a different database session.
   // Messages will be reloaded from the backend for the new session.
   // This effect intentionally resets multiple state variables to ensure
@@ -577,7 +537,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
       // Clear messages - will be reloaded from backend
       setMessages([]);
-      setClaudeSessionId(null);
       setGitBranch(null);
       setPendingPermission(null);
       setPendingQuestion(null);
@@ -589,8 +548,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       // Clear refs
       toolInputAccumulatorRef.current.clear();
       messageQueueRef.current = [];
-      hasLoadedInitialSessionRef.current = false;
-      loadedClaudeSessionIdRef.current = null;
     }
   }, [dbSessionId]);
 
@@ -601,20 +558,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages.length]);
-
-  // Sync initial Claude session ref with prop and reset load flag when navigating to a different session
-  // This handles: page refresh, direct URL navigation, and browser back/forward
-  useEffect(() => {
-    const claudeSessionId = initialClaudeSessionId ?? null;
-    if (claudeSessionId !== initialClaudeSessionIdRef.current) {
-      initialClaudeSessionIdRef.current = claudeSessionId;
-      // Only reset the load flag if we haven't already loaded this session
-      // This prevents duplicate loads when URL updates after loading via picker
-      if (claudeSessionId !== loadedClaudeSessionIdRef.current) {
-        hasLoadedInitialSessionRef.current = false;
-      }
-    }
-  }, [initialClaudeSessionId]);
 
   // Flush queued messages when connection is open
   const flushMessageQueue = useCallback(() => {
@@ -725,7 +668,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const handlerContext: MessageHandlerContext = useMemo(
     () => ({
       setRunning,
-      setClaudeSessionId,
       setGitBranch,
       setMessages,
       setAvailableSessions,
@@ -736,7 +678,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       setChatSettings,
       toolInputAccumulatorRef,
       updateToolInput,
-      loadedClaudeSessionIdRef,
     }),
     [updateToolInput]
   );
@@ -837,18 +778,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       // Request list of available sessions
       sendWsMessage({ type: 'list_sessions' });
 
-      // Load initial session on first connect, or reload on reconnect if we had a session
-      if (initialClaudeSessionIdRef.current && !hasLoadedInitialSessionRef.current) {
-        hasLoadedInitialSessionRef.current = true;
-        setLoadingSession(true);
-        sendWsMessage({ type: 'load_session', claudeSessionId: initialClaudeSessionIdRef.current });
-      } else if (wasReconnect && claudeSessionIdRef.current) {
-        // On reconnect, reload the current session to restore state
-        // Use ref to get the current value, not stale closure value
-        debug.log('🔄 Reloading session after reconnect:', claudeSessionIdRef.current);
-        setLoadingSession(true);
-        sendWsMessage({ type: 'load_session', claudeSessionId: claudeSessionIdRef.current });
-      }
+      // Always load the session on connect/reconnect.
+      // The backend will look up the claudeSessionId from the database using the
+      // dbSessionId in the WebSocket URL, so we don't need to pass it explicitly.
+      setLoadingSession(true);
+      sendWsMessage({ type: 'load_session' });
     };
 
     ws.onclose = () => {
@@ -921,6 +855,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         // Show starting indicator immediately for user feedback
         setStartingSession(true);
 
+        // Note: The backend will look up the claudeSessionId from the database
+        // using the dbSessionId in the WebSocket URL
         const startMsg: StartMessage = {
           type: 'start',
           // Include current settings when starting
@@ -928,11 +864,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           thinkingEnabled: chatSettings.thinkingEnabled,
           planModeEnabled: chatSettings.planModeEnabled,
         };
-        // If we have a Claude CLI session, resume it
-        if (claudeSessionId) {
-          startMsg.resumeSessionId = claudeSessionId;
-        }
-        // Note: dbSessionId is now part of the WebSocket URL, not sent in messages
         sendWsMessage(startMsg);
       }
 
@@ -942,7 +873,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       const messageToSend = chatSettings.thinkingEnabled ? `${text}${THINKING_SUFFIX}` : text;
       sendWsMessage({ type: 'user_input', text: messageToSend });
     },
-    [running, claudeSessionId, chatSettings, sendWsMessage]
+    [running, chatSettings, sendWsMessage]
   );
 
   const stopChat = useCallback(() => {
@@ -959,7 +890,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
     // Clear local state
     setMessages([]);
-    setClaudeSessionId(null);
     setGitBranch(null);
     setPendingPermission(null);
     setPendingQuestion(null);
@@ -967,22 +897,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setChatSettings(DEFAULT_CHAT_SETTINGS);
     toolInputAccumulatorRef.current.clear();
 
-    // Reset session tracking refs for fresh start
-    loadedClaudeSessionIdRef.current = null;
-    hasLoadedInitialSessionRef.current = false;
-    initialClaudeSessionIdRef.current = null;
-
     // Reconnect with new dbSessionId (will be picked up from dbSessionIdRef)
     connect();
   }, [running, sendWsMessage, connect]);
-
-  const loadSession = useCallback(
-    (claudeSessionId: string) => {
-      setLoadingSession(true);
-      sendWsMessage({ type: 'load_session', claudeSessionId });
-    },
-    [sendWsMessage]
-  );
 
   const approvePermission = useCallback(
     (requestId: string, allow: boolean) => {
@@ -1011,7 +928,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     messages,
     connected,
     running,
-    claudeSessionId,
     gitBranch,
     availableSessions,
     pendingPermission,
@@ -1023,7 +939,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     sendMessage,
     stopChat,
     clearChat,
-    loadSession,
     approvePermission,
     answerQuestion,
     updateSettings,

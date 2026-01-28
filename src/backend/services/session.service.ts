@@ -49,7 +49,7 @@ class SessionService {
     const processOptions: ClaudeProcessOptions = {
       workingDir,
       model: session.model,
-      resumeSessionId: session.claudeSessionId ?? undefined,
+      resumeClaudeSessionId: session.claudeSessionId ?? undefined,
       initialPrompt: options?.initialPrompt ?? 'Continue with the task.',
       permissionMode: 'bypassPermissions',
       systemPrompt: workflowPrompt ?? undefined,
@@ -83,6 +83,14 @@ class SessionService {
 
     process.on('exit', async () => {
       activeClaudeProcesses.delete(sessionId);
+
+      // Skip status update if stopClaudeSession is handling this (prevents race condition)
+      // When stopping, the stopClaudeSession function will set the correct status (IDLE)
+      if (stoppingInProgress.has(sessionId)) {
+        logger.debug('Skipping exit handler status update - stop in progress', { sessionId });
+        return;
+      }
+
       try {
         await claudeSessionAccessor.update(sessionId, {
           status: SessionStatus.COMPLETED,

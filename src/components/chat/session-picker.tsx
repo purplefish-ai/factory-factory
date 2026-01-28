@@ -77,13 +77,13 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Truncates a session ID for display.
+ * Truncates a Claude session ID for display.
  */
-function truncateSessionId(sessionId: string): string {
-  if (sessionId.length <= 12) {
-    return sessionId;
+function truncateClaudeSessionId(claudeSessionId: string): string {
+  if (claudeSessionId.length <= 12) {
+    return claudeSessionId;
   }
-  return `${sessionId.slice(0, 8)}...${sessionId.slice(-4)}`;
+  return `${claudeSessionId.slice(0, 8)}...${claudeSessionId.slice(-4)}`;
 }
 
 // =============================================================================
@@ -136,14 +136,18 @@ export function SessionPicker({
       </SelectTrigger>
       <SelectContent>
         {sortedSessions.map((session) => {
-          const isCurrent = session.sessionId === currentSessionId;
+          const isCurrent = session.claudeSessionId === currentSessionId;
 
           return (
-            <SelectItem key={session.sessionId} value={session.sessionId} className="py-2">
+            <SelectItem
+              key={session.claudeSessionId}
+              value={session.claudeSessionId}
+              className="py-2"
+            >
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <span className={cn('font-mono text-xs', isCurrent && 'font-medium')}>
-                    {truncateSessionId(session.sessionId)}
+                    {truncateClaudeSessionId(session.claudeSessionId)}
                   </span>
                   {isCurrent && <span className="text-xs text-primary">(current)</span>}
                 </div>

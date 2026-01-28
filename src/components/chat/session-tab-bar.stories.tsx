@@ -61,7 +61,6 @@ function createSession(
   const createdAt = new Date(now.getTime() - offsetMinutes * 60 * 1000);
   return {
     id,
-    claudeSessionId: `claude-${id}`,
     status: 'IDLE',
     name: null,
     createdAt,

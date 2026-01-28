@@ -44,6 +44,20 @@ Project (repo configuration)
 - **tRPC routers:** `src/backend/trpc/` - project, workspace, session, admin
 - **Claude integration:** `src/backend/claude/` - ClaudeClient, SessionManager, protocol parsing
 
+## Database
+
+SQLite database located at `~/factory-factory/data.db` by default. The path is determined by:
+1. `DATABASE_PATH` env var (if set)
+2. `$BASE_DIR/data.db` (if `BASE_DIR` is set)
+3. `~/factory-factory/data.db` (default)
+
+Query directly with sqlite3:
+```bash
+sqlite3 ~/factory-factory/data.db ".tables"              # List tables
+sqlite3 ~/factory-factory/data.db "SELECT * FROM Project"  # Query projects
+sqlite3 ~/factory-factory/data.db ".schema Workspace"     # Show table schema
+```
+
 ## Data Model
 
 - **Project:** Repository path, worktree base path, default branch, GitHub info

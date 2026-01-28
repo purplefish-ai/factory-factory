@@ -43,12 +43,16 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // Helper to create sessions with different timestamps
-function createSessionWithOffset(sessionId: string, offsetMinutes: number, sizeBytes: number) {
+function createSessionWithOffset(
+  claudeSessionId: string,
+  offsetMinutes: number,
+  sizeBytes: number
+) {
   const now = new Date();
   const modified = new Date(now.getTime() - offsetMinutes * 60 * 1000);
   const created = new Date(modified.getTime() - 60 * 60 * 1000); // 1 hour before modified
   return createSessionInfo({
-    sessionId,
+    claudeSessionId,
     createdAt: created.toISOString(),
     modifiedAt: modified.toISOString(),
     sizeBytes,

@@ -13,7 +13,6 @@ import { cn } from '@/lib/utils';
 
 export interface SessionData {
   id: string;
-  claudeSessionId?: string | null;
   status: SessionStatus;
   name?: string | null;
   createdAt: Date;

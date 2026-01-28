@@ -292,9 +292,10 @@ export interface PermissionRequest {
 
 /**
  * Session info from list_sessions.
+ * claudeSessionId is the Claude CLI session ID (filename in ~/.claude/projects/).
  */
 export interface SessionInfo {
-  sessionId: string;
+  claudeSessionId: string;
   createdAt: string;
   modifiedAt: string;
   sizeBytes: number;
@@ -347,7 +348,8 @@ export interface AgentMetadata {
   executionState: string;
   desiredExecutionState: string;
   worktreePath: string | null;
-  sessionId: string | null;
+  /** Database session ID */
+  dbSessionId: string | null;
   tmuxSessionName: string | null;
   cliProcessId: string | null;
   cliProcessStatus: string | null;
@@ -381,7 +383,6 @@ export interface WebSocketMessage {
     | 'message_queued';
   sessionId?: string;
   dbSessionId?: string;
-  claudeSessionId?: string;
   running?: boolean;
   message?: string;
   code?: number;
