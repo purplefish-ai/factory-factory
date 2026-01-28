@@ -301,7 +301,8 @@ export function AppSidebar() {
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
                   const isWorking = workingStatus?.[workspace.id];
-                  const changeCount = gitStats?.[workspace.id]?.total ?? 0;
+                  const stats = gitStats?.[workspace.id];
+                  const hasChanges = stats && (stats.additions > 0 || stats.deletions > 0);
                   return (
                     <SidebarMenuItem key={workspace.id}>
                       <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
@@ -314,8 +315,18 @@ export function AppSidebar() {
                               <span className="truncate font-medium text-sm">
                                 {workspace.branchName || workspace.name}
                               </span>
+                              {hasChanges && (
+                                <span className="ml-auto shrink-0 flex items-center gap-1 text-xs font-mono">
+                                  <span className="text-green-600 dark:text-green-500">
+                                    +{stats.additions}
+                                  </span>
+                                  <span className="text-red-600 dark:text-red-500">
+                                    -{stats.deletions}
+                                  </span>
+                                </span>
+                              )}
                               {workspace.prNumber && workspace.prState !== 'NONE' && (
-                                <span className="ml-auto shrink-0 flex items-center gap-0.5 text-xs text-muted-foreground">
+                                <span className="shrink-0 flex items-center gap-0.5 text-xs text-muted-foreground">
                                   <GitPullRequest className="h-3 w-3" />
                                   <span>#{workspace.prNumber}</span>
                                 </span>
@@ -327,14 +338,6 @@ export function AppSidebar() {
                                 <>
                                   <span>·</span>
                                   <Loader2 className="h-3 w-3 animate-spin text-green-500 shrink-0" />
-                                </>
-                              )}
-                              {changeCount > 0 && (
-                                <>
-                                  <span>·</span>
-                                  <span className="text-yellow-600 dark:text-yellow-500 shrink-0">
-                                    {changeCount} {changeCount === 1 ? 'file' : 'files'}
-                                  </span>
                                 </>
                               )}
                             </div>

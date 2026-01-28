@@ -81,6 +81,31 @@ export function parseGitStatusOutput(output: string): GitStatusFile[] {
 }
 
 /**
+ * Parse git diff --numstat output to get total additions and deletions.
+ */
+function parseNumstatOutput(output: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+
+  if (!output.trim()) {
+    return { additions, deletions };
+  }
+
+  for (const line of output.trim().split('\n')) {
+    const [add, del] = line.split('\t');
+    // Binary files show as '-' for add/del
+    if (add !== '-') {
+      additions += Number.parseInt(add, 10) || 0;
+    }
+    if (del !== '-') {
+      deletions += Number.parseInt(del, 10) || 0;
+    }
+  }
+
+  return { additions, deletions };
+}
+
+/**
  * Validate that a file path doesn't escape the worktree directory.
  * Uses path normalization and realpath to handle encoded sequences,
  * symlinks, and other bypass attempts.
@@ -614,7 +639,10 @@ export const workspaceRouter = router({
     .query(async ({ input }) => {
       const workspaces = await workspaceAccessor.findByIds(input.workspaceIds);
 
-      const results: Record<string, { total: number } | null> = {};
+      const results: Record<
+        string,
+        { total: number; additions: number; deletions: number } | null
+      > = {};
 
       await Promise.all(
         workspaces.map(async (workspace) => {
@@ -624,14 +652,30 @@ export const workspaceRouter = router({
           }
 
           try {
-            const result = await gitCommand(['status', '--porcelain'], workspace.worktreePath);
-            if (result.code !== 0) {
+            // Get file count from status
+            const statusResult = await gitCommand(
+              ['status', '--porcelain'],
+              workspace.worktreePath
+            );
+            if (statusResult.code !== 0) {
               results[workspace.id] = null;
               return;
             }
 
-            const files = parseGitStatusOutput(result.stdout);
-            results[workspace.id] = { total: files.length };
+            const files = parseGitStatusOutput(statusResult.stdout);
+
+            // Get additions/deletions from diff --numstat
+            const diffResult = await gitCommand(
+              ['diff', 'HEAD', '--numstat'],
+              workspace.worktreePath
+            );
+
+            const { additions, deletions } =
+              diffResult.code === 0
+                ? parseNumstatOutput(diffResult.stdout)
+                : { additions: 0, deletions: 0 };
+
+            results[workspace.id] = { total: files.length, additions, deletions };
           } catch {
             results[workspace.id] = null;
           }
