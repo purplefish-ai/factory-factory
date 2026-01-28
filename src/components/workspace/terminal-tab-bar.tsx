@@ -2,7 +2,6 @@
 
 import { Plus, Terminal, X } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -61,7 +60,7 @@ export function TerminalTabBar({
               type="button"
               onClick={() => onCloseTab(tab.id)}
               className={cn(
-                'mr-1 p-0.5 rounded hover:bg-zinc-700 transition-colors',
+                'mr-1 p-0.5 rounded hover:bg-zinc-600/50 transition-colors',
                 'opacity-0 group-hover:opacity-100',
                 activeTabId === tab.id && 'opacity-100'
               )}
@@ -72,15 +71,14 @@ export function TerminalTabBar({
         ))}
       </div>
 
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
+        type="button"
         onClick={onNewTab}
-        className="h-6 w-6 flex-shrink-0"
+        className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
         title="New terminal"
       >
         <Plus className="h-3 w-3" />
-      </Button>
+      </button>
     </div>
   );
 }

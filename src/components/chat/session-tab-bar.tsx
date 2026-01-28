@@ -263,16 +263,15 @@ export function SessionTabBar({
       )}
 
       {/* New session button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0 ml-1"
+      <button
+        type="button"
         onClick={onCreateSession}
         disabled={disabled}
         title="New Session"
+        className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
       >
         <Plus className="h-4 w-4" />
-      </Button>
+      </button>
     </div>
   );
 }
