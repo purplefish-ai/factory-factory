@@ -170,6 +170,7 @@ export class ClaudeProcess extends EventEmitter {
   private lastActivityAt: number = Date.now();
   private lastResourceUsage: ResourceUsage | null = null;
   private hungWarningEmitted: boolean = false;
+  private isIntentionallyStopping: boolean = false;
 
   private constructor(
     process: ChildProcess,
@@ -372,6 +373,9 @@ export class ClaudeProcess extends EventEmitter {
     if (this.status === 'exited') {
       return;
     }
+
+    // Mark as intentionally stopping to suppress error events
+    this.isIntentionallyStopping = true;
 
     // Send interrupt via protocol
     await this.protocol.sendInterrupt();
@@ -599,7 +603,8 @@ export class ClaudeProcess extends EventEmitter {
         status: this.status,
         claudeSessionId: this.claudeSessionId,
       });
-      if (this.status !== 'exited') {
+      // Only emit error if not intentionally stopping and not already exited
+      if (this.status !== 'exited' && !this.isIntentionallyStopping) {
         const stderr = this.stderrBuffer.join('');
         logger.error('Claude process closed unexpectedly', {
           pid: this.process.pid,

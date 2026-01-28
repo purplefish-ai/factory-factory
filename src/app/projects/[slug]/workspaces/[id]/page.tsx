@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils';
 // Types
 // =============================================================================
 
-type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
+type ConnectionStatus = 'connected' | 'processing' | 'stopping' | 'disconnected' | 'loading';
 
 // =============================================================================
 // Helper Components
@@ -46,13 +46,17 @@ type ConnectionStatus = 'connected' | 'processing' | 'disconnected' | 'loading';
 function getConnectionStatusFromState(
   connected: boolean,
   loadingSession: boolean,
-  running: boolean
+  running: boolean,
+  stopping: boolean
 ): ConnectionStatus {
   if (!connected) {
     return 'disconnected';
   }
   if (loadingSession) {
     return 'loading';
+  }
+  if (stopping) {
+    return 'stopping';
   }
   if (running) {
     return 'processing';
@@ -66,6 +70,8 @@ function getStatusText(status: ConnectionStatus): string {
       return 'Connected';
     case 'processing':
       return 'Processing request';
+    case 'stopping':
+      return 'Stopping...';
     case 'loading':
       return 'Loading session';
     case 'disconnected':
@@ -83,6 +89,7 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
           'h-2.5 w-2.5 rounded-full',
           status === 'connected' && 'bg-green-500',
           status === 'processing' && 'bg-yellow-500 animate-pulse',
+          status === 'stopping' && 'bg-orange-500 animate-pulse',
           status === 'loading' && 'bg-blue-500 animate-pulse',
           status === 'disconnected' && 'bg-red-500'
         )}
@@ -145,6 +152,7 @@ function ToggleRightPanelButton() {
 interface ChatContentProps {
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   running: boolean;
+  stopping: boolean;
   loadingSession: boolean;
   startingSession: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -170,6 +178,7 @@ interface ChatContentProps {
 function ChatContent({
   messages,
   running,
+  stopping,
   loadingSession,
   startingSession,
   messagesEndRef,
@@ -273,8 +282,11 @@ function ChatContent({
           onStop={stopChat}
           disabled={!connected}
           running={running}
+          stopping={stopping}
           inputRef={inputRef}
-          placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
+          placeholder={
+            stopping ? 'Stopping...' : running ? 'Claude is thinking...' : 'Type a message...'
+          }
           settings={chatSettings}
           onSettingsChange={updateSettings}
           sessionId={selectedDbSessionId}
@@ -637,6 +649,7 @@ function WorkspaceChatContent() {
     messages,
     connected,
     running,
+    stopping,
     pendingPermission,
     pendingQuestion,
     loadingSession,
@@ -690,7 +703,7 @@ function WorkspaceChatContent() {
   );
 
   // Determine connection status for indicator
-  const status = getConnectionStatusFromState(connected, loadingSession, running);
+  const status = getConnectionStatusFromState(connected, loadingSession, running, stopping);
 
   // Show loading while fetching workspace and sessions
   if (workspaceLoading || sessionsLoading) {
@@ -830,6 +843,7 @@ function WorkspaceChatContent() {
               <ChatContent
                 messages={messages}
                 running={running}
+                stopping={stopping}
                 loadingSession={loadingSession}
                 startingSession={startingSession}
                 messagesEndRef={messagesEndRef}

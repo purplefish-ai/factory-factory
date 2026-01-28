@@ -32,6 +32,7 @@ interface ChatInputProps {
   onStop?: () => void;
   disabled?: boolean;
   running?: boolean;
+  stopping?: boolean;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   placeholder?: string;
   className?: string;
@@ -188,6 +189,7 @@ export function ChatInput({
   onStop,
   disabled = false,
   running = false,
+  stopping = false,
   inputRef,
   placeholder = 'Type a message...',
   className,
@@ -333,11 +335,15 @@ export function ChatInput({
           {/* Button is enabled when running to allow stop functionality */}
           <InputGroupButton
             onClick={handleSendClick}
-            disabled={isDisabled && !running}
+            disabled={(isDisabled && !running) || stopping}
             size="icon-sm"
-            aria-label={running ? 'Stop' : 'Send message'}
+            aria-label={stopping ? 'Stopping...' : running ? 'Stop' : 'Send message'}
           >
-            {running ? (
+            {stopping ? (
+              <span className="relative flex items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </span>
+            ) : running ? (
               <span className="relative flex items-center justify-center">
                 <Loader2 className="h-4 w-4 animate-spin absolute" />
                 <Square className="h-2 w-2 fill-current" />
