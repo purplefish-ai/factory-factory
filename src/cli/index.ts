@@ -144,14 +144,18 @@ function isPortAvailable(port: number, host: string): Promise<boolean> {
   });
 }
 
-// Find an available port starting from the given port
+// Find an available port starting from the given port, excluding specific ports
 async function findAvailablePort(
   startPort: number,
   host: string,
-  maxAttempts = 10
+  maxAttempts = 10,
+  excludePorts: number[] = []
 ): Promise<number> {
   for (let i = 0; i < maxAttempts; i++) {
     const port = startPort + i;
+    if (excludePorts.includes(port)) {
+      continue;
+    }
     if (await isPortAvailable(port, host)) {
       return port;
     }
@@ -254,6 +258,8 @@ program
       if (verbose) {
         console.log(chalk.gray('  Checking port availability...'));
       }
+
+      // Find backend port first
       backendPort = await findAvailablePort(requestedBackendPort, options.host);
       if (backendPort !== requestedBackendPort) {
         console.log(
@@ -261,7 +267,10 @@ program
         );
       }
 
-      frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
+      // Find frontend port, excluding the backend port to avoid conflicts
+      frontendPort = await findAvailablePort(requestedFrontendPort, options.host, 10, [
+        backendPort,
+      ]);
       if (frontendPort !== requestedFrontendPort) {
         console.log(
           chalk.yellow(`  ⚠ Frontend port ${requestedFrontendPort} in use, using ${frontendPort}`)

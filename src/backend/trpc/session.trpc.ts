@@ -43,9 +43,14 @@ export const sessionRouter = router({
         limit: z.number().min(1).max(100).optional(),
       })
     )
-    .query(({ input }) => {
+    .query(async ({ input }) => {
       const { workspaceId, ...filters } = input;
-      return claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
+      const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
+      // Augment sessions with real-time working status from in-memory process state
+      return sessions.map((session) => ({
+        ...session,
+        isWorking: sessionService.isSessionWorking(session.id),
+      }));
     }),
 
   // Get claude session by ID

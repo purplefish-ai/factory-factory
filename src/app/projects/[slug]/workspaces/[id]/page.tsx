@@ -171,6 +171,8 @@ interface ChatContentProps {
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
+  inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
+  setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
   /** Database session ID for detecting session changes (auto-focus) */
   selectedDbSessionId: string | null;
 }
@@ -197,6 +199,8 @@ function ChatContent({
   inputRef,
   chatSettings,
   updateSettings,
+  inputDraft,
+  setInputDraft,
   selectedDbSessionId,
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
@@ -290,6 +294,8 @@ function ChatContent({
           settings={chatSettings}
           onSettingsChange={updateSettings}
           sessionId={selectedDbSessionId}
+          value={inputDraft}
+          onChange={setInputDraft}
           onHeightChange={() => {
             // Keep messages scrolled to bottom when input area grows
             if (isNearBottom) {
@@ -655,11 +661,13 @@ function WorkspaceChatContent() {
     loadingSession,
     startingSession,
     chatSettings,
+    inputDraft,
     sendMessage,
     stopChat,
     approvePermission,
     answerQuestion,
     updateSettings,
+    setInputDraft,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
@@ -870,6 +878,8 @@ function WorkspaceChatContent() {
                 inputRef={inputRef}
                 chatSettings={chatSettings}
                 updateSettings={updateSettings}
+                inputDraft={inputDraft}
+                setInputDraft={setInputDraft}
                 selectedDbSessionId={selectedDbSessionId}
               />
             </WorkspaceContentView>

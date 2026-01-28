@@ -258,6 +258,8 @@ export class ClaudeProcess extends EventEmitter {
         'Claude process spawn/initialization timed out'
       );
     } catch (error) {
+      // Mark as intentionally stopping to suppress error events from protocol close
+      claudeProcess.isIntentionallyStopping = true;
       // Clean up on initialization failure
       claudeProcess.killProcessGroup();
       throw error;
