@@ -3,6 +3,7 @@
 import {
   AppWindow,
   Archive,
+  ArrowDown,
   CheckCircle2,
   Circle,
   GitBranch,
@@ -147,6 +148,8 @@ interface ChatContentProps {
   startingSession: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
+  isNearBottom: boolean;
+  scrollToBottom: () => void;
   pendingPermission: ReturnType<typeof useChatWebSocket>['pendingPermission'];
   pendingQuestion: ReturnType<typeof useChatWebSocket>['pendingQuestion'];
   approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
@@ -168,6 +171,8 @@ function ChatContent({
   startingSession,
   messagesEndRef,
   handleScroll,
+  isNearBottom,
+  scrollToBottom,
   pendingPermission,
   pendingQuestion,
   approvePermission,
@@ -204,7 +209,7 @@ function ChatContent({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction
     // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
-    <div className="flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
+    <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
       <ScrollArea className="flex-1" onScroll={handleScroll}>
         <div className="p-4 space-y-2">
@@ -237,6 +242,21 @@ function ChatContent({
           <div ref={messagesEndRef} className="h-px" />
         </div>
       </ScrollArea>
+
+      {/* Scroll to Bottom Button */}
+      {!isNearBottom && (
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={scrollToBottom}
+            className="rounded-full shadow-lg"
+          >
+            <ArrowDown className="h-4 w-4 mr-1" />
+            Scroll to bottom
+          </Button>
+        </div>
+      )}
 
       {/* Input Section with Prompts */}
       <div className="border-t">
@@ -475,6 +495,7 @@ function useAutoScroll(
   messages: unknown[],
   messagesEndRef: React.RefObject<HTMLDivElement | null>
 ) {
+  const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
@@ -484,14 +505,32 @@ function useAutoScroll(
     }
   }, [messages.length, messagesEndRef]);
 
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const target = event.currentTarget;
-    const threshold = 100;
-    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
-    isNearBottomRef.current = isNearBottom;
-  }, []);
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const target = event.currentTarget;
+      const scrollThreshold = 100; // Don't auto-scroll if more than 100px from bottom
+      const snapThreshold = 20; // Snap to bottom if within 20px
+      const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
 
-  return { handleScroll };
+      const nearBottom = distanceFromBottom < scrollThreshold;
+      isNearBottomRef.current = nearBottom;
+      setIsNearBottom(nearBottom);
+
+      // Snap to bottom if very close (UX improvement)
+      if (distanceFromBottom > 0 && distanceFromBottom < snapThreshold && messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    },
+    [messagesEndRef]
+  );
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setIsNearBottom(true);
+    isNearBottomRef.current = true;
+  }, [messagesEndRef]);
+
+  return { handleScroll, isNearBottom, scrollToBottom };
 }
 
 // =============================================================================
@@ -572,7 +611,7 @@ function WorkspaceChatContent() {
   });
 
   // Auto-scroll behavior
-  const { handleScroll } = useAutoScroll(messages, messagesEndRef);
+  const { handleScroll, isNearBottom, scrollToBottom } = useAutoScroll(messages, messagesEndRef);
 
   // Determine connection status for indicator
   const status = getConnectionStatusFromState(connected, loadingSession, running);
@@ -714,6 +753,8 @@ function WorkspaceChatContent() {
               startingSession={startingSession}
               messagesEndRef={messagesEndRef}
               handleScroll={handleScroll}
+              isNearBottom={isNearBottom}
+              scrollToBottom={scrollToBottom}
               pendingPermission={pendingPermission}
               pendingQuestion={pendingQuestion}
               approvePermission={approvePermission}

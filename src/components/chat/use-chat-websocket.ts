@@ -555,14 +555,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     }
   }, [dbSessionId]);
 
-  // Auto-scroll to bottom when messages change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to trigger scroll on messages array change
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages.length]);
-
   // Flush queued messages when connection is open
   const flushMessageQueue = useCallback(() => {
     // Filter out stale time-sensitive messages that don't make sense after reconnect
