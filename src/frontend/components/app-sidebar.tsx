@@ -346,6 +346,16 @@ export function AppSidebar() {
                                   )}
                                 </span>
                               )}
+                              {stats?.hasUncommitted && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="h-2 w-2 rounded-full bg-orange-500 shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right">
+                                    <p>Uncommitted changes</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                               {workspace.prNumber &&
                                 workspace.prState !== 'NONE' &&
                                 workspace.prUrl && (

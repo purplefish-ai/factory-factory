@@ -151,6 +151,12 @@ export function GitSummaryPanel({ workspaceId }: GitSummaryPanelProps) {
   return (
     <ScrollArea className="h-full">
       <div className="p-2 space-y-3">
+        {data?.hasUncommitted && (
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-orange-500/10 rounded text-xs text-orange-600 dark:text-orange-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-current shrink-0" />
+            <span>Uncommitted changes</span>
+          </div>
+        )}
         {stagedFiles.length > 0 && (
           <div>
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
