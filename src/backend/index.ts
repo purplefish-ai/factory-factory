@@ -1011,7 +1011,11 @@ async function handleChatMessage(
     case 'stop': {
       const client = chatClients.get(dbSessionId);
       if (client) {
-        client.kill();
+        try {
+          await client.stop(); // Graceful stop with 5s timeout
+        } catch {
+          client.kill(); // Fallback to force kill
+        }
         chatClients.delete(dbSessionId);
       }
       // Clean up pending messages
