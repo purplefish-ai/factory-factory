@@ -2,6 +2,7 @@
 
 import { GripVertical } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { useEffect, useState } from 'react';
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 
 import { cn } from '@/lib/utils';
@@ -13,6 +14,15 @@ type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'
   autoSaveId?: string;
 };
 
+// Custom hook that safely provides localStorage only on client
+function useClientStorage() {
+  const [storage, setStorage] = useState<Storage | undefined>(undefined);
+  useEffect(() => {
+    setStorage(localStorage);
+  }, []);
+  return storage;
+}
+
 const ResizablePanelGroup = ({
   className,
   direction = 'horizontal',
@@ -21,10 +31,12 @@ const ResizablePanelGroup = ({
   onLayoutChanged: onLayoutChangedProp,
   ...props
 }: ResizablePanelGroupProps) => {
+  const clientStorage = useClientStorage();
+
   // Use the persistence hook when autoSaveId is provided
   const persistence = useDefaultLayout({
     id: autoSaveId ?? '__unused__',
-    storage: autoSaveId && typeof window !== 'undefined' ? localStorage : undefined,
+    storage: autoSaveId ? clientStorage : undefined,
   });
 
   return (
