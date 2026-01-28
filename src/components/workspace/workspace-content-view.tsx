@@ -82,10 +82,12 @@ export function WorkspaceContentView({
   }
 
   // Show tab bar + chat content when sessions exist
+  // Wrap in a flex container with min-h-0 to enable proper overflow handling
+  // Without this, the ScrollArea in ChatContent cannot calculate its height correctly
   return (
-    <>
-      {/* Tab bar */}
-      <div className="border-b">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Tab bar - flex-shrink-0 ensures it stays visible */}
+      <div className="border-b flex-shrink-0">
         <MainViewTabBar
           sessions={claudeSessions}
           currentSessionId={selectedSessionId}
@@ -98,9 +100,9 @@ export function WorkspaceContentView({
       </div>
 
       {/* Main View Content (children = ChatContent) */}
-      <MainViewContent workspaceId={workspaceId} className="flex-1">
+      <MainViewContent workspaceId={workspaceId} className="flex-1 min-h-0">
         {children}
       </MainViewContent>
-    </>
+    </div>
   );
 }

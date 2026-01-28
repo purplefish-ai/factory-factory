@@ -1052,6 +1052,10 @@ async function handleChatMessage(
 
       const targetSessionId = dbSession.claudeSessionId ?? null;
 
+      // Check if there's an active Claude client running for this session
+      const existingClient = chatClients.get(dbSessionId);
+      const running = existingClient?.isRunning() ?? false;
+
       if (targetSessionId) {
         const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
           SessionManager.getHistory(targetSessionId, workingDir),
@@ -1072,6 +1076,7 @@ async function handleChatMessage(
             type: 'session_loaded',
             messages: history,
             gitBranch,
+            running,
             settings: {
               selectedModel,
               thinkingEnabled,
@@ -1087,6 +1092,7 @@ async function handleChatMessage(
             type: 'session_loaded',
             messages: [],
             gitBranch: null,
+            running,
             settings: {
               selectedModel: null,
               thinkingEnabled: false,
