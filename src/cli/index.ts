@@ -331,11 +331,18 @@ async function startDevelopmentMode(
   });
   processes.push({ name: 'backend', proc: backend });
 
-  // Log stderr even in non-verbose mode
-  if (!options.verbose && backend.stderr) {
-    backend.stderr.on('data', (data: Buffer) => {
-      console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
-    });
+  // Log stdout/stderr even in non-verbose mode
+  if (!options.verbose) {
+    if (backend.stdout) {
+      backend.stdout.on('data', (data: Buffer) => {
+        process.stdout.write(data);
+      });
+    }
+    if (backend.stderr) {
+      backend.stderr.on('data', (data: Buffer) => {
+        console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
+      });
+    }
   }
 
   // Wait for backend to be ready
@@ -359,11 +366,18 @@ async function startDevelopmentMode(
   });
   processes.push({ name: 'frontend', proc: frontend });
 
-  // Log stderr even in non-verbose mode
-  if (!options.verbose && frontend.stderr) {
-    frontend.stderr.on('data', (data: Buffer) => {
-      console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
-    });
+  // Log stdout/stderr even in non-verbose mode
+  if (!options.verbose) {
+    if (frontend.stdout) {
+      frontend.stdout.on('data', (data: Buffer) => {
+        process.stdout.write(data);
+      });
+    }
+    if (frontend.stderr) {
+      frontend.stderr.on('data', (data: Buffer) => {
+        console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
+      });
+    }
   }
 
   // Wait for frontend to be ready
@@ -446,11 +460,18 @@ async function startProductionMode(
   });
   processes.push({ name: 'backend', proc: backend });
 
-  // Log stderr even in non-verbose mode
-  if (!options.verbose && backend.stderr) {
-    backend.stderr.on('data', (data: Buffer) => {
-      console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
-    });
+  // Log stdout/stderr even in non-verbose mode
+  if (!options.verbose) {
+    if (backend.stdout) {
+      backend.stdout.on('data', (data: Buffer) => {
+        process.stdout.write(data);
+      });
+    }
+    if (backend.stderr) {
+      backend.stderr.on('data', (data: Buffer) => {
+        console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
+      });
+    }
   }
 
   // Wait for backend to be ready
@@ -480,11 +501,18 @@ async function startProductionMode(
   });
   processes.push({ name: 'frontend', proc: frontend });
 
-  // Log stderr even in non-verbose mode
-  if (!options.verbose && frontend.stderr) {
-    frontend.stderr.on('data', (data: Buffer) => {
-      console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
-    });
+  // Log stdout/stderr even in non-verbose mode
+  if (!options.verbose) {
+    if (frontend.stdout) {
+      frontend.stdout.on('data', (data: Buffer) => {
+        process.stdout.write(data);
+      });
+    }
+    if (frontend.stderr) {
+      frontend.stderr.on('data', (data: Buffer) => {
+        console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
+      });
+    }
   }
 
   // Wait for frontend to be ready
