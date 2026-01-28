@@ -556,29 +556,20 @@ function useAutoScroll(
     return () => observer.disconnect();
   }, [contentRef, messagesEndRef, updateScrollState]);
 
-  const handleScroll = useCallback(
-    (event: React.UIEvent<HTMLDivElement>) => {
-      // Don't update state while animating scroll-to-bottom (prevents flicker)
-      if (isScrollingToBottomRef.current) {
-        return;
-      }
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    // Don't update state while animating scroll-to-bottom (prevents flicker)
+    if (isScrollingToBottomRef.current) {
+      return;
+    }
 
-      const target = event.currentTarget;
-      const scrollThreshold = 100; // Don't auto-scroll if more than 100px from bottom
-      const snapThreshold = 20; // Snap to bottom if within 20px
-      const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    const target = event.currentTarget;
+    const scrollThreshold = 100; // Don't auto-scroll if more than 100px from bottom
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
 
-      const nearBottom = distanceFromBottom < scrollThreshold;
-      isNearBottomRef.current = nearBottom;
-      setIsNearBottom(nearBottom);
-
-      // Snap to bottom if very close (UX improvement)
-      if (distanceFromBottom > 0 && distanceFromBottom < snapThreshold && messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-    },
-    [messagesEndRef]
-  );
+    const nearBottom = distanceFromBottom < scrollThreshold;
+    isNearBottomRef.current = nearBottom;
+    setIsNearBottom(nearBottom);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     // Set flag to prevent handleScroll from causing flicker during animation
