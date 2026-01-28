@@ -599,11 +599,13 @@ function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void 
     }
 
     // Drain pending messages now that Claude process is ready
-    // Delete first to prevent re-entry if session_id fires multiple times
+    // Note: Normally messages are drained in handleChatMessage after client creation,
+    // but this handles edge cases where messages were queued via a different path.
+    // Delete first to prevent re-entry if session_id fires multiple times.
     const pending = pendingMessages.get(dbSessionId);
     pendingMessages.delete(dbSessionId);
     if (pending && pending.length > 0) {
-      logger.info('[Chat WS] Draining pending messages', {
+      logger.info('[Chat WS] Draining pending messages on session_id', {
         dbSessionId,
         count: pending.length,
       });
@@ -892,9 +894,23 @@ async function handleChatMessage(
         ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
 
         // Auto-start if not running
-        await getOrCreateChatClient(dbSessionId, { workingDir });
+        const newClient = await getOrCreateChatClient(dbSessionId, { workingDir });
         ws.send(JSON.stringify({ type: 'started', dbSessionId }));
-        // Note: The queued message will be sent when 'session_id' event fires
+
+        // Send queued messages now that client is ready
+        // Note: We can't wait for session_id because that only fires after Claude responds,
+        // and Claude needs our message first - waiting would cause a deadlock.
+        const pending = pendingMessages.get(dbSessionId);
+        pendingMessages.delete(dbSessionId);
+        if (pending && pending.length > 0) {
+          logger.info('[Chat WS] Sending queued messages after client ready', {
+            dbSessionId,
+            count: pending.length,
+          });
+          for (const msg of pending) {
+            newClient.sendMessage(msg.text);
+          }
+        }
       }
       break;
     }
