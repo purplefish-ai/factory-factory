@@ -39,6 +39,7 @@ export interface UseChatWebSocketReturn {
   messages: ChatMessage[];
   connected: boolean;
   running: boolean;
+  stopping: boolean;
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Permission request state (Phase 9)
@@ -207,6 +208,7 @@ function createClaudeMessage(message: ClaudeMessage): ChatMessage {
 
 interface MessageHandlerContext {
   setRunning: (running: boolean) => void;
+  setStopping: (stopping: boolean) => void;
   setGitBranch: (branch: string | null) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setAvailableSessions: (sessions: SessionInfo[]) => void;
@@ -492,6 +494,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [availableSessions, setAvailableSessions] = useState<SessionInfo[]>([]);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
@@ -664,6 +667,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const handlerContext: MessageHandlerContext = useMemo(
     () => ({
       setRunning,
+      setStopping,
       setGitBranch,
       setMessages,
       setAvailableSessions,
@@ -697,10 +701,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           started: handleStartedMessage,
           stopped: (_, ctx) => {
             ctx.setRunning(false);
+            ctx.setStopping(false);
             ctx.setStartingSession(false);
           },
           process_exit: (_, ctx) => {
             ctx.setRunning(false);
+            ctx.setStopping(false);
             ctx.setStartingSession(false);
           },
           claude_message: handleClaudeMessage,
@@ -873,14 +879,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   );
 
   const stopChat = useCallback(() => {
-    if (running) {
+    if (running && !stopping) {
+      setStopping(true);
       sendWsMessage({ type: 'stop' });
     }
-  }, [running, sendWsMessage]);
+  }, [running, stopping, sendWsMessage]);
 
   const clearChat = useCallback(() => {
     // Stop any running Claude process
     if (running) {
+      setStopping(true);
       sendWsMessage({ type: 'stop' });
     }
 
@@ -890,6 +898,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setPendingPermission(null);
     setPendingQuestion(null);
     setStartingSession(false);
+    setStopping(false);
     setChatSettings(DEFAULT_CHAT_SETTINGS);
     toolInputAccumulatorRef.current.clear();
 
@@ -924,6 +933,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     messages,
     connected,
     running,
+    stopping,
     gitBranch,
     availableSessions,
     pendingPermission,
