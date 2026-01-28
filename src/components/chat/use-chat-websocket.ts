@@ -52,6 +52,8 @@ export interface UseChatWebSocketReturn {
   startingSession: boolean;
   // Chat settings
   chatSettings: ChatSettings;
+  // Input draft (preserved across tab switches)
+  inputDraft: string;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -59,6 +61,7 @@ export interface UseChatWebSocketReturn {
   approvePermission: (requestId: string, allow: boolean) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
+  setInputDraft: (draft: string) => void;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -502,6 +505,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const [loadingSession, setLoadingSession] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
+  const [inputDraft, setInputDraft] = useState('');
 
   // Refs
   const wsRef = useRef<WebSocket | null>(null);
@@ -941,6 +945,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     loadingSession,
     startingSession,
     chatSettings,
+    inputDraft,
     // Actions
     sendMessage,
     stopChat,
@@ -948,6 +953,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     approvePermission,
     answerQuestion,
     updateSettings,
+    setInputDraft,
     // Refs
     inputRef,
     messagesEndRef,

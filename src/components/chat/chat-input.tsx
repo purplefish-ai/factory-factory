@@ -1,7 +1,8 @@
 'use client';
 
 import { Brain, ChevronDown, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
-import { type KeyboardEvent, useCallback, useEffect, useRef } from 'react';
+import type { ChangeEvent, KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +44,10 @@ interface ChatInputProps {
   sessionId?: string | null;
   // Called when textarea height changes (for scroll adjustment)
   onHeightChange?: () => void;
+  // Draft input value (for preserving across tab switches)
+  value?: string;
+  // Called when input value changes
+  onChange?: (value: string) => void;
 }
 
 // =============================================================================
@@ -197,7 +202,17 @@ export function ChatInput({
   onSettingsChange,
   sessionId,
   onHeightChange,
+  value,
+  onChange,
 }: ChatInputProps) {
+  // Handle input changes to preserve draft across tab switches
+  const handleInputChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => {
+      onChange?.(event.target.value);
+    },
+    [onChange]
+  );
+
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -208,10 +223,11 @@ export function ChatInput({
         if (text && !disabled && !running) {
           onSend(text);
           event.currentTarget.value = '';
+          onChange?.('');
         }
       }
     },
-    [onSend, disabled, running]
+    [onSend, disabled, running, onChange]
   );
 
   // Handle send button click
@@ -225,10 +241,11 @@ export function ChatInput({
       if (text && !disabled) {
         onSend(text);
         inputRef.current.value = '';
+        onChange?.('');
         inputRef.current.focus();
       }
     }
-  }, [onSend, onStop, inputRef, disabled, running]);
+  }, [onSend, onStop, inputRef, disabled, running, onChange]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
   useEffect(() => {
@@ -266,6 +283,17 @@ export function ChatInput({
     }
   }, [running, disabled, inputRef, sessionId]);
 
+  // Restore input value from draft when component mounts or value prop changes
+  // This preserves the draft across tab switches
+  const prevValueRef = useRef(value);
+  useEffect(() => {
+    // Only restore if value has actually changed from what we last synced
+    if (inputRef?.current && value !== undefined && value !== prevValueRef.current) {
+      inputRef.current.value = value;
+      prevValueRef.current = value;
+    }
+  }, [value, inputRef]);
+
   const isDisabled = disabled || !inputRef;
 
   // Settings change handlers
@@ -297,6 +325,7 @@ export function ChatInput({
         <InputGroupTextarea
           ref={inputRef}
           onKeyDown={handleKeyDown}
+          onChange={handleInputChange}
           disabled={isDisabled}
           placeholder={isDisabled ? 'Connecting...' : placeholder}
           className={cn(

@@ -15,6 +15,7 @@ import { useWorkspacePanel } from './workspace-panel-context';
 interface Session {
   id: string;
   name: string | null;
+  isWorking?: boolean;
 }
 
 // =============================================================================
@@ -191,7 +192,7 @@ export function MainViewTabBar({
           key={session.id}
           label={session.name ?? `Chat ${index + 1}`}
           isActive={session.id === currentSessionId && activeTabId === 'chat'}
-          isRunning={session.id === runningSessionId}
+          isRunning={session.isWorking || session.id === runningSessionId}
           onSelect={() => {
             onSelectSession?.(session.id);
             selectTab('chat');
