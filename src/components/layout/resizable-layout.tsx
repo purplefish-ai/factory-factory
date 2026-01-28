@@ -3,7 +3,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { SidebarProvider } from '@/components/ui/sidebar';
 
 interface ResizableLayoutProps {
   sidebar: ReactNode;
@@ -12,7 +12,7 @@ interface ResizableLayoutProps {
 
 export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
   return (
-    <TooltipProvider delayDuration={0}>
+    <SidebarProvider>
       <ResizablePanelGroup
         direction="horizontal"
         className="h-svh w-full"
@@ -33,6 +33,6 @@ export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
           </main>
         </ResizablePanel>
       </ResizablePanelGroup>
-    </TooltipProvider>
+    </SidebarProvider>
   );
 }
