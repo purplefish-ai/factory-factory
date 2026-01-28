@@ -147,7 +147,8 @@ interface ChatContentProps {
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
-  claudeSessionId: string | null;
+  /** Database session ID for detecting session changes (auto-focus) */
+  selectedDbSessionId: string | null;
 }
 
 function ChatContent({
@@ -167,7 +168,7 @@ function ChatContent({
   inputRef,
   chatSettings,
   updateSettings,
-  claudeSessionId,
+  selectedDbSessionId,
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
@@ -241,7 +242,7 @@ function ChatContent({
           placeholder={running ? 'Claude is thinking...' : 'Type a message...'}
           settings={chatSettings}
           onSettingsChange={updateSettings}
-          sessionId={claudeSessionId}
+          sessionId={selectedDbSessionId}
         />
       </div>
     </div>
@@ -520,7 +521,6 @@ function WorkspaceChatContent() {
     messages,
     connected,
     running,
-    claudeSessionId,
     pendingPermission,
     pendingQuestion,
     loadingSession,
@@ -563,26 +563,9 @@ function WorkspaceChatContent() {
   // Auto-scroll behavior
   const { handleScroll } = useAutoScroll(messages, messagesEndRef);
 
-  // Mutation to update session with Claude session ID
-  const updateSession = trpc.session.updateClaudeSession.useMutation({
-    onError: (err) => {
-      // biome-ignore lint/suspicious/noConsole: intentional error logging for failed DB sync
-      console.error('Failed to sync Claude session ID to database:', err);
-    },
-  });
-
-  // Sync Claude CLI session ID to database when it becomes available
-  // This links the database ClaudeSession record to the actual Claude CLI session
-  // biome-ignore lint/correctness/useExhaustiveDependencies: updateSession.mutate is stable from useMutation
-  useEffect(() => {
-    if (selectedDbSessionId && claudeSessionId) {
-      // Find the current session and check if it already has this claudeSessionId
-      const currentSession = claudeSessions?.find((s) => s.id === selectedDbSessionId);
-      if (currentSession && currentSession.claudeSessionId !== claudeSessionId) {
-        updateSession.mutate({ id: selectedDbSessionId, claudeSessionId });
-      }
-    }
-  }, [selectedDbSessionId, claudeSessionId, claudeSessions]);
+  // Note: claudeSessionId syncing to the database is handled by the backend
+  // when it receives the session_id event from the Claude CLI process.
+  // The frontend doesn't need to sync this.
 
   // Determine connection status for indicator
   const status = getConnectionStatusFromState(connected, loadingSession, running);
@@ -603,10 +586,8 @@ function WorkspaceChatContent() {
     );
   }
 
-  // Find the running session ID (still needs to be derived from claudeSessionId)
-  const runningSessionId = running
-    ? claudeSessions?.find((s) => s.claudeSessionId === claudeSessionId)?.id
-    : undefined;
+  // The running session is always the currently selected session
+  const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
   return (
     <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
@@ -702,7 +683,7 @@ function WorkspaceChatContent() {
               inputRef={inputRef}
               chatSettings={chatSettings}
               updateSettings={updateSettings}
-              claudeSessionId={claudeSessionId}
+              selectedDbSessionId={selectedDbSessionId}
             />
           </WorkspaceContentView>
         </div>

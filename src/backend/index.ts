@@ -827,9 +827,17 @@ async function handleChatMessage(
       const model =
         requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
 
+      // Look up resumeSessionId from database if not provided
+      // This allows the frontend to not track claudeSessionId
+      let resumeSessionId = message.resumeSessionId;
+      if (!resumeSessionId) {
+        const dbSession = await claudeSessionAccessor.findById(dbSessionId);
+        resumeSessionId = dbSession?.claudeSessionId ?? undefined;
+      }
+
       await getOrCreateChatClient(dbSessionId, {
         workingDir: message.workingDir || workingDir,
-        resumeSessionId: message.resumeSessionId,
+        resumeSessionId,
         systemPrompt: message.systemPrompt,
         model,
         thinkingEnabled: message.thinkingEnabled,
@@ -868,7 +876,7 @@ async function handleChatMessage(
           ws.send(
             JSON.stringify({
               type: 'error',
-              message: `Message queue full (max ${MAX_PENDING_MESSAGES}). Please wait for session to start.`,
+              message: 'Session is still starting. Please wait a moment and try again.',
             })
           );
           break;
@@ -932,11 +940,22 @@ async function handleChatMessage(
 
       // claudeSessionId can come from the message, or we look it up from the database
       let targetSessionId: string | null | undefined = message.claudeSessionId;
+      let sessionNotFound = false;
 
       if (!targetSessionId) {
         // Look up claudeSessionId from the database using dbSessionId
         const dbSession = await claudeSessionAccessor.findById(dbSessionId);
-        targetSessionId = dbSession?.claudeSessionId ?? null;
+        if (dbSession) {
+          targetSessionId = dbSession.claudeSessionId ?? null;
+        } else {
+          // Session doesn't exist in database
+          sessionNotFound = true;
+        }
+      }
+
+      if (sessionNotFound) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+        break;
       }
 
       if (targetSessionId) {
