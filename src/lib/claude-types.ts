@@ -404,6 +404,19 @@ export interface WebSocketMessage {
 }
 
 // =============================================================================
+// Queued Message Types
+// =============================================================================
+
+/**
+ * A message queued to be sent when the agent becomes idle.
+ */
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  timestamp: string;
+}
+
+// =============================================================================
 // UI Chat Message Types
 // =============================================================================
 

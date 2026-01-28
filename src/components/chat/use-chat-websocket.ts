@@ -7,12 +7,14 @@ import type {
   ClaudeMessage,
   HistoryMessage,
   PermissionRequest,
+  QueuedMessage,
   SessionInfo,
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
 import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
+import { loadQueue, persistQueue } from '@/lib/queue-storage';
 import {
   buildWebSocketUrl,
   getReconnectDelay,
@@ -54,6 +56,8 @@ export interface UseChatWebSocketReturn {
   chatSettings: ChatSettings;
   // Input draft (preserved across tab switches)
   inputDraft: string;
+  // Message queue state
+  queuedMessages: QueuedMessage[];
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -62,6 +66,7 @@ export interface UseChatWebSocketReturn {
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   setInputDraft: (draft: string) => void;
+  removeQueuedMessage: (id: string) => void;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -506,6 +511,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const [startingSession, setStartingSession] = useState(false);
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
   const [inputDraft, setInputDraft] = useState('');
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
 
   // Refs
   const wsRef = useRef<WebSocket | null>(null);
@@ -521,6 +527,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   // Track previous dbSessionId to detect session switches
   const prevDbSessionIdRef = useRef<string | null>(null);
+  // Track previous running state to detect idle transitions
+  const prevRunningRef = useRef(false);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
   // Debug message counter (instance-scoped, not global)
@@ -546,6 +554,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         to: newDbSessionId,
       });
 
+      // Persist queue clear for the old session to prevent stale messages on refresh
+      persistQueue(prevDbSessionId, []);
+
       // Clear messages - will be reloaded from backend
       setMessages([]);
       setGitBranch(null);
@@ -555,10 +566,17 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       setLoadingSession(false);
       setChatSettings(DEFAULT_CHAT_SETTINGS);
       setRunning(false);
+      setQueuedMessages([]);
 
       // Clear refs
       toolInputAccumulatorRef.current.clear();
       messageQueueRef.current = [];
+    }
+
+    // Load queue from storage for the new session
+    if (newDbSessionId) {
+      const storedQueue = loadQueue(newDbSessionId);
+      setQueuedMessages(storedQueue);
     }
   }, [dbSessionId]);
 
@@ -847,40 +865,74 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   }, [connect, workingDir, dbSessionId]);
 
   // Actions
+  // Queue a message for sending - all messages go through the queue first
   const sendMessage = useCallback(
     (text: string) => {
       if (!text.trim()) {
         return;
       }
 
-      // Add user message to local state immediately (optimistic UI)
-      setMessages((prev) => [...prev, createUserMessage(text)]);
+      const queuedMsg: QueuedMessage = {
+        id: generateMessageId(),
+        text: text.trim(),
+        timestamp: new Date().toISOString(),
+      };
 
-      // If Claude is not running, start it first
-      if (!running) {
-        // Show starting indicator immediately for user feedback
-        setStartingSession(true);
-
-        // Note: The backend will look up the claudeSessionId from the database
-        // using the dbSessionId in the WebSocket URL
-        const startMsg: StartMessage = {
-          type: 'start',
-          // Include current settings when starting
-          selectedModel: chatSettings.selectedModel,
-          thinkingEnabled: chatSettings.thinkingEnabled,
-          planModeEnabled: chatSettings.planModeEnabled,
-        };
-        sendWsMessage(startMsg);
-      }
-
-      // Send the user input
-      // The backend will queue this if Claude process isn't ready yet
-      // Append thinking suffix to enable extended thinking when thinking mode is enabled
-      const messageToSend = chatSettings.thinkingEnabled ? `${text}${THINKING_SUFFIX}` : text;
-      sendWsMessage({ type: 'user_input', text: messageToSend });
+      setQueuedMessages((prev) => {
+        const updated = [...prev, queuedMsg];
+        persistQueue(dbSessionId, updated);
+        return updated;
+      });
     },
-    [running, chatSettings, sendWsMessage]
+    [dbSessionId]
   );
+
+  // Drain next message from queue and send to Claude
+  const drainQueue = useCallback(() => {
+    if (running || startingSession || queuedMessages.length === 0) {
+      return;
+    }
+
+    const [nextMsg, ...remaining] = queuedMessages;
+    setQueuedMessages(remaining);
+    persistQueue(dbSessionId, remaining);
+
+    // Add to messages (optimistic UI)
+    setMessages((prev) => [...prev, createUserMessage(nextMsg.text)]);
+
+    // Start Claude if not running
+    setStartingSession(true);
+    const startMsg: StartMessage = {
+      type: 'start',
+      selectedModel: chatSettings.selectedModel,
+      thinkingEnabled: chatSettings.thinkingEnabled,
+      planModeEnabled: chatSettings.planModeEnabled,
+    };
+    sendWsMessage(startMsg);
+
+    // Send the user input
+    const messageToSend = chatSettings.thinkingEnabled
+      ? `${nextMsg.text}${THINKING_SUFFIX}`
+      : nextMsg.text;
+    sendWsMessage({ type: 'user_input', text: messageToSend });
+  }, [running, startingSession, queuedMessages, dbSessionId, chatSettings, sendWsMessage]);
+
+  // Drain queue when agent becomes idle (running transitions from true to false)
+  // or when queue gains items while already idle
+  useEffect(() => {
+    const wasRunning = prevRunningRef.current;
+    const isNowIdle = !(running || startingSession);
+    const becameIdle = wasRunning && isNowIdle;
+    const hasQueuedMessages = queuedMessages.length > 0;
+
+    // Update ref for next render
+    prevRunningRef.current = running;
+
+    // Only drain if we just became idle, or if we're already idle and have messages
+    if ((becameIdle || isNowIdle) && hasQueuedMessages) {
+      drainQueue();
+    }
+  }, [running, startingSession, queuedMessages.length, drainQueue]);
 
   const stopChat = useCallback(() => {
     if (running && !stopping) {
@@ -932,6 +984,17 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setChatSettings((prev) => ({ ...prev, ...settings }));
   }, []);
 
+  const removeQueuedMessage = useCallback(
+    (id: string) => {
+      setQueuedMessages((prev) => {
+        const updated = prev.filter((msg) => msg.id !== id);
+        persistQueue(dbSessionId, updated);
+        return updated;
+      });
+    },
+    [dbSessionId]
+  );
+
   return {
     // State
     messages,
@@ -946,6 +1009,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     startingSession,
     chatSettings,
     inputDraft,
+    queuedMessages,
     // Actions
     sendMessage,
     stopChat,
@@ -954,6 +1018,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     answerQuestion,
     updateSettings,
     setInputDraft,
+    removeQueuedMessage,
     // Refs
     inputRef,
     messagesEndRef,

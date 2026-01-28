@@ -17,7 +17,13 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { toast } from 'sonner';
 
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
-import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@/components/chat';
+import {
+  ChatInput,
+  PermissionPrompt,
+  QuestionPrompt,
+  QueuedMessages,
+  useChatWebSocket,
+} from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -173,6 +179,8 @@ interface ChatContentProps {
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
+  queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
+  removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   /** Database session ID for detecting session changes (auto-focus) */
   selectedDbSessionId: string | null;
 }
@@ -201,6 +209,8 @@ function ChatContent({
   updateSettings,
   inputDraft,
   setInputDraft,
+  queuedMessages,
+  removeQueuedMessage,
   selectedDbSessionId,
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
@@ -276,8 +286,9 @@ function ChatContent({
         </div>
       )}
 
-      {/* Input Section with Prompts */}
+      {/* Input Section with Queue and Prompts */}
       <div className="border-t">
+        <QueuedMessages messages={queuedMessages} onRemove={removeQueuedMessage} />
         <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
         <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
 
@@ -289,7 +300,7 @@ function ChatContent({
           stopping={stopping}
           inputRef={inputRef}
           placeholder={
-            stopping ? 'Stopping...' : running ? 'Claude is thinking...' : 'Type a message...'
+            stopping ? 'Stopping...' : running ? 'Message will be queued...' : 'Type a message...'
           }
           settings={chatSettings}
           onSettingsChange={updateSettings}
@@ -662,12 +673,14 @@ function WorkspaceChatContent() {
     startingSession,
     chatSettings,
     inputDraft,
+    queuedMessages,
     sendMessage,
     stopChat,
     approvePermission,
     answerQuestion,
     updateSettings,
     setInputDraft,
+    removeQueuedMessage,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
@@ -880,6 +893,8 @@ function WorkspaceChatContent() {
                 updateSettings={updateSettings}
                 inputDraft={inputDraft}
                 setInputDraft={setInputDraft}
+                queuedMessages={queuedMessages}
+                removeQueuedMessage={removeQueuedMessage}
                 selectedDbSessionId={selectedDbSessionId}
               />
             </WorkspaceContentView>
