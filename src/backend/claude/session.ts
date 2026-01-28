@@ -10,7 +10,7 @@ const logger = createLogger('session');
  * Represents a message from session history
  */
 export interface HistoryMessage {
-  type: 'user' | 'assistant' | 'tool_use' | 'tool_result';
+  type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking';
   content: string;
   timestamp: string;
   uuid?: string;
@@ -384,7 +384,9 @@ function parseAssistantContentItem(
       ...meta,
     };
   }
-  // Skip thinking items - not shown in UI
+  if (item.type === 'thinking') {
+    return { type: 'thinking', content: item.thinking, ...meta };
+  }
   return null;
 }
 

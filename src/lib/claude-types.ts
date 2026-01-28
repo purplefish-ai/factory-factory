@@ -305,7 +305,7 @@ export interface SessionInfo {
  * Message from session history.
  */
 export interface HistoryMessage {
-  type: 'user' | 'assistant' | 'tool_use' | 'tool_result';
+  type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking';
   content: string;
   timestamp: string;
   uuid?: string;
@@ -526,6 +526,25 @@ export function convertHistoryMessage(msg: HistoryMessage): ChatMessage {
       ...baseMessage,
       source: 'user',
       text: msg.content,
+    };
+  }
+
+  // Thinking messages - create properly structured content block
+  if (msg.type === 'thinking') {
+    const thinkingContent: ThinkingContent = {
+      type: 'thinking',
+      thinking: msg.content,
+    };
+    return {
+      ...baseMessage,
+      source: 'claude',
+      message: {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [thinkingContent],
+        },
+      },
     };
   }
 
