@@ -665,10 +665,8 @@ export const workspaceRouter = router({
             const files = parseGitStatusOutput(statusResult.stdout);
 
             // Get additions/deletions from diff --numstat
-            const diffResult = await gitCommand(
-              ['diff', 'HEAD', '--numstat'],
-              workspace.worktreePath
-            );
+            // Use diff without HEAD to handle repos with no commits yet
+            const diffResult = await gitCommand(['diff', '--numstat'], workspace.worktreePath);
 
             const { additions, deletions } =
               diffResult.code === 0

@@ -302,7 +302,8 @@ export function AppSidebar() {
                   const isActive = currentWorkspaceId === workspace.id;
                   const isWorking = workingStatus?.[workspace.id];
                   const stats = gitStats?.[workspace.id];
-                  const hasChanges = stats && (stats.additions > 0 || stats.deletions > 0);
+                  const hasChanges =
+                    stats && (stats.total > 0 || stats.additions > 0 || stats.deletions > 0);
                   return (
                     <SidebarMenuItem key={workspace.id}>
                       <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
@@ -317,12 +318,20 @@ export function AppSidebar() {
                               </span>
                               {hasChanges && (
                                 <span className="ml-auto shrink-0 flex items-center gap-1 text-xs font-mono px-1 py-px rounded border border-border/60 bg-muted/80">
-                                  <span className="text-green-600 dark:text-green-400">
-                                    +{stats.additions}
-                                  </span>
-                                  <span className="text-red-600 dark:text-red-400">
-                                    -{stats.deletions}
-                                  </span>
+                                  {stats.additions > 0 || stats.deletions > 0 ? (
+                                    <>
+                                      <span className="text-green-600 dark:text-green-400">
+                                        +{stats.additions}
+                                      </span>
+                                      <span className="text-red-600 dark:text-red-400">
+                                        -{stats.deletions}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-yellow-600 dark:text-yellow-500">
+                                      {stats.total} {stats.total === 1 ? 'file' : 'files'}
+                                    </span>
+                                  )}
                                 </span>
                               )}
                               {workspace.prNumber && workspace.prState !== 'NONE' && (
