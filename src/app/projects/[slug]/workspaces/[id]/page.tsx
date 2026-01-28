@@ -3,6 +3,7 @@
 import {
   AppWindow,
   Archive,
+  ArrowDown,
   CheckCircle2,
   Circle,
   GitBranch,
@@ -146,7 +147,11 @@ interface ChatContentProps {
   loadingSession: boolean;
   startingSession: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  contentRef: React.RefObject<HTMLDivElement | null>;
+  viewportRef: React.RefObject<HTMLDivElement | null>;
   handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
+  isNearBottom: boolean;
+  scrollToBottom: () => void;
   pendingPermission: ReturnType<typeof useChatWebSocket>['pendingPermission'];
   pendingQuestion: ReturnType<typeof useChatWebSocket>['pendingQuestion'];
   approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
@@ -167,7 +172,11 @@ function ChatContent({
   loadingSession,
   startingSession,
   messagesEndRef,
+  contentRef,
+  viewportRef,
   handleScroll,
+  isNearBottom,
+  scrollToBottom,
   pendingPermission,
   pendingQuestion,
   approvePermission,
@@ -204,10 +213,10 @@ function ChatContent({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction
     // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
-    <div className="flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
+    <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
-      <ScrollArea className="flex-1" onScroll={handleScroll}>
-        <div className="p-4 space-y-2">
+      <ScrollArea className="flex-1 min-h-0" viewportRef={viewportRef} onScroll={handleScroll}>
+        <div ref={contentRef} className="p-4 space-y-2">
           {messages.length === 0 && !running && !loadingSession && !startingSession && (
             <EmptyState />
           )}
@@ -237,6 +246,21 @@ function ChatContent({
           <div ref={messagesEndRef} className="h-px" />
         </div>
       </ScrollArea>
+
+      {/* Scroll to Bottom Button */}
+      {!isNearBottom && (
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={scrollToBottom}
+            className="rounded-full shadow-lg"
+          >
+            <ArrowDown className="h-4 w-4 mr-1" />
+            Scroll to bottom
+          </Button>
+        </div>
+      )}
 
       {/* Input Section with Prompts */}
       <div className="border-t">
@@ -473,9 +497,30 @@ function useSessionManagement({
 
 function useAutoScroll(
   messages: unknown[],
-  messagesEndRef: React.RefObject<HTMLDivElement | null>
+  messagesEndRef: React.RefObject<HTMLDivElement | null>,
+  contentRef: React.RefObject<HTMLDivElement | null>,
+  viewportRef: React.RefObject<HTMLDivElement | null>,
+  inputRef: React.RefObject<HTMLTextAreaElement | null>
 ) {
+  const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
+  // Track if we're currently animating a scroll-to-bottom to prevent flicker
+  const isScrollingToBottomRef = useRef(false);
+
+  // Helper to check distance from bottom and update state
+  const updateScrollState = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const scrollThreshold = 100;
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    const nearBottom = distanceFromBottom < scrollThreshold;
+
+    isNearBottomRef.current = nearBottom;
+    setIsNearBottom(nearBottom);
+  }, [viewportRef]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
   useEffect(() => {
@@ -484,14 +529,66 @@ function useAutoScroll(
     }
   }, [messages.length, messagesEndRef]);
 
+  // Watch for content size changes (e.g., tool call expand/collapse)
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      // Skip state updates during scroll animation
+      if (isScrollingToBottomRef.current) {
+        return;
+      }
+
+      // Re-evaluate scroll position after content size change
+      // This will show the "scroll to bottom" button if expansion pushed us away from bottom
+      updateScrollState();
+
+      // If still near bottom after content change, scroll to keep at bottom
+      if (isNearBottomRef.current && messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [contentRef, messagesEndRef, updateScrollState]);
+
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    // Don't update state while animating scroll-to-bottom (prevents flicker)
+    if (isScrollingToBottomRef.current) {
+      return;
+    }
+
     const target = event.currentTarget;
-    const threshold = 100;
-    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
-    isNearBottomRef.current = isNearBottom;
+    const scrollThreshold = 100; // Don't auto-scroll if more than 100px from bottom
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+    const nearBottom = distanceFromBottom < scrollThreshold;
+    isNearBottomRef.current = nearBottom;
+    setIsNearBottom(nearBottom);
   }, []);
 
-  return { handleScroll };
+  const scrollToBottom = useCallback(() => {
+    // Set flag to prevent handleScroll from causing flicker during animation
+    isScrollingToBottomRef.current = true;
+    setIsNearBottom(true);
+    isNearBottomRef.current = true;
+
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+    // Focus the input for convenience
+    inputRef.current?.focus();
+
+    // Clear the flag after animation completes (smooth scroll typically ~300-500ms)
+    setTimeout(() => {
+      isScrollingToBottomRef.current = false;
+    }, 500);
+  }, [messagesEndRef, inputRef]);
+
+  return { handleScroll, isNearBottom, scrollToBottom };
 }
 
 // =============================================================================
@@ -571,8 +668,18 @@ function WorkspaceChatContent() {
     setSelectedDbSessionId,
   });
 
+  // Refs for scroll handling
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+
   // Auto-scroll behavior
-  const { handleScroll } = useAutoScroll(messages, messagesEndRef);
+  const { handleScroll, isNearBottom, scrollToBottom } = useAutoScroll(
+    messages,
+    messagesEndRef,
+    contentRef,
+    viewportRef,
+    inputRef
+  );
 
   // Determine connection status for indicator
   const status = getConnectionStatusFromState(connected, loadingSession, running);
@@ -713,7 +820,11 @@ function WorkspaceChatContent() {
               loadingSession={loadingSession}
               startingSession={startingSession}
               messagesEndRef={messagesEndRef}
+              contentRef={contentRef}
+              viewportRef={viewportRef}
               handleScroll={handleScroll}
+              isNearBottom={isNearBottom}
+              scrollToBottom={scrollToBottom}
               pendingPermission={pendingPermission}
               pendingQuestion={pendingQuestion}
               approvePermission={approvePermission}
