@@ -393,7 +393,8 @@ class GitHubCLIService {
   }
 
   /**
-   * Find an open PR for a given branch in a repository.
+   * Find a PR for a given branch in a repository.
+   * Checks both open and merged PRs to handle workspaces where the PR was merged.
    * Returns the PR URL if found, null otherwise.
    */
   async findPRForBranch(
@@ -402,7 +403,8 @@ class GitHubCLIService {
     branchName: string
   ): Promise<{ url: string; number: number } | null> {
     try {
-      const { stdout } = await execFileAsync(
+      // First check for open PRs
+      const { stdout: openStdout } = await execFileAsync(
         'gh',
         [
           'pr',
@@ -419,10 +421,36 @@ class GitHubCLIService {
         { timeout: 30_000 }
       );
 
-      const prs = JSON.parse(stdout) as Array<{ number: number; url: string }>;
-      if (prs.length > 0) {
-        return { url: prs[0].url, number: prs[0].number };
+      const openPrs = JSON.parse(openStdout) as Array<{ number: number; url: string }>;
+      if (openPrs.length > 0) {
+        return { url: openPrs[0].url, number: openPrs[0].number };
       }
+
+      // If no open PR found, check for merged PRs
+      const { stdout: mergedStdout } = await execFileAsync(
+        'gh',
+        [
+          'pr',
+          'list',
+          '--head',
+          branchName,
+          '--repo',
+          `${owner}/${repo}`,
+          '--state',
+          'merged',
+          '--json',
+          'number,url',
+          '--limit',
+          '1',
+        ],
+        { timeout: 30_000 }
+      );
+
+      const mergedPrs = JSON.parse(mergedStdout) as Array<{ number: number; url: string }>;
+      if (mergedPrs.length > 0) {
+        return { url: mergedPrs[0].url, number: mergedPrs[0].number };
+      }
+
       return null;
     } catch (error) {
       const errorType = this.classifyError(error);

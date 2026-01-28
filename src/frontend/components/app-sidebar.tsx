@@ -357,27 +357,43 @@ export function AppSidebar() {
                                             );
                                           }
                                         }}
-                                        className="shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors"
+                                        className={`shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full hover:opacity-80 transition-colors ${
+                                          workspace.prState === 'MERGED'
+                                            ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300'
+                                            : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
+                                        }`}
                                       >
                                         <GitPullRequest className="h-3 w-3" />
                                         <span>#{workspace.prNumber}</span>
-                                        {workspace.prCiStatus === 'SUCCESS' && (
-                                          <CheckCircle2 className="h-3 w-3 text-green-500" />
-                                        )}
-                                        {workspace.prCiStatus === 'FAILURE' && (
-                                          <XCircle className="h-3 w-3 text-red-500" />
-                                        )}
-                                        {workspace.prCiStatus === 'PENDING' && (
-                                          <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
+                                        {workspace.prState === 'MERGED' ? (
+                                          <CheckCircle2 className="h-3 w-3 text-purple-500" />
+                                        ) : (
+                                          <>
+                                            {workspace.prCiStatus === 'SUCCESS' && (
+                                              <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                            )}
+                                            {workspace.prCiStatus === 'FAILURE' && (
+                                              <XCircle className="h-3 w-3 text-red-500" />
+                                            )}
+                                            {workspace.prCiStatus === 'PENDING' && (
+                                              <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
+                                            )}
+                                          </>
                                         )}
                                       </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="right">
                                       <p>
                                         PR #{workspace.prNumber}
-                                        {workspace.prCiStatus === 'SUCCESS' && ' · CI passed'}
-                                        {workspace.prCiStatus === 'FAILURE' && ' · CI failed'}
-                                        {workspace.prCiStatus === 'PENDING' && ' · CI running'}
+                                        {workspace.prState === 'MERGED'
+                                          ? ' · Merged'
+                                          : workspace.prCiStatus === 'SUCCESS'
+                                            ? ' · CI passed'
+                                            : workspace.prCiStatus === 'FAILURE'
+                                              ? ' · CI failed'
+                                              : workspace.prCiStatus === 'PENDING'
+                                                ? ' · CI running'
+                                                : ''}
                                       </p>
                                       <p className="text-xs text-muted-foreground">
                                         Click to open on GitHub

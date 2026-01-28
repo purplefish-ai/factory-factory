@@ -85,15 +85,19 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
                 {prBadge.label}
               </Badge>
               {workspace.prUrl && (
-                <a
-                  href={workspace.prUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (workspace.prUrl) {
+                      window.open(workspace.prUrl, '_blank', 'noopener,noreferrer');
+                    }
+                  }}
                   className="text-muted-foreground hover:text-foreground"
                 >
                   <ExternalLink className="h-3 w-3" />
-                </a>
+                </button>
               )}
             </div>
           )}
