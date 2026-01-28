@@ -54,3 +54,6 @@ prisma/generated/
 
 # Storybook
 storybook-static/
+
+# Agent workspace context (ephemeral, for cross-agent collaboration)
+.context/
