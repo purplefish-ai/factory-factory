@@ -41,6 +41,8 @@ interface ChatInputProps {
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   // Session tracking for auto-focus on new sessions
   sessionId?: string | null;
+  // Called when textarea height changes (for scroll adjustment)
+  onHeightChange?: () => void;
 }
 
 // =============================================================================
@@ -194,6 +196,7 @@ export function ChatInput({
   settings,
   onSettingsChange,
   sessionId,
+  onHeightChange,
 }: ChatInputProps) {
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
@@ -205,9 +208,6 @@ export function ChatInput({
         if (text && !disabled && !running) {
           onSend(text);
           event.currentTarget.value = '';
-          // Reset textarea height and overflow
-          event.currentTarget.style.height = 'auto';
-          event.currentTarget.style.overflowY = 'hidden';
         }
       }
     },
@@ -225,24 +225,24 @@ export function ChatInput({
       if (text && !disabled) {
         onSend(text);
         inputRef.current.value = '';
-        inputRef.current.style.height = 'auto';
-        inputRef.current.style.overflowY = 'hidden';
         inputRef.current.focus();
       }
     }
   }, [onSend, onStop, inputRef, disabled, running]);
 
-  // Auto-resize textarea based on content
-  const maxHeight = 200;
-  const handleInput = useCallback((event: React.FormEvent<HTMLTextAreaElement>) => {
-    const target = event.currentTarget;
-    // Reset height to auto to get accurate scrollHeight
-    target.style.height = 'auto';
-    const newHeight = Math.min(target.scrollHeight, maxHeight);
-    target.style.height = `${newHeight}px`;
-    // Show scrollbar only when content exceeds max height
-    target.style.overflowY = target.scrollHeight > maxHeight ? 'auto' : 'hidden';
-  }, []);
+  // Watch for textarea height changes (from field-sizing: content) to notify parent
+  useEffect(() => {
+    const textarea = inputRef?.current;
+    if (!(textarea && onHeightChange)) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      onHeightChange();
+    });
+    observer.observe(textarea);
+    return () => observer.disconnect();
+  }, [inputRef, onHeightChange]);
 
   // Track previous state to only auto-focus on specific transitions
   const prevRunningRef = useRef(running);
@@ -297,11 +297,10 @@ export function ChatInput({
         <InputGroupTextarea
           ref={inputRef}
           onKeyDown={handleKeyDown}
-          onInput={handleInput}
           disabled={isDisabled}
           placeholder={isDisabled ? 'Connecting...' : placeholder}
           className={cn(
-            'min-h-[40px] max-h-[200px] overflow-y-hidden',
+            'min-h-[40px] max-h-[110px] overflow-y-auto [field-sizing:content]',
             isDisabled && 'opacity-50 cursor-not-allowed'
           )}
           rows={1}

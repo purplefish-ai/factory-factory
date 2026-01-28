@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@/components/chat';
 import { Button } from '@/components/ui/button';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   QuickActionsMenu,
@@ -225,7 +226,7 @@ function ChatContent({
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
       <ScrollArea className="flex-1 min-h-0" viewportRef={viewportRef} onScroll={handleScroll}>
-        <div ref={contentRef} className="p-4 space-y-2">
+        <div ref={contentRef} className="p-4 space-y-2 min-w-0">
           {messages.length === 0 && !running && !loadingSession && !startingSession && (
             <EmptyState />
           )}
@@ -289,6 +290,12 @@ function ChatContent({
           settings={chatSettings}
           onSettingsChange={updateSettings}
           sessionId={selectedDbSessionId}
+          onHeightChange={() => {
+            // Keep messages scrolled to bottom when input area grows
+            if (isNearBottom) {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+            }
+          }}
         />
       </div>
     </div>
@@ -613,7 +620,6 @@ function WorkspaceChatContent() {
   const router = useRouter();
   const slug = params.slug as string;
   const workspaceId = params.id as string;
-  const { rightPanelVisible } = useWorkspacePanel();
 
   // Fetch workspace and session data
   const {
@@ -625,6 +631,8 @@ function WorkspaceChatContent() {
     recommendedWorkflow,
     initialDbSessionId,
   } = useWorkspaceData({ workspaceId });
+
+  const { rightPanelVisible } = useWorkspacePanel();
 
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
@@ -717,7 +725,7 @@ function WorkspaceChatContent() {
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
   return (
-    <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Header: Branch name, status, and toggle button */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-3">
@@ -808,59 +816,70 @@ function WorkspaceChatContent() {
         </div>
       </div>
 
-      {/* Main Content Area: Two-column layout */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Main Content Area: Resizable two-column layout */}
+      <ResizablePanelGroup
+        direction="horizontal"
+        className="flex-1 overflow-hidden"
+        autoSaveId="workspace-main-panel"
+      >
         {/* Left Panel: Session tabs + Main View Content */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <WorkspaceContentView
-            workspaceId={workspaceId}
-            claudeSessions={claudeSessions}
-            workflows={workflows}
-            recommendedWorkflow={recommendedWorkflow}
-            selectedSessionId={selectedDbSessionId}
-            runningSessionId={runningSessionId}
-            running={running}
-            isCreatingSession={createSession.isPending}
-            isDeletingSession={deleteSession.isPending}
-            onWorkflowSelect={handleWorkflowSelect}
-            onSelectSession={handleSelectSession}
-            onCreateSession={handleNewChat}
-            onCloseSession={handleCloseSession}
-          >
-            <ChatContent
-              messages={messages}
+        <ResizablePanel defaultSize="70%" minSize="30%">
+          <div className="h-full flex flex-col min-w-0">
+            <WorkspaceContentView
+              workspaceId={workspaceId}
+              claudeSessions={claudeSessions}
+              workflows={workflows}
+              recommendedWorkflow={recommendedWorkflow}
+              selectedSessionId={selectedDbSessionId}
+              runningSessionId={runningSessionId}
               running={running}
-              stopping={stopping}
-              loadingSession={loadingSession}
-              startingSession={startingSession}
-              messagesEndRef={messagesEndRef}
-              contentRef={contentRef}
-              viewportRef={viewportRef}
-              handleScroll={handleScroll}
-              isNearBottom={isNearBottom}
-              scrollToBottom={scrollToBottom}
-              pendingPermission={pendingPermission}
-              pendingQuestion={pendingQuestion}
-              approvePermission={approvePermission}
-              answerQuestion={answerQuestion}
-              connected={connected}
-              sendMessage={sendMessage}
-              stopChat={stopChat}
-              inputRef={inputRef}
-              chatSettings={chatSettings}
-              updateSettings={updateSettings}
-              selectedDbSessionId={selectedDbSessionId}
-            />
-          </WorkspaceContentView>
-        </div>
-
-        {/* Right Panel (conditionally rendered, fixed width) */}
-        {rightPanelVisible && (
-          <div className="w-[480px] border-l flex-shrink-0">
-            <RightPanel workspaceId={workspaceId} />
+              isCreatingSession={createSession.isPending}
+              isDeletingSession={deleteSession.isPending}
+              onWorkflowSelect={handleWorkflowSelect}
+              onSelectSession={handleSelectSession}
+              onCreateSession={handleNewChat}
+              onCloseSession={handleCloseSession}
+            >
+              <ChatContent
+                messages={messages}
+                running={running}
+                stopping={stopping}
+                loadingSession={loadingSession}
+                startingSession={startingSession}
+                messagesEndRef={messagesEndRef}
+                contentRef={contentRef}
+                viewportRef={viewportRef}
+                handleScroll={handleScroll}
+                isNearBottom={isNearBottom}
+                scrollToBottom={scrollToBottom}
+                pendingPermission={pendingPermission}
+                pendingQuestion={pendingQuestion}
+                approvePermission={approvePermission}
+                answerQuestion={answerQuestion}
+                connected={connected}
+                sendMessage={sendMessage}
+                stopChat={stopChat}
+                inputRef={inputRef}
+                chatSettings={chatSettings}
+                updateSettings={updateSettings}
+                selectedDbSessionId={selectedDbSessionId}
+              />
+            </WorkspaceContentView>
           </div>
+        </ResizablePanel>
+
+        {/* Right Panel: Git/Files + Terminal (conditionally rendered) */}
+        {rightPanelVisible && (
+          <>
+            <ResizableHandle />
+            <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
+              <div className="h-full border-l">
+                <RightPanel workspaceId={workspaceId} />
+              </div>
+            </ResizablePanel>
+          </>
         )}
-      </div>
+      </ResizablePanelGroup>
     </div>
   );
 }
