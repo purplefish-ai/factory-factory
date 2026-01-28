@@ -148,6 +148,7 @@ interface ChatContentProps {
   startingSession: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   contentRef: React.RefObject<HTMLDivElement | null>;
+  viewportRef: React.RefObject<HTMLDivElement | null>;
   handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
   isNearBottom: boolean;
   scrollToBottom: () => void;
@@ -172,6 +173,7 @@ function ChatContent({
   startingSession,
   messagesEndRef,
   contentRef,
+  viewportRef,
   handleScroll,
   isNearBottom,
   scrollToBottom,
@@ -213,7 +215,7 @@ function ChatContent({
     // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
-      <ScrollArea className="flex-1" onScroll={handleScroll}>
+      <ScrollArea className="flex-1 min-h-0" viewportRef={viewportRef} onScroll={handleScroll}>
         <div ref={contentRef} className="p-4 space-y-2">
           {messages.length === 0 && !running && !loadingSession && !startingSession && (
             <EmptyState />
@@ -496,14 +498,28 @@ function useSessionManagement({
 function useAutoScroll(
   messages: unknown[],
   messagesEndRef: React.RefObject<HTMLDivElement | null>,
-  contentRef: React.RefObject<HTMLDivElement | null>
+  contentRef: React.RefObject<HTMLDivElement | null>,
+  viewportRef: React.RefObject<HTMLDivElement | null>
 ) {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
   // Track if we're currently animating a scroll-to-bottom to prevent flicker
   const isScrollingToBottomRef = useRef(false);
-  // Track the scroll container for ResizeObserver
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Helper to check distance from bottom and update state
+  const updateScrollState = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const scrollThreshold = 100;
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    const nearBottom = distanceFromBottom < scrollThreshold;
+
+    isNearBottomRef.current = nearBottom;
+    setIsNearBottom(nearBottom);
+  }, [viewportRef]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
   useEffect(() => {
@@ -512,7 +528,7 @@ function useAutoScroll(
     }
   }, [messages.length, messagesEndRef]);
 
-  // Watch for content size changes (e.g., tool call expand/collapse) and scroll if near bottom
+  // Watch for content size changes (e.g., tool call expand/collapse)
   useEffect(() => {
     const content = contentRef.current;
     if (!content) {
@@ -520,7 +536,16 @@ function useAutoScroll(
     }
 
     const observer = new ResizeObserver(() => {
-      // If near bottom when content size changes, scroll to keep at bottom
+      // Skip state updates during scroll animation
+      if (isScrollingToBottomRef.current) {
+        return;
+      }
+
+      // Re-evaluate scroll position after content size change
+      // This will show the "scroll to bottom" button if expansion pushed us away from bottom
+      updateScrollState();
+
+      // If still near bottom after content change, scroll to keep at bottom
       if (isNearBottomRef.current && messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
@@ -528,13 +553,10 @@ function useAutoScroll(
 
     observer.observe(content);
     return () => observer.disconnect();
-  }, [contentRef, messagesEndRef]);
+  }, [contentRef, messagesEndRef, updateScrollState]);
 
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
-      // Store scroll container reference for potential future use
-      scrollContainerRef.current = event.currentTarget;
-
       // Don't update state while animating scroll-to-bottom (prevents flicker)
       if (isScrollingToBottomRef.current) {
         return;
@@ -651,14 +673,16 @@ function WorkspaceChatContent() {
     setSelectedDbSessionId,
   });
 
-  // Ref for scroll content container (used for ResizeObserver)
+  // Refs for scroll handling
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll behavior
   const { handleScroll, isNearBottom, scrollToBottom } = useAutoScroll(
     messages,
     messagesEndRef,
-    contentRef
+    contentRef,
+    viewportRef
   );
 
   // Determine connection status for indicator
@@ -801,6 +825,7 @@ function WorkspaceChatContent() {
               startingSession={startingSession}
               messagesEndRef={messagesEndRef}
               contentRef={contentRef}
+              viewportRef={viewportRef}
               handleScroll={handleScroll}
               isNearBottom={isNearBottom}
               scrollToBottom={scrollToBottom}
