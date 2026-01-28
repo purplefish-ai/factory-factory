@@ -361,11 +361,19 @@ export function AppSidebar() {
                                 workspace.prUrl && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <a
-                                        href={workspace.prUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          if (workspace.prUrl) {
+                                            window.open(
+                                              workspace.prUrl,
+                                              '_blank',
+                                              'noopener,noreferrer'
+                                            );
+                                          }
+                                        }}
                                         className="shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors"
                                       >
                                         <GitPullRequest className="h-3 w-3" />
@@ -379,7 +387,7 @@ export function AppSidebar() {
                                         {workspace.prCiStatus === 'PENDING' && (
                                           <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
                                         )}
-                                      </a>
+                                      </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="right">
                                       <p>

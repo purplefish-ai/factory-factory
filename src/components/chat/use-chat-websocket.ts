@@ -431,6 +431,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
     debug.group('📚 Session loaded from history');
     debug.log('Total messages:', chatMessages.length);
     debug.log('Git branch:', data.gitBranch);
+    debug.log('Running:', data.running);
     debug.log(
       'Message types:',
       chatMessages.map((m) =>
@@ -447,6 +448,9 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
   if (data.settings) {
     ctx.setChatSettings(data.settings);
   }
+  // Set running status from backend - this ensures UI accurately reflects
+  // whether the agent is currently processing for this session
+  ctx.setRunning(data.running ?? false);
   ctx.setLoadingSession(false);
 }
 
