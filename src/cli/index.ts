@@ -29,6 +29,61 @@ function findProjectRoot(): string {
 
 const PROJECT_ROOT = findProjectRoot();
 
+// Setup stdout/stderr forwarding for a child process in non-verbose mode
+function setupProcessOutput(proc: ChildProcess, name: string): void {
+  if (proc.stdout) {
+    proc.stdout.on('data', (data: Buffer) => {
+      process.stdout.write(data);
+    });
+  }
+  if (proc.stderr) {
+    proc.stderr.on('data', (data: Buffer) => {
+      console.error(chalk.red(`  [${name}] ${data.toString().trim()}`));
+    });
+  }
+}
+
+// Wait for a service to start on a port, killing all processes and exiting on failure
+async function waitForService(
+  port: number,
+  host: string,
+  serviceName: string,
+  processes: { name: string; proc: ChildProcess }[]
+): Promise<void> {
+  try {
+    await waitForPort(port, host);
+    console.log(chalk.green(`  ✓ ${serviceName} ready on port ${port}`));
+  } catch {
+    console.error(chalk.red(`\n  ✗ ${serviceName} failed to start on port ${port}`));
+    killAllProcesses(processes);
+    process.exit(1);
+  }
+}
+
+// Kill all tracked processes
+function killAllProcesses(processes: { name: string; proc: ChildProcess }[]): void {
+  for (const { proc } of processes) {
+    proc.kill('SIGTERM');
+  }
+}
+
+// Create an exit promise for a process that resolves during shutdown, rejects on unexpected exit
+function createExitPromise(
+  proc: ChildProcess,
+  name: string,
+  shutdownState: { shuttingDown: boolean }
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    proc.on('exit', (code) => {
+      if (shutdownState.shuttingDown) {
+        resolve();
+      } else if (code !== 0) {
+        reject(new Error(`${name} exited with code ${code}`));
+      }
+    });
+  });
+}
+
 // Read version from package.json
 function getVersion(): string {
   try {
@@ -331,31 +386,11 @@ async function startDevelopmentMode(
   });
   processes.push({ name: 'backend', proc: backend });
 
-  // Log stdout/stderr even in non-verbose mode
   if (!options.verbose) {
-    if (backend.stdout) {
-      backend.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data);
-      });
-    }
-    if (backend.stderr) {
-      backend.stderr.on('data', (data: Buffer) => {
-        console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
-      });
-    }
+    setupProcessOutput(backend, 'backend');
   }
 
-  // Wait for backend to be ready
-  try {
-    await waitForPort(backendPort, options.host);
-    console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
-  } catch {
-    console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
-    for (const { proc } of processes) {
-      proc.kill('SIGTERM');
-    }
-    process.exit(1);
-  }
+  await waitForService(backendPort, options.host, 'Backend', processes);
 
   console.log(chalk.blue('  🎨 Starting frontend (development mode)...'));
 
@@ -366,62 +401,20 @@ async function startDevelopmentMode(
   });
   processes.push({ name: 'frontend', proc: frontend });
 
-  // Log stdout/stderr even in non-verbose mode
   if (!options.verbose) {
-    if (frontend.stdout) {
-      frontend.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data);
-      });
-    }
-    if (frontend.stderr) {
-      frontend.stderr.on('data', (data: Buffer) => {
-        console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
-      });
-    }
+    setupProcessOutput(frontend, 'frontend');
   }
 
-  // Wait for frontend to be ready
-  try {
-    await waitForPort(frontendPort, options.host);
-    console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
-  } catch {
-    console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
-    for (const { proc } of processes) {
-      proc.kill('SIGTERM');
-    }
-    process.exit(1);
-  }
+  await waitForService(frontendPort, options.host, 'Frontend', processes);
 
-  // Call onReady callback (opens browser, shows final status)
   await onReady();
 
-  // Wait for either process to exit
   await Promise.race([
-    new Promise<void>((resolve, reject) => {
-      backend.on('exit', (code) => {
-        // Resolve cleanly during shutdown, reject on unexpected exit
-        if (shutdownState.shuttingDown) {
-          resolve();
-        } else if (code !== 0) {
-          reject(new Error(`Backend exited with code ${code}`));
-        }
-      });
-    }),
-    new Promise<void>((resolve, reject) => {
-      frontend.on('exit', (code) => {
-        // Resolve cleanly during shutdown, reject on unexpected exit
-        if (shutdownState.shuttingDown) {
-          resolve();
-        } else if (code !== 0) {
-          reject(new Error(`Frontend exited with code ${code}`));
-        }
-      });
-    }),
+    createExitPromise(backend, 'Backend', shutdownState),
+    createExitPromise(frontend, 'Frontend', shutdownState),
   ]).catch((error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    for (const { proc } of processes) {
-      proc.kill('SIGTERM');
-    }
+    killAllProcesses(processes);
     process.exit(1);
   });
 }
@@ -435,7 +428,6 @@ async function startProductionMode(
   onReady: () => Promise<void>,
   shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
-  // Check if built
   const nextStandalone = join(PROJECT_ROOT, '.next', 'standalone');
   const backendDist = join(PROJECT_ROOT, 'dist', 'src', 'backend', 'index.js');
 
@@ -460,35 +452,14 @@ async function startProductionMode(
   });
   processes.push({ name: 'backend', proc: backend });
 
-  // Log stdout/stderr even in non-verbose mode
   if (!options.verbose) {
-    if (backend.stdout) {
-      backend.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data);
-      });
-    }
-    if (backend.stderr) {
-      backend.stderr.on('data', (data: Buffer) => {
-        console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
-      });
-    }
+    setupProcessOutput(backend, 'backend');
   }
 
-  // Wait for backend to be ready
-  try {
-    await waitForPort(backendPort, options.host);
-    console.log(chalk.green(`  ✓ Backend ready on port ${backendPort}`));
-  } catch {
-    console.error(chalk.red(`\n  ✗ Backend failed to start on port ${backendPort}`));
-    for (const { proc } of processes) {
-      proc.kill('SIGTERM');
-    }
-    process.exit(1);
-  }
+  await waitForService(backendPort, options.host, 'Backend', processes);
 
   console.log(chalk.blue('  🎨 Starting frontend (production mode)...'));
 
-  // Next.js standalone server
   const standaloneServer = join(nextStandalone, 'server.js');
   const frontend = spawn('node', [standaloneServer], {
     cwd: PROJECT_ROOT,
@@ -501,62 +472,20 @@ async function startProductionMode(
   });
   processes.push({ name: 'frontend', proc: frontend });
 
-  // Log stdout/stderr even in non-verbose mode
   if (!options.verbose) {
-    if (frontend.stdout) {
-      frontend.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data);
-      });
-    }
-    if (frontend.stderr) {
-      frontend.stderr.on('data', (data: Buffer) => {
-        console.error(chalk.red(`  [frontend] ${data.toString().trim()}`));
-      });
-    }
+    setupProcessOutput(frontend, 'frontend');
   }
 
-  // Wait for frontend to be ready
-  try {
-    await waitForPort(frontendPort, options.host);
-    console.log(chalk.green(`  ✓ Frontend ready on port ${frontendPort}`));
-  } catch {
-    console.error(chalk.red(`\n  ✗ Frontend failed to start on port ${frontendPort}`));
-    for (const { proc } of processes) {
-      proc.kill('SIGTERM');
-    }
-    process.exit(1);
-  }
+  await waitForService(frontendPort, options.host, 'Frontend', processes);
 
-  // Call onReady callback (opens browser, shows final status)
   await onReady();
 
-  // Wait for either process to exit with error handling
   await Promise.race([
-    new Promise<void>((resolve, reject) => {
-      backend.on('exit', (code) => {
-        // Resolve cleanly during shutdown, reject on unexpected exit
-        if (shutdownState.shuttingDown) {
-          resolve();
-        } else if (code !== 0) {
-          reject(new Error(`Backend exited with code ${code}`));
-        }
-      });
-    }),
-    new Promise<void>((resolve, reject) => {
-      frontend.on('exit', (code) => {
-        // Resolve cleanly during shutdown, reject on unexpected exit
-        if (shutdownState.shuttingDown) {
-          resolve();
-        } else if (code !== 0) {
-          reject(new Error(`Frontend exited with code ${code}`));
-        }
-      });
-    }),
+    createExitPromise(backend, 'Backend', shutdownState),
+    createExitPromise(frontend, 'Frontend', shutdownState),
   ]).catch((error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    for (const { proc } of processes) {
-      proc.kill('SIGTERM');
-    }
+    killAllProcesses(processes);
     process.exit(1);
   });
 }
