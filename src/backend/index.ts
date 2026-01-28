@@ -696,6 +696,12 @@ function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void 
     // Log the raw result from CLI
     sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
     forwardToConnections(dbSessionId, { type: 'claude_message', data: result });
+
+    // Notify frontend that Claude is done processing (no longer "working")
+    forwardToConnections(dbSessionId, {
+      type: 'status',
+      running: false,
+    });
   });
 
   client.on('exit', (result) => {
