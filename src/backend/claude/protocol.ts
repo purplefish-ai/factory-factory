@@ -92,6 +92,7 @@ export class ClaudeProtocol extends EventEmitter {
   private started: boolean;
   private drainPromise: Promise<void> | null;
   private drainReject: ((error: Error) => void) | null;
+  private drainErrorHandler: ((error: Error) => void) | null;
 
   constructor(stdin: Writable, stdout: Readable, options?: ClaudeProtocolOptions) {
     super();
@@ -104,6 +105,7 @@ export class ClaudeProtocol extends EventEmitter {
     this.started = false;
     this.drainPromise = null;
     this.drainReject = null;
+    this.drainErrorHandler = null;
   }
 
   // ===========================================================================
@@ -283,9 +285,9 @@ export class ClaudeProtocol extends EventEmitter {
 
     // Clean up pending drain promise
     if (this.drainReject) {
-      this.drainReject(new Error('Protocol stopped'));
-      this.drainReject = null;
-      this.drainPromise = null;
+      const reject = this.drainReject;
+      this.cleanupDrainHandlers();
+      reject(new Error('Protocol stopped'));
     }
   }
 
@@ -317,14 +319,35 @@ export class ClaudeProtocol extends EventEmitter {
       // Buffer is full, wait for drain
       this.drainPromise = new Promise<void>((resolve, reject) => {
         this.drainReject = reject;
-        this.stdin.once('drain', () => {
-          this.drainPromise = null;
-          this.drainReject = null;
+
+        const onDrain = () => {
+          this.cleanupDrainHandlers();
           resolve();
-        });
+        };
+
+        // Handle stdin errors while waiting for drain to prevent memory leaks
+        this.drainErrorHandler = (error: Error) => {
+          this.cleanupDrainHandlers();
+          reject(error);
+        };
+
+        this.stdin.once('drain', onDrain);
+        this.stdin.once('error', this.drainErrorHandler);
       });
       await this.drainPromise;
     }
+  }
+
+  /**
+   * Clean up drain-related event handlers and state.
+   */
+  private cleanupDrainHandlers(): void {
+    if (this.drainErrorHandler) {
+      this.stdin.removeListener('error', this.drainErrorHandler);
+      this.drainErrorHandler = null;
+    }
+    this.drainPromise = null;
+    this.drainReject = null;
   }
 
   /**

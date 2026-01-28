@@ -305,6 +305,9 @@ const chatConnections = new Map<string, ConnectionInfo>();
 // Pending messages per dbSessionId (queued before Claude process is ready)
 const pendingMessages = new Map<string, PendingMessage[]>();
 
+// Maximum number of pending messages per session to prevent unbounded memory growth
+const MAX_PENDING_MESSAGES = 100;
+
 // ============================================================================
 // Chat Client Manager
 // ============================================================================
@@ -314,8 +317,8 @@ const chatClients = new Map<string, ClaudeClient>();
 // Track pending client creation to prevent duplicate creation from race conditions
 const pendingClientCreation = new Map<string, Promise<ClaudeClient>>();
 
-// Debug logging for chat websocket
-const DEBUG_CHAT_WS = true;
+// Debug logging for chat websocket (configurable via environment variable)
+const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
 let chatWsMsgCounter = 0;
 
 // ============================================================================
@@ -339,9 +342,15 @@ class SessionFileLogger {
   }
 
   /**
-   * Initialize a log file for a session
+   * Initialize a log file for a session.
+   * Returns early if already initialized to prevent duplicate log files.
    */
   initSession(sessionId: string): void {
+    // Skip if already initialized (prevents duplicate log files when multiple windows connect)
+    if (this.sessionLogs.has(sessionId)) {
+      return;
+    }
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9-]/g, '_');
     const logFile = join(this.logDir, `${safeSessionId}_${timestamp}.log`);
@@ -848,6 +857,23 @@ async function handleChatMessage(
           queue = [];
           pendingMessages.set(dbSessionId, queue);
         }
+
+        // Enforce maximum queue size to prevent unbounded memory growth
+        if (queue.length >= MAX_PENDING_MESSAGES) {
+          logger.warn('[Chat WS] Pending message queue full, rejecting message', {
+            dbSessionId,
+            queueLength: queue.length,
+            maxSize: MAX_PENDING_MESSAGES,
+          });
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              message: `Message queue full (max ${MAX_PENDING_MESSAGES}). Please wait for session to start.`,
+            })
+          );
+          break;
+        }
+
         queue.push({ text, sentAt: new Date() });
 
         logger.info('[Chat WS] Queued message for pending session', {
