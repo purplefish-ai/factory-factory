@@ -360,13 +360,17 @@ export function AppSidebar() {
                                         className={`shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-colors ${
                                           workspace.prState === 'MERGED'
                                             ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300 hover:bg-purple-500/35'
-                                            : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
+                                            : workspace.prState === 'CLOSED'
+                                              ? 'bg-gray-500/20 text-gray-500 dark:text-gray-400 hover:bg-gray-500/30'
+                                              : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
                                         }`}
                                       >
                                         <GitPullRequest className="h-3 w-3" />
                                         <span>#{workspace.prNumber}</span>
                                         {workspace.prState === 'MERGED' ? (
                                           <CheckCircle2 className="h-3 w-3 text-purple-500" />
+                                        ) : workspace.prState === 'CLOSED' ? (
+                                          <XCircle className="h-3 w-3 text-gray-400" />
                                         ) : (
                                           <>
                                             {workspace.prCiStatus === 'SUCCESS' && (
@@ -387,13 +391,15 @@ export function AppSidebar() {
                                         PR #{workspace.prNumber}
                                         {workspace.prState === 'MERGED'
                                           ? ' · Merged'
-                                          : workspace.prCiStatus === 'SUCCESS'
-                                            ? ' · CI passed'
-                                            : workspace.prCiStatus === 'FAILURE'
-                                              ? ' · CI failed'
-                                              : workspace.prCiStatus === 'PENDING'
-                                                ? ' · CI running'
-                                                : ''}
+                                          : workspace.prState === 'CLOSED'
+                                            ? ' · Closed'
+                                            : workspace.prCiStatus === 'SUCCESS'
+                                              ? ' · CI passed'
+                                              : workspace.prCiStatus === 'FAILURE'
+                                                ? ' · CI failed'
+                                                : workspace.prCiStatus === 'PENDING'
+                                                  ? ' · CI running'
+                                                  : ''}
                                       </p>
                                       <p className="text-xs text-muted-foreground">
                                         Click to open on GitHub
