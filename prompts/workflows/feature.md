@@ -39,8 +39,12 @@ You are implementing a new feature. Follow this workflow to deliver high-quality
 
 ### 6. Create Pull Request
 - Commit all changes with descriptive messages
-- Push your branch and create a PR
-- Write a clear PR description explaining the changes
+- Push your branch: `git push -u origin HEAD`
+- Create the PR using the GitHub CLI:
+  ```bash
+  gh pr create --title "Your PR title" --body "Description of changes"
+  ```
+- Include a clear summary, what changed, and how to test it in the PR body
 
 ## Guidelines
 

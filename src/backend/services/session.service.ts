@@ -44,6 +44,13 @@ class SessionService {
 
     // Get workflow prompt content
     const workflowPrompt = getWorkflowContent(session.workflow);
+    logger.info('Loaded workflow prompt', {
+      sessionId,
+      workflow: session.workflow,
+      hasPrompt: !!workflowPrompt,
+      promptLength: workflowPrompt?.length ?? 0,
+      promptPreview: workflowPrompt?.slice(0, 200) ?? '(none)',
+    });
 
     // Build process options
     const processOptions: ClaudeProcessOptions = {
