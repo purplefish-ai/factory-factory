@@ -1,14 +1,23 @@
 import { SessionStatus } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
 import { DEFAULT_FIRST_SESSION, DEFAULT_FOLLOWUP, listWorkflows } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { configService } from '../services/config.service';
 import { sessionService } from '../services/session.service';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
+  // Session limits
+
+  // Get the maximum number of sessions allowed per workspace
+  getMaxSessionsPerWorkspace: publicProcedure.query(() => {
+    return configService.getMaxSessionsPerWorkspace();
+  }),
+
   // Workflows
 
   // List all available workflows
@@ -72,7 +81,18 @@ export const sessionRouter = router({
         model: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
+      // Check per-workspace session limit
+      const maxSessions = configService.getMaxSessionsPerWorkspace();
+      const existingSessions = await claudeSessionAccessor.findByWorkspaceId(input.workspaceId);
+
+      if (existingSessions.length >= maxSessions) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Maximum sessions per workspace (${maxSessions}) reached`,
+        });
+      }
+
       return claudeSessionAccessor.create(input);
     }),
 

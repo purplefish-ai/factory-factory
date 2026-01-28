@@ -32,6 +32,8 @@ interface WorkspaceContentViewProps {
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
   children: ReactNode;
+  /** Maximum sessions allowed per workspace */
+  maxSessions?: number;
 }
 
 // =============================================================================
@@ -60,6 +62,7 @@ export function WorkspaceContentView({
   onCreateSession,
   onCloseSession,
   children,
+  maxSessions,
 }: WorkspaceContentViewProps) {
   // Show workflow selector when no sessions exist
   if (claudeSessions && claudeSessions.length === 0) {
@@ -96,6 +99,7 @@ export function WorkspaceContentView({
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
           disabled={running || isCreatingSession || isDeletingSession}
+          maxSessions={maxSessions}
         />
       </div>
 

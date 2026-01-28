@@ -270,7 +270,7 @@ export function AppSidebar() {
                 )}
               </button>
             </div>
-            <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+            <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
               <SidebarMenu>
                 {showCreatingPlaceholder && (
                   <SidebarMenuItem>

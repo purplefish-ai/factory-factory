@@ -1,11 +1,12 @@
 /**
- * Session-storage based queue persistence for chat messages.
- * Messages are stored per-session to persist across page reloads.
+ * Session-storage based persistence for chat messages and settings.
+ * Data is stored per-session to persist across page reloads and tab switches.
  */
 
-import type { QueuedMessage } from './claude-types';
+import type { ChatSettings, QueuedMessage } from './claude-types';
 
 const QUEUE_KEY_PREFIX = 'chat-queue-';
+const SETTINGS_KEY_PREFIX = 'chat-settings-';
 
 /**
  * Validate that an object has the required QueuedMessage shape.
@@ -60,5 +61,71 @@ export function persistQueue(dbSessionId: string | null, messages: QueuedMessage
     }
   } catch {
     // Silently ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+/**
+ * Validate that an object has the required ChatSettings shape.
+ */
+function isValidChatSettings(obj: unknown): obj is ChatSettings {
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+  const settings = obj as ChatSettings;
+  return (
+    (settings.selectedModel === null || typeof settings.selectedModel === 'string') &&
+    typeof settings.thinkingEnabled === 'boolean' &&
+    typeof settings.planModeEnabled === 'boolean'
+  );
+}
+
+/**
+ * Load chat settings from sessionStorage for a specific session.
+ * Returns null if no settings are stored (caller should use defaults).
+ */
+export function loadSettings(dbSessionId: string): ChatSettings | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    const stored = sessionStorage.getItem(`${SETTINGS_KEY_PREFIX}${dbSessionId}`);
+    if (!stored) {
+      return null;
+    }
+    const parsed: unknown = JSON.parse(stored);
+    if (!isValidChatSettings(parsed)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist chat settings to sessionStorage for a specific session.
+ */
+export function persistSettings(dbSessionId: string | null, settings: ChatSettings): void {
+  if (typeof window === 'undefined' || !dbSessionId) {
+    return;
+  }
+  try {
+    sessionStorage.setItem(`${SETTINGS_KEY_PREFIX}${dbSessionId}`, JSON.stringify(settings));
+  } catch {
+    // Silently ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+/**
+ * Clear chat settings from sessionStorage for a specific session.
+ */
+export function clearSettings(dbSessionId: string | null): void {
+  if (typeof window === 'undefined' || !dbSessionId) {
+    return;
+  }
+  try {
+    sessionStorage.removeItem(`${SETTINGS_KEY_PREFIX}${dbSessionId}`);
+  } catch {
+    // Silently ignore storage errors
   }
 }

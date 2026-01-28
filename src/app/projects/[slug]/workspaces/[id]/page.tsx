@@ -336,6 +336,8 @@ function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const { data: claudeSessions, isLoading: sessionsLoading } =
     trpc.session.listClaudeSessions.useQuery({ workspaceId }, { refetchInterval: 5000 });
 
+  const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
+
   const { data: workflows } = trpc.session.listWorkflows.useQuery(undefined, {
     enabled: claudeSessions !== undefined && claudeSessions.length === 0,
   });
@@ -357,6 +359,7 @@ function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     workflows,
     recommendedWorkflow,
     initialDbSessionId,
+    maxSessions,
   };
 }
 
@@ -647,6 +650,7 @@ function WorkspaceChatContent() {
     workflows,
     recommendedWorkflow,
     initialDbSessionId,
+    maxSessions,
   } = useWorkspaceData({ workspaceId });
 
   const { rightPanelVisible } = useWorkspacePanel();
@@ -868,6 +872,7 @@ function WorkspaceChatContent() {
               onSelectSession={handleSelectSession}
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}
+              maxSessions={maxSessions}
             >
               <ChatContent
                 messages={messages}

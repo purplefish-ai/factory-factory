@@ -50,6 +50,9 @@ interface SystemConfig {
   // Health check settings
   healthCheckIntervalMs: number;
 
+  // Session limits
+  maxSessionsPerWorkspace: number;
+
   // Feature flags
   features: {
     authentication: boolean;
@@ -164,6 +167,9 @@ function loadSystemConfig(): SystemConfig {
 
     // Health check settings
     healthCheckIntervalMs: Number.parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '300000', 10), // 5 minutes
+
+    // Session limits
+    maxSessionsPerWorkspace: Number.parseInt(process.env.MAX_SESSIONS_PER_WORKSPACE || '5', 10),
 
     // Feature flags
     features: {
@@ -283,6 +289,13 @@ class ConfigService {
    */
   getDatabasePath(): string {
     return this.config.databasePath;
+  }
+
+  /**
+   * Get max sessions per workspace
+   */
+  getMaxSessionsPerWorkspace(): number {
+    return this.config.maxSessionsPerWorkspace;
   }
 
   /**

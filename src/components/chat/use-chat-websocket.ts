@@ -14,7 +14,7 @@ import type {
 } from '@/lib/claude-types';
 import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
-import { loadQueue, persistQueue } from '@/lib/queue-storage';
+import { loadQueue, loadSettings, persistQueue, persistSettings } from '@/lib/queue-storage';
 import {
   buildWebSocketUrl,
   getReconnectDelay,
@@ -229,6 +229,8 @@ interface MessageHandlerContext {
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
   /** Updates tool input for a specific tool_use_id */
   updateToolInput: (toolUseId: string, input: Record<string, unknown>) => void;
+  /** Current dbSessionId for settings persistence */
+  dbSessionIdRef: React.MutableRefObject<string | null>;
 }
 
 function handleStatusMessage(data: WebSocketMessage, ctx: MessageHandlerContext): void {
@@ -454,9 +456,21 @@ function handleSessionLoadedMessage(data: WebSocketMessage, ctx: MessageHandlerC
     // Clear tool input accumulator when loading a new session to prevent memory buildup
     ctx.toolInputAccumulatorRef.current.clear();
   }
-  // Load settings if present
+  // Load settings: prefer locally stored settings (user's explicit changes) over backend-inferred settings
+  // This preserves the user's model selection when switching tabs
   if (data.settings) {
-    ctx.setChatSettings(data.settings);
+    const dbSessionId = ctx.dbSessionIdRef.current;
+    const storedSettings = dbSessionId ? loadSettings(dbSessionId) : null;
+    if (storedSettings) {
+      // User has explicit settings stored - use those instead of backend inference
+      ctx.setChatSettings(storedSettings);
+    } else {
+      // No stored settings - use backend-inferred settings and persist them
+      ctx.setChatSettings(data.settings);
+      if (dbSessionId) {
+        persistSettings(dbSessionId, data.settings);
+      }
+    }
   }
   // Set running status from backend - this ensures UI accurately reflects
   // whether the agent is currently processing for this session
@@ -564,7 +578,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       setPendingQuestion(null);
       setStartingSession(false);
       setLoadingSession(false);
-      setChatSettings(DEFAULT_CHAT_SETTINGS);
       setRunning(false);
       setQueuedMessages([]);
 
@@ -573,10 +586,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       messageQueueRef.current = [];
     }
 
-    // Load queue from storage for the new session
+    // Load queue and settings from storage for the new session
     if (newDbSessionId) {
       const storedQueue = loadQueue(newDbSessionId);
       setQueuedMessages(storedQueue);
+
+      // Load settings from storage, falling back to defaults
+      const storedSettings = loadSettings(newDbSessionId);
+      setChatSettings(storedSettings ?? DEFAULT_CHAT_SETTINGS);
+    } else {
+      setChatSettings(DEFAULT_CHAT_SETTINGS);
     }
   }, [dbSessionId]);
 
@@ -700,6 +719,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       setChatSettings,
       toolInputAccumulatorRef,
       updateToolInput,
+      dbSessionIdRef,
     }),
     [updateToolInput]
   );
@@ -978,11 +998,17 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [sendWsMessage]
   );
 
-  const updateSettings = useCallback((settings: Partial<ChatSettings>) => {
-    // Update local state - settings are inferred from session file on load,
-    // not persisted to database
-    setChatSettings((prev) => ({ ...prev, ...settings }));
-  }, []);
+  const updateSettings = useCallback(
+    (settings: Partial<ChatSettings>) => {
+      // Update local state and persist to session storage
+      setChatSettings((prev) => {
+        const updated = { ...prev, ...settings };
+        persistSettings(dbSessionId, updated);
+        return updated;
+      });
+    },
+    [dbSessionId]
+  );
 
   const removeQueuedMessage = useCallback(
     (id: string) => {
