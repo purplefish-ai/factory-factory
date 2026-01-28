@@ -9,6 +9,7 @@ import {
   GitBranch,
   GitPullRequest,
   Loader2,
+  PanelRight,
   XCircle,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -23,6 +24,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   QuickActionsMenu,
   RightPanel,
+  useWorkspacePanel,
   WorkspaceContentView,
   WorkspacePanelProvider,
 } from '@/components/workspace';
@@ -113,6 +115,26 @@ function EmptyState() {
         <p className="text-sm">Start a conversation by typing a message below.</p>
       </div>
     </div>
+  );
+}
+
+// =============================================================================
+// Toggle Right Panel Button
+// =============================================================================
+
+function ToggleRightPanelButton() {
+  const { rightPanelVisible, toggleRightPanel } = useWorkspacePanel();
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggleRightPanel}
+      className="h-8 w-8"
+      title={rightPanelVisible ? 'Hide right panel' : 'Show right panel'}
+    >
+      <PanelRight className={cn('h-4 w-4', rightPanelVisible && 'text-primary')} />
+    </Button>
   );
 }
 
@@ -592,6 +614,8 @@ function WorkspaceChatContent() {
     initialDbSessionId,
   } = useWorkspaceData({ workspaceId });
 
+  const { rightPanelVisible } = useWorkspacePanel();
+
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
 
@@ -769,13 +793,14 @@ function WorkspaceChatContent() {
           >
             <Archive className="h-4 w-4" />
           </Button>
+          <ToggleRightPanelButton />
         </div>
       </div>
 
       {/* Main Content Area: Resizable two-column layout */}
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         {/* Left Panel: Session tabs + Main View Content */}
-        <ResizablePanel defaultSize="70%" minSize="30%">
+        <ResizablePanel defaultSize={rightPanelVisible ? '70%' : '100%'} minSize="30%">
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
               workspaceId={workspaceId}
@@ -819,14 +844,17 @@ function WorkspaceChatContent() {
           </div>
         </ResizablePanel>
 
-        <ResizableHandle />
-
-        {/* Right Panel: Git/Files + Terminal */}
-        <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
-          <div className="h-full border-l">
-            <RightPanel workspaceId={workspaceId} />
-          </div>
-        </ResizablePanel>
+        {/* Right Panel: Git/Files + Terminal (conditionally rendered) */}
+        {rightPanelVisible && (
+          <>
+            <ResizableHandle />
+            <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
+              <div className="h-full border-l">
+                <RightPanel workspaceId={workspaceId} />
+              </div>
+            </ResizablePanel>
+          </>
+        )}
       </ResizablePanelGroup>
     </div>
   );
