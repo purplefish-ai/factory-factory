@@ -16,6 +16,7 @@ import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
 import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index';
 import { prisma } from './db';
+import { interceptorRegistry, registerInterceptors } from './interceptors';
 import { claudeSessionAccessor } from './resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from './resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from './resource_accessors/workspace.accessor';
@@ -116,6 +117,9 @@ app.use(express.json({ limit: '10mb' }));
 
 // Initialize MCP tools
 initializeMcpTools();
+
+// Register tool interceptors
+registerInterceptors();
 
 // ============================================================================
 // Health Check Endpoints
@@ -566,11 +570,80 @@ function forwardToConnections(dbSessionId: string, data: unknown): void {
   }
 }
 
+/**
+ * Notify interceptors of tool_result events and clean up tracking maps.
+ */
+function notifyToolResultInterceptors(
+  content: Array<{ type?: string }>,
+  pendingToolNames: Map<string, string>,
+  pendingToolInputs: Map<string, Record<string, unknown>>,
+  interceptorContext: { sessionId: string; workspaceId: string; workingDir: string }
+): void {
+  for (const item of content) {
+    const typedItem = item as {
+      type: string;
+      tool_use_id?: string;
+      content?: string;
+      is_error?: boolean;
+    };
+    if (typedItem.type !== 'tool_result' || !typedItem.tool_use_id) {
+      continue;
+    }
+
+    const toolName = pendingToolNames.get(typedItem.tool_use_id) ?? 'unknown';
+    const toolInput = pendingToolInputs.get(typedItem.tool_use_id) ?? {};
+
+    interceptorRegistry.notifyToolComplete(
+      {
+        toolUseId: typedItem.tool_use_id,
+        toolName,
+        input: toolInput,
+        output: {
+          content:
+            typeof typedItem.content === 'string'
+              ? typedItem.content
+              : JSON.stringify(typedItem.content),
+          isError: typedItem.is_error ?? false,
+        },
+      },
+      { ...interceptorContext, timestamp: new Date() }
+    );
+
+    // Clean up tracking maps
+    pendingToolNames.delete(typedItem.tool_use_id);
+    pendingToolInputs.delete(typedItem.tool_use_id);
+  }
+}
+
 // Set up event forwarding from ClaudeClient to WebSocket connections
-function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void {
+function setupChatClientEvents(
+  dbSessionId: string,
+  client: ClaudeClient,
+  context: { workspaceId: string; workingDir: string }
+): void {
   if (DEBUG_CHAT_WS) {
     logger.info('[Chat WS] Setting up event forwarding for session', { dbSessionId });
   }
+
+  // Track tool_use events to correlate with tool_result for interceptors
+  const pendingToolNames = new Map<string, string>();
+  const pendingToolInputs = new Map<string, Record<string, unknown>>();
+
+  // Listen for tool_use events and notify interceptors
+  client.on('tool_use', (toolUse) => {
+    pendingToolNames.set(toolUse.id, toolUse.name);
+    pendingToolInputs.set(toolUse.id, toolUse.input);
+
+    interceptorRegistry.notifyToolStart(
+      { toolUseId: toolUse.id, toolName: toolUse.name, input: toolUse.input },
+      {
+        sessionId: dbSessionId,
+        workspaceId: context.workspaceId,
+        workingDir: context.workingDir,
+        timestamp: new Date(),
+      }
+    );
+  });
 
   // Forward Claude CLI session ID to frontend when it becomes available
   // This is the actual Claude session ID used to store history in ~/.claude/projects/
@@ -677,6 +750,13 @@ function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void 
       return;
     }
 
+    // Notify interceptors of tool_result events
+    notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
+      sessionId: dbSessionId,
+      workspaceId: context.workspaceId,
+      workingDir: context.workingDir,
+    });
+
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Forwarding user message with tool_result', { dbSessionId });
     }
@@ -772,10 +852,17 @@ async function getOrCreateChatClient(
     };
 
     try {
+      // Look up workspaceId from the session for interceptor context
+      const session = await claudeSessionAccessor.findById(dbSessionId);
+      const workspaceId = session?.workspaceId ?? 'unknown';
+
       const newClient = await ClaudeClient.create(clientOptions);
 
       // Set up event forwarding before storing in map to ensure events aren't missed
-      setupChatClientEvents(dbSessionId, newClient);
+      setupChatClientEvents(dbSessionId, newClient, {
+        workspaceId,
+        workingDir: options.workingDir,
+      });
       chatClients.set(dbSessionId, newClient);
 
       return newClient;
