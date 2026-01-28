@@ -2,8 +2,9 @@
 
 import { GripVertical } from 'lucide-react';
 import type { ComponentProps } from 'react';
-import { useEffect, useState } from 'react';
-import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
+import { useCallback, useEffect, useState } from 'react';
+import type { Layout } from 'react-resizable-panels';
+import { Group, Panel, Separator } from 'react-resizable-panels';
 
 import { cn } from '@/lib/utils';
 
@@ -14,13 +15,41 @@ type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'
   autoSaveId?: string;
 };
 
-// Custom hook that safely provides localStorage only on client
-function useClientStorage() {
-  const [storage, setStorage] = useState<Storage | undefined>(undefined);
+// Custom hook for localStorage persistence that's safe during SSR
+function useLayoutPersistence(autoSaveId: string | undefined) {
+  const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(undefined);
+
+  // Load layout from localStorage on mount
   useEffect(() => {
-    setStorage(localStorage);
-  }, []);
-  return storage;
+    if (!autoSaveId) {
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(`resizable-panels:${autoSaveId}`);
+      if (stored) {
+        setDefaultLayout(JSON.parse(stored));
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [autoSaveId]);
+
+  // Save layout to localStorage when it changes
+  const onLayoutChanged = useCallback(
+    (layout: Layout) => {
+      if (!autoSaveId) {
+        return;
+      }
+      try {
+        localStorage.setItem(`resizable-panels:${autoSaveId}`, JSON.stringify(layout));
+      } catch {
+        // Ignore storage errors
+      }
+    },
+    [autoSaveId]
+  );
+
+  return { defaultLayout, onLayoutChanged };
 }
 
 const ResizablePanelGroup = ({
@@ -31,13 +60,7 @@ const ResizablePanelGroup = ({
   onLayoutChanged: onLayoutChangedProp,
   ...props
 }: ResizablePanelGroupProps) => {
-  const clientStorage = useClientStorage();
-
-  // Use the persistence hook when autoSaveId is provided
-  const persistence = useDefaultLayout({
-    id: autoSaveId ?? '__unused__',
-    storage: autoSaveId ? clientStorage : undefined,
-  });
+  const persistence = useLayoutPersistence(autoSaveId);
 
   return (
     <Group
