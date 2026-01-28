@@ -826,6 +826,9 @@ async function handleChatMessage(
       // Look up resumeClaudeSessionId from database
       // The frontend no longer tracks claudeSessionId - it's a backend-only concern
       const dbSession = await claudeSessionAccessor.findById(dbSessionId);
+      if (!dbSession) {
+        logger.warn('[Chat WS] Session not found during start', { dbSessionId });
+      }
       const resumeClaudeSessionId = dbSession?.claudeSessionId ?? undefined;
 
       await getOrCreateChatClient(dbSessionId, {

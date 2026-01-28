@@ -93,6 +93,7 @@ export class ClaudeProtocol extends EventEmitter {
   private drainPromise: Promise<void> | null;
   private drainReject: ((error: Error) => void) | null;
   private drainErrorHandler: ((error: Error) => void) | null;
+  private drainHandler: (() => void) | null;
 
   constructor(stdin: Writable, stdout: Readable, options?: ClaudeProtocolOptions) {
     super();
@@ -106,6 +107,7 @@ export class ClaudeProtocol extends EventEmitter {
     this.drainPromise = null;
     this.drainReject = null;
     this.drainErrorHandler = null;
+    this.drainHandler = null;
   }
 
   // ===========================================================================
@@ -320,7 +322,8 @@ export class ClaudeProtocol extends EventEmitter {
       this.drainPromise = new Promise<void>((resolve, reject) => {
         this.drainReject = reject;
 
-        const onDrain = () => {
+        // Track drain handler so it can be removed on error
+        this.drainHandler = () => {
           this.cleanupDrainHandlers();
           resolve();
         };
@@ -331,7 +334,7 @@ export class ClaudeProtocol extends EventEmitter {
           reject(error);
         };
 
-        this.stdin.once('drain', onDrain);
+        this.stdin.once('drain', this.drainHandler);
         this.stdin.once('error', this.drainErrorHandler);
       });
       await this.drainPromise;
@@ -342,6 +345,10 @@ export class ClaudeProtocol extends EventEmitter {
    * Clean up drain-related event handlers and state.
    */
   private cleanupDrainHandlers(): void {
+    if (this.drainHandler) {
+      this.stdin.removeListener('drain', this.drainHandler);
+      this.drainHandler = null;
+    }
     if (this.drainErrorHandler) {
       this.stdin.removeListener('error', this.drainErrorHandler);
       this.drainErrorHandler = null;
