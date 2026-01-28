@@ -1253,9 +1253,9 @@ function handleChatUpgrade(
       });
     }
 
-    // Get running status from chatClients
+    // Get working status from chatClients (actively processing, not just alive)
     const client = chatClients.get(dbSessionId);
-    const isRunning = client?.isRunning() ?? false;
+    const isRunning = client?.isWorking() ?? false;
 
     // Send initial status
     const initialStatus = {
