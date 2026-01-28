@@ -217,7 +217,7 @@ function ChatContent({
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
       <ScrollArea className="flex-1 min-h-0" viewportRef={viewportRef} onScroll={handleScroll}>
-        <div ref={contentRef} className="p-4 space-y-2">
+        <div ref={contentRef} className="p-4 space-y-2 min-w-0">
           {messages.length === 0 && !running && !loadingSession && !startingSession && (
             <EmptyState />
           )}

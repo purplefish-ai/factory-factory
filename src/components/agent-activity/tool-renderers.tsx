@@ -107,7 +107,7 @@ export function ToolInfoRenderer({
 
     return (
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="rounded border bg-muted/30">
+        <div className="rounded border bg-muted/30 min-w-0">
           <CollapsibleTrigger asChild>
             <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
               {isOpen ? (
@@ -133,7 +133,7 @@ export function ToolInfoRenderer({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="border-t px-2 py-1.5">
+            <div className="border-t px-2 py-1.5 overflow-x-auto">
               <ToolInputRenderer name={toolInfo.name} input={toolInfo.input} />
             </div>
           </CollapsibleContent>
@@ -153,7 +153,7 @@ export function ToolInfoRenderer({
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <div
           className={cn(
-            'rounded border',
+            'rounded border min-w-0',
             resultInfo.isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
           )}
         >
@@ -179,7 +179,7 @@ export function ToolInfoRenderer({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="border-t px-2 py-1.5">
+            <div className="border-t px-2 py-1.5 overflow-x-auto">
               <ToolResultContentRenderer
                 content={resultInfo.content}
                 isError={resultInfo.isError}
@@ -273,7 +273,7 @@ export function ToolSequenceGroup({ sequence, defaultOpen = false }: ToolSequenc
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="rounded border bg-muted/20">
+      <div className="rounded border bg-muted/20 min-w-0">
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/50 transition-colors">
             {isOpen ? (
@@ -289,7 +289,7 @@ export function ToolSequenceGroup({ sequence, defaultOpen = false }: ToolSequenc
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t space-y-1 p-1.5">
+          <div className="border-t space-y-1 p-1.5 overflow-x-auto">
             {pairedCalls.map((call) => (
               <div key={call.id} className="pl-2">
                 <PairedToolCallRenderer call={call} defaultOpen={false} />
@@ -325,7 +325,7 @@ function PairedToolCallRenderer({ call, defaultOpen = false }: PairedToolCallRen
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
-          'rounded border',
+          'rounded border min-w-0',
           isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
         )}
       >
@@ -359,15 +359,15 @@ function PairedToolCallRenderer({ call, defaultOpen = false }: PairedToolCallRen
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t px-2 py-1.5 space-y-2">
+          <div className="border-t px-2 py-1.5 space-y-2 overflow-x-auto">
             {/* Tool Input */}
-            <div>
+            <div className="min-w-0">
               <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Input</div>
               <ToolInputRenderer name={call.name} input={call.input} />
             </div>
             {/* Tool Result */}
             {call.result && (
-              <div>
+              <div className="min-w-0">
                 <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Result</div>
                 <ToolResultContentRenderer
                   content={call.result.content}
@@ -396,7 +396,7 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
   switch (name) {
     case 'Read':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 w-0 min-w-full">
           <FilePathDisplay path={input.file_path as string} />
           {input.offset !== undefined && (
             <div className="text-xs text-muted-foreground">
@@ -408,7 +408,7 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
 
     case 'Write':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 w-0 min-w-full">
           <FilePathDisplay path={input.file_path as string} />
           <div className="rounded bg-muted px-1.5 py-1">
             <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto">
@@ -420,16 +420,16 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
 
     case 'Edit':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 w-0 min-w-full">
           <FilePathDisplay path={input.file_path as string} />
           <div className="grid grid-cols-2 gap-1.5">
-            <div className="rounded bg-destructive/10 px-1.5 py-1">
+            <div className="rounded bg-destructive/10 px-1.5 py-1 min-w-0">
               <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
               <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
                 {truncateContent(input.old_string as string, 200)}
               </pre>
             </div>
-            <div className="rounded bg-success/10 px-1.5 py-1">
+            <div className="rounded bg-success/10 px-1.5 py-1 min-w-0">
               <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
               <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
                 {truncateContent(input.new_string as string, 200)}
@@ -441,7 +441,7 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
 
     case 'Bash':
       return (
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 w-0 min-w-full">
           <div className="rounded bg-muted px-1.5 py-1 font-mono">
             <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
               {String(input.command ?? '')}
@@ -456,7 +456,7 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
     case 'Glob':
     case 'Grep':
       return (
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 w-0 min-w-full">
           <div className="font-mono text-xs">{String(input.pattern ?? '')}</div>
           {input.path != null && <FilePathDisplay path={String(input.path)} />}
         </div>
@@ -465,9 +465,11 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
     default:
       // Generic JSON display for unknown tools
       return (
-        <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
-          {JSON.stringify(input, null, 2)}
-        </pre>
+        <div className="w-0 min-w-full">
+          <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
+            {JSON.stringify(input, null, 2)}
+          </pre>
+        </div>
       );
   }
 }
@@ -484,20 +486,22 @@ interface ToolResultContentRendererProps {
 function ToolResultContentRenderer({ content, isError }: ToolResultContentRendererProps) {
   if (typeof content === 'string') {
     return (
-      <pre
-        className={cn(
-          'text-xs overflow-x-auto max-h-40 overflow-y-auto rounded px-1.5 py-1',
-          isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
-        )}
-      >
-        {truncateContent(content, 2000)}
-      </pre>
+      <div className="w-0 min-w-full">
+        <pre
+          className={cn(
+            'text-xs overflow-x-auto max-h-40 overflow-y-auto rounded px-1.5 py-1',
+            isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
+          )}
+        >
+          {truncateContent(content, 2000)}
+        </pre>
+      </div>
     );
   }
 
   // Handle array of text/image items
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 w-0 min-w-full">
       {content.map((item, index) => {
         const key =
           item.type === 'text' ? `text-${index}-${(item.text ?? '').slice(0, 20)}` : `img-${index}`;
@@ -553,7 +557,7 @@ export function ToolCallGroupRenderer({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="rounded border bg-muted/20">
+      <div className="rounded border bg-muted/20 min-w-0">
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
             {isOpen ? (
@@ -583,7 +587,7 @@ export function ToolCallGroupRenderer({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t divide-y">
+          <div className="border-t divide-y overflow-x-auto">
             {toolCalls.map((toolCall) => (
               <ToolCallItem key={toolCall.id} toolCall={toolCall} />
             ))}
@@ -627,7 +631,7 @@ function ToolCallItem({ toolCall }: ToolCallItemProps) {
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="px-4 pb-1.5 space-y-1">
+        <div className="px-4 pb-1.5 space-y-1 overflow-x-auto">
           <ToolInputRenderer name={toolCall.name} input={toolCall.input} />
           {toolCall.result && (
             <ToolResultContentRenderer
@@ -656,10 +660,10 @@ function FilePathDisplay({ path }: { path: string }) {
   const directory = parts.slice(0, -1).join('/');
 
   return (
-    <div className="flex items-center gap-1 text-sm">
+    <div className="flex items-center gap-1 text-sm min-w-0">
       <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="text-muted-foreground">{directory}/</span>
-      <span className="font-medium">{filename}</span>
+      <span className="text-muted-foreground truncate">{directory}/</span>
+      <span className="font-medium shrink-0">{filename}</span>
     </div>
   );
 }
