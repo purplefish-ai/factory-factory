@@ -393,7 +393,8 @@ class GitHubCLIService {
   }
 
   /**
-   * Find an open PR for a given branch in a repository.
+   * Find a PR for a given branch in a repository.
+   * Checks both open and merged PRs to handle workspaces where the PR was merged.
    * Returns the PR URL if found, null otherwise.
    */
   async findPRForBranch(
@@ -402,6 +403,7 @@ class GitHubCLIService {
     branchName: string
   ): Promise<{ url: string; number: number } | null> {
     try {
+      // Fetch all PRs (open and merged) in a single API call
       const { stdout } = await execFileAsync(
         'gh',
         [
@@ -411,18 +413,33 @@ class GitHubCLIService {
           branchName,
           '--repo',
           `${owner}/${repo}`,
+          '--state',
+          'all',
           '--json',
-          'number,url',
+          'number,url,state',
           '--limit',
-          '1',
+          '10',
         ],
         { timeout: 30_000 }
       );
 
-      const prs = JSON.parse(stdout) as Array<{ number: number; url: string }>;
-      if (prs.length > 0) {
-        return { url: prs[0].url, number: prs[0].number };
+      const prs = JSON.parse(stdout) as Array<{ number: number; url: string; state: string }>;
+      if (prs.length === 0) {
+        return null;
       }
+
+      // Prefer open PRs over merged/closed ones
+      const openPr = prs.find((pr) => pr.state === 'OPEN');
+      if (openPr) {
+        return { url: openPr.url, number: openPr.number };
+      }
+
+      // Fall back to merged PR if no open one exists
+      const mergedPr = prs.find((pr) => pr.state === 'MERGED');
+      if (mergedPr) {
+        return { url: mergedPr.url, number: mergedPr.number };
+      }
+
       return null;
     } catch (error) {
       const errorType = this.classifyError(error);

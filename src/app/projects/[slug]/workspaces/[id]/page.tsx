@@ -616,16 +616,31 @@ function WorkspaceChatContent() {
               href={workspace.prUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors text-sm font-medium"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-colors text-sm font-medium ${
+                workspace.prState === 'MERGED'
+                  ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300 hover:bg-purple-500/35'
+                  : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
+              }`}
             >
               <GitPullRequest className="h-4 w-4" />
               <span>#{workspace.prNumber}</span>
-              {workspace.prCiStatus === 'SUCCESS' && (
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-              )}
-              {workspace.prCiStatus === 'FAILURE' && <XCircle className="h-4 w-4 text-red-500" />}
-              {workspace.prCiStatus === 'PENDING' && (
-                <Circle className="h-4 w-4 text-yellow-500 animate-pulse" />
+              {workspace.prState === 'MERGED' ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-purple-500" />
+                  <span className="text-xs">Merged</span>
+                </>
+              ) : (
+                <>
+                  {workspace.prCiStatus === 'SUCCESS' && (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  )}
+                  {workspace.prCiStatus === 'FAILURE' && (
+                    <XCircle className="h-4 w-4 text-red-500" />
+                  )}
+                  {workspace.prCiStatus === 'PENDING' && (
+                    <Circle className="h-4 w-4 text-yellow-500 animate-pulse" />
+                  )}
+                </>
               )}
             </a>
           )}
