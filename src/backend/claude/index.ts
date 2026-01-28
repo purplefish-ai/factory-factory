@@ -277,10 +277,19 @@ export class ClaudeClient extends EventEmitter {
   }
 
   /**
-   * Check if the Claude process is still running.
+   * Check if the Claude process is still running (alive but may be idle).
    */
   isRunning(): boolean {
     return this.process?.isRunning() ?? false;
+  }
+
+  /**
+   * Check if the Claude process is actively working (processing a request).
+   * Returns true only when status is 'running', false for 'ready' (idle) or 'exited'.
+   * Use this to determine if the UI should show a "thinking" indicator.
+   */
+  isWorking(): boolean {
+    return this.process?.getStatus() === 'running';
   }
 
   // ===========================================================================

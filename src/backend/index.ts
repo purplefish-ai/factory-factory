@@ -1056,9 +1056,12 @@ async function handleChatMessage(
 
       const targetSessionId = dbSession.claudeSessionId ?? null;
 
-      // Check if there's an active Claude client running for this session
+      // Check if there's an active Claude client actively working for this session
+      // Use isWorking() instead of isRunning() to distinguish between:
+      // - 'running' status: Claude is actively processing a request
+      // - 'ready' status: Process is alive but idle (not "thinking")
       const existingClient = chatClients.get(dbSessionId);
-      const running = existingClient?.isRunning() ?? false;
+      const running = existingClient?.isWorking() ?? false;
 
       if (targetSessionId) {
         const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
