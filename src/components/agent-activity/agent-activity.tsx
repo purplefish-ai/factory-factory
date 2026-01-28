@@ -216,7 +216,7 @@ export function MessageItem({ message }: MessageItemProps) {
   if (message.source === 'user') {
     return (
       <MessageWrapper chatMessage={message}>
-        <div className="rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block max-w-full break-words text-xs">
+        <div className="rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block max-w-full break-words text-sm">
           {stripThinkingSuffix(message.text)}
         </div>
       </MessageWrapper>

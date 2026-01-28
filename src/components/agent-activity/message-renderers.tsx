@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Bot, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type {
@@ -119,7 +119,7 @@ export function AssistantMessageRenderer({
   if (text) {
     return (
       <div
-        className={cn('prose prose-sm dark:prose-invert max-w-none text-xs break-words', className)}
+        className={cn('prose prose-sm dark:prose-invert max-w-none text-sm break-words', className)}
       >
         <TextRenderer text={text} />
       </div>
@@ -172,7 +172,7 @@ export function ResultRenderer({ message, className }: ResultRendererProps) {
   // But if there's result content, show it with proper markdown formatting
   if (message.result && typeof message.result === 'string') {
     return (
-      <div className={cn('prose prose-sm dark:prose-invert max-w-none text-xs', className)}>
+      <div className={cn('prose prose-sm dark:prose-invert max-w-none text-sm', className)}>
         <MarkdownRenderer content={message.result} />
       </div>
     );
@@ -202,7 +202,7 @@ function StreamEventRenderer({ event, messageId, className }: StreamEventRendere
       const block = event.content_block;
       if (isTextContent(block)) {
         return (
-          <div className={cn('prose prose-sm dark:prose-invert max-w-none text-xs', className)}>
+          <div className={cn('prose prose-sm dark:prose-invert max-w-none text-sm', className)}>
             <TextRenderer text={block.text} />
           </div>
         );
@@ -402,16 +402,8 @@ export function MessageWrapper({ chatMessage, children, className }: MessageWrap
   const isUser = chatMessage.source === 'user';
 
   return (
-    <div className={cn('flex gap-3 py-2', isUser ? 'flex-row-reverse' : '', className)}>
-      <div
-        className={cn(
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
-        )}
-      >
-        {isUser ? <span className="text-xs font-medium">U</span> : <Bot className="h-4 w-4" />}
-      </div>
-      <div className={cn('flex-1 min-w-0', isUser ? 'text-right' : '')}>{children}</div>
+    <div className={cn('py-2', isUser ? 'flex justify-end' : '', className)}>
+      <div className={cn('max-w-full', isUser ? 'text-right' : '')}>{children}</div>
     </div>
   );
 }
