@@ -9,7 +9,6 @@ import {
   GitBranch,
   GitPullRequest,
   Loader2,
-  PanelRight,
   XCircle,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -19,11 +18,11 @@ import { toast } from 'sonner';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@/components/chat';
 import { Button } from '@/components/ui/button';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   QuickActionsMenu,
   RightPanel,
-  useWorkspacePanel,
   WorkspaceContentView,
   WorkspacePanelProvider,
 } from '@/components/workspace';
@@ -114,26 +113,6 @@ function EmptyState() {
         <p className="text-sm">Start a conversation by typing a message below.</p>
       </div>
     </div>
-  );
-}
-
-// =============================================================================
-// Toggle Right Panel Button
-// =============================================================================
-
-function ToggleRightPanelButton() {
-  const { rightPanelVisible, toggleRightPanel } = useWorkspacePanel();
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={toggleRightPanel}
-      className="h-8 w-8"
-      title={rightPanelVisible ? 'Hide right panel' : 'Show right panel'}
-    >
-      <PanelRight className={cn('h-4 w-4', rightPanelVisible && 'text-primary')} />
-    </Button>
   );
 }
 
@@ -601,7 +580,6 @@ function WorkspaceChatContent() {
   const router = useRouter();
   const slug = params.slug as string;
   const workspaceId = params.id as string;
-  const { rightPanelVisible } = useWorkspacePanel();
 
   // Fetch workspace and session data
   const {
@@ -791,62 +769,65 @@ function WorkspaceChatContent() {
           >
             <Archive className="h-4 w-4" />
           </Button>
-          <ToggleRightPanelButton />
         </div>
       </div>
 
-      {/* Main Content Area: Two-column layout */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Main Content Area: Resizable two-column layout */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         {/* Left Panel: Session tabs + Main View Content */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <WorkspaceContentView
-            workspaceId={workspaceId}
-            claudeSessions={claudeSessions}
-            workflows={workflows}
-            recommendedWorkflow={recommendedWorkflow}
-            selectedSessionId={selectedDbSessionId}
-            runningSessionId={runningSessionId}
-            running={running}
-            isCreatingSession={createSession.isPending}
-            isDeletingSession={deleteSession.isPending}
-            onWorkflowSelect={handleWorkflowSelect}
-            onSelectSession={handleSelectSession}
-            onCreateSession={handleNewChat}
-            onCloseSession={handleCloseSession}
-          >
-            <ChatContent
-              messages={messages}
+        <ResizablePanel defaultSize="70%" minSize="30%">
+          <div className="h-full flex flex-col min-w-0">
+            <WorkspaceContentView
+              workspaceId={workspaceId}
+              claudeSessions={claudeSessions}
+              workflows={workflows}
+              recommendedWorkflow={recommendedWorkflow}
+              selectedSessionId={selectedDbSessionId}
+              runningSessionId={runningSessionId}
               running={running}
-              loadingSession={loadingSession}
-              startingSession={startingSession}
-              messagesEndRef={messagesEndRef}
-              contentRef={contentRef}
-              viewportRef={viewportRef}
-              handleScroll={handleScroll}
-              isNearBottom={isNearBottom}
-              scrollToBottom={scrollToBottom}
-              pendingPermission={pendingPermission}
-              pendingQuestion={pendingQuestion}
-              approvePermission={approvePermission}
-              answerQuestion={answerQuestion}
-              connected={connected}
-              sendMessage={sendMessage}
-              stopChat={stopChat}
-              inputRef={inputRef}
-              chatSettings={chatSettings}
-              updateSettings={updateSettings}
-              selectedDbSessionId={selectedDbSessionId}
-            />
-          </WorkspaceContentView>
-        </div>
+              isCreatingSession={createSession.isPending}
+              isDeletingSession={deleteSession.isPending}
+              onWorkflowSelect={handleWorkflowSelect}
+              onSelectSession={handleSelectSession}
+              onCreateSession={handleNewChat}
+              onCloseSession={handleCloseSession}
+            >
+              <ChatContent
+                messages={messages}
+                running={running}
+                loadingSession={loadingSession}
+                startingSession={startingSession}
+                messagesEndRef={messagesEndRef}
+                contentRef={contentRef}
+                viewportRef={viewportRef}
+                handleScroll={handleScroll}
+                isNearBottom={isNearBottom}
+                scrollToBottom={scrollToBottom}
+                pendingPermission={pendingPermission}
+                pendingQuestion={pendingQuestion}
+                approvePermission={approvePermission}
+                answerQuestion={answerQuestion}
+                connected={connected}
+                sendMessage={sendMessage}
+                stopChat={stopChat}
+                inputRef={inputRef}
+                chatSettings={chatSettings}
+                updateSettings={updateSettings}
+                selectedDbSessionId={selectedDbSessionId}
+              />
+            </WorkspaceContentView>
+          </div>
+        </ResizablePanel>
 
-        {/* Right Panel (conditionally rendered, fixed width) */}
-        {rightPanelVisible && (
-          <div className="w-[480px] border-l flex-shrink-0">
+        <ResizableHandle />
+
+        {/* Right Panel: Git/Files + Terminal */}
+        <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
+          <div className="h-full border-l">
             <RightPanel workspaceId={workspaceId} />
           </div>
-        )}
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

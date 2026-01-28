@@ -3,6 +3,7 @@
 import { Files, GitBranch } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
 
 import { FileBrowserPanel } from './file-browser-panel';
@@ -92,36 +93,40 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
   };
 
   return (
-    <div className={cn('h-full flex flex-col', className)}>
-      {/* Top Panel: Git Status / File Browser (60% height) */}
-      <div className="flex-[6] flex flex-col min-h-0">
-        {/* Tab bar */}
-        <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
-          <PanelTab
-            label="Git"
-            icon={<GitBranch className="h-3.5 w-3.5" />}
-            isActive={activeTopTab === 'git'}
-            onClick={() => handleTabChange('git')}
-          />
-          <PanelTab
-            label="Files"
-            icon={<Files className="h-3.5 w-3.5" />}
-            isActive={activeTopTab === 'files'}
-            onClick={() => handleTabChange('files')}
-          />
-        </div>
+    <ResizablePanelGroup direction="vertical" className={cn('h-full', className)}>
+      {/* Top Panel: Git Status / File Browser */}
+      <ResizablePanel defaultSize={60} minSize={20}>
+        <div className="flex flex-col h-full min-h-0">
+          {/* Tab bar */}
+          <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
+            <PanelTab
+              label="Git"
+              icon={<GitBranch className="h-3.5 w-3.5" />}
+              isActive={activeTopTab === 'git'}
+              onClick={() => handleTabChange('git')}
+            />
+            <PanelTab
+              label="Files"
+              icon={<Files className="h-3.5 w-3.5" />}
+              isActive={activeTopTab === 'files'}
+              onClick={() => handleTabChange('files')}
+            />
+          </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          {activeTopTab === 'git' && <GitSummaryPanel workspaceId={workspaceId} />}
-          {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
+            {activeTopTab === 'git' && <GitSummaryPanel workspaceId={workspaceId} />}
+            {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
+          </div>
         </div>
-      </div>
+      </ResizablePanel>
 
-      {/* Bottom Panel: Terminal (40% height) */}
-      <div className="flex-[4] min-h-0 border-t">
+      <ResizableHandle />
+
+      {/* Bottom Panel: Terminal */}
+      <ResizablePanel defaultSize={40} minSize={15}>
         <TerminalPanel workspaceId={workspaceId} className="h-full" />
-      </div>
-    </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
