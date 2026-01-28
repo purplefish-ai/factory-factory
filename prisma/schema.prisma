@@ -36,6 +36,13 @@ enum PRState {
   CLOSED
 }
 
+enum CIStatus {
+  UNKNOWN   // No CI configured or not yet fetched
+  PENDING   // CI is running
+  SUCCESS   // All checks passed
+  FAILURE   // One or more checks failed
+}
+
 enum KanbanColumn {
   BACKLOG
   IN_PROGRESS
@@ -121,6 +128,7 @@ model Workspace {
   prNumber            Int?
   prState             PRState           @default(NONE)
   prReviewState       String?           // Raw GitHub review state
+  prCiStatus          CIStatus          @default(UNKNOWN)  // CI check status
   prUpdatedAt         DateTime?         // Last PR sync time
 
   // Activity tracking

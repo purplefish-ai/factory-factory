@@ -196,6 +196,23 @@ function isBinaryContent(buffer: Buffer): boolean {
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 
 /**
+ * Get the merge base between HEAD and the default branch.
+ * Tries local branch first, falls back to origin/.
+ * Returns null if no merge base can be found.
+ */
+async function getMergeBase(worktreePath: string, defaultBranch: string): Promise<string | null> {
+  const candidates = [defaultBranch, `origin/${defaultBranch}`];
+
+  for (const base of candidates) {
+    const result = await gitCommand(['merge-base', 'HEAD', base], worktreePath);
+    if (result.code === 0 && result.stdout.trim()) {
+      return result.stdout.trim();
+    }
+  }
+  return null;
+}
+
+/**
  * IDE configurations for detection and launching
  */
 const IDE_CONFIGS: Record<
@@ -622,7 +639,7 @@ export const workspaceRouter = router({
       }
 
       if (!workspace.worktreePath) {
-        return { files: [] };
+        return { files: [], hasUncommitted: false };
       }
 
       const result = await gitCommand(['status', '--porcelain'], workspace.worktreePath);
@@ -630,18 +647,20 @@ export const workspaceRouter = router({
         throw new Error(`Git status failed: ${result.stderr}`);
       }
 
-      return { files: parseGitStatusOutput(result.stdout) };
+      const files = parseGitStatusOutput(result.stdout);
+      return { files, hasUncommitted: files.length > 0 };
     }),
 
   // Get batch git stats for multiple workspaces (for sidebar)
+  // Shows changes relative to the project's default branch (e.g., main)
   getBatchGitStats: publicProcedure
     .input(z.object({ workspaceIds: z.array(z.string()) }))
     .query(async ({ input }) => {
-      const workspaces = await workspaceAccessor.findByIds(input.workspaceIds);
+      const workspaces = await workspaceAccessor.findByIdsWithProject(input.workspaceIds);
 
       const results: Record<
         string,
-        { total: number; additions: number; deletions: number } | null
+        { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null
       > = {};
 
       await Promise.all(
@@ -652,7 +671,7 @@ export const workspaceRouter = router({
           }
 
           try {
-            // Get file count from status
+            // Check for uncommitted changes
             const statusResult = await gitCommand(
               ['status', '--porcelain'],
               workspace.worktreePath
@@ -661,19 +680,36 @@ export const workspaceRouter = router({
               results[workspace.id] = null;
               return;
             }
+            const hasUncommitted = statusResult.stdout.trim().length > 0;
 
-            const files = parseGitStatusOutput(statusResult.stdout);
+            // Get merge base with the project's default branch
+            const defaultBranch = workspace.project?.defaultBranch ?? 'main';
+            const mergeBase = await getMergeBase(workspace.worktreePath, defaultBranch);
 
-            // Get additions/deletions from diff --numstat
-            // Use diff without HEAD to handle repos with no commits yet
-            const diffResult = await gitCommand(['diff', '--numstat'], workspace.worktreePath);
+            // Get all changes from merge base (committed + uncommitted)
+            // If no merge base found, fall back to showing only uncommitted changes
+            const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
+            const diffResult = await gitCommand(diffArgs, workspace.worktreePath);
+
+            // Get file count from main-relative diff
+            const fileCountArgs = mergeBase
+              ? ['diff', '--name-only', mergeBase]
+              : ['diff', '--name-only'];
+            const fileCountResult = await gitCommand(fileCountArgs, workspace.worktreePath);
+            const total =
+              fileCountResult.code === 0
+                ? fileCountResult.stdout
+                    .trim()
+                    .split('\n')
+                    .filter((l) => l.length > 0).length
+                : 0;
 
             const { additions, deletions } =
               diffResult.code === 0
                 ? parseNumstatOutput(diffResult.stdout)
                 : { additions: 0, deletions: 0 };
 
-            results[workspace.id] = { total: files.length, additions, deletions };
+            results[workspace.id] = { total, additions, deletions, hasUncommitted };
           } catch {
             results[workspace.id] = null;
           }
@@ -683,7 +719,7 @@ export const workspaceRouter = router({
       return results;
     }),
 
-  // Get file diff for workspace
+  // Get file diff for workspace (relative to project's default branch)
   getFileDiff: publicProcedure
     .input(
       z.object({
@@ -692,7 +728,7 @@ export const workspaceRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.workspaceId);
+      const workspace = await workspaceAccessor.findByIdWithProject(input.workspaceId);
       if (!workspace) {
         throw new Error(`Workspace not found: ${input.workspaceId}`);
       }
@@ -706,10 +742,19 @@ export const workspaceRouter = router({
         throw new Error('Invalid file path');
       }
 
-      // Try to get diff with HEAD first (for staged/unstaged changes)
-      let result = await gitCommand(['diff', 'HEAD', '--', input.filePath], workspace.worktreePath);
+      // Get merge base with the project's default branch
+      const defaultBranch = workspace.project?.defaultBranch ?? 'main';
+      const mergeBase = await getMergeBase(workspace.worktreePath, defaultBranch);
 
-      // If empty, try without HEAD (for untracked files or other scenarios)
+      // Try to get diff from merge base (shows all changes from main)
+      // Falls back to HEAD if no merge base found
+      const diffBase = mergeBase ?? 'HEAD';
+      let result = await gitCommand(
+        ['diff', diffBase, '--', input.filePath],
+        workspace.worktreePath
+      );
+
+      // If empty, try without base (for untracked files or other scenarios)
       if (result.stdout.trim() === '' && result.code === 0) {
         result = await gitCommand(['diff', '--', input.filePath], workspace.worktreePath);
       }

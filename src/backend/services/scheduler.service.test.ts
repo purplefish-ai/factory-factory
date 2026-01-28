@@ -67,6 +67,7 @@ describe('SchedulerService', () => {
         prNumber: 1,
         prState: 'OPEN',
         prReviewState: 'APPROVED',
+        prCiStatus: 'SUCCESS',
       });
       mockUpdate.mockResolvedValue({});
       mockUpdateCachedKanbanColumn.mockResolvedValue(undefined);
@@ -91,6 +92,7 @@ describe('SchedulerService', () => {
           prNumber: 1,
           prState: 'OPEN',
           prReviewState: 'APPROVED',
+          prCiStatus: 'SUCCESS',
         })
         .mockResolvedValueOnce(null); // Second call fails
 
@@ -141,6 +143,7 @@ describe('SchedulerService', () => {
           prNumber: 1,
           prState: 'OPEN',
           prReviewState: null,
+          prCiStatus: 'PENDING',
         };
       });
 
@@ -168,6 +171,7 @@ describe('SchedulerService', () => {
         prNumber: 123,
         prState: 'MERGED',
         prReviewState: 'APPROVED',
+        prCiStatus: 'SUCCESS',
       });
 
       mockUpdate.mockResolvedValue({});
@@ -179,6 +183,7 @@ describe('SchedulerService', () => {
         prNumber: 123,
         prState: 'MERGED',
         prReviewState: 'APPROVED',
+        prCiStatus: 'SUCCESS',
         prUpdatedAt: expect.any(Date),
       });
       expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');

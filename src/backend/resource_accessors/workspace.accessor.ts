@@ -1,4 +1,5 @@
 import type {
+  CIStatus,
   KanbanColumn,
   PRState,
   Prisma,
@@ -28,6 +29,7 @@ interface UpdateWorkspaceInput {
   prNumber?: number | null;
   prState?: PRState;
   prReviewState?: string | null;
+  prCiStatus?: CIStatus;
   prUpdatedAt?: Date | null;
   // Activity tracking
   hasHadSessions?: boolean;
@@ -202,6 +204,24 @@ class WorkspaceAccessor {
         project: true,
       },
       orderBy: { prUpdatedAt: 'asc' }, // Oldest first
+    });
+  }
+
+  /**
+   * Find ACTIVE workspaces without PR URLs that have a branch name.
+   * Used for detecting newly created PRs.
+   */
+  findNeedingPRDiscovery(): Promise<WorkspaceWithProject[]> {
+    return prisma.workspace.findMany({
+      where: {
+        status: 'ACTIVE',
+        prUrl: null,
+        branchName: { not: null },
+      },
+      include: {
+        project: true,
+      },
+      orderBy: { updatedAt: 'desc' },
     });
   }
 

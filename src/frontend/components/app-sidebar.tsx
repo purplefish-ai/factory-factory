@@ -1,6 +1,16 @@
 'use client';
 
-import { GitBranch, GitPullRequest, Kanban, Loader2, Plus, Settings } from 'lucide-react';
+import {
+  CheckCircle2,
+  Circle,
+  GitBranch,
+  GitPullRequest,
+  Kanban,
+  Loader2,
+  Plus,
+  Settings,
+  XCircle,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -26,6 +36,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
@@ -298,6 +309,7 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )}
+                {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conditional rendering for PR/CI status badges */}
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
                   const isWorking = workingStatus?.[workspace.id];
@@ -334,12 +346,54 @@ export function AppSidebar() {
                                   )}
                                 </span>
                               )}
-                              {workspace.prNumber && workspace.prState !== 'NONE' && (
-                                <span className="shrink-0 flex items-center gap-0.5 text-xs text-muted-foreground">
-                                  <GitPullRequest className="h-3 w-3" />
-                                  <span>#{workspace.prNumber}</span>
-                                </span>
+                              {stats?.hasUncommitted && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="h-2 w-2 rounded-full bg-orange-500 shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right">
+                                    <p>Uncommitted changes</p>
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
+                              {workspace.prNumber &&
+                                workspace.prState !== 'NONE' &&
+                                workspace.prUrl && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={workspace.prUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors"
+                                      >
+                                        <GitPullRequest className="h-3 w-3" />
+                                        <span>#{workspace.prNumber}</span>
+                                        {workspace.prCiStatus === 'SUCCESS' && (
+                                          <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                        )}
+                                        {workspace.prCiStatus === 'FAILURE' && (
+                                          <XCircle className="h-3 w-3 text-red-500" />
+                                        )}
+                                        {workspace.prCiStatus === 'PENDING' && (
+                                          <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
+                                        )}
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right">
+                                      <p>
+                                        PR #{workspace.prNumber}
+                                        {workspace.prCiStatus === 'SUCCESS' && ' · CI passed'}
+                                        {workspace.prCiStatus === 'FAILURE' && ' · CI failed'}
+                                        {workspace.prCiStatus === 'PENDING' && ' · CI running'}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        Click to open on GitHub
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <span className="truncate">{workspace.name}</span>
