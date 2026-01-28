@@ -615,7 +615,6 @@ function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void 
     forwardToConnections(dbSessionId, {
       type: 'status',
       running: true,
-      claudeSessionId,
     });
   });
 
@@ -701,7 +700,6 @@ function setupChatClientEvents(dbSessionId: string, client: ClaudeClient): void 
     forwardToConnections(dbSessionId, {
       type: 'process_exit',
       code: result.code,
-      claudeSessionId: result.sessionId,
     });
     // Clean up all listeners to prevent memory leaks if client is recreated
     client.removeAllListeners();
@@ -805,7 +803,6 @@ async function handleChatMessage(
     workingDir?: string;
     systemPrompt?: string;
     model?: string;
-    claudeSessionId?: string;
     // Settings fields
     thinkingEnabled?: boolean;
     planModeEnabled?: boolean;
@@ -934,25 +931,14 @@ async function handleChatMessage(
       // Settings are inferred from session file (model from assistant messages,
       // thinking mode from last user message ending with suffix)
 
-      // claudeSessionId can come from the message, or we look it up from the database
-      let targetSessionId: string | null | undefined = message.claudeSessionId;
-      let sessionNotFound = false;
-
-      if (!targetSessionId) {
-        // Look up claudeSessionId from the database using dbSessionId
-        const dbSession = await claudeSessionAccessor.findById(dbSessionId);
-        if (dbSession) {
-          targetSessionId = dbSession.claudeSessionId ?? null;
-        } else {
-          // Session doesn't exist in database
-          sessionNotFound = true;
-        }
-      }
-
-      if (sessionNotFound) {
+      // Look up claudeSessionId from the database using dbSessionId
+      const dbSession = await claudeSessionAccessor.findById(dbSessionId);
+      if (!dbSession) {
         ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
         break;
       }
+
+      const targetSessionId = dbSession.claudeSessionId ?? null;
 
       if (targetSessionId) {
         const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
@@ -972,7 +958,6 @@ async function handleChatMessage(
         ws.send(
           JSON.stringify({
             type: 'session_loaded',
-            claudeSessionId: targetSessionId,
             messages: history,
             gitBranch,
             settings: {
@@ -983,12 +968,11 @@ async function handleChatMessage(
           })
         );
       } else {
-        // No claudeSessionId available - this is a new session with no history
+        // No history available - this is a new session
         // Send an empty session_loaded response so the UI knows loading is complete
         ws.send(
           JSON.stringify({
             type: 'session_loaded',
-            claudeSessionId: null,
             messages: [],
             gitBranch: null,
             settings: {
@@ -1065,7 +1049,6 @@ function handleChatUpgrade(
   // dbSessionId: database session ID, required for linking to Claude process
   const dbSessionId = url.searchParams.get('sessionId');
   const rawWorkingDir = url.searchParams.get('workingDir');
-  const claudeSessionId = url.searchParams.get('claudeSessionId');
 
   // Require dbSessionId parameter - no temp IDs allowed
   if (!dbSessionId) {
@@ -1092,12 +1075,10 @@ function handleChatUpgrade(
     return;
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket connection handler with multiple event handlers
   wss.handleUpgrade(request, socket, head, (ws) => {
     logger.info('Chat WebSocket connection established', {
       connectionId,
       dbSessionId,
-      claudeSessionId,
     });
 
     // Setup heartbeat tracking
@@ -1110,7 +1091,6 @@ function handleChatUpgrade(
       event: 'connection_established',
       connectionId,
       dbSessionId,
-      claudeSessionId,
       workingDir,
     });
 
@@ -1151,14 +1131,12 @@ function handleChatUpgrade(
     // Get running status from chatClients
     const client = chatClients.get(dbSessionId);
     const isRunning = client?.isRunning() ?? false;
-    const currentClaudeSessionId = client?.getSessionId() ?? claudeSessionId ?? null;
 
     // Send initial status
     const initialStatus = {
       type: 'status',
       dbSessionId,
       running: isRunning,
-      claudeSessionId: currentClaudeSessionId,
     };
     sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
     ws.send(JSON.stringify(initialStatus));

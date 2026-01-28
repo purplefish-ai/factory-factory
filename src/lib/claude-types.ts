@@ -381,7 +381,6 @@ export interface WebSocketMessage {
     | 'message_queued';
   sessionId?: string;
   dbSessionId?: string;
-  claudeSessionId?: string;
   running?: boolean;
   message?: string;
   code?: number;
