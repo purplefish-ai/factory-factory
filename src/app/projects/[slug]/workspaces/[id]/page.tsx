@@ -277,8 +277,6 @@ function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const firstSession = claudeSessions?.[0];
   // Database record ID for the first session
   const initialDbSessionId = firstSession?.id;
-  // Claude CLI session ID (stored in ~/.claude/projects/)
-  const initialClaudeSessionId = firstSession?.claudeSessionId ?? undefined;
 
   return {
     workspace,
@@ -288,7 +286,6 @@ function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     workflows,
     recommendedWorkflow,
     initialDbSessionId,
-    initialClaudeSessionId,
   };
 }
 
@@ -296,8 +293,6 @@ interface UseSessionManagementOptions {
   workspaceId: string;
   slug: string;
   claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
-  loadSession: (claudeSessionId: string) => void;
-  clearChat: () => void;
   sendMessage: (text: string) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
@@ -308,8 +303,6 @@ function useSessionManagement({
   workspaceId,
   slug,
   claudeSessions,
-  loadSession,
-  clearChat,
   sendMessage,
   inputRef,
   selectedDbSessionId,
@@ -359,16 +352,13 @@ function useSessionManagement({
 
   const handleSelectSession = useCallback(
     (dbSessionId: string) => {
+      // Only update the selected session ID here.
+      // The WebSocket connection is keyed by dbSessionId, so changing it will
+      // automatically reconnect and load the correct session.
       setSelectedDbSessionId(dbSessionId);
-      const session = claudeSessions?.find((s) => s.id === dbSessionId);
-      if (session?.claudeSessionId) {
-        loadSession(session.claudeSessionId);
-      } else {
-        clearChat();
-      }
       setTimeout(() => inputRef.current?.focus(), 0);
     },
-    [loadSession, claudeSessions, clearChat, inputRef, setSelectedDbSessionId]
+    [inputRef, setSelectedDbSessionId]
   );
 
   const handleCloseSession = useCallback(
@@ -386,26 +376,16 @@ function useSessionManagement({
       deleteSession.mutate({ id: dbSessionId });
 
       if (isSelectedSession && claudeSessions.length > 1) {
+        // Select the next or previous session
+        // The WebSocket will automatically reconnect and load the new session
         const nextSession = claudeSessions[sessionIndex + 1] ?? claudeSessions[sessionIndex - 1];
         setSelectedDbSessionId(nextSession?.id ?? null);
-        if (nextSession?.claudeSessionId) {
-          loadSession(nextSession.claudeSessionId);
-        } else {
-          clearChat();
-        }
       } else if (claudeSessions.length === 1) {
+        // No more sessions - clear selection
         setSelectedDbSessionId(null);
-        clearChat();
       }
     },
-    [
-      claudeSessions,
-      selectedDbSessionId,
-      deleteSession,
-      loadSession,
-      clearChat,
-      setSelectedDbSessionId,
-    ]
+    [claudeSessions, selectedDbSessionId, deleteSession, setSelectedDbSessionId]
   );
 
   // Generate next available "Chat N" name based on existing sessions
@@ -426,13 +406,13 @@ function useSessionManagement({
         { workspaceId, workflow: workflowId, model: 'sonnet', name: getNextChatName() },
         {
           onSuccess: (session) => {
+            // Setting the new session ID triggers WebSocket reconnection automatically
             setSelectedDbSessionId(session.id);
-            clearChat();
           },
         }
       );
     },
-    [createSession, workspaceId, clearChat, getNextChatName, setSelectedDbSessionId]
+    [createSession, workspaceId, getNextChatName, setSelectedDbSessionId]
   );
 
   const handleNewChat = useCallback(() => {
@@ -442,12 +422,12 @@ function useSessionManagement({
       { workspaceId, workflow: 'followup', model: 'sonnet', name },
       {
         onSuccess: (session) => {
+          // Setting the new session ID triggers WebSocket reconnection automatically
           setSelectedDbSessionId(session.id);
-          clearChat();
         },
       }
     );
-  }, [clearChat, createSession, workspaceId, getNextChatName, setSelectedDbSessionId]);
+  }, [createSession, workspaceId, getNextChatName, setSelectedDbSessionId]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
@@ -457,13 +437,13 @@ function useSessionManagement({
           onSuccess: (session) => {
             // Store the pending prompt to be sent once the session state settles
             pendingQuickActionRef.current = { dbSessionId: session.id, prompt };
+            // Setting the new session ID triggers WebSocket reconnection automatically
             setSelectedDbSessionId(session.id);
-            clearChat();
           },
         }
       );
     },
-    [clearChat, createSession, workspaceId, setSelectedDbSessionId]
+    [createSession, workspaceId, setSelectedDbSessionId]
   );
 
   return {
@@ -523,7 +503,6 @@ function WorkspaceChatContent() {
     workflows,
     recommendedWorkflow,
     initialDbSessionId,
-    initialClaudeSessionId,
   } = useWorkspaceData({ workspaceId });
 
   // Manage selected session state here so it's available for useChatWebSocket
@@ -549,15 +528,12 @@ function WorkspaceChatContent() {
     chatSettings,
     sendMessage,
     stopChat,
-    clearChat,
-    loadSession,
     approvePermission,
     answerQuestion,
     updateSettings,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
-    initialClaudeSessionId,
     workingDir: workspace?.worktreePath ?? undefined,
     dbSessionId: selectedDbSessionId,
   });
@@ -578,8 +554,6 @@ function WorkspaceChatContent() {
     workspaceId,
     slug,
     claudeSessions,
-    loadSession,
-    clearChat,
     sendMessage,
     inputRef,
     selectedDbSessionId,

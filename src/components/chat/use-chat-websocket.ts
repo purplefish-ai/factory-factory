@@ -95,7 +95,7 @@ interface ListSessionsMessage {
 
 interface LoadSessionMessage {
   type: 'load_session';
-  claudeSessionId: string;
+  claudeSessionId?: string; // Optional - backend will look it up from dbSessionId if not provided
 }
 
 interface PermissionResponseMessage {
@@ -602,20 +602,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     }
   }, [messages.length]);
 
-  // Sync initial Claude session ref with prop and reset load flag when navigating to a different session
-  // This handles: page refresh, direct URL navigation, and browser back/forward
-  useEffect(() => {
-    const claudeSessionId = initialClaudeSessionId ?? null;
-    if (claudeSessionId !== initialClaudeSessionIdRef.current) {
-      initialClaudeSessionIdRef.current = claudeSessionId;
-      // Only reset the load flag if we haven't already loaded this session
-      // This prevents duplicate loads when URL updates after loading via picker
-      if (claudeSessionId !== loadedClaudeSessionIdRef.current) {
-        hasLoadedInitialSessionRef.current = false;
-      }
-    }
-  }, [initialClaudeSessionId]);
-
   // Flush queued messages when connection is open
   const flushMessageQueue = useCallback(() => {
     // Filter out stale time-sensitive messages that don't make sense after reconnect
@@ -837,18 +823,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       // Request list of available sessions
       sendWsMessage({ type: 'list_sessions' });
 
-      // Load initial session on first connect, or reload on reconnect if we had a session
-      if (initialClaudeSessionIdRef.current && !hasLoadedInitialSessionRef.current) {
-        hasLoadedInitialSessionRef.current = true;
-        setLoadingSession(true);
-        sendWsMessage({ type: 'load_session', claudeSessionId: initialClaudeSessionIdRef.current });
-      } else if (wasReconnect && claudeSessionIdRef.current) {
-        // On reconnect, reload the current session to restore state
-        // Use ref to get the current value, not stale closure value
-        debug.log('🔄 Reloading session after reconnect:', claudeSessionIdRef.current);
-        setLoadingSession(true);
-        sendWsMessage({ type: 'load_session', claudeSessionId: claudeSessionIdRef.current });
-      }
+      // Always load the session on connect/reconnect.
+      // The backend will look up the claudeSessionId from the database using the
+      // dbSessionId in the WebSocket URL, so we don't need to pass it explicitly.
+      setLoadingSession(true);
+      sendWsMessage({ type: 'load_session' });
     };
 
     ws.onclose = () => {

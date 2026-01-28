@@ -929,7 +929,16 @@ async function handleChatMessage(
       // Load session history without starting a process
       // Settings are inferred from session file (model from assistant messages,
       // thinking mode from last user message ending with suffix)
-      const targetSessionId = message.claudeSessionId;
+
+      // claudeSessionId can come from the message, or we look it up from the database
+      let targetSessionId: string | null | undefined = message.claudeSessionId;
+
+      if (!targetSessionId) {
+        // Look up claudeSessionId from the database using dbSessionId
+        const dbSession = await claudeSessionAccessor.findById(dbSessionId);
+        targetSessionId = dbSession?.claudeSessionId ?? null;
+      }
+
       if (targetSessionId) {
         const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
           SessionManager.getHistory(targetSessionId, workingDir),
@@ -959,7 +968,21 @@ async function handleChatMessage(
           })
         );
       } else {
-        ws.send(JSON.stringify({ type: 'error', message: 'claudeSessionId required' }));
+        // No claudeSessionId available - this is a new session with no history
+        // Send an empty session_loaded response so the UI knows loading is complete
+        ws.send(
+          JSON.stringify({
+            type: 'session_loaded',
+            claudeSessionId: null,
+            messages: [],
+            gitBranch: null,
+            settings: {
+              selectedModel: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
+          })
+        );
       }
       break;
     }
