@@ -2,26 +2,41 @@
 
 import { GripVertical } from 'lucide-react';
 import type { ComponentProps } from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 
 import { cn } from '@/lib/utils';
 
 type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'> & {
   /** Alias for orientation to maintain shadcn API compatibility */
   direction?: 'horizontal' | 'vertical';
+  /** Unique ID for persisting layout to localStorage */
+  autoSaveId?: string;
 };
 
 const ResizablePanelGroup = ({
   className,
   direction = 'horizontal',
+  autoSaveId,
+  defaultLayout: defaultLayoutProp,
+  onLayoutChanged: onLayoutChangedProp,
   ...props
-}: ResizablePanelGroupProps) => (
-  <Group
-    orientation={direction}
-    className={cn('flex h-full w-full', direction === 'vertical' && 'flex-col', className)}
-    {...props}
-  />
-);
+}: ResizablePanelGroupProps) => {
+  // Use the persistence hook when autoSaveId is provided
+  const persistence = useDefaultLayout({
+    id: autoSaveId ?? '__unused__',
+    storage: autoSaveId && typeof window !== 'undefined' ? localStorage : undefined,
+  });
+
+  return (
+    <Group
+      orientation={direction}
+      className={cn('flex h-full w-full', direction === 'vertical' && 'flex-col', className)}
+      defaultLayout={autoSaveId ? persistence.defaultLayout : defaultLayoutProp}
+      onLayoutChanged={autoSaveId ? persistence.onLayoutChanged : onLayoutChangedProp}
+      {...props}
+    />
+  );
+};
 
 const ResizablePanel = Panel;
 

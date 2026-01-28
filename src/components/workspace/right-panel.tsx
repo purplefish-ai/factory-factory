@@ -93,7 +93,11 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
   };
 
   return (
-    <ResizablePanelGroup direction="vertical" className={cn('h-full', className)}>
+    <ResizablePanelGroup
+      direction="vertical"
+      className={cn('h-full', className)}
+      autoSaveId="workspace-right-panel"
+    >
       {/* Top Panel: Git Status / File Browser */}
       <ResizablePanel defaultSize={60} minSize={20}>
         <div className="flex flex-col h-full min-h-0">

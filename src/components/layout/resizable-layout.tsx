@@ -17,6 +17,7 @@ export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
         direction="horizontal"
         className="h-svh w-full"
         style={{ '--sidebar-width': '100%' } as CSSProperties}
+        autoSaveId="app-sidebar-layout"
       >
         {/* Left sidebar panel */}
         <ResizablePanel defaultSize="15%" minSize="10%" maxSize="30%">
