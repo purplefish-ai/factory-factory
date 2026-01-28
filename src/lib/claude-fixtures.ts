@@ -449,7 +449,7 @@ export function createAgentMetadata(overrides: Partial<AgentMetadata> = {}): Age
     executionState: overrides.executionState ?? 'RUNNING',
     desiredExecutionState: overrides.desiredExecutionState ?? 'RUNNING',
     worktreePath: overrides.worktreePath ?? '/tmp/worktrees/project-worker-1',
-    sessionId: overrides.sessionId ?? `session-${id}`,
+    dbSessionId: overrides.dbSessionId ?? `session-${id}`,
     tmuxSessionName: overrides.tmuxSessionName ?? null,
     cliProcessId: overrides.cliProcessId ?? `cli-${id}`,
     cliProcessStatus: overrides.cliProcessStatus ?? 'RUNNING',
@@ -472,7 +472,7 @@ export function createAgentMetadata(overrides: Partial<AgentMetadata> = {}): Age
 export function createSessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
   const now = new Date();
   return {
-    sessionId: overrides.sessionId ?? `session-${Date.now()}`,
+    claudeSessionId: overrides.claudeSessionId ?? `session-${Date.now()}`,
     createdAt: overrides.createdAt ?? now.toISOString(),
     modifiedAt: overrides.modifiedAt ?? now.toISOString(),
     sizeBytes: overrides.sizeBytes ?? 15_360,

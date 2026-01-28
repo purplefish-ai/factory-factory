@@ -22,10 +22,11 @@ export interface HistoryMessage {
 }
 
 /**
- * Information about a session
+ * Information about a Claude CLI session (from ~/.claude/projects/).
+ * claudeSessionId is the filename (without .jsonl) used by Claude CLI to store history.
  */
 export interface SessionInfo {
-  sessionId: string;
+  claudeSessionId: string;
   createdAt: Date;
   modifiedAt: Date;
   sizeBytes: number;
@@ -108,15 +109,15 @@ export class SessionManager {
   /**
    * Get the path to a specific session file
    */
-  static getSessionPath(sessionId: string, workingDir: string): string {
-    return join(SessionManager.getProjectPath(workingDir), `${sessionId}.jsonl`);
+  static getSessionPath(claudeSessionId: string, workingDir: string): string {
+    return join(SessionManager.getProjectPath(workingDir), `${claudeSessionId}.jsonl`);
   }
 
   /**
    * Get session history from JSONL file
    */
-  static async getHistory(sessionId: string, workingDir: string): Promise<HistoryMessage[]> {
-    const sessionPath = SessionManager.getSessionPath(sessionId, workingDir);
+  static async getHistory(claudeSessionId: string, workingDir: string): Promise<HistoryMessage[]> {
+    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
     const messages: HistoryMessage[] = [];
 
     try {
@@ -130,13 +131,13 @@ export class SessionManager {
           messages.push(...parsedMessages);
         } catch {
           // Skip malformed JSONL lines
-          logger.warn('Skipping malformed JSONL line', { sessionId });
+          logger.warn('Skipping malformed JSONL line', { claudeSessionId });
         }
       }
     } catch (error) {
       // Return empty array if file doesn't exist or can't be read
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Error reading session', { sessionId, error });
+        logger.warn('Error reading session', { claudeSessionId, error });
       }
     }
 
@@ -147,8 +148,11 @@ export class SessionManager {
    * Infer the model used in a session by reading the first assistant message.
    * Returns the model ID (e.g., 'claude-opus-4-5-20251101', 'opus') or null if not found.
    */
-  static async getSessionModel(sessionId: string, workingDir: string): Promise<string | null> {
-    const sessionPath = SessionManager.getSessionPath(sessionId, workingDir);
+  static async getSessionModel(
+    claudeSessionId: string,
+    workingDir: string
+  ): Promise<string | null> {
+    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
 
     try {
       const content = await readFile(sessionPath, 'utf-8');
@@ -170,7 +174,7 @@ export class SessionManager {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Error reading session for model', { sessionId, error });
+        logger.warn('Error reading session for model', { claudeSessionId, error });
       }
     }
 
@@ -182,11 +186,11 @@ export class SessionManager {
    * ends with the thinking suffix (e.g., ' ultrathink').
    */
   static async getSessionThinkingEnabled(
-    sessionId: string,
+    claudeSessionId: string,
     workingDir: string,
     thinkingSuffix = ' ultrathink'
   ): Promise<boolean> {
-    const sessionPath = SessionManager.getSessionPath(sessionId, workingDir);
+    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
 
     try {
       const content = await readFile(sessionPath, 'utf-8');
@@ -201,7 +205,7 @@ export class SessionManager {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Error reading session for thinking mode', { sessionId, error });
+        logger.warn('Error reading session for thinking mode', { claudeSessionId, error });
       }
     }
 
@@ -212,8 +216,11 @@ export class SessionManager {
    * Get the git branch associated with a session.
    * Reads the session file and extracts gitBranch from the first message that has it.
    */
-  static async getSessionGitBranch(sessionId: string, workingDir: string): Promise<string | null> {
-    const sessionPath = SessionManager.getSessionPath(sessionId, workingDir);
+  static async getSessionGitBranch(
+    claudeSessionId: string,
+    workingDir: string
+  ): Promise<string | null> {
+    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
 
     try {
       const content = await readFile(sessionPath, 'utf-8');
@@ -232,7 +239,7 @@ export class SessionManager {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Error reading session for git branch', { sessionId, error });
+        logger.warn('Error reading session for git branch', { claudeSessionId, error });
       }
     }
 
@@ -254,13 +261,13 @@ export class SessionManager {
           continue;
         }
 
-        const sessionId = file.replace('.jsonl', '');
+        const claudeSessionId = file.replace('.jsonl', '');
         const filePath = join(projectPath, file);
 
         try {
           const fileStat = await stat(filePath);
           sessions.push({
-            sessionId,
+            claudeSessionId,
             createdAt: fileStat.birthtime,
             modifiedAt: fileStat.mtime,
             sizeBytes: fileStat.size,
@@ -281,10 +288,10 @@ export class SessionManager {
   }
 
   /**
-   * Extract session ID from a ClaudeJson message.
+   * Extract Claude CLI session ID from a ClaudeJson message.
    * Returns undefined for system and stream_event messages (per protocol rules).
    */
-  static extractSessionId(msg: ClaudeJson): string | undefined {
+  static extractClaudeSessionId(msg: ClaudeJson): string | undefined {
     // Skip system messages for session ID extraction
     if (msg.type === 'system') {
       return undefined;

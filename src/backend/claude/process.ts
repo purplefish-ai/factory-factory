@@ -87,8 +87,8 @@ export interface ExitResult {
   code: number | null;
   /** Signal that killed the process (null if normal exit) */
   signal: NodeJS.Signals | null;
-  /** Session ID extracted during the session */
-  sessionId: string | null;
+  /** Claude CLI session ID extracted during the session (used for history in ~/.claude/projects/) */
+  claudeSessionId: string | null;
 }
 
 /**
@@ -159,7 +159,7 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   private process: ChildProcess;
-  private sessionId: string | null = null;
+  private claudeSessionId: string | null = null;
   private status: ProcessStatus = 'starting';
   private initializeResponse: InitializeResponseData | null = null;
   private stderrBuffer: string[] = [];
@@ -300,11 +300,12 @@ export class ClaudeProcess extends EventEmitter {
   // ===========================================================================
 
   /**
-   * Get the session ID extracted from the conversation.
+   * Get the Claude CLI session ID extracted from the conversation.
+   * This ID is used to locate history in ~/.claude/projects/.
    * Returns null until a message with session_id is received.
    */
-  getSessionId(): string | null {
-    return this.sessionId;
+  getClaudeSessionId(): string | null {
+    return this.claudeSessionId;
   }
 
   /**
@@ -441,7 +442,7 @@ export class ClaudeProcess extends EventEmitter {
       return Promise.resolve({
         code: this.process.exitCode,
         signal: this.process.signalCode as NodeJS.Signals | null,
-        sessionId: this.sessionId,
+        claudeSessionId: this.claudeSessionId,
       });
     }
 
@@ -471,7 +472,7 @@ export class ClaudeProcess extends EventEmitter {
   // ===========================================================================
 
   override on(event: 'message', handler: (msg: ClaudeJson) => void): this;
-  override on(event: 'session_id', handler: (sessionId: string) => void): this;
+  override on(event: 'session_id', handler: (claudeSessionId: string) => void): this;
   override on(event: 'exit', handler: (result: ExitResult) => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'status', handler: (status: ProcessStatus) => void): this;
@@ -491,7 +492,7 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   override emit(event: 'message', msg: ClaudeJson): boolean;
-  override emit(event: 'session_id', sessionId: string): boolean;
+  override emit(event: 'session_id', claudeSessionId: string): boolean;
   override emit(event: 'exit', result: ExitResult): boolean;
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'status', status: ProcessStatus): boolean;
@@ -574,7 +575,7 @@ export class ClaudeProcess extends EventEmitter {
     // Forward all messages
     this.protocol.on('message', (msg: ClaudeJson) => {
       this.emit('message', msg);
-      this.extractSessionId(msg);
+      this.extractClaudeSessionId(msg);
       this.updateActivity(); // Track activity for hung detection
 
       // Update status based on message type
@@ -596,7 +597,7 @@ export class ClaudeProcess extends EventEmitter {
       logger.warn('Claude protocol closed', {
         pid: this.process.pid,
         status: this.status,
-        sessionId: this.sessionId,
+        claudeSessionId: this.claudeSessionId,
       });
       if (this.status !== 'exited') {
         const stderr = this.stderrBuffer.join('');
@@ -621,7 +622,7 @@ export class ClaudeProcess extends EventEmitter {
         pid: this.process.pid,
         code,
         signal,
-        sessionId: this.sessionId,
+        claudeSessionId: this.claudeSessionId,
         stderr: stderr || '(empty)',
       });
 
@@ -632,7 +633,7 @@ export class ClaudeProcess extends EventEmitter {
       const result: ExitResult = {
         code,
         signal: signal as NodeJS.Signals | null,
-        sessionId: this.sessionId,
+        claudeSessionId: this.claudeSessionId,
       };
 
       this.emit('exit', result);
@@ -642,7 +643,7 @@ export class ClaudeProcess extends EventEmitter {
       logger.error('Claude process error event', {
         pid: this.process.pid,
         error: error.message,
-        sessionId: this.sessionId,
+        claudeSessionId: this.claudeSessionId,
       });
       this.emit('error', error);
     });
@@ -669,9 +670,9 @@ export class ClaudeProcess extends EventEmitter {
    * Session ID appears on assistant, user, tool_use, tool_result, or result messages.
    * Skip system and stream_event messages.
    */
-  private extractSessionId(msg: ClaudeJson): void {
+  private extractClaudeSessionId(msg: ClaudeJson): void {
     // Only extract once
-    if (this.sessionId !== null) {
+    if (this.claudeSessionId !== null) {
       return;
     }
 
@@ -682,10 +683,10 @@ export class ClaudeProcess extends EventEmitter {
 
     // Check for session_id on valid message types
     if (msg.type === 'assistant' || msg.type === 'user' || msg.type === 'result') {
-      const sessionId = msg.session_id ?? (msg as { sessionId?: string }).sessionId;
-      if (sessionId) {
-        this.sessionId = sessionId;
-        this.emit('session_id', sessionId);
+      const claudeSessionId = msg.session_id ?? (msg as { sessionId?: string }).sessionId;
+      if (claudeSessionId) {
+        this.claudeSessionId = claudeSessionId;
+        this.emit('session_id', claudeSessionId);
       }
     }
   }

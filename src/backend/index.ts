@@ -910,7 +910,7 @@ async function handleChatMessage(
 
     case 'get_history': {
       const client = chatClients.get(dbSessionId);
-      const claudeSessionId = client?.getSessionId();
+      const claudeSessionId = client?.getClaudeSessionId();
       if (claudeSessionId) {
         const history = await SessionManager.getHistory(claudeSessionId, workingDir);
         ws.send(JSON.stringify({ type: 'history', dbSessionId, messages: history }));

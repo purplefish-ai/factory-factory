@@ -212,12 +212,13 @@ export class ClaudeClient extends EventEmitter {
   // ===========================================================================
 
   /**
-   * Get the session ID for the current conversation.
+   * Get the Claude CLI session ID for the current conversation.
+   * This ID is used to locate history in ~/.claude/projects/.
    *
-   * @returns The session ID or null if not yet available
+   * @returns The Claude session ID or null if not yet available
    */
-  getSessionId(): string | null {
-    return this.process?.getSessionId() ?? null;
+  getClaudeSessionId(): string | null {
+    return this.process?.getClaudeSessionId() ?? null;
   }
 
   /**
@@ -226,11 +227,11 @@ export class ClaudeClient extends EventEmitter {
    * @returns Promise resolving to an array of history messages
    */
   async getSessionHistory(): Promise<HistoryMessage[]> {
-    const sessionId = this.getSessionId();
-    if (!sessionId) {
+    const claudeSessionId = this.getClaudeSessionId();
+    if (!claudeSessionId) {
       return [];
     }
-    return await SessionManager.getHistory(sessionId, this.workingDir);
+    return await SessionManager.getHistory(claudeSessionId, this.workingDir);
   }
 
   /**
@@ -293,7 +294,7 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'result', handler: (result: ResultMessage) => void): this;
   override on(event: 'exit', handler: (result: ExitResult) => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
-  override on(event: 'session_id', handler: (sessionId: string) => void): this;
+  override on(event: 'session_id', handler: (claudeSessionId: string) => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -306,7 +307,7 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'result', result: ResultMessage): boolean;
   override emit(event: 'exit', result: ExitResult): boolean;
   override emit(event: 'error', error: Error): boolean;
-  override emit(event: 'session_id', sessionId: string): boolean;
+  override emit(event: 'session_id', claudeSessionId: string): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -328,8 +329,8 @@ export class ClaudeClient extends EventEmitter {
     this.process.on('message', (msg: ClaudeJson) => this.handleProcessMessage(msg));
 
     // Forward session_id
-    this.process.on('session_id', (sessionId: string) => {
-      this.emit('session_id', sessionId);
+    this.process.on('session_id', (claudeSessionId: string) => {
+      this.emit('session_id', claudeSessionId);
     });
 
     // Forward exit

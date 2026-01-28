@@ -41,14 +41,14 @@ describe('SessionManager', () => {
     });
   });
 
-  describe('extractSessionId', () => {
+  describe('extractClaudeSessionId', () => {
     it('should extract session_id from assistant messages', () => {
       const msg: ClaudeJson = {
         type: 'assistant',
         session_id: 'abc123',
         message: { role: 'assistant', content: [] },
       };
-      expect(SessionManager.extractSessionId(msg)).toBe('abc123');
+      expect(SessionManager.extractClaudeSessionId(msg)).toBe('abc123');
     });
 
     it('should extract session_id from user messages', () => {
@@ -57,7 +57,7 @@ describe('SessionManager', () => {
         session_id: 'user-session-456',
         message: { role: 'user', content: 'Hello' },
       };
-      expect(SessionManager.extractSessionId(msg)).toBe('user-session-456');
+      expect(SessionManager.extractClaudeSessionId(msg)).toBe('user-session-456');
     });
 
     it('should extract session_id from result messages using session_id field', () => {
@@ -65,7 +65,7 @@ describe('SessionManager', () => {
         type: 'result',
         session_id: 'result-session-789',
       };
-      expect(SessionManager.extractSessionId(msg)).toBe('result-session-789');
+      expect(SessionManager.extractClaudeSessionId(msg)).toBe('result-session-789');
     });
 
     it('should extract sessionId from result messages using sessionId field', () => {
@@ -73,7 +73,7 @@ describe('SessionManager', () => {
         type: 'result',
         sessionId: 'result-session-camel',
       };
-      expect(SessionManager.extractSessionId(msg)).toBe('result-session-camel');
+      expect(SessionManager.extractClaudeSessionId(msg)).toBe('result-session-camel');
     });
 
     it('should prefer session_id over sessionId in result messages', () => {
@@ -82,7 +82,7 @@ describe('SessionManager', () => {
         session_id: 'snake-case-wins',
         sessionId: 'camel-case-loses',
       };
-      expect(SessionManager.extractSessionId(msg)).toBe('snake-case-wins');
+      expect(SessionManager.extractClaudeSessionId(msg)).toBe('snake-case-wins');
     });
 
     it('should return undefined for system messages', () => {
@@ -90,7 +90,7 @@ describe('SessionManager', () => {
         type: 'system',
         session_id: 'should-be-ignored',
       };
-      expect(SessionManager.extractSessionId(msg)).toBeUndefined();
+      expect(SessionManager.extractClaudeSessionId(msg)).toBeUndefined();
     });
 
     it('should return undefined for stream_event messages', () => {
@@ -99,7 +99,7 @@ describe('SessionManager', () => {
         session_id: 'should-be-ignored',
         event: { type: 'message_start', message: { role: 'assistant', content: [] } },
       };
-      expect(SessionManager.extractSessionId(msg)).toBeUndefined();
+      expect(SessionManager.extractClaudeSessionId(msg)).toBeUndefined();
     });
 
     it('should return undefined for control_request messages', () => {
@@ -108,7 +108,7 @@ describe('SessionManager', () => {
         request_id: 'req-123',
         request: { subtype: 'can_use_tool', tool_name: 'Read', input: {} },
       };
-      expect(SessionManager.extractSessionId(msg)).toBeUndefined();
+      expect(SessionManager.extractClaudeSessionId(msg)).toBeUndefined();
     });
 
     it('should return undefined for control_response messages', () => {
@@ -120,7 +120,7 @@ describe('SessionManager', () => {
           response: { behavior: 'allow' },
         },
       };
-      expect(SessionManager.extractSessionId(msg)).toBeUndefined();
+      expect(SessionManager.extractClaudeSessionId(msg)).toBeUndefined();
     });
 
     it('should return undefined for control_cancel_request messages', () => {
@@ -128,7 +128,7 @@ describe('SessionManager', () => {
         type: 'control_cancel_request',
         request_id: 'req-123',
       };
-      expect(SessionManager.extractSessionId(msg)).toBeUndefined();
+      expect(SessionManager.extractClaudeSessionId(msg)).toBeUndefined();
     });
   });
 });

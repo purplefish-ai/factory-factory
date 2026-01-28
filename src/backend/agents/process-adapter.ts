@@ -64,7 +64,7 @@ export interface ToolResultEventData {
 
 export interface ResultEventData {
   agentId: string;
-  sessionId: string;
+  /** Claude CLI session ID from the result message (used for history in ~/.claude/projects/) */
   claudeSessionId: string;
   usage: { input_tokens: number; output_tokens: number };
   totalCostUsd: number;
@@ -76,7 +76,8 @@ export interface ExitEventData {
   agentId: string;
   code: number | null;
   signal: string | null;
-  sessionId: string | null;
+  /** Claude CLI session ID (used for history in ~/.claude/projects/) */
+  claudeSessionId: string | null;
 }
 
 export interface ErrorEventData {
@@ -151,8 +152,7 @@ export class AgentProcessAdapter extends EventEmitter {
     client.on('result', (result: ResultMessage) => {
       this.emit('result', {
         agentId,
-        sessionId: client.getSessionId() || '',
-        claudeSessionId: result.session_id || result.sessionId || '',
+        claudeSessionId: client.getClaudeSessionId() || result.session_id || result.sessionId || '',
         usage: {
           input_tokens: result.usage?.input_tokens || 0,
           output_tokens: result.usage?.output_tokens || 0,
@@ -169,7 +169,7 @@ export class AgentProcessAdapter extends EventEmitter {
         agentId,
         code: exitResult.code,
         signal: exitResult.signal,
-        sessionId: exitResult.sessionId,
+        claudeSessionId: exitResult.claudeSessionId,
       });
 
       this.cleanupAgent(agentId);
@@ -390,7 +390,7 @@ export class AgentProcessAdapter extends EventEmitter {
     if (!client) {
       return null;
     }
-    return client.getSessionId();
+    return client.getClaudeSessionId();
   }
 
   /**
