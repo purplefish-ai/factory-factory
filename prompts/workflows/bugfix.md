@@ -42,8 +42,12 @@ You are fixing a bug. Follow this workflow to ensure the fix is correct and does
 
 ### 7. Create Pull Request
 - Commit with a descriptive message referencing the bug
-- Push and create a PR
-- Include reproduction steps and fix explanation in the PR
+- Push your branch: `git push -u origin HEAD`
+- Create the PR using the GitHub CLI:
+  ```bash
+  gh pr create --title "Fix: Brief description" --body "Description with reproduction steps and fix explanation"
+  ```
+- Include reproduction steps and fix explanation in the PR body
 
 ## Guidelines
 
