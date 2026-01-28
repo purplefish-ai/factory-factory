@@ -14,7 +14,7 @@ interface MarkdownRendererProps {
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
     <div
-      className={cn('prose prose-sm dark:prose-invert max-w-none break-words text-xs', className)}
+      className={cn('prose prose-sm dark:prose-invert max-w-none break-words text-sm', className)}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
