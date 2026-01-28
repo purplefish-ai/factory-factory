@@ -29,12 +29,10 @@ export const adminRouter = router({
    */
   getSystemStats: publicProcedure.query(() => {
     const apiUsage = rateLimiter.getApiUsageStats();
-    const concurrency = rateLimiter.getConcurrencyStats();
     const config = configService.getSystemConfig();
 
     return {
       apiUsage,
-      concurrency,
       environment: config.nodeEnv,
       features: config.features,
     };
@@ -84,9 +82,6 @@ export const adminRouter = router({
       z.object({
         claudeRequestsPerMinute: z.number().optional(),
         claudeRequestsPerHour: z.number().optional(),
-        maxConcurrentWorkers: z.number().optional(),
-        maxConcurrentSupervisors: z.number().optional(),
-        maxConcurrentEpics: z.number().optional(),
       })
     )
     .mutation(({ input }) => {

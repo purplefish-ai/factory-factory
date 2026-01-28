@@ -1,7 +1,7 @@
 /**
  * Rate Limiter Service
  *
- * Provides rate limiting for Claude API calls and agent concurrency management.
+ * Provides rate limiting for Claude API calls.
  * Implements token bucket algorithm for API rate limiting.
  */
 
@@ -17,11 +17,6 @@ export interface RateLimiterConfig {
   claudeRequestsPerMinute: number;
   claudeRequestsPerHour: number;
 
-  // Concurrency limits
-  maxConcurrentWorkers: number;
-  maxConcurrentSupervisors: number;
-  maxConcurrentTopLevelTasks: number;
-
   // Queue settings
   maxQueueSize: number;
   queueTimeoutMs: number;
@@ -31,9 +26,9 @@ export interface RateLimiterConfig {
  * Request priority levels
  */
 enum RequestPriority {
-  ORCHESTRATOR = 0, // Highest priority
-  SUPERVISOR = 1,
-  WORKER = 2, // Lowest priority
+  HIGH = 0,
+  NORMAL = 1,
+  LOW = 2,
 }
 
 /**
@@ -59,39 +54,19 @@ export interface ApiUsageStats {
 }
 
 /**
- * Concurrency statistics
- */
-export interface ConcurrencyStats {
-  activeWorkers: number;
-  activeSupervisors: number;
-  activeTopLevelTasks: number;
-  limits: {
-    maxWorkers: number;
-    maxSupervisors: number;
-    maxTopLevelTasks: number;
-  };
-}
-
-/**
  * Get default configuration from environment
  */
 function getDefaultConfig(): RateLimiterConfig {
   return {
     claudeRequestsPerMinute: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_MINUTE || '60', 10),
     claudeRequestsPerHour: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_HOUR || '1000', 10),
-    maxConcurrentWorkers: Number.parseInt(process.env.MAX_CONCURRENT_WORKERS || '10', 10),
-    maxConcurrentSupervisors: Number.parseInt(process.env.MAX_CONCURRENT_SUPERVISORS || '5', 10),
-    maxConcurrentTopLevelTasks: Number.parseInt(
-      process.env.MAX_CONCURRENT_TOP_LEVEL_TASKS || '5',
-      10
-    ),
     maxQueueSize: Number.parseInt(process.env.RATE_LIMIT_QUEUE_SIZE || '100', 10),
     queueTimeoutMs: Number.parseInt(process.env.RATE_LIMIT_QUEUE_TIMEOUT_MS || '30000', 10),
   };
 }
 
 /**
- * Rate Limiter class for managing API and concurrency limits
+ * Rate Limiter class for managing API rate limits
  */
 class RateLimiter {
   private config: RateLimiterConfig;
@@ -102,11 +77,6 @@ class RateLimiter {
 
   // Request queue (priority queue)
   private requestQueue: QueuedRequest[] = [];
-
-  // Active agent tracking
-  private activeWorkers = new Set<string>();
-  private activeSupervisors = new Set<string>();
-  private activeTopLevelTasks = new Set<string>();
 
   // Processing state
   private isProcessingQueue = false;
@@ -161,7 +131,7 @@ class RateLimiter {
   acquireSlot(
     agentId: string,
     topLevelTaskId: string | null,
-    priority: RequestPriority = RequestPriority.WORKER
+    priority: RequestPriority = RequestPriority.NORMAL
   ): Promise<void> {
     // Check if we can proceed immediately
     if (!this.isRateLimited()) {
@@ -261,120 +231,6 @@ class RateLimiter {
   }
 
   /**
-   * Register an active worker
-   */
-  registerWorker(workerId: string): boolean {
-    if (this.activeWorkers.size >= this.config.maxConcurrentWorkers) {
-      logger.warn('Max concurrent workers reached', {
-        current: this.activeWorkers.size,
-        max: this.config.maxConcurrentWorkers,
-      });
-      return false;
-    }
-
-    this.activeWorkers.add(workerId);
-    logger.debug('Worker registered', {
-      workerId,
-      activeWorkers: this.activeWorkers.size,
-    });
-    return true;
-  }
-
-  /**
-   * Unregister a worker
-   */
-  unregisterWorker(workerId: string): void {
-    this.activeWorkers.delete(workerId);
-    logger.debug('Worker unregistered', {
-      workerId,
-      activeWorkers: this.activeWorkers.size,
-    });
-  }
-
-  /**
-   * Register an active supervisor
-   */
-  registerSupervisor(supervisorId: string): boolean {
-    if (this.activeSupervisors.size >= this.config.maxConcurrentSupervisors) {
-      logger.warn('Max concurrent supervisors reached', {
-        current: this.activeSupervisors.size,
-        max: this.config.maxConcurrentSupervisors,
-      });
-      return false;
-    }
-
-    this.activeSupervisors.add(supervisorId);
-    logger.debug('Supervisor registered', {
-      supervisorId,
-      activeSupervisors: this.activeSupervisors.size,
-    });
-    return true;
-  }
-
-  /**
-   * Unregister a supervisor
-   */
-  unregisterSupervisor(supervisorId: string): void {
-    this.activeSupervisors.delete(supervisorId);
-    logger.debug('Supervisor unregistered', {
-      supervisorId,
-      activeSupervisors: this.activeSupervisors.size,
-    });
-  }
-
-  /**
-   * Register an active top-level task
-   */
-  registerTopLevelTask(topLevelTaskId: string): boolean {
-    if (this.activeTopLevelTasks.size >= this.config.maxConcurrentTopLevelTasks) {
-      logger.warn('Max concurrent top-level tasks reached', {
-        current: this.activeTopLevelTasks.size,
-        max: this.config.maxConcurrentTopLevelTasks,
-      });
-      return false;
-    }
-
-    this.activeTopLevelTasks.add(topLevelTaskId);
-    logger.debug('Top-level task registered', {
-      topLevelTaskId,
-      activeTopLevelTasks: this.activeTopLevelTasks.size,
-    });
-    return true;
-  }
-
-  /**
-   * Unregister a top-level task
-   */
-  unregisterTopLevelTask(topLevelTaskId: string): void {
-    this.activeTopLevelTasks.delete(topLevelTaskId);
-    logger.debug('Top-level task unregistered', {
-      topLevelTaskId,
-      activeTopLevelTasks: this.activeTopLevelTasks.size,
-    });
-  }
-
-  /**
-   * Check if we can start a new worker
-   */
-  canStartWorker(): boolean {
-    return this.activeWorkers.size < this.config.maxConcurrentWorkers;
-  }
-
-  /**
-   * Check if we can start a new supervisor
-   */
-  canStartSupervisor(): boolean {
-    return this.activeSupervisors.size < this.config.maxConcurrentSupervisors;
-  }
-
-  /**
-   * Check if we can start a new top-level task
-   */
-  canStartTopLevelTask(): boolean {
-    return this.activeTopLevelTasks.size < this.config.maxConcurrentTopLevelTasks;
-  }
-
-  /**
    * Get API usage statistics
    */
   getApiUsageStats(): ApiUsageStats {
@@ -384,22 +240,6 @@ class RateLimiter {
       totalRequests: this.totalRequests,
       queueDepth: this.requestQueue.length,
       isRateLimited: this.isRateLimited(),
-    };
-  }
-
-  /**
-   * Get concurrency statistics
-   */
-  getConcurrencyStats(): ConcurrencyStats {
-    return {
-      activeWorkers: this.activeWorkers.size,
-      activeSupervisors: this.activeSupervisors.size,
-      activeTopLevelTasks: this.activeTopLevelTasks.size,
-      limits: {
-        maxWorkers: this.config.maxConcurrentWorkers,
-        maxSupervisors: this.config.maxConcurrentSupervisors,
-        maxTopLevelTasks: this.config.maxConcurrentTopLevelTasks,
-      },
     };
   }
 

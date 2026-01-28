@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { QueuedMessage } from './claude-types';
+import type { ChatSettings, QueuedMessage } from './claude-types';
 
 // Since the actual storage functions use sessionStorage which isn't available in Node.js,
 // we test the serialization/deserialization logic that those functions rely on.
@@ -140,6 +140,132 @@ describe('queue-storage serialization', () => {
       expect(uuidStyle).toBe('chat-queue-550e8400-e29b-41d4-a716-446655440000');
       expect(numericStyle).toBe('chat-queue-12345');
       expect(mixedStyle).toBe('chat-queue-session_2024_01_abc');
+    });
+  });
+});
+
+describe('settings-storage serialization', () => {
+  describe('ChatSettings JSON round-trip', () => {
+    it('should serialize and deserialize settings with all fields', () => {
+      const settings: ChatSettings = {
+        selectedModel: 'opus',
+        thinkingEnabled: true,
+        planModeEnabled: false,
+      };
+
+      const serialized = JSON.stringify(settings);
+      const deserialized = JSON.parse(serialized) as ChatSettings;
+
+      expect(deserialized).toEqual(settings);
+    });
+
+    it('should handle null selectedModel (default model)', () => {
+      const settings: ChatSettings = {
+        selectedModel: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      };
+
+      const serialized = JSON.stringify(settings);
+      const deserialized = JSON.parse(serialized) as ChatSettings;
+
+      expect(deserialized.selectedModel).toBeNull();
+    });
+
+    it('should handle sonnet model', () => {
+      const settings: ChatSettings = {
+        selectedModel: 'sonnet',
+        thinkingEnabled: false,
+        planModeEnabled: true,
+      };
+
+      const serialized = JSON.stringify(settings);
+      const deserialized = JSON.parse(serialized) as ChatSettings;
+
+      expect(deserialized.selectedModel).toBe('sonnet');
+      expect(deserialized.planModeEnabled).toBe(true);
+    });
+
+    it('should handle haiku model', () => {
+      const settings: ChatSettings = {
+        selectedModel: 'haiku',
+        thinkingEnabled: true,
+        planModeEnabled: false,
+      };
+
+      const serialized = JSON.stringify(settings);
+      const deserialized = JSON.parse(serialized) as ChatSettings;
+
+      expect(deserialized.selectedModel).toBe('haiku');
+      expect(deserialized.thinkingEnabled).toBe(true);
+    });
+  });
+
+  describe('settings validation pattern', () => {
+    it('should validate correct settings shape', () => {
+      // This demonstrates the validation pattern used in loadSettings
+      const isValidChatSettings = (obj: unknown): obj is ChatSettings => {
+        if (typeof obj !== 'object' || obj === null) {
+          return false;
+        }
+        const settings = obj as ChatSettings;
+        return (
+          (settings.selectedModel === null || typeof settings.selectedModel === 'string') &&
+          typeof settings.thinkingEnabled === 'boolean' &&
+          typeof settings.planModeEnabled === 'boolean'
+        );
+      };
+
+      expect(
+        isValidChatSettings({
+          selectedModel: 'opus',
+          thinkingEnabled: true,
+          planModeEnabled: false,
+        })
+      ).toBe(true);
+      expect(
+        isValidChatSettings({ selectedModel: null, thinkingEnabled: false, planModeEnabled: false })
+      ).toBe(true);
+      expect(
+        isValidChatSettings({
+          selectedModel: 'sonnet',
+          thinkingEnabled: false,
+          planModeEnabled: true,
+        })
+      ).toBe(true);
+    });
+
+    it('should reject invalid settings shapes', () => {
+      const isValidChatSettings = (obj: unknown): obj is ChatSettings => {
+        if (typeof obj !== 'object' || obj === null) {
+          return false;
+        }
+        const settings = obj as ChatSettings;
+        return (
+          (settings.selectedModel === null || typeof settings.selectedModel === 'string') &&
+          typeof settings.thinkingEnabled === 'boolean' &&
+          typeof settings.planModeEnabled === 'boolean'
+        );
+      };
+
+      expect(isValidChatSettings(null)).toBe(false);
+      expect(isValidChatSettings(undefined)).toBe(false);
+      expect(isValidChatSettings('string')).toBe(false);
+      expect(isValidChatSettings(123)).toBe(false);
+      expect(isValidChatSettings({})).toBe(false);
+      expect(isValidChatSettings({ selectedModel: 123 })).toBe(false);
+      expect(isValidChatSettings({ selectedModel: null, thinkingEnabled: 'true' })).toBe(false);
+    });
+  });
+
+  describe('storage key format', () => {
+    it('should use correct settings key prefix pattern', () => {
+      const SETTINGS_KEY_PREFIX = 'chat-settings-';
+      const dbSessionId = 'session-abc-123';
+
+      const key = `${SETTINGS_KEY_PREFIX}${dbSessionId}`;
+
+      expect(key).toBe('chat-settings-session-abc-123');
     });
   });
 });

@@ -3,6 +3,7 @@
 import { FileCode, FileDiff, MessageSquare, Plus, X } from 'lucide-react';
 import { useCallback } from 'react';
 
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 import type { MainViewTab } from './workspace-panel-context';
@@ -163,6 +164,8 @@ interface MainViewTabBarProps {
   onCreateSession?: () => void;
   onCloseSession?: (sessionId: string) => void;
   disabled?: boolean;
+  /** Maximum sessions allowed per workspace */
+  maxSessions?: number;
 }
 
 export function MainViewTabBar({
@@ -174,11 +177,17 @@ export function MainViewTabBar({
   onCreateSession,
   onCloseSession,
   disabled,
+  maxSessions,
 }: MainViewTabBarProps) {
   const { tabs, activeTabId, selectTab, closeTab } = useWorkspacePanel();
 
   // Filter out the default 'chat' tab since we're showing sessions instead
   const nonChatTabs = tabs.filter((tab) => tab.type !== 'chat');
+
+  // Check if session limit is reached
+  const sessionCount = sessions?.length ?? 0;
+  const isAtLimit = maxSessions !== undefined && sessionCount >= maxSessions;
+  const isButtonDisabled = disabled || isAtLimit;
 
   return (
     <div
@@ -203,19 +212,26 @@ export function MainViewTabBar({
 
       {/* Add session button */}
       {onCreateSession && (
-        <button
-          type="button"
-          onClick={onCreateSession}
-          disabled={disabled}
-          className={cn(
-            'flex items-center justify-center h-6 w-6 rounded-md',
-            'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-            'transition-colors disabled:opacity-50 disabled:pointer-events-none'
-          )}
-          aria-label="New chat session"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onCreateSession}
+              disabled={isButtonDisabled}
+              className={cn(
+                'flex items-center justify-center h-6 w-6 rounded-md',
+                'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
+                'transition-colors disabled:opacity-50 disabled:pointer-events-none'
+              )}
+              aria-label="New chat session"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isAtLimit ? `Maximum ${maxSessions} sessions per workspace` : 'New chat session'}
+          </TooltipContent>
+        </Tooltip>
       )}
 
       {/* Separator between sessions and file tabs */}
