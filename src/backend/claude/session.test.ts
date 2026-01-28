@@ -334,7 +334,7 @@ describe('parseHistoryEntry', () => {
       expect(result[0].content).toBe(JSON.stringify({ file_path: '/test.txt' }, null, 2));
     });
 
-    it('should skip thinking content', () => {
+    it('should include thinking content', () => {
       const entry = {
         type: 'assistant',
         timestamp,
@@ -347,12 +347,14 @@ describe('parseHistoryEntry', () => {
         },
       };
       const result = parseHistoryEntry(entry);
-      expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('assistant');
-      expect(result[0].content).toBe('Here is my response');
+      expect(result).toHaveLength(2);
+      expect(result[0].type).toBe('thinking');
+      expect(result[0].content).toBe('Let me think...');
+      expect(result[1].type).toBe('assistant');
+      expect(result[1].content).toBe('Here is my response');
     });
 
-    it('should return empty array when only thinking content exists', () => {
+    it('should return thinking content when only thinking content exists', () => {
       const entry = {
         type: 'assistant',
         timestamp,
@@ -362,7 +364,9 @@ describe('parseHistoryEntry', () => {
         },
       };
       const result = parseHistoryEntry(entry);
-      expect(result).toHaveLength(0);
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe('thinking');
+      expect(result[0].content).toBe('Just thinking...');
     });
 
     it('should parse multiple content items in assistant message', () => {

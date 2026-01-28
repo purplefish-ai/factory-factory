@@ -272,10 +272,10 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
     return false;
   }
 
-  // Only store content_block_start for tool_use and tool_result
+  // Only store content_block_start for tool_use, tool_result, and thinking
   if (event.type === 'content_block_start' && event.content_block) {
     const blockType = event.content_block.type;
-    return blockType === 'tool_use' || blockType === 'tool_result';
+    return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
   }
 
   // Skip all other stream events (deltas, structural events, text blocks)
