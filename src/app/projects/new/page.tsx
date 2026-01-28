@@ -24,8 +24,11 @@ export default function NewProjectPage() {
   const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
   const hasExistingProjects = projects && projects.length > 0;
 
+  const utils = trpc.useUtils();
+
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
+      utils.project.list.invalidate();
       router.push(`/projects/${project.slug}`);
     },
     onError: (err) => {

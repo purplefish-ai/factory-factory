@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '../../frontend/lib/trpc';
 
 export default function ProjectsPage() {
@@ -31,7 +32,7 @@ export default function ProjectsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full gap-2">
+      <div className="flex items-center justify-center h-full gap-2 p-6">
         <Spinner className="size-5" />
         <span className="text-muted-foreground">Loading projects...</span>
       </div>
@@ -39,7 +40,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Projects</h1>
@@ -72,8 +73,8 @@ export default function ProjectsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Repository Path</TableHead>
                 <TableHead>Default Branch</TableHead>
-                <TableHead>Epics</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>Workspaces</TableHead>
+                <TableHead className="w-[80px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,7 +95,9 @@ export default function ProjectsPage() {
                     {project.defaultBranch}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {'_count' in project ? (project._count as { epics: number }).epics : '-'}
+                    {'_count' in project
+                      ? (project._count as { workspaces: number }).workspaces
+                      : '-'}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -104,29 +107,28 @@ export default function ProjectsPage() {
                         currentStartupScriptCommand={project.startupScriptCommand}
                         currentStartupScriptPath={project.startupScriptPath}
                       />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm('Are you sure you want to archive this project?')) {
-                            archiveMutation.mutate({ id: project.id });
-                          }
-                        }}
-                        disabled={archiveMutation.isPending}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        {archiveMutation.isPending ? (
-                          <>
-                            <Spinner className="size-4" />
-                            Archiving...
-                          </>
-                        ) : (
-                          <>
-                            <Archive className="size-4" />
-                            Archive
-                          </>
-                        )}
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              if (confirm('Are you sure you want to archive this project?')) {
+                                archiveMutation.mutate({ id: project.id });
+                              }
+                            }}
+                            disabled={archiveMutation.isPending}
+                            className="hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            {archiveMutation.isPending ? (
+                              <Spinner className="size-4" />
+                            ) : (
+                              <Archive className="size-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Archive</TooltipContent>
+                      </Tooltip>
                     </div>
                   </TableCell>
                 </TableRow>

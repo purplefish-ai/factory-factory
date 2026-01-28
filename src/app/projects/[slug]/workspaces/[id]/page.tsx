@@ -21,6 +21,7 @@ import { ChatInput, PermissionPrompt, QuestionPrompt, useChatWebSocket } from '@
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   QuickActionsMenu,
   RightPanel,
@@ -133,15 +134,14 @@ function ToggleRightPanelButton() {
   const { rightPanelVisible, toggleRightPanel } = useWorkspacePanel();
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={toggleRightPanel}
-      className="h-8 w-8"
-      title={rightPanelVisible ? 'Hide right panel' : 'Show right panel'}
-    >
-      <PanelRight className={cn('h-4 w-4', rightPanelVisible && 'text-primary')} />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon" onClick={toggleRightPanel} className="h-8 w-8">
+          <PanelRight className={cn('h-4 w-4', rightPanelVisible && 'text-primary')} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{rightPanelVisible ? 'Hide right panel' : 'Show right panel'}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -783,35 +783,43 @@ function WorkspaceChatContent() {
             disabled={running || createSession.isPending}
           />
           {availableIdes.length > 0 && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              title={`Open in ${availableIdes[0].name}`}
-              onClick={() => openInIde.mutate({ id: workspaceId, ide: availableIdes[0].id })}
-              disabled={openInIde.isPending || !workspace.worktreePath}
-            >
-              {openInIde.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <AppWindow className="h-4 w-4" />
-              )}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => openInIde.mutate({ id: workspaceId, ide: availableIdes[0].id })}
+                  disabled={openInIde.isPending || !workspace.worktreePath}
+                >
+                  {openInIde.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <AppWindow className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open in {availableIdes[0].name}</TooltipContent>
+            </Tooltip>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            title="Archive workspace"
-            onClick={() => {
-              if (confirm('Are you sure you want to archive this workspace?')) {
-                archiveWorkspace.mutate({ id: workspaceId });
-              }
-            }}
-            disabled={archiveWorkspace.isPending}
-          >
-            <Archive className="h-4 w-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => {
+                  if (confirm('Are you sure you want to archive this workspace?')) {
+                    archiveWorkspace.mutate({ id: workspaceId });
+                  }
+                }}
+                disabled={archiveWorkspace.isPending}
+              >
+                <Archive className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Archive</TooltipContent>
+          </Tooltip>
           <ToggleRightPanelButton />
         </div>
       </div>

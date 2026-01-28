@@ -208,7 +208,7 @@ export function MainViewTabBar({
           disabled={disabled}
           className={cn(
             'flex items-center justify-center h-6 w-6 rounded-md',
-            'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+            'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
             'transition-colors disabled:opacity-50 disabled:pointer-events-none'
           )}
           aria-label="New chat session"
