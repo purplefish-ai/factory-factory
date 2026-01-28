@@ -1,4 +1,5 @@
 import type {
+  CIStatus,
   KanbanColumn,
   PRState,
   Prisma,
@@ -28,6 +29,7 @@ interface UpdateWorkspaceInput {
   prNumber?: number | null;
   prState?: PRState;
   prReviewState?: string | null;
+  prCiStatus?: CIStatus;
   prUpdatedAt?: Date | null;
   // Activity tracking
   hasHadSessions?: boolean;

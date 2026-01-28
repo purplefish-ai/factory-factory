@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { PRState } from '@prisma-gen/client';
+import { CIStatus, PRState } from '@prisma-gen/client';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { createLogger } from './logger.service';
 
@@ -46,6 +46,7 @@ export interface PRStatusFromGitHub {
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   mergedAt: string | null;
   updatedAt: string;
+  statusCheckRollup: Array<{ state: string }> | null;
 }
 
 export interface PRInfo {
@@ -178,6 +179,7 @@ class GitHubCLIService {
   /**
    * Get PR status from GitHub using the gh CLI.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: error classification logic
   async getPRStatus(prUrl: string): Promise<PRStatusFromGitHub | null> {
     const prInfo = this.extractPRInfo(prUrl);
     if (!prInfo) {
@@ -197,7 +199,7 @@ class GitHubCLIService {
           '--repo',
           `${prInfo.owner}/${prInfo.repo}`,
           '--json',
-          'number,state,isDraft,reviewDecision,mergedAt,updatedAt',
+          'number,state,isDraft,reviewDecision,mergedAt,updatedAt,statusCheckRollup',
         ],
         { timeout: 30_000 }
       );
@@ -211,6 +213,7 @@ class GitHubCLIService {
         reviewDecision: data.reviewDecision || null,
         mergedAt: data.mergedAt || null,
         updatedAt: data.updatedAt,
+        statusCheckRollup: data.statusCheckRollup || null,
       };
     } catch (error) {
       const errorType = this.classifyError(error);
@@ -238,6 +241,40 @@ class GitHubCLIService {
       }
       return null;
     }
+  }
+
+  /**
+   * Convert GitHub status check rollup to our CIStatus enum.
+   */
+  computeCIStatus(statusCheckRollup: Array<{ state: string }> | null): CIStatus {
+    if (!statusCheckRollup || statusCheckRollup.length === 0) {
+      return CIStatus.UNKNOWN;
+    }
+
+    // Check for any failures first
+    const hasFailure = statusCheckRollup.some(
+      (check) => check.state === 'FAILURE' || check.state === 'ERROR'
+    );
+    if (hasFailure) {
+      return CIStatus.FAILURE;
+    }
+
+    // Check if any are still pending
+    const hasPending = statusCheckRollup.some(
+      (check) => check.state === 'PENDING' || check.state === 'EXPECTED' || check.state === 'QUEUED'
+    );
+    if (hasPending) {
+      return CIStatus.PENDING;
+    }
+
+    // All checks passed
+    const allSuccess = statusCheckRollup.every((check) => check.state === 'SUCCESS');
+    if (allSuccess) {
+      return CIStatus.SUCCESS;
+    }
+
+    // Default to unknown for any other state combinations
+    return CIStatus.UNKNOWN;
   }
 
   /**
@@ -276,9 +313,12 @@ class GitHubCLIService {
    * Fetch PR status and convert to our PRState.
    * Returns null if PR cannot be fetched.
    */
-  async fetchAndComputePRState(
-    prUrl: string
-  ): Promise<{ prState: PRState; prNumber: number; prReviewState: string | null } | null> {
+  async fetchAndComputePRState(prUrl: string): Promise<{
+    prState: PRState;
+    prNumber: number;
+    prReviewState: string | null;
+    prCiStatus: CIStatus;
+  } | null> {
     const status = await this.getPRStatus(prUrl);
     if (!status) {
       return null;
@@ -288,6 +328,7 @@ class GitHubCLIService {
       prState: this.computePRState(status),
       prNumber: status.number,
       prReviewState: status.reviewDecision,
+      prCiStatus: this.computeCIStatus(status.statusCheckRollup),
     };
   }
 

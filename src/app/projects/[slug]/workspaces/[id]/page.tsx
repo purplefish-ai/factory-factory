@@ -1,6 +1,16 @@
 'use client';
 
-import { AppWindow, Archive, GitBranch, Loader2, PanelRight } from 'lucide-react';
+import {
+  AppWindow,
+  Archive,
+  CheckCircle2,
+  Circle,
+  GitBranch,
+  GitPullRequest,
+  Loader2,
+  PanelRight,
+  XCircle,
+} from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -488,6 +498,7 @@ function useAutoScroll(
 // Main Workspace Chat Component
 // =============================================================================
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: main workspace component with multiple features
 function WorkspaceChatContent() {
   const params = useParams();
   const router = useRouter();
@@ -599,6 +610,25 @@ function WorkspaceChatContent() {
             <h1 className="text-lg font-semibold">{workspace.name}</h1>
           )}
           <StatusDot status={status} />
+          {/* PR Link with CI Status */}
+          {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
+            <a
+              href={workspace.prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors text-sm font-medium"
+            >
+              <GitPullRequest className="h-4 w-4" />
+              <span>#{workspace.prNumber}</span>
+              {workspace.prCiStatus === 'SUCCESS' && (
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              )}
+              {workspace.prCiStatus === 'FAILURE' && <XCircle className="h-4 w-4 text-red-500" />}
+              {workspace.prCiStatus === 'PENDING' && (
+                <Circle className="h-4 w-4 text-yellow-500 animate-pulse" />
+              )}
+            </a>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <QuickActionsMenu

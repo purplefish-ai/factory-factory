@@ -133,6 +133,7 @@ class SchedulerService {
         prNumber: prResult.prNumber,
         prState: prResult.prState,
         prReviewState: prResult.prReviewState,
+        prCiStatus: prResult.prCiStatus,
         prUpdatedAt: new Date(),
       });
 
@@ -143,6 +144,7 @@ class SchedulerService {
         workspaceId,
         prNumber: prResult.prNumber,
         prState: prResult.prState,
+        prCiStatus: prResult.prCiStatus,
       });
 
       return { success: true };
