@@ -66,7 +66,9 @@ const ResizablePanelGroup = ({
     <Group
       orientation={direction}
       className={cn('flex h-full w-full', direction === 'vertical' && 'flex-col', className)}
-      defaultLayout={autoSaveId ? persistence.defaultLayout : defaultLayoutProp}
+      defaultLayout={
+        autoSaveId ? (persistence.defaultLayout ?? defaultLayoutProp) : defaultLayoutProp
+      }
       onLayoutChanged={autoSaveId ? persistence.onLayoutChanged : onLayoutChangedProp}
       {...props}
     />

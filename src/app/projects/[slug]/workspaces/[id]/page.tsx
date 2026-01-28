@@ -278,6 +278,12 @@ function ChatContent({
           settings={chatSettings}
           onSettingsChange={updateSettings}
           sessionId={selectedDbSessionId}
+          onHeightChange={() => {
+            // Keep messages scrolled to bottom when input area grows
+            if (isNearBottom) {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+            }
+          }}
         />
       </div>
     </div>
@@ -706,7 +712,7 @@ function WorkspaceChatContent() {
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
   return (
-    <div className="flex h-[calc(100svh-24px)] flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Header: Branch name, status, and toggle button */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-3">
@@ -798,9 +804,13 @@ function WorkspaceChatContent() {
       </div>
 
       {/* Main Content Area: Resizable two-column layout */}
-      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+      <ResizablePanelGroup
+        direction="horizontal"
+        className="flex-1 overflow-hidden"
+        autoSaveId="workspace-main-panel"
+      >
         {/* Left Panel: Session tabs + Main View Content */}
-        <ResizablePanel defaultSize={rightPanelVisible ? '70%' : '100%'} minSize="30%">
+        <ResizablePanel defaultSize="70%" minSize="30%">
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
               workspaceId={workspaceId}

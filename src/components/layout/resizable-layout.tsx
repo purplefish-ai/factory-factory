@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -16,7 +16,6 @@ export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
       <ResizablePanelGroup
         direction="horizontal"
         className="h-svh w-full"
-        style={{ '--sidebar-width': '100%' } as CSSProperties}
         autoSaveId="app-sidebar-layout"
       >
         {/* Left sidebar panel */}
@@ -28,7 +27,7 @@ export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
 
         {/* Main content panel */}
         <ResizablePanel defaultSize="85%" minSize="50%">
-          <main className="relative flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-background">
+          <main className="relative flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden bg-background">
             {children}
           </main>
         </ResizablePanel>
