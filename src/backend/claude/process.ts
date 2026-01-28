@@ -55,8 +55,8 @@ export interface ResourceUsage {
 export interface ClaudeProcessOptions {
   /** Working directory for the Claude CLI process */
   workingDir: string;
-  /** Session ID to resume from */
-  resumeSessionId?: string;
+  /** Claude session ID to resume from */
+  resumeClaudeSessionId?: string;
   /** Fork from the resumed session instead of continuing it */
   forkSession?: boolean;
   /** Model to use (overrides default) */
@@ -202,7 +202,7 @@ export class ClaudeProcess extends EventEmitter {
     logger.info('Spawning Claude process', {
       workingDir: options.workingDir,
       args: args.join(' '),
-      resumeSessionId: options.resumeSessionId,
+      resumeClaudeSessionId: options.resumeClaudeSessionId,
     });
 
     const childProcess = spawn('claude', args, {
@@ -537,8 +537,8 @@ export class ClaudeProcess extends EventEmitter {
     }
 
     // Session management
-    if (options.resumeSessionId) {
-      args.push('--resume', options.resumeSessionId);
+    if (options.resumeClaudeSessionId) {
+      args.push('--resume', options.resumeClaudeSessionId);
       if (options.forkSession) {
         args.push('--fork-session');
       }

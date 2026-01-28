@@ -82,7 +82,6 @@ export function AgentActivity({
     running,
     agentMetadata,
     tokenStats,
-    claudeSessionId: _claudeSessionId,
     error,
     reconnect,
     messagesEndRef,

@@ -720,7 +720,7 @@ async function getOrCreateChatClient(
   dbSessionId: string,
   options: {
     workingDir: string;
-    resumeSessionId?: string;
+    resumeClaudeSessionId?: string;
     systemPrompt?: string;
     model?: string;
     thinkingEnabled?: boolean;
@@ -749,7 +749,7 @@ async function getOrCreateChatClient(
     logger.info('[Chat WS] Creating new client', {
       dbSessionId,
       hadExistingClient: !!client,
-      resumeSessionId: options.resumeSessionId,
+      resumeClaudeSessionId: options.resumeClaudeSessionId,
     });
   }
 
@@ -757,7 +757,7 @@ async function getOrCreateChatClient(
   const createPromise = (async () => {
     const clientOptions: ClaudeClientOptions = {
       workingDir: options.workingDir,
-      resumeSessionId: options.resumeSessionId,
+      resumeClaudeSessionId: options.resumeClaudeSessionId,
       systemPrompt: options.systemPrompt,
       model: options.model,
       permissionMode: options.permissionMode ?? 'bypassPermissions',
@@ -803,7 +803,6 @@ async function handleChatMessage(
     type: string;
     text?: string;
     workingDir?: string;
-    resumeSessionId?: string;
     systemPrompt?: string;
     model?: string;
     claudeSessionId?: string;
@@ -827,17 +826,14 @@ async function handleChatMessage(
       const model =
         requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
 
-      // Look up resumeSessionId from database if not provided
-      // This allows the frontend to not track claudeSessionId
-      let resumeSessionId = message.resumeSessionId;
-      if (!resumeSessionId) {
-        const dbSession = await claudeSessionAccessor.findById(dbSessionId);
-        resumeSessionId = dbSession?.claudeSessionId ?? undefined;
-      }
+      // Look up resumeClaudeSessionId from database
+      // The frontend no longer tracks claudeSessionId - it's a backend-only concern
+      const dbSession = await claudeSessionAccessor.findById(dbSessionId);
+      const resumeClaudeSessionId = dbSession?.claudeSessionId ?? undefined;
 
       await getOrCreateChatClient(dbSessionId, {
         workingDir: message.workingDir || workingDir,
-        resumeSessionId,
+        resumeClaudeSessionId,
         systemPrompt: message.systemPrompt,
         model,
         thinkingEnabled: message.thinkingEnabled,

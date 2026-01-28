@@ -563,10 +563,6 @@ function WorkspaceChatContent() {
   // Auto-scroll behavior
   const { handleScroll } = useAutoScroll(messages, messagesEndRef);
 
-  // Note: claudeSessionId syncing to the database is handled by the backend
-  // when it receives the session_id event from the Claude CLI process.
-  // The frontend doesn't need to sync this.
-
   // Determine connection status for indicator
   const status = getConnectionStatusFromState(connected, loadingSession, running);
 

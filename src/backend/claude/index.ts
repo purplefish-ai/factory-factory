@@ -37,8 +37,8 @@ import {
 export interface ClaudeClientOptions {
   /** Working directory for the Claude CLI process */
   workingDir: string;
-  /** Session ID to resume from */
-  resumeSessionId?: string;
+  /** Claude session ID to resume from */
+  resumeClaudeSessionId?: string;
   /** Fork from the resumed session instead of continuing it */
   forkSession?: boolean;
   /** Model to use (overrides default) */
@@ -133,7 +133,7 @@ export class ClaudeClient extends EventEmitter {
     // Build process options
     const processOptions: ClaudeProcessOptions = {
       workingDir: options.workingDir,
-      resumeSessionId: options.resumeSessionId,
+      resumeClaudeSessionId: options.resumeClaudeSessionId,
       forkSession: options.forkSession,
       model: options.model,
       systemPrompt: options.systemPrompt,

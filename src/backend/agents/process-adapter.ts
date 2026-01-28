@@ -32,7 +32,7 @@ export interface AgentStartOptions {
   workingDir: string;
   systemPrompt?: string;
   model?: string;
-  resumeSessionId?: string;
+  resumeClaudeSessionId?: string;
   allowedTools?: string[];
   agentType: AgentType;
   initialPrompt?: string;
@@ -271,14 +271,14 @@ export class AgentProcessAdapter extends EventEmitter {
       agentId,
       workingDir: options.workingDir,
       agentType: options.agentType,
-      resuming: !!options.resumeSessionId,
+      resuming: !!options.resumeClaudeSessionId,
     });
 
     const clientOptions: ClaudeClientOptions = {
       workingDir: options.workingDir,
       systemPrompt: options.systemPrompt,
       model: options.model,
-      resumeSessionId: options.resumeSessionId,
+      resumeClaudeSessionId: options.resumeClaudeSessionId,
       permissionMode: 'bypassPermissions', // Auto-approve for agents
       disallowedTools: options.allowedTools ? undefined : [], // Configure as needed
       initialPrompt: options.initialPrompt,

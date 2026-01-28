@@ -45,8 +45,6 @@ export interface UseAgentWebSocketReturn {
   agentMetadata: AgentMetadata | null;
   /** Accumulated token usage statistics */
   tokenStats: TokenStats;
-  /** Claude session ID if available */
-  claudeSessionId: string | null;
   /** Error message if any */
   error: string | null;
   /** Manually trigger reconnection */
@@ -86,7 +84,6 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
   const [running, setRunning] = useState(false);
   const [agentMetadata, setAgentMetadata] = useState<AgentMetadata | null>(null);
   const [tokenStats, setTokenStats] = useState<TokenStats>(createEmptyTokenStats());
-  const [claudeSessionId, setClaudeSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Refs
@@ -113,16 +110,10 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
       switch (data.type) {
         case 'status':
           setRunning(data.running ?? false);
-          if (data.claudeSessionId) {
-            setClaudeSessionId(data.claudeSessionId);
-          }
           break;
 
         case 'started':
           setRunning(true);
-          if (data.claudeSessionId) {
-            setClaudeSessionId(data.claudeSessionId);
-          }
           break;
 
         case 'stopped':
@@ -153,9 +144,6 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
           break;
 
         case 'session_loaded':
-          if (data.claudeSessionId) {
-            setClaudeSessionId(data.claudeSessionId);
-          }
           // Convert history messages to chat messages
           if (data.messages) {
             const historyMessages = data.messages as HistoryMessage[];
@@ -297,7 +285,6 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
       setMessages([]);
       setTokenStats(createEmptyTokenStats());
       setAgentMetadata(null);
-      setClaudeSessionId(null);
       setError(null);
       reconnectAttemptsRef.current = 0;
       connect();
@@ -311,7 +298,6 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions): UseAgentWe
     running,
     agentMetadata,
     tokenStats,
-    claudeSessionId,
     error,
     reconnect,
     messagesEndRef,

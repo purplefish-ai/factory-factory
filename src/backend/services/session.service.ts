@@ -49,7 +49,7 @@ class SessionService {
     const processOptions: ClaudeProcessOptions = {
       workingDir,
       model: session.model,
-      resumeSessionId: session.claudeSessionId ?? undefined,
+      resumeClaudeSessionId: session.claudeSessionId ?? undefined,
       initialPrompt: options?.initialPrompt ?? 'Continue with the task.',
       permissionMode: 'bypassPermissions',
       systemPrompt: workflowPrompt ?? undefined,
