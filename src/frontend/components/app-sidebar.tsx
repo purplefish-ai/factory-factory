@@ -316,11 +316,11 @@ export function AppSidebar() {
                                 {workspace.branchName || workspace.name}
                               </span>
                               {hasChanges && (
-                                <span className="ml-auto shrink-0 flex items-center gap-1 text-xs font-mono px-1.5 py-0.5 rounded border border-border/50 bg-muted/50">
-                                  <span className="text-green-600 dark:text-green-500">
+                                <span className="ml-auto shrink-0 flex items-center gap-1 text-xs font-mono px-1 py-px rounded border border-border/60 bg-muted/80">
+                                  <span className="text-green-600 dark:text-green-400">
                                     +{stats.additions}
                                   </span>
-                                  <span className="text-red-600 dark:text-red-500">
+                                  <span className="text-red-600 dark:text-red-400">
                                     -{stats.deletions}
                                   </span>
                                 </span>
