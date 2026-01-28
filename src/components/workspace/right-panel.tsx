@@ -99,7 +99,7 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
       autoSaveId="workspace-right-panel"
     >
       {/* Top Panel: Git Status / File Browser */}
-      <ResizablePanel defaultSize={60} minSize={20}>
+      <ResizablePanel defaultSize="60%" minSize="20%">
         <div className="flex flex-col h-full min-h-0">
           {/* Tab bar */}
           <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
@@ -128,7 +128,7 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
       <ResizableHandle />
 
       {/* Bottom Panel: Terminal */}
-      <ResizablePanel defaultSize={40} minSize={15}>
+      <ResizablePanel defaultSize="40%" minSize="15%">
         <TerminalPanel workspaceId={workspaceId} className="h-full" />
       </ResizablePanel>
     </ResizablePanelGroup>
