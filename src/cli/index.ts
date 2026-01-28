@@ -8,10 +8,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { Command } from 'commander';
+import { config } from 'dotenv';
 import open from 'open';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Load .env file before anything else
+config();
 
 // Find project root (where package.json is)
 function findProjectRoot(): string {
@@ -215,8 +219,8 @@ program
 program
   .command('serve')
   .description('Start the FACTORY FACTORY server')
-  .option('-p, --port <port>', 'Frontend port', '3000')
-  .option('--backend-port <port>', 'Backend port', '3001')
+  .option('-p, --port <port>', 'Frontend port', process.env.FRONTEND_PORT || '3000')
+  .option('--backend-port <port>', 'Backend port', process.env.BACKEND_PORT || '3001')
   .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
   .option('--host <host>', 'Host to bind to', 'localhost')
   .option('--dev', 'Run in development mode with hot reloading')
