@@ -147,6 +147,7 @@ interface ChatContentProps {
   loadingSession: boolean;
   startingSession: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  contentRef: React.RefObject<HTMLDivElement | null>;
   handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
   isNearBottom: boolean;
   scrollToBottom: () => void;
@@ -170,6 +171,7 @@ function ChatContent({
   loadingSession,
   startingSession,
   messagesEndRef,
+  contentRef,
   handleScroll,
   isNearBottom,
   scrollToBottom,
@@ -212,7 +214,7 @@ function ChatContent({
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
       <ScrollArea className="flex-1" onScroll={handleScroll}>
-        <div className="p-4 space-y-2">
+        <div ref={contentRef} className="p-4 space-y-2">
           {messages.length === 0 && !running && !loadingSession && !startingSession && (
             <EmptyState />
           )}
@@ -493,10 +495,15 @@ function useSessionManagement({
 
 function useAutoScroll(
   messages: unknown[],
-  messagesEndRef: React.RefObject<HTMLDivElement | null>
+  messagesEndRef: React.RefObject<HTMLDivElement | null>,
+  contentRef: React.RefObject<HTMLDivElement | null>
 ) {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
+  // Track if we're currently animating a scroll-to-bottom to prevent flicker
+  const isScrollingToBottomRef = useRef(false);
+  // Track the scroll container for ResizeObserver
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
   useEffect(() => {
@@ -505,8 +512,34 @@ function useAutoScroll(
     }
   }, [messages.length, messagesEndRef]);
 
+  // Watch for content size changes (e.g., tool call expand/collapse) and scroll if near bottom
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      // If near bottom when content size changes, scroll to keep at bottom
+      if (isNearBottomRef.current && messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [contentRef, messagesEndRef]);
+
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
+      // Store scroll container reference for potential future use
+      scrollContainerRef.current = event.currentTarget;
+
+      // Don't update state while animating scroll-to-bottom (prevents flicker)
+      if (isScrollingToBottomRef.current) {
+        return;
+      }
+
       const target = event.currentTarget;
       const scrollThreshold = 100; // Don't auto-scroll if more than 100px from bottom
       const snapThreshold = 20; // Snap to bottom if within 20px
@@ -525,9 +558,17 @@ function useAutoScroll(
   );
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Set flag to prevent handleScroll from causing flicker during animation
+    isScrollingToBottomRef.current = true;
     setIsNearBottom(true);
     isNearBottomRef.current = true;
+
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+    // Clear the flag after animation completes (smooth scroll typically ~300-500ms)
+    setTimeout(() => {
+      isScrollingToBottomRef.current = false;
+    }, 500);
   }, [messagesEndRef]);
 
   return { handleScroll, isNearBottom, scrollToBottom };
@@ -610,8 +651,15 @@ function WorkspaceChatContent() {
     setSelectedDbSessionId,
   });
 
+  // Ref for scroll content container (used for ResizeObserver)
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
   // Auto-scroll behavior
-  const { handleScroll, isNearBottom, scrollToBottom } = useAutoScroll(messages, messagesEndRef);
+  const { handleScroll, isNearBottom, scrollToBottom } = useAutoScroll(
+    messages,
+    messagesEndRef,
+    contentRef
+  );
 
   // Determine connection status for indicator
   const status = getConnectionStatusFromState(connected, loadingSession, running);
@@ -752,6 +800,7 @@ function WorkspaceChatContent() {
               loadingSession={loadingSession}
               startingSession={startingSession}
               messagesEndRef={messagesEndRef}
+              contentRef={contentRef}
               handleScroll={handleScroll}
               isNearBottom={isNearBottom}
               scrollToBottom={scrollToBottom}
