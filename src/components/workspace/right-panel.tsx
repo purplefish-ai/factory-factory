@@ -125,7 +125,7 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
         </div>
       </ResizablePanel>
 
-      <ResizableHandle />
+      <ResizableHandle direction="vertical" />
 
       {/* Bottom Panel: Terminal */}
       <ResizablePanel defaultSize="40%" minSize="15%">
