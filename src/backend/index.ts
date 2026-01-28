@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
+import { createServer as createNetServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
@@ -34,7 +35,36 @@ import { appRouter, createContext } from './trpc/index';
 
 const logger = createLogger('server');
 const app = express();
-const PORT = process.env.BACKEND_PORT || 3001;
+const REQUESTED_PORT = Number.parseInt(process.env.BACKEND_PORT || '3001', 10);
+
+/**
+ * Check if a port is available by attempting to create a server on it.
+ */
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const testServer = createNetServer();
+    testServer.once('error', () => {
+      resolve(false);
+    });
+    testServer.once('listening', () => {
+      testServer.close(() => resolve(true));
+    });
+    testServer.listen(port, 'localhost');
+  });
+}
+
+/**
+ * Find an available port starting from the given port.
+ */
+async function findAvailablePort(startPort: number, maxAttempts = 10): Promise<number> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const port = startPort + i;
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(`Could not find an available port starting from ${startPort}`);
+}
 
 // Create HTTP server and WebSocket server
 const server = createServer(app);
@@ -1685,37 +1715,56 @@ server.on('upgrade', (request, socket, head) => {
 // Server Startup
 // ============================================================================
 
-server.listen(PORT, async () => {
-  logger.info('Backend server started', {
-    port: PORT,
-    environment: configService.getEnvironment(),
-  });
+// Track the actual port we're listening on (may differ from REQUESTED_PORT if port is in use)
+let actualPort: number = REQUESTED_PORT;
 
-  // Clean up orphan sessions from previous crashes
+(async () => {
   try {
-    await reconciliationService.cleanupOrphans();
+    // Find an available port
+    actualPort = await findAvailablePort(REQUESTED_PORT);
+    if (actualPort !== REQUESTED_PORT) {
+      logger.warn('Requested port in use, using alternative', {
+        requestedPort: REQUESTED_PORT,
+        actualPort,
+      });
+    }
+
+    server.listen(actualPort, async () => {
+      logger.info('Backend server started', {
+        port: actualPort,
+        environment: configService.getEnvironment(),
+      });
+
+      // Clean up orphan sessions from previous crashes
+      try {
+        await reconciliationService.cleanupOrphans();
+      } catch (error) {
+        logger.error('Failed to cleanup orphan sessions on startup', error as Error);
+      }
+
+      // Clean up old log files (older than 7 days)
+      sessionFileLogger.cleanupOldLogs();
+
+      // Start periodic orphan cleanup
+      reconciliationService.startPeriodicCleanup();
+
+      // Start background scheduler (PR sync, etc.)
+      schedulerService.start();
+
+      logger.info('Server endpoints available', {
+        server: `http://localhost:${actualPort}`,
+        health: `http://localhost:${actualPort}/health`,
+        healthAll: `http://localhost:${actualPort}/health/all`,
+        trpc: `http://localhost:${actualPort}/api/trpc`,
+        wsChat: `ws://localhost:${actualPort}/chat`,
+        wsTerminal: `ws://localhost:${actualPort}/terminal`,
+      });
+    });
   } catch (error) {
-    logger.error('Failed to cleanup orphan sessions on startup', error as Error);
+    logger.error('Failed to start server', error as Error);
+    process.exit(1);
   }
-
-  // Clean up old log files (older than 7 days)
-  sessionFileLogger.cleanupOldLogs();
-
-  // Start periodic orphan cleanup
-  reconciliationService.startPeriodicCleanup();
-
-  // Start background scheduler (PR sync, etc.)
-  schedulerService.start();
-
-  logger.info('Server endpoints available', {
-    server: `http://localhost:${PORT}`,
-    health: `http://localhost:${PORT}/health`,
-    healthAll: `http://localhost:${PORT}/health/all`,
-    trpc: `http://localhost:${PORT}/api/trpc`,
-    wsChat: `ws://localhost:${PORT}/chat`,
-    wsTerminal: `ws://localhost:${PORT}/terminal`,
-  });
-});
+})();
 
 // Shared cleanup logic
 const SHUTDOWN_TIMEOUT_MS = 5000;
