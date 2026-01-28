@@ -208,6 +208,24 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Find ACTIVE workspaces without PR URLs that have a branch name.
+   * Used for detecting newly created PRs.
+   */
+  findNeedingPRDiscovery(): Promise<WorkspaceWithProject[]> {
+    return prisma.workspace.findMany({
+      where: {
+        status: 'ACTIVE',
+        prUrl: null,
+        branchName: { not: null },
+      },
+      include: {
+        project: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  /**
    * Mark workspace as having had sessions (for kanban backlog/waiting distinction).
    * Uses atomic conditional update to prevent race conditions when multiple sessions start.
    */

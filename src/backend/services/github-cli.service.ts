@@ -393,6 +393,47 @@ class GitHubCLIService {
   }
 
   /**
+   * Find an open PR for a given branch in a repository.
+   * Returns the PR URL if found, null otherwise.
+   */
+  async findPRForBranch(
+    owner: string,
+    repo: string,
+    branchName: string
+  ): Promise<{ url: string; number: number } | null> {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        [
+          'pr',
+          'list',
+          '--head',
+          branchName,
+          '--repo',
+          `${owner}/${repo}`,
+          '--json',
+          'number,url',
+          '--limit',
+          '1',
+        ],
+        { timeout: 30_000 }
+      );
+
+      const prs = JSON.parse(stdout) as Array<{ number: number; url: string }>;
+      if (prs.length > 0) {
+        return { url: prs[0].url, number: prs[0].number };
+      }
+      return null;
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      if (errorType !== 'cli_not_installed' && errorType !== 'auth_required') {
+        logger.debug('No PR found for branch', { owner, repo, branchName });
+      }
+      return null;
+    }
+  }
+
+  /**
    * Approve a PR.
    */
   async approvePR(owner: string, repo: string, prNumber: number): Promise<void> {
