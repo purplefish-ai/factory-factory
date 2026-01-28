@@ -216,26 +216,22 @@ export function ChatInput({
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Enter without Shift sends the message
+      // Enter without Shift sends the message (queues if agent is running)
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         const text = event.currentTarget.value.trim();
-        if (text && !disabled && !running) {
+        if (text && !disabled) {
           onSend(text);
           event.currentTarget.value = '';
           onChange?.('');
         }
       }
     },
-    [onSend, disabled, running, onChange]
+    [onSend, disabled, onChange]
   );
 
   // Handle send button click
   const handleSendClick = useCallback(() => {
-    if (running) {
-      onStop?.();
-      return;
-    }
     if (inputRef?.current) {
       const text = inputRef.current.value.trim();
       if (text && !disabled) {
@@ -245,7 +241,7 @@ export function ChatInput({
         inputRef.current.focus();
       }
     }
-  }, [onSend, onStop, inputRef, disabled, running, onChange]);
+  }, [onSend, inputRef, disabled, onChange]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
   useEffect(() => {
@@ -360,27 +356,34 @@ export function ChatInput({
             />
           </div>
 
-          {/* Right side: Send/Stop button */}
-          {/* Button is enabled when running to allow stop functionality */}
-          <InputGroupButton
-            onClick={handleSendClick}
-            disabled={(isDisabled && !running) || stopping}
-            size="icon-sm"
-            aria-label={stopping ? 'Stopping...' : running ? 'Stop' : 'Send message'}
-          >
-            {stopping ? (
-              <span className="relative flex items-center justify-center">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              </span>
-            ) : running ? (
-              <span className="relative flex items-center justify-center">
-                <Loader2 className="h-4 w-4 animate-spin absolute" />
-                <Square className="h-2 w-2 fill-current" />
-              </span>
-            ) : (
-              <Send className="h-4 w-4" />
+          {/* Right side: Stop button (when running) + Send button */}
+          <div className="flex items-center gap-1">
+            {running && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onStop}
+                disabled={stopping}
+                className="h-7 w-7"
+                aria-label={stopping ? 'Stopping...' : 'Stop agent'}
+              >
+                {stopping ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Square className="h-3 w-3 fill-current" />
+                )}
+              </Button>
             )}
-          </InputGroupButton>
+            {/* Send button - always enabled (except when disconnected), queues when running */}
+            <InputGroupButton
+              onClick={handleSendClick}
+              disabled={isDisabled}
+              size="icon-sm"
+              aria-label={running ? 'Queue message' : 'Send message'}
+            >
+              <Send className="h-4 w-4" />
+            </InputGroupButton>
+          </div>
         </InputGroupAddon>
       </InputGroup>
     </div>
