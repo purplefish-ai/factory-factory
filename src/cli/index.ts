@@ -619,6 +619,7 @@ program
     const nextBuild = spawn('npx', ['next', 'build'], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
+      env: { ...process.env, NODE_ENV: 'production' },
     });
 
     exitCode = await new Promise<number>((resolve) => {
