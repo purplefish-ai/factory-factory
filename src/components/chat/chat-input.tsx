@@ -1,7 +1,7 @@
 'use client';
 
 import { Brain, ChevronDown, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
-import { type KeyboardEvent, useCallback, useEffect, useRef } from 'react';
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +22,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { ChatSettings } from '@/lib/claude-types';
 import { AVAILABLE_MODELS } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const STORAGE_KEY_DRAFT_PREFIX = 'chat-input-draft-';
 
 // =============================================================================
 // Types
@@ -198,6 +204,73 @@ export function ChatInput({
   sessionId,
   onHeightChange,
 }: ChatInputProps) {
+  // Track which session we've loaded draft for (prevents save-on-load loops)
+  const loadedForSessionRef = useRef<string | null>(null);
+  // Debounce timeout for saving drafts
+  const saveDraftTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load draft from localStorage when session changes
+  useEffect(() => {
+    if (!sessionId || loadedForSessionRef.current === sessionId) {
+      return;
+    }
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const draft = localStorage.getItem(`${STORAGE_KEY_DRAFT_PREFIX}${sessionId}`);
+      if (inputRef?.current) {
+        inputRef.current.value = draft ?? '';
+      }
+    } catch {
+      // Ignore storage errors
+    }
+
+    loadedForSessionRef.current = sessionId;
+  }, [sessionId, inputRef]);
+
+  // Clear draft from localStorage
+  const clearDraft = useCallback(() => {
+    if (!sessionId) {
+      return;
+    }
+    try {
+      localStorage.removeItem(`${STORAGE_KEY_DRAFT_PREFIX}${sessionId}`);
+    } catch {
+      // Ignore storage errors
+    }
+  }, [sessionId]);
+
+  // Save draft to localStorage (debounced)
+  const handleInput = useCallback(
+    (event: FormEvent<HTMLTextAreaElement>) => {
+      if (!sessionId || loadedForSessionRef.current !== sessionId) {
+        return;
+      }
+
+      // Clear any pending save
+      if (saveDraftTimeoutRef.current) {
+        clearTimeout(saveDraftTimeoutRef.current);
+      }
+
+      // Debounce localStorage writes
+      saveDraftTimeoutRef.current = setTimeout(() => {
+        try {
+          const value = (event.target as HTMLTextAreaElement).value;
+          if (value) {
+            localStorage.setItem(`${STORAGE_KEY_DRAFT_PREFIX}${sessionId}`, value);
+          } else {
+            localStorage.removeItem(`${STORAGE_KEY_DRAFT_PREFIX}${sessionId}`);
+          }
+        } catch {
+          // Ignore storage errors
+        }
+      }, 300);
+    },
+    [sessionId]
+  );
+
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -208,10 +281,11 @@ export function ChatInput({
         if (text && !disabled && !running) {
           onSend(text);
           event.currentTarget.value = '';
+          clearDraft();
         }
       }
     },
-    [onSend, disabled, running]
+    [onSend, disabled, running, clearDraft]
   );
 
   // Handle send button click
@@ -226,9 +300,10 @@ export function ChatInput({
         onSend(text);
         inputRef.current.value = '';
         inputRef.current.focus();
+        clearDraft();
       }
     }
-  }, [onSend, onStop, inputRef, disabled, running]);
+  }, [onSend, onStop, inputRef, disabled, running, clearDraft]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
   useEffect(() => {
@@ -297,6 +372,7 @@ export function ChatInput({
         <InputGroupTextarea
           ref={inputRef}
           onKeyDown={handleKeyDown}
+          onInput={handleInput}
           disabled={isDisabled}
           placeholder={isDisabled ? 'Connecting...' : placeholder}
           className={cn(

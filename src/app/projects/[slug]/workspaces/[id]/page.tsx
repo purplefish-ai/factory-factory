@@ -171,6 +171,7 @@ interface ChatContentProps {
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
+  deleteQueuedMessage: ReturnType<typeof useChatWebSocket>['deleteQueuedMessage'];
   /** Database session ID for detecting session changes (auto-focus) */
   selectedDbSessionId: string | null;
 }
@@ -197,6 +198,7 @@ function ChatContent({
   inputRef,
   chatSettings,
   updateSettings,
+  deleteQueuedMessage,
   selectedDbSessionId,
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
@@ -241,7 +243,11 @@ function ChatContent({
           )}
 
           {groupedMessages.map((item) => (
-            <GroupedMessageItemRenderer key={item.id} item={item} />
+            <GroupedMessageItemRenderer
+              key={item.id}
+              item={item}
+              onDeleteQueued={deleteQueuedMessage}
+            />
           ))}
 
           {running && <LoadingIndicator className="py-4" />}
@@ -660,6 +666,7 @@ function WorkspaceChatContent() {
     approvePermission,
     answerQuestion,
     updateSettings,
+    deleteQueuedMessage,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
@@ -870,6 +877,7 @@ function WorkspaceChatContent() {
                 inputRef={inputRef}
                 chatSettings={chatSettings}
                 updateSettings={updateSettings}
+                deleteQueuedMessage={deleteQueuedMessage}
                 selectedDbSessionId={selectedDbSessionId}
               />
             </WorkspaceContentView>

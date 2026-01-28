@@ -34,6 +34,15 @@ export interface UseChatWebSocketOptions {
   dbSessionId: string | null;
 }
 
+/**
+ * A user message that has been queued to be sent when the agent becomes idle.
+ */
+export interface QueuedUserMessage {
+  id: string;
+  text: string;
+  timestamp: string;
+}
+
 export interface UseChatWebSocketReturn {
   // State
   messages: ChatMessage[];
@@ -52,6 +61,8 @@ export interface UseChatWebSocketReturn {
   startingSession: boolean;
   // Chat settings
   chatSettings: ChatSettings;
+  // Queued user messages (waiting to be sent when agent is idle)
+  queuedUserMessages: QueuedUserMessage[];
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -59,6 +70,7 @@ export interface UseChatWebSocketReturn {
   approvePermission: (requestId: string, allow: boolean) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
+  deleteQueuedMessage: (id: string) => void;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -184,12 +196,13 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function createUserMessage(text: string): ChatMessage {
+function createUserMessage(text: string, queued = false): ChatMessage {
   return {
     id: generateMessageId(),
     source: 'user',
     text,
     timestamp: new Date().toISOString(),
+    queued,
   };
 }
 
@@ -502,6 +515,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const [loadingSession, setLoadingSession] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
+  // User messages queued to be sent when agent becomes idle
+  const [queuedUserMessages, setQueuedUserMessages] = useState<QueuedUserMessage[]>([]);
 
   // Refs
   const wsRef = useRef<WebSocket | null>(null);
@@ -551,6 +566,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       setLoadingSession(false);
       setChatSettings(DEFAULT_CHAT_SETTINGS);
       setRunning(false);
+      setQueuedUserMessages([]);
 
       // Clear refs
       toolInputAccumulatorRef.current.clear();
@@ -842,32 +858,22 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     };
   }, [connect, workingDir, dbSessionId]);
 
-  // Actions
-  const sendMessage = useCallback(
+  // Helper to actually send a message (used for both immediate and queued messages)
+  const doSendMessage = useCallback(
     (text: string) => {
-      if (!text.trim()) {
-        return;
-      }
+      // Show starting indicator immediately for user feedback
+      setStartingSession(true);
 
-      // Add user message to local state immediately (optimistic UI)
-      setMessages((prev) => [...prev, createUserMessage(text)]);
-
-      // If Claude is not running, start it first
-      if (!running) {
-        // Show starting indicator immediately for user feedback
-        setStartingSession(true);
-
-        // Note: The backend will look up the claudeSessionId from the database
-        // using the dbSessionId in the WebSocket URL
-        const startMsg: StartMessage = {
-          type: 'start',
-          // Include current settings when starting
-          selectedModel: chatSettings.selectedModel,
-          thinkingEnabled: chatSettings.thinkingEnabled,
-          planModeEnabled: chatSettings.planModeEnabled,
-        };
-        sendWsMessage(startMsg);
-      }
+      // Note: The backend will look up the claudeSessionId from the database
+      // using the dbSessionId in the WebSocket URL
+      const startMsg: StartMessage = {
+        type: 'start',
+        // Include current settings when starting
+        selectedModel: chatSettings.selectedModel,
+        thinkingEnabled: chatSettings.thinkingEnabled,
+        planModeEnabled: chatSettings.planModeEnabled,
+      };
+      sendWsMessage(startMsg);
 
       // Send the user input
       // The backend will queue this if Claude process isn't ready yet
@@ -875,8 +881,72 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       const messageToSend = chatSettings.thinkingEnabled ? `${text}${THINKING_SUFFIX}` : text;
       sendWsMessage({ type: 'user_input', text: messageToSend });
     },
-    [running, chatSettings, sendWsMessage]
+    [chatSettings, sendWsMessage]
   );
+
+  // Actions
+  const sendMessage = useCallback(
+    (text: string) => {
+      if (!text.trim()) {
+        return;
+      }
+
+      // If Claude is running, queue the message instead of sending immediately
+      if (running || startingSession) {
+        const queuedMsg: QueuedUserMessage = {
+          id: generateMessageId(),
+          text: text.trim(),
+          timestamp: new Date().toISOString(),
+        };
+        setQueuedUserMessages((prev) => [...prev, queuedMsg]);
+        // Add to messages list with queued flag for UI display
+        setMessages((prev) => [...prev, createUserMessage(text, true)]);
+        debug.log('📥 Message queued for later:', text.substring(0, 50));
+        return;
+      }
+
+      // Add user message to local state immediately (optimistic UI)
+      setMessages((prev) => [...prev, createUserMessage(text)]);
+      doSendMessage(text);
+    },
+    [running, startingSession, doSendMessage]
+  );
+
+  // Delete a queued message before it's sent
+  const deleteQueuedMessage = useCallback((id: string) => {
+    setQueuedUserMessages((prev) => prev.filter((m) => m.id !== id));
+    // Also remove from messages list
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    debug.log('🗑️ Deleted queued message:', id);
+  }, []);
+
+  // Track previous running state to detect transition from running to idle
+  const prevRunningForQueueRef = useRef(running);
+
+  // Auto-send queued messages when agent becomes idle
+  useEffect(() => {
+    const wasRunning = prevRunningForQueueRef.current;
+    prevRunningForQueueRef.current = running;
+
+    // Only process when transitioning from running/starting to idle
+    if (
+      (wasRunning || startingSession) &&
+      !running &&
+      !startingSession &&
+      queuedUserMessages.length > 0
+    ) {
+      // Get the first queued message
+      const [first, ...rest] = queuedUserMessages;
+      setQueuedUserMessages(rest);
+
+      // Mark the message as no longer queued in the messages list
+      setMessages((prev) => prev.map((m) => (m.id === first.id ? { ...m, queued: false } : m)));
+
+      // Send it
+      debug.log('📤 Auto-sending queued message:', first.text.substring(0, 50));
+      doSendMessage(first.text);
+    }
+  }, [running, startingSession, queuedUserMessages, doSendMessage]);
 
   const stopChat = useCallback(() => {
     if (running && !stopping) {
@@ -941,6 +1011,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     loadingSession,
     startingSession,
     chatSettings,
+    queuedUserMessages,
     // Actions
     sendMessage,
     stopChat,
@@ -948,6 +1019,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     approvePermission,
     answerQuestion,
     updateSettings,
+    deleteQueuedMessage,
     // Refs
     inputRef,
     messagesEndRef,

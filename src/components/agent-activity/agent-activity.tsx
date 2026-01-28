@@ -1,5 +1,8 @@
 'use client';
 
+import { X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
@@ -209,15 +212,42 @@ export function CompactAgentActivity({
 
 export interface MessageItemProps {
   message: ChatMessage;
+  /** Callback when delete button is clicked for a queued message */
+  onDeleteQueued?: (id: string) => void;
 }
 
-export function MessageItem({ message }: MessageItemProps) {
+export function MessageItem({ message, onDeleteQueued }: MessageItemProps) {
   // User messages
   if (message.source === 'user') {
     return (
       <MessageWrapper chatMessage={message}>
-        <div className="rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block max-w-full break-words text-sm">
-          {stripThinkingSuffix(message.text)}
+        <div className="flex items-start gap-2">
+          <div
+            className={cn(
+              'rounded-lg bg-primary text-primary-foreground px-3 py-2 inline-block max-w-full break-words text-sm',
+              message.queued && 'opacity-70'
+            )}
+          >
+            {stripThinkingSuffix(message.text)}
+          </div>
+          {message.queued && (
+            <div className="flex items-center gap-1 shrink-0">
+              <Badge variant="secondary" className="text-xs">
+                Queued
+              </Badge>
+              {onDeleteQueued && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => onDeleteQueued(message.id)}
+                  aria-label="Delete queued message"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </MessageWrapper>
     );
@@ -241,16 +271,21 @@ export function MessageItem({ message }: MessageItemProps) {
 
 export interface GroupedMessageItemRendererProps {
   item: GroupedMessageItem;
+  /** Callback when delete button is clicked for a queued message */
+  onDeleteQueued?: (id: string) => void;
 }
 
 /**
  * Renders either a regular message or a tool sequence group.
  */
-export function GroupedMessageItemRenderer({ item }: GroupedMessageItemRendererProps) {
+export function GroupedMessageItemRenderer({
+  item,
+  onDeleteQueued,
+}: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     return <ToolSequenceGroup sequence={item} />;
   }
-  return <MessageItem message={item} />;
+  return <MessageItem message={item} onDeleteQueued={onDeleteQueued} />;
 }
 
 // =============================================================================

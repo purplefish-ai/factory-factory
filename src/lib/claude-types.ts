@@ -416,6 +416,8 @@ export interface ChatMessage {
   text?: string; // For user messages
   message?: ClaudeMessage; // For claude messages
   timestamp: string;
+  /** Whether this message is queued to be sent (not yet processed by Claude) */
+  queued?: boolean;
 }
 
 /**
