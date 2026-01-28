@@ -116,3 +116,6 @@ The server automatically finds available ports. Use `--verbose` to see which por
 ## License
 
 MIT
+
+---
+*This line was added to test the pull request workflow.*
