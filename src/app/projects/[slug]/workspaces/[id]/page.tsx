@@ -499,7 +499,8 @@ function useAutoScroll(
   messages: unknown[],
   messagesEndRef: React.RefObject<HTMLDivElement | null>,
   contentRef: React.RefObject<HTMLDivElement | null>,
-  viewportRef: React.RefObject<HTMLDivElement | null>
+  viewportRef: React.RefObject<HTMLDivElement | null>,
+  inputRef: React.RefObject<HTMLTextAreaElement | null>
 ) {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
@@ -587,11 +588,14 @@ function useAutoScroll(
 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
+    // Focus the input for convenience
+    inputRef.current?.focus();
+
     // Clear the flag after animation completes (smooth scroll typically ~300-500ms)
     setTimeout(() => {
       isScrollingToBottomRef.current = false;
     }, 500);
-  }, [messagesEndRef]);
+  }, [messagesEndRef, inputRef]);
 
   return { handleScroll, isNearBottom, scrollToBottom };
 }
@@ -682,7 +686,8 @@ function WorkspaceChatContent() {
     messages,
     messagesEndRef,
     contentRef,
-    viewportRef
+    viewportRef,
+    inputRef
   );
 
   // Determine connection status for indicator
