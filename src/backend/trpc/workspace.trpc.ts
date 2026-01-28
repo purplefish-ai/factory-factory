@@ -5,7 +5,9 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { GitClientFactory } from '../clients/git.client';
 import { execCommand, gitCommand } from '../lib/shell';
+import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { githubCLIService } from '../services/github-cli.service';
 import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
@@ -311,6 +313,113 @@ export const workspaceRouter = router({
     .query(({ input }) => {
       const { projectId, ...filters } = input;
       return workspaceAccessor.findByProjectId(projectId, filters);
+    }),
+
+  // Get unified project summary state for sidebar (workspaces + working status + git stats + review count)
+  getProjectSummaryState: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input }) => {
+      // 1. Fetch project (for defaultBranch) and ACTIVE workspaces with sessions in parallel
+      const [project, workspaces] = await Promise.all([
+        projectAccessor.findById(input.projectId),
+        workspaceAccessor.findByProjectIdWithSessions(input.projectId, {
+          status: WorkspaceStatus.ACTIVE,
+        }),
+      ]);
+
+      const defaultBranch = project?.defaultBranch ?? 'main';
+
+      // 2. Compute working status for each workspace
+      const workingStatusByWorkspace = new Map<string, boolean>();
+      for (const workspace of workspaces) {
+        const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+        workingStatusByWorkspace.set(workspace.id, sessionService.isAnySessionWorking(sessionIds));
+      }
+
+      // 3. Fetch git stats for all workspaces in parallel
+      const gitStatsResults: Record<
+        string,
+        { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null
+      > = {};
+
+      await Promise.all(
+        workspaces.map(async (workspace) => {
+          if (!workspace.worktreePath) {
+            gitStatsResults[workspace.id] = null;
+            return;
+          }
+
+          try {
+            // Check for uncommitted changes
+            const statusResult = await gitCommand(
+              ['status', '--porcelain'],
+              workspace.worktreePath
+            );
+            if (statusResult.code !== 0) {
+              gitStatsResults[workspace.id] = null;
+              return;
+            }
+            const hasUncommitted = statusResult.stdout.trim().length > 0;
+
+            // Get merge base with the project's default branch
+            const mergeBase = await getMergeBase(workspace.worktreePath, defaultBranch);
+
+            // Get all changes from merge base (committed + uncommitted)
+            const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
+            const diffResult = await gitCommand(diffArgs, workspace.worktreePath);
+
+            // Get file count from main-relative diff
+            const fileCountArgs = mergeBase
+              ? ['diff', '--name-only', mergeBase]
+              : ['diff', '--name-only'];
+            const fileCountResult = await gitCommand(fileCountArgs, workspace.worktreePath);
+            const total =
+              fileCountResult.code === 0
+                ? fileCountResult.stdout
+                    .trim()
+                    .split('\n')
+                    .filter((l) => l.length > 0).length
+                : 0;
+
+            const { additions, deletions } =
+              diffResult.code === 0
+                ? parseNumstatOutput(diffResult.stdout)
+                : { additions: 0, deletions: 0 };
+
+            gitStatsResults[workspace.id] = { total, additions, deletions, hasUncommitted };
+          } catch {
+            gitStatsResults[workspace.id] = null;
+          }
+        })
+      );
+
+      // 4. Fetch review count (unapproved PRs only)
+      let reviewCount = 0;
+      try {
+        const health = await githubCLIService.checkHealth();
+        if (health.isInstalled && health.isAuthenticated) {
+          const prs = await githubCLIService.listReviewRequests();
+          reviewCount = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
+        }
+      } catch {
+        // Silently fail - review count is non-critical
+      }
+
+      // 5. Build response
+      return {
+        workspaces: workspaces.map((w) => ({
+          id: w.id,
+          name: w.name,
+          branchName: w.branchName,
+          prUrl: w.prUrl,
+          prNumber: w.prNumber,
+          prState: w.prState,
+          prCiStatus: w.prCiStatus,
+          isWorking: workingStatusByWorkspace.get(w.id) ?? false,
+          gitStats: gitStatsResults[w.id] ?? null,
+        })),
+        reviewCount,
+      };
     }),
 
   // List workspaces with kanban state (for board view)
@@ -649,74 +758,6 @@ export const workspaceRouter = router({
 
       const files = parseGitStatusOutput(result.stdout);
       return { files, hasUncommitted: files.length > 0 };
-    }),
-
-  // Get batch git stats for multiple workspaces (for sidebar)
-  // Shows changes relative to the project's default branch (e.g., main)
-  getBatchGitStats: publicProcedure
-    .input(z.object({ workspaceIds: z.array(z.string()) }))
-    .query(async ({ input }) => {
-      const workspaces = await workspaceAccessor.findByIdsWithProject(input.workspaceIds);
-
-      const results: Record<
-        string,
-        { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null
-      > = {};
-
-      await Promise.all(
-        workspaces.map(async (workspace) => {
-          if (!workspace.worktreePath) {
-            results[workspace.id] = null;
-            return;
-          }
-
-          try {
-            // Check for uncommitted changes
-            const statusResult = await gitCommand(
-              ['status', '--porcelain'],
-              workspace.worktreePath
-            );
-            if (statusResult.code !== 0) {
-              results[workspace.id] = null;
-              return;
-            }
-            const hasUncommitted = statusResult.stdout.trim().length > 0;
-
-            // Get merge base with the project's default branch
-            const defaultBranch = workspace.project?.defaultBranch ?? 'main';
-            const mergeBase = await getMergeBase(workspace.worktreePath, defaultBranch);
-
-            // Get all changes from merge base (committed + uncommitted)
-            // If no merge base found, fall back to showing only uncommitted changes
-            const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
-            const diffResult = await gitCommand(diffArgs, workspace.worktreePath);
-
-            // Get file count from main-relative diff
-            const fileCountArgs = mergeBase
-              ? ['diff', '--name-only', mergeBase]
-              : ['diff', '--name-only'];
-            const fileCountResult = await gitCommand(fileCountArgs, workspace.worktreePath);
-            const total =
-              fileCountResult.code === 0
-                ? fileCountResult.stdout
-                    .trim()
-                    .split('\n')
-                    .filter((l) => l.length > 0).length
-                : 0;
-
-            const { additions, deletions } =
-              diffResult.code === 0
-                ? parseNumstatOutput(diffResult.stdout)
-                : { additions: 0, deletions: 0 };
-
-            results[workspace.id] = { total, additions, deletions, hasUncommitted };
-          } catch {
-            results[workspace.id] = null;
-          }
-        })
-      );
-
-      return results;
     }),
 
   // Get file diff for workspace (relative to project's default branch)

@@ -71,30 +71,14 @@ export function AppSidebar() {
 
   const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
 
-  // Fetch workspaces for the selected project
-  const { data: workspaces } = trpc.workspace.list.useQuery(
-    { projectId: selectedProjectId ?? '', status: 'ACTIVE' },
-    { enabled: !!selectedProjectId, refetchInterval: 5000 }
+  // Fetch unified project summary state (workspaces + working status + git stats + review count)
+  const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
+    { projectId: selectedProjectId ?? '' },
+    { enabled: !!selectedProjectId, refetchInterval: 2000 }
   );
 
-  // Fetch working status for all workspaces
-  const workspaceIds = workspaces?.map((w) => w.id) ?? [];
-  const { data: workingStatus } = trpc.session.getWorkspacesWorkingStatus.useQuery(
-    { workspaceIds },
-    { enabled: workspaceIds.length > 0, refetchInterval: 1000 }
-  );
-
-  // Fetch git stats for all workspaces (for showing change counts)
-  const { data: gitStats } = trpc.workspace.getBatchGitStats.useQuery(
-    { workspaceIds },
-    { enabled: workspaceIds.length > 0, refetchInterval: 10_000 }
-  );
-
-  // Fetch review requests count for badge (only count unapproved PRs)
-  const { data: reviewData } = trpc.prReview.listReviewRequests.useQuery(undefined, {
-    refetchInterval: 60_000, // Poll every 60 seconds
-  });
-  const reviewCount = reviewData?.prs?.filter((pr) => pr.reviewDecision !== 'APPROVED').length ?? 0;
+  const workspaces = projectState?.workspaces;
+  const reviewCount = projectState?.reviewCount ?? 0;
 
   const utils = trpc.useUtils();
 
@@ -312,8 +296,7 @@ export function AppSidebar() {
                 {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conditional rendering for PR/CI status badges */}
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
-                  const isWorking = workingStatus?.[workspace.id];
-                  const stats = gitStats?.[workspace.id];
+                  const { isWorking, gitStats: stats } = workspace;
                   const hasChanges =
                     stats && (stats.total > 0 || stats.additions > 0 || stats.deletions > 0);
                   return (
