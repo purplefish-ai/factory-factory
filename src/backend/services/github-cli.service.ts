@@ -403,31 +403,8 @@ class GitHubCLIService {
     branchName: string
   ): Promise<{ url: string; number: number } | null> {
     try {
-      // First check for open PRs
-      const { stdout: openStdout } = await execFileAsync(
-        'gh',
-        [
-          'pr',
-          'list',
-          '--head',
-          branchName,
-          '--repo',
-          `${owner}/${repo}`,
-          '--json',
-          'number,url',
-          '--limit',
-          '1',
-        ],
-        { timeout: 30_000 }
-      );
-
-      const openPrs = JSON.parse(openStdout) as Array<{ number: number; url: string }>;
-      if (openPrs.length > 0) {
-        return { url: openPrs[0].url, number: openPrs[0].number };
-      }
-
-      // If no open PR found, check for merged PRs
-      const { stdout: mergedStdout } = await execFileAsync(
+      // Fetch all PRs (open and merged) in a single API call
+      const { stdout } = await execFileAsync(
         'gh',
         [
           'pr',
@@ -437,18 +414,30 @@ class GitHubCLIService {
           '--repo',
           `${owner}/${repo}`,
           '--state',
-          'merged',
+          'all',
           '--json',
-          'number,url',
+          'number,url,state',
           '--limit',
-          '1',
+          '10',
         ],
         { timeout: 30_000 }
       );
 
-      const mergedPrs = JSON.parse(mergedStdout) as Array<{ number: number; url: string }>;
-      if (mergedPrs.length > 0) {
-        return { url: mergedPrs[0].url, number: mergedPrs[0].number };
+      const prs = JSON.parse(stdout) as Array<{ number: number; url: string; state: string }>;
+      if (prs.length === 0) {
+        return null;
+      }
+
+      // Prefer open PRs over merged/closed ones
+      const openPr = prs.find((pr) => pr.state === 'OPEN');
+      if (openPr) {
+        return { url: openPr.url, number: openPr.number };
+      }
+
+      // Fall back to merged PR if no open one exists
+      const mergedPr = prs.find((pr) => pr.state === 'MERGED');
+      if (mergedPr) {
+        return { url: mergedPr.url, number: mergedPr.number };
       }
 
       return null;

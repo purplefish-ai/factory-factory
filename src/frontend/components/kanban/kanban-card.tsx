@@ -90,9 +90,7 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (workspace.prUrl) {
-                      window.open(workspace.prUrl, '_blank', 'noopener,noreferrer');
-                    }
+                    window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
                   }}
                   className="text-muted-foreground hover:text-foreground"
                 >

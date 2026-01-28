@@ -357,9 +357,9 @@ export function AppSidebar() {
                                             );
                                           }
                                         }}
-                                        className={`shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full hover:opacity-80 transition-colors ${
+                                        className={`shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-colors ${
                                           workspace.prState === 'MERGED'
-                                            ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300'
+                                            ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300 hover:bg-purple-500/35'
                                             : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
                                         }`}
                                       >
