@@ -157,7 +157,12 @@ export function useTerminalWebSocket({
     };
 
     ws.onerror = () => {
-      onErrorRef.current?.('WebSocket connection error');
+      // Don't report errors if this was an intentional close (e.g., React Strict Mode unmount)
+      // The browser will still log "WebSocket is closed before connection established" but we
+      // won't propagate it to our error handler
+      if (!intentionalCloseRef.current) {
+        onErrorRef.current?.('WebSocket connection error');
+      }
     };
   }, [workspaceId]);
 
