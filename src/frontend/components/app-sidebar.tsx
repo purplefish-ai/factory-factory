@@ -204,17 +204,13 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="none">
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        {selectedProjectSlug ? (
-          <Link href={`/projects/${selectedProjectSlug}/workspaces`}>
-            <Logo
-              iconClassName="size-6"
-              textClassName="text-sm"
-              className="hover:opacity-80 transition-opacity"
-            />
-          </Link>
-        ) : (
-          <Logo iconClassName="size-6" textClassName="text-sm" />
-        )}
+        <Link href="/projects">
+          <Logo
+            iconClassName="size-6"
+            textClassName="text-sm"
+            className="hover:opacity-80 transition-opacity"
+          />
+        </Link>
 
         {projects && projects.length > 0 && (
           <div className="mt-3">

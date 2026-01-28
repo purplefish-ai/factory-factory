@@ -181,7 +181,7 @@ class ProjectAccessor {
     });
   }
 
-  list(filters?: ListProjectsFilters): Promise<Project[]> {
+  list(filters?: ListProjectsFilters) {
     const where: Prisma.ProjectWhereInput = {};
 
     if (filters?.isArchived !== undefined) {
@@ -195,7 +195,11 @@ class ProjectAccessor {
       orderBy: { updatedAt: 'desc' },
       include: {
         _count: {
-          select: { workspaces: true },
+          select: {
+            workspaces: {
+              where: { status: 'ACTIVE' },
+            },
+          },
         },
       },
     });
