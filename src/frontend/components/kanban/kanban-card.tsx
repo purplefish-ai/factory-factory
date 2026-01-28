@@ -79,7 +79,9 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
                   workspace.prState === 'APPROVED' &&
                     'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30',
                   workspace.prState === 'MERGED' &&
-                    'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30'
+                    'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30',
+                  workspace.prState === 'CLOSED' &&
+                    'bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/30'
                 )}
               >
                 {prBadge.label}
