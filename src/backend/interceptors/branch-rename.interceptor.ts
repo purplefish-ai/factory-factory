@@ -23,8 +23,9 @@ export const branchRenameInterceptor: ToolInterceptor = {
     }
 
     // Check if this was a `git branch -m` command (branch rename)
+    // Use regex to avoid false positives from strings containing "git branch -m"
     const command = event.input.command as string | undefined;
-    if (!command?.includes('git branch -m')) {
+    if (!(command && /\bgit\s+branch\s+-m\b/.test(command))) {
       return;
     }
 

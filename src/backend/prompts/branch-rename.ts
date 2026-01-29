@@ -6,8 +6,6 @@
  */
 
 export interface BranchRenameContext {
-  /** Current auto-generated branch name (e.g., "martin-purplefish/a38djnb") */
-  currentBranchName: string;
   /** Prefix to use for the new branch (e.g., "martin-purplefish") */
   branchPrefix: string;
   /** Workspace name/title */
