@@ -13,6 +13,7 @@ import {
   workspaceAccessor,
 } from '../resource_accessors/index';
 import {
+  cliHealthService,
   configService,
   createLogger,
   rateLimiter,
@@ -115,6 +116,16 @@ export const adminRouter = router({
     rateLimiter.resetUsageStats();
     return { success: true, message: 'API usage statistics reset' };
   }),
+
+  /**
+   * Check CLI dependencies health (Claude CLI, GitHub CLI).
+   * Returns status of each CLI and whether all are healthy.
+   */
+  checkCLIHealth: publicProcedure
+    .input(z.object({ forceRefresh: z.boolean().default(false) }).optional())
+    .query(({ input }) => {
+      return cliHealthService.checkHealth(input?.forceRefresh ?? false);
+    }),
 
   /**
    * Get all active processes (Claude and Terminal)
