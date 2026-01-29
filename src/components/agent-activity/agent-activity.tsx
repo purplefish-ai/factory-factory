@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
 import { isToolSequence, THINKING_SUFFIX } from '@/lib/claude-types';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
@@ -31,7 +32,7 @@ export interface MessageItemProps {
   message: ChatMessage;
 }
 
-export function MessageItem({ message }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message }: MessageItemProps) {
   // User messages
   if (message.source === 'user') {
     return (
@@ -53,7 +54,7 @@ export function MessageItem({ message }: MessageItemProps) {
   }
 
   return null;
-}
+});
 
 // =============================================================================
 // Grouped Message Item Renderer
@@ -66,9 +67,11 @@ export interface GroupedMessageItemRendererProps {
 /**
  * Renders either a regular message or a tool sequence group.
  */
-export function GroupedMessageItemRenderer({ item }: GroupedMessageItemRendererProps) {
+export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRenderer({
+  item,
+}: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     return <ToolSequenceGroup sequence={item} />;
   }
   return <MessageItem message={item} />;
-}
+});

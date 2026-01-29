@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import * as React from 'react';
+import { memo } from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type {
   ChatMessage,
@@ -87,7 +88,7 @@ interface AssistantMessageRendererProps {
 /**
  * Renders an assistant message, handling different message types.
  */
-export function AssistantMessageRenderer({
+export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
   message,
   messageId,
   className,
@@ -132,7 +133,7 @@ export function AssistantMessageRenderer({
   }
 
   return null;
-}
+});
 
 // =============================================================================
 // Tool Call Renderer
@@ -146,13 +147,16 @@ interface ToolCallRendererProps {
 /**
  * Renders a tool use or tool result message.
  */
-export function ToolCallRenderer({ message, className }: ToolCallRendererProps) {
+export const ToolCallRenderer = memo(function ToolCallRenderer({
+  message,
+  className,
+}: ToolCallRendererProps) {
   return (
     <div className={cn('my-1', className)}>
       <ToolInfoRenderer message={message} />
     </div>
   );
-}
+});
 
 // =============================================================================
 // Result Renderer
@@ -167,7 +171,10 @@ interface ResultRendererProps {
  * Renders a result message, typically showing completion info.
  * Uses markdown rendering to match history-loaded message display.
  */
-export function ResultRenderer({ message, className }: ResultRendererProps) {
+export const ResultRenderer = memo(function ResultRenderer({
+  message,
+  className,
+}: ResultRendererProps) {
   // Result messages often just indicate completion; we may not need to render them visibly
   // But if there's result content, show it with proper markdown formatting
   if (message.result && typeof message.result === 'string') {
@@ -180,7 +187,7 @@ export function ResultRenderer({ message, className }: ResultRendererProps) {
 
   // Don't render empty result messages
   return null;
-}
+});
 
 // =============================================================================
 // Stream Event Renderer
@@ -196,7 +203,11 @@ interface StreamEventRendererProps {
 /**
  * Renders a stream event, handling different event types.
  */
-function StreamEventRenderer({ event, messageId, className }: StreamEventRendererProps) {
+const StreamEventRenderer = memo(function StreamEventRenderer({
+  event,
+  messageId,
+  className,
+}: StreamEventRendererProps) {
   switch (event.type) {
     case 'content_block_start': {
       const block = event.content_block;
@@ -229,7 +240,7 @@ function StreamEventRenderer({ event, messageId, className }: StreamEventRendere
     default:
       return null;
   }
-}
+});
 
 // =============================================================================
 // Stream Delta Renderer
@@ -243,7 +254,10 @@ interface StreamDeltaRendererProps {
 /**
  * Renders a stream delta (partial content update).
  */
-export function StreamDeltaRenderer({ delta, className }: StreamDeltaRendererProps) {
+export const StreamDeltaRenderer = memo(function StreamDeltaRenderer({
+  delta,
+  className,
+}: StreamDeltaRendererProps) {
   if (delta.type === 'text_delta') {
     return <span className={cn('', className)}>{delta.text}</span>;
   }
@@ -253,7 +267,7 @@ export function StreamDeltaRenderer({ delta, className }: StreamDeltaRendererPro
   }
 
   return null;
-}
+});
 
 // =============================================================================
 // Error Renderer
@@ -267,7 +281,10 @@ interface ErrorRendererProps {
 /**
  * Renders an error message.
  */
-export function ErrorRenderer({ message, className }: ErrorRendererProps) {
+export const ErrorRenderer = memo(function ErrorRenderer({
+  message,
+  className,
+}: ErrorRendererProps) {
   const errorText = message.error || 'An unknown error occurred';
 
   return (
@@ -281,7 +298,7 @@ export function ErrorRenderer({ message, className }: ErrorRendererProps) {
       <div className="text-sm text-destructive">{errorText}</div>
     </div>
   );
-}
+});
 
 // =============================================================================
 // Thinking Renderer
@@ -306,7 +323,7 @@ interface ThinkingRendererProps {
  * - If there's subsequent content after this thinking block, it's complete
  * - Only the last thinking block (while agent is running) shows animation
  */
-function ThinkingRenderer({
+const ThinkingRenderer = memo(function ThinkingRenderer({
   text,
   messageId,
   truncateLength = DEFAULT_THINKING_TRUNCATE_LENGTH,
@@ -341,7 +358,7 @@ function ThinkingRenderer({
       )}
     </div>
   );
-}
+});
 
 // =============================================================================
 // System Message Renderer
@@ -355,7 +372,10 @@ interface SystemMessageRendererProps {
 /**
  * Renders system messages (init, status, etc.).
  */
-function SystemMessageRenderer({ message, className }: SystemMessageRendererProps) {
+const SystemMessageRenderer = memo(function SystemMessageRenderer({
+  message,
+  className,
+}: SystemMessageRendererProps) {
   // System init messages with tools
   if (message.subtype === 'init' && message.tools) {
     return (
@@ -368,7 +388,7 @@ function SystemMessageRenderer({ message, className }: SystemMessageRendererProp
 
   // Other system messages - usually don't need to be shown
   return null;
-}
+});
 
 // =============================================================================
 // Text Renderer
@@ -381,9 +401,9 @@ interface TextRendererProps {
 /**
  * Renders text content with full markdown support.
  */
-function TextRenderer({ text }: TextRendererProps) {
+const TextRenderer = memo(function TextRenderer({ text }: TextRendererProps) {
   return <MarkdownRenderer content={text} />;
-}
+});
 
 // =============================================================================
 // Message Wrapper
@@ -398,7 +418,11 @@ interface MessageWrapperProps {
 /**
  * Wrapper component for consistent message styling.
  */
-export function MessageWrapper({ chatMessage, children, className }: MessageWrapperProps) {
+export const MessageWrapper = memo(function MessageWrapper({
+  chatMessage,
+  children,
+  className,
+}: MessageWrapperProps) {
   const isUser = chatMessage.source === 'user';
 
   return (
@@ -406,7 +430,7 @@ export function MessageWrapper({ chatMessage, children, className }: MessageWrap
       <div className={cn('max-w-full', isUser ? 'text-right' : '')}>{children}</div>
     </div>
   );
-}
+});
 
 // =============================================================================
 // Loading Indicator
@@ -419,11 +443,13 @@ interface LoadingIndicatorProps {
 /**
  * Shows a loading/typing indicator when the agent is processing.
  */
-export function LoadingIndicator({ className }: LoadingIndicatorProps) {
+export const LoadingIndicator = memo(function LoadingIndicator({
+  className,
+}: LoadingIndicatorProps) {
   return (
     <div className={cn('flex items-center gap-2 text-muted-foreground', className)}>
       <Loader2 className="h-4 w-4 animate-spin" />
       <span className="text-sm">Agent is working...</span>
     </div>
   );
-}
+});
