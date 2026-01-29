@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "electron/dist/main/index.js",
+  "main": "electron/dist/electron/main/index.js",
   "packageManager": "pnpm@10.28.1",
   "bin": {
     "ff": "./dist/src/cli/index.js",
@@ -23,11 +23,10 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "storybook": "storybook dev -p 6006",
-    "dev:electron": "concurrently \"pnpm dev:backend\" \"wait-on http://localhost:3001/health && electron .\"",
+    "dev:electron": "tsc -p tsconfig.electron.json && concurrently \"pnpm dev:backend\" \"wait-on http://localhost:3001/health && BACKEND_PORT=3001 electron .\"",
     "dev:backend": "BACKEND_PORT=3001 tsx watch src/backend/index.ts",
-    "build:electron": "pnpm build && tsc -p tsconfig.electron.json && electron-builder",
+    "build:electron": "pnpm build && tsc -p tsconfig.electron.json && electron-builder install-app-deps && electron-builder",
     "start:electron": "electron .",
-    "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "prepare": "husky",
     "deps:check": "depcruise src --config .dependency-cruiser.cjs",
     "knip": "knip --include files,dependencies,unlisted"

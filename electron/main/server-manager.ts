@@ -2,7 +2,10 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { app } from 'electron';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * ServerManager handles the lifecycle of the backend server process
@@ -13,15 +16,22 @@ export class ServerManager {
 
   /**
    * Start the backend server.
-   * - Determines the database path using Electron's userData directory
-   * - Finds an available port
-   * - Runs database migrations
-   * - Spawns the backend process
-   * - Waits for the health endpoint to respond
+   * - In dev mode, connects to existing backend started by pnpm dev:backend
+   * - In production, spawns backend process and manages its lifecycle
    *
    * @returns The port the server is running on
    */
   async start(): Promise<number> {
+    // In dev mode, backend is already running via pnpm dev:backend
+    const devPort = process.env.BACKEND_PORT;
+    if (devPort) {
+      const port = Number.parseInt(devPort, 10);
+      console.log(`[electron] Dev mode: connecting to existing backend on port ${port}`);
+      await this.waitForHealth(port);
+      return port;
+    }
+
+    // Production mode: spawn our own backend
     // Database path - use Electron's userData directory
     const userDataPath = app.getPath('userData');
     const databasePath = join(userDataPath, 'data.db');
@@ -117,8 +127,8 @@ export class ServerManager {
       return join(process.resourcesPath, 'app');
     }
     // In development, use the project root
-    // Assuming electron/main/index.ts is compiled to electron/main/index.js
-    return join(__dirname, '..', '..');
+    // Compiled file is at electron/dist/electron/main/index.js
+    return join(__dirname, '..', '..', '..', '..');
   }
 
   /**

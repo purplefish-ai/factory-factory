@@ -1,6 +1,9 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow } from 'electron';
-import { ServerManager } from './server-manager';
+import { ServerManager } from './server-manager.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 const serverManager = new ServerManager();

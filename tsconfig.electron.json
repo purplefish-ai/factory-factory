@@ -4,5 +4,6 @@
     "outDir": "electron/dist",
     "noEmit": false
   },
-  "include": ["electron/**/*"]
+  "include": ["electron/**/*"],
+  "exclude": ["electron/dist"]
 }
