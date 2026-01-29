@@ -72,10 +72,9 @@ export function AppSidebar() {
   const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
 
   // Fetch unified project summary state (workspaces + working status + git stats + review count)
-  // Poll every 10s (git operations are expensive); staleTime prevents refetch on window focus
   const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
-    { enabled: !!selectedProjectId, refetchInterval: 10_000, staleTime: 8000 }
+    { enabled: !!selectedProjectId, refetchInterval: 2000 }
   );
 
   const workspaces = projectState?.workspaces;

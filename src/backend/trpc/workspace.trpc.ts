@@ -13,8 +13,11 @@ import { githubCLIService } from '../services/github-cli.service';
 // Cache the authenticated GitHub username (fetched once per server lifetime)
 let cachedGitHubUsername: string | null | undefined;
 
-// Limit concurrent git operations to prevent resource exhaustion
-const gitConcurrencyLimit = pLimit(3);
+// Limit concurrent git operations to prevent resource exhaustion.
+// The value 3 is arbitrary but works well in practice - high enough for parallelism,
+// low enough to avoid spawning too many git processes simultaneously.
+const DEFAULT_GIT_CONCURRENCY = 3;
+const gitConcurrencyLimit = pLimit(DEFAULT_GIT_CONCURRENCY);
 
 // Cache for GitHub review requests (expensive API call)
 let cachedReviewCount: { count: number; fetchedAt: number } | null = null;
