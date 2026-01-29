@@ -119,16 +119,6 @@ export default function NewWorkspacePage() {
               />
             </div>
 
-            {createWorkspace.isPending &&
-              (project.startupScriptCommand || project.startupScriptPath) && (
-                <Alert>
-                  <AlertDescription className="flex items-center gap-2">
-                    <Spinner className="h-4 w-4" />
-                    Running startup script... This may take a few minutes.
-                  </AlertDescription>
-                </Alert>
-              )}
-
             <div className="flex justify-end gap-4">
               <Button variant="outline" asChild disabled={createWorkspace.isPending}>
                 <Link to={`/projects/${slug}/workspaces`}>Cancel</Link>

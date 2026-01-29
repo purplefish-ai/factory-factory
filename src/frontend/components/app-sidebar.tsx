@@ -1,3 +1,4 @@
+import { useMutationState } from '@tanstack/react-query';
 import {
   CheckCircle2,
   Circle,
@@ -117,6 +118,12 @@ export function AppSidebar() {
     pendingWorkspaceName && workspaces?.some((w) => w.name === pendingWorkspaceName);
   const showCreatingPlaceholder = isCreatingWorkspace && !pendingWorkspaceAlreadyExists;
 
+  // Track which workspaces are being archived (mutation triggered from workspace detail page)
+  const archivingWorkspaceIds = useMutationState({
+    filters: { mutationKey: [['workspace', 'archive']], status: 'pending' },
+    select: (mutation) => (mutation.state.variables as { id: string } | undefined)?.id,
+  }).filter(Boolean) as string[];
+
   useEffect(() => {
     if (selectedProjectId) {
       setProjectContext(selectedProjectId);
@@ -177,19 +184,61 @@ export function AppSidebar() {
       <Sidebar collapsible="none">
         <SidebarHeader className="border-b border-sidebar-border p-4">
           <Logo iconClassName="size-6" textClassName="text-sm" />
-          <p className="text-xs text-muted-foreground mt-1">Loading...</p>
+          {/* Project selector skeleton */}
+          <div className="mt-3">
+            <Skeleton className="h-9 w-full rounded-md" />
+          </div>
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="flex flex-col">
+          {/* Workspaces section skeleton */}
+          <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <SidebarGroupLabel>
+              <Skeleton className="h-4 w-20" />
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="flex-1 min-h-0">
+              <SidebarMenu>
+                {/* Workspace item skeletons */}
+                {[1, 2, 3].map((i) => (
+                  <SidebarMenuItem key={i}>
+                    <SidebarMenuButton className="h-auto py-2 cursor-default">
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <div className="flex items-center gap-1.5">
+                          <Skeleton className="h-3 w-3 shrink-0" />
+                          <Skeleton className="h-4 flex-1" />
+                        </div>
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarSeparator />
+
+          {/* Navigation items skeleton */}
           <SidebarGroup>
             <SidebarGroupContent>
-              <div className="space-y-2 p-2">
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
-              </div>
+              <SidebarMenu>
+                {[1, 2].map((i) => (
+                  <SidebarMenuItem key={i}>
+                    <SidebarMenuButton className="cursor-default">
+                      <Skeleton className="h-4 w-4" />
+                      <Skeleton className="h-4 w-16" />
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
+        <SidebarFooter className="border-t border-sidebar-border p-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-8 w-8 rounded-md" />
+          </div>
+        </SidebarFooter>
       </Sidebar>
     );
   }
@@ -290,20 +339,29 @@ export function AppSidebar() {
                 {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conditional rendering for PR/CI status badges */}
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
+                  const isArchiving = archivingWorkspaceIds.includes(workspace.id);
                   const { isWorking, gitStats: stats } = workspace;
                   const hasChanges =
                     stats && (stats.total > 0 || stats.additions > 0 || stats.deletions > 0);
                   return (
                     <SidebarMenuItem key={workspace.id}>
-                      <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        className={`h-auto py-2 ${isArchiving ? 'opacity-50 pointer-events-none' : ''}`}
+                      >
                         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
                           <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
                             <div className="flex items-center gap-1.5">
-                              {workspace.branchName && (
+                              {isArchiving ? (
+                                <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                              ) : workspace.branchName ? (
                                 <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
-                              )}
+                              ) : null}
                               <span className="truncate font-medium text-sm">
-                                {workspace.branchName || workspace.name}
+                                {isArchiving
+                                  ? 'Archiving...'
+                                  : workspace.branchName || workspace.name}
                               </span>
                               {hasChanges && (
                                 <span className="ml-auto shrink-0 flex items-center gap-1 text-xs font-mono px-1 py-px rounded border border-border/60 bg-muted/80">

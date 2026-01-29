@@ -577,7 +577,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       setPendingPermission(null);
       setPendingQuestion(null);
       setStartingSession(false);
-      setLoadingSession(false);
+      // Set loadingSession to true immediately to prevent "No messages yet" flash
+      // while the WebSocket reconnects and loads the new session
+      setLoadingSession(true);
       setRunning(false);
       setQueuedMessages([]);
 
@@ -871,6 +873,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       return;
     }
 
+    // Set loading state immediately to prevent "No messages yet" flash
+    // while WebSocket connection is being established
+    setLoadingSession(true);
     connect();
 
     return () => {
