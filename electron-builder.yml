@@ -11,12 +11,17 @@ files:
 extraResources:
   - from: prisma/migrations
     to: prisma/migrations
+  - from: prisma/schema.prisma
+    to: prisma/schema.prisma
   - from: prompts
     to: prompts
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
   - node_modules/node-pty/**/*
+  - dist/**/*
 mac:
   category: public.app-category.developer-tools
   target: [dmg, zip]
