@@ -1,7 +1,7 @@
 'use client';
 
 import { ExternalLink } from 'lucide-react';
-import type { ComponentPropsWithoutRef } from 'react';
+import { type ComponentPropsWithoutRef, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -11,7 +11,10 @@ interface MarkdownRendererProps {
   className?: string;
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  content,
+  className,
+}: MarkdownRendererProps) {
   return (
     <div
       className={cn('prose prose-sm dark:prose-invert max-w-none break-words text-sm', className)}
@@ -65,4 +68,4 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
       </ReactMarkdown>
     </div>
   );
-}
+});

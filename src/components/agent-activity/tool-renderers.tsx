@@ -10,6 +10,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import * as React from 'react';
+import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type {
@@ -91,7 +92,7 @@ interface ToolInfoRendererProps {
  * Renders tool use or tool result information.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but readable conditional rendering
-export function ToolInfoRenderer({
+export const ToolInfoRenderer = memo(function ToolInfoRenderer({
   message,
   defaultOpen = false,
   isPending = false,
@@ -192,7 +193,7 @@ export function ToolInfoRenderer({
   }
 
   return null;
-}
+});
 
 // =============================================================================
 // Tool Sequence Group Renderer
@@ -209,7 +210,10 @@ interface ToolSequenceGroupProps {
  * - Single tool: Shows inline with status, expands to show input + result
  * - Multiple tools: Shows summary "3 tools: Read, Edit, Bash [✓][✓][✓]", expands to show all
  */
-export function ToolSequenceGroup({ sequence, defaultOpen = false }: ToolSequenceGroupProps) {
+export const ToolSequenceGroup = memo(function ToolSequenceGroup({
+  sequence,
+  defaultOpen = false,
+}: ToolSequenceGroupProps) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   const { pairedCalls } = sequence;
@@ -300,7 +304,7 @@ export function ToolSequenceGroup({ sequence, defaultOpen = false }: ToolSequenc
       </div>
     </Collapsible>
   );
-}
+});
 
 // =============================================================================
 // Paired Tool Call Renderer
@@ -315,7 +319,10 @@ interface PairedToolCallRendererProps {
  * Renders a single tool call paired with its result.
  * Shows: ToolName [status] - expands to show input and result.
  */
-function PairedToolCallRenderer({ call, defaultOpen = false }: PairedToolCallRendererProps) {
+const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
+  call,
+  defaultOpen = false,
+}: PairedToolCallRendererProps) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   const isPending = call.status === 'pending';
@@ -380,7 +387,7 @@ function PairedToolCallRenderer({ call, defaultOpen = false }: PairedToolCallRen
       </div>
     </Collapsible>
   );
-}
+});
 
 // =============================================================================
 // Tool Input Renderer
@@ -391,7 +398,7 @@ interface ToolInputRendererProps {
   input: Record<string, unknown>;
 }
 
-function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
+const ToolInputRenderer = memo(function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
   // Special rendering for common tools
   switch (name) {
     case 'Read':
@@ -472,7 +479,7 @@ function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
         </div>
       );
   }
-}
+});
 
 // =============================================================================
 // Tool Result Content Renderer
@@ -483,7 +490,10 @@ interface ToolResultContentRendererProps {
   isError: boolean;
 }
 
-function ToolResultContentRenderer({ content, isError }: ToolResultContentRendererProps) {
+const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
+  content,
+  isError,
+}: ToolResultContentRendererProps) {
   if (typeof content === 'string') {
     return (
       <div className="w-0 min-w-full">
@@ -527,7 +537,7 @@ function ToolResultContentRenderer({ content, isError }: ToolResultContentRender
       })}
     </div>
   );
-}
+});
 
 // =============================================================================
 // Tool Call Group Renderer
@@ -541,7 +551,7 @@ interface ToolCallGroupRendererProps {
 /**
  * Renders a group of related tool calls.
  */
-export function ToolCallGroupRenderer({
+export const ToolCallGroupRenderer = memo(function ToolCallGroupRenderer({
   toolCalls,
   defaultOpen = false,
 }: ToolCallGroupRendererProps) {
@@ -596,7 +606,7 @@ export function ToolCallGroupRenderer({
       </div>
     </Collapsible>
   );
-}
+});
 
 // =============================================================================
 // Tool Call Item
@@ -606,7 +616,7 @@ interface ToolCallItemProps {
   toolCall: ToolCallInfo;
 }
 
-function ToolCallItem({ toolCall }: ToolCallItemProps) {
+const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps) {
   const [isOpen, setIsOpen] = React.useState(false);
 
   return (
@@ -643,13 +653,13 @@ function ToolCallItem({ toolCall }: ToolCallItemProps) {
       </CollapsibleContent>
     </Collapsible>
   );
-}
+});
 
 // =============================================================================
 // Helper Components
 // =============================================================================
 
-function FilePathDisplay({ path }: { path: string }) {
+const FilePathDisplay = memo(function FilePathDisplay({ path }: { path: string }) {
   if (!path) {
     return null;
   }
@@ -666,7 +676,7 @@ function FilePathDisplay({ path }: { path: string }) {
       <span className="font-medium shrink-0">{filename}</span>
     </div>
   );
-}
+});
 
 // =============================================================================
 // Utility Functions
