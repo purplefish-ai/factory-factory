@@ -24,6 +24,8 @@ pnpm link --global
 
 ## Running
 
+### Web App
+
 ```bash
 # Using pnpm (recommended for development)
 pnpm dev
@@ -37,6 +39,21 @@ The server automatically:
 - Runs database migrations
 - Finds available ports if defaults are in use
 - Opens your browser when ready
+
+### Desktop App (Electron)
+
+```bash
+# Development with hot reload
+pnpm dev:electron
+
+# Build distributable
+pnpm build:electron
+```
+
+The Electron app stores data in the standard location for your OS:
+- **macOS:** `~/Library/Application Support/Factory Factory/`
+- **Windows:** `%APPDATA%/Factory Factory/`
+- **Linux:** `~/.config/Factory Factory/`
 
 ## CLI Reference
 
@@ -69,6 +86,10 @@ pnpm dev --no-open    # Without browser auto-open
 pnpm dev --verbose    # With detailed logging
 pnpm build            # Build for production
 pnpm start            # Start production server
+
+# Electron
+pnpm dev:electron     # Start Electron with hot reload
+pnpm build:electron   # Build distributable package
 
 # Quality
 pnpm test             # Run tests
