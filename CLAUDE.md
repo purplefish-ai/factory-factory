@@ -28,7 +28,7 @@ Project (repo configuration)
 ```
 
 **Key components:**
-- **Frontend (Next.js 16):** Project management, workspace UI, real-time chat
+- **Frontend (Vite + React Router v7):** Project management, workspace UI, real-time chat
 - **Backend (Express + tRPC):** API, WebSocket handlers for chat/terminal, git operations
 - **Database (SQLite + Prisma):** Project, Workspace, Session persistence
 
@@ -40,6 +40,7 @@ Project (repo configuration)
 
 - **Path aliases:** `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`
 - **Backend imports:** No `.js` extension needed (tsx handles module resolution)
+- **Frontend routes:** `src/client/routes/` - explicit React Router v7 configuration in `src/client/router.tsx`
 - **Database access:** All queries go through `src/backend/resource_accessors/`
 - **tRPC routers:** `src/backend/trpc/` - project, workspace, session, admin
 - **Claude integration:** `src/backend/claude/` - ClaudeClient, SessionManager, protocol parsing
