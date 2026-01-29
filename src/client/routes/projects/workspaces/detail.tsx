@@ -274,7 +274,12 @@ function ChatContent({
     // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Message List */}
-      <ScrollArea className="flex-1 min-h-0" viewportRef={viewportRef} onScroll={handleScroll}>
+      <ScrollArea
+        className="flex-1 min-h-0"
+        viewportRef={viewportRef}
+        onScroll={handleScroll}
+        smoothScroll
+      >
         <div ref={contentRef} className="p-4 space-y-2 min-w-0">
           {messages.length === 0 && !running && !loadingSession && !startingSession && (
             <EmptyState />
@@ -344,8 +349,12 @@ function ChatContent({
           onChange={setInputDraft}
           onHeightChange={() => {
             // Keep messages scrolled to bottom when input area grows
-            if (isNearBottom) {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+            // Use scrollTo with instant to override CSS smooth scrolling
+            if (isNearBottom && viewportRef.current) {
+              viewportRef.current.scrollTo({
+                top: viewportRef.current.scrollHeight,
+                behavior: 'instant',
+              });
             }
           }}
         />
@@ -574,7 +583,6 @@ function useSessionManagement({
 
 function useAutoScroll(
   messages: unknown[],
-  messagesEndRef: React.RefObject<HTMLDivElement | null>,
   contentRef: React.RefObject<HTMLDivElement | null>,
   viewportRef: React.RefObject<HTMLDivElement | null>,
   inputRef: React.RefObject<HTMLTextAreaElement | null>
@@ -599,12 +607,15 @@ function useAutoScroll(
     setIsNearBottom(nearBottom);
   }, [viewportRef]);
 
+  // Scroll to bottom when new messages are added
+  // Content size changes (streaming, expand/collapse) are handled by ResizeObserver below
   // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
   useEffect(() => {
-    if (isNearBottomRef.current && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    const viewport = viewportRef.current;
+    if (isNearBottomRef.current && viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
     }
-  }, [messages.length, messagesEndRef]);
+  }, [messages.length, viewportRef]);
 
   // Watch for content size changes (e.g., tool call expand/collapse)
   useEffect(() => {
@@ -624,14 +635,15 @@ function useAutoScroll(
       updateScrollState();
 
       // If still near bottom after content change, scroll to keep at bottom
-      if (isNearBottomRef.current && messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      const viewport = viewportRef.current;
+      if (isNearBottomRef.current && viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
       }
     });
 
     observer.observe(content);
     return () => observer.disconnect();
-  }, [contentRef, messagesEndRef, updateScrollState]);
+  }, [contentRef, viewportRef, updateScrollState]);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     // Don't update state while animating scroll-to-bottom (prevents flicker)
@@ -649,12 +661,17 @@ function useAutoScroll(
   }, []);
 
   const scrollToBottom = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
     // Set flag to prevent handleScroll from causing flicker during animation
     isScrollingToBottomRef.current = true;
     setIsNearBottom(true);
     isNearBottomRef.current = true;
 
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    viewport.scrollTop = viewport.scrollHeight;
 
     // Focus the input for convenience
     inputRef.current?.focus();
@@ -663,7 +680,7 @@ function useAutoScroll(
     setTimeout(() => {
       isScrollingToBottomRef.current = false;
     }, 500);
-  }, [messagesEndRef, inputRef]);
+  }, [viewportRef, inputRef]);
 
   return { handleScroll, isNearBottom, scrollToBottom };
 }
@@ -770,7 +787,6 @@ function WorkspaceChatContent() {
   // Auto-scroll behavior
   const { handleScroll, isNearBottom, scrollToBottom } = useAutoScroll(
     messages,
-    messagesEndRef,
     contentRef,
     viewportRef,
     inputRef
