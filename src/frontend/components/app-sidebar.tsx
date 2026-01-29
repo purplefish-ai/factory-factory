@@ -177,19 +177,61 @@ export function AppSidebar() {
       <Sidebar collapsible="none">
         <SidebarHeader className="border-b border-sidebar-border p-4">
           <Logo iconClassName="size-6" textClassName="text-sm" />
-          <p className="text-xs text-muted-foreground mt-1">Loading...</p>
+          {/* Project selector skeleton */}
+          <div className="mt-3">
+            <Skeleton className="h-9 w-full rounded-md" />
+          </div>
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="flex flex-col">
+          {/* Workspaces section skeleton */}
+          <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <SidebarGroupLabel>
+              <Skeleton className="h-4 w-20" />
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="flex-1 min-h-0">
+              <SidebarMenu>
+                {/* Workspace item skeletons */}
+                {[1, 2, 3].map((i) => (
+                  <SidebarMenuItem key={i}>
+                    <SidebarMenuButton className="h-auto py-2 cursor-default">
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <div className="flex items-center gap-1.5">
+                          <Skeleton className="h-3 w-3 shrink-0" />
+                          <Skeleton className="h-4 flex-1" />
+                        </div>
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarSeparator />
+
+          {/* Navigation items skeleton */}
           <SidebarGroup>
             <SidebarGroupContent>
-              <div className="space-y-2 p-2">
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
-              </div>
+              <SidebarMenu>
+                {[1, 2].map((i) => (
+                  <SidebarMenuItem key={i}>
+                    <SidebarMenuButton className="cursor-default">
+                      <Skeleton className="h-4 w-4" />
+                      <Skeleton className="h-4 w-16" />
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
+        <SidebarFooter className="border-t border-sidebar-border p-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-8 w-8 rounded-md" />
+          </div>
+        </SidebarFooter>
       </Sidebar>
     );
   }
