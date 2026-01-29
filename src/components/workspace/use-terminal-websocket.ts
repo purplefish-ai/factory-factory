@@ -33,6 +33,7 @@ interface UseTerminalWebSocketReturn {
   sendInput: (terminalId: string, data: string) => void;
   resize: (terminalId: string, cols: number, rows: number) => void;
   destroy: (terminalId: string) => void;
+  setActive: (terminalId: string) => void;
 }
 
 // =============================================================================
@@ -209,11 +210,19 @@ export function useTerminalWebSocket({
     }
   }, []);
 
+  // Set the active terminal (for MCP tools to know which terminal the user is viewing)
+  const setActive = useCallback((terminalId: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'set_active', terminalId }));
+    }
+  }, []);
+
   return {
     connected,
     create,
     sendInput,
     resize,
     destroy,
+    setActive,
   };
 }

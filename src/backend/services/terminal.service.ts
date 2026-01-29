@@ -80,12 +80,40 @@ class TerminalService {
   // Exit listeners by terminalId
   private exitListeners = new Map<string, Set<(exitCode: number) => void>>();
 
+  // Active terminal per workspace (for MCP tool to know which terminal user is viewing)
+  private activeTerminals = new Map<string, string>();
+
   // Resource monitoring interval
   private monitoringInterval: NodeJS.Timeout | null = null;
   private static readonly MONITORING_INTERVAL_MS = 5000; // 5 seconds
 
   // Max output buffer size per terminal (100KB) for restoration after reconnect
   private static readonly MAX_OUTPUT_BUFFER_SIZE = 100 * 1024;
+
+  /**
+   * Set the active terminal for a workspace.
+   * Called when the user switches terminal tabs in the UI.
+   */
+  setActiveTerminal(workspaceId: string, terminalId: string): void {
+    this.activeTerminals.set(workspaceId, terminalId);
+    logger.debug('Active terminal set', { workspaceId, terminalId });
+  }
+
+  /**
+   * Get the active terminal for a workspace.
+   * Returns null if no active terminal is set.
+   */
+  getActiveTerminal(workspaceId: string): string | null {
+    return this.activeTerminals.get(workspaceId) ?? null;
+  }
+
+  /**
+   * Clear the active terminal for a workspace.
+   */
+  clearActiveTerminal(workspaceId: string): void {
+    this.activeTerminals.delete(workspaceId);
+    logger.debug('Active terminal cleared', { workspaceId });
+  }
 
   /**
    * Ensure resource monitoring is running if there are terminals.
@@ -346,6 +374,11 @@ class TerminalService {
     // Clean up our listeners
     this.outputListeners.delete(terminalId);
     this.exitListeners.delete(terminalId);
+
+    // Clear active terminal if this was the active one
+    if (this.activeTerminals.get(workspaceId) === terminalId) {
+      this.activeTerminals.delete(workspaceId);
+    }
 
     // Dispose PTY event listeners before killing
     for (const dispose of instance.disposables) {

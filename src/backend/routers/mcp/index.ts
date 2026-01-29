@@ -1,6 +1,7 @@
 import { createLogger } from '../../services/logger.service';
 import { registerLockTools } from './lock.mcp';
 import { registerSystemTools } from './system.mcp';
+import { registerTerminalTools } from './terminal.mcp';
 
 const logger = createLogger('mcp');
 
@@ -13,6 +14,7 @@ export function initializeMcpTools(): void {
   // Register tool categories
   registerSystemTools();
   registerLockTools();
+  registerTerminalTools();
 
   logger.info('MCP tools initialized successfully');
 }
