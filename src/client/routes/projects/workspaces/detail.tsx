@@ -836,10 +836,16 @@ function WorkspaceChatContent() {
                 }}
                 disabled={archiveWorkspace.isPending}
               >
-                <Archive className="h-4 w-4" />
+                {archiveWorkspace.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Archive className="h-4 w-4" />
+                )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Archive</TooltipContent>
+            <TooltipContent>
+              {archiveWorkspace.isPending ? 'Archiving...' : 'Archive'}
+            </TooltipContent>
           </Tooltip>
           <ToggleRightPanelButton />
         </div>
