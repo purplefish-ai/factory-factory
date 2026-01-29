@@ -138,15 +138,18 @@ function EmptyState() {
 
 interface InitializationOverlayProps {
   workspaceId: string;
+  initStatus: 'PENDING' | 'INITIALIZING' | 'READY' | 'FAILED';
+  initErrorMessage: string | null;
   hasStartupScript: boolean;
 }
 
-function InitializationOverlay({ workspaceId, hasStartupScript }: InitializationOverlayProps) {
+function InitializationOverlay({
+  workspaceId,
+  initStatus,
+  initErrorMessage,
+  hasStartupScript,
+}: InitializationOverlayProps) {
   const utils = trpc.useUtils();
-  const { data: initStatus, isLoading } = trpc.workspace.getInitStatus.useQuery(
-    { id: workspaceId },
-    { refetchInterval: 1000 } // Poll every second
-  );
 
   const retryInit = trpc.workspace.retryInit.useMutation({
     onSuccess: () => {
@@ -157,13 +160,8 @@ function InitializationOverlay({ workspaceId, hasStartupScript }: Initialization
     },
   });
 
-  // Don't show overlay if workspace is ready
-  if (!isLoading && initStatus?.initStatus === 'READY') {
-    return null;
-  }
-
-  const isFailed = initStatus?.initStatus === 'FAILED';
-  const isInitializing = initStatus?.initStatus === 'INITIALIZING';
+  const isFailed = initStatus === 'FAILED';
+  const isInitializing = initStatus === 'INITIALIZING';
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -176,8 +174,7 @@ function InitializationOverlay({ workspaceId, hasStartupScript }: Initialization
             <div className="space-y-2">
               <h2 className="text-lg font-semibold">Workspace Setup Failed</h2>
               <p className="text-sm text-muted-foreground">
-                {initStatus?.initErrorMessage ||
-                  'An error occurred while setting up this workspace.'}
+                {initErrorMessage || 'An error occurred while setting up this workspace.'}
               </p>
             </div>
             <Button
@@ -848,9 +845,11 @@ function WorkspaceChatContent() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Initialization Overlay - shown while workspace is being set up */}
-      {isInitializing && (
+      {isInitializing && initStatus && (
         <InitializationOverlay
           workspaceId={workspaceId}
+          initStatus={initStatus.initStatus}
+          initErrorMessage={initStatus.initErrorMessage}
           hasStartupScript={initStatus.hasStartupScript}
         />
       )}

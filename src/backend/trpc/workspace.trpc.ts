@@ -580,12 +580,8 @@ export const workspaceRouter = router({
 
       // Start worktree initialization in the background (fire-and-forget)
       // This allows the user to be redirected to the workspace page immediately
-      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
-        // Error is already logged and handled inside the function
-        logger.error('Background workspace initialization failed', error as Error, {
-          workspaceId: workspace.id,
-        });
-      });
+      // Errors are logged and handled inside the function (updates initStatus to FAILED)
+      initializeWorkspaceWorktree(workspace.id, input.branchName);
 
       // Return immediately so frontend can redirect to the workspace page
       return workspace;
