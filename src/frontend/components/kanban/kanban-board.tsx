@@ -109,8 +109,8 @@ export function KanbanBoard() {
   }
 
   return (
-    <ScrollArea className="w-full whitespace-nowrap">
-      <div className="flex gap-4 pb-4">
+    <ScrollArea className="w-full h-full whitespace-nowrap">
+      <div className="flex gap-4 pb-4 h-full">
         {KANBAN_COLUMNS.map((column) => (
           <KanbanColumn
             key={column.id}
