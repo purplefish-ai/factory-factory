@@ -5,6 +5,7 @@
  * They are registered at startup and notified of tool start/complete events.
  */
 
+import { branchRenameInterceptor } from './branch-rename.interceptor';
 import { prDetectionInterceptor } from './pr-detection.interceptor';
 import { interceptorRegistry } from './registry';
 
@@ -12,6 +13,7 @@ import { interceptorRegistry } from './registry';
  * Register all interceptors. Called at server startup.
  */
 export function registerInterceptors(): void {
+  interceptorRegistry.register(branchRenameInterceptor);
   interceptorRegistry.register(prDetectionInterceptor);
 }
 
