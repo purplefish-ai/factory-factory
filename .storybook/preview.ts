@@ -1,7 +1,9 @@
 import { withThemeByClassName } from '@storybook/addon-themes';
 import type { Preview } from '@storybook/react';
+import React from 'react';
+import { MemoryRouter } from 'react-router';
 
-import '../src/app/globals.css';
+import '../src/client/globals.css';
 
 const preview: Preview = {
   parameters: {
@@ -11,12 +13,10 @@ const preview: Preview = {
         date: /Date$/i,
       },
     },
-    nextjs: {
-      appDirectory: true,
-    },
     layout: 'centered',
   },
   decorators: [
+    (Story) => React.createElement(MemoryRouter, null, React.createElement(Story)),
     withThemeByClassName({
       themes: {
         light: '',
