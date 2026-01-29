@@ -29,6 +29,7 @@ import {
   rateLimiter,
   reconciliationService,
   schedulerService,
+  sessionService,
 } from './services/index';
 import { terminalService } from './services/terminal.service';
 import { appRouter, createContext } from './trpc/index';
@@ -939,27 +940,27 @@ async function handleChatMessage(
       // Notify client that session is starting (Claude CLI spinning up)
       ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
 
+      // Get session options from database (includes workflow prompt)
+      const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
+      if (!sessionOpts) {
+        logger.error('[Chat WS] Failed to get session options', { dbSessionId });
+        ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+        break;
+      }
+
       // Map planModeEnabled to permissionMode
       const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
 
-      // Validate model value - only allow known models, fallback to default
+      // Validate model value - only allow known models, fallback to session model
       const validModels = ['sonnet', 'opus'];
       const requestedModel = message.selectedModel || message.model;
       const model =
-        requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
-
-      // Look up resumeClaudeSessionId from database
-      // The frontend no longer tracks claudeSessionId - it's a backend-only concern
-      const dbSession = await claudeSessionAccessor.findById(dbSessionId);
-      if (!dbSession) {
-        logger.warn('[Chat WS] Session not found during start', { dbSessionId });
-      }
-      const resumeClaudeSessionId = dbSession?.claudeSessionId ?? undefined;
+        requestedModel && validModels.includes(requestedModel) ? requestedModel : sessionOpts.model;
 
       await getOrCreateChatClient(dbSessionId, {
-        workingDir: message.workingDir || workingDir,
-        resumeClaudeSessionId,
-        systemPrompt: message.systemPrompt,
+        workingDir: sessionOpts.workingDir,
+        resumeClaudeSessionId: sessionOpts.resumeClaudeSessionId,
+        systemPrompt: sessionOpts.systemPrompt,
         model,
         thinkingEnabled: message.thinkingEnabled,
         permissionMode,
@@ -1016,8 +1017,33 @@ async function handleChatMessage(
         // Notify client that session is starting (Claude CLI spinning up)
         ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
 
-        // Auto-start if not running
-        const newClient = await getOrCreateChatClient(dbSessionId, { workingDir });
+        // Auto-start if not running - load session options including workflow prompt
+        const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
+        if (!sessionOpts) {
+          logger.error('[Chat WS] Failed to get session options for auto-start', { dbSessionId });
+          ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+          break;
+        }
+
+        // Map planModeEnabled to permissionMode (default to bypassPermissions for auto-start)
+        const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
+
+        // Validate model value - only allow known models, fallback to session model
+        const validModels = ['sonnet', 'opus'];
+        const requestedModel = message.selectedModel || message.model;
+        const model =
+          requestedModel && validModels.includes(requestedModel)
+            ? requestedModel
+            : sessionOpts.model;
+
+        const newClient = await getOrCreateChatClient(dbSessionId, {
+          workingDir: sessionOpts.workingDir,
+          resumeClaudeSessionId: sessionOpts.resumeClaudeSessionId,
+          systemPrompt: sessionOpts.systemPrompt,
+          model,
+          thinkingEnabled: message.thinkingEnabled,
+          permissionMode,
+        });
         ws.send(JSON.stringify({ type: 'started', dbSessionId }));
 
         // Send queued messages now that client is ready

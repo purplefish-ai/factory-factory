@@ -200,10 +200,21 @@ export class ClaudeProcess extends EventEmitter {
   static async spawn(options: ClaudeProcessOptions): Promise<ClaudeProcess> {
     const args = ClaudeProcess.buildArgs(options);
 
-    logger.info('Spawning Claude process', {
+    // Log the full command for debugging
+    const fullCommand = ['claude', ...args]
+      .map((arg) => (arg.includes(' ') ? `"${arg}"` : arg))
+      .join(' ');
+    logger.info('Spawning Claude process - full command', {
+      command: fullCommand,
       workingDir: options.workingDir,
-      args: args.join(' '),
+    });
+    logger.info('Spawning Claude process - options', {
+      hasSystemPrompt: !!options.systemPrompt,
+      systemPromptLength: options.systemPrompt?.length ?? 0,
+      systemPromptPreview: options.systemPrompt?.slice(0, 500) ?? '(none)',
       resumeClaudeSessionId: options.resumeClaudeSessionId,
+      model: options.model,
+      permissionMode: options.permissionMode,
     });
 
     const childProcess = spawn('claude', args, {
