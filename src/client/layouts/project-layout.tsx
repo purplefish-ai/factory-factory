@@ -1,14 +1,10 @@
-'use client';
-
-import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { useProjectContext } from '../../../frontend/lib/providers';
-import { trpc } from '../../../frontend/lib/trpc';
+import { Outlet, useParams } from 'react-router';
+import { useProjectContext } from '../../frontend/lib/providers';
+import { trpc } from '../../frontend/lib/trpc';
 
-export default function ProjectLayout({ children }: { children: React.ReactNode }) {
-  const params = useParams();
-  const router = useRouter();
-  const slug = params.slug as string;
+export function ProjectLayout() {
+  const { slug = '' } = useParams<{ slug: string }>();
   const { setProjectContext } = useProjectContext();
 
   const {
@@ -28,13 +24,6 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     };
   }, [project?.id, setProjectContext]);
 
-  useEffect(() => {
-    if (!(isLoading || project || error)) {
-      // Project not found, redirect to projects list
-      router.push('/projects');
-    }
-  }, [isLoading, project, error, router]);
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -51,5 +40,5 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     );
   }
 
-  return <>{children}</>;
+  return <Outlet />;
 }

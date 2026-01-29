@@ -1,10 +1,7 @@
-'use client';
-
 import type { Workspace } from '@prisma-gen/browser';
 import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,12 +10,11 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { Loading } from '@/frontend/components/loading';
-import { trpc } from '../../../../../frontend/lib/trpc';
+import { trpc } from '../../../../frontend/lib/trpc';
 
 export default function NewWorkspacePage() {
-  const params = useParams();
-  const router = useRouter();
-  const slug = params.slug as string;
+  const { slug = '' } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -29,7 +25,7 @@ export default function NewWorkspacePage() {
 
   const createWorkspace = trpc.workspace.create.useMutation({
     onSuccess: (workspace: Workspace) => {
-      router.push(`/projects/${slug}/workspaces/${workspace.id}`);
+      navigate(`/projects/${slug}/workspaces/${workspace.id}`);
     },
     onError: (err) => {
       setError(err.message);
@@ -66,7 +62,7 @@ export default function NewWorkspacePage() {
     <div className="space-y-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={`/projects/${slug}/workspaces`}>
+          <Link to={`/projects/${slug}/workspaces`}>
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
@@ -135,7 +131,7 @@ export default function NewWorkspacePage() {
 
             <div className="flex justify-end gap-4">
               <Button variant="outline" asChild disabled={createWorkspace.isPending}>
-                <Link href={`/projects/${slug}/workspaces`}>Cancel</Link>
+                <Link to={`/projects/${slug}/workspaces`}>Cancel</Link>
               </Button>
               <Button type="submit" disabled={createWorkspace.isPending}>
                 {createWorkspace.isPending && <Spinner className="mr-2 h-4 w-4" />}

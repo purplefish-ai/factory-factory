@@ -1,5 +1,3 @@
-'use client';
-
 import type { TRPCClient } from '@trpc/client';
 import type { CreateTRPCReact } from '@trpc/react-query';
 import { createTRPCReact, httpBatchLink } from '@trpc/react-query';
@@ -12,12 +10,8 @@ export type { AppRouter };
 export const trpc: CreateTRPCReact<AppRouter, unknown> = createTRPCReact<AppRouter>();
 
 export const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    // Browser should use current path
-    return '';
-  }
-  // SSR should use localhost
-  return `http://localhost:${process.env.BACKEND_PORT || 3001}`;
+  // Use relative path - works in both dev (Vite proxy) and prod (same origin)
+  return '';
 };
 
 /**

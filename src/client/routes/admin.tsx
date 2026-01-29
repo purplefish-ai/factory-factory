@@ -1,8 +1,6 @@
-'use client';
-
 import type { inferRouterOutputs } from '@trpc/server';
 import { Bot, Terminal } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -232,7 +230,7 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
                         <div className="flex flex-col">
                           {process.projectSlug ? (
                             <Link
-                              href={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
+                              to={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
                               className="font-medium hover:underline"
                             >
                               {process.workspaceName}
@@ -314,7 +312,7 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
                         <div className="flex flex-col">
                           {process.projectSlug ? (
                             <Link
-                              href={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
+                              to={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
                               className="font-medium hover:underline"
                             >
                               {process.workspaceName}

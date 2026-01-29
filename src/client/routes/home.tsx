@@ -1,12 +1,10 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { trpc } from '../frontend/lib/trpc';
+import { useNavigate } from 'react-router';
+import { trpc } from '../../frontend/lib/trpc';
 
-// Redirect root to project-scoped epics page
-export default function RootRedirect() {
-  const router = useRouter();
+// Redirect root to project-scoped page
+export default function HomePage() {
+  const navigate = useNavigate();
   const { data: projects, isLoading, error } = trpc.project.list.useQuery({ isArchived: false });
 
   useEffect(() => {
@@ -16,7 +14,7 @@ export default function RootRedirect() {
 
     // On error, redirect to projects page where error can be shown properly
     if (error) {
-      router.replace('/projects');
+      navigate('/projects', { replace: true });
       return;
     }
 
@@ -24,11 +22,11 @@ export default function RootRedirect() {
       // Get stored project or use first one
       const stored = localStorage.getItem('factoryfactory_selected_project_slug');
       const slug = stored || projects[0].slug;
-      router.replace(`/projects/${slug}`);
+      navigate(`/projects/${slug}`, { replace: true });
     } else {
-      router.replace('/projects/new');
+      navigate('/projects/new', { replace: true });
     }
-  }, [isLoading, projects, error, router]);
+  }, [isLoading, projects, error, navigate]);
 
   if (error) {
     return (

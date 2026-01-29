@@ -1,5 +1,3 @@
-'use client';
-
 import {
   AppWindow,
   Archive,
@@ -12,8 +10,8 @@ import {
   PanelRight,
   XCircle,
 } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
@@ -382,7 +380,7 @@ function useSessionManagement({
   selectedDbSessionId,
   setSelectedDbSessionId,
 }: UseSessionManagementOptions) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const utils = trpc.useUtils();
 
   // Ref to store pending quick action prompt (to send after session is ready)
@@ -411,7 +409,7 @@ function useSessionManagement({
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: () => {
-      router.push(`/projects/${slug}/workspaces`);
+      navigate(`/projects/${slug}/workspaces`);
     },
   });
 
@@ -636,10 +634,8 @@ function useAutoScroll(
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: main workspace component with multiple features
 function WorkspaceChatContent() {
-  const params = useParams();
-  const router = useRouter();
-  const slug = params.slug as string;
-  const workspaceId = params.id as string;
+  const { slug = '', id: workspaceId = '' } = useParams<{ slug: string; id: string }>();
+  const navigate = useNavigate();
 
   // Fetch workspace and session data
   const {
@@ -651,7 +647,7 @@ function WorkspaceChatContent() {
     recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
-  } = useWorkspaceData({ workspaceId });
+  } = useWorkspaceData({ workspaceId: workspaceId });
 
   const { rightPanelVisible } = useWorkspacePanel();
 
@@ -705,8 +701,8 @@ function WorkspaceChatContent() {
     handleNewChat,
     handleQuickAction,
   } = useSessionManagement({
-    workspaceId,
-    slug,
+    workspaceId: workspaceId,
+    slug: slug,
     claudeSessions,
     sendMessage,
     inputRef,
@@ -739,7 +735,7 @@ function WorkspaceChatContent() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <p className="text-destructive">Workspace not found</p>
-        <Button variant="outline" onClick={() => router.push(`/projects/${slug}/workspaces`)}>
+        <Button variant="outline" onClick={() => navigate(`/projects/${slug}/workspaces`)}>
           Back to workspaces
         </Button>
       </div>
@@ -856,6 +852,9 @@ function WorkspaceChatContent() {
         autoSaveId="workspace-main-panel"
       >
         {/* Left Panel: Session tabs + Main View Content */}
+        {/* NOTE: react-resizable-panels v4+ changed its API to use percentage strings (e.g., "70%")
+            instead of numbers. Do NOT change these to numbers - it will break panel sizing.
+            See: https://github.com/bvaughn/react-resizable-panels/releases/tag/4.0.0 */}
         <ResizablePanel defaultSize="70%" minSize="30%">
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
@@ -907,6 +906,7 @@ function WorkspaceChatContent() {
         </ResizablePanel>
 
         {/* Right Panel: Git/Files + Terminal (conditionally rendered) */}
+        {/* NOTE: Panel sizes must be percentage strings for react-resizable-panels v4+ */}
         {rightPanelVisible && (
           <>
             <ResizableHandle />
@@ -927,13 +927,15 @@ function WorkspaceChatContent() {
 // =============================================================================
 
 export default function WorkspaceDetailPage() {
-  const params = useParams();
-  const workspaceId = params.id as string;
+  const { id: workspaceId = '' } = useParams<{ id: string }>();
 
   return (
     <WorkspacePanelProvider workspaceId={workspaceId}>
       <Suspense fallback={<ChatLoading />}>
-        <WorkspaceChatContent />
+        {/* Key by workspaceId to reset all state when switching workspaces.
+            Without this, selectedDbSessionId would persist from the previous
+            workspace and no session tab would be highlighted. */}
+        <WorkspaceChatContent key={workspaceId} />
       </Suspense>
     </WorkspacePanelProvider>
   );
