@@ -95,22 +95,23 @@ export class ServerManager {
     }
 
     return new Promise((resolve) => {
+      // Force kill after 5 seconds if still running
+      const forceKillTimeout = setTimeout(() => {
+        if (this.backendProcess && !this.backendProcess.killed) {
+          console.log('[backend] Force killing process');
+          this.backendProcess.kill('SIGKILL');
+        }
+      }, 5000);
+
       // Set up exit handler
       proc.once('exit', () => {
+        clearTimeout(forceKillTimeout);
         this.backendProcess = null;
         resolve();
       });
 
       // Send SIGTERM for graceful shutdown
       proc.kill('SIGTERM');
-
-      // Force kill after 5 seconds if still running
-      setTimeout(() => {
-        if (this.backendProcess && !this.backendProcess.killed) {
-          console.log('[backend] Force killing process');
-          this.backendProcess.kill('SIGKILL');
-        }
-      }, 5000);
     });
   }
 
@@ -121,8 +122,8 @@ export class ServerManager {
    */
   private getResourcesPath(): string {
     if (app.isPackaged) {
-      // In packaged app, resources are in the app.asar or resources folder
-      return join(process.resourcesPath, 'app');
+      // In packaged app, files are in app.asar at the resources path root
+      return join(process.resourcesPath, 'app.asar');
     }
     // In development, use the project root
     // Compiled file is at electron/dist/electron/main/index.js
@@ -170,16 +171,21 @@ export class ServerManager {
 
   /**
    * Run database migrations using Prisma.
+   * Uses the bundled prisma CLI from node_modules.
    */
   private runMigrations(databasePath: string, resourcesPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const migrate = spawn('npx', ['prisma', 'migrate', 'deploy'], {
+      // Use bundled prisma CLI instead of npx (npx may not be available in packaged app)
+      const prismaBin = join(resourcesPath, 'node_modules', '.bin', 'prisma');
+
+      const migrate = spawn(prismaBin, ['migrate', 'deploy'], {
         cwd: resourcesPath,
         env: {
           ...process.env,
           DATABASE_URL: `file:${databasePath}`,
         },
         stdio: 'pipe',
+        shell: process.platform === 'win32', // Use shell on Windows for .cmd files
       });
 
       migrate.stdout?.on('data', (data: Buffer) => {

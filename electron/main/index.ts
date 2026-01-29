@@ -26,7 +26,17 @@ async function createWindow() {
 
 app.whenReady().then(createWindow);
 
+app.on('activate', () => {
+  // On macOS, re-create window when dock icon is clicked and no windows are open
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
+
 app.on('window-all-closed', async () => {
   await serverManager.stop();
-  app.quit();
+  // On macOS, apps typically stay open until explicitly quit
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });
