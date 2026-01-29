@@ -958,7 +958,7 @@ async function handleChatMessage(
         requestedModel && validModels.includes(requestedModel) ? requestedModel : sessionOpts.model;
 
       await getOrCreateChatClient(dbSessionId, {
-        workingDir: message.workingDir || sessionOpts.workingDir,
+        workingDir: sessionOpts.workingDir,
         resumeClaudeSessionId: sessionOpts.resumeClaudeSessionId,
         systemPrompt: sessionOpts.systemPrompt,
         model,
@@ -1025,11 +1025,24 @@ async function handleChatMessage(
           break;
         }
 
+        // Map planModeEnabled to permissionMode (default to bypassPermissions for auto-start)
+        const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
+
+        // Validate model value - only allow known models, fallback to session model
+        const validModels = ['sonnet', 'opus'];
+        const requestedModel = message.selectedModel || message.model;
+        const model =
+          requestedModel && validModels.includes(requestedModel)
+            ? requestedModel
+            : sessionOpts.model;
+
         const newClient = await getOrCreateChatClient(dbSessionId, {
           workingDir: sessionOpts.workingDir,
           resumeClaudeSessionId: sessionOpts.resumeClaudeSessionId,
           systemPrompt: sessionOpts.systemPrompt,
-          model: sessionOpts.model,
+          model,
+          thinkingEnabled: message.thinkingEnabled,
+          permissionMode,
         });
         ws.send(JSON.stringify({ type: 'started', dbSessionId }));
 
