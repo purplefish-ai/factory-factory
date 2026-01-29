@@ -50,7 +50,7 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
       {/* Column Content */}
       <div
         className={cn(
-          'flex-1 overflow-y-auto p-2 space-y-2 min-h-[200px] rounded-b-lg border border-t-0',
+          'flex-1 overflow-y-auto p-2 space-y-2 min-h-0 rounded-b-lg border border-t-0',
           isEmpty && 'border-dashed'
         )}
       >
