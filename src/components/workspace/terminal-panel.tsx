@@ -43,6 +43,10 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
   // This handles the race condition where output arrives before the 'created' message
   const outputBufferRef = useRef<Map<string, string>>(new Map());
 
+  // Ref to hold setActive function to break circular dependency with callbacks
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: Placeholder until hook initializes
+  const setActiveRef = useRef<(terminalId: string) => void>(() => {});
+
   // Handle terminal output - route to correct tab by terminalId
   const handleOutput = useCallback((terminalId: string, data: string) => {
     setTabs((prev) => {
@@ -74,6 +78,9 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
         )
       );
       pendingTabIdRef.current = null;
+
+      // Notify backend that this terminal is now active
+      setActiveRef.current(terminalId);
     }
   }, []);
 
@@ -128,8 +135,13 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
         }));
 
         // Set the first tab as active
-        if (restoredTabs.length > 0) {
-          setTimeout(() => setActiveTabId(restoredTabs[0].id), 0);
+        if (restoredTabs.length > 0 && restoredTabs[0].terminalId) {
+          const firstTerminalId = restoredTabs[0].terminalId;
+          setTimeout(() => {
+            setActiveTabId(restoredTabs[0].id);
+            // Notify backend of active terminal
+            setActiveRef.current(firstTerminalId);
+          }, 0);
         }
 
         return restoredTabs;
@@ -138,7 +150,7 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
     []
   );
 
-  const { connected, create, sendInput, resize, destroy } = useTerminalWebSocket({
+  const { connected, create, sendInput, resize, destroy, setActive } = useTerminalWebSocket({
     workspaceId,
     onOutput: handleOutput,
     onCreated: handleCreated,
@@ -146,6 +158,9 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
     onError: handleError,
     onTerminalList: handleTerminalList,
   });
+
+  // Update ref so callbacks can access setActive
+  setActiveRef.current = setActive;
 
   // Create new terminal tab
   const handleNewTab = useCallback(() => {
@@ -182,17 +197,25 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
 
         // Update active tab if we're closing the current one
         // Use setTimeout to avoid state update during render
-        if (activeTabId === id) {
+        if (activeTabId === id && filtered.length > 0) {
           const closedIndex = prev.findIndex((t) => t.id === id);
           // Prefer the tab before the closed one, or the first remaining tab
           const newActiveTab = filtered[closedIndex - 1] ?? filtered[0];
-          setTimeout(() => setActiveTabId(newActiveTab?.id ?? null), 0);
+          setTimeout(() => {
+            setActiveTabId(newActiveTab.id);
+            // Notify backend of new active terminal
+            if (newActiveTab.terminalId) {
+              setActive(newActiveTab.terminalId);
+            }
+          }, 0);
+        } else if (activeTabId === id) {
+          setTimeout(() => setActiveTabId(null), 0);
         }
 
         return filtered;
       });
     },
-    [activeTabId, destroy]
+    [activeTabId, destroy, setActive]
   );
 
   // Handle terminal input - send to the active tab's terminal
@@ -215,6 +238,18 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
       }
     },
     [activeTabId, tabs, resize]
+  );
+
+  // Handle tab selection - update local state and notify backend
+  const handleSelectTab = useCallback(
+    (tabId: string) => {
+      setActiveTabId(tabId);
+      const tab = tabs.find((t) => t.id === tabId);
+      if (tab?.terminalId) {
+        setActive(tab.terminalId);
+      }
+    },
+    [tabs, setActive]
   );
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
@@ -265,7 +300,7 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
         <TerminalTabBar
           tabs={tabs}
           activeTabId={activeTabId}
-          onSelectTab={setActiveTabId}
+          onSelectTab={handleSelectTab}
           onCloseTab={handleCloseTab}
           onNewTab={handleNewTab}
         />

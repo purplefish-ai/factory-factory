@@ -1702,6 +1702,17 @@ function handleTerminalUpgrade(
             break;
           }
 
+          case 'set_active': {
+            if (message.terminalId) {
+              logger.debug('Setting active terminal', {
+                workspaceId,
+                terminalId: message.terminalId,
+              });
+              terminalService.setActiveTerminal(workspaceId, message.terminalId);
+            }
+            break;
+          }
+
           default:
             logger.warn('Unknown message type', { type: message.type });
         }
