@@ -369,7 +369,10 @@ function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   );
 
   const { data: claudeSessions, isLoading: sessionsLoading } =
-    trpc.session.listClaudeSessions.useQuery({ workspaceId }, { refetchInterval: 5000 });
+    trpc.session.listClaudeSessions.useQuery(
+      { workspaceId },
+      { refetchInterval: 5000, staleTime: 3000 }
+    );
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
 

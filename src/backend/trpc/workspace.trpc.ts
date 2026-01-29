@@ -2,6 +2,7 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import pLimit from 'p-limit';
 import { z } from 'zod';
 import { GitClientFactory } from '../clients/git.client';
 import { execCommand, gitCommand } from '../lib/shell';
@@ -11,6 +12,13 @@ import { githubCLIService } from '../services/github-cli.service';
 
 // Cache the authenticated GitHub username (fetched once per server lifetime)
 let cachedGitHubUsername: string | null | undefined;
+
+// Limit concurrent git operations to prevent resource exhaustion
+const gitConcurrencyLimit = pLimit(3);
+
+// Cache for GitHub review requests (expensive API call)
+let cachedReviewCount: { count: number; fetchedAt: number } | null = null;
+const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
 
 import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
@@ -216,6 +224,50 @@ async function getMergeBase(worktreePath: string, defaultBranch: string): Promis
     }
   }
   return null;
+}
+
+/**
+ * Fetch git stats (additions/deletions/file count) for a single workspace.
+ * Returns null if the workspace has no worktree or git commands fail.
+ */
+async function getWorkspaceGitStats(
+  worktreePath: string,
+  defaultBranch: string
+): Promise<{
+  total: number;
+  additions: number;
+  deletions: number;
+  hasUncommitted: boolean;
+} | null> {
+  // Check for uncommitted changes
+  const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
+  if (statusResult.code !== 0) {
+    return null;
+  }
+  const hasUncommitted = statusResult.stdout.trim().length > 0;
+
+  // Get merge base with the project's default branch
+  const mergeBase = await getMergeBase(worktreePath, defaultBranch);
+
+  // Get all changes from merge base (committed + uncommitted)
+  const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
+  const diffResult = await gitCommand(diffArgs, worktreePath);
+
+  // Get file count from main-relative diff
+  const fileCountArgs = mergeBase ? ['diff', '--name-only', mergeBase] : ['diff', '--name-only'];
+  const fileCountResult = await gitCommand(fileCountArgs, worktreePath);
+  const total =
+    fileCountResult.code === 0
+      ? fileCountResult.stdout
+          .trim()
+          .split('\n')
+          .filter((l) => l.length > 0).length
+      : 0;
+
+  const { additions, deletions } =
+    diffResult.code === 0 ? parseNumstatOutput(diffResult.stdout) : { additions: 0, deletions: 0 };
+
+  return { total, additions, deletions, hasUncommitted };
 }
 
 /**
@@ -436,73 +488,47 @@ export const workspaceRouter = router({
         workingStatusByWorkspace.set(workspace.id, sessionService.isAnySessionWorking(sessionIds));
       }
 
-      // 3. Fetch git stats for all workspaces in parallel
+      // 3. Fetch git stats for all workspaces with concurrency limit
       const gitStatsResults: Record<
         string,
         { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null
       > = {};
 
       await Promise.all(
-        workspaces.map(async (workspace) => {
-          if (!workspace.worktreePath) {
-            gitStatsResults[workspace.id] = null;
-            return;
-          }
-
-          try {
-            // Check for uncommitted changes
-            const statusResult = await gitCommand(
-              ['status', '--porcelain'],
-              workspace.worktreePath
-            );
-            if (statusResult.code !== 0) {
+        workspaces.map((workspace) =>
+          gitConcurrencyLimit(async () => {
+            if (!workspace.worktreePath) {
               gitStatsResults[workspace.id] = null;
               return;
             }
-            const hasUncommitted = statusResult.stdout.trim().length > 0;
-
-            // Get merge base with the project's default branch
-            const mergeBase = await getMergeBase(workspace.worktreePath, defaultBranch);
-
-            // Get all changes from merge base (committed + uncommitted)
-            const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
-            const diffResult = await gitCommand(diffArgs, workspace.worktreePath);
-
-            // Get file count from main-relative diff
-            const fileCountArgs = mergeBase
-              ? ['diff', '--name-only', mergeBase]
-              : ['diff', '--name-only'];
-            const fileCountResult = await gitCommand(fileCountArgs, workspace.worktreePath);
-            const total =
-              fileCountResult.code === 0
-                ? fileCountResult.stdout
-                    .trim()
-                    .split('\n')
-                    .filter((l) => l.length > 0).length
-                : 0;
-
-            const { additions, deletions } =
-              diffResult.code === 0
-                ? parseNumstatOutput(diffResult.stdout)
-                : { additions: 0, deletions: 0 };
-
-            gitStatsResults[workspace.id] = { total, additions, deletions, hasUncommitted };
-          } catch {
-            gitStatsResults[workspace.id] = null;
-          }
-        })
+            try {
+              gitStatsResults[workspace.id] = await getWorkspaceGitStats(
+                workspace.worktreePath,
+                defaultBranch
+              );
+            } catch {
+              gitStatsResults[workspace.id] = null;
+            }
+          })
+        )
       );
 
-      // 4. Fetch review count (unapproved PRs only)
+      // 4. Fetch review count (unapproved PRs only) with caching
       let reviewCount = 0;
-      try {
-        const health = await githubCLIService.checkHealth();
-        if (health.isInstalled && health.isAuthenticated) {
-          const prs = await githubCLIService.listReviewRequests();
-          reviewCount = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
+      const now = Date.now();
+      if (cachedReviewCount && now - cachedReviewCount.fetchedAt < REVIEW_CACHE_TTL_MS) {
+        reviewCount = cachedReviewCount.count;
+      } else {
+        try {
+          const health = await githubCLIService.checkHealth();
+          if (health.isInstalled && health.isAuthenticated) {
+            const prs = await githubCLIService.listReviewRequests();
+            reviewCount = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
+            cachedReviewCount = { count: reviewCount, fetchedAt: now };
+          }
+        } catch {
+          // Silently fail - review count is non-critical
         }
-      } catch {
-        // Silently fail - review count is non-critical
       }
 
       // 5. Build response

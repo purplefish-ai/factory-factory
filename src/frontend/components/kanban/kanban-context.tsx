@@ -71,7 +71,10 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     isError,
     error,
     refetch,
-  } = trpc.workspace.listWithKanbanState.useQuery({ projectId }, { refetchInterval: 5000 });
+  } = trpc.workspace.listWithKanbanState.useQuery(
+    { projectId },
+    { refetchInterval: 15_000, staleTime: 10_000 }
+  );
 
   const toggleColumnVisibility = (columnId: KanbanColumnType) => {
     setHiddenColumns((prev) => {
