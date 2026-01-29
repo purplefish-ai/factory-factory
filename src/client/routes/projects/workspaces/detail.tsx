@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   AppWindow,
   Archive,
   ArrowDown,
@@ -8,6 +9,7 @@ import {
   GitPullRequest,
   Loader2,
   PanelRight,
+  RefreshCw,
   XCircle,
 } from 'lucide-react';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -125,6 +127,89 @@ function EmptyState() {
       <div className="text-muted-foreground space-y-2">
         <p className="text-lg font-medium">No messages yet</p>
         <p className="text-sm">Start a conversation by typing a message below.</p>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Workspace Initialization Overlay
+// =============================================================================
+
+interface InitializationOverlayProps {
+  workspaceId: string;
+  hasStartupScript: boolean;
+}
+
+function InitializationOverlay({ workspaceId, hasStartupScript }: InitializationOverlayProps) {
+  const utils = trpc.useUtils();
+  const { data: initStatus, isLoading } = trpc.workspace.getInitStatus.useQuery(
+    { id: workspaceId },
+    { refetchInterval: 1000 } // Poll every second
+  );
+
+  const retryInit = trpc.workspace.retryInit.useMutation({
+    onSuccess: () => {
+      utils.workspace.getInitStatus.invalidate({ id: workspaceId });
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Don't show overlay if workspace is ready
+  if (!isLoading && initStatus?.initStatus === 'READY') {
+    return null;
+  }
+
+  const isFailed = initStatus?.initStatus === 'FAILED';
+  const isInitializing = initStatus?.initStatus === 'INITIALIZING';
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4 p-8 max-w-md text-center">
+        {isFailed ? (
+          <>
+            <div className="rounded-full bg-destructive/10 p-3">
+              <AlertTriangle className="h-8 w-8 text-destructive" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">Workspace Setup Failed</h2>
+              <p className="text-sm text-muted-foreground">
+                {initStatus?.initErrorMessage ||
+                  'An error occurred while setting up this workspace.'}
+              </p>
+            </div>
+            <Button
+              onClick={() => retryInit.mutate({ id: workspaceId })}
+              disabled={retryInit.isPending}
+            >
+              {retryInit.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry Setup
+                </>
+              )}
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">Setting up workspace...</h2>
+              <p className="text-sm text-muted-foreground">
+                {isInitializing && hasStartupScript
+                  ? 'Running startup script. This may take a few minutes.'
+                  : 'Creating git worktree and preparing your workspace.'}
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -651,6 +736,18 @@ function WorkspaceChatContent() {
 
   const { rightPanelVisible } = useWorkspacePanel();
 
+  // Query init status to show initialization overlay
+  const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
+    { id: workspaceId },
+    {
+      // Poll while not ready
+      refetchInterval: (query) => {
+        const status = query.state.data?.initStatus;
+        return status === 'READY' || status === 'FAILED' ? false : 1000;
+      },
+    }
+  );
+
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
 
@@ -745,8 +842,19 @@ function WorkspaceChatContent() {
   // The running session is always the currently selected session
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
+  // Check if workspace is still initializing
+  const isInitializing = initStatus && initStatus.initStatus !== 'READY';
+
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="relative flex h-full flex-col overflow-hidden">
+      {/* Initialization Overlay - shown while workspace is being set up */}
+      {isInitializing && (
+        <InitializationOverlay
+          workspaceId={workspaceId}
+          hasStartupScript={initStatus.hasStartupScript}
+        />
+      )}
+
       {/* Header: Branch name, status, and toggle button */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-3">

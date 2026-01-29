@@ -296,6 +296,96 @@ async function openPathInIde(ide: string, targetPath: string): Promise<boolean> 
 }
 
 // =============================================================================
+// Background Initialization
+// =============================================================================
+
+/**
+ * Initialize workspace worktree in the background.
+ * This function is called after the workspace record is created and allows
+ * the API to return immediately while the worktree is being set up.
+ */
+async function initializeWorkspaceWorktree(
+  workspaceId: string,
+  requestedBranchName?: string
+): Promise<void> {
+  try {
+    const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspaceId);
+    if (!workspaceWithProject?.project) {
+      throw new Error('Workspace project not found');
+    }
+
+    // Mark as initializing
+    await workspaceAccessor.updateInitStatus(workspaceId, 'INITIALIZING');
+
+    const project = workspaceWithProject.project;
+    const gitClient = GitClientFactory.forProject({
+      repoPath: project.repoPath,
+      worktreeBasePath: project.worktreeBasePath,
+    });
+
+    const worktreeName = `workspace-${workspaceId}`;
+    const baseBranch = requestedBranchName ?? project.defaultBranch;
+
+    // Validate that the base branch exists before attempting to create worktree
+    const branchExists = await gitClient.branchExists(baseBranch);
+    if (!branchExists) {
+      // Also check if it's a remote branch (origin/branchName)
+      const remoteBranchExists = await gitClient.branchExists(`origin/${baseBranch}`);
+      if (!remoteBranchExists) {
+        throw new Error(
+          `Branch '${baseBranch}' does not exist. Please specify an existing branch or leave empty to use the default branch '${project.defaultBranch}'.`
+        );
+      }
+    }
+
+    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
+      branchPrefix: project.githubOwner ?? undefined,
+    });
+    const worktreePath = gitClient.getWorktreePath(worktreeName);
+
+    // Update workspace with worktree info
+    await workspaceAccessor.update(workspaceId, {
+      worktreePath,
+      branchName: worktreeInfo.branchName,
+    });
+
+    // Run startup script if configured
+    if (startupScriptService.hasStartupScript(project)) {
+      logger.info('Running startup script for workspace', {
+        workspaceId,
+        hasCommand: !!project.startupScriptCommand,
+        hasScriptPath: !!project.startupScriptPath,
+      });
+
+      const scriptResult = await startupScriptService.runStartupScript(
+        { ...workspaceWithProject, worktreePath },
+        project
+      );
+
+      // If script failed, log but don't throw (workspace is still usable)
+      if (!scriptResult.success) {
+        const finalWorkspace = await workspaceAccessor.findById(workspaceId);
+        logger.warn('Startup script failed but workspace created', {
+          workspaceId,
+          error: finalWorkspace?.initErrorMessage,
+        });
+      }
+      // startup script service already updates init status
+      return;
+    }
+
+    // No startup script - mark as ready
+    await workspaceAccessor.updateInitStatus(workspaceId, 'READY');
+  } catch (error) {
+    logger.error('Failed to initialize workspace worktree', error as Error, {
+      workspaceId,
+    });
+    // Mark workspace as failed so user can see the error and retry
+    await workspaceAccessor.updateInitStatus(workspaceId, 'FAILED', (error as Error).message);
+  }
+}
+
+// =============================================================================
 // Router
 // =============================================================================
 
@@ -488,88 +578,17 @@ export const workspaceRouter = router({
       // Create the workspace record
       const workspace = await workspaceAccessor.create(input);
 
-      // Create the worktree for this workspace
-      try {
-        const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspace.id);
-        if (!workspaceWithProject?.project) {
-          throw new Error('Workspace project not found');
-        }
-
-        const project = workspaceWithProject.project;
-        const gitClient = GitClientFactory.forProject({
-          repoPath: project.repoPath,
-          worktreeBasePath: project.worktreeBasePath,
-        });
-
-        const worktreeName = `workspace-${workspace.id}`;
-        const baseBranch = input.branchName ?? project.defaultBranch;
-
-        // Validate that the base branch exists before attempting to create worktree
-        const branchExists = await gitClient.branchExists(baseBranch);
-        if (!branchExists) {
-          // Also check if it's a remote branch (origin/branchName)
-          const remoteBranchExists = await gitClient.branchExists(`origin/${baseBranch}`);
-          if (!remoteBranchExists) {
-            throw new Error(
-              `Branch '${baseBranch}' does not exist. Please specify an existing branch or leave empty to use the default branch '${project.defaultBranch}'.`
-            );
-          }
-        }
-
-        const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
-          branchPrefix: project.githubOwner ?? undefined,
-        });
-        const worktreePath = gitClient.getWorktreePath(worktreeName);
-
-        // Update workspace with worktree info
-        const updatedWorkspace = await workspaceAccessor.update(workspace.id, {
-          worktreePath,
-          branchName: worktreeInfo.branchName,
-        });
-
-        // Run startup script if configured
-        if (startupScriptService.hasStartupScript(project)) {
-          logger.info('Running startup script for workspace', {
-            workspaceId: workspace.id,
-            hasCommand: !!project.startupScriptCommand,
-            hasScriptPath: !!project.startupScriptPath,
-          });
-
-          const scriptResult = await startupScriptService.runStartupScript(
-            { ...updatedWorkspace, worktreePath },
-            project
-          );
-
-          // Re-fetch workspace to get updated init status
-          const finalWorkspace = await workspaceAccessor.findById(workspace.id);
-          if (!finalWorkspace) {
-            throw new Error('Workspace not found after initialization');
-          }
-
-          // If script failed, log but don't throw (workspace is still usable)
-          if (!scriptResult.success) {
-            logger.warn('Startup script failed but workspace created', {
-              workspaceId: workspace.id,
-              error: finalWorkspace.initErrorMessage,
-            });
-          }
-
-          return finalWorkspace;
-        }
-
-        // No startup script - mark as ready
-        return workspaceAccessor.updateInitStatus(workspace.id, 'READY');
-      } catch (error) {
-        logger.error('Failed to create worktree for workspace', error as Error, {
+      // Start worktree initialization in the background (fire-and-forget)
+      // This allows the user to be redirected to the workspace page immediately
+      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
+        // Error is already logged and handled inside the function
+        logger.error('Background workspace initialization failed', error as Error, {
           workspaceId: workspace.id,
         });
-        // Throw error so user can see what went wrong
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `Failed to create worktree: ${(error as Error).message}`,
-          cause: error,
-        });
-      }
+      });
+
+      // Return immediately so frontend can redirect to the workspace page
+      return workspace;
     }),
 
   // Update a workspace
