@@ -9,7 +9,7 @@ let mainWindow: BrowserWindow | null = null;
 const serverManager = new ServerManager();
 
 async function createWindow() {
-  const port = await serverManager.start();
+  const url = await serverManager.start();
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -21,7 +21,7 @@ async function createWindow() {
     },
   });
 
-  mainWindow.loadURL(`http://localhost:${port}`);
+  mainWindow.loadURL(url);
 }
 
 app.whenReady().then(createWindow);

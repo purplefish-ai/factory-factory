@@ -16,19 +16,17 @@ export class ServerManager {
 
   /**
    * Start the backend server.
-   * - In dev mode, connects to existing backend started by pnpm dev:backend
+   * - In dev mode with Vite, returns Vite dev server URL
    * - In production, spawns backend process and manages its lifecycle
    *
-   * @returns The port the server is running on
+   * @returns The URL to load in the browser window
    */
-  async start(): Promise<number> {
-    // In dev mode, backend is already running via pnpm dev:backend
-    const devPort = process.env.BACKEND_PORT;
-    if (devPort) {
-      const port = Number.parseInt(devPort, 10);
-      console.log(`[electron] Dev mode: connecting to existing backend on port ${port}`);
-      await this.waitForHealth(port);
-      return port;
+  async start(): Promise<string> {
+    // In dev mode, use Vite dev server URL (includes HMR)
+    const viteDevUrl = process.env.VITE_DEV_SERVER_URL;
+    if (viteDevUrl) {
+      console.log(`[electron] Dev mode: using Vite dev server at ${viteDevUrl}`);
+      return viteDevUrl;
     }
 
     // Production mode: spawn our own backend
@@ -84,7 +82,7 @@ export class ServerManager {
     // Wait for health endpoint
     await this.waitForHealth(port);
 
-    return port;
+    return `http://localhost:${port}`;
   }
 
   /**
