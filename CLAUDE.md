@@ -14,6 +14,10 @@ pnpm typecheck     # TypeScript checking
 pnpm db:migrate    # Run Prisma migrations
 pnpm db:generate   # Regenerate Prisma client after schema changes
 pnpm storybook     # Start Storybook for component development
+
+# Electron
+pnpm dev:electron    # Start Electron app with hot reload
+pnpm build:electron  # Build distributable package
 ```
 
 ## Architecture
@@ -31,6 +35,7 @@ Project (repo configuration)
 - **Frontend (Vite + React Router v7):** Project management, workspace UI, real-time chat
 - **Backend (Express + tRPC):** API, WebSocket handlers for chat/terminal, git operations
 - **Database (SQLite + Prisma):** Project, Workspace, Session persistence
+- **Electron (`electron/`):** Desktop app wrapper, spawns backend as child process
 
 **Real-time communication:**
 - `/chat` WebSocket: Claude Code CLI streaming (JSON protocol)
@@ -47,10 +52,17 @@ Project (repo configuration)
 
 ## Database
 
-SQLite database located at `~/factory-factory/data.db` by default. The path is determined by:
+SQLite database location depends on how the app is run:
+
+**Web/CLI mode:** `~/factory-factory/data.db` by default. The path is determined by:
 1. `DATABASE_PATH` env var (if set)
 2. `$BASE_DIR/data.db` (if `BASE_DIR` is set)
 3. `~/factory-factory/data.db` (default)
+
+**Electron mode:** Uses OS-specific userData directory:
+- macOS: `~/Library/Application Support/Factory Factory/data.db`
+- Windows: `%APPDATA%/Factory Factory/data.db`
+- Linux: `~/.config/Factory Factory/data.db`
 
 Query directly with sqlite3:
 ```bash

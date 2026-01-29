@@ -4,6 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "main": "electron/dist/electron/main/index.js",
   "packageManager": "pnpm@10.28.1",
   "bin": {
     "ff": "./dist/src/cli/index.js",
@@ -23,6 +24,11 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "storybook": "storybook dev -p 6006",
+    "dev:electron": "tsc -p tsconfig.electron.json && concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "dev:backend": "BACKEND_PORT=3001 tsx watch src/backend/index.ts",
+    "dev:frontend": "BACKEND_URL=http://localhost:3001 vite",
+    "build:electron": "pnpm build && tsc -p tsconfig.electron.json && electron-builder install-app-deps && electron-builder",
+    "start:electron": "electron .",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "prepare": "husky",
     "deps:check": "depcruise src --config .dependency-cruiser.cjs",
@@ -118,6 +124,7 @@
     ]
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.2",
     "@biomejs/biome": "^2.3.13",
     "@storybook/addon-a11y": "10.2.1",
     "@storybook/addon-mcp": "^0.2.2",
@@ -136,7 +143,10 @@
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.23",
+    "concurrently": "^9.1.0",
     "dependency-cruiser": "^17.3.7",
+    "electron": "^40.1.0",
+    "electron-builder": "^26.4.0",
     "husky": "^9.1.7",
     "knip": "^5.82.1",
     "lint-staged": "^16.2.7",
@@ -149,6 +159,7 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wait-on": "^8.0.3"
   }
 }

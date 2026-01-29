@@ -1,0 +1,27 @@
+appId: com.factoryfactory.app
+productName: Factory Factory
+directories:
+  output: release
+  buildResources: build-resources
+files:
+  - dist/**/*
+  - electron/dist/**/*
+  - node_modules/**/*
+  - package.json
+extraResources:
+  - from: prisma/migrations
+    to: prisma/migrations
+  - from: prompts
+    to: prompts
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/node-pty/**/*
+mac:
+  category: public.app-category.developer-tools
+  target: [dmg, zip]
+win:
+  target: [nsis]
+linux:
+  target: [AppImage, deb]
+npmRebuild: true
