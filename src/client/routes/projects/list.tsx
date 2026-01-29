@@ -1,8 +1,10 @@
 import { Archive, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { ProjectSettingsDialog } from '@/components/project/project-settings-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Spinner } from '@/components/ui/spinner';
 import {
   Table,
@@ -16,6 +18,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { trpc } from '../../../frontend/lib/trpc';
 
 export default function ProjectsListPage() {
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [projectToArchive, setProjectToArchive] = useState<string | null>(null);
+
   const {
     data: projects,
     isLoading,
@@ -111,9 +116,8 @@ export default function ProjectsListPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() => {
-                              if (confirm('Are you sure you want to archive this project?')) {
-                                archiveMutation.mutate({ id: project.id });
-                              }
+                              setProjectToArchive(project.id);
+                              setArchiveDialogOpen(true);
                             }}
                             disabled={archiveMutation.isPending}
                             className="hover:bg-destructive/10 hover:text-destructive"
@@ -135,6 +139,22 @@ export default function ProjectsListPage() {
           </Table>
         )}
       </div>
+
+      <ConfirmDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        title="Archive Project"
+        description="Are you sure you want to archive this project?"
+        confirmText="Archive"
+        variant="destructive"
+        onConfirm={() => {
+          if (projectToArchive) {
+            archiveMutation.mutate({ id: projectToArchive });
+          }
+          setArchiveDialogOpen(false);
+        }}
+        isPending={archiveMutation.isPending}
+      />
     </div>
   );
 }

@@ -256,7 +256,7 @@ export const WithDiff: Story = {
         diffLoading={false}
         onFetchDiff={() => undefined}
         onOpenGitHub={() => window.open(mockPR.url, '_blank')}
-        onApprove={() => alert('Approve clicked')}
+        onApprove={() => undefined}
         approving={false}
       />
     );

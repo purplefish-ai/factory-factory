@@ -1,0 +1,15 @@
+or {
+  `confirm($_)` as $call,
+  `window.confirm($_)` as $call,
+  `alert($_)` as $call,
+  `window.alert($_)` as $call,
+  `prompt($_)` as $call,
+  `window.prompt($_)` as $call,
+  `prompt($_, $_)` as $call,
+  `window.prompt($_, $_)` as $call
+} where {
+  register_diagnostic(
+    span=$call,
+    message="Do not use native browser dialogs. Use ConfirmDialog or AlertDialog from @/components/ui instead."
+  )
+}
