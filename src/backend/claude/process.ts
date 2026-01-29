@@ -11,6 +11,7 @@ import { EventEmitter } from 'node:events';
 import pidusage from 'pidusage';
 import { createLogger } from '../services/logger.service';
 import { ClaudeProtocol } from './protocol';
+import { registerProcess, unregisterProcess } from './registry';
 import type { ClaudeJson, HooksConfig, InitializeResponseData, PermissionMode } from './types';
 
 const logger = createLogger('claude-process');
@@ -37,17 +38,10 @@ export interface ResourceMonitoringOptions {
   monitoringIntervalMs?: number;
 }
 
-/**
- * Resource usage snapshot.
- */
-export interface ResourceUsage {
-  /** CPU usage percentage (0-100+) */
-  cpu: number;
-  /** Memory usage in bytes */
-  memory: number;
-  /** Timestamp of measurement */
-  timestamp: Date;
-}
+// Import shared types (also re-exported for backwards compatibility)
+import type { ProcessStatus, ResourceUsage } from './types/process-types';
+
+export type { ProcessStatus, ResourceUsage } from './types/process-types';
 
 /**
  * Options for spawning a Claude CLI process.
@@ -77,6 +71,8 @@ export interface ClaudeProcessOptions {
   thinkingEnabled?: boolean;
   /** Resource monitoring configuration */
   resourceMonitoring?: ResourceMonitoringOptions;
+  /** Session ID for automatic process registration (optional) */
+  sessionId?: string;
 }
 
 /**
@@ -90,11 +86,6 @@ export interface ExitResult {
   /** Claude CLI session ID extracted during the session (used for history in ~/.claude/projects/) */
   claudeSessionId: string | null;
 }
-
-/**
- * Process lifecycle status.
- */
-export type ProcessStatus = 'starting' | 'ready' | 'running' | 'exited';
 
 // =============================================================================
 // ClaudeProcess Class
@@ -172,10 +163,14 @@ export class ClaudeProcess extends EventEmitter {
   private hungWarningEmitted: boolean = false;
   private isIntentionallyStopping: boolean = false;
 
+  // Session ID for automatic registry (optional)
+  private sessionId: string | null = null;
+
   private constructor(
     process: ChildProcess,
     protocol: ClaudeProtocol,
-    monitoringOptions?: ResourceMonitoringOptions
+    monitoringOptions?: ResourceMonitoringOptions,
+    sessionId?: string
   ) {
     super();
     this.process = process;
@@ -184,6 +179,7 @@ export class ClaudeProcess extends EventEmitter {
       ...ClaudeProcess.buildDefaultMonitoring(),
       ...monitoringOptions,
     };
+    this.sessionId = sessionId ?? null;
   }
 
   // ===========================================================================
@@ -239,7 +235,12 @@ export class ClaudeProcess extends EventEmitter {
     }
 
     const protocol = new ClaudeProtocol(childProcess.stdin, childProcess.stdout);
-    const claudeProcess = new ClaudeProcess(childProcess, protocol, options.resourceMonitoring);
+    const claudeProcess = new ClaudeProcess(
+      childProcess,
+      protocol,
+      options.resourceMonitoring,
+      options.sessionId
+    );
 
     // Set up stderr collection for diagnostics
     childProcess.stderr.on('data', (data: Buffer) => {
@@ -279,6 +280,11 @@ export class ClaudeProcess extends EventEmitter {
     // Start resource monitoring if enabled
     if (claudeProcess.monitoringOptions.enabled) {
       claudeProcess.startResourceMonitoring();
+    }
+
+    // Auto-register in the global registry if sessionId was provided
+    if (options.sessionId) {
+      registerProcess(options.sessionId, claudeProcess);
     }
 
     return claudeProcess;
@@ -647,6 +653,11 @@ export class ClaudeProcess extends EventEmitter {
       this.setStatus('exited');
       this.protocol.stop();
       this.stopResourceMonitoring();
+
+      // Auto-unregister from the global registry if sessionId was provided
+      if (this.sessionId) {
+        unregisterProcess(this.sessionId);
+      }
 
       const result: ExitResult = {
         code,

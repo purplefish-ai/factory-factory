@@ -860,6 +860,7 @@ function setupChatClientEvents(
     // Clean up all listeners to prevent memory leaks if client is recreated
     client.removeAllListeners();
     chatClients.delete(dbSessionId);
+    // Process is auto-unregistered from global registry on exit
     // Clean up any remaining pending messages
     pendingMessages.delete(dbSessionId);
   });
@@ -924,7 +925,12 @@ async function getOrCreateChatClient(
       const session = await claudeSessionAccessor.findById(dbSessionId);
       const workspaceId = session?.workspaceId ?? 'unknown';
 
-      const newClient = await ClaudeClient.create(clientOptions);
+      const newClient = await ClaudeClient.create({
+        ...clientOptions,
+        sessionId: dbSessionId, // Enable auto-registration in process registry
+      });
+
+      // Process is now auto-registered in global registry via sessionId
 
       // Set up event forwarding before storing in map to ensure events aren't missed
       setupChatClientEvents(dbSessionId, newClient, {
@@ -1110,6 +1116,7 @@ async function handleChatMessage(
           client.kill(); // Fallback to force kill
         }
         chatClients.delete(dbSessionId);
+        // Process is auto-unregistered from global registry on exit
       }
       // Clean up pending messages
       pendingMessages.delete(dbSessionId);

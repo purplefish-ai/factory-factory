@@ -59,6 +59,8 @@ export interface ClaudeClientOptions {
   includePartialMessages?: boolean;
   /** Enable extended thinking mode */
   thinkingEnabled?: boolean;
+  /** Session ID for automatic process registration (optional) */
+  sessionId?: string;
 }
 
 // =============================================================================
@@ -143,6 +145,7 @@ export class ClaudeClient extends EventEmitter {
       initialPrompt: options.initialPrompt,
       includePartialMessages: options.includePartialMessages,
       thinkingEnabled: options.thinkingEnabled,
+      sessionId: options.sessionId,
     };
 
     // Spawn the process
@@ -462,5 +465,6 @@ export class ClaudeClient extends EventEmitter {
 export * from './permissions';
 export * from './process';
 export * from './protocol';
+export * from './registry';
 export * from './session';
 export * from './types';
