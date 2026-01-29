@@ -189,7 +189,8 @@ class SessionService {
   }
 
   /**
-   * Get an active Claude process
+   * Get an active Claude process from the global registry.
+   * Returns a RegisteredProcess interface with status, lifecycle, and resource methods.
    */
   getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
     return getProcess(sessionId);

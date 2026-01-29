@@ -256,16 +256,6 @@ export class ClaudeClient extends EventEmitter {
     return this.process?.getPid();
   }
 
-  /**
-   * Get the underlying ClaudeProcess instance.
-   * Used for registering with sessionService for working status tracking.
-   *
-   * @returns The ClaudeProcess or null if not initialized
-   */
-  getProcess(): ClaudeProcess | null {
-    return this.process;
-  }
-
   // ===========================================================================
   // Lifecycle
   // ===========================================================================
