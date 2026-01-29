@@ -49,6 +49,7 @@ function getProjectSlugFromPath(pathname: string): string | null {
   return match ? match[1] : null;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: sidebar has many interactive states (create, archive, working indicators)
 export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
@@ -57,6 +58,11 @@ export function AppSidebar() {
   const [hasCheckedProjects, setHasCheckedProjects] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
+  const [archivingWorkspace, setArchivingWorkspace] = useState<{
+    id: string;
+    name: string;
+    branchName?: string | null;
+  } | null>(null);
   const { setProjectContext } = useProjectContext();
 
   const { data: projects, isLoading: projectsLoading } = trpc.project.list.useQuery({
@@ -88,8 +94,9 @@ export function AppSidebar() {
       }
     },
   });
-  // ID of workspace currently being archived (from mutation variables)
-  const archivingWorkspaceId = archiveWorkspace.isPending ? archiveWorkspace.variables?.id : null;
+  // ID of workspace currently being archived - use archivingWorkspace state as source of truth
+  // (not isPending, which clears before cache updates)
+  const archivingWorkspaceId = archivingWorkspace?.id ?? null;
   // Track pending workspace: name during creation, id+name after creation until it appears in list
   const [pendingWorkspace, setPendingWorkspace] = useState<{
     name: string;
@@ -145,6 +152,22 @@ export function AppSidebar() {
       setPendingWorkspace(null);
     }
   }, [pendingWorkspace, pendingWorkspaceInList]);
+
+  // Clear archiving workspace state after it's removed from the list and mutation is complete
+  const archivingWorkspaceInList = archivingWorkspace
+    ? workspaces?.some((w) => w.id === archivingWorkspace.id)
+    : false;
+
+  useEffect(() => {
+    if (!archivingWorkspace || archiveWorkspace.isPending || archivingWorkspaceInList) {
+      return;
+    }
+    // Small delay for visual feedback before clearing
+    const timer = setTimeout(() => {
+      setArchivingWorkspace(null);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [archivingWorkspace, archiveWorkspace.isPending, archivingWorkspaceInList]);
 
   // Show "Creating..." placeholder only during the mutation (before we have an ID)
   const showCreatingPlaceholder = isCreatingWorkspace && !pendingWorkspace?.id;
@@ -390,6 +413,22 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )}
+                {/* Optimistic archiving entry - shows after workspace is removed from list but before mutation completes */}
+                {archivingWorkspace && !workspaces?.some((w) => w.id === archivingWorkspace.id) && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton className="h-auto py-2 opacity-50 pointer-events-none">
+                      <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                          <span className="truncate font-medium text-sm">Archiving...</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="truncate">{archivingWorkspace.name}</span>
+                        </div>
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
                 {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conditional rendering for PR/CI status badges */}
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
@@ -608,6 +647,15 @@ export function AppSidebar() {
         variant="destructive"
         onConfirm={() => {
           if (workspaceToArchive) {
+            // Capture workspace info for optimistic UI before archiving
+            const workspace = workspaces?.find((w) => w.id === workspaceToArchive);
+            if (workspace) {
+              setArchivingWorkspace({
+                id: workspace.id,
+                name: workspace.name,
+                branchName: workspace.branchName,
+              });
+            }
             archiveWorkspace.mutate({ id: workspaceToArchive });
           }
           setArchiveDialogOpen(false);
