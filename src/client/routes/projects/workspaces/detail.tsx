@@ -852,7 +852,7 @@ function WorkspaceChatContent() {
         autoSaveId="workspace-main-panel"
       >
         {/* Left Panel: Session tabs + Main View Content */}
-        <ResizablePanel defaultSize={70} minSize={30}>
+        <ResizablePanel defaultSize="70%" minSize="30%">
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
               workspaceId={workspaceId}
@@ -906,7 +906,7 @@ function WorkspaceChatContent() {
         {rightPanelVisible && (
           <>
             <ResizableHandle />
-            <ResizablePanel defaultSize={30} minSize={15} maxSize={50}>
+            <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
               <div className="h-full border-l">
                 <RightPanel workspaceId={workspaceId} />
               </div>
