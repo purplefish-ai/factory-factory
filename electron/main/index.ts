@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { ServerManager } from './server-manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +23,14 @@ async function createWindow() {
 
   mainWindow.loadURL(url);
 }
+
+// IPC handler for native file/folder picker dialog
+ipcMain.handle('dialog:showOpen', async (_event, options) => {
+  if (!mainWindow) {
+    return { canceled: true, filePaths: [] };
+  }
+  return await dialog.showOpenDialog(mainWindow, options);
+});
 
 app.whenReady().then(createWindow);
 

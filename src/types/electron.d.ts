@@ -1,5 +1,3 @@
-import { contextBridge, ipcRenderer } from 'electron';
-
 export interface OpenDialogOptions {
   title?: string;
   defaultPath?: string;
@@ -22,8 +20,13 @@ export interface OpenDialogResult {
   filePaths: string[];
 }
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  isElectron: true,
-  showOpenDialog: (options: OpenDialogOptions): Promise<OpenDialogResult> =>
-    ipcRenderer.invoke('dialog:showOpen', options),
-});
+export interface ElectronAPI {
+  isElectron: true;
+  showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogResult>;
+}
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronAPI;
+  }
+}
