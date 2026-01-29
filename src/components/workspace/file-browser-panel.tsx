@@ -25,9 +25,12 @@ export function FileBrowserPanel({ workspaceId }: FileBrowserPanelProps) {
   const { openTab } = useWorkspacePanel();
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const handleFileSelect = (path: string, name: string) => {
-    openTab('file', path, name);
-  };
+  const handleFileSelect = useCallback(
+    (path: string, name: string) => {
+      openTab('file', path, name);
+    },
+    [openTab]
+  );
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((prev) => prev + 1);

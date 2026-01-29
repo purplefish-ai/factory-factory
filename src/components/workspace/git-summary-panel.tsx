@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertCircle, FileCode, FileMinus, FilePlus, FileQuestion, Loader2 } from 'lucide-react';
+import { memo, useCallback } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
@@ -72,7 +73,7 @@ interface FileItemProps {
   onClick: () => void;
 }
 
-function FileItem({ file, onClick }: FileItemProps) {
+const FileItem = memo(function FileItem({ file, onClick }: FileItemProps) {
   const statusColor = getStatusColor(file.status);
   const fileName = file.path.split('/').pop() ?? file.path;
   const dirPath = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
@@ -96,7 +97,7 @@ function FileItem({ file, onClick }: FileItemProps) {
       <span className={cn('text-xs font-mono', statusColor)}>{file.status}</span>
     </button>
   );
-}
+});
 
 // =============================================================================
 // Main Component
@@ -107,12 +108,15 @@ export function GitSummaryPanel({ workspaceId }: GitSummaryPanelProps) {
 
   const { data, isLoading, error } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
-    { refetchInterval: 5000 }
+    { refetchInterval: 15_000, staleTime: 10_000 }
   );
 
-  const handleFileClick = (file: GitStatusFile) => {
-    openTab('diff', file.path, `Diff: ${file.path.split('/').pop()}`);
-  };
+  const handleFileClick = useCallback(
+    (file: GitStatusFile) => {
+      openTab('diff', file.path, `Diff: ${file.path.split('/').pop()}`);
+    },
+    [openTab]
+  );
 
   if (isLoading) {
     return (

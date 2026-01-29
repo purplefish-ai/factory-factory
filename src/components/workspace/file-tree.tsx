@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronRight, File, FileCode, Folder, Loader2 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 
 import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
@@ -74,7 +74,12 @@ interface DirectoryNodeProps {
   onFileSelect: (path: string, name: string) => void;
 }
 
-function DirectoryNode({ workspaceId, entry, depth, onFileSelect }: DirectoryNodeProps) {
+const DirectoryNode = memo(function DirectoryNode({
+  workspaceId,
+  entry,
+  depth,
+  onFileSelect,
+}: DirectoryNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleExpand = useCallback(() => {
@@ -112,7 +117,7 @@ function DirectoryNode({ workspaceId, entry, depth, onFileSelect }: DirectoryNod
       )}
     </div>
   );
-}
+});
 
 interface FileNodeProps {
   entry: FileEntry;
@@ -120,11 +125,15 @@ interface FileNodeProps {
   onFileSelect: (path: string, name: string) => void;
 }
 
-function FileNode({ entry, depth, onFileSelect }: FileNodeProps) {
+const FileNode = memo(function FileNode({ entry, depth, onFileSelect }: FileNodeProps) {
+  const handleClick = useCallback(() => {
+    onFileSelect(entry.path, entry.name);
+  }, [onFileSelect, entry.path, entry.name]);
+
   return (
     <button
       type="button"
-      onClick={() => onFileSelect(entry.path, entry.name)}
+      onClick={handleClick}
       className={cn(
         'w-full flex items-center gap-1 px-2 py-1 text-sm text-left',
         'hover:bg-muted/50 rounded-sm transition-colors',
@@ -136,7 +145,7 @@ function FileNode({ entry, depth, onFileSelect }: FileNodeProps) {
       <span className="truncate">{entry.name}</span>
     </button>
   );
-}
+});
 
 // =============================================================================
 // Main Component
@@ -149,12 +158,12 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
       path: path || undefined,
     },
     {
-      // Refetch when window focuses to pick up new files or worktree changes
-      refetchOnWindowFocus: true,
-      // Refetch periodically to catch worktree creation
-      refetchInterval: depth === 0 ? 10_000 : false, // Only root level refetches
-      // Consider data stale immediately so it refetches on mount
-      staleTime: 0,
+      // Refetch periodically at root level only; subdirectories rarely change
+      refetchInterval: depth === 0 ? 30_000 : false,
+      // Keep data fresh for 20s to avoid refetching on window focus or navigation
+      staleTime: 20_000,
+      // Disable refetch on window focus - too aggressive for file trees
+      refetchOnWindowFocus: false,
     }
   );
 

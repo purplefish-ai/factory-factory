@@ -57,7 +57,7 @@ export default function WorkspacesListPage() {
       projectId: project?.id ?? '',
       status: statusFilter !== 'all' ? (statusFilter as WorkspaceStatus) : undefined,
     },
-    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 5000 }
+    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 15_000, staleTime: 10_000 }
   );
 
   if (!project) {
