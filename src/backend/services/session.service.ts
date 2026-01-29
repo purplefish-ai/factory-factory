@@ -212,6 +212,49 @@ class SessionService {
   }
 
   /**
+   * Get session options for creating a Claude client.
+   * Loads the workflow prompt from the database session.
+   * This is the single source of truth for session configuration.
+   */
+  async getSessionOptions(sessionId: string): Promise<{
+    workingDir: string;
+    resumeClaudeSessionId: string | undefined;
+    systemPrompt: string | undefined;
+    model: string;
+  } | null> {
+    const session = await claudeSessionAccessor.findById(sessionId);
+    if (!session) {
+      logger.warn('Session not found when getting options', { sessionId });
+      return null;
+    }
+
+    const workspace = await workspaceAccessor.findById(session.workspaceId);
+    if (!workspace?.worktreePath) {
+      logger.warn('Workspace or worktree not found', {
+        sessionId,
+        workspaceId: session.workspaceId,
+      });
+      return null;
+    }
+
+    // Load workflow prompt
+    const workflowPrompt = getWorkflowContent(session.workflow);
+    logger.info('Loaded workflow prompt for session options', {
+      sessionId,
+      workflow: session.workflow,
+      hasPrompt: !!workflowPrompt,
+      promptLength: workflowPrompt?.length ?? 0,
+    });
+
+    return {
+      workingDir: workspace.worktreePath,
+      resumeClaudeSessionId: session.claudeSessionId ?? undefined,
+      systemPrompt: workflowPrompt ?? undefined,
+      model: session.model,
+    };
+  }
+
+  /**
    * Get all active Claude processes for admin view
    */
   getAllActiveProcesses(): Array<{
