@@ -55,5 +55,8 @@ prisma/generated/
 # Storybook
 storybook-static/
 
+# Electron
+release/
+
 # Agent workspace context (ephemeral, for cross-agent collaboration)
 .context/

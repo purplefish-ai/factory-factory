@@ -1,0 +1,220 @@
+import { type ChildProcess, spawn } from 'node:child_process';
+import { existsSync, mkdirSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { dirname, join } from 'node:path';
+import { app } from 'electron';
+
+/**
+ * ServerManager handles the lifecycle of the backend server process
+ * for the Electron application.
+ */
+export class ServerManager {
+  private backendProcess: ChildProcess | null = null;
+
+  /**
+   * Start the backend server.
+   * - Determines the database path using Electron's userData directory
+   * - Finds an available port
+   * - Runs database migrations
+   * - Spawns the backend process
+   * - Waits for the health endpoint to respond
+   *
+   * @returns The port the server is running on
+   */
+  async start(): Promise<number> {
+    // Database path - use Electron's userData directory
+    const userDataPath = app.getPath('userData');
+    const databasePath = join(userDataPath, 'data.db');
+
+    // Ensure data directory exists
+    this.ensureDataDir(databasePath);
+
+    // Find available port starting from 3001
+    const port = await this.findAvailablePort(3001);
+
+    // Get paths for production build
+    const resourcesPath = this.getResourcesPath();
+    const frontendDist = join(resourcesPath, 'dist', 'client');
+    const backendDist = join(resourcesPath, 'dist', 'src', 'backend', 'index.js');
+
+    // Run database migrations
+    await this.runMigrations(databasePath, resourcesPath);
+
+    // Spawn backend process
+    this.backendProcess = spawn('node', [backendDist], {
+      cwd: resourcesPath,
+      env: {
+        ...process.env,
+        DATABASE_PATH: databasePath,
+        FRONTEND_STATIC_PATH: frontendDist,
+        BACKEND_PORT: port.toString(),
+        NODE_ENV: 'production',
+      },
+      stdio: 'pipe',
+    });
+
+    // Handle process output
+    this.backendProcess.stdout?.on('data', (data: Buffer) => {
+      console.log(`[backend] ${data.toString().trim()}`);
+    });
+
+    this.backendProcess.stderr?.on('data', (data: Buffer) => {
+      console.error(`[backend] ${data.toString().trim()}`);
+    });
+
+    this.backendProcess.on('error', (error) => {
+      console.error(`[backend] Process error: ${error.message}`);
+    });
+
+    this.backendProcess.on('exit', (code) => {
+      console.log(`[backend] Process exited with code ${code}`);
+      this.backendProcess = null;
+    });
+
+    // Wait for health endpoint
+    await this.waitForHealth(port);
+
+    return port;
+  }
+
+  /**
+   * Stop the backend server gracefully.
+   */
+  stop(): Promise<void> {
+    const proc = this.backendProcess;
+    if (!proc) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      // Set up exit handler
+      proc.once('exit', () => {
+        this.backendProcess = null;
+        resolve();
+      });
+
+      // Send SIGTERM for graceful shutdown
+      proc.kill('SIGTERM');
+
+      // Force kill after 5 seconds if still running
+      setTimeout(() => {
+        if (this.backendProcess && !this.backendProcess.killed) {
+          console.log('[backend] Force killing process');
+          this.backendProcess.kill('SIGKILL');
+        }
+      }, 5000);
+    });
+  }
+
+  /**
+   * Get the resources path where the built files are located.
+   * In development, this is the project root.
+   * In production (packaged app), this is the resources directory.
+   */
+  private getResourcesPath(): string {
+    if (app.isPackaged) {
+      // In packaged app, resources are in the app.asar or resources folder
+      return join(process.resourcesPath, 'app');
+    }
+    // In development, use the project root
+    // Assuming electron/main/index.ts is compiled to electron/main/index.js
+    return join(__dirname, '..', '..');
+  }
+
+  /**
+   * Ensure the directory for the database file exists.
+   */
+  private ensureDataDir(databasePath: string): void {
+    const dir = dirname(databasePath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+  }
+
+  /**
+   * Check if a port is available.
+   */
+  private isPortAvailable(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const server = createServer();
+      server.once('error', () => {
+        resolve(false);
+      });
+      server.once('listening', () => {
+        server.close(() => resolve(true));
+      });
+      server.listen(port, 'localhost');
+    });
+  }
+
+  /**
+   * Find an available port starting from the given port.
+   */
+  private async findAvailablePort(startPort: number, maxAttempts = 10): Promise<number> {
+    for (let i = 0; i < maxAttempts; i++) {
+      const port = startPort + i;
+      if (await this.isPortAvailable(port)) {
+        return port;
+      }
+    }
+    throw new Error(`Could not find an available port starting from ${startPort}`);
+  }
+
+  /**
+   * Run database migrations using Prisma.
+   */
+  private runMigrations(databasePath: string, resourcesPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const migrate = spawn('npx', ['prisma', 'migrate', 'deploy'], {
+        cwd: resourcesPath,
+        env: {
+          ...process.env,
+          DATABASE_URL: `file:${databasePath}`,
+        },
+        stdio: 'pipe',
+      });
+
+      migrate.stdout?.on('data', (data: Buffer) => {
+        console.log(`[migrate] ${data.toString().trim()}`);
+      });
+
+      migrate.stderr?.on('data', (data: Buffer) => {
+        console.error(`[migrate] ${data.toString().trim()}`);
+      });
+
+      migrate.on('exit', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Migration failed with exit code ${code}`));
+        }
+      });
+
+      migrate.on('error', reject);
+    });
+  }
+
+  /**
+   * Wait for the backend health endpoint to respond.
+   */
+  private async waitForHealth(port: number, timeout = 30_000, interval = 500): Promise<void> {
+    const startTime = Date.now();
+    const healthUrl = `http://localhost:${port}/health`;
+
+    while (Date.now() - startTime < timeout) {
+      try {
+        const response = await fetch(healthUrl);
+        if (response.ok) {
+          console.log(`[backend] Health check passed on port ${port}`);
+          return;
+        }
+      } catch {
+        // Server not ready yet, continue waiting
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+
+    throw new Error(`Backend health check timed out after ${timeout}ms`);
+  }
+}

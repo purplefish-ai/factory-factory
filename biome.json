@@ -119,7 +119,8 @@
         "src/backend/services/logger.service.ts",
         "src/lib/debug.ts",
         "src/cli/**/*.ts",
-        "scripts/**/*.ts"
+        "scripts/**/*.ts",
+        "electron/**/*.ts"
       ],
       "linter": {
         "rules": {

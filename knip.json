@@ -1,7 +1,13 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["src/client/main.tsx", "src/cli/index.ts", "src/backend/index.ts"],
-  "project": ["src/**/*.{ts,tsx}"],
+  "entry": [
+    "src/client/main.tsx",
+    "src/cli/index.ts",
+    "src/backend/index.ts",
+    "electron/main/index.ts",
+    "electron/preload/index.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts"],
   "paths": {
     "@/*": ["src/*"],
     "@prisma-gen/*": ["prisma/generated/*"]
@@ -16,6 +22,7 @@
     "src/backend/trpc/procedures/index.ts"
   ],
   "ignoreDependencies": [
+    "@electron/rebuild",
     "autoprefixer",
     "tw-animate-css",
     "@prisma/client",
