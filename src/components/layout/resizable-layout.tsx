@@ -4,6 +4,7 @@ import { createContext, type ReactNode, useContext, useState } from 'react';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { cn } from '@/lib/utils';
 
 // Context to allow sidebar component to hide the entire sidebar panel
 interface SidebarVisibilityContextType {
@@ -24,9 +25,10 @@ export function useSidebarVisibility() {
 interface ResizableLayoutProps {
   sidebar: ReactNode;
   children: ReactNode;
+  className?: string;
 }
 
-export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
+export function ResizableLayout({ sidebar, children, className }: ResizableLayoutProps) {
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   return (
@@ -35,7 +37,7 @@ export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
         {isSidebarVisible ? (
           <ResizablePanelGroup
             direction="horizontal"
-            className="h-svh w-full"
+            className={cn('h-svh w-full', className)}
             autoSaveId="app-sidebar-layout"
           >
             {/* Left sidebar panel */}
@@ -53,7 +55,12 @@ export function ResizableLayout({ sidebar, children }: ResizableLayoutProps) {
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <main className="relative flex min-h-0 h-svh w-full flex-1 flex-col overflow-hidden bg-background">
+          <main
+            className={cn(
+              'relative flex min-h-0 h-svh w-full flex-1 flex-col overflow-hidden bg-background',
+              className
+            )}
+          >
             {children}
           </main>
         )}
