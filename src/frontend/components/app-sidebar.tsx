@@ -76,7 +76,14 @@ export function AppSidebar() {
   const createWorkspace = trpc.workspace.create.useMutation();
   const [pendingWorkspaceName, setPendingWorkspaceName] = useState<string | null>(null);
 
-  const existingWorkspaceNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
+  const existingWorkspaceNames = useMemo(() => {
+    const names = workspaces?.map((w) => w.name) ?? [];
+    // Include pending name to prevent duplicates on rapid clicks
+    if (pendingWorkspaceName) {
+      names.push(pendingWorkspaceName);
+    }
+    return names;
+  }, [workspaces, pendingWorkspaceName]);
 
   const handleCreateWorkspace = async () => {
     if (!selectedProjectId) {

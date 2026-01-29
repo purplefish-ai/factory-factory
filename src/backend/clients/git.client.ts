@@ -106,12 +106,14 @@ export class GitClient {
 
   /**
    * Generate a branch name with optional prefix.
-   * If workspaceName is provided: {prefix}/{workspaceName} or just {workspaceName}
+   * If workspaceName is provided: {prefix}/{workspaceName}-{hash} or just {workspaceName}-{hash}
    * Otherwise falls back to random hex: {prefix}/{hash} or just {hash}
-   * Example: martin-purplefish/tiger
+   * The hash suffix ensures uniqueness across projects with the same owner.
+   * Example: martin-purplefish/tiger-a3b2c1
    */
   generateBranchName(prefix?: string, workspaceName?: string): string {
-    const suffix = workspaceName ?? crypto.randomBytes(3).toString('hex');
+    const hash = crypto.randomBytes(3).toString('hex');
+    const suffix = workspaceName ? `${workspaceName}-${hash}` : hash;
     return prefix ? `${prefix}/${suffix}` : suffix;
   }
 

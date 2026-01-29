@@ -78,9 +78,10 @@ export function generateUniqueWorkspaceName(existingNames: string[]): string {
     return baseWord;
   }
 
-  // Find the next available number
+  // Find the next available number (with safety limit)
   let counter = 2;
-  while (existingNames.includes(`${baseWord}-${counter}`)) {
+  const maxIterations = 1000;
+  while (counter < maxIterations && existingNames.includes(`${baseWord}-${counter}`)) {
     counter++;
   }
 
