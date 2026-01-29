@@ -852,8 +852,9 @@ function WorkspaceChatContent() {
         autoSaveId="workspace-main-panel"
       >
         {/* Left Panel: Session tabs + Main View Content */}
-        {/* NOTE: defaultSize/minSize must be strings like "70%" for react-resizable-panels v4+.
-            Do NOT change these to numbers - it will break panel sizing. */}
+        {/* NOTE: react-resizable-panels v4+ changed its API to use percentage strings (e.g., "70%")
+            instead of numbers. Do NOT change these to numbers - it will break panel sizing.
+            See: https://github.com/bvaughn/react-resizable-panels/releases/tag/4.0.0 */}
         <ResizablePanel defaultSize="70%" minSize="30%">
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
@@ -905,7 +906,7 @@ function WorkspaceChatContent() {
         </ResizablePanel>
 
         {/* Right Panel: Git/Files + Terminal (conditionally rendered) */}
-        {/* NOTE: Panel sizes must be strings - see comment above */}
+        {/* NOTE: Panel sizes must be percentage strings for react-resizable-panels v4+ */}
         {rightPanelVisible && (
           <>
             <ResizableHandle />

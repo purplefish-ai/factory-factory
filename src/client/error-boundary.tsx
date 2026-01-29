@@ -62,17 +62,3 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return this.props.children;
   }
 }
-
-// Functional wrapper for easier use with React Router
-export function withErrorBoundary<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  fallback?: ReactNode
-) {
-  return function WithErrorBoundary(props: P) {
-    return (
-      <ErrorBoundary fallback={fallback}>
-        <WrappedComponent {...props} />
-      </ErrorBoundary>
-    );
-  };
-}
