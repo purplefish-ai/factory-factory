@@ -25,6 +25,7 @@ import {
   useChatWebSocket,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -41,74 +42,8 @@ import { groupAdjacentToolCalls } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
-// Types
-// =============================================================================
-
-type ConnectionStatus = 'connected' | 'processing' | 'stopping' | 'disconnected' | 'loading';
-
-// =============================================================================
 // Helper Components
 // =============================================================================
-
-function getConnectionStatusFromState(
-  connected: boolean,
-  loadingSession: boolean,
-  running: boolean,
-  stopping: boolean
-): ConnectionStatus {
-  if (!connected) {
-    return 'disconnected';
-  }
-  if (loadingSession) {
-    return 'loading';
-  }
-  if (stopping) {
-    return 'stopping';
-  }
-  if (running) {
-    return 'processing';
-  }
-  return 'connected';
-}
-
-function getStatusText(status: ConnectionStatus): string {
-  switch (status) {
-    case 'connected':
-      return 'Connected';
-    case 'processing':
-      return 'Processing request';
-    case 'stopping':
-      return 'Stopping...';
-    case 'loading':
-      return 'Loading session';
-    case 'disconnected':
-      return 'Disconnected';
-  }
-}
-
-function StatusDot({ status }: { status: ConnectionStatus }) {
-  const statusText = getStatusText(status);
-
-  return (
-    <>
-      <div
-        className={cn(
-          'h-2.5 w-2.5 rounded-full',
-          status === 'connected' && 'bg-green-500',
-          status === 'processing' && 'bg-yellow-500 animate-pulse',
-          status === 'stopping' && 'bg-orange-500 animate-pulse',
-          status === 'loading' && 'bg-blue-500 animate-pulse',
-          status === 'disconnected' && 'bg-red-500'
-        )}
-        title={statusText}
-        aria-hidden="true"
-      />
-      <output className="sr-only" aria-live="polite">
-        {statusText}
-      </output>
-    </>
-  );
-}
 
 function ChatLoading() {
   return (
@@ -207,6 +142,26 @@ function InitializationOverlay({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Archiving Overlay
+// =============================================================================
+
+function ArchivingOverlay() {
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4 p-8 max-w-md text-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">Archiving workspace...</h2>
+          <p className="text-sm text-muted-foreground">
+            Cleaning up worktree and archiving this workspace.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -747,6 +702,7 @@ function WorkspaceChatContent() {
 
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   // Initialize selectedDbSessionId when sessions first load
   useEffect(() => {
@@ -817,9 +773,6 @@ function WorkspaceChatContent() {
     inputRef
   );
 
-  // Determine connection status for indicator
-  const status = getConnectionStatusFromState(connected, loadingSession, running, stopping);
-
   // Show loading while fetching workspace and sessions
   if (workspaceLoading || sessionsLoading) {
     return <Loading message="Loading workspace..." />;
@@ -854,6 +807,9 @@ function WorkspaceChatContent() {
         />
       )}
 
+      {/* Archiving Overlay - shown while workspace is being archived */}
+      {archiveWorkspace.isPending && <ArchivingOverlay />}
+
       {/* Header: Branch name, status, and toggle button */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-3">
@@ -865,7 +821,6 @@ function WorkspaceChatContent() {
           ) : (
             <h1 className="text-lg font-semibold">{workspace.name}</h1>
           )}
-          <StatusDot status={status} />
           {/* PR Link with CI Status */}
           {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
             <a
@@ -936,11 +891,7 @@ function WorkspaceChatContent() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => {
-                  if (confirm('Are you sure you want to archive this workspace?')) {
-                    archiveWorkspace.mutate({ id: workspaceId });
-                  }
-                }}
+                onClick={() => setArchiveDialogOpen(true)}
                 disabled={archiveWorkspace.isPending}
               >
                 {archiveWorkspace.isPending ? (
@@ -1031,6 +982,20 @@ function WorkspaceChatContent() {
           </>
         )}
       </ResizablePanelGroup>
+
+      <ConfirmDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        title="Archive Workspace"
+        description="Are you sure you want to archive this workspace?"
+        confirmText="Archive"
+        variant="destructive"
+        onConfirm={() => {
+          archiveWorkspace.mutate({ id: workspaceId });
+          setArchiveDialogOpen(false);
+        }}
+        isPending={archiveWorkspace.isPending}
+      />
     </div>
   );
 }

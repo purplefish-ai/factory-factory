@@ -121,6 +121,21 @@ class GitHubCLIService {
   }
 
   /**
+   * Get the authenticated user's GitHub username.
+   * Returns null if not authenticated or gh CLI is not available.
+   */
+  async getAuthenticatedUsername(): Promise<string | null> {
+    try {
+      const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login'], {
+        timeout: 10_000,
+      });
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Check if gh CLI is installed and authenticated.
    */
   async checkHealth(): Promise<GitHubCLIHealthStatus> {

@@ -125,6 +125,26 @@ describe('GitClient', () => {
       // Empty string is falsy, so it should just return the hash
       expect(name).toMatch(/^[0-9a-f]{6}$/);
     });
+
+    it('should use workspace name without hash when provided', () => {
+      const name = client.generateBranchName('martin-purplefish', 'flux-1');
+      expect(name).toBe('martin-purplefish/flux-1');
+    });
+
+    it('should use workspace name only when no prefix', () => {
+      const name = client.generateBranchName(undefined, 'flux-1');
+      expect(name).toBe('flux-1');
+    });
+
+    it('should use workspace name only when empty prefix', () => {
+      const name = client.generateBranchName('', 'flux-1');
+      expect(name).toBe('flux-1');
+    });
+
+    it('should handle workspace names with hyphens', () => {
+      const name = client.generateBranchName('martin-purplefish', 'tiger-2');
+      expect(name).toBe('martin-purplefish/tiger-2');
+    });
   });
 
   // ===========================================================================

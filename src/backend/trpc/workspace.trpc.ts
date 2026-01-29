@@ -8,6 +8,10 @@ import { execCommand, gitCommand } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { githubCLIService } from '../services/github-cli.service';
+
+// Cache the authenticated GitHub username (fetched once per server lifetime)
+let cachedGitHubUsername: string | null | undefined;
+
 import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
@@ -338,8 +342,13 @@ async function initializeWorkspaceWorktree(
       }
     }
 
+    // Get the authenticated user's GitHub username for branch prefix (cached)
+    if (cachedGitHubUsername === undefined) {
+      cachedGitHubUsername = await githubCLIService.getAuthenticatedUsername();
+    }
+
     const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
-      branchPrefix: project.githubOwner ?? undefined,
+      branchPrefix: cachedGitHubUsername ?? undefined,
       workspaceName: workspaceWithProject.name,
     });
     const worktreePath = gitClient.getWorktreePath(worktreeName);

@@ -1,5 +1,5 @@
-import { useMutationState } from '@tanstack/react-query';
 import {
+  Archive,
   CheckCircle2,
   Circle,
   GitBranch,
@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Select,
   SelectContent,
@@ -48,12 +49,20 @@ function getProjectSlugFromPath(pathname: string): string | null {
   return match ? match[1] : null;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: sidebar has many interactive states (create, archive, working indicators)
 export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
   const navigate = useNavigate();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('');
   const [hasCheckedProjects, setHasCheckedProjects] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
+  const [archivingWorkspace, setArchivingWorkspace] = useState<{
+    id: string;
+    name: string;
+    branchName?: string | null;
+  } | null>(null);
   const { setProjectContext } = useProjectContext();
 
   const { data: projects, isLoading: projectsLoading } = trpc.project.list.useQuery({
@@ -74,23 +83,41 @@ export function AppSidebar() {
   const utils = trpc.useUtils();
 
   const createWorkspace = trpc.workspace.create.useMutation();
-  const [pendingWorkspaceName, setPendingWorkspaceName] = useState<string | null>(null);
+  const archiveWorkspace = trpc.workspace.archive.useMutation({
+    onSuccess: (_data, variables) => {
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+      // If we archived the currently viewed workspace, navigate to the workspaces list
+      const archivedId = variables.id;
+      const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
+      if (archivedId === currentId) {
+        navigate(`/projects/${selectedProjectSlug}/workspaces`);
+      }
+    },
+  });
+  // ID of workspace currently being archived - use archivingWorkspace state as source of truth
+  // (not isPending, which clears before cache updates)
+  const archivingWorkspaceId = archivingWorkspace?.id ?? null;
+  // Track pending workspace: name during creation, id+name after creation until it appears in list
+  const [pendingWorkspace, setPendingWorkspace] = useState<{
+    name: string;
+    id?: string;
+  } | null>(null);
 
   const existingWorkspaceNames = useMemo(() => {
     const names = workspaces?.map((w) => w.name) ?? [];
     // Include pending name to prevent duplicates on rapid clicks
-    if (pendingWorkspaceName) {
-      names.push(pendingWorkspaceName);
+    if (pendingWorkspace?.name) {
+      names.push(pendingWorkspace.name);
     }
     return names;
-  }, [workspaces, pendingWorkspaceName]);
+  }, [workspaces, pendingWorkspace?.name]);
 
   const handleCreateWorkspace = async () => {
     if (!selectedProjectId) {
       return;
     }
     const name = generateUniqueWorkspaceName(existingWorkspaceNames);
-    setPendingWorkspaceName(name);
+    setPendingWorkspace({ name });
 
     // Create workspace (branchName defaults to project's default branch)
     // Don't create a session - user will choose workflow in workspace page
@@ -99,11 +126,12 @@ export function AppSidebar() {
       name,
     });
 
-    // Invalidate workspace list cache
-    utils.workspace.list.invalidate({ projectId: selectedProjectId });
+    // Update pending workspace with ID so we can show it as selected
+    setPendingWorkspace({ name, id: workspace.id });
 
-    // Clear the pending name
-    setPendingWorkspaceName(null);
+    // Invalidate caches to trigger immediate refetch
+    utils.workspace.list.invalidate({ projectId: selectedProjectId });
+    utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
 
     // Navigate to workspace (workflow selection will be shown)
     navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
@@ -113,17 +141,39 @@ export function AppSidebar() {
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
   const isCreatingWorkspace = createWorkspace.isPending;
 
-  // Check if the workspace we're creating already appeared in the list (via polling)
-  // to avoid showing both the "Creating workspace..." placeholder and the actual workspace
-  const pendingWorkspaceAlreadyExists =
-    pendingWorkspaceName && workspaces?.some((w) => w.name === pendingWorkspaceName);
-  const showCreatingPlaceholder = isCreatingWorkspace && !pendingWorkspaceAlreadyExists;
+  // Check if the pending workspace has appeared in the list yet
+  const pendingWorkspaceInList = pendingWorkspace?.id
+    ? workspaces?.some((w) => w.id === pendingWorkspace.id)
+    : workspaces?.some((w) => w.name === pendingWorkspace?.name);
 
-  // Track which workspaces are being archived (mutation triggered from workspace detail page)
-  const archivingWorkspaceIds = useMutationState({
-    filters: { mutationKey: [['workspace', 'archive']], status: 'pending' },
-    select: (mutation) => (mutation.state.variables as { id: string } | undefined)?.id,
-  }).filter(Boolean) as string[];
+  // Clear pending workspace once it appears in the list
+  useEffect(() => {
+    if (pendingWorkspace && pendingWorkspaceInList) {
+      setPendingWorkspace(null);
+    }
+  }, [pendingWorkspace, pendingWorkspaceInList]);
+
+  // Clear archiving workspace state after it's removed from the list and mutation is complete
+  const archivingWorkspaceInList = archivingWorkspace
+    ? workspaces?.some((w) => w.id === archivingWorkspace.id)
+    : false;
+
+  useEffect(() => {
+    if (!archivingWorkspace || archiveWorkspace.isPending || archivingWorkspaceInList) {
+      return;
+    }
+    // Small delay for visual feedback before clearing
+    const timer = setTimeout(() => {
+      setArchivingWorkspace(null);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [archivingWorkspace, archiveWorkspace.isPending, archivingWorkspaceInList]);
+
+  // Show "Creating..." placeholder only during the mutation (before we have an ID)
+  const showCreatingPlaceholder = isCreatingWorkspace && !pendingWorkspace?.id;
+
+  // Show optimistic workspace entry after creation but before it appears in the list
+  const showOptimisticWorkspace = pendingWorkspace?.id && !pendingWorkspaceInList;
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -337,10 +387,52 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )}
+                {/* Optimistic workspace entry - shows immediately after creation before polling picks it up */}
+                {showOptimisticWorkspace && pendingWorkspace.id && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={currentWorkspaceId === pendingWorkspace.id}
+                      className="h-auto py-2"
+                    >
+                      <Link
+                        to={`/projects/${selectedProjectSlug}/workspaces/${pendingWorkspace.id}`}
+                      >
+                        <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
+                          <div className="flex items-center gap-1.5">
+                            <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                            <span className="truncate font-medium text-sm">
+                              {pendingWorkspace.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="truncate">Initializing...</span>
+                          </div>
+                        </div>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+                {/* Optimistic archiving entry - shows after workspace is removed from list but before mutation completes */}
+                {archivingWorkspace && !workspaces?.some((w) => w.id === archivingWorkspace.id) && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton className="h-auto py-2 opacity-50 pointer-events-none">
+                      <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                          <span className="truncate font-medium text-sm">Archiving...</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="truncate">{archivingWorkspace.name}</span>
+                        </div>
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
                 {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conditional rendering for PR/CI status badges */}
                 {workspaces?.map((workspace) => {
                   const isActive = currentWorkspaceId === workspace.id;
-                  const isArchiving = archivingWorkspaceIds.includes(workspace.id);
+                  const isArchiving = archivingWorkspaceId === workspace.id;
                   const { isWorking, gitStats: stats } = workspace;
                   const hasChanges =
                     stats && (stats.total > 0 || stats.additions > 0 || stats.deletions > 0);
@@ -354,47 +446,114 @@ export function AppSidebar() {
                         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
                           <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
                             <div className="flex items-center gap-1.5">
-                              {isArchiving ? (
+                              {isArchiving || !workspace.branchName ? (
                                 <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
-                              ) : workspace.branchName ? (
+                              ) : (
                                 <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
-                              ) : null}
+                              )}
                               <span className="truncate font-medium text-sm">
                                 {isArchiving
                                   ? 'Archiving...'
                                   : workspace.branchName || workspace.name}
                               </span>
-                              {hasChanges && (
-                                <span className="ml-auto shrink-0 flex items-center gap-1 text-xs font-mono px-1 py-px rounded border border-border/60 bg-muted/80">
-                                  {stats.additions > 0 || stats.deletions > 0 ? (
-                                    <>
-                                      <span className="text-green-600 dark:text-green-400">
-                                        +{stats.additions}
+                              <span className="ml-auto shrink-0 flex items-center gap-1.5">
+                                {hasChanges && (
+                                  <span className="shrink-0 flex items-center gap-1 text-xs font-mono px-1 py-px rounded border border-border/60 bg-muted/80">
+                                    {stats.additions > 0 || stats.deletions > 0 ? (
+                                      <>
+                                        <span className="text-green-600 dark:text-green-400">
+                                          +{stats.additions}
+                                        </span>
+                                        <span className="text-red-600 dark:text-red-400">
+                                          -{stats.deletions}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-yellow-600 dark:text-yellow-500">
+                                        {stats.total} {stats.total === 1 ? 'file' : 'files'}
                                       </span>
-                                      <span className="text-red-600 dark:text-red-400">
-                                        -{stats.deletions}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span className="text-yellow-600 dark:text-yellow-500">
-                                      {stats.total} {stats.total === 1 ? 'file' : 'files'}
-                                    </span>
+                                    )}
+                                  </span>
+                                )}
+                                {stats?.hasUncommitted && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="h-2 w-2 rounded-full bg-orange-500 shrink-0" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right">
+                                      <p>Uncommitted changes</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {workspace.prNumber &&
+                                  workspace.prState !== 'NONE' &&
+                                  workspace.prUrl && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            if (workspace.prUrl) {
+                                              window.open(
+                                                workspace.prUrl,
+                                                '_blank',
+                                                'noopener,noreferrer'
+                                              );
+                                            }
+                                          }}
+                                          className={`shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-colors ${
+                                            workspace.prState === 'MERGED'
+                                              ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300 hover:bg-purple-500/35'
+                                              : workspace.prState === 'CLOSED'
+                                                ? 'bg-gray-500/20 text-gray-500 dark:text-gray-400 hover:bg-gray-500/30'
+                                                : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
+                                          }`}
+                                        >
+                                          <GitPullRequest className="h-3 w-3" />
+                                          <span>#{workspace.prNumber}</span>
+                                          {workspace.prState === 'MERGED' ? (
+                                            <CheckCircle2 className="h-3 w-3 text-purple-500" />
+                                          ) : workspace.prState === 'CLOSED' ? (
+                                            <XCircle className="h-3 w-3 text-gray-400" />
+                                          ) : (
+                                            <>
+                                              {workspace.prCiStatus === 'SUCCESS' && (
+                                                <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                              )}
+                                              {workspace.prCiStatus === 'FAILURE' && (
+                                                <XCircle className="h-3 w-3 text-red-500" />
+                                              )}
+                                              {workspace.prCiStatus === 'PENDING' && (
+                                                <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
+                                              )}
+                                            </>
+                                          )}
+                                        </button>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="right">
+                                        <p>
+                                          PR #{workspace.prNumber}
+                                          {workspace.prState === 'MERGED'
+                                            ? ' · Merged'
+                                            : workspace.prState === 'CLOSED'
+                                              ? ' · Closed'
+                                              : workspace.prCiStatus === 'SUCCESS'
+                                                ? ' · CI passed'
+                                                : workspace.prCiStatus === 'FAILURE'
+                                                  ? ' · CI failed'
+                                                  : workspace.prCiStatus === 'PENDING'
+                                                    ? ' · CI running'
+                                                    : ''}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Click to open on GitHub
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
                                   )}
-                                </span>
-                              )}
-                              {stats?.hasUncommitted && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="h-2 w-2 rounded-full bg-orange-500 shrink-0" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right">
-                                    <p>Uncommitted changes</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              {workspace.prNumber &&
-                                workspace.prState !== 'NONE' &&
-                                workspace.prUrl && (
+                                {!isArchiving && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <button
@@ -402,64 +561,18 @@ export function AppSidebar() {
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          if (workspace.prUrl) {
-                                            window.open(
-                                              workspace.prUrl,
-                                              '_blank',
-                                              'noopener,noreferrer'
-                                            );
-                                          }
+                                          setWorkspaceToArchive(workspace.id);
+                                          setArchiveDialogOpen(true);
                                         }}
-                                        className={`shrink-0 flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-colors ${
-                                          workspace.prState === 'MERGED'
-                                            ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300 hover:bg-purple-500/35'
-                                            : workspace.prState === 'CLOSED'
-                                              ? 'bg-gray-500/20 text-gray-500 dark:text-gray-400 hover:bg-gray-500/30'
-                                              : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
-                                        }`}
+                                        className="shrink-0 p-0.5 rounded opacity-0 group-hover/menu-item:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted"
                                       >
-                                        <GitPullRequest className="h-3 w-3" />
-                                        <span>#{workspace.prNumber}</span>
-                                        {workspace.prState === 'MERGED' ? (
-                                          <CheckCircle2 className="h-3 w-3 text-purple-500" />
-                                        ) : workspace.prState === 'CLOSED' ? (
-                                          <XCircle className="h-3 w-3 text-gray-400" />
-                                        ) : (
-                                          <>
-                                            {workspace.prCiStatus === 'SUCCESS' && (
-                                              <CheckCircle2 className="h-3 w-3 text-green-500" />
-                                            )}
-                                            {workspace.prCiStatus === 'FAILURE' && (
-                                              <XCircle className="h-3 w-3 text-red-500" />
-                                            )}
-                                            {workspace.prCiStatus === 'PENDING' && (
-                                              <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
-                                            )}
-                                          </>
-                                        )}
+                                        <Archive className="h-3 w-3" />
                                       </button>
                                     </TooltipTrigger>
-                                    <TooltipContent side="right">
-                                      <p>
-                                        PR #{workspace.prNumber}
-                                        {workspace.prState === 'MERGED'
-                                          ? ' · Merged'
-                                          : workspace.prState === 'CLOSED'
-                                            ? ' · Closed'
-                                            : workspace.prCiStatus === 'SUCCESS'
-                                              ? ' · CI passed'
-                                              : workspace.prCiStatus === 'FAILURE'
-                                                ? ' · CI failed'
-                                                : workspace.prCiStatus === 'PENDING'
-                                                  ? ' · CI running'
-                                                  : ''}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        Click to open on GitHub
-                                      </p>
-                                    </TooltipContent>
+                                    <TooltipContent side="right">Archive</TooltipContent>
                                   </Tooltip>
                                 )}
+                              </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <span className="truncate">{workspace.name}</span>
@@ -524,6 +637,31 @@ export function AppSidebar() {
           <ThemeToggle />
         </div>
       </SidebarFooter>
+
+      <ConfirmDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        title="Archive Workspace"
+        description="Are you sure you want to archive this workspace?"
+        confirmText="Archive"
+        variant="destructive"
+        onConfirm={() => {
+          if (workspaceToArchive) {
+            // Capture workspace info for optimistic UI before archiving
+            const workspace = workspaces?.find((w) => w.id === workspaceToArchive);
+            if (workspace) {
+              setArchivingWorkspace({
+                id: workspace.id,
+                name: workspace.name,
+                branchName: workspace.branchName,
+              });
+            }
+            archiveWorkspace.mutate({ id: workspaceToArchive });
+          }
+          setArchiveDialogOpen(false);
+        }}
+        isPending={archiveWorkspace.isPending}
+      />
     </Sidebar>
   );
 }
