@@ -134,6 +134,15 @@ pnpm exec prisma migrate reset   # Reset database (destroys data)
 **Port conflicts:**
 The server automatically finds available ports. Use `--verbose` to see which ports are used.
 
+## Acknowledgements
+
+This project was inspired by:
+
+- [Conductor](https://conductor.build) - Mac app for running coding agents in parallel
+- [VibeKanban](https://vibekanban.com) - Visual kanban for AI-assisted development
+- [Gastown](https://github.com/steveyegge/gastown) - Steve Yegge's multi-agent coding environment
+- [Multiclaude](https://github.com/dlorenc/multiclaude) - Dan Lorenc's parallel Claude sessions tool
+
 ## License
 
 MIT

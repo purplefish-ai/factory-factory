@@ -340,6 +340,7 @@ async function initializeWorkspaceWorktree(
 
     const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
       branchPrefix: project.githubOwner ?? undefined,
+      workspaceName: workspaceWithProject.name,
     });
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
