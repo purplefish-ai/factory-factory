@@ -1,26 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-
-export interface OpenDialogOptions {
-  title?: string;
-  defaultPath?: string;
-  buttonLabel?: string;
-  properties?: Array<
-    | 'openFile'
-    | 'openDirectory'
-    | 'multiSelections'
-    | 'showHiddenFiles'
-    | 'createDirectory'
-    | 'promptToCreate'
-    | 'noResolveAliases'
-    | 'treatPackageAsDirectory'
-    | 'dontAddToRecent'
-  >;
-}
-
-export interface OpenDialogResult {
-  canceled: boolean;
-  filePaths: string[];
-}
+import type { OpenDialogOptions, OpenDialogResult } from '../../src/types/electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,

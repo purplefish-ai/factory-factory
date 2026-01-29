@@ -25,7 +25,7 @@ async function createWindow() {
 }
 
 // IPC handler for native file/folder picker dialog
-ipcMain.handle('dialog:showOpen', async (_event, options) => {
+ipcMain.handle('dialog:showOpen', async (_event, options: Electron.OpenDialogOptions) => {
   if (!mainWindow) {
     return { canceled: true, filePaths: [] };
   }

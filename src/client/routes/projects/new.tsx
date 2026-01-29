@@ -25,13 +25,17 @@ export default function NewProjectPage() {
       return;
     }
 
-    const result = await window.electronAPI.showOpenDialog({
-      title: 'Select Repository',
-      properties: ['openDirectory', 'showHiddenFiles'],
-    });
+    try {
+      const result = await window.electronAPI.showOpenDialog({
+        title: 'Select Repository',
+        properties: ['openDirectory', 'showHiddenFiles'],
+      });
 
-    if (!result.canceled && result.filePaths.length > 0) {
-      setRepoPath(result.filePaths[0]);
+      if (!result.canceled && result.filePaths.length > 0) {
+        setRepoPath(result.filePaths[0]);
+      }
+    } catch {
+      // Silently handle dialog failure - nothing actionable for user
     }
   };
 
