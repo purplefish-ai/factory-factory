@@ -82,7 +82,7 @@ export function extractFileReferences(
 // Tool Info Renderer
 // =============================================================================
 
-interface ToolInfoRendererProps {
+export interface ToolInfoRendererProps {
   message: ClaudeMessage;
   defaultOpen?: boolean;
   isPending?: boolean;
@@ -199,7 +199,7 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
 // Tool Sequence Group Renderer
 // =============================================================================
 
-interface ToolSequenceGroupProps {
+export interface ToolSequenceGroupProps {
   sequence: ToolSequence;
   defaultOpen?: boolean;
 }
@@ -543,7 +543,7 @@ const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
 // Tool Call Group Renderer
 // =============================================================================
 
-interface ToolCallGroupRendererProps {
+export interface ToolCallGroupRendererProps {
   toolCalls: ToolCallInfo[];
   defaultOpen?: boolean;
 }
