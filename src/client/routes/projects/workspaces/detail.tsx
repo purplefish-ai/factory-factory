@@ -604,15 +604,15 @@ function useAutoScroll(
     setIsNearBottom(nearBottom);
   }, [viewportRef]);
 
-  // Scroll to bottom when messages array changes (new messages or content updates)
-  // Using scrollTop with CSS scroll-behavior: smooth for better performance
-  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages changes
+  // Scroll to bottom when new messages are added
+  // Content size changes (streaming, expand/collapse) are handled by ResizeObserver below
+  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
   useEffect(() => {
     const viewport = viewportRef.current;
     if (isNearBottomRef.current && viewport) {
       viewport.scrollTop = viewport.scrollHeight;
     }
-  }, [messages, viewportRef]);
+  }, [messages.length, viewportRef]);
 
   // Watch for content size changes (e.g., tool call expand/collapse)
   useEffect(() => {
