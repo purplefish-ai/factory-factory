@@ -298,6 +298,43 @@ app.use(
 );
 
 // ============================================================================
+// Static File Serving (Production Mode)
+// ============================================================================
+
+// In production, serve static files from dist/client
+// FRONTEND_STATIC_PATH is set by the CLI when running in production mode
+const frontendStaticPath = process.env.FRONTEND_STATIC_PATH;
+if (frontendStaticPath && existsSync(frontendStaticPath)) {
+  logger.info('Serving static files from', { path: frontendStaticPath });
+
+  // Serve static files with caching headers
+  app.use(
+    express.static(frontendStaticPath, {
+      maxAge: '1d',
+      etag: true,
+    })
+  );
+
+  // SPA fallback - serve index.html for all non-API routes
+  // This enables client-side routing with React Router
+  app.get('*', (req, res, next) => {
+    // Skip API routes, WebSocket paths, and health checks
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/mcp') ||
+      req.path.startsWith('/health') ||
+      req.path === '/chat' ||
+      req.path === '/terminal'
+    ) {
+      return next();
+    }
+
+    // Serve index.html for all other routes (SPA client-side routing)
+    res.sendFile(join(frontendStaticPath, 'index.html'));
+  });
+}
+
+// ============================================================================
 // Error Handling
 // ============================================================================
 

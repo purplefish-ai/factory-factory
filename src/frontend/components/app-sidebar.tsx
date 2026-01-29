@@ -1,5 +1,3 @@
-'use client';
-
 import {
   CheckCircle2,
   Circle,
@@ -11,9 +9,8 @@ import {
   Settings,
   XCircle,
 } from 'lucide-react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -59,8 +56,9 @@ function generateWorkspaceName(): string {
 }
 
 export function AppSidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const location = useLocation();
+  const pathname = location.pathname;
+  const navigate = useNavigate();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('');
   const [hasCheckedProjects, setHasCheckedProjects] = useState(false);
   const { setProjectContext } = useProjectContext();
@@ -106,7 +104,7 @@ export function AppSidebar() {
     setPendingWorkspaceName(null);
 
     // Navigate to workspace (workflow selection will be shown)
-    router.push(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
+    navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
   };
 
   // Get current workspace ID from URL
@@ -144,7 +142,7 @@ export function AppSidebar() {
 
       if (projects.length === 0) {
         if (!pathname.startsWith('/projects/new')) {
-          router.push('/projects/new');
+          navigate('/projects/new');
         }
       } else if (!selectedProjectSlug) {
         const firstSlug = projects[0].slug;
@@ -152,20 +150,20 @@ export function AppSidebar() {
         localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
       }
     }
-  }, [projectsLoading, projects, selectedProjectSlug, pathname, router]);
+  }, [projectsLoading, projects, selectedProjectSlug, pathname, navigate]);
 
   const handleProjectChange = (value: string) => {
     if (value === '__manage__') {
-      router.push('/projects');
+      navigate('/projects');
       return;
     }
     if (value === '__create__') {
-      router.push('/projects/new');
+      navigate('/projects/new');
       return;
     }
     setSelectedProjectSlug(value);
     localStorage.setItem(SELECTED_PROJECT_KEY, value);
-    router.push(`/projects/${value}/workspaces`);
+    navigate(`/projects/${value}/workspaces`);
   };
 
   const globalNavItems = [
@@ -204,7 +202,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="none">
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <Link href="/projects">
+        <Link to="/projects">
           <Logo
             iconClassName="size-6"
             textClassName="text-sm"
@@ -242,7 +240,7 @@ export function AppSidebar() {
           <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <SidebarGroupLabel>
               <Link
-                href={`/projects/${selectedProjectSlug}/workspaces`}
+                to={`/projects/${selectedProjectSlug}/workspaces`}
                 className="hover:text-foreground transition-colors"
               >
                 Workspaces
@@ -250,7 +248,7 @@ export function AppSidebar() {
             </SidebarGroupLabel>
             <div className="absolute right-1 top-2 flex items-center gap-0.5">
               <Link
-                href={`/projects/${selectedProjectSlug}/workspaces`}
+                to={`/projects/${selectedProjectSlug}/workspaces`}
                 className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
                 title="View Kanban board"
               >
@@ -298,7 +296,7 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={workspace.id}>
                       <SidebarMenuButton asChild isActive={isActive} className="h-auto py-2">
-                        <Link href={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
+                        <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
                           <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
                             <div className="flex items-center gap-1.5">
                               {workspace.branchName && (
@@ -440,7 +438,7 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.href}>
+                      <Link to={item.href}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.label}</span>
                         {showBadge && (

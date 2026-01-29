@@ -1,19 +1,15 @@
-'use client';
-
 import { Terminal } from 'lucide-react';
-import dynamic from 'next/dynamic';
-import { useCallback, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import { TerminalTabBar } from './terminal-tab-bar';
 import { useTerminalWebSocket } from './use-terminal-websocket';
 
-// Dynamic import with SSR disabled to allow xterm.js to use static imports
+// Lazy import to allow xterm.js to use static imports
 // xterm.js requires DOM APIs that aren't available during server-side rendering
-const TerminalInstance = dynamic(
-  () => import('./terminal-instance').then((m) => ({ default: m.TerminalInstance })),
-  { ssr: false }
+const TerminalInstance = lazy(() =>
+  import('./terminal-instance').then((m) => ({ default: m.TerminalInstance }))
 );
 
 // =============================================================================
@@ -278,14 +274,22 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
       {/* Terminal content */}
       <div className="flex-1 overflow-hidden bg-zinc-900">
         {activeTab && (
-          <TerminalInstance
-            key={activeTab.id}
-            output={activeTab.output}
-            onData={handleData}
-            onResize={handleResize}
-            className="h-full"
-            isActive
-          />
+          <Suspense
+            fallback={
+              <div className="h-full flex items-center justify-center text-zinc-500">
+                Loading terminal...
+              </div>
+            }
+          >
+            <TerminalInstance
+              key={activeTab.id}
+              output={activeTab.output}
+              onData={handleData}
+              onResize={handleResize}
+              className="h-full"
+              isActive
+            />
+          </Suspense>
         )}
       </div>
     </div>

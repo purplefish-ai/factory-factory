@@ -1,7 +1,5 @@
-'use client';
-
 import { Archive, Plus } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { ProjectSettingsDialog } from '@/components/project/project-settings-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,9 +13,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { trpc } from '../../frontend/lib/trpc';
+import { trpc } from '../../../frontend/lib/trpc';
 
-export default function ProjectsPage() {
+export default function ProjectsListPage() {
   const {
     data: projects,
     isLoading,
@@ -47,7 +45,7 @@ export default function ProjectsPage() {
           <p className="text-muted-foreground mt-1">Manage your repositories</p>
         </div>
         <Button asChild>
-          <Link href="/projects/new">
+          <Link to="/projects/new">
             <Plus className="size-5" />
             New Project
           </Link>
@@ -60,7 +58,7 @@ export default function ProjectsPage() {
           <div className="p-8 text-center text-muted-foreground">
             <p>No projects found.</p>
             <Link
-              href="/projects/new"
+              to="/projects/new"
               className="text-primary hover:text-primary/80 mt-2 inline-block"
             >
               Create your first project

@@ -298,7 +298,6 @@ program
       FRONTEND_PORT: frontendPort.toString(),
       BACKEND_PORT: backendPort.toString(),
       BACKEND_URL: `http://${options.host}:${backendPort}`,
-      NEXT_PUBLIC_BACKEND_PORT: backendPort.toString(),
       NODE_ENV: options.dev ? 'development' : 'production',
     };
 
@@ -407,7 +406,7 @@ async function startDevelopmentMode(
 
   console.log(chalk.blue('  🎨 Starting frontend (development mode)...'));
 
-  const frontend = spawn('npx', ['next', 'dev', '-p', frontendPort.toString()], {
+  const frontend = spawn('npx', ['vite', '--port', frontendPort.toString()], {
     cwd: PROJECT_ROOT,
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
@@ -436,15 +435,15 @@ async function startProductionMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
   processes: { name: string; proc: ChildProcess }[],
-  backendPort: number,
+  _backendPort: number, // Unused in production - backend serves both API and frontend on frontendPort
   frontendPort: number,
   onReady: () => Promise<void>,
   shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
-  const nextStandalone = join(PROJECT_ROOT, '.next', 'standalone');
+  const frontendDist = join(PROJECT_ROOT, 'dist', 'client');
   const backendDist = join(PROJECT_ROOT, 'dist', 'src', 'backend', 'index.js');
 
-  if (!existsSync(nextStandalone)) {
+  if (!existsSync(frontendDist)) {
     console.error(chalk.red('\n  ✗ Frontend not built. Run `ff build` or `pnpm build` first.'));
     console.error(chalk.gray('    Or use --dev flag for development mode.'));
     process.exit(1);
@@ -456,47 +455,31 @@ async function startProductionMode(
     process.exit(1);
   }
 
-  console.log(chalk.blue('  🔧 Starting backend (production mode)...'));
+  // In production, the backend serves both API and static files on a single port
+  // Set FRONTEND_STATIC_PATH so backend knows where to serve static files from
+  console.log(chalk.blue('  🔧 Starting server (production mode)...'));
 
   const backend = spawn('node', [backendDist], {
     cwd: PROJECT_ROOT,
-    env,
-    stdio: options.verbose ? 'inherit' : 'pipe',
-  });
-  processes.push({ name: 'backend', proc: backend });
-
-  if (!options.verbose) {
-    setupProcessOutput(backend, 'backend');
-  }
-
-  await waitForService(backendPort, options.host, 'Backend', processes);
-
-  console.log(chalk.blue('  🎨 Starting frontend (production mode)...'));
-
-  const standaloneServer = join(nextStandalone, 'server.js');
-  const frontend = spawn('node', [standaloneServer], {
-    cwd: PROJECT_ROOT,
     env: {
       ...env,
-      PORT: frontendPort.toString(),
-      HOSTNAME: options.host,
+      FRONTEND_STATIC_PATH: frontendDist,
+      // In production, frontend and backend run on the same port
+      BACKEND_PORT: frontendPort.toString(),
     },
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
-  processes.push({ name: 'frontend', proc: frontend });
+  processes.push({ name: 'server', proc: backend });
 
   if (!options.verbose) {
-    setupProcessOutput(frontend, 'frontend');
+    setupProcessOutput(backend, 'server');
   }
 
-  await waitForService(frontendPort, options.host, 'Frontend', processes);
+  await waitForService(frontendPort, options.host, 'Server', processes);
 
   await onReady();
 
-  await Promise.race([
-    createExitPromise(backend, 'Backend', shutdownState),
-    createExitPromise(frontend, 'Frontend', shutdownState),
-  ]).catch((error) => {
+  await createExitPromise(backend, 'Server', shutdownState).catch((error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
     killAllProcesses(processes);
     process.exit(1);
@@ -624,27 +607,20 @@ program
     console.log(chalk.green('  ✓ Backend built'));
     console.log(chalk.blue('Building frontend...'));
 
-    // Build Next.js frontend
-    const nextBuild = spawn('npx', ['next', 'build'], {
+    // Build Vite/React Router frontend
+    const viteBuild = spawn('npx', ['vite', 'build'], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
       env: { ...process.env, NODE_ENV: 'production' },
     });
 
     exitCode = await new Promise<number>((resolve) => {
-      nextBuild.on('exit', (code) => resolve(code ?? 1));
+      viteBuild.on('exit', (code) => resolve(code ?? 1));
     });
 
     if (exitCode !== 0) {
       console.error(chalk.red('Frontend build failed'));
       process.exit(exitCode);
-    }
-
-    // Copy static files to standalone output (required for Next.js standalone mode)
-    const staticSrc = join(PROJECT_ROOT, '.next', 'static');
-    const staticDest = join(PROJECT_ROOT, '.next', 'standalone', '.next', 'static');
-    if (existsSync(staticSrc)) {
-      cpSync(staticSrc, staticDest, { recursive: true });
     }
 
     console.log(chalk.green('\n✅ Build completed successfully!'));

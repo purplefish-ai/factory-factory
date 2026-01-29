@@ -1,9 +1,6 @@
-'use client';
-
 import { ArrowLeftIcon } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -15,7 +12,7 @@ import { Logo } from '../../../frontend/components/logo';
 import { trpc } from '../../../frontend/lib/trpc';
 
 export default function NewProjectPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [repoPath, setRepoPath] = useState('');
   const [error, setError] = useState('');
   const [startupScript, setStartupScript] = useState('');
@@ -29,7 +26,7 @@ export default function NewProjectPage() {
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
       utils.project.list.invalidate();
-      router.push(`/projects/${project.slug}`);
+      navigate(`/projects/${project.slug}`);
     },
     onError: (err) => {
       setError(err.message);
@@ -121,7 +118,7 @@ export default function NewProjectPage() {
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/projects">
+          <Link to="/projects">
             <ArrowLeftIcon className="h-5 w-5" />
           </Link>
         </Button>
@@ -175,7 +172,7 @@ export default function NewProjectPage() {
 
             <div className="flex justify-end gap-4">
               <Button variant="secondary" asChild>
-                <Link href="/projects">Cancel</Link>
+                <Link to="/projects">Cancel</Link>
               </Button>
               <Button type="submit" disabled={createProject.isPending}>
                 {createProject.isPending && <Spinner className="mr-2" />}

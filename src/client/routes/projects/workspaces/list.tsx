@@ -1,10 +1,7 @@
-'use client';
-
 import type { Workspace, WorkspaceInitStatus, WorkspaceStatus } from '@prisma-gen/browser';
 import { Kanban, List, Plus } from 'lucide-react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { Link, useParams } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -47,9 +44,8 @@ type WorkspaceWithSessions = Workspace & {
   initErrorMessage?: string | null;
 };
 
-export default function ProjectWorkspacesPage() {
-  const params = useParams();
-  const slug = params.slug as string;
+export default function WorkspacesListPage() {
+  const { slug = '' } = useParams<{ slug: string }>();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('board');
 
@@ -88,7 +84,7 @@ export default function ProjectWorkspacesPage() {
             </ToggleGroup>
             <KanbanControls />
             <Button asChild>
-              <Link href={`/projects/${slug}/workspaces/new`}>
+              <Link to={`/projects/${slug}/workspaces/new`}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Workspace
               </Link>
@@ -131,7 +127,7 @@ export default function ProjectWorkspacesPage() {
           </SelectContent>
         </Select>
         <Button asChild>
-          <Link href={`/projects/${slug}/workspaces/new`}>
+          <Link to={`/projects/${slug}/workspaces/new`}>
             <Plus className="h-4 w-4 mr-2" />
             New Workspace
           </Link>
@@ -148,7 +144,7 @@ export default function ProjectWorkspacesPage() {
               <EmptyDescription>Get started by creating your first workspace.</EmptyDescription>
             </EmptyHeader>
             <Button asChild>
-              <Link href={`/projects/${slug}/workspaces/new`}>Create your first workspace</Link>
+              <Link to={`/projects/${slug}/workspaces/new`}>Create your first workspace</Link>
             </Button>
           </Empty>
         ) : (
@@ -169,7 +165,7 @@ export default function ProjectWorkspacesPage() {
                 <TableRow key={workspace.id}>
                   <TableCell>
                     <Link
-                      href={`/projects/${slug}/workspaces/${workspace.id}`}
+                      to={`/projects/${slug}/workspaces/${workspace.id}`}
                       className="font-medium hover:underline"
                     >
                       {workspace.name}
@@ -208,7 +204,7 @@ export default function ProjectWorkspacesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/projects/${slug}/workspaces/${workspace.id}`}>View</Link>
+                      <Link to={`/projects/${slug}/workspaces/${workspace.id}`}>View</Link>
                     </Button>
                   </TableCell>
                 </TableRow>

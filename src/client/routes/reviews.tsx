@@ -1,7 +1,5 @@
-'use client';
-
-import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { PRWithFullDetails } from '@/shared/github-types';
@@ -18,7 +16,7 @@ export default function ReviewsPage() {
 }
 
 function ReviewsPageContent() {
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
   const initialRepo = searchParams.get('repo');
   const initialPR = searchParams.get('pr');
 
