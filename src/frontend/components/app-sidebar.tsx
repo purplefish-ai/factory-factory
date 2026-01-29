@@ -10,7 +10,7 @@ import {
   Settings,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
@@ -45,15 +46,6 @@ const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
   return match ? match[1] : null;
-}
-
-function generateWorkspaceName(): string {
-  const now = new Date();
-  const month = now.toLocaleString('en-US', { month: 'short' }).toLowerCase();
-  const day = now.getDate();
-  const hour = now.getHours();
-  const min = now.getMinutes().toString().padStart(2, '0');
-  return `workspace-${month}${day}-${hour}${min}`;
 }
 
 export function AppSidebar() {
@@ -84,11 +76,13 @@ export function AppSidebar() {
   const createWorkspace = trpc.workspace.create.useMutation();
   const [pendingWorkspaceName, setPendingWorkspaceName] = useState<string | null>(null);
 
+  const existingWorkspaceNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
+
   const handleCreateWorkspace = async () => {
     if (!selectedProjectId) {
       return;
     }
-    const name = generateWorkspaceName();
+    const name = generateUniqueWorkspaceName(existingWorkspaceNames);
     setPendingWorkspaceName(name);
 
     // Create workspace (branchName defaults to project's default branch)

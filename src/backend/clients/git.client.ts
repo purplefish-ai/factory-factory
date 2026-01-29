@@ -23,6 +23,8 @@ export interface GitWorktreeInfo {
 export interface CreateWorktreeOptions {
   /** GitHub username or org for branch prefix (e.g., 'martin-purplefish') */
   branchPrefix?: string;
+  /** Workspace name to use for branch (e.g., 'tiger' -> 'martin-purplefish/tiger') */
+  workspaceName?: string;
 }
 
 export interface GitClientConfig {
@@ -52,7 +54,7 @@ export class GitClient {
     options: CreateWorktreeOptions = {}
   ): Promise<GitWorktreeInfo> {
     const worktreePath = this.getWorktreePath(name);
-    const branchName = this.generateBranchName(options.branchPrefix);
+    const branchName = this.generateBranchName(options.branchPrefix, options.workspaceName);
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
@@ -103,13 +105,14 @@ export class GitClient {
   }
 
   /**
-   * Generate a short branch name with optional prefix.
-   * Format: {prefix}/{hash} or just {hash} if no prefix.
-   * Example: martin-purplefish/a38djnb
+   * Generate a branch name with optional prefix.
+   * If workspaceName is provided: {prefix}/{workspaceName} or just {workspaceName}
+   * Otherwise falls back to random hex: {prefix}/{hash} or just {hash}
+   * Example: martin-purplefish/tiger
    */
-  generateBranchName(prefix?: string): string {
-    const hash = crypto.randomBytes(3).toString('hex'); // 6 hex chars
-    return prefix ? `${prefix}/${hash}` : hash;
+  generateBranchName(prefix?: string, workspaceName?: string): string {
+    const suffix = workspaceName ?? crypto.randomBytes(3).toString('hex');
+    return prefix ? `${prefix}/${suffix}` : suffix;
   }
 
   /**
