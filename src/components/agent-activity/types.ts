@@ -1,86 +1,15 @@
 /**
  * Agent-specific type definitions.
- *
- * Re-exports types from '@/lib/claude-types' and adds agent-specific types.
  */
 
 import type { ToolResultContentValue as _ToolResultContentValue } from '@/lib/claude-types';
 
-// Re-export all types from claude-types for convenience
-export type {
-  AgentAssignedTask,
-  AgentCurrentTask,
-  // Agent metadata types
-  AgentMetadata,
-  ChatMessage,
-  ClaudeContentItem,
-  // Message types
-  ClaudeMessage,
-  ClaudeMessagePayload,
-  ClaudeStreamEvent,
-  ClaudeUsage,
-  ConnectionState,
-  ContentBlockDelta,
-  // Tool call grouping types
-  GroupedMessageItem,
-  HistoryMessage,
-  ImageItem,
-  MessageGroup,
-  MessageGroupType,
-  // Session types
-  SessionInfo,
-  // Content types
-  TextContent,
-  // Stream event types
-  TextDelta,
-  TextItem,
-  ThinkingContent,
-  ThinkingDelta,
-  // Stats types
-  TokenStats,
-  ToolDefinition,
-  ToolResultContent,
-  ToolResultContentValue,
-  ToolSequence,
-  ToolUseContent,
-  WebSocketMessage,
-} from '@/lib/claude-types';
-
-// Re-export helper functions
-export {
-  convertHistoryMessage,
-  createEmptyTokenStats,
-  extractTextFromMessage,
-  extractToolInfo,
-  extractToolResultInfo,
-  groupAdjacentToolCalls,
-  groupMessages,
-  isContentBlockDeltaEvent,
-  isContentBlockStartEvent,
-  isTextContent,
-  isThinkingContent,
-  isToolResultContent,
-  isToolResultMessage,
-  isToolSequence,
-  isToolUseContent,
-  isToolUseMessage,
-  updateTokenStatsFromResult,
-} from '@/lib/claude-types';
+// Re-export commonly used types from claude-types for index.ts
+export type { ChatMessage, ClaudeMessage } from '@/lib/claude-types';
 
 // =============================================================================
 // Agent-Specific Types
 // =============================================================================
-
-/**
- * Agent activity view state.
- */
-export type AgentActivityState =
-  | 'idle' // Not connected, no activity
-  | 'connecting' // Attempting to connect
-  | 'connected' // Connected but agent not running
-  | 'running' // Agent is actively running
-  | 'paused' // Agent is paused
-  | 'error'; // Connection error
 
 /**
  * Tool call group for rendering multiple tool calls together.
