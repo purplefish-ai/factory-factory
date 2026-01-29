@@ -80,15 +80,21 @@ try {
       'INSERT INTO _prisma_migrations (id, migration_name, started_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
     ).run(id, migrationName);
 
-    // Execute the migration
-    db.exec(sql);
+    try {
+      // Execute the migration
+      db.exec(sql);
 
-    // Record migration completion
-    db.prepare(
-      'UPDATE _prisma_migrations SET finished_at = CURRENT_TIMESTAMP, applied_steps_count = 1 WHERE id = ?'
-    ).run(id);
+      // Record migration completion
+      db.prepare(
+        'UPDATE _prisma_migrations SET finished_at = CURRENT_TIMESTAMP, applied_steps_count = 1 WHERE id = ?'
+      ).run(id);
 
-    log(`Applied: ${migrationName}`);
+      log(`Applied: ${migrationName}`);
+    } catch (err) {
+      // Remove the incomplete migration record so it can be retried
+      db.prepare('DELETE FROM _prisma_migrations WHERE id = ?').run(id);
+      throw err;
+    }
   }
 
   log('All migrations complete');
