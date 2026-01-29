@@ -8,6 +8,12 @@
  * - In-memory storage with file-based persistence
  * - TTL-based automatic expiration
  * - Workspace-scoped locks resolved from agentId
+ *
+ * Limitations:
+ * - Single-process only: In-memory lock state is not shared across multiple
+ *   Node.js processes. If running in a cluster, each process will have its
+ *   own lock state. File persistence helps on restart but doesn't provide
+ *   cross-process synchronization during runtime.
  */
 
 import * as fs from 'node:fs/promises';
@@ -301,14 +307,20 @@ class FileLockService {
   }
 
   /**
-   * Normalize file path to prevent traversal attacks
+   * Normalize file path and verify it stays within the workspace
    */
-  private normalizePath(filePath: string): string {
+  private normalizePath(filePath: string, worktreePath: string): string {
     // Remove leading slashes and normalize
     const normalized = path.normalize(filePath).replace(/^\/+/, '');
 
-    // Prevent path traversal
+    // Prevent obvious path traversal patterns
     if (normalized.startsWith('..') || normalized.includes('/..') || normalized.includes('\\..')) {
+      throw new Error('Path traversal not allowed');
+    }
+
+    // Resolve the full path and verify it stays within the workspace
+    const fullPath = path.resolve(worktreePath, normalized);
+    if (!fullPath.startsWith(worktreePath + path.sep) && fullPath !== worktreePath) {
       throw new Error('Path traversal not allowed');
     }
 
@@ -354,7 +366,7 @@ class FileLockService {
       throw new Error('Could not resolve workspace for agent');
     }
 
-    const normalizedPath = this.normalizePath(input.filePath);
+    const normalizedPath = this.normalizePath(input.filePath, context.worktreePath);
     const store = await this.getOrCreateStore(context);
 
     // Lazy cleanup
@@ -392,8 +404,8 @@ class FileLockService {
 
     store.locks.set(normalizedPath, newLock);
 
-    // Persist to disk (fire and forget, with logging on error)
-    this.persistToDisk(store);
+    // Persist to disk
+    await this.persistToDisk(store);
 
     logger.info('Lock acquired', {
       workspaceId: context.workspaceId,
@@ -418,7 +430,7 @@ class FileLockService {
       throw new Error('Could not resolve workspace for agent');
     }
 
-    const normalizedPath = this.normalizePath(input.filePath);
+    const normalizedPath = this.normalizePath(input.filePath, context.worktreePath);
     const store = await this.getOrCreateStore(context);
 
     const existingLock = store.locks.get(normalizedPath);
@@ -443,7 +455,7 @@ class FileLockService {
     store.locks.delete(normalizedPath);
 
     // Persist to disk
-    this.persistToDisk(store);
+    await this.persistToDisk(store);
 
     logger.info('Lock released', {
       workspaceId: context.workspaceId,
@@ -467,7 +479,7 @@ class FileLockService {
       throw new Error('Could not resolve workspace for agent');
     }
 
-    const normalizedPath = this.normalizePath(input.filePath);
+    const normalizedPath = this.normalizePath(input.filePath, context.worktreePath);
     const store = await this.getOrCreateStore(context);
 
     // Lazy cleanup
@@ -552,7 +564,7 @@ class FileLockService {
 
     if (releasedPaths.length > 0) {
       // Persist to disk
-      this.persistToDisk(store);
+      await this.persistToDisk(store);
 
       logger.info('Released all locks for agent', {
         workspaceId: context.workspaceId,
@@ -576,25 +588,27 @@ class FileLockService {
     }
 
     this.cleanupInterval = setInterval(() => {
-      let totalCleaned = 0;
-      const modifiedStores: WorkspaceLockStore[] = [];
+      void (async () => {
+        let totalCleaned = 0;
+        const modifiedStores: WorkspaceLockStore[] = [];
 
-      for (const store of this.stores.values()) {
-        const cleaned = this.cleanupExpired(store);
-        if (cleaned > 0) {
-          totalCleaned += cleaned;
-          modifiedStores.push(store);
+        for (const store of this.stores.values()) {
+          const cleaned = this.cleanupExpired(store);
+          if (cleaned > 0) {
+            totalCleaned += cleaned;
+            modifiedStores.push(store);
+          }
         }
-      }
 
-      // Persist modified stores
-      for (const store of modifiedStores) {
-        this.persistToDisk(store);
-      }
+        // Persist modified stores
+        for (const store of modifiedStores) {
+          await this.persistToDisk(store);
+        }
 
-      if (totalCleaned > 0) {
-        logger.info('Periodic lock cleanup completed', { cleaned: totalCleaned });
-      }
+        if (totalCleaned > 0) {
+          logger.info('Periodic lock cleanup completed', { cleaned: totalCleaned });
+        }
+      })();
     }, intervalMs);
 
     logger.info('Lock cleanup interval started', { intervalMs });

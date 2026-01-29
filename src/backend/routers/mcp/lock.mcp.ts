@@ -31,126 +31,101 @@ const ListLocksInputSchema = z.object({
 const ReleaseAllLocksInputSchema = z.object({});
 
 // ============================================================================
+// Error Handling Helper
+// ============================================================================
+
+/**
+ * Wraps a lock service call with standard error handling
+ */
+async function wrapLockHandler<T>(
+  fn: () => Promise<T>,
+  options: { checkPathTraversal?: boolean } = {}
+): Promise<McpToolResponse<T>> {
+  try {
+    const result = await fn();
+    return createSuccessResponse(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
+    }
+    if (error instanceof Error && error.message === 'Could not resolve workspace for agent') {
+      return createErrorResponse(
+        McpErrorCode.WORKSPACE_NOT_FOUND,
+        'Could not resolve workspace for agent'
+      );
+    }
+    if (
+      options.checkPathTraversal &&
+      error instanceof Error &&
+      error.message === 'Path traversal not allowed'
+    ) {
+      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Path traversal not allowed');
+    }
+    throw error;
+  }
+}
+
+// ============================================================================
 // Tool Implementations
 // ============================================================================
 
 /**
  * Acquire an advisory lock on a file
  */
-async function acquireLock(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
-  try {
-    const parsed = AcquireLockInputSchema.parse(input);
-    const result = await fileLockService.acquireLock(context.agentId, parsed);
-    return createSuccessResponse(result);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
-    }
-    if (error instanceof Error && error.message === 'Could not resolve workspace for agent') {
-      return createErrorResponse(
-        McpErrorCode.WORKSPACE_NOT_FOUND,
-        'Could not resolve workspace for agent'
-      );
-    }
-    if (error instanceof Error && error.message === 'Path traversal not allowed') {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Path traversal not allowed');
-    }
-    throw error;
-  }
+function acquireLock(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+  return wrapLockHandler(
+    () => {
+      const parsed = AcquireLockInputSchema.parse(input);
+      return fileLockService.acquireLock(context.agentId, parsed);
+    },
+    { checkPathTraversal: true }
+  );
 }
 
 /**
  * Release an advisory lock on a file
  */
-async function releaseLock(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
-  try {
-    const parsed = ReleaseLockInputSchema.parse(input);
-    const result = await fileLockService.releaseLock(context.agentId, parsed);
-    return createSuccessResponse(result);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
-    }
-    if (error instanceof Error && error.message === 'Could not resolve workspace for agent') {
-      return createErrorResponse(
-        McpErrorCode.WORKSPACE_NOT_FOUND,
-        'Could not resolve workspace for agent'
-      );
-    }
-    if (error instanceof Error && error.message === 'Path traversal not allowed') {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Path traversal not allowed');
-    }
-    throw error;
-  }
+function releaseLock(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+  return wrapLockHandler(
+    () => {
+      const parsed = ReleaseLockInputSchema.parse(input);
+      return fileLockService.releaseLock(context.agentId, parsed);
+    },
+    { checkPathTraversal: true }
+  );
 }
 
 /**
  * Check if a file is locked
  */
-async function checkLock(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
-  try {
-    const parsed = CheckLockInputSchema.parse(input);
-    const result = await fileLockService.checkLock(context.agentId, parsed);
-    return createSuccessResponse(result);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
-    }
-    if (error instanceof Error && error.message === 'Could not resolve workspace for agent') {
-      return createErrorResponse(
-        McpErrorCode.WORKSPACE_NOT_FOUND,
-        'Could not resolve workspace for agent'
-      );
-    }
-    if (error instanceof Error && error.message === 'Path traversal not allowed') {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Path traversal not allowed');
-    }
-    throw error;
-  }
+function checkLock(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+  return wrapLockHandler(
+    () => {
+      const parsed = CheckLockInputSchema.parse(input);
+      return fileLockService.checkLock(context.agentId, parsed);
+    },
+    { checkPathTraversal: true }
+  );
 }
 
 /**
  * List all locks in the workspace
  */
-async function listLocks(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
-  try {
+function listLocks(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+  return wrapLockHandler(() => {
     const parsed = ListLocksInputSchema.parse(input);
-    const result = await fileLockService.listLocks(context.agentId, parsed);
-    return createSuccessResponse(result);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
-    }
-    if (error instanceof Error && error.message === 'Could not resolve workspace for agent') {
-      return createErrorResponse(
-        McpErrorCode.WORKSPACE_NOT_FOUND,
-        'Could not resolve workspace for agent'
-      );
-    }
-    throw error;
-  }
+    return fileLockService.listLocks(context.agentId, parsed);
+  });
 }
 
 /**
  * Release all locks held by the current agent
  */
-async function releaseAllLocks(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
-  try {
+function releaseAllLocks(context: McpToolContext, input: unknown): Promise<McpToolResponse> {
+  return wrapLockHandler(() => {
     ReleaseAllLocksInputSchema.parse(input);
-    const result = await fileLockService.releaseAllLocks(context.agentId);
-    return createSuccessResponse(result);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return createErrorResponse(McpErrorCode.INVALID_INPUT, 'Invalid input', error.issues);
-    }
-    if (error instanceof Error && error.message === 'Could not resolve workspace for agent') {
-      return createErrorResponse(
-        McpErrorCode.WORKSPACE_NOT_FOUND,
-        'Could not resolve workspace for agent'
-      );
-    }
-    throw error;
-  }
+    return fileLockService.releaseAllLocks(context.agentId);
+  });
 }
 
 // ============================================================================
@@ -158,6 +133,9 @@ async function releaseAllLocks(context: McpToolContext, input: unknown): Promise
 // ============================================================================
 
 export function registerLockTools(): void {
+  // Start the cleanup interval for expired locks
+  fileLockService.startCleanupInterval();
+
   registerMcpTool({
     name: 'mcp__lock__acquire',
     description:
