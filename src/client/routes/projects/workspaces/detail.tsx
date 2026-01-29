@@ -931,7 +931,10 @@ export default function WorkspaceDetailPage() {
   return (
     <WorkspacePanelProvider workspaceId={workspaceId}>
       <Suspense fallback={<ChatLoading />}>
-        <WorkspaceChatContent />
+        {/* Key by workspaceId to reset all state when switching workspaces.
+            Without this, selectedDbSessionId would persist from the previous
+            workspace and no session tab would be highlighted. */}
+        <WorkspaceChatContent key={workspaceId} />
       </Suspense>
     </WorkspacePanelProvider>
   );
