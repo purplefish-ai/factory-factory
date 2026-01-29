@@ -2,6 +2,7 @@
   "name": "factoryfactory",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.28.1",
   "bin": {
