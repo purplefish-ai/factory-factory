@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
-import { Outlet, useNavigate, useParams } from 'react-router';
+import { Outlet, useParams } from 'react-router';
 import { useProjectContext } from '../../frontend/lib/providers';
 import { trpc } from '../../frontend/lib/trpc';
 
 export function ProjectLayout() {
   const { slug = '' } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
   const { setProjectContext } = useProjectContext();
 
   const {
@@ -24,13 +23,6 @@ export function ProjectLayout() {
       setProjectContext(undefined);
     };
   }, [project?.id, setProjectContext]);
-
-  useEffect(() => {
-    if (!(isLoading || project || error)) {
-      // Project not found, redirect to projects list
-      navigate('/projects');
-    }
-  }, [isLoading, project, error, navigate]);
 
   if (isLoading) {
     return (
