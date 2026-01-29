@@ -3,6 +3,9 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+// Backend URL is set by the CLI when running in development mode
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -17,15 +20,15 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/chat': {
-        target: 'ws://localhost:3000',
+        target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },
       '/terminal': {
-        target: 'ws://localhost:3000',
+        target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },
     },

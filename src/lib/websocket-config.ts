@@ -4,13 +4,6 @@
  */
 
 /**
- * Port number for WebSocket connections to the backend.
- * Configurable via NEXT_PUBLIC_BACKEND_PORT env var (defaults to 3001).
- * This allows running dev and production servers on different ports simultaneously.
- */
-export const WEBSOCKET_PORT = Number(process.env.NEXT_PUBLIC_BACKEND_PORT) || 3001;
-
-/**
  * Maximum reconnection attempts before giving up.
  *
  * With exponential backoff (1s, 2s, 4s, 8s, 16s, then 30s cap), 10 attempts
@@ -54,13 +47,15 @@ export function getReconnectDelay(attempt: number): number {
 /**
  * Constructs a WebSocket URL for the given endpoint with query parameters.
  * Uses wss:// when the page is served over HTTPS, ws:// otherwise.
+ * In development, Vite proxies WebSocket connections to the backend.
+ * In production, the backend serves both HTTP and WebSocket on the same port.
  * @param endpoint - The WebSocket endpoint path (e.g., '/chat', '/agent-activity')
  * @param params - Query parameters to append to the URL
  */
 export function buildWebSocketUrl(endpoint: string, params: Record<string, string>): string {
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
   const protocol =
     typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const queryString = new URLSearchParams(params).toString();
-  return `${protocol}//${host}:${WEBSOCKET_PORT}${endpoint}?${queryString}`;
+  return `${protocol}//${host}${endpoint}?${queryString}`;
 }

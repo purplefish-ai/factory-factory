@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { StorybookConfig } from '@storybook/nextjs-vite';
+import type { StorybookConfig } from '@storybook/react-vite';
 import tailwindcss from '@tailwindcss/vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,7 +14,7 @@ const config: StorybookConfig = {
   addons: ['@storybook/addon-themes', '@storybook/addon-a11y', '@storybook/addon-mcp'],
 
   framework: {
-    name: '@storybook/nextjs-vite',
+    name: '@storybook/react-vite',
     options: {},
   },
 

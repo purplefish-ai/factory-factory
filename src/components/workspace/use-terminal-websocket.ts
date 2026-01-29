@@ -87,10 +87,8 @@ export function useTerminalWebSocket({
     intentionalCloseRef.current = false;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = process.env.NEXT_PUBLIC_WS_HOST || window.location.host;
-    const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT || '3001';
-    const wsHost = host.includes(':') ? host.split(':')[0] : host;
-    const wsUrl = `${protocol}//${wsHost}:${backendPort}/terminal?workspaceId=${encodeURIComponent(workspaceId)}`;
+    // Use same origin - Vite proxies /terminal to backend in dev, backend serves directly in prod
+    const wsUrl = `${protocol}//${window.location.host}/terminal?workspaceId=${encodeURIComponent(workspaceId)}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
