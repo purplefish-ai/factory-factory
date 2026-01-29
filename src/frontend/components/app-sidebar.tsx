@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { useSidebarVisibility } from '@/components/layout/resizable-layout';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -64,6 +65,7 @@ export function AppSidebar() {
     branchName?: string | null;
   } | null>(null);
   const { setProjectContext } = useProjectContext();
+  const { setIsSidebarVisible } = useSidebarVisibility();
 
   const { data: projects, isLoading: projectsLoading } = trpc.project.list.useQuery({
     isArchived: false,
@@ -210,6 +212,13 @@ export function AppSidebar() {
     }
   }, [projectsLoading, projects, selectedProjectSlug, pathname, navigate]);
 
+  // Hide sidebar panel when no projects exist - show onboarding flow
+  useEffect(() => {
+    if (projects) {
+      setIsSidebarVisible(projects.length > 0);
+    }
+  }, [projects, setIsSidebarVisible]);
+
   const handleProjectChange = (value: string) => {
     if (value === '__manage__') {
       navigate('/projects');
@@ -294,7 +303,6 @@ export function AppSidebar() {
     );
   }
 
-  // Hide sidebar when no projects exist - show onboarding flow
   if (projects && projects.length === 0) {
     return null;
   }
