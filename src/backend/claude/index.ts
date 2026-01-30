@@ -7,12 +7,20 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { AutoApproveHandler, ModeBasedHandler, type PermissionHandler } from './permissions';
+import {
+  AutoApproveHandler,
+  DeferredHandler,
+  INTERACTIVE_TOOLS,
+  ModeBasedHandler,
+  type PermissionHandler,
+} from './permissions';
 import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './process';
 import type { ControlResponseBody } from './protocol';
 import { type HistoryMessage, SessionManager } from './session';
 import {
+  type AskUserQuestionInput,
   type AssistantMessage,
+  type CanUseToolRequest,
   type ClaudeContentItem,
   type ClaudeJson,
   type ControlRequest,
@@ -93,15 +101,43 @@ export interface ClaudeClientOptions {
  * client.sendToolResult(toolUseId, { result: 'success' });
  * ```
  */
+/**
+ * Pending interactive tool request (e.g., AskUserQuestion).
+ */
+export interface PendingInteractiveRequest {
+  requestId: string;
+  toolName: string;
+  toolUseId: string;
+  input: Record<string, unknown>;
+}
+
 export class ClaudeClient extends EventEmitter {
   private process: ClaudeProcess | null = null;
   private permissionHandler: PermissionHandler;
   private workingDir: string;
+  /** Handler for interactive tools that require user input (AskUserQuestion, etc.) */
+  private interactiveHandler: DeferredHandler;
+  /** Store pending interactive requests to retrieve original input when responding */
+  private pendingInteractiveRequests: Map<string, CanUseToolRequest> = new Map();
 
   private constructor(workingDir: string, permissionHandler: PermissionHandler) {
     super();
     this.workingDir = workingDir;
     this.permissionHandler = permissionHandler;
+    this.interactiveHandler = new DeferredHandler({ timeout: 300_000 }); // 5 minute timeout
+
+    // Forward interactive tool requests as events and store them for later
+    this.interactiveHandler.on('permission_request', (request, requestId) => {
+      // Store the request so we can retrieve the input (e.g., questions) when responding
+      this.pendingInteractiveRequests.set(requestId, request);
+
+      this.emit('interactive_request', {
+        requestId,
+        toolName: request.tool_name,
+        toolUseId: request.tool_use_id,
+        input: request.input,
+      } as PendingInteractiveRequest);
+    });
   }
 
   // ===========================================================================
@@ -297,6 +333,74 @@ export class ClaudeClient extends EventEmitter {
   }
 
   // ===========================================================================
+  // Interactive Tool Responses
+  // ===========================================================================
+
+  /**
+   * Answer an AskUserQuestion request.
+   * The answers object maps question text to selected option label(s).
+   *
+   * @param requestId - The request ID from the 'interactive_request' event
+   * @param answers - Map of question text to selected answer(s)
+   */
+  answerQuestion(requestId: string, answers: Record<string, string | string[]>): void {
+    // Retrieve the stored request to get the original questions
+    const storedRequest = this.pendingInteractiveRequests.get(requestId);
+    if (!storedRequest) {
+      throw new Error(`No pending interactive request found with ID: ${requestId}`);
+    }
+
+    // Get questions from the stored request
+    const input = storedRequest.input as unknown as AskUserQuestionInput;
+    const questions = input.questions;
+
+    // Clean up stored request
+    this.pendingInteractiveRequests.delete(requestId);
+
+    // Approve with both questions and answers (required by Claude CLI)
+    this.interactiveHandler.approve(requestId, { questions, answers });
+  }
+
+  /**
+   * Approve an interactive tool request (e.g., ExitPlanMode).
+   * For AskUserQuestion, use answerQuestion instead.
+   *
+   * @param requestId - The request ID from the 'interactive_request' event
+   */
+  approveInteractiveRequest(requestId: string): void {
+    // Retrieve the stored request to pass through the original input
+    const storedRequest = this.pendingInteractiveRequests.get(requestId);
+    if (!storedRequest) {
+      throw new Error(`No pending interactive request found with ID: ${requestId}`);
+    }
+
+    // Clean up stored request
+    this.pendingInteractiveRequests.delete(requestId);
+
+    // Approve with the original input (pass it through unchanged)
+    this.interactiveHandler.approve(requestId, storedRequest.input);
+  }
+
+  /**
+   * Deny an interactive tool request.
+   *
+   * @param requestId - The request ID from the 'interactive_request' event
+   * @param reason - The reason for denial
+   */
+  denyInteractiveRequest(requestId: string, reason: string): void {
+    // Clean up stored request
+    this.pendingInteractiveRequests.delete(requestId);
+    this.interactiveHandler.deny(requestId, reason);
+  }
+
+  /**
+   * Check if there are pending interactive requests.
+   */
+  hasPendingInteractiveRequests(): boolean {
+    return this.interactiveHandler.getPendingCount() > 0;
+  }
+
+  // ===========================================================================
   // Event Emitter Overloads (for TypeScript)
   // ===========================================================================
 
@@ -304,6 +408,10 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'tool_use', handler: (toolUse: ToolUseContent) => void): this;
   override on(event: 'stream', handler: (event: StreamEventMessage) => void): this;
   override on(event: 'permission_request', handler: (req: ControlRequest) => void): this;
+  override on(
+    event: 'interactive_request',
+    handler: (req: PendingInteractiveRequest) => void
+  ): this;
   override on(event: 'result', handler: (result: ResultMessage) => void): this;
   override on(event: 'exit', handler: (result: ExitResult) => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
@@ -317,6 +425,7 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'tool_use', toolUse: ToolUseContent): boolean;
   override emit(event: 'stream', event_: StreamEventMessage): boolean;
   override emit(event: 'permission_request', req: ControlRequest): boolean;
+  override emit(event: 'interactive_request', req: PendingInteractiveRequest): boolean;
   override emit(event: 'result', result: ResultMessage): boolean;
   override emit(event: 'exit', result: ExitResult): boolean;
   override emit(event: 'error', error: Error): boolean;
@@ -426,6 +535,10 @@ export class ClaudeClient extends EventEmitter {
     request: ControlRequest['request']
   ): Promise<ControlResponseBody> {
     if (isCanUseToolRequest(request)) {
+      // Route interactive tools to the deferred handler to wait for user input
+      if (INTERACTIVE_TOOLS.has(request.tool_name)) {
+        return await this.interactiveHandler.onCanUseTool(request);
+      }
       return await this.permissionHandler.onCanUseTool(request);
     }
 

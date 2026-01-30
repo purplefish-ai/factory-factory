@@ -273,6 +273,30 @@ function setupChatClientEvents(
     });
   });
 
+  // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
+  client.on('interactive_request', (request) => {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Received interactive_request from client', {
+        dbSessionId,
+        toolName: request.toolName,
+        requestId: request.requestId,
+      });
+    }
+    sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+      eventType: 'interactive_request',
+      data: request,
+    });
+
+    // Forward to frontend as a special message type
+    forwardToConnections(dbSessionId, {
+      type: 'interactive_request',
+      requestId: request.requestId,
+      toolName: request.toolName,
+      toolUseId: request.toolUseId,
+      input: request.input,
+    });
+  });
+
   client.on('exit', (result) => {
     forwardToConnections(dbSessionId, {
       type: 'process_exit',
@@ -536,6 +560,87 @@ async function handleChatMessage(
               thinkingEnabled: false,
               planModeEnabled: false,
             },
+          })
+        );
+      }
+      break;
+    }
+
+    case 'question_response': {
+      const { requestId, answers } = message as {
+        type: 'question_response';
+        requestId: string;
+        answers: Record<string, string | string[]>;
+      };
+
+      if (!(requestId && answers)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Missing requestId or answers' }));
+        break;
+      }
+
+      const client = sessionService.getClient(sessionId);
+      if (!client) {
+        ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+        break;
+      }
+
+      try {
+        client.answerQuestion(requestId, answers);
+        if (DEBUG_CHAT_WS) {
+          logger.info('[Chat WS] Answered question', { sessionId, requestId });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('[Chat WS] Failed to answer question', {
+          sessionId,
+          requestId,
+          error: errorMessage,
+        });
+        ws.send(
+          JSON.stringify({ type: 'error', message: `Failed to answer question: ${errorMessage}` })
+        );
+      }
+      break;
+    }
+
+    case 'permission_response': {
+      const { requestId, allow } = message as {
+        type: 'permission_response';
+        requestId: string;
+        allow: boolean;
+      };
+
+      if (!requestId || allow === undefined) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Missing requestId or allow' }));
+        break;
+      }
+
+      const client = sessionService.getClient(sessionId);
+      if (!client) {
+        ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+        break;
+      }
+
+      try {
+        if (allow) {
+          client.approveInteractiveRequest(requestId);
+        } else {
+          client.denyInteractiveRequest(requestId, 'User denied');
+        }
+        if (DEBUG_CHAT_WS) {
+          logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('[Chat WS] Failed to respond to permission request', {
+          sessionId,
+          requestId,
+          error: errorMessage,
+        });
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            message: `Failed to respond to permission: ${errorMessage}`,
           })
         );
       }

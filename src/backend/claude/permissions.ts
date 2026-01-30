@@ -125,9 +125,22 @@ export function createStopHookResponse(
 }
 
 /**
+ * Interactive tools that require user input, not just permission.
+ * These tools should NEVER be auto-approved because they need actual user responses.
+ * - AskUserQuestion: needs the user's answers to questions
+ * - ExitPlanMode: needs user approval of the proposed plan
+ */
+export const INTERACTIVE_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
+/**
  * Determine if a tool should be auto-approved based on permission mode.
  */
 export function shouldAutoApprove(mode: PermissionMode, toolName: string): boolean {
+  // Interactive tools should NEVER be auto-approved - they require user input, not just permission
+  if (INTERACTIVE_TOOLS.has(toolName)) {
+    return false;
+  }
+
   switch (mode) {
     case 'bypassPermissions':
       return true;
