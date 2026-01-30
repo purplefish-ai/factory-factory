@@ -156,6 +156,18 @@ const ChatContent = memo(function ChatContent({
     [inputRef, running]
   );
 
+  // Memoize onHeightChange to prevent recreating on every render
+  const handleHeightChange = useCallback(() => {
+    // Keep messages scrolled to bottom when input area grows
+    // Use scrollTo with instant to override CSS smooth scrolling
+    if (isNearBottom && viewportRef.current) {
+      viewportRef.current.scrollTo({
+        top: viewportRef.current.scrollHeight,
+        behavior: 'instant',
+      });
+    }
+  }, [isNearBottom, viewportRef]);
+
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction
     // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
@@ -210,16 +222,7 @@ const ChatContent = memo(function ChatContent({
           sessionId={selectedDbSessionId}
           value={inputDraft}
           onChange={setInputDraft}
-          onHeightChange={() => {
-            // Keep messages scrolled to bottom when input area grows
-            // Use scrollTo with instant to override CSS smooth scrolling
-            if (isNearBottom && viewportRef.current) {
-              viewportRef.current.scrollTo({
-                top: viewportRef.current.scrollHeight,
-                behavior: 'instant',
-              });
-            }
-          }}
+          onHeightChange={handleHeightChange}
         />
       </div>
     </div>
