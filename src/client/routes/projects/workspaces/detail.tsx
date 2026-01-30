@@ -240,7 +240,6 @@ function WorkspaceChatContent() {
     workspace,
     workspaceLoading,
     claudeSessions,
-    sessionsLoading,
     workflows,
     recommendedWorkflow,
     initialDbSessionId,
@@ -328,8 +327,8 @@ function WorkspaceChatContent() {
   // Auto-scroll behavior with RAF throttling
   const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef, inputRef);
 
-  // Show loading while fetching workspace and sessions
-  if (workspaceLoading || sessionsLoading) {
+  // Show loading while fetching workspace (but not sessions - they can load in background)
+  if (workspaceLoading) {
     return <Loading message="Loading workspace..." />;
   }
 
