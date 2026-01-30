@@ -659,14 +659,21 @@ async function handleChatMessage(
             inputLength: Object.keys(toolInput).length,
           });
 
-          // Special handling for ExitPlanMode: return input only if non-empty
-          if (toolName === 'ExitPlanMode' && Object.keys(toolInput).length > 0) {
-            logger.info('[Chat WS] Approving ExitPlanMode with input', {
+          // Special handling for ExitPlanMode: return input and switch to bypass mode
+          if (toolName === 'ExitPlanMode') {
+            logger.info('[Chat WS] Approving ExitPlanMode with input and mode switch', {
               sessionId,
               requestId,
               toolInput,
             });
-            handler.approve(requestId, toolInput);
+            // Pass both updatedInput and updatedPermissions
+            handler.approveWithPermissions(requestId, toolInput, [
+              {
+                updateType: 'setMode',
+                mode: 'bypassPermissions',
+                destination: 'session',
+              },
+            ]);
           } else {
             logger.info('[Chat WS] Approving without input', {
               sessionId,

@@ -77,18 +77,40 @@ export interface PermissionHandler {
 /**
  * Create an allow response for can_use_tool requests.
  */
-export function createAllowResponse(updatedInput?: Record<string, unknown>): AllowResponseData {
+export function createAllowResponse(
+  updatedInput?: Record<string, unknown>,
+  updatedPermissions?: Array<{
+    updateType: string;
+    mode?: string;
+    destination?: string;
+    rules?: Array<{ tool_name: string; rule_content?: string }>;
+  }>
+): AllowResponseData {
   // Don't include updatedInput field at all if it's undefined
   // This avoids Zod validation issues with optional fields
-  if (updatedInput !== undefined) {
-    return {
-      behavior: 'allow',
-      updatedInput,
-    };
-  }
-  return {
+  const response: AllowResponseData = {
     behavior: 'allow',
   };
+
+  if (updatedInput !== undefined) {
+    response.updatedInput = updatedInput;
+  }
+
+  if (updatedPermissions !== undefined && updatedPermissions.length > 0) {
+    response.updatedPermissions = updatedPermissions.map((p) => ({
+      type: p.updateType as 'setMode' | 'addRules' | 'removeRules' | 'clearRules',
+      mode: p.mode as PermissionMode | undefined,
+      destination: p.destination as
+        | 'session'
+        | 'userSettings'
+        | 'projectSettings'
+        | 'localSettings'
+        | undefined,
+      rules: p.rules,
+    }));
+  }
+
+  return response;
 }
 
 /**
@@ -433,6 +455,27 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
    * @param updatedInput - Optional updated input to pass to the tool
    */
   approve(requestId: string, updatedInput?: Record<string, unknown>): void {
+    this.approveWithPermissions(requestId, updatedInput, undefined);
+  }
+
+  /**
+   * Approve a pending permission request with updated permissions.
+   * Used for ExitPlanMode to switch permission modes.
+   *
+   * @param requestId - The ID of the pending request
+   * @param updatedInput - Optional updated input to pass to the tool
+   * @param updatedPermissions - Optional permission updates
+   */
+  approveWithPermissions(
+    requestId: string,
+    updatedInput?: Record<string, unknown>,
+    updatedPermissions?: Array<{
+      updateType: string;
+      mode?: string;
+      destination?: string;
+      rules?: Array<{ tool_name: string; rule_content?: string }>;
+    }>
+  ): void {
     const pending = this.pendingRequests.get(requestId);
 
     if (!pending) {
@@ -446,13 +489,15 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     this.pendingRequests.delete(requestId);
 
     if (pending.type === 'permission') {
-      const response = createAllowResponse(updatedInput);
+      const response = createAllowResponse(updatedInput, updatedPermissions);
       // biome-ignore lint/suspicious/noConsole: Debug logging for permission approval
       console.log('[DeferredHandler] Approving with response:', {
         requestId,
         response,
         hasUpdatedInput: 'updatedInput' in response,
+        hasUpdatedPermissions: 'updatedPermissions' in response,
         updatedInputValue: updatedInput,
+        updatedPermissionsValue: updatedPermissions,
         responseJSON: JSON.stringify(response),
       });
       pending.resolve(response);
