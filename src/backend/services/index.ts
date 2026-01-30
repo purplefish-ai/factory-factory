@@ -24,6 +24,8 @@ export { rateLimiter } from './rate-limiter.service';
 export { reconciliationService } from './reconciliation.service';
 // Scheduler service
 export { schedulerService } from './scheduler.service';
+// Server instance service
+export { serverInstanceService } from './server-instance.service';
 // Session service
 export { sessionService } from './session.service';
 // Session file logger service
