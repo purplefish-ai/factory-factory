@@ -423,11 +423,9 @@ export const MessageWrapper = memo(function MessageWrapper({
   children,
   className,
 }: MessageWrapperProps) {
-  const isUser = chatMessage.source === 'user';
-
   return (
-    <div className={cn('py-2', isUser ? 'flex justify-end' : '', className)}>
-      <div className={cn('max-w-full', isUser ? 'text-right' : '')}>{children}</div>
+    <div className={cn('py-2', className)}>
+      <div className="max-w-full">{children}</div>
     </div>
   );
 });
