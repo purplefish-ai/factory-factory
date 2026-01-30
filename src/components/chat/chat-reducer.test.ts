@@ -798,6 +798,30 @@ describe('chatReducer', () => {
 
       expect(newState.pendingPermission).toEqual(permissionRequest);
     });
+
+    it('should not overwrite existing pending permission request (guard against loss)', () => {
+      const existingRequest: PermissionRequest = {
+        requestId: 'req-first',
+        toolName: 'Bash',
+        toolInput: { command: 'rm -rf /' },
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const newRequest: PermissionRequest = {
+        requestId: 'req-second',
+        toolName: 'Write',
+        toolInput: { file_path: '/tmp/test.txt' },
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingPermission: existingRequest,
+      };
+      const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: newRequest };
+      const newState = chatReducer(state, action);
+
+      // Should keep the first request, not overwrite with second
+      expect(newState.pendingPermission).toEqual(existingRequest);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -823,6 +847,30 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.pendingQuestion).toEqual(questionRequest);
+    });
+
+    it('should not overwrite existing pending question (guard against loss)', () => {
+      const existingQuestion: UserQuestionRequest = {
+        requestId: 'req-first',
+        questions: [{ question: 'First question?', header: 'Q1', options: [], multiSelect: false }],
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const newQuestion: UserQuestionRequest = {
+        requestId: 'req-second',
+        questions: [
+          { question: 'Second question?', header: 'Q2', options: [], multiSelect: false },
+        ],
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingQuestion: existingQuestion,
+      };
+      const action: ChatAction = { type: 'WS_USER_QUESTION', payload: newQuestion };
+      const newState = chatReducer(state, action);
+
+      // Should keep the first question, not overwrite with second
+      expect(newState.pendingQuestion).toEqual(existingQuestion);
     });
   });
 

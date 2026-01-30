@@ -330,6 +330,7 @@ function handleToolInputUpdate(
 // Reducer
 // =============================================================================
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Reducer handles many action types by design
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     // WebSocket status messages
@@ -426,9 +427,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     // Permission and question requests
+    // Guard: Don't overwrite existing pending request to prevent losing unresponded requests
     case 'WS_PERMISSION_REQUEST':
+      if (state.pendingPermission !== null) {
+        // Already have a pending permission request - ignore new one to prevent loss
+        return state;
+      }
       return { ...state, pendingPermission: action.payload };
     case 'WS_USER_QUESTION':
+      if (state.pendingQuestion !== null) {
+        // Already have a pending question - ignore new one to prevent loss
+        return state;
+      }
       return { ...state, pendingQuestion: action.payload };
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings
