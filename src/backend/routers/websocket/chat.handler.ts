@@ -426,10 +426,9 @@ async function handleChatMessage(
           queueLength: queue.length,
         });
 
-        const displayText =
-          typeof messageContent === 'string' ? messageContent : '[Image message]';
+        const displayText = typeof messageContent === 'string' ? messageContent : '[Image message]';
         ws.send(JSON.stringify({ type: 'message_queued', text: displayText }));
-        ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId });
+        ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
 
         // Determine model to use
         const validModels = ['sonnet', 'opus'];

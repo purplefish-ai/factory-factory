@@ -1,7 +1,16 @@
 'use client';
 
 import type { inferRouterOutputs } from '@trpc/server';
-import { Check, Eye, type LucideIcon, Play, Sparkles, Terminal, Zap } from 'lucide-react';
+import {
+  Check,
+  Eye,
+  GitBranch,
+  type LucideIcon,
+  Play,
+  Sparkles,
+  Terminal,
+  Zap,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -38,6 +47,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   play: Play,
   terminal: Terminal,
   check: Check,
+  'git-branch': GitBranch,
 };
 
 function getActionIcon(iconName?: string | null): LucideIcon {

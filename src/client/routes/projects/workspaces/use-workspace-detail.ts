@@ -306,7 +306,8 @@ export function useAutoScroll(
         return;
       }
 
-      const scrollThreshold = 100;
+      // Increased threshold for better UX - don't hide scroll button too early
+      const scrollThreshold = 150;
       const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       const nearBottom = distanceFromBottom < scrollThreshold;
 

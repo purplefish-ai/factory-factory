@@ -349,10 +349,36 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_SESSIONS':
       return { ...state, availableSessions: action.payload.sessions };
     case 'WS_SESSION_LOADED': {
-      const chatMessages = action.payload.messages.map(convertHistoryMessage);
+      const historyMessages = action.payload.messages.map(convertHistoryMessage);
+
+      // Preserve any optimistic user messages that were sent after the last history message
+      // This handles the case where the user sends a message and navigates away before
+      // the session processes it. We identify these by checking if the message timestamp
+      // is after the last message in history.
+      const lastHistoryTime =
+        historyMessages.length > 0
+          ? new Date(historyMessages[historyMessages.length - 1].timestamp).getTime()
+          : 0;
+
+      const optimisticUserMessages = state.messages.filter((msg) => {
+        if (msg.source !== 'user' || msg.text === undefined) {
+          return false;
+        }
+
+        // Keep messages that are newer than the last history message
+        const msgTime = new Date(msg.timestamp).getTime();
+        return msgTime > lastHistoryTime;
+      });
+
+      // Combine history with any optimistic messages (optimistic messages come after history)
+      const messages =
+        optimisticUserMessages.length > 0
+          ? [...historyMessages, ...optimisticUserMessages]
+          : historyMessages;
+
       return {
         ...state,
-        messages: chatMessages,
+        messages,
         gitBranch: action.payload.gitBranch,
         running: action.payload.running,
         loadingSession: false,

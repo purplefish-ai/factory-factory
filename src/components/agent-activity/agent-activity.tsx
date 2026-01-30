@@ -37,7 +37,7 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
   // User messages
   if (message.source === 'user') {
     return (
-      <MessageWrapper chatMessage={message}>
+      <MessageWrapper>
         <div className="inline-block max-w-full space-y-2">
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
