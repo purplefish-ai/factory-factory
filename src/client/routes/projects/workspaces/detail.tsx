@@ -329,6 +329,7 @@ function WorkspaceChatContent() {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
+    selectedModel: chatSettings.selectedModel,
   });
 
   // Ref for scroll handling (virtualized list manages its own content)

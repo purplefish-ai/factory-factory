@@ -72,6 +72,8 @@ interface UseSessionManagementOptions {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
   setSelectedDbSessionId: React.Dispatch<React.SetStateAction<string | null>>;
+  /** Selected model from chat settings (null means use default 'opus') */
+  selectedModel: string | null;
 }
 
 /** Minimal mutation interface exposing only the properties we use */
@@ -111,7 +113,10 @@ export function useSessionManagement({
   inputRef,
   selectedDbSessionId,
   setSelectedDbSessionId,
+  selectedModel,
 }: UseSessionManagementOptions): UseSessionManagementReturn {
+  // Default to 'opus' when no model is selected
+  const model = selectedModel ?? 'opus';
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
@@ -211,7 +216,7 @@ export function useSessionManagement({
     (workflowId: string) => {
       const chatName = getNextChatName();
       createSession.mutate(
-        { workspaceId, workflow: workflowId, model: 'sonnet', name: chatName },
+        { workspaceId, workflow: workflowId, model, name: chatName },
         {
           onSuccess: (session) => {
             // Setting the new session ID triggers WebSocket reconnection automatically
@@ -220,14 +225,14 @@ export function useSessionManagement({
         }
       );
     },
-    [createSession, workspaceId, getNextChatName, setSelectedDbSessionId]
+    [createSession, workspaceId, getNextChatName, setSelectedDbSessionId, model]
   );
 
   const handleNewChat = useCallback(() => {
     const name = getNextChatName();
 
     createSession.mutate(
-      { workspaceId, workflow: 'followup', model: 'sonnet', name },
+      { workspaceId, workflow: 'followup', model, name },
       {
         onSuccess: (session) => {
           // Setting the new session ID triggers WebSocket reconnection automatically
@@ -235,12 +240,12 @@ export function useSessionManagement({
         },
       }
     );
-  }, [createSession, workspaceId, getNextChatName, setSelectedDbSessionId]);
+  }, [createSession, workspaceId, getNextChatName, setSelectedDbSessionId, model]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
       createSession.mutate(
-        { workspaceId, workflow: 'followup', name, model: 'sonnet' },
+        { workspaceId, workflow: 'followup', name, model },
         {
           onSuccess: (session) => {
             // Store the pending prompt to be sent once the session state settles
@@ -251,7 +256,7 @@ export function useSessionManagement({
         }
       );
     },
-    [createSession, workspaceId, setSelectedDbSessionId]
+    [createSession, workspaceId, setSelectedDbSessionId, model]
   );
 
   return {
