@@ -498,7 +498,7 @@ export function AppSidebar() {
                               {isWorking && (
                                 <>
                                   <span>·</span>
-                                  <Loader2 className="h-3 w-3 animate-spin text-green-500 shrink-0" />
+                                  <Loader2 className="h-3 w-3 animate-spin text-brand shrink-0" />
                                 </>
                               )}
                             </div>
