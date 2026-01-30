@@ -34,7 +34,7 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
  * Chat session settings that persist per-session.
  */
 export interface ChatSettings {
-  selectedModel: string | null; // null = use default (Opus)
+  selectedModel: string;
   thinkingEnabled: boolean;
   planModeEnabled: boolean;
 }
@@ -43,7 +43,7 @@ export interface ChatSettings {
  * Default chat settings for new sessions.
  */
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
-  selectedModel: null,
+  selectedModel: 'opus',
   thinkingEnabled: false,
   planModeEnabled: false,
 };
