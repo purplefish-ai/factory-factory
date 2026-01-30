@@ -110,6 +110,19 @@ export interface ImageItem {
 }
 
 /**
+ * Image content block for user messages (base64 encoded).
+ * Used when users upload images in chat.
+ */
+export interface ImageContent {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: string;
+    data: string;
+  };
+}
+
+/**
  * Value type for tool_result content field.
  */
 export type ToolResultContentValue = string | Array<TextItem | ImageItem>;
@@ -127,7 +140,12 @@ export interface ToolResultContent {
 /**
  * Union of all content item types that can appear in a message.
  */
-export type ClaudeContentItem = TextContent | ThinkingContent | ToolUseContent | ToolResultContent;
+export type ClaudeContentItem =
+  | TextContent
+  | ThinkingContent
+  | ToolUseContent
+  | ToolResultContent
+  | ImageContent;
 
 // =============================================================================
 // Stream Event Types
@@ -408,12 +426,24 @@ export interface WebSocketMessage {
 // =============================================================================
 
 /**
+ * Attachment data for uploaded files in chat.
+ */
+export interface MessageAttachment {
+  id: string;
+  name: string;
+  type: string; // MIME type
+  size: number;
+  data: string; // base64 encoded
+}
+
+/**
  * A message queued to be sent when the agent becomes idle.
  */
 export interface QueuedMessage {
   id: string;
   text: string;
   timestamp: string;
+  attachments?: MessageAttachment[];
 }
 
 // =============================================================================
@@ -429,6 +459,7 @@ export interface ChatMessage {
   text?: string; // For user messages
   message?: ClaudeMessage; // For claude messages
   timestamp: string;
+  attachments?: MessageAttachment[]; // For user uploaded images/files
 }
 
 /**
@@ -499,6 +530,13 @@ export function isToolUseContent(item: ClaudeContentItem): item is ToolUseConten
  */
 export function isToolResultContent(item: ClaudeContentItem): item is ToolResultContent {
   return item.type === 'tool_result';
+}
+
+/**
+ * Type guard to check if a content item is ImageContent.
+ */
+export function isImageContent(item: ClaudeContentItem): item is ImageContent {
+  return item.type === 'image' && 'source' in item;
 }
 
 /**

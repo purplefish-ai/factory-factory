@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
 import { isToolSequence, THINKING_SUFFIX } from '@/lib/claude-types';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
@@ -36,9 +37,18 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
   // User messages
   if (message.source === 'user') {
     return (
-      <MessageWrapper>
-        <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 inline-block max-w-full break-words text-sm text-left whitespace-pre-wrap">
-          {stripThinkingSuffix(message.text)}
+      <MessageWrapper chatMessage={message}>
+        <div className="inline-block max-w-full space-y-2">
+          {/* Attachments */}
+          {message.attachments && message.attachments.length > 0 && (
+            <AttachmentPreview attachments={message.attachments} readOnly />
+          )}
+          {/* Text */}
+          {message.text && (
+            <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 inline-block max-w-full break-words text-sm text-left whitespace-pre-wrap">
+              {stripThinkingSuffix(message.text)}
+            </div>
+          )}
         </div>
       </MessageWrapper>
     );

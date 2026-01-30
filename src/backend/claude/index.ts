@@ -13,6 +13,7 @@ import type { ControlResponseBody } from './protocol';
 import { type HistoryMessage, SessionManager } from './session';
 import {
   type AssistantMessage,
+  type ClaudeContentItem,
   type ClaudeJson,
   type ControlRequest,
   type HookCallbackRequest,
@@ -167,9 +168,9 @@ export class ClaudeClient extends EventEmitter {
   /**
    * Send a user message to Claude.
    *
-   * @param content - The message content to send
+   * @param content - The message content to send (string or content array with images)
    */
-  sendMessage(content: string): void {
+  sendMessage(content: string | ClaudeContentItem[]): void {
     if (!this.process) {
       throw new Error('ClaudeClient not initialized');
     }

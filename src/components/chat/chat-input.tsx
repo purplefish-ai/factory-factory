@@ -1,9 +1,10 @@
 'use client';
 
-import { Brain, ChevronDown, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
+import { Brain, ChevronDown, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -20,8 +21,9 @@ import {
 } from '@/components/ui/input-group';
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { ChatSettings } from '@/lib/claude-types';
+import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
 import { AVAILABLE_MODELS } from '@/lib/claude-types';
+import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -29,7 +31,7 @@ import { cn } from '@/lib/utils';
 // =============================================================================
 
 interface ChatInputProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: MessageAttachment[]) => void;
   onStop?: () => void;
   disabled?: boolean;
   running?: boolean;
@@ -205,6 +207,10 @@ export function ChatInput({
   value,
   onChange,
 }: ChatInputProps) {
+  // State for file attachments
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Handle input changes to preserve draft across tab switches
   const handleInputChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -213,6 +219,40 @@ export function ChatInput({
     [onChange]
   );
 
+  // Handle file selection
+  const handleFileSelect = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const newAttachments: MessageAttachment[] = [];
+
+    for (const file of Array.from(files)) {
+      try {
+        const attachment = await fileToAttachment(file);
+        newAttachments.push(attachment);
+      } catch {
+        // Silently ignore errors for now
+        // TODO: Show error toast/notification for failed uploads
+      }
+    }
+
+    if (newAttachments.length > 0) {
+      setAttachments((prev) => [...prev, ...newAttachments]);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  // Handle removing an attachment
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((att) => att.id !== id));
+  }, []);
+
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -220,28 +260,30 @@ export function ChatInput({
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         const text = event.currentTarget.value.trim();
-        if (text && !disabled) {
-          onSend(text);
+        if ((text || attachments.length > 0) && !disabled) {
+          onSend(text, attachments.length > 0 ? attachments : undefined);
           event.currentTarget.value = '';
           onChange?.('');
+          setAttachments([]);
         }
       }
     },
-    [onSend, disabled, onChange]
+    [onSend, disabled, onChange, attachments]
   );
 
   // Handle send button click
   const handleSendClick = useCallback(() => {
     if (inputRef?.current) {
       const text = inputRef.current.value.trim();
-      if (text && !disabled) {
-        onSend(text);
+      if ((text || attachments.length > 0) && !disabled) {
+        onSend(text, attachments.length > 0 ? attachments : undefined);
         inputRef.current.value = '';
         onChange?.('');
+        setAttachments([]);
         inputRef.current.focus();
       }
     }
-  }, [onSend, inputRef, disabled, onChange]);
+  }, [onSend, inputRef, disabled, onChange, attachments]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
   useEffect(() => {
@@ -317,6 +359,13 @@ export function ChatInput({
   return (
     <div className={cn('px-4 py-3', className)}>
       <InputGroup className="flex-col">
+        {/* Attachment preview (above text input) */}
+        {attachments.length > 0 && (
+          <div className="px-3 pt-2 pb-1">
+            <AttachmentPreview attachments={attachments} onRemove={handleRemoveAttachment} />
+          </div>
+        )}
+
         {/* Text input row */}
         <InputGroupTextarea
           ref={inputRef}
@@ -353,6 +402,37 @@ export function ChatInput({
               pressed={settings?.planModeEnabled ?? false}
               onPressedChange={handlePlanModeChange}
               disabled={running}
+            />
+            <div className="h-4 w-px bg-border" />
+            {/* File upload button */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={running || isDisabled}
+                    className="h-6 w-6 p-0"
+                    aria-label="Upload image"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>Upload image</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={SUPPORTED_IMAGE_TYPES.join(',')}
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              aria-label="File upload input"
             />
           </div>
 

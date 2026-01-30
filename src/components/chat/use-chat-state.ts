@@ -28,6 +28,8 @@ import type {
   ChatMessage,
   ChatSettings,
   ClaudeMessage,
+  ImageContent,
+  MessageAttachment,
   QueuedMessage,
   WebSocketMessage,
 } from '@/lib/claude-types';
@@ -126,12 +128,13 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function createUserMessage(text: string): ChatMessage {
+function createUserMessage(text: string, attachments?: MessageAttachment[]): ChatMessage {
   return {
     id: generateMessageId(),
     source: 'user',
     text,
     timestamp: new Date().toISOString(),
+    attachments,
   };
 }
 
@@ -415,7 +418,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     clearDraft(dbSessionIdRef.current);
 
     // Add to messages (optimistic UI)
-    dispatch({ type: 'USER_MESSAGE_SENT', payload: createUserMessage(nextMsg.text) });
+    dispatch({
+      type: 'USER_MESSAGE_SENT',
+      payload: createUserMessage(nextMsg.text, nextMsg.attachments),
+    });
 
     // Start Claude if not running
     dispatch({ type: 'WS_STARTING' });
@@ -431,7 +437,32 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     const messageToSend = chatSettings.thinkingEnabled
       ? `${nextMsg.text}${THINKING_SUFFIX}`
       : nextMsg.text;
-    send({ type: 'user_input', text: messageToSend });
+
+    // If there are attachments, send as content array; otherwise send as text
+    if (nextMsg.attachments && nextMsg.attachments.length > 0) {
+      const content: Array<{ type: 'text'; text: string } | ImageContent> = [];
+
+      // Add text if present
+      if (messageToSend) {
+        content.push({ type: 'text', text: messageToSend });
+      }
+
+      // Add images
+      for (const attachment of nextMsg.attachments) {
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: attachment.type,
+            data: attachment.data,
+          },
+        });
+      }
+
+      send({ type: 'user_input', content });
+    } else {
+      send({ type: 'user_input', text: messageToSend });
+    }
   }, [send]);
 
   // Drain queue when agent becomes idle
@@ -457,8 +488,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Action Callbacks
   // =============================================================================
 
-  const sendMessage = useCallback((text: string) => {
-    if (!text.trim()) {
+  const sendMessage = useCallback((text: string, attachments?: MessageAttachment[]) => {
+    if (!text.trim() && (!attachments || attachments.length === 0)) {
       return;
     }
 
@@ -466,6 +497,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       id: generateMessageId(),
       text: text.trim(),
       timestamp: new Date().toISOString(),
+      attachments,
     };
 
     dispatch({ type: 'QUEUE_MESSAGE', payload: queuedMsg });
