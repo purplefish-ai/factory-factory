@@ -190,7 +190,7 @@ export function createServer(requestedPort?: number): ServerInstance {
 
     clearInterval(heartbeatInterval);
 
-    // Clear terminal grace periods
+    // Close WebSocket server
     wss.close();
     server.close();
 
