@@ -7,6 +7,7 @@ import type { ChatSettings, QueuedMessage } from './claude-types';
 
 const QUEUE_KEY_PREFIX = 'chat-queue-';
 const SETTINGS_KEY_PREFIX = 'chat-settings-';
+const DRAFT_KEY_PREFIX = 'chat-draft-';
 
 /**
  * Validate that an object has the required QueuedMessage shape.
@@ -125,6 +126,55 @@ export function clearSettings(dbSessionId: string | null): void {
   }
   try {
     sessionStorage.removeItem(`${SETTINGS_KEY_PREFIX}${dbSessionId}`);
+  } catch {
+    // Silently ignore storage errors
+  }
+}
+
+/**
+ * Load input draft from sessionStorage for a specific session.
+ * Returns empty string if no draft is stored.
+ */
+export function loadDraft(dbSessionId: string): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  try {
+    const stored = sessionStorage.getItem(`${DRAFT_KEY_PREFIX}${dbSessionId}`);
+    return stored || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Persist input draft to sessionStorage for a specific session.
+ * Clears storage if draft is empty.
+ */
+export function persistDraft(dbSessionId: string | null, draft: string): void {
+  if (typeof window === 'undefined' || !dbSessionId) {
+    return;
+  }
+  try {
+    if (draft.trim() === '') {
+      sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${dbSessionId}`);
+    } else {
+      sessionStorage.setItem(`${DRAFT_KEY_PREFIX}${dbSessionId}`, draft);
+    }
+  } catch {
+    // Silently ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+/**
+ * Clear input draft from sessionStorage for a specific session.
+ */
+export function clearDraft(dbSessionId: string | null): void {
+  if (typeof window === 'undefined' || !dbSessionId) {
+    return;
+  }
+  try {
+    sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${dbSessionId}`);
   } catch {
     // Silently ignore storage errors
   }

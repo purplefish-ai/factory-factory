@@ -14,7 +14,15 @@ import type {
 } from '@/lib/claude-types';
 import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
-import { loadQueue, loadSettings, persistQueue, persistSettings } from '@/lib/queue-storage';
+import {
+  clearDraft,
+  loadDraft,
+  loadQueue,
+  loadSettings,
+  persistDraft,
+  persistQueue,
+  persistSettings,
+} from '@/lib/queue-storage';
 import {
   buildWebSocketUrl,
   getReconnectDelay,
@@ -588,7 +596,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       messageQueueRef.current = [];
     }
 
-    // Load queue and settings from storage for the new session
+    // Load queue, settings, and draft from storage for the new session
     if (newDbSessionId) {
       const storedQueue = loadQueue(newDbSessionId);
       setQueuedMessages(storedQueue);
@@ -596,8 +604,13 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       // Load settings from storage, falling back to defaults
       const storedSettings = loadSettings(newDbSessionId);
       setChatSettings(storedSettings ?? DEFAULT_CHAT_SETTINGS);
+
+      // Load draft from storage
+      const storedDraft = loadDraft(newDbSessionId);
+      setInputDraft(storedDraft);
     } else {
       setChatSettings(DEFAULT_CHAT_SETTINGS);
+      setInputDraft('');
     }
   }, [dbSessionId]);
 
@@ -890,6 +903,15 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   }, [connect, workingDir, dbSessionId]);
 
   // Actions
+  // Wrapper for setInputDraft that persists to sessionStorage
+  const setInputDraftWithPersistence = useCallback(
+    (draft: string) => {
+      setInputDraft(draft);
+      persistDraft(dbSessionId, draft);
+    },
+    [dbSessionId]
+  );
+
   // Queue a message for sending - all messages go through the queue first
   const sendMessage = useCallback(
     (text: string) => {
@@ -908,6 +930,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         persistQueue(dbSessionId, updated);
         return updated;
       });
+
+      // Clear the draft since message is being sent
+      clearDraft(dbSessionId);
+      setInputDraft('');
     },
     [dbSessionId]
   );
@@ -1048,7 +1074,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     approvePermission,
     answerQuestion,
     updateSettings,
-    setInputDraft,
+    setInputDraft: setInputDraftWithPersistence,
     removeQueuedMessage,
     // Refs
     inputRef,
