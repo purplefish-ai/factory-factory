@@ -261,9 +261,6 @@ importers:
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
-      '@types/minimatch':
-        specifier: ^6.0.0
-        version: 6.0.0
       '@types/node':
         specifier: ^25.1.0
         version: 25.1.0
@@ -2480,10 +2477,6 @@ packages:
 
   '@types/methods@1.1.4':
     resolution: {integrity: sha512-ymXWVrDiCxTBE3+RIrrP533E70eA+9qu7zdWoHuOmGujkYtzf4HQF96b8nwHLqhuf4ykX61IGRIB38CC6/sImQ==}
-
-  '@types/minimatch@6.0.0':
-    resolution: {integrity: sha512-zmPitbQ8+6zNutpwgcQuLcsEpn/Cj54Kbn7L5pX0Os5kdWplB7xPgEh/g+SWOB/qmows2gpuCaPyduq8ZZRnxA==}
-    deprecated: This is a stub types definition. minimatch provides its own type definitions, so you do not need this installed.
 
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
@@ -9439,10 +9432,6 @@ snapshots:
       '@types/unist': 3.0.3
 
   '@types/methods@1.1.4': {}
-
-  '@types/minimatch@6.0.0':
-    dependencies:
-      minimatch: 10.1.1
 
   '@types/ms@2.1.0': {}
 

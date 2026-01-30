@@ -2,8 +2,7 @@
 
 import { ExternalLink } from 'lucide-react';
 import mermaid from 'mermaid';
-import type React from 'react';
-import { type ComponentPropsWithoutRef, memo, useEffect, useMemo, useRef } from 'react';
+import { type ComponentPropsWithoutRef, memo, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -25,7 +24,7 @@ interface MarkdownRendererProps {
 // Component to render Mermaid diagrams
 function MermaidDiagram({ chart }: { chart: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (ref.current && chart) {
@@ -91,7 +90,8 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       // Override pre for code blocks
       pre: ({ children, ...props }: ComponentPropsWithoutRef<'pre'>) => {
         // Check if the child is a Mermaid diagram
-        const child = children as React.ReactElement | undefined;
+        // biome-ignore lint/suspicious/noExplicitAny: Need to check child props dynamically
+        const child = children as any;
         if (child?.props?.className?.includes('language-mermaid')) {
           return <>{children}</>;
         }
