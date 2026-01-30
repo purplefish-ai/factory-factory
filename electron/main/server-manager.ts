@@ -52,16 +52,21 @@ export class ServerManager {
     const migrationsPath = join(process.resourcesPath, 'prisma', 'migrations');
     const frontendDist = join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'client');
 
+    // WebSocket logs directory
+    const wsLogsPath = join(userDataPath, 'ws-logs');
+
     // Set environment variables BEFORE importing the backend
     // These are read at module load time by db.ts and config.service.ts
     process.env.DATABASE_PATH = databasePath;
     process.env.FRONTEND_STATIC_PATH = frontendDist;
+    process.env.WS_LOGS_PATH = wsLogsPath;
     process.env.NODE_ENV = 'production';
 
     console.log('[electron] Configuration:');
     console.log(`[electron]   Database: ${databasePath}`);
     console.log(`[electron]   Frontend: ${frontendDist}`);
     console.log(`[electron]   Migrations: ${migrationsPath}`);
+    console.log(`[electron]   WS Logs: ${wsLogsPath}`);
 
     // Run database migrations
     // Dynamic import is required here because we must set environment variables

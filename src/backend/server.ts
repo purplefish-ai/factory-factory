@@ -108,7 +108,10 @@ class SessionFileLogger {
   private sessionLogs = new Map<string, string>(); // sessionId -> logFilePath
 
   constructor() {
-    this.logDir = join(process.cwd(), '.context', 'ws-logs');
+    // Use WS_LOGS_PATH env var (set by Electron), or fall back to .context/ws-logs in cwd
+    // For Electron, this will be in userData directory
+    const basePath = process.env.WS_LOGS_PATH || join(process.cwd(), '.context', 'ws-logs');
+    this.logDir = basePath;
     // Ensure log directory exists
     if (!existsSync(this.logDir)) {
       mkdirSync(this.logDir, { recursive: true });
