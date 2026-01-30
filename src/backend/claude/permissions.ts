@@ -356,6 +356,7 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
         this.timeout > 0
           ? setTimeout(() => {
               this.pendingRequests.delete(requestId);
+              this.emit('request_timeout', requestId, request);
               reject(new Error(`Permission request timed out after ${this.timeout}ms`));
             }, this.timeout)
           : undefined;
@@ -551,6 +552,10 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     event: 'stop_request',
     handler: (request: HookCallbackRequest, requestId: string) => void
   ): this;
+  override on(
+    event: 'request_timeout',
+    handler: (requestId: string, request: CanUseToolRequest | HookCallbackRequest) => void
+  ): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -563,6 +568,11 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
   ): boolean;
   override emit(event: 'hook_request', request: HookCallbackRequest, requestId: string): boolean;
   override emit(event: 'stop_request', request: HookCallbackRequest, requestId: string): boolean;
+  override emit(
+    event: 'request_timeout',
+    requestId: string,
+    request: CanUseToolRequest | HookCallbackRequest
+  ): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit

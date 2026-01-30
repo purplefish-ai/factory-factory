@@ -138,6 +138,11 @@ export class ClaudeClient extends EventEmitter {
         input: request.input,
       } as PendingInteractiveRequest);
     });
+
+    // Clean up pendingInteractiveRequests when requests time out
+    this.interactiveHandler.on('request_timeout', (requestId) => {
+      this.pendingInteractiveRequests.delete(requestId);
+    });
   }
 
   // ===========================================================================
@@ -395,13 +400,6 @@ export class ClaudeClient extends EventEmitter {
     // Clean up stored request
     this.pendingInteractiveRequests.delete(requestId);
     this.interactiveHandler.deny(requestId, reason);
-  }
-
-  /**
-   * Check if there are pending interactive requests.
-   */
-  hasPendingInteractiveRequests(): boolean {
-    return this.interactiveHandler.getPendingCount() > 0;
   }
 
   // ===========================================================================

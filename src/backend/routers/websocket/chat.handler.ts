@@ -744,10 +744,10 @@ async function handleChatMessage(
       await handleLoadSessionMessage(ws, dbSessionId, workingDir);
       break;
     case 'question_response':
-      await handleQuestionResponseMessage(ws, dbSessionId, message);
+      handleQuestionResponseMessage(ws, dbSessionId, message);
       break;
     case 'permission_response':
-      await handlePermissionResponseMessage(ws, dbSessionId, message);
+      handlePermissionResponseMessage(ws, dbSessionId, message);
       break;
   }
 }
