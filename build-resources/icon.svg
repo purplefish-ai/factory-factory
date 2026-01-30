@@ -1,0 +1,24 @@
+<svg width="1024" height="1024" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="80" height="80" fill="#1a1a1a"/>
+  <!-- Outer square: 74x74 inset by 3 so stroke fits in viewBox -->
+  <rect
+    x="3"
+    y="3"
+    width="74"
+    height="74"
+    stroke="#ffffff"
+    stroke-width="6"
+    fill="none"
+  />
+  <!-- Inner square: 37x37 centered (half size of outer) -->
+  <rect
+    x="21.5"
+    y="21.5"
+    width="37"
+    height="37"
+    stroke="#ffffff"
+    stroke-width="6"
+    fill="none"
+  />
+</svg>
