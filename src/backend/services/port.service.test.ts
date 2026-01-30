@@ -51,7 +51,7 @@ describe('port.service', () => {
       const result = await isPortAvailable(3000);
 
       expect(result).toBe(true);
-      expect(mockServer.listen).toHaveBeenCalledWith(3000, 'localhost');
+      expect(mockServer.listen).toHaveBeenCalledWith(3000);
       expect(mockServer.close).toHaveBeenCalled();
     });
 
@@ -68,7 +68,7 @@ describe('port.service', () => {
       const result = await isPortAvailable(3000);
 
       expect(result).toBe(false);
-      expect(mockServer.listen).toHaveBeenCalledWith(3000, 'localhost');
+      expect(mockServer.listen).toHaveBeenCalledWith(3000);
     });
   });
 
