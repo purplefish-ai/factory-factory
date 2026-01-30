@@ -78,13 +78,17 @@ export interface PermissionHandler {
  * Create an allow response for can_use_tool requests.
  */
 export function createAllowResponse(updatedInput?: Record<string, unknown>): AllowResponseData {
-  const response: AllowResponseData = {
+  // Don't include updatedInput field at all if it's undefined
+  // This avoids Zod validation issues with optional fields
+  if (updatedInput !== undefined) {
+    return {
+      behavior: 'allow',
+      updatedInput,
+    };
+  }
+  return {
     behavior: 'allow',
   };
-  if (updatedInput !== undefined) {
-    response.updatedInput = updatedInput;
-  }
-  return response;
 }
 
 /**
