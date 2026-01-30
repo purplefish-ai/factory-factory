@@ -1,8 +1,8 @@
 'use client';
 
-import { CheckCircle, CheckSquare, Circle, ListTodo, Square } from 'lucide-react';
+import { CheckCircle, ListTodo } from 'lucide-react';
 import { memo } from 'react';
-import { cn } from '@/lib/utils';
+import { TodoItem } from '@/components/shared';
 import type { TodoState } from './use-todo-tracker';
 
 export interface TodoPanelProps {
@@ -51,37 +51,9 @@ export const TodoPanel = memo(function TodoPanel({ todoState }: TodoPanelProps) 
 
         {/* Todo List */}
         <div className="space-y-1.5 max-h-48 overflow-y-auto">
-          {todos.map((todo, index) => {
-            const StatusIcon =
-              todo.status === 'completed'
-                ? CheckSquare
-                : todo.status === 'in_progress'
-                  ? Circle
-                  : Square;
-
-            const statusColor =
-              todo.status === 'completed'
-                ? 'text-success'
-                : todo.status === 'in_progress'
-                  ? 'text-primary'
-                  : 'text-muted-foreground';
-
-            return (
-              <div key={`${todo.content}-${index}`} className="flex items-start gap-1.5">
-                <StatusIcon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', statusColor)} />
-                <div className="flex-1 min-w-0">
-                  <div
-                    className={cn(
-                      'text-xs',
-                      todo.status === 'completed' && 'line-through text-muted-foreground'
-                    )}
-                  >
-                    {todo.status === 'in_progress' ? todo.activeForm : todo.content}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {todos.map((todo, index) => (
+            <TodoItem key={`${todo.content}-${index}`} todo={todo} />
+          ))}
         </div>
       </div>
     </div>

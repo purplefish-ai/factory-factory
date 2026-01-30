@@ -3,18 +3,16 @@
 import {
   AlertCircle,
   CheckCircle,
-  CheckSquare,
   ChevronDown,
   ChevronRight,
-  Circle,
   FileCode,
   Loader2,
-  Square,
   Terminal,
   Zap,
 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
+import { TodoItem } from '@/components/shared';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type {
@@ -456,41 +454,6 @@ const TaskToolRenderer = memo(function TaskToolRenderer({
 });
 
 /**
- * Renders a single todo item
- */
-const TodoItemRenderer = memo(function TodoItemRenderer({
-  todo,
-}: {
-  todo: { content: string; activeForm: string; status: 'pending' | 'in_progress' | 'completed' };
-}) {
-  const StatusIcon =
-    todo.status === 'completed' ? CheckSquare : todo.status === 'in_progress' ? Circle : Square;
-
-  const statusColor =
-    todo.status === 'completed'
-      ? 'text-success'
-      : todo.status === 'in_progress'
-        ? 'text-primary'
-        : 'text-muted-foreground';
-
-  return (
-    <div className="flex items-start gap-1.5">
-      <StatusIcon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', statusColor)} />
-      <div className="flex-1 min-w-0">
-        <div
-          className={cn(
-            'text-xs',
-            todo.status === 'completed' && 'line-through text-muted-foreground'
-          )}
-        >
-          {todo.status === 'in_progress' ? todo.activeForm : todo.content}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-/**
  * Renders TodoWrite tool with visual task list and progress bar
  */
 const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
@@ -530,7 +493,7 @@ const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
       </div>
       <div className="space-y-1.5">
         {todos.map((todo, index) => (
-          <TodoItemRenderer key={`${todo.content}-${index}`} todo={todo} />
+          <TodoItem key={`${todo.content}-${index}`} todo={todo} />
         ))}
       </div>
     </div>
