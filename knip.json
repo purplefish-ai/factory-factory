@@ -23,11 +23,13 @@
     "src/backend/trpc/procedures/index.ts"
   ],
   "ignoreDependencies": [
+    "@electron/rebuild",
     "autoprefixer",
     "tw-animate-css",
     "@tailwindcss/typography",
     "@prisma/client",
     "@radix-ui/react-accordion",
+    "@radix-ui/react-alert-dialog",
     "@radix-ui/react-aspect-ratio",
     "@radix-ui/react-avatar",
     "@radix-ui/react-context-menu",
