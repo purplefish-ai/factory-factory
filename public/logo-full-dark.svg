@@ -4,7 +4,7 @@
   <text x="22" y="75" font-family="'IBM Plex Mono', monospace" font-weight="600" font-size="26" fill="#FFE500">$</text>
   <text x="44" y="75" font-family="'IBM Plex Mono', monospace" font-weight="600" font-size="26" fill="#FAFAFA">ff</text>
   <rect x="82" y="53" width="13" height="24" fill="#FAFAFA"/>
-  <!-- Logotype (light mode version - for light backgrounds) -->
-  <text x="132" y="54" font-family="Inter, system-ui, sans-serif" font-weight="900" font-size="32" fill="#0A0A0A" letter-spacing="-0.02em">FACTORY</text>
-  <text x="132" y="92" font-family="Inter, system-ui, sans-serif" font-weight="900" font-size="32" fill="#0A0A0A" opacity="0.35" letter-spacing="-0.02em">FACTORY</text>
+  <!-- Logotype (dark mode version - for dark backgrounds) -->
+  <text x="132" y="54" font-family="Inter, system-ui, sans-serif" font-weight="900" font-size="32" fill="#FAFAFA" letter-spacing="-0.02em">FACTORY</text>
+  <text x="132" y="92" font-family="Inter, system-ui, sans-serif" font-weight="900" font-size="32" fill="#FFE500" letter-spacing="-0.02em">FACTORY</text>
 </svg>

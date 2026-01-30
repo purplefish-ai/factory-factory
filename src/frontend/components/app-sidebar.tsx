@@ -225,8 +225,8 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <Link to="/projects">
           <Logo
-            iconClassName="size-6"
-            textClassName="text-sm"
+            showIcon={false}
+            textClassName="text-lg"
             className="hover:opacity-80 transition-opacity"
           />
         </Link>
