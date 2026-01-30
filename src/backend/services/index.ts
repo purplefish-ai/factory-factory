@@ -16,6 +16,8 @@ export { computeKanbanColumn, kanbanStateService } from './kanban-state.service'
 export { createLogger } from './logger.service';
 // Notification service
 export { notificationService } from './notification.service';
+// Port service
+export { findAvailablePort, isPortAvailable } from './port.service';
 // Rate limiter service
 export { rateLimiter } from './rate-limiter.service';
 // Reconciliation service
@@ -24,5 +26,7 @@ export { reconciliationService } from './reconciliation.service';
 export { schedulerService } from './scheduler.service';
 // Session service
 export { sessionService } from './session.service';
+// Session file logger service
+export { SessionFileLogger, sessionFileLogger } from './session-file-logger.service';
 // Terminal service
 export { terminalService } from './terminal.service';
