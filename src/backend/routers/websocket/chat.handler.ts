@@ -368,7 +368,8 @@ async function getOrCreateChatClient(
   // Delegate client lifecycle to sessionService
   const client = await sessionService.getOrCreateClient(dbSessionId, {
     thinkingEnabled: options.thinkingEnabled,
-    permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
+    // Don't pass permissionMode when using a custom handler - it overrides it
+    permissionMode: permissionHandler ? undefined : 'bypassPermissions',
     permissionHandler,
     model: options.model,
   });
