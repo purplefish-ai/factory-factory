@@ -54,19 +54,22 @@ export class GitClient {
     options: CreateWorktreeOptions = {}
   ): Promise<GitWorktreeInfo> {
     const worktreePath = this.getWorktreePath(name);
-    const branchName = this.generateBranchName(options.branchPrefix, options.workspaceName);
+    const branchName = await this.generateUniqueBranchName(
+      options.branchPrefix,
+      options.workspaceName
+    );
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
-    // First, check if the branch already exists
-    const branchExists = await this.branchExists(branchName);
-
-    // Use spawn with array args (safe - no shell interpretation)
-    const args = branchExists
-      ? ['worktree', 'add', worktreePath, branchName]
-      : ['worktree', 'add', '-b', branchName, worktreePath, baseBranch];
-
-    const result = await gitCommandC(this.baseRepoPath, args);
+    // Create new branch from baseBranch (branch shouldn't exist at this point)
+    const result = await gitCommandC(this.baseRepoPath, [
+      'worktree',
+      'add',
+      '-b',
+      branchName,
+      worktreePath,
+      baseBranch,
+    ]);
     if (result.code !== 0) {
       throw new Error(`Failed to create worktree: ${result.stderr || result.stdout}`);
     }
@@ -113,6 +116,36 @@ export class GitClient {
   generateBranchName(prefix?: string, workspaceName?: string): string {
     const suffix = workspaceName ?? crypto.randomBytes(3).toString('hex');
     return prefix ? `${prefix}/${suffix}` : suffix;
+  }
+
+  /**
+   * Generate a unique branch name that doesn't conflict with existing branches.
+   * If the generated name already exists, appends -1, -2, -3, etc. until finding an available name.
+   * Example: martin-purplefish/jaguar -> martin-purplefish/jaguar-1
+   */
+  async generateUniqueBranchName(prefix?: string, workspaceName?: string): Promise<string> {
+    const baseName = this.generateBranchName(prefix, workspaceName);
+
+    // Check if base name is available
+    const baseExists = await this.branchExists(baseName);
+    if (!baseExists) {
+      return baseName;
+    }
+
+    // Try numbered suffixes until we find an available name
+    let counter = 1;
+    while (counter < 1000) {
+      // Safety limit to prevent infinite loops
+      const numberedName = `${baseName}-${counter}`;
+      const exists = await this.branchExists(numberedName);
+      if (!exists) {
+        return numberedName;
+      }
+      counter++;
+    }
+
+    // Fallback to random hex if we somehow hit the limit
+    return this.generateBranchName(prefix, crypto.randomBytes(6).toString('hex'));
   }
 
   /**
