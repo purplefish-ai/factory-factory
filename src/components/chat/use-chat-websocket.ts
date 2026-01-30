@@ -227,6 +227,8 @@ interface MessageHandlerContext {
   setChatSettings: (settings: ChatSettings) => void;
   /** Ref to track accumulated tool input JSON per tool_use_id */
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
+  /** Ref to track message index by tool_use_id for O(1) lookup */
+  toolUseIdToIndexRef: React.MutableRefObject<Map<string, number>>;
   /** Updates tool input for a specific tool_use_id */
   updateToolInput: (toolUseId: string, input: Record<string, unknown>) => void;
   /** Current dbSessionId for settings persistence */
@@ -411,7 +413,24 @@ function handleClaudeMessage(data: WebSocketMessage, ctx: MessageHandlerContext)
 
     debug.log('📝 Adding message to state:', debugInfo);
 
-    ctx.setMessages((prev) => [...prev, createClaudeMessage(claudeMsg)]);
+    // Add message and track index for tool_use messages (for O(1) lookup during updates)
+    ctx.setMessages((prev) => {
+      const newIndex = prev.length;
+
+      // If this is a tool_use message, track its index for fast lookup
+      if (
+        claudeMsg.type === 'stream_event' &&
+        claudeMsg.event?.type === 'content_block_start' &&
+        claudeMsg.event.content_block?.type === 'tool_use'
+      ) {
+        const toolUseId = (claudeMsg.event.content_block as { id?: string }).id;
+        if (toolUseId) {
+          ctx.toolUseIdToIndexRef.current.set(toolUseId, newIndex);
+        }
+      }
+
+      return [...prev, createClaudeMessage(claudeMsg)];
+    });
   }
 }
 
@@ -545,6 +564,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const prevRunningRef = useRef(false);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
+  // Map tool_use_id to message index for O(1) lookup during tool input updates
+  // This avoids O(n) scanning of all messages on every input delta event
+  const toolUseIdToIndexRef = useRef<Map<string, number>>(new Map());
   // Debug message counter (instance-scoped, not global)
   const messageCounterRef = useRef(0);
   // Message queue for messages sent while disconnected
@@ -585,6 +607,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
       // Clear refs
       toolInputAccumulatorRef.current.clear();
+      toolUseIdToIndexRef.current.clear();
       messageQueueRef.current = [];
     }
 
@@ -661,50 +684,90 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [flushMessageQueue]
   );
 
-  // Update tool input for a specific tool_use_id in stored messages
-  // This is called when we accumulate input_json_delta events
-  const updateToolInput = useCallback((toolUseId: string, input: Record<string, unknown>) => {
-    setMessages((prev) =>
-      prev.map((msg): ChatMessage => {
-        // Only update claude messages with stream events
-        if (msg.source !== 'claude' || !msg.message) {
-          return msg;
-        }
-
-        const claudeMsg = msg.message;
-
-        // Check if this message is a content_block_start with matching tool_use_id
-        if (
-          claudeMsg.type === 'stream_event' &&
-          claudeMsg.event?.type === 'content_block_start' &&
-          claudeMsg.event.content_block?.type === 'tool_use' &&
-          (claudeMsg.event.content_block as { id?: string }).id === toolUseId
-        ) {
-          // Create a new message with updated input
-          // We need to deep clone and update the nested content_block.input
-          const updatedEvent = {
-            ...claudeMsg.event,
-            content_block: {
-              ...claudeMsg.event.content_block,
-              input,
-            },
-          };
-
-          const updatedMessage: ClaudeMessage = {
-            ...claudeMsg,
-            event: updatedEvent,
-          };
-
-          return {
-            ...msg,
-            message: updatedMessage,
-          };
-        }
-
-        return msg;
-      })
+  // Helper: check if a message is a tool_use with the given ID
+  const isToolUseMessage = useCallback((msg: ChatMessage, toolUseId: string): boolean => {
+    if (msg.source !== 'claude' || !msg.message) {
+      return false;
+    }
+    const claudeMsg = msg.message;
+    return (
+      claudeMsg.type === 'stream_event' &&
+      claudeMsg.event?.type === 'content_block_start' &&
+      claudeMsg.event.content_block?.type === 'tool_use' &&
+      (claudeMsg.event.content_block as { id?: string }).id === toolUseId
     );
   }, []);
+
+  // Helper: find message index by tool_use_id (fallback scan)
+  const findToolUseIndex = useCallback(
+    (messages: ChatMessage[], toolUseId: string): number | undefined => {
+      for (let i = 0; i < messages.length; i++) {
+        if (isToolUseMessage(messages[i], toolUseId)) {
+          // Update index for future lookups
+          toolUseIdToIndexRef.current.set(toolUseId, i);
+          return i;
+        }
+      }
+      return undefined;
+    },
+    [isToolUseMessage]
+  );
+
+  // Update tool input for a specific tool_use_id in stored messages
+  // Uses O(1) index lookup instead of O(n) array scan for better performance
+  // This is called frequently during tool input streaming
+  const updateToolInput = useCallback(
+    (toolUseId: string, input: Record<string, unknown>) => {
+      setMessages((prev) => {
+        // Try O(1) index lookup first, fallback to array scan
+        let messageIndex = toolUseIdToIndexRef.current.get(toolUseId);
+        if (messageIndex === undefined) {
+          debug.log('⚠️ Tool use ID not found in index, falling back to scan:', toolUseId);
+          messageIndex = findToolUseIndex(prev, toolUseId);
+        }
+
+        // Not found anywhere
+        if (messageIndex === undefined || messageIndex < 0 || messageIndex >= prev.length) {
+          debug.log('⚠️ Tool use ID not found in messages:', toolUseId);
+          return prev;
+        }
+
+        const msg = prev[messageIndex];
+        if (!isToolUseMessage(msg, toolUseId)) {
+          return prev;
+        }
+
+        // msg.message is guaranteed to exist by isToolUseMessage check
+        const claudeMsg = msg.message;
+        const event = claudeMsg?.event as
+          | { type: 'content_block_start'; content_block: { type: string; input?: unknown } }
+          | undefined;
+        if (!event?.content_block) {
+          return prev;
+        }
+
+        // Create updated message with new input
+        const updatedEvent = {
+          ...event,
+          content_block: {
+            ...event.content_block,
+            input,
+          },
+        };
+
+        const updatedChatMessage: ChatMessage = {
+          ...msg,
+          message: { ...claudeMsg, event: updatedEvent } as ClaudeMessage,
+        };
+
+        // Create new array with updated message at index
+        const newMessages = [...prev];
+        newMessages[messageIndex] = updatedChatMessage;
+        return newMessages;
+      });
+    },
+    [isToolUseMessage, findToolUseIndex]
+  );
 
   // Create handler context for message handlers
   const handlerContext: MessageHandlerContext = useMemo(
@@ -720,6 +783,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       setStartingSession,
       setChatSettings,
       toolInputAccumulatorRef,
+      toolUseIdToIndexRef,
       updateToolInput,
       dbSessionIdRef,
     }),
