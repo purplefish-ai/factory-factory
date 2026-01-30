@@ -429,18 +429,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     // Permission and question requests
-    // Guard: Don't overwrite existing pending request to prevent losing unresponded requests
+    // Always accept new requests (overwriting existing) to match backend behavior.
+    // Backend always stores the latest request, so frontend must show the same one.
     case 'WS_PERMISSION_REQUEST':
-      if (state.pendingPermission !== null) {
-        // Already have a pending permission request - ignore new one to prevent loss
-        return state;
-      }
       return { ...state, pendingPermission: action.payload };
     case 'WS_USER_QUESTION':
-      if (state.pendingQuestion !== null) {
-        // Already have a pending question - ignore new one to prevent loss
-        return state;
-      }
       return { ...state, pendingQuestion: action.payload };
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings

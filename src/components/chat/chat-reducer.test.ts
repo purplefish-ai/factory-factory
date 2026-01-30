@@ -799,7 +799,9 @@ describe('chatReducer', () => {
       expect(newState.pendingPermission).toEqual(permissionRequest);
     });
 
-    it('should not overwrite existing pending permission request (guard against loss)', () => {
+    it('should overwrite existing pending permission request with newer one (matches backend behavior)', () => {
+      // Backend always overwrites stored request with the new one, so frontend must match
+      // to prevent responding to an old request while backend has the new one stored
       const existingRequest: PermissionRequest = {
         requestId: 'req-first',
         toolName: 'Bash',
@@ -819,8 +821,8 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: newRequest };
       const newState = chatReducer(state, action);
 
-      // Should keep the first request, not overwrite with second
-      expect(newState.pendingPermission).toEqual(existingRequest);
+      // Should overwrite with the new request to match backend state
+      expect(newState.pendingPermission).toEqual(newRequest);
     });
   });
 
@@ -849,7 +851,8 @@ describe('chatReducer', () => {
       expect(newState.pendingQuestion).toEqual(questionRequest);
     });
 
-    it('should not overwrite existing pending question (guard against loss)', () => {
+    it('should overwrite existing pending question with newer one (matches backend behavior)', () => {
+      // Backend always overwrites stored request with the new one, so frontend must match
       const existingQuestion: UserQuestionRequest = {
         requestId: 'req-first',
         questions: [{ question: 'First question?', header: 'Q1', options: [], multiSelect: false }],
@@ -869,8 +872,8 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'WS_USER_QUESTION', payload: newQuestion };
       const newState = chatReducer(state, action);
 
-      // Should keep the first question, not overwrite with second
-      expect(newState.pendingQuestion).toEqual(existingQuestion);
+      // Should overwrite with the new question to match backend state
+      expect(newState.pendingQuestion).toEqual(newQuestion);
     });
   });
 
