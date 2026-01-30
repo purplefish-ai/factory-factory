@@ -1,9 +1,20 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import { Bot, Terminal } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -357,6 +368,129 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
   );
 }
 
+function IdeSettingsSection() {
+  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const utils = trpc.useUtils();
+  const updateSettings = trpc.userSettings.update.useMutation({
+    onSuccess: () => {
+      toast.success('IDE settings updated');
+      utils.workspace.getAvailableIdes.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to update settings: ${error.message}`);
+    },
+  });
+
+  const testCommand = trpc.userSettings.testCustomCommand.useMutation({
+    onSuccess: () => {
+      toast.success('Command executed successfully!');
+    },
+    onError: (error) => {
+      toast.error(`Command test failed: ${error.message}`);
+    },
+  });
+
+  const [preferredIde, setPreferredIde] = useState<string>('cursor');
+  const [customCommand, setCustomCommand] = useState<string>('');
+
+  // Update local state when settings load
+  useEffect(() => {
+    if (settings) {
+      setPreferredIde(settings.preferredIde);
+      setCustomCommand(settings.customIdeCommand || '');
+    }
+  }, [settings]);
+
+  const handleSave = () => {
+    updateSettings.mutate({
+      preferredIde: preferredIde as 'cursor' | 'vscode' | 'custom',
+      customIdeCommand: preferredIde === 'custom' ? customCommand : null,
+    });
+  };
+
+  const handleTestCommand = () => {
+    if (!customCommand) {
+      toast.error('Please enter a custom command first');
+      return;
+    }
+    testCommand.mutate({ customCommand });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>IDE Settings</CardTitle>
+          <CardDescription>Configure your preferred IDE for opening workspaces</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>IDE Settings</CardTitle>
+        <CardDescription>Configure your preferred IDE for opening workspaces</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="ide-select">Preferred IDE</Label>
+          <Select
+            value={preferredIde}
+            onValueChange={(value) => {
+              setPreferredIde(value);
+            }}
+          >
+            <SelectTrigger id="ide-select">
+              <SelectValue placeholder="Select an IDE" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cursor">Cursor</SelectItem>
+              <SelectItem value="vscode">VS Code</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {preferredIde === 'custom' && (
+          <div className="space-y-2">
+            <Label htmlFor="custom-command">Custom Command</Label>
+            <div className="flex gap-2">
+              <Input
+                id="custom-command"
+                value={customCommand}
+                onChange={(e) => setCustomCommand(e.target.value)}
+                placeholder="code-insiders {workspace}"
+                className="font-mono text-sm flex-1"
+              />
+              <Button
+                variant="outline"
+                onClick={handleTestCommand}
+                disabled={testCommand.isPending || !customCommand}
+              >
+                {testCommand.isPending ? 'Testing...' : 'Test'}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Use <code className="bg-muted px-1 py-0.5 rounded">{'{workspace}'}</code> as a
+              placeholder for the workspace path. Example:{' '}
+              <code className="bg-muted px-1 py-0.5 rounded">code-insiders {'{workspace}'}</code>
+            </p>
+          </div>
+        )}
+
+        <Button onClick={handleSave} disabled={updateSettings.isPending}>
+          {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboardPage() {
   const {
     data: stats,
@@ -410,6 +544,9 @@ export default function AdminDashboardPage() {
           <span className="text-muted-foreground">{getEnabledFeatures(stats?.features)}</span>
         </CardContent>
       </Card>
+
+      {/* IDE Settings */}
+      <IdeSettingsSection />
     </div>
   );
 }
