@@ -191,9 +191,9 @@ describe('settings persistence', () => {
       expect(result).toBeNull();
     });
 
-    it('should accept settings with null selectedModel', () => {
+    it('should accept settings with default selectedModel', () => {
       const settings: ChatSettings = {
-        selectedModel: null,
+        selectedModel: 'opus',
         thinkingEnabled: false,
         planModeEnabled: true,
       };
