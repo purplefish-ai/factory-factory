@@ -78,10 +78,13 @@ export interface PermissionHandler {
  * Create an allow response for can_use_tool requests.
  */
 export function createAllowResponse(updatedInput?: Record<string, unknown>): AllowResponseData {
-  return {
+  const response: AllowResponseData = {
     behavior: 'allow',
-    ...(updatedInput && { updatedInput }),
   };
+  if (updatedInput !== undefined) {
+    response.updatedInput = updatedInput;
+  }
+  return response;
 }
 
 /**

@@ -302,6 +302,16 @@ function setupChatClientEvents(
       const toolInput = controlRequest.request.input ?? {};
       const requestId = controlRequest.request_id;
 
+      // Enhance display for ExitPlanMode
+      let displayInput = toolInput;
+      if (toolName === 'ExitPlanMode') {
+        // Show a more user-friendly message for plan approval
+        displayInput = {
+          action: 'Exit planning mode and begin implementation',
+          note: 'Approve to proceed with the implementation plan',
+        };
+      }
+
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Forwarding permission request', {
           dbSessionId,
@@ -314,14 +324,14 @@ function setupChatClientEvents(
         type: 'permission_request',
         requestId,
         toolName,
-        toolInput,
+        toolInput: displayInput,
       });
 
       forwardToConnections(dbSessionId, {
         type: 'permission_request',
         requestId,
         toolName,
-        toolInput,
+        toolInput: displayInput,
         timestamp: new Date().toISOString(),
       });
     }
