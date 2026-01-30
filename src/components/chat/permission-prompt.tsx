@@ -1,10 +1,11 @@
 'use client';
 
-import { ShieldCheck, ShieldX, Terminal } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { FileText, ShieldCheck, ShieldX, Terminal } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { PermissionRequest } from '@/lib/claude-types';
+import { cn } from '@/lib/utils';
 
 // =============================================================================
 // Types
@@ -60,12 +61,102 @@ function formatToolInput(input: Record<string, unknown>): string {
 }
 
 // =============================================================================
+// Plan Approval Component
+// =============================================================================
+
+/**
+ * Specialized prompt for approving plans in ExitPlanMode.
+ * Displays the plan content with expand/collapse functionality.
+ */
+function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
+  const approveButtonRef = useRef<HTMLButtonElement>(null);
+  const [expanded, setExpanded] = useState(true);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only re-focus when requestId changes
+  useEffect(() => {
+    if (!permission) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      approveButtonRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [permission?.requestId]);
+
+  if (!permission) {
+    return null;
+  }
+
+  const { requestId, planContent } = permission;
+
+  const handleApprove = () => {
+    onApprove(requestId, true);
+  };
+
+  const handleReject = () => {
+    onApprove(requestId, false);
+  };
+
+  return (
+    <div className="border-b bg-muted/50 p-3" role="alertdialog" aria-label="Plan approval request">
+      <div className="space-y-3">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 shrink-0 text-blue-500" aria-hidden="true" />
+            <span className="text-sm font-medium">Review Plan</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? 'Collapse' : 'Expand'}
+          </button>
+        </div>
+
+        {/* Plan Content */}
+        {expanded && planContent && (
+          <div className="bg-background rounded-md border overflow-hidden">
+            <pre
+              className={cn(
+                'text-xs p-3 overflow-auto whitespace-pre-wrap font-mono',
+                'max-h-64' // Limit height with scroll
+              )}
+            >
+              {planContent}
+            </pre>
+          </div>
+        )}
+
+        {!planContent && (
+          <div className="text-xs text-muted-foreground italic">No plan content available</div>
+        )}
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={handleReject} className="gap-1.5">
+            <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
+            Reject Plan
+          </Button>
+          <Button ref={approveButtonRef} size="sm" onClick={handleApprove} className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+            Approve Plan
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
 /**
  * Inline prompt for approving or denying tool permission requests.
  * Appears above the chat input as a compact card.
+ * For ExitPlanMode requests, shows a specialized plan approval view.
  */
 export function PermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
@@ -85,6 +176,11 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
 
   if (!permission) {
     return null;
+  }
+
+  // Use specialized view for ExitPlanMode
+  if (permission.toolName === 'ExitPlanMode') {
+    return <PlanApprovalPrompt permission={permission} onApprove={onApprove} />;
   }
 
   const { requestId, toolName, toolInput } = permission;
