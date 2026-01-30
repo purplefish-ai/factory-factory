@@ -26,6 +26,7 @@
     "@electron/rebuild",
     "autoprefixer",
     "tw-animate-css",
+    "@tailwindcss/typography",
     "@prisma/client",
     "@radix-ui/react-accordion",
     "@radix-ui/react-alert-dialog",

@@ -66,6 +66,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/postcss": "^4.1.18",
+    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.90.20",
     "@tanstack/react-virtual": "^3.13.18",
     "@trpc/client": "^11.9.0",
