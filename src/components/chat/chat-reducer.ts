@@ -336,7 +336,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTING':
       return { ...state, startingSession: true };
     case 'WS_STARTED':
-      return { ...state, startingSession: false, running: true };
+      return { ...state, startingSession: false, running: true, latestThinking: null };
     case 'WS_STOPPED':
       return { ...state, running: false, stopping: false, startingSession: false };
 
@@ -414,6 +414,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         running: false,
         queuedMessages: [],
         toolUseIdToIndex: new Map(),
+        latestThinking: null,
       };
     case 'SESSION_LOADING_START':
       return { ...state, loadingSession: true };
