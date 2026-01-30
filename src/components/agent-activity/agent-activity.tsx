@@ -48,7 +48,7 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
           {/* Text */}
           {message.text && (
             <div className="relative inline-block max-w-full">
-              <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
+              <div className="rounded bg-background border border-border px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
                 {userText}
               </div>
               {userText && <CopyMessageButton textContent={userText} />}
