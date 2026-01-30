@@ -1,7 +1,7 @@
 // Main components
 export type { GroupedMessageItemRendererProps, MessageItemProps } from './agent-activity';
 export { GroupedMessageItemRenderer, MessageItem } from './agent-activity';
-export { CopyMessageButton } from './copy-message-button';
+export { CopyMessageButton, KeyboardStateProvider } from './copy-message-button';
 
 // Message renderers
 export {

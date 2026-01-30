@@ -43,7 +43,7 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
           <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
             {userText}
           </div>
-          <CopyMessageButton textContent={userText} />
+          {userText && <CopyMessageButton textContent={userText} />}
         </div>
       </MessageWrapper>
     );
@@ -54,10 +54,14 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
     const assistantText = extractTextFromMessage(message.message);
     return (
       <MessageWrapper>
-        <div className="relative">
+        {assistantText ? (
+          <div className="relative">
+            <AssistantMessageRenderer message={message.message} messageId={message.id} />
+            <CopyMessageButton textContent={assistantText} />
+          </div>
+        ) : (
           <AssistantMessageRenderer message={message.message} messageId={message.id} />
-          {assistantText && <CopyMessageButton textContent={assistantText} />}
-        </div>
+        )}
       </MessageWrapper>
     );
   }
