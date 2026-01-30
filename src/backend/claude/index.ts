@@ -7,12 +7,19 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { AutoApproveHandler, ModeBasedHandler, type PermissionHandler } from './permissions';
+import {
+  AutoApproveHandler,
+  createAllowResponse,
+  createDenyResponse,
+  ModeBasedHandler,
+  type PermissionHandler,
+} from './permissions';
 import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './process';
 import type { ControlResponseBody } from './protocol';
 import { type HistoryMessage, SessionManager } from './session';
 import {
   type AssistantMessage,
+  type CanUseToolRequest,
   type ClaudeContentItem,
   type ClaudeJson,
   type ControlRequest,
@@ -97,6 +104,8 @@ export class ClaudeClient extends EventEmitter {
   private process: ClaudeProcess | null = null;
   private permissionHandler: PermissionHandler;
   private workingDir: string;
+  /** Pending permission requests awaiting user approval (for plan mode) */
+  private pendingPermissions: Map<string, (response: ControlResponseBody) => void> = new Map();
 
   private constructor(workingDir: string, permissionHandler: PermissionHandler) {
     super();
@@ -132,6 +141,19 @@ export class ClaudeClient extends EventEmitter {
 
     // Create the client
     const client = new ClaudeClient(options.workingDir, permissionHandler);
+
+    // For plan mode, set up deferred approval callback for ExitPlanMode
+    // This allows the UI to approve/deny ExitPlanMode before execution continues
+    if (options.permissionMode === 'plan' && permissionHandler instanceof ModeBasedHandler) {
+      permissionHandler.setOnAsk((request) => {
+        const requestId = request.tool_use_id ?? `perm-${Date.now()}`;
+        return new Promise<ControlResponseBody>((resolve) => {
+          client.pendingPermissions.set(requestId, resolve);
+          // Emit event for WebSocket handler to forward to frontend
+          client.emit('deferred_permission_request', request, requestId);
+        });
+      });
+    }
 
     // Build process options
     const processOptions: ClaudeProcessOptions = {
@@ -304,6 +326,10 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'tool_use', handler: (toolUse: ToolUseContent) => void): this;
   override on(event: 'stream', handler: (event: StreamEventMessage) => void): this;
   override on(event: 'permission_request', handler: (req: ControlRequest) => void): this;
+  override on(
+    event: 'deferred_permission_request',
+    handler: (req: CanUseToolRequest, requestId: string) => void
+  ): this;
   override on(event: 'result', handler: (result: ResultMessage) => void): this;
   override on(event: 'exit', handler: (result: ExitResult) => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
@@ -317,6 +343,11 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'tool_use', toolUse: ToolUseContent): boolean;
   override emit(event: 'stream', event_: StreamEventMessage): boolean;
   override emit(event: 'permission_request', req: ControlRequest): boolean;
+  override emit(
+    event: 'deferred_permission_request',
+    req: CanUseToolRequest,
+    requestId: string
+  ): boolean;
   override emit(event: 'result', result: ResultMessage): boolean;
   override emit(event: 'exit', result: ExitResult): boolean;
   override emit(event: 'error', error: Error): boolean;
@@ -456,6 +487,48 @@ export class ClaudeClient extends EventEmitter {
 
     // Unknown hook type - allow by default
     return { behavior: 'allow' };
+  }
+
+  // ===========================================================================
+  // Deferred Permission Approval (for Plan Mode)
+  // ===========================================================================
+
+  /**
+   * Approve a pending permission request.
+   * Used by external code (WebSocket handler) when user approves a deferred request.
+   *
+   * @param requestId - The ID of the pending request
+   * @param updatedInput - Optional updated input to pass to the tool
+   * @returns true if a pending request was found and resolved, false otherwise
+   */
+  approvePermission(requestId: string, updatedInput?: Record<string, unknown>): boolean {
+    const resolve = this.pendingPermissions.get(requestId);
+    if (!resolve) {
+      return false;
+    }
+
+    this.pendingPermissions.delete(requestId);
+    resolve(createAllowResponse(updatedInput));
+    return true;
+  }
+
+  /**
+   * Deny a pending permission request.
+   * Used by external code (WebSocket handler) when user denies a deferred request.
+   *
+   * @param requestId - The ID of the pending request
+   * @param message - Optional message explaining the denial
+   * @returns true if a pending request was found and resolved, false otherwise
+   */
+  denyPermission(requestId: string, message?: string): boolean {
+    const resolve = this.pendingPermissions.get(requestId);
+    if (!resolve) {
+      return false;
+    }
+
+    this.pendingPermissions.delete(requestId);
+    resolve(createDenyResponse(message ?? 'User denied'));
+    return true;
   }
 }
 

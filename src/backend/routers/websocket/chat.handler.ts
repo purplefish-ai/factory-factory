@@ -286,6 +286,23 @@ function setupChatClientEvents(
   client.on('error', (error) => {
     forwardToConnections(dbSessionId, { type: 'error', message: error.message });
   });
+
+  // Forward deferred permission requests (plan mode ExitPlanMode approval)
+  client.on('deferred_permission_request', (request, requestId) => {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Deferred permission request for tool', {
+        dbSessionId,
+        toolName: request.tool_name,
+        requestId,
+      });
+    }
+    forwardToConnections(dbSessionId, {
+      type: 'permission_request',
+      requestId,
+      toolName: request.tool_name,
+      input: request.input,
+    });
+  });
 }
 
 /**
@@ -538,6 +555,32 @@ async function handleChatMessage(
             },
           })
         );
+      }
+      break;
+    }
+
+    case 'permission_response': {
+      const { requestId, allow } = message as { requestId?: string; allow?: boolean };
+      if (!requestId) {
+        logger.warn('[Chat WS] permission_response missing requestId', { sessionId });
+        break;
+      }
+
+      const client = sessionService.getClient(sessionId);
+      if (client) {
+        if (allow) {
+          const approved = client.approvePermission(requestId);
+          if (DEBUG_CHAT_WS) {
+            logger.info('[Chat WS] Permission approved', { sessionId, requestId, approved });
+          }
+        } else {
+          const denied = client.denyPermission(requestId, 'User denied the request');
+          if (DEBUG_CHAT_WS) {
+            logger.info('[Chat WS] Permission denied', { sessionId, requestId, denied });
+          }
+        }
+      } else {
+        logger.warn('[Chat WS] No client found for permission_response', { sessionId, requestId });
       }
       break;
     }

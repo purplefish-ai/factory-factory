@@ -266,6 +266,14 @@ export class ModeBasedHandler implements PermissionHandler {
   getMode(): PermissionMode {
     return this.mode;
   }
+
+  /**
+   * Set or update the onAsk callback.
+   * This allows setting up deferred approval after construction.
+   */
+  setOnAsk(callback: (request: CanUseToolRequest) => Promise<ControlResponseBody>): void {
+    this.onAsk = callback;
+  }
 }
 
 // =============================================================================
