@@ -384,10 +384,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ? [...historyMessages, ...optimisticUserMessages]
           : historyMessages;
 
-      // Restore pending interactive request if present
+      // Restore pending interactive request if present from backend.
+      // Only overwrite existing state if backend has something to restore,
+      // otherwise preserve any pending state that may have arrived during loading (race condition fix).
       const pendingReq = action.payload.pendingInteractiveRequest;
-      let pendingPermission: PermissionRequest | null = null;
-      let pendingQuestion: UserQuestionRequest | null = null;
+      let pendingPermission: PermissionRequest | null = state.pendingPermission;
+      let pendingQuestion: UserQuestionRequest | null = state.pendingQuestion;
 
       if (pendingReq) {
         if (pendingReq.toolName === 'AskUserQuestion') {

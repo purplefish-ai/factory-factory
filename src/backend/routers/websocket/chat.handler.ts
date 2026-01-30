@@ -182,20 +182,25 @@ function routeInteractiveRequest(
     input: Record<string, unknown>;
   }
 ): void {
+  // Compute planContent for ExitPlanMode, null for others
+  const planContent =
+    request.toolName === 'ExitPlanMode'
+      ? readPlanFileContent((request.input as { planFile?: string }).planFile)
+      : null;
+
+  // Store for session restore (single location for all request types)
+  pendingInteractiveRequests.set(dbSessionId, {
+    requestId: request.requestId,
+    toolName: request.toolName,
+    toolUseId: request.toolUseId,
+    input: request.input,
+    planContent,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Route to appropriate WebSocket message format
   if (request.toolName === 'AskUserQuestion') {
-    // AskUserQuestion: send as 'user_question' with questions extracted from input
     const input = request.input as { questions?: unknown[] };
-
-    // Store for session restore
-    pendingInteractiveRequests.set(dbSessionId, {
-      requestId: request.requestId,
-      toolName: request.toolName,
-      toolUseId: request.toolUseId,
-      input: request.input,
-      planContent: null,
-      timestamp: new Date().toISOString(),
-    });
-
     forwardToConnections(dbSessionId, {
       type: 'user_question',
       requestId: request.requestId,
@@ -205,20 +210,6 @@ function routeInteractiveRequest(
   }
 
   if (request.toolName === 'ExitPlanMode') {
-    // ExitPlanMode: send as 'permission_request' for plan approval
-    const exitPlanInput = request.input as { planFile?: string };
-    const planContent = readPlanFileContent(exitPlanInput.planFile);
-
-    // Store for session restore
-    pendingInteractiveRequests.set(dbSessionId, {
-      requestId: request.requestId,
-      toolName: request.toolName,
-      toolUseId: request.toolUseId,
-      input: request.input,
-      planContent,
-      timestamp: new Date().toISOString(),
-    });
-
     forwardToConnections(dbSessionId, {
       type: 'permission_request',
       requestId: request.requestId,
@@ -229,16 +220,7 @@ function routeInteractiveRequest(
     return;
   }
 
-  // Fallback: send as generic interactive_request (also store it)
-  pendingInteractiveRequests.set(dbSessionId, {
-    requestId: request.requestId,
-    toolName: request.toolName,
-    toolUseId: request.toolUseId,
-    input: request.input,
-    planContent: null,
-    timestamp: new Date().toISOString(),
-  });
-
+  // Fallback: send as generic interactive_request
   forwardToConnections(dbSessionId, {
     type: 'interactive_request',
     requestId: request.requestId,
@@ -582,6 +564,7 @@ async function handleUserInputMessage(
 async function handleStopMessage(ws: WebSocket, sessionId: string): Promise<void> {
   await sessionService.stopClaudeSession(sessionId);
   pendingMessages.delete(sessionId);
+  pendingInteractiveRequests.delete(sessionId);
   ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
 }
 
