@@ -146,7 +146,7 @@ interface StreamEventData {
     id?: string;
     name?: string;
   };
-  delta?: { type?: string; partial_json?: string };
+  delta?: { type?: string; partial_json?: string; thinking?: string };
 }
 
 /**
@@ -235,6 +235,33 @@ function handleToolInputStreaming(
 }
 
 /**
+ * Handle thinking delta stream events (extended thinking mode).
+ * Returns a THINKING_DELTA action for thinking deltas, THINKING_CLEAR for message_start, null otherwise.
+ */
+function handleThinkingStreaming(claudeMsg: ClaudeMessage): ChatAction | null {
+  const event = getStreamEvent(claudeMsg);
+  if (!event) {
+    return null;
+  }
+
+  // Clear thinking on new message start
+  if (event.type === 'message_start') {
+    return { type: 'THINKING_CLEAR' };
+  }
+
+  // Accumulate thinking delta
+  if (
+    event.type === 'content_block_delta' &&
+    event.delta?.type === 'thinking_delta' &&
+    event.delta.thinking
+  ) {
+    return { type: 'THINKING_DELTA', payload: { thinking: event.delta.thinking } };
+  }
+
+  return null;
+}
+
+/**
  * Handle session_loaded message with settings override logic.
  * Prefers locally stored settings over backend-inferred settings.
  */
@@ -289,6 +316,13 @@ function handleClaudeMessageWithStreaming(
   if (toolInputAction) {
     dispatch(toolInputAction);
     // Don't return - still need to dispatch the main action for content_block_start
+  }
+
+  // Handle thinking streaming (extended thinking mode)
+  const thinkingAction = handleThinkingStreaming(claudeMsg);
+  if (thinkingAction) {
+    dispatch(thinkingAction);
+    // Don't return - THINKING_CLEAR also needs the main action to process
   }
 }
 

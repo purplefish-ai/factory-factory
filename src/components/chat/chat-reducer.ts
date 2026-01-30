@@ -52,6 +52,8 @@ export interface ChatState {
   queuedMessages: QueuedMessage[];
   /** Tool use ID to message index map for O(1) updates */
   toolUseIdToIndex: Map<string, number>;
+  /** Latest accumulated thinking content from extended thinking mode */
+  latestThinking: string | null;
 }
 
 // =============================================================================
@@ -100,6 +102,9 @@ export type ChatAction =
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
+  // Thinking actions (extended thinking mode)
+  | { type: 'THINKING_DELTA'; payload: { thinking: string } }
+  | { type: 'THINKING_CLEAR' }
   // Clear/reset actions
   | { type: 'CLEAR_CHAT' }
   | { type: 'RESET_FOR_SESSION_SWITCH' };
@@ -221,6 +226,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     chatSettings: DEFAULT_CHAT_SETTINGS,
     queuedMessages: [],
     toolUseIdToIndex: new Map(),
+    latestThinking: null,
     ...overrides,
   };
 }
@@ -448,6 +454,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_SETTINGS':
       return { ...state, chatSettings: action.payload };
 
+    // Thinking (extended thinking mode)
+    case 'THINKING_DELTA':
+      return {
+        ...state,
+        latestThinking: (state.latestThinking ?? '') + action.payload.thinking,
+      };
+    case 'THINKING_CLEAR':
+      return { ...state, latestThinking: null };
+
     // Clear/reset
     case 'CLEAR_CHAT':
       return {
@@ -460,6 +475,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         stopping: false,
         chatSettings: DEFAULT_CHAT_SETTINGS,
         toolUseIdToIndex: new Map(),
+        latestThinking: null,
       };
     case 'RESET_FOR_SESSION_SWITCH':
       return {
@@ -473,6 +489,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         running: false,
         queuedMessages: [],
         toolUseIdToIndex: new Map(),
+        latestThinking: null,
       };
 
     default:
