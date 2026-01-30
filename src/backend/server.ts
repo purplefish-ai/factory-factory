@@ -31,7 +31,7 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
-import { ClaudeClient, type ClaudeClientOptions, SessionManager } from './claude/index';
+import { type ClaudeClient, SessionManager } from './claude/index';
 import { prisma } from './db';
 import { interceptorRegistry, registerInterceptors } from './interceptors';
 import { claudeSessionAccessor } from './resource_accessors/claude-session.accessor';
@@ -573,9 +573,8 @@ export function createServer(requestedPort?: number): ServerInstance {
   const pendingMessages = new Map<string, PendingMessage[]>();
   const MAX_PENDING_MESSAGES = 100;
 
-  // Chat clients keyed by dbSessionId
-  const chatClients = new Map<string, ClaudeClient>();
-  const pendingClientCreation = new Map<string, Promise<ClaudeClient>>();
+  // Track which sessions have had event forwarding set up (for idempotent setup)
+  const clientEventSetup = new Set<string>();
 
   const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
   let chatWsMsgCounter = 0;
@@ -667,6 +666,15 @@ export function createServer(requestedPort?: number): ServerInstance {
     client: ClaudeClient,
     context: { workspaceId: string; workingDir: string }
   ): void {
+    // Idempotent: skip if already set up for this session
+    if (clientEventSetup.has(dbSessionId)) {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Event forwarding already set up, skipping', { dbSessionId });
+      }
+      return;
+    }
+    clientEventSetup.add(dbSessionId);
+
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Setting up event forwarding for session', { dbSessionId });
     }
@@ -689,8 +697,8 @@ export function createServer(requestedPort?: number): ServerInstance {
       );
     });
 
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: session initialization with error handling
-    client.on('session_id', async (claudeSessionId) => {
+    // Note: DB update for claudeSessionId is now handled by sessionService.setupClientDbHandlers()
+    client.on('session_id', (claudeSessionId) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received session_id from Claude CLI', {
           dbSessionId,
@@ -698,20 +706,7 @@ export function createServer(requestedPort?: number): ServerInstance {
         });
       }
 
-      try {
-        await claudeSessionAccessor.update(dbSessionId, { claudeSessionId });
-        logger.info('[Chat WS] Updated database with claudeSessionId', {
-          dbSessionId,
-          claudeSessionId,
-        });
-      } catch (error) {
-        logger.warn('[Chat WS] Failed to update database with claudeSessionId', {
-          dbSessionId,
-          claudeSessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
+      // Drain any pending messages
       const pending = pendingMessages.get(dbSessionId);
       pendingMessages.delete(dbSessionId);
       if (pending && pending.length > 0) {
@@ -812,7 +807,7 @@ export function createServer(requestedPort?: number): ServerInstance {
         code: result.code,
       });
       client.removeAllListeners();
-      chatClients.delete(dbSessionId);
+      clientEventSetup.delete(dbSessionId);
       pendingMessages.delete(dbSessionId);
     });
 
@@ -821,82 +816,38 @@ export function createServer(requestedPort?: number): ServerInstance {
     });
   }
 
+  /**
+   * Get or create a ClaudeClient by delegating to sessionService.
+   * Sets up event forwarding for WebSocket connections.
+   */
   async function getOrCreateChatClient(
     dbSessionId: string,
     options: {
-      workingDir: string;
-      resumeClaudeSessionId?: string;
-      systemPrompt?: string;
-      model?: string;
       thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
+      planModeEnabled?: boolean;
+      model?: string;
     }
   ): Promise<ClaudeClient> {
-    let client = chatClients.get(dbSessionId);
-    if (client?.isRunning()) {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Reusing existing running client', { dbSessionId });
-      }
-      return client;
-    }
-
-    const pendingCreation = pendingClientCreation.get(dbSessionId);
-    if (pendingCreation) {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Waiting for pending client creation', { dbSessionId });
-      }
-      return pendingCreation;
-    }
-
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Creating new client', {
-        dbSessionId,
-        hadExistingClient: !!client,
-        resumeClaudeSessionId: options.resumeClaudeSessionId,
-      });
+      logger.info('[Chat WS] Getting or creating client via sessionService', { dbSessionId });
     }
 
-    const createPromise = (async () => {
-      const clientOptions: ClaudeClientOptions = {
-        workingDir: options.workingDir,
-        resumeClaudeSessionId: options.resumeClaudeSessionId,
-        systemPrompt: options.systemPrompt,
-        model: options.model,
-        permissionMode: options.permissionMode ?? 'bypassPermissions',
-        includePartialMessages: true,
-        thinkingEnabled: options.thinkingEnabled,
-      };
+    // Delegate client lifecycle to sessionService
+    const client = await sessionService.getOrCreateClient(dbSessionId, {
+      thinkingEnabled: options.thinkingEnabled,
+      permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
+      model: options.model,
+    });
 
-      try {
-        const session = await claudeSessionAccessor.findById(dbSessionId);
-        const workspaceId = session?.workspaceId ?? 'unknown';
+    // Set up event forwarding (idempotent - safe to call multiple times)
+    const session = await claudeSessionAccessor.findById(dbSessionId);
+    const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
+    setupChatClientEvents(dbSessionId, client, {
+      workspaceId: session?.workspaceId ?? 'unknown',
+      workingDir: sessionOpts?.workingDir ?? '',
+    });
 
-        const newClient = await ClaudeClient.create({
-          ...clientOptions,
-          sessionId: dbSessionId,
-        });
-
-        setupChatClientEvents(dbSessionId, newClient, {
-          workspaceId,
-          workingDir: options.workingDir,
-        });
-        chatClients.set(dbSessionId, newClient);
-
-        return newClient;
-      } catch (error) {
-        chatClients.delete(dbSessionId);
-        throw error;
-      }
-    })();
-
-    pendingClientCreation.set(dbSessionId, createPromise);
-
-    try {
-      client = await createPromise;
-      return client;
-    } finally {
-      pendingClientCreation.delete(dbSessionId);
-    }
+    return client;
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles multiple message types with settings
@@ -920,6 +871,7 @@ export function createServer(requestedPort?: number): ServerInstance {
       case 'start': {
         ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
 
+        // Determine model to use
         const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
         if (!sessionOpts) {
           logger.error('[Chat WS] Failed to get session options', { dbSessionId });
@@ -927,22 +879,15 @@ export function createServer(requestedPort?: number): ServerInstance {
           break;
         }
 
-        const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
-
         const validModels = ['sonnet', 'opus'];
         const requestedModel = message.selectedModel || message.model;
         const model =
-          requestedModel && validModels.includes(requestedModel)
-            ? requestedModel
-            : sessionOpts.model;
+          requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
 
         await getOrCreateChatClient(dbSessionId, {
-          workingDir: sessionOpts.workingDir,
-          resumeClaudeSessionId: sessionOpts.resumeClaudeSessionId,
-          systemPrompt: sessionOpts.systemPrompt,
-          model,
           thinkingEnabled: message.thinkingEnabled,
-          permissionMode,
+          planModeEnabled: message.planModeEnabled,
+          model,
         });
         ws.send(JSON.stringify({ type: 'started', dbSessionId }));
         break;
@@ -954,9 +899,10 @@ export function createServer(requestedPort?: number): ServerInstance {
           break;
         }
 
-        const client = chatClients.get(dbSessionId);
-        if (client?.isRunning()) {
-          client.sendMessage(text);
+        // Check if client exists and is running via sessionService
+        const existingClient = sessionService.getClient(dbSessionId);
+        if (existingClient?.isRunning()) {
+          existingClient.sendMessage(text);
         } else {
           let queue = pendingMessages.get(dbSessionId);
           if (!queue) {
@@ -989,32 +935,20 @@ export function createServer(requestedPort?: number): ServerInstance {
           ws.send(JSON.stringify({ type: 'message_queued', text }));
           ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
 
-          const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
-          if (!sessionOpts) {
-            logger.error('[Chat WS] Failed to get session options for auto-start', { dbSessionId });
-            ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
-            break;
-          }
-
-          const permissionMode = message.planModeEnabled ? 'plan' : 'bypassPermissions';
-
+          // Determine model to use
           const validModels = ['sonnet', 'opus'];
           const requestedModel = message.selectedModel || message.model;
           const model =
-            requestedModel && validModels.includes(requestedModel)
-              ? requestedModel
-              : sessionOpts.model;
+            requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
 
           const newClient = await getOrCreateChatClient(dbSessionId, {
-            workingDir: sessionOpts.workingDir,
-            resumeClaudeSessionId: sessionOpts.resumeClaudeSessionId,
-            systemPrompt: sessionOpts.systemPrompt,
-            model,
             thinkingEnabled: message.thinkingEnabled,
-            permissionMode,
+            planModeEnabled: message.planModeEnabled,
+            model,
           });
           ws.send(JSON.stringify({ type: 'started', dbSessionId }));
 
+          // Drain pending messages
           const pending = pendingMessages.get(dbSessionId);
           pendingMessages.delete(dbSessionId);
           if (pending && pending.length > 0) {
@@ -1031,22 +965,15 @@ export function createServer(requestedPort?: number): ServerInstance {
       }
 
       case 'stop': {
-        const client = chatClients.get(dbSessionId);
-        if (client) {
-          try {
-            await client.stop();
-          } catch {
-            client.kill();
-          }
-          chatClients.delete(dbSessionId);
-        }
+        // Delegate to sessionService for unified session lifecycle management
+        await sessionService.stopClaudeSession(dbSessionId);
         pendingMessages.delete(dbSessionId);
         ws.send(JSON.stringify({ type: 'stopped', dbSessionId }));
         break;
       }
 
       case 'get_history': {
-        const client = chatClients.get(dbSessionId);
+        const client = sessionService.getClient(dbSessionId);
         const claudeSessionId = client?.getClaudeSessionId();
         if (claudeSessionId) {
           const history = await SessionManager.getHistory(claudeSessionId, workingDir);
@@ -1072,7 +999,7 @@ export function createServer(requestedPort?: number): ServerInstance {
 
         const targetSessionId = dbSession.claudeSessionId ?? null;
 
-        const existingClient = chatClients.get(dbSessionId);
+        const existingClient = sessionService.getClient(dbSessionId);
         const running = existingClient?.isWorking() ?? false;
 
         if (targetSessionId) {
@@ -1238,7 +1165,7 @@ export function createServer(requestedPort?: number): ServerInstance {
         });
       }
 
-      const client = chatClients.get(dbSessionId);
+      const client = sessionService.getClient(dbSessionId);
       const isRunning = client?.isWorking() ?? false;
 
       const initialStatus = {
@@ -1660,43 +1587,8 @@ export function createServer(requestedPort?: number): ServerInstance {
     wss.close();
     server.close();
 
-    const stopPromises: Promise<void>[] = [];
-    for (const [sessionId, client] of chatClients) {
-      let didTimeout = false;
-      const stopPromise = Promise.race([
-        (async () => {
-          try {
-            await client.stop();
-          } catch {
-            client.kill();
-          }
-        })(),
-        new Promise<void>((resolve) =>
-          setTimeout(() => {
-            didTimeout = true;
-            resolve();
-          }, SHUTDOWN_TIMEOUT_MS)
-        ),
-      ]).then(() => {
-        if (didTimeout) {
-          logger.warn('Client stop timed out, force killing', { sessionId });
-        }
-        try {
-          client.kill();
-        } catch {
-          // Ignore kill errors
-        }
-      });
-      stopPromises.push(stopPromise);
-      logger.debug('Stopping chat client', { sessionId });
-    }
-
-    await Promise.all(stopPromises);
-
-    for (const client of chatClients.values()) {
-      client.removeAllListeners();
-    }
-    chatClients.clear();
+    // Stop all Claude clients via sessionService (unified lifecycle management)
+    await sessionService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
 
     terminalService.cleanup();
     agentProcessAdapter.cleanup();
