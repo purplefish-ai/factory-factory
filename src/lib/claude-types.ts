@@ -423,6 +423,15 @@ export interface WebSocketMessage {
   settings?: ChatSettings;
   // Message queued acknowledgment
   text?: string;
+  // Pending interactive request for session restore
+  pendingInteractiveRequest?: {
+    requestId: string;
+    toolName: string;
+    toolUseId: string;
+    input: Record<string, unknown>;
+    planContent: string | null;
+    timestamp: string;
+  } | null;
 }
 
 // =============================================================================

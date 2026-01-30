@@ -43,6 +43,23 @@ export const chatConnections = new Map<string, ConnectionInfo>();
 export const pendingMessages = new Map<string, PendingMessage[]>();
 export const clientEventSetup = new Set<string>();
 
+/**
+ * Pending interactive request stored for session restore.
+ * When a user navigates away and returns, we need to show the modal again.
+ */
+export interface StoredInteractiveRequest {
+  requestId: string;
+  toolName: string;
+  toolUseId: string;
+  input: Record<string, unknown>;
+  /** Plan content for ExitPlanMode requests */
+  planContent: string | null;
+  timestamp: string;
+}
+
+/** Pending interactive requests by session ID (for restore on reconnect) */
+export const pendingInteractiveRequests = new Map<string, StoredInteractiveRequest>();
+
 const MAX_PENDING_MESSAGES = 100;
 const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
 let chatWsMsgCounter = 0;
@@ -154,6 +171,7 @@ function readPlanFileContent(planFile: string | undefined): string | null {
 
 /**
  * Route interactive tool requests to the appropriate WebSocket message format.
+ * Also stores the request for session restore when user navigates away and returns.
  */
 function routeInteractiveRequest(
   dbSessionId: string,
@@ -167,6 +185,17 @@ function routeInteractiveRequest(
   if (request.toolName === 'AskUserQuestion') {
     // AskUserQuestion: send as 'user_question' with questions extracted from input
     const input = request.input as { questions?: unknown[] };
+
+    // Store for session restore
+    pendingInteractiveRequests.set(dbSessionId, {
+      requestId: request.requestId,
+      toolName: request.toolName,
+      toolUseId: request.toolUseId,
+      input: request.input,
+      planContent: null,
+      timestamp: new Date().toISOString(),
+    });
+
     forwardToConnections(dbSessionId, {
       type: 'user_question',
       requestId: request.requestId,
@@ -180,6 +209,16 @@ function routeInteractiveRequest(
     const exitPlanInput = request.input as { planFile?: string };
     const planContent = readPlanFileContent(exitPlanInput.planFile);
 
+    // Store for session restore
+    pendingInteractiveRequests.set(dbSessionId, {
+      requestId: request.requestId,
+      toolName: request.toolName,
+      toolUseId: request.toolUseId,
+      input: request.input,
+      planContent,
+      timestamp: new Date().toISOString(),
+    });
+
     forwardToConnections(dbSessionId, {
       type: 'permission_request',
       requestId: request.requestId,
@@ -190,7 +229,16 @@ function routeInteractiveRequest(
     return;
   }
 
-  // Fallback: send as generic interactive_request
+  // Fallback: send as generic interactive_request (also store it)
+  pendingInteractiveRequests.set(dbSessionId, {
+    requestId: request.requestId,
+    toolName: request.toolName,
+    toolUseId: request.toolUseId,
+    input: request.input,
+    planContent: null,
+    timestamp: new Date().toISOString(),
+  });
+
   forwardToConnections(dbSessionId, {
     type: 'interactive_request',
     requestId: request.requestId,
@@ -365,6 +413,8 @@ function setupChatClientEvents(
     client.removeAllListeners();
     clientEventSetup.delete(dbSessionId);
     pendingMessages.delete(dbSessionId);
+    // Clear any pending interactive requests when process exits
+    pendingInteractiveRequests.delete(dbSessionId);
   });
 
   client.on('error', (error) => {
@@ -570,6 +620,9 @@ async function handleLoadSessionMessage(
   const existingClient = sessionService.getClient(sessionId);
   const running = existingClient?.isWorking() ?? false;
 
+  // Check for pending interactive request to restore modal state
+  const pendingRequest = pendingInteractiveRequests.get(sessionId);
+
   if (targetSessionId) {
     const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
       SessionManager.getHistory(targetSessionId, workingDir),
@@ -595,6 +648,7 @@ async function handleLoadSessionMessage(
           thinkingEnabled,
           planModeEnabled: false,
         },
+        pendingInteractiveRequest: pendingRequest ?? null,
       })
     );
   } else {
@@ -609,6 +663,7 @@ async function handleLoadSessionMessage(
           thinkingEnabled: false,
           planModeEnabled: false,
         },
+        pendingInteractiveRequest: pendingRequest ?? null,
       })
     );
   }
@@ -637,6 +692,8 @@ function handleQuestionResponseMessage(
 
   try {
     client.answerQuestion(requestId, answers);
+    // Clear the pending request after successful response
+    pendingInteractiveRequests.delete(sessionId);
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Answered question', { sessionId, requestId });
     }
@@ -680,6 +737,8 @@ function handlePermissionResponseMessage(
     } else {
       client.denyInteractiveRequest(requestId, 'User denied');
     }
+    // Clear the pending request after successful response
+    pendingInteractiveRequests.delete(sessionId);
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
     }

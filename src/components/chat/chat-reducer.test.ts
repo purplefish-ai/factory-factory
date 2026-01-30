@@ -1336,6 +1336,7 @@ describe('createActionFromWebSocketMessage', () => {
         gitBranch: 'main',
         running: false,
         settings,
+        pendingInteractiveRequest: null,
       },
     });
   });
@@ -1351,6 +1352,7 @@ describe('createActionFromWebSocketMessage', () => {
         gitBranch: null,
         running: false,
         settings: undefined,
+        pendingInteractiveRequest: null,
       },
     });
   });

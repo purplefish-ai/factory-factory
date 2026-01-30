@@ -76,6 +76,14 @@ export type ChatAction =
         gitBranch: string | null;
         running: boolean;
         settings?: ChatSettings;
+        pendingInteractiveRequest?: {
+          requestId: string;
+          toolName: string;
+          toolUseId: string;
+          input: Record<string, unknown>;
+          planContent: string | null;
+          timestamp: string;
+        } | null;
       };
     }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
@@ -381,6 +389,33 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         optimisticUserMessages.length > 0
           ? [...historyMessages, ...optimisticUserMessages]
           : historyMessages;
+
+      // Restore pending interactive request if present
+      const pendingReq = action.payload.pendingInteractiveRequest;
+      let pendingPermission: PermissionRequest | null = null;
+      let pendingQuestion: UserQuestionRequest | null = null;
+
+      if (pendingReq) {
+        if (pendingReq.toolName === 'AskUserQuestion') {
+          // Restore AskUserQuestion modal
+          const input = pendingReq.input as { questions?: unknown[] };
+          pendingQuestion = {
+            requestId: pendingReq.requestId,
+            questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+            timestamp: pendingReq.timestamp,
+          };
+        } else {
+          // Restore permission request (ExitPlanMode or other)
+          pendingPermission = {
+            requestId: pendingReq.requestId,
+            toolName: pendingReq.toolName,
+            toolInput: pendingReq.input,
+            timestamp: pendingReq.timestamp,
+            planContent: pendingReq.planContent,
+          };
+        }
+      }
+
       return {
         ...state,
         messages,
@@ -388,6 +423,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         running: action.payload.running,
         loadingSession: false,
         toolUseIdToIndex: new Map(),
+        pendingPermission,
+        pendingQuestion,
       };
     }
 
@@ -547,6 +584,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage): ChatAction {
       gitBranch: data.gitBranch ?? null,
       running: data.running ?? false,
       settings: data.settings,
+      pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
     },
   };
 }
