@@ -336,9 +336,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     if (prevDbSessionId !== null && prevDbSessionId !== newDbSessionId) {
       debug.log('Session switch detected', { from: prevDbSessionId, to: newDbSessionId });
 
-      // Persist queue clear for the old session to prevent stale messages on refresh
-      persistQueue(prevDbSessionId, []);
-
       // Dispatch session switch to reset reducer state
       dispatch({ type: 'SESSION_SWITCH_START' });
 
