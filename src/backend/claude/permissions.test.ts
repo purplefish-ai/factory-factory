@@ -188,8 +188,12 @@ describe('shouldAutoApprove', () => {
       expect(shouldAutoApprove(mode, 'Read')).toBe(true);
     });
 
-    it('should auto-approve ExitPlanMode', () => {
-      expect(shouldAutoApprove(mode, 'ExitPlanMode')).toBe(true);
+    it('should NOT auto-approve ExitPlanMode (interactive tool)', () => {
+      expect(shouldAutoApprove(mode, 'ExitPlanMode')).toBe(false);
+    });
+
+    it('should NOT auto-approve AskUserQuestion (interactive tool)', () => {
+      expect(shouldAutoApprove(mode, 'AskUserQuestion')).toBe(false);
     });
 
     it('should auto-approve any arbitrary tool', () => {
@@ -629,9 +633,12 @@ describe('ModeBasedHandler', () => {
       expect(response).toEqual({ behavior: 'allow' });
     });
 
-    it('should auto-approve ExitPlanMode', async () => {
+    it('should NOT auto-approve ExitPlanMode (interactive tool)', async () => {
       const response = await handler.onCanUseTool(exitPlanModeRequest);
-      expect(response).toEqual({ behavior: 'allow' });
+      expect(response).toEqual({
+        behavior: 'deny',
+        message: "Tool 'ExitPlanMode' requires manual approval",
+      });
     });
   });
 

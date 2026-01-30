@@ -5,7 +5,7 @@
  * Manages session lifecycle, message forwarding, and tool interception.
  */
 
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
@@ -132,6 +132,72 @@ function notifyToolResultInterceptors(
     pendingToolNames.delete(typedItem.tool_use_id);
     pendingToolInputs.delete(typedItem.tool_use_id);
   }
+}
+
+/**
+ * Read plan file content for ExitPlanMode requests.
+ */
+function readPlanFileContent(planFile: string | undefined): string | null {
+  if (!(planFile && existsSync(planFile))) {
+    return null;
+  }
+  try {
+    return readFileSync(planFile, 'utf-8');
+  } catch (error) {
+    logger.warn('[Chat WS] Failed to read plan file', {
+      planFile,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Route interactive tool requests to the appropriate WebSocket message format.
+ */
+function routeInteractiveRequest(
+  dbSessionId: string,
+  request: {
+    requestId: string;
+    toolName: string;
+    toolUseId: string;
+    input: Record<string, unknown>;
+  }
+): void {
+  if (request.toolName === 'AskUserQuestion') {
+    // AskUserQuestion: send as 'user_question' with questions extracted from input
+    const input = request.input as { questions?: unknown[] };
+    forwardToConnections(dbSessionId, {
+      type: 'user_question',
+      requestId: request.requestId,
+      questions: input.questions ?? [],
+    });
+    return;
+  }
+
+  if (request.toolName === 'ExitPlanMode') {
+    // ExitPlanMode: send as 'permission_request' for plan approval
+    const exitPlanInput = request.input as { planFile?: string };
+    const planContent = readPlanFileContent(exitPlanInput.planFile);
+
+    forwardToConnections(dbSessionId, {
+      type: 'permission_request',
+      requestId: request.requestId,
+      toolName: request.toolName,
+      input: request.input,
+      planContent,
+    });
+    return;
+  }
+
+  // Fallback: send as generic interactive_request
+  forwardToConnections(dbSessionId, {
+    type: 'interactive_request',
+    requestId: request.requestId,
+    toolName: request.toolName,
+    toolUseId: request.toolUseId,
+    input: request.input,
+  });
 }
 
 function setupChatClientEvents(
@@ -272,6 +338,23 @@ function setupChatClientEvents(
       type: 'status',
       running: false,
     });
+  });
+
+  // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
+  client.on('interactive_request', (request) => {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Received interactive_request from client', {
+        dbSessionId,
+        toolName: request.toolName,
+        requestId: request.requestId,
+      });
+    }
+    sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+      eventType: 'interactive_request',
+      data: request,
+    });
+
+    routeInteractiveRequest(dbSessionId, request);
   });
 
   client.on('exit', (result) => {
@@ -531,6 +614,91 @@ async function handleLoadSessionMessage(
   }
 }
 
+function handleQuestionResponseMessage(
+  ws: WebSocket,
+  sessionId: string,
+  message: ChatMessage
+): void {
+  const { requestId, answers } = message as unknown as {
+    requestId: string;
+    answers: Record<string, string | string[]>;
+  };
+
+  if (!(requestId && answers)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Missing requestId or answers' }));
+    return;
+  }
+
+  const client = sessionService.getClient(sessionId);
+  if (!client) {
+    ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+    return;
+  }
+
+  try {
+    client.answerQuestion(requestId, answers);
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Answered question', { sessionId, requestId });
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('[Chat WS] Failed to answer question', {
+      sessionId,
+      requestId,
+      error: errorMessage,
+    });
+    ws.send(
+      JSON.stringify({ type: 'error', message: `Failed to answer question: ${errorMessage}` })
+    );
+  }
+}
+
+function handlePermissionResponseMessage(
+  ws: WebSocket,
+  sessionId: string,
+  message: ChatMessage
+): void {
+  const { requestId, allow } = message as unknown as {
+    requestId: string;
+    allow: boolean;
+  };
+
+  if (!requestId || allow === undefined) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Missing requestId or allow' }));
+    return;
+  }
+
+  const client = sessionService.getClient(sessionId);
+  if (!client) {
+    ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+    return;
+  }
+
+  try {
+    if (allow) {
+      client.approveInteractiveRequest(requestId);
+    } else {
+      client.denyInteractiveRequest(requestId, 'User denied');
+    }
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('[Chat WS] Failed to respond to permission request', {
+      sessionId,
+      requestId,
+      error: errorMessage,
+    });
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: `Failed to respond to permission: ${errorMessage}`,
+      })
+    );
+  }
+}
+
 // ============================================================================
 // Main Message Handler
 // ============================================================================
@@ -574,6 +742,12 @@ async function handleChatMessage(
       break;
     case 'load_session':
       await handleLoadSessionMessage(ws, dbSessionId, workingDir);
+      break;
+    case 'question_response':
+      handleQuestionResponseMessage(ws, dbSessionId, message);
+      break;
+    case 'permission_response':
+      handlePermissionResponseMessage(ws, dbSessionId, message);
       break;
   }
 }

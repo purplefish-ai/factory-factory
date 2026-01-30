@@ -125,14 +125,28 @@ export function createStopHookResponse(
 }
 
 /**
+ * Interactive tools that require user input, not just permission.
+ * These tools should NEVER be auto-approved because they need actual user responses.
+ * - AskUserQuestion: needs the user's answers to questions
+ * - ExitPlanMode: needs user approval of the proposed plan
+ */
+export const INTERACTIVE_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
+/**
  * Determine if a tool should be auto-approved based on permission mode.
  */
 export function shouldAutoApprove(mode: PermissionMode, toolName: string): boolean {
+  // Interactive tools should NEVER be auto-approved - they require user input, not just permission
+  if (INTERACTIVE_TOOLS.has(toolName)) {
+    return false;
+  }
+
   switch (mode) {
     case 'bypassPermissions':
       return true;
     case 'plan':
-      return toolName !== 'ExitPlanMode';
+      // ExitPlanMode already handled by INTERACTIVE_TOOLS check above
+      return true;
     case 'acceptEdits':
       return READ_ONLY_TOOLS.has(toolName) || EDIT_TOOLS.has(toolName);
     default:
@@ -342,6 +356,7 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
         this.timeout > 0
           ? setTimeout(() => {
               this.pendingRequests.delete(requestId);
+              this.emit('request_timeout', requestId, request);
               reject(new Error(`Permission request timed out after ${this.timeout}ms`));
             }, this.timeout)
           : undefined;
@@ -537,6 +552,10 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     event: 'stop_request',
     handler: (request: HookCallbackRequest, requestId: string) => void
   ): this;
+  override on(
+    event: 'request_timeout',
+    handler: (requestId: string, request: CanUseToolRequest | HookCallbackRequest) => void
+  ): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -549,6 +568,11 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
   ): boolean;
   override emit(event: 'hook_request', request: HookCallbackRequest, requestId: string): boolean;
   override emit(event: 'stop_request', request: HookCallbackRequest, requestId: string): boolean;
+  override emit(
+    event: 'request_timeout',
+    requestId: string,
+    request: CanUseToolRequest | HookCallbackRequest
+  ): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit

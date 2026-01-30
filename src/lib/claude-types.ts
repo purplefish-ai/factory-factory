@@ -302,6 +302,8 @@ export interface PermissionRequest {
   toolName: string;
   toolInput: Record<string, unknown>;
   timestamp: string;
+  /** Plan content for ExitPlanMode requests (markdown) */
+  planContent?: string | null;
 }
 
 // =============================================================================
@@ -413,6 +415,8 @@ export interface WebSocketMessage {
   requestId?: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
+  // Plan content for ExitPlanMode permission requests
+  planContent?: string | null;
   // AskUserQuestion fields (Phase 11)
   questions?: AskUserQuestion[];
   // Chat settings

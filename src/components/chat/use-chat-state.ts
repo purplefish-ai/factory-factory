@@ -561,7 +561,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     (requestId: string, allow: boolean) => {
       const msg: PermissionResponseMessage = { type: 'permission_response', requestId, allow };
       send(msg);
-      dispatch({ type: 'PERMISSION_RESPONSE' });
+      dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
     },
     [send]
   );

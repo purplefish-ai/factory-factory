@@ -88,7 +88,7 @@ export type ChatAction =
   // Track tool use message index
   | { type: 'TOOL_USE_INDEXED'; payload: { toolUseId: string; index: number } }
   // Permission/question response actions
-  | { type: 'PERMISSION_RESPONSE' }
+  | { type: 'PERMISSION_RESPONSE'; payload: { allow: boolean } }
   | { type: 'QUESTION_RESPONSE' }
   // Stop action
   | { type: 'STOP_REQUESTED' }
@@ -396,8 +396,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, pendingPermission: action.payload };
     case 'WS_USER_QUESTION':
       return { ...state, pendingQuestion: action.payload };
-    case 'PERMISSION_RESPONSE':
-      return { ...state, pendingPermission: null };
+    case 'PERMISSION_RESPONSE': {
+      // If ExitPlanMode was approved, disable plan mode in settings
+      const shouldDisablePlanMode =
+        action.payload.allow && state.pendingPermission?.toolName === 'ExitPlanMode';
+      return {
+        ...state,
+        pendingPermission: null,
+        ...(shouldDisablePlanMode && {
+          chatSettings: { ...state.chatSettings, planModeEnabled: false },
+        }),
+      };
+    }
     case 'QUESTION_RESPONSE':
       return { ...state, pendingQuestion: null };
 
@@ -550,6 +560,8 @@ function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | nu
         toolName: data.toolName,
         toolInput: data.toolInput ?? {},
         timestamp: new Date().toISOString(),
+        // Include plan content for ExitPlanMode requests
+        planContent: data.planContent ?? null,
       },
     };
   }
