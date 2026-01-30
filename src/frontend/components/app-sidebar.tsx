@@ -553,6 +553,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
+        <ServerPortInfo />
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">Phase 7: Production Ready</p>
           <ThemeToggle />
@@ -584,5 +585,78 @@ export function AppSidebar() {
         isPending={archiveWorkspace.isPending}
       />
     </Sidebar>
+  );
+}
+
+/**
+ * ServerPortInfo Component
+ * Displays backend port information when running on non-default port
+ */
+function ServerPortInfo() {
+  const { data: serverInfo, isLoading } = trpc.admin.getServerInfo.useQuery(undefined, {
+    // Retry configuration in case endpoint isn't available yet
+    retry: 1,
+    retryDelay: 1000,
+    // Don't show errors for this optional enhancement
+    meta: { suppressErrors: true },
+  });
+
+  // Get the current frontend port from window.location
+  const frontendPort = window.location.port ? Number.parseInt(window.location.port, 10) : null;
+  const backendPort = serverInfo?.backendPort ?? null;
+
+  // If we're still loading or don't have frontend port
+  if (isLoading || !frontendPort) {
+    return null;
+  }
+
+  // Check if we're running on non-default ports
+  const defaultFrontendPort = 3000;
+  const defaultBackendPort = 3001;
+  const isNonDefaultFrontend = frontendPort !== defaultFrontendPort;
+  const isNonDefaultBackend = backendPort !== null && backendPort !== defaultBackendPort;
+
+  // Only show if running on non-default ports
+  if (!(isNonDefaultFrontend || isNonDefaultBackend)) {
+    return null;
+  }
+
+  // Determine if we're in dev or production mode
+  // In production, frontend and backend are on the same port
+  // In dev, they're on different ports
+  const isDev = backendPort !== null && frontendPort !== backendPort;
+
+  return (
+    <div className="mb-2 space-y-0.5 text-[10px] text-muted-foreground/80">
+      {isDev ? (
+        <>
+          <div className="flex items-center justify-between">
+            <span>Frontend:</span>
+            <code className="rounded bg-muted px-1 py-0.5">{frontendPort}</code>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Backend:</span>
+            {backendPort ? (
+              <code className="rounded bg-muted px-1 py-0.5">{backendPort}</code>
+            ) : (
+              <code className="rounded bg-muted px-1 py-0.5 text-muted-foreground/50">
+                (restart to detect)
+              </code>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center justify-between">
+          <span>Server:</span>
+          {backendPort ? (
+            <code className="rounded bg-muted px-1 py-0.5">{backendPort}</code>
+          ) : (
+            <code className="rounded bg-muted px-1 py-0.5 text-muted-foreground/50">
+              (restart to detect)
+            </code>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

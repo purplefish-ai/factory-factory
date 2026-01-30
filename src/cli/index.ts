@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, exec, spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
+
+const execPromise = promisify(exec);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -130,18 +133,49 @@ async function waitForPort(
   throw new Error(`Timed out waiting for port ${port} after ${timeout}ms`);
 }
 
-// Check if a port is available
-function isPortAvailable(port: number, host: string): Promise<boolean> {
+/**
+ * Check if a port is in use by checking actual listening processes.
+ * Uses lsof on Unix systems for more reliable detection that avoids TOCTOU race conditions.
+ * Falls back to bind attempt if lsof is unavailable.
+ */
+async function isPortInUse(port: number): Promise<boolean> {
+  // Try lsof first (more reliable, checks actual listening processes)
+  if (process.platform !== 'win32') {
+    try {
+      // lsof -i :PORT -sTCP:LISTEN checks for processes listening on the port
+      // -t returns just PIDs (suppresses errors if no process found)
+      const { stdout } = await execPromise(`lsof -i :${port} -sTCP:LISTEN -t`, {
+        timeout: 2000,
+      });
+      // If we get output, port is in use
+      return stdout.trim().length > 0;
+    } catch (error) {
+      // lsof exits with code 1 if no process found (port is free)
+      if ((error as { code?: number }).code === 1) {
+        return false;
+      }
+      // lsof not available or other error - fall back to bind attempt
+    }
+  }
+
+  // Fallback: try to bind to the port
   return new Promise((resolve) => {
     const server = createServer();
     server.once('error', () => {
-      resolve(false);
+      resolve(true); // Error means port is in use
     });
     server.once('listening', () => {
-      server.close(() => resolve(true));
+      server.close(() => resolve(false)); // Successfully bound means port is free
     });
-    server.listen(port, host);
+    server.listen(port);
   });
+}
+
+/**
+ * Check if a port is available (inverse of isPortInUse).
+ */
+function isPortAvailable(port: number, _host: string): Promise<boolean> {
+  return isPortInUse(port).then((inUse) => !inUse);
 }
 
 // Find an available port starting from the given port, excluding specific ports
@@ -230,6 +264,7 @@ program
   .option('--dev', 'Run in development mode with hot reloading')
   .option('--no-open', 'Do not open browser automatically')
   .option('-v, --verbose', 'Enable verbose logging')
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: CLI serve action handles multiple setup steps
   .action(async (options: ServeOptions) => {
     const verbose = options.verbose ?? false;
     const shouldOpen = options.open !== false;
@@ -252,18 +287,46 @@ program
     const requestedBackendPort = Number.parseInt(options.backendPort, 10);
 
     let frontendPort: number;
+    let backendPort: number;
 
     try {
       if (verbose) {
-        console.log(chalk.gray('  Checking frontend port availability...'));
+        console.log(chalk.gray('  Checking port availability...'));
       }
 
-      // Find frontend port (backend will find its own port dynamically)
-      frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
-      if (frontendPort !== requestedFrontendPort) {
-        console.log(
-          chalk.yellow(`  ⚠ Frontend port ${requestedFrontendPort} in use, using ${frontendPort}`)
+      if (options.dev) {
+        // In development mode, find two non-conflicting ports
+        // We need to ensure neither port is in use by ANY service
+        backendPort = await findAvailablePort(requestedBackendPort, options.host);
+
+        // Frontend port must not conflict with:
+        // 1. The backend port we just allocated
+        // 2. Any other running service
+        // We exclude backendPort to ensure no collision
+        frontendPort = await findAvailablePort(
+          requestedFrontendPort,
+          options.host,
+          20, // Increased attempts to find a free port
+          [backendPort] // Exclude backend port
         );
+
+        if (frontendPort !== requestedFrontendPort || backendPort !== requestedBackendPort) {
+          console.log(
+            chalk.yellow(
+              `  ⚠ Requested ports in use, using Frontend: ${frontendPort}, Backend: ${backendPort}`
+            )
+          );
+        }
+      } else {
+        // In production mode, frontend and backend run on the same port
+        frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
+        backendPort = frontendPort; // Same port in production
+
+        if (frontendPort !== requestedFrontendPort) {
+          console.log(
+            chalk.yellow(`  ⚠ Port ${requestedFrontendPort} in use, using ${frontendPort}`)
+          );
+        }
       }
     } catch (error) {
       console.error(chalk.red(`\n  ✗ ${(error as Error).message}`));
@@ -285,7 +348,7 @@ program
       ...process.env,
       DATABASE_PATH: databasePath,
       FRONTEND_PORT: frontendPort.toString(),
-      BACKEND_PORT: requestedBackendPort.toString(), // Backend will try this port first, then find available
+      BACKEND_PORT: backendPort.toString(), // Use pre-allocated backend port
       NODE_ENV: options.dev ? 'development' : 'production',
     };
 
@@ -322,12 +385,21 @@ program
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-    const url = `http://${options.host}:${frontendPort}`;
-
     const createOnReady = (actualBackendPort: number) => async () => {
+      // In production mode, frontend and backend run on the same port (actualBackendPort)
+      // In development mode, frontend runs on frontendPort, backend runs on actualBackendPort
+      const url = options.dev
+        ? `http://${options.host}:${frontendPort}`
+        : `http://${options.host}:${actualBackendPort}`;
+
       console.log(chalk.gray('\n  ─────────────────────────────────────'));
-      console.log(chalk.gray(`  Frontend:  http://${options.host}:${frontendPort}`));
-      console.log(chalk.gray(`  Backend:   http://${options.host}:${actualBackendPort}`));
+      if (options.dev) {
+        console.log(chalk.gray(`  Frontend:  http://${options.host}:${frontendPort}`));
+        console.log(chalk.gray(`  Backend:   http://${options.host}:${actualBackendPort}`));
+      } else {
+        // In production, frontend and backend are on the same port
+        console.log(chalk.gray(`  Server:    http://${options.host}:${actualBackendPort}`));
+      }
       console.log(chalk.gray(`  Database:  ${databasePath}`));
       console.log(chalk.gray(`  Mode:      ${options.dev ? 'development' : 'production'}`));
       console.log(chalk.gray('  ─────────────────────────────────────'));
@@ -350,6 +422,7 @@ program
         env,
         processes,
         frontendPort,
+        backendPort,
         createOnReady,
         shutdownState
       );
@@ -360,6 +433,7 @@ program
         env,
         processes,
         frontendPort,
+        backendPort,
         createOnReady,
         shutdownState
       );
@@ -371,6 +445,7 @@ async function startDevelopmentMode(
   env: NodeJS.ProcessEnv,
   processes: { name: string; proc: ChildProcess }[],
   frontendPort: number,
+  backendPort: number,
   createOnReady: (actualBackendPort: number) => () => Promise<void>,
   shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
@@ -383,52 +458,21 @@ async function startDevelopmentMode(
   });
   processes.push({ name: 'backend', proc: backend });
 
-  // Capture backend port from stdout
-  let actualBackendPort: number | null = null;
-  const backendPortPromise = new Promise<number>((resolve) => {
-    if (backend.stdout) {
-      backend.stdout.on('data', (data: Buffer) => {
-        const output = data.toString();
-        // Look for BACKEND_PORT: line
-        const match = output.match(/BACKEND_PORT:(\d+)/);
-        if (match && !actualBackendPort) {
-          actualBackendPort = Number.parseInt(match[1], 10);
-          resolve(actualBackendPort);
-        }
-        // Forward output to stdout
-        process.stdout.write(data);
-      });
-    }
-  });
-
-  if (!options.verbose && backend.stderr) {
-    backend.stderr.on('data', (data: Buffer) => {
-      console.error(chalk.red(`  [backend] ${data.toString().trim()}`));
-    });
+  if (!options.verbose) {
+    setupProcessOutput(backend, 'backend');
   }
 
-  // Wait for backend to report its actual port
-  actualBackendPort = await Promise.race([
-    backendPortPromise,
-    new Promise<number>((_, reject) =>
-      setTimeout(() => reject(new Error('Backend did not report port within 30s')), 30_000)
-    ),
-  ]);
-
-  console.log(chalk.green(`  ✓ Backend started on port ${actualBackendPort}`));
-
-  await waitForService(actualBackendPort, options.host, 'Backend', processes);
+  await waitForService(backendPort, options.host, 'Backend', processes);
 
   console.log(chalk.blue('  🎨 Starting frontend (development mode)...'));
 
-  // Update env with actual backend port for Vite proxy configuration
+  // Update env with backend port for Vite proxy configuration
   const frontendEnv = {
     ...env,
-    BACKEND_URL: `http://${options.host}:${actualBackendPort}`,
-    BACKEND_PORT: actualBackendPort.toString(),
+    BACKEND_URL: `http://${options.host}:${backendPort}`,
   };
 
-  const frontend = spawn('npx', ['vite', '--port', frontendPort.toString()], {
+  const frontend = spawn('npx', ['vite', '--port', frontendPort.toString(), '--strictPort'], {
     cwd: PROJECT_ROOT,
     env: frontendEnv,
     stdio: options.verbose ? 'inherit' : 'pipe',
@@ -441,7 +485,7 @@ async function startDevelopmentMode(
 
   await waitForService(frontendPort, options.host, 'Frontend', processes);
 
-  const onReady = createOnReady(actualBackendPort);
+  const onReady = createOnReady(backendPort);
   await onReady();
 
   await Promise.race([
@@ -458,7 +502,8 @@ async function startProductionMode(
   options: ServeOptions,
   env: NodeJS.ProcessEnv,
   processes: { name: string; proc: ChildProcess }[],
-  frontendPort: number,
+  _frontendPort: number,
+  backendPort: number,
   createOnReady: (actualBackendPort: number) => () => Promise<void>,
   shutdownState: { shuttingDown: boolean }
 ): Promise<void> {
@@ -486,50 +531,18 @@ async function startProductionMode(
     env: {
       ...env,
       FRONTEND_STATIC_PATH: frontendDist,
-      // In production, frontend and backend run on the same port
-      BACKEND_PORT: frontendPort.toString(),
     },
     stdio: options.verbose ? 'inherit' : 'pipe',
   });
   processes.push({ name: 'server', proc: backend });
 
-  // Capture backend port from stdout (backend may use a different port if requested port is taken)
-  let actualBackendPort: number | null = null;
-  const backendPortPromise = new Promise<number>((resolve) => {
-    if (backend.stdout) {
-      backend.stdout.on('data', (data: Buffer) => {
-        const output = data.toString();
-        // Look for BACKEND_PORT: line
-        const match = output.match(/BACKEND_PORT:(\d+)/);
-        if (match && !actualBackendPort) {
-          actualBackendPort = Number.parseInt(match[1], 10);
-          resolve(actualBackendPort);
-        }
-        // Forward output to stdout
-        process.stdout.write(data);
-      });
-    }
-  });
-
-  if (!options.verbose && backend.stderr) {
-    backend.stderr.on('data', (data: Buffer) => {
-      console.error(chalk.red(`  [server] ${data.toString().trim()}`));
-    });
+  if (!options.verbose) {
+    setupProcessOutput(backend, 'server');
   }
 
-  // Wait for backend to report its actual port
-  actualBackendPort = await Promise.race([
-    backendPortPromise,
-    new Promise<number>((_, reject) =>
-      setTimeout(() => reject(new Error('Server did not report port within 30s')), 30_000)
-    ),
-  ]);
+  await waitForService(backendPort, options.host, 'Server', processes);
 
-  console.log(chalk.green(`  ✓ Server started on port ${actualBackendPort}`));
-
-  await waitForService(actualBackendPort, options.host, 'Server', processes);
-
-  const onReady = createOnReady(actualBackendPort);
+  const onReady = createOnReady(backendPort);
   await onReady();
 
   await createExitPromise(backend, 'Server', shutdownState).catch((error) => {
