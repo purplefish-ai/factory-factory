@@ -1,14 +1,16 @@
 'use client';
 
-import { FileQuestion, Files, GitCompare } from 'lucide-react';
+import { FileQuestion, Files, GitCompare, ListTodo } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import type { ChatMessage } from '@/components/chat';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
 
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
 import { TerminalPanel } from './terminal-panel';
+import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
 
 // =============================================================================
@@ -21,7 +23,7 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // Types
 // =============================================================================
 
-type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files';
+type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
 
 // =============================================================================
 // Sub-Components
@@ -59,9 +61,10 @@ function PanelTab({ label, icon, isActive, onClick }: PanelTabProps) {
 interface RightPanelProps {
   workspaceId: string;
   className?: string;
+  messages?: ChatMessage[];
 }
 
-export function RightPanel({ workspaceId, className }: RightPanelProps) {
+export function RightPanel({ workspaceId, className, messages = [] }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
@@ -75,7 +78,12 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
 
     try {
       const stored = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
-      if (stored === 'unstaged' || stored === 'diff-vs-main' || stored === 'files') {
+      if (
+        stored === 'unstaged' ||
+        stored === 'diff-vs-main' ||
+        stored === 'files' ||
+        stored === 'tasks'
+      ) {
         setActiveTopTab(stored);
       }
     } catch {
@@ -122,6 +130,12 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
               isActive={activeTopTab === 'files'}
               onClick={() => handleTabChange('files')}
             />
+            <PanelTab
+              label="Tasks"
+              icon={<ListTodo className="h-3.5 w-3.5" />}
+              isActive={activeTopTab === 'tasks'}
+              onClick={() => handleTabChange('tasks')}
+            />
           </div>
 
           {/* Content */}
@@ -129,6 +143,7 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
             {activeTopTab === 'unstaged' && <UnstagedChangesPanel workspaceId={workspaceId} />}
             {activeTopTab === 'diff-vs-main' && <DiffVsMainPanel workspaceId={workspaceId} />}
             {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
+            {activeTopTab === 'tasks' && <TodoPanelContainer messages={messages} />}
           </div>
         </div>
       </ResizablePanel>

@@ -13,6 +13,7 @@ import {
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
+import { KeyboardStateProvider } from '@/components/agent-activity';
 import {
   ChatInput,
   PermissionPrompt,
@@ -174,16 +175,18 @@ const ChatContent = memo(function ChatContent({
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Virtualized Message List */}
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        <VirtualizedMessageList
-          messages={groupedMessages}
-          running={running}
-          startingSession={startingSession}
-          loadingSession={loadingSession}
-          scrollContainerRef={viewportRef}
-          onScroll={onScroll}
-          messagesEndRef={messagesEndRef}
-          isNearBottom={isNearBottom}
-        />
+        <KeyboardStateProvider>
+          <VirtualizedMessageList
+            messages={groupedMessages}
+            running={running}
+            startingSession={startingSession}
+            loadingSession={loadingSession}
+            scrollContainerRef={viewportRef}
+            onScroll={onScroll}
+            messagesEndRef={messagesEndRef}
+            isNearBottom={isNearBottom}
+          />
+        </KeyboardStateProvider>
       </div>
 
       {/* Scroll to Bottom Button */}
@@ -534,7 +537,7 @@ function WorkspaceChatContent() {
             <ResizableHandle />
             <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
               <div className="h-full border-l">
-                <RightPanel workspaceId={workspaceId} />
+                <RightPanel workspaceId={workspaceId} messages={messages} />
               </div>
             </ResizablePanel>
           </>
