@@ -318,7 +318,8 @@ if (frontendStaticPath && existsSync(frontendStaticPath)) {
 
   // SPA fallback - serve index.html for all non-API routes
   // This enables client-side routing with React Router
-  app.get('*', (req, res, next) => {
+  // Note: {*splat} is Express 5 wildcard syntax (replaces Express 4's *)
+  app.get('/{*splat}', (req, res, next) => {
     // Skip API routes, WebSocket paths, and health checks
     if (
       req.path.startsWith('/api') ||

@@ -141,6 +141,9 @@ model Workspace {
   @@index([projectId])
   @@index([status])
   @@index([cachedKanbanColumn])
+  // Composite indexes for common query patterns
+  @@index([projectId, status])
+  @@index([projectId, cachedKanbanColumn])
 }
 
 model ClaudeSession {

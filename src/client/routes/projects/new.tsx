@@ -1,4 +1,4 @@
-import { ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeftIcon, FolderOpenIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
@@ -17,6 +17,27 @@ export default function NewProjectPage() {
   const [error, setError] = useState('');
   const [startupScript, setStartupScript] = useState('');
   const [scriptType, setScriptType] = useState<ScriptType>('command');
+
+  const isElectron = Boolean(window.electronAPI?.isElectron);
+
+  const handleBrowse = async () => {
+    if (!window.electronAPI?.showOpenDialog) {
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.showOpenDialog({
+        title: 'Select Repository',
+        properties: ['openDirectory', 'showHiddenFiles'],
+      });
+
+      if (!result.canceled && result.filePaths.length > 0) {
+        setRepoPath(result.filePaths[0]);
+      }
+    } catch {
+      // Silently handle dialog failure - nothing actionable for user
+    }
+  };
 
   const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
   const hasExistingProjects = projects && projects.length > 0;
@@ -79,15 +100,22 @@ export default function NewProjectPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="repoPath">Repository Path</Label>
-                  <Input
-                    type="text"
-                    id="repoPath"
-                    value={repoPath}
-                    onChange={(e) => setRepoPath(e.target.value)}
-                    className="font-mono"
-                    placeholder="/Users/you/code/my-project"
-                    autoFocus
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      id="repoPath"
+                      value={repoPath}
+                      onChange={(e) => setRepoPath(e.target.value)}
+                      className="font-mono"
+                      placeholder="/Users/you/code/my-project"
+                      autoFocus
+                    />
+                    {isElectron && (
+                      <Button type="button" variant="outline" onClick={handleBrowse}>
+                        <FolderOpenIcon className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Path to a git repository on your local machine.
                   </p>
@@ -147,15 +175,22 @@ export default function NewProjectPage() {
 
             <div className="space-y-2">
               <Label htmlFor="repoPath">Repository Path</Label>
-              <Input
-                type="text"
-                id="repoPath"
-                value={repoPath}
-                onChange={(e) => setRepoPath(e.target.value)}
-                className="font-mono"
-                placeholder="/Users/you/code/my-project"
-                autoFocus
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  id="repoPath"
+                  value={repoPath}
+                  onChange={(e) => setRepoPath(e.target.value)}
+                  className="font-mono"
+                  placeholder="/Users/you/code/my-project"
+                  autoFocus
+                />
+                {isElectron && (
+                  <Button type="button" variant="outline" onClick={handleBrowse}>
+                    <FolderOpenIcon className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Path to a git repository on your local machine. The project name will be derived
                 from the directory name.

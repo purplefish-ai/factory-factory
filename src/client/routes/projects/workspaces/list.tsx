@@ -57,7 +57,7 @@ export default function WorkspacesListPage() {
       projectId: project?.id ?? '',
       status: statusFilter !== 'all' ? (statusFilter as WorkspaceStatus) : undefined,
     },
-    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 5000 }
+    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 15_000, staleTime: 10_000 }
   );
 
   if (!project) {
@@ -67,7 +67,7 @@ export default function WorkspacesListPage() {
   if (viewMode === 'board') {
     return (
       <KanbanProvider projectId={project.id} projectSlug={slug}>
-        <div className="space-y-4 p-6">
+        <div className="flex flex-col h-screen p-6 gap-4">
           <PageHeader title="Workspaces">
             <ToggleGroup
               type="single"
@@ -91,7 +91,9 @@ export default function WorkspacesListPage() {
             </Button>
           </PageHeader>
 
-          <KanbanBoard />
+          <div className="flex-1 min-h-0">
+            <KanbanBoard />
+          </div>
         </div>
       </KanbanProvider>
     );

@@ -4,6 +4,7 @@
     "src/client/main.tsx",
     "src/cli/index.ts",
     "src/backend/index.ts",
+    "src/backend/migrate.ts",
     "electron/main/index.ts",
     "electron/preload/index.ts"
   ],

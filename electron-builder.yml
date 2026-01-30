@@ -4,19 +4,74 @@ directories:
   output: release
   buildResources: build-resources
 files:
-  - dist/**/*
+  # Bundled backend (single file instead of entire node_modules)
+  - dist-bundle/**/*
+  # Compiled Electron main process
   - electron/dist/**/*
-  - node_modules/**/*
+  # Frontend build
+  - dist/client/**/*
+  # Package manifest (required)
   - package.json
+  # Native modules that cannot be bundled - include with pnpm structure
+  - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
+  - node_modules/node-addon-api/**/*
+  - node_modules/node-pty/**/*
+  # Prisma generated client and dependencies
+  - prisma/generated/**/*
+  - node_modules/@prisma/**/*
+  - node_modules/.prisma/**/*
+  # pnpm store entries for Prisma (resolved symlinks)
+  - node_modules/.pnpm/@prisma+client@*/**/*
+  - node_modules/.pnpm/@prisma+client-runtime-utils@*/**/*
+  - node_modules/.pnpm/@prisma+adapter-better-sqlite3@*/**/*
+  - node_modules/.pnpm/.prisma+client@*/**/*
+  # pnpm store entries for native modules
+  - node_modules/.pnpm/better-sqlite3@*/**/*
+  - node_modules/.pnpm/node-pty@*/**/*
+  - node_modules/.pnpm/bindings@*/**/*
+  - node_modules/.pnpm/file-uri-to-path@*/**/*
+  - node_modules/.pnpm/node-addon-api@*/**/*
+  # Exclude dev/build dependencies
+  - "!**/node_modules/.pnpm/*storybook*/**"
+  - "!**/node_modules/.pnpm/*vite*/**"
+  - "!**/node_modules/.pnpm/*vitest*/**"
+  - "!**/node_modules/.pnpm/*typescript*/**"
+  - "!**/node_modules/.pnpm/*biome*/**"
+  - "!**/node_modules/.pnpm/*esbuild*/**"
+  - "!**/node_modules/.pnpm/*tailwindcss*/**"
+  - "!**/node_modules/.pnpm/*postcss*/**"
+  - "!**/node_modules/.pnpm/*next*/**"
 extraResources:
   - from: prisma/migrations
     to: prisma/migrations
+  - from: prisma/schema.prisma
+    to: prisma/schema.prisma
   - from: prompts
     to: prompts
 asar: true
 asarUnpack:
+  # Native modules must be unpacked for Node.js to load them
   - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
   - node_modules/node-pty/**/*
+  # Prisma generated client and runtime
+  - prisma/generated/**/*
+  - node_modules/@prisma/**/*
+  - node_modules/.prisma/**/*
+  - node_modules/.pnpm/@prisma*/**/*
+  - node_modules/.pnpm/.prisma*/**/*
+  - node_modules/.pnpm/better-sqlite3*/**/*
+  - node_modules/.pnpm/node-pty*/**/*
+  - node_modules/.pnpm/bindings*/**/*
+  - node_modules/.pnpm/file-uri-to-path*/**/*
+  - node_modules/.pnpm/node-addon-api*/**/*
+  # Backend bundle must be unpacked for child process to run it
+  - dist-bundle/**/*
+  # Frontend must be unpacked for Express static serving
+  - dist/client/**/*
 mac:
   category: public.app-category.developer-tools
   target: [dmg, zip]

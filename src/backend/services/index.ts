@@ -4,6 +4,8 @@
  * Central export point for all backend services.
  */
 
+// CLI health service
+export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
 export { configService } from './config.service';
 // GitHub CLI service

@@ -41,16 +41,18 @@ export class ServerManager {
     const port = await this.findAvailablePort(3001);
 
     // Get paths for production build
-    const resourcesPath = this.getResourcesPath();
-    const frontendDist = join(resourcesPath, 'dist', 'client');
-    const backendDist = join(resourcesPath, 'dist', 'src', 'backend', 'index.js');
+    // Child processes can't read from asar, so all paths must use unpacked resources
+    const unpackedPath = this.getUnpackedResourcesPath();
+    const frontendDist = join(unpackedPath, 'dist', 'client');
+    // Use bundled backend (single file instead of compiled TS output)
+    const backendDist = join(unpackedPath, 'dist-bundle', 'backend.mjs');
 
     // Run database migrations
-    await this.runMigrations(databasePath, resourcesPath);
+    await this.runMigrations(databasePath, unpackedPath);
 
     // Spawn backend process
     this.backendProcess = spawn('node', [backendDist], {
-      cwd: resourcesPath,
+      cwd: unpackedPath,
       env: {
         ...process.env,
         DATABASE_PATH: databasePath,
@@ -116,14 +118,15 @@ export class ServerManager {
   }
 
   /**
-   * Get the resources path where the built files are located.
+   * Get the resources path for files that need to be executed by child processes.
+   * Child processes can't read from asar archives, so we unpack certain files.
+   * In production, this points to app.asar.unpacked.
    * In development, this is the project root.
-   * In production (packaged app), this is the resources directory.
    */
-  private getResourcesPath(): string {
+  private getUnpackedResourcesPath(): string {
     if (app.isPackaged) {
-      // In packaged app, files are in app.asar at the resources path root
-      return join(process.resourcesPath, 'app.asar');
+      // Unpacked files are in app.asar.unpacked directory
+      return join(process.resourcesPath, 'app.asar.unpacked');
     }
     // In development, use the project root
     // Compiled file is at electron/dist/electron/main/index.js
@@ -170,22 +173,29 @@ export class ServerManager {
   }
 
   /**
-   * Run database migrations using Prisma.
-   * Uses the bundled prisma CLI from node_modules.
+   * Run database migrations using a separate script.
+   * Spawns the migration script as a child process to use unpacked node_modules.
    */
-  private runMigrations(databasePath: string, resourcesPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Use bundled prisma CLI instead of npx (npx may not be available in packaged app)
-      const prismaBin = join(resourcesPath, 'node_modules', '.bin', 'prisma');
+  private runMigrations(databasePath: string, unpackedPath: string): Promise<void> {
+    console.log('[migrate] Running database migrations...');
 
-      const migrate = spawn(prismaBin, ['migrate', 'deploy'], {
-        cwd: resourcesPath,
+    return new Promise((resolve, reject) => {
+      // Migrations are in extraResources
+      const migrationsPath = app.isPackaged
+        ? join(process.resourcesPath, 'prisma', 'migrations')
+        : join(unpackedPath, 'prisma', 'migrations');
+
+      // Use bundled migration script
+      const migrateScript = join(unpackedPath, 'dist-bundle', 'migrate.mjs');
+
+      const migrate = spawn('node', [migrateScript], {
+        cwd: unpackedPath,
         env: {
           ...process.env,
-          DATABASE_URL: `file:${databasePath}`,
+          DATABASE_PATH: databasePath,
+          MIGRATIONS_PATH: migrationsPath,
         },
         stdio: 'pipe',
-        shell: process.platform === 'win32', // Use shell on Windows for .cmd files
       });
 
       migrate.stdout?.on('data', (data: Buffer) => {
@@ -198,6 +208,7 @@ export class ServerManager {
 
       migrate.on('exit', (code) => {
         if (code === 0) {
+          console.log('[migrate] Migrations complete');
           resolve();
         } else {
           reject(new Error(`Migration failed with exit code ${code}`));

@@ -12,21 +12,21 @@ import {
   RefreshCw,
   XCircle,
 } from 'lucide-react';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 
-import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
   QueuedMessages,
   useChatWebSocket,
+  VirtualizedMessageList,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   QuickActionsMenu,
@@ -41,74 +41,8 @@ import { groupAdjacentToolCalls } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
-// Types
-// =============================================================================
-
-type ConnectionStatus = 'connected' | 'processing' | 'stopping' | 'disconnected' | 'loading';
-
-// =============================================================================
 // Helper Components
 // =============================================================================
-
-function getConnectionStatusFromState(
-  connected: boolean,
-  loadingSession: boolean,
-  running: boolean,
-  stopping: boolean
-): ConnectionStatus {
-  if (!connected) {
-    return 'disconnected';
-  }
-  if (loadingSession) {
-    return 'loading';
-  }
-  if (stopping) {
-    return 'stopping';
-  }
-  if (running) {
-    return 'processing';
-  }
-  return 'connected';
-}
-
-function getStatusText(status: ConnectionStatus): string {
-  switch (status) {
-    case 'connected':
-      return 'Connected';
-    case 'processing':
-      return 'Processing request';
-    case 'stopping':
-      return 'Stopping...';
-    case 'loading':
-      return 'Loading session';
-    case 'disconnected':
-      return 'Disconnected';
-  }
-}
-
-function StatusDot({ status }: { status: ConnectionStatus }) {
-  const statusText = getStatusText(status);
-
-  return (
-    <>
-      <div
-        className={cn(
-          'h-2.5 w-2.5 rounded-full',
-          status === 'connected' && 'bg-green-500',
-          status === 'processing' && 'bg-yellow-500 animate-pulse',
-          status === 'stopping' && 'bg-orange-500 animate-pulse',
-          status === 'loading' && 'bg-blue-500 animate-pulse',
-          status === 'disconnected' && 'bg-red-500'
-        )}
-        title={statusText}
-        aria-hidden="true"
-      />
-      <output className="sr-only" aria-live="polite">
-        {statusText}
-      </output>
-    </>
-  );
-}
 
 function ChatLoading() {
   return (
@@ -116,17 +50,6 @@ function ChatLoading() {
       <div className="flex flex-col items-center gap-4">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         <p className="text-sm text-muted-foreground">Loading chat...</p>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <div className="text-muted-foreground space-y-2">
-        <p className="text-lg font-medium">No messages yet</p>
-        <p className="text-sm">Start a conversation by typing a message below.</p>
       </div>
     </div>
   );
@@ -213,6 +136,26 @@ function InitializationOverlay({
 }
 
 // =============================================================================
+// Archiving Overlay
+// =============================================================================
+
+function ArchivingOverlay() {
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4 p-8 max-w-md text-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">Archiving workspace...</h2>
+          <p className="text-sm text-muted-foreground">
+            Cleaning up worktree and archiving this workspace.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Toggle Right Panel Button
 // =============================================================================
 
@@ -242,11 +185,10 @@ interface ChatContentProps {
   loadingSession: boolean;
   startingSession: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  contentRef: React.RefObject<HTMLDivElement | null>;
   viewportRef: React.RefObject<HTMLDivElement | null>;
-  handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
   isNearBottom: boolean;
   scrollToBottom: () => void;
+  onScroll: () => void;
   pendingPermission: ReturnType<typeof useChatWebSocket>['pendingPermission'];
   pendingQuestion: ReturnType<typeof useChatWebSocket>['pendingQuestion'];
   approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
@@ -265,18 +207,21 @@ interface ChatContentProps {
   selectedDbSessionId: string | null;
 }
 
-function ChatContent({
+/**
+ * ChatContent component - memoized to prevent re-renders from parent state changes.
+ * Uses virtualization for efficient rendering of long message lists.
+ */
+const ChatContent = memo(function ChatContent({
   messages,
   running,
   stopping,
   loadingSession,
   startingSession,
   messagesEndRef,
-  contentRef,
   viewportRef,
-  handleScroll,
   isNearBottom,
   scrollToBottom,
+  onScroll,
   pendingPermission,
   pendingQuestion,
   approvePermission,
@@ -293,6 +238,7 @@ function ChatContent({
   removeQueuedMessage,
   selectedDbSessionId,
 }: ChatContentProps) {
+  // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
   // Focus input when clicking anywhere in the chat area (but not on interactive elements)
@@ -318,38 +264,19 @@ function ChatContent({
     // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction
     // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
-      {/* Message List */}
-      <ScrollArea className="flex-1 min-h-0" viewportRef={viewportRef} onScroll={handleScroll}>
-        <div ref={contentRef} className="p-4 space-y-2 min-w-0">
-          {messages.length === 0 && !running && !loadingSession && !startingSession && (
-            <EmptyState />
-          )}
-
-          {loadingSession && messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                <span className="text-sm">Loading session...</span>
-              </div>
-            </div>
-          )}
-
-          {groupedMessages.map((item) => (
-            <GroupedMessageItemRenderer key={item.id} item={item} />
-          ))}
-
-          {running && <LoadingIndicator className="py-4" />}
-
-          {startingSession && !running && (
-            <div className="flex items-center gap-2 text-muted-foreground py-4">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Starting agent...</span>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} className="h-px" />
-        </div>
-      </ScrollArea>
+      {/* Virtualized Message List */}
+      <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto scroll-smooth">
+        <VirtualizedMessageList
+          messages={groupedMessages}
+          running={running}
+          startingSession={startingSession}
+          loadingSession={loadingSession}
+          scrollContainerRef={viewportRef}
+          onScroll={onScroll}
+          messagesEndRef={messagesEndRef}
+          isNearBottom={isNearBottom}
+        />
+      </div>
 
       {/* Scroll to Bottom Button */}
       {!isNearBottom && (
@@ -389,15 +316,19 @@ function ChatContent({
           onChange={setInputDraft}
           onHeightChange={() => {
             // Keep messages scrolled to bottom when input area grows
-            if (isNearBottom) {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+            // Use scrollTo with instant to override CSS smooth scrolling
+            if (isNearBottom && viewportRef.current) {
+              viewportRef.current.scrollTo({
+                top: viewportRef.current.scrollHeight,
+                behavior: 'instant',
+              });
             }
           }}
         />
       </div>
     </div>
   );
-}
+});
 
 // =============================================================================
 // Custom Hooks for Workspace Page
@@ -408,13 +339,25 @@ interface UseWorkspaceDataOptions {
 }
 
 function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
+  // Increased staleTime to reduce unnecessary re-renders from background fetches
   const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
     { id: workspaceId },
-    { refetchInterval: 10_000 }
+    {
+      refetchInterval: 30_000, // Poll every 30s instead of 10s
+      staleTime: 15_000, // Data considered fresh for 15s
+      refetchOnWindowFocus: false, // Don't refetch on tab focus
+    }
   );
 
   const { data: claudeSessions, isLoading: sessionsLoading } =
-    trpc.session.listClaudeSessions.useQuery({ workspaceId }, { refetchInterval: 5000 });
+    trpc.session.listClaudeSessions.useQuery(
+      { workspaceId },
+      {
+        refetchInterval: 10_000, // Poll every 10s instead of 5s
+        staleTime: 5000, // Data considered fresh for 5s
+        refetchOnWindowFocus: false,
+      }
+    );
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
 
@@ -614,10 +557,11 @@ function useSessionManagement({
   };
 }
 
+/**
+ * Hook for managing auto-scroll behavior with RAF throttling.
+ * Optimized for virtualized lists - doesn't require contentRef.
+ */
 function useAutoScroll(
-  messages: unknown[],
-  messagesEndRef: React.RefObject<HTMLDivElement | null>,
-  contentRef: React.RefObject<HTMLDivElement | null>,
   viewportRef: React.RefObject<HTMLDivElement | null>,
   inputRef: React.RefObject<HTMLTextAreaElement | null>
 ) {
@@ -625,78 +569,57 @@ function useAutoScroll(
   const isNearBottomRef = useRef(true);
   // Track if we're currently animating a scroll-to-bottom to prevent flicker
   const isScrollingToBottomRef = useRef(false);
+  // RAF throttle flag
+  const rafPendingRef = useRef(false);
 
-  // Helper to check distance from bottom and update state
-  const updateScrollState = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    const scrollThreshold = 100;
-    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-    const nearBottom = distanceFromBottom < scrollThreshold;
-
-    isNearBottomRef.current = nearBottom;
-    setIsNearBottom(nearBottom);
-  }, [viewportRef]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on messages.length changes
-  useEffect(() => {
-    if (isNearBottomRef.current && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages.length, messagesEndRef]);
-
-  // Watch for content size changes (e.g., tool call expand/collapse)
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content) {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      // Skip state updates during scroll animation
-      if (isScrollingToBottomRef.current) {
-        return;
-      }
-
-      // Re-evaluate scroll position after content size change
-      // This will show the "scroll to bottom" button if expansion pushed us away from bottom
-      updateScrollState();
-
-      // If still near bottom after content change, scroll to keep at bottom
-      if (isNearBottomRef.current && messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-    });
-
-    observer.observe(content);
-    return () => observer.disconnect();
-  }, [contentRef, messagesEndRef, updateScrollState]);
-
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+  // Throttled scroll handler using requestAnimationFrame
+  const onScroll = useCallback(() => {
     // Don't update state while animating scroll-to-bottom (prevents flicker)
     if (isScrollingToBottomRef.current) {
       return;
     }
 
-    const target = event.currentTarget;
-    const scrollThreshold = 100; // Don't auto-scroll if more than 100px from bottom
-    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    // Skip if we already have a pending RAF
+    if (rafPendingRef.current) {
+      return;
+    }
 
-    const nearBottom = distanceFromBottom < scrollThreshold;
-    isNearBottomRef.current = nearBottom;
-    setIsNearBottom(nearBottom);
-  }, []);
+    rafPendingRef.current = true;
+    requestAnimationFrame(() => {
+      rafPendingRef.current = false;
+
+      const viewport = viewportRef.current;
+      if (!viewport) {
+        return;
+      }
+
+      const scrollThreshold = 100;
+      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      const nearBottom = distanceFromBottom < scrollThreshold;
+
+      // Only update state if it changed
+      if (nearBottom !== isNearBottomRef.current) {
+        isNearBottomRef.current = nearBottom;
+        setIsNearBottom(nearBottom);
+      }
+    });
+  }, [viewportRef]);
 
   const scrollToBottom = useCallback(() => {
-    // Set flag to prevent handleScroll from causing flicker during animation
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    // Set flag to prevent onScroll from causing flicker during animation
     isScrollingToBottomRef.current = true;
     setIsNearBottom(true);
     isNearBottomRef.current = true;
 
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    viewport.scrollTo({
+      top: viewport.scrollHeight,
+      behavior: 'smooth',
+    });
 
     // Focus the input for convenience
     inputRef.current?.focus();
@@ -705,9 +628,9 @@ function useAutoScroll(
     setTimeout(() => {
       isScrollingToBottomRef.current = false;
     }, 500);
-  }, [messagesEndRef, inputRef]);
+  }, [viewportRef, inputRef]);
 
-  return { handleScroll, isNearBottom, scrollToBottom };
+  return { onScroll, isNearBottom, scrollToBottom };
 }
 
 // =============================================================================
@@ -747,6 +670,7 @@ function WorkspaceChatContent() {
 
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   // Initialize selectedDbSessionId when sessions first load
   useEffect(() => {
@@ -804,21 +728,11 @@ function WorkspaceChatContent() {
     setSelectedDbSessionId,
   });
 
-  // Refs for scroll handling
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  // Ref for scroll handling (virtualized list manages its own content)
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll behavior
-  const { handleScroll, isNearBottom, scrollToBottom } = useAutoScroll(
-    messages,
-    messagesEndRef,
-    contentRef,
-    viewportRef,
-    inputRef
-  );
-
-  // Determine connection status for indicator
-  const status = getConnectionStatusFromState(connected, loadingSession, running, stopping);
+  // Auto-scroll behavior with RAF throttling
+  const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef, inputRef);
 
   // Show loading while fetching workspace and sessions
   if (workspaceLoading || sessionsLoading) {
@@ -854,6 +768,9 @@ function WorkspaceChatContent() {
         />
       )}
 
+      {/* Archiving Overlay - shown while workspace is being archived */}
+      {archiveWorkspace.isPending && <ArchivingOverlay />}
+
       {/* Header: Branch name, status, and toggle button */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-3">
@@ -865,7 +782,6 @@ function WorkspaceChatContent() {
           ) : (
             <h1 className="text-lg font-semibold">{workspace.name}</h1>
           )}
-          <StatusDot status={status} />
           {/* PR Link with CI Status */}
           {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
             <a
@@ -936,11 +852,7 @@ function WorkspaceChatContent() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => {
-                  if (confirm('Are you sure you want to archive this workspace?')) {
-                    archiveWorkspace.mutate({ id: workspaceId });
-                  }
-                }}
+                onClick={() => setArchiveDialogOpen(true)}
                 disabled={archiveWorkspace.isPending}
               >
                 {archiveWorkspace.isPending ? (
@@ -993,11 +905,10 @@ function WorkspaceChatContent() {
                 loadingSession={loadingSession}
                 startingSession={startingSession}
                 messagesEndRef={messagesEndRef}
-                contentRef={contentRef}
                 viewportRef={viewportRef}
-                handleScroll={handleScroll}
                 isNearBottom={isNearBottom}
                 scrollToBottom={scrollToBottom}
+                onScroll={onScroll}
                 pendingPermission={pendingPermission}
                 pendingQuestion={pendingQuestion}
                 approvePermission={approvePermission}
@@ -1031,6 +942,20 @@ function WorkspaceChatContent() {
           </>
         )}
       </ResizablePanelGroup>
+
+      <ConfirmDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        title="Archive Workspace"
+        description="Are you sure you want to archive this workspace?"
+        confirmText="Archive"
+        variant="destructive"
+        onConfirm={() => {
+          archiveWorkspace.mutate({ id: workspaceId });
+          setArchiveDialogOpen(false);
+        }}
+        isPending={archiveWorkspace.isPending}
+      />
     </div>
   );
 }
