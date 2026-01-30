@@ -27,6 +27,7 @@ import {
   isToolResultMessage,
   isToolUseMessage,
 } from '@/lib/claude-types';
+import { calculateTodoProgress } from '@/lib/todo-utils';
 import { cn } from '@/lib/utils';
 import type { FileReference, ToolCallInfo } from './types';
 
@@ -473,9 +474,7 @@ const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
     return <div className="text-xs text-muted-foreground">No todos</div>;
   }
 
-  const completedCount = todos.filter((t) => t.status === 'completed').length;
-  const totalCount = todos.length;
-  const progressPercent = Math.round((completedCount / totalCount) * 100);
+  const { completedCount, totalCount, progressPercent } = calculateTodoProgress(todos);
 
   return (
     <div className="space-y-2 w-0 min-w-full">

@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import type { ChatMessage } from '@/lib/claude-types';
 import { isToolUseMessage } from '@/lib/claude-types';
+import { calculateTodoProgress } from '@/lib/todo-utils';
 
 export interface Todo {
   content: string;
@@ -25,9 +26,7 @@ export interface TodoState {
  * Helper to calculate todo state from a todo list
  */
 function calculateTodoState(todos: Todo[], timestamp: string): TodoState {
-  const completedCount = todos.filter((t) => t.status === 'completed').length;
-  const totalCount = todos.length;
-  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const { completedCount, totalCount, progressPercent } = calculateTodoProgress(todos);
 
   return {
     todos,
@@ -54,7 +53,7 @@ function extractTodosFromMessage(message: ChatMessage): TodoState | null {
   // Check if this message contains a TodoWrite tool call
   // claudeMessage.message.content is the actual content array
   const messageContent = claudeMessage.message;
-  if (!messageContent || typeof messageContent.content === 'string') {
+  if (!(messageContent && Array.isArray(messageContent.content))) {
     return null;
   }
 

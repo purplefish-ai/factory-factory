@@ -143,9 +143,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
             {activeTopTab === 'unstaged' && <UnstagedChangesPanel workspaceId={workspaceId} />}
             {activeTopTab === 'diff-vs-main' && <DiffVsMainPanel workspaceId={workspaceId} />}
             {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
-            {activeTopTab === 'tasks' && (
-              <TodoPanelContainer workspaceId={workspaceId} messages={messages} />
-            )}
+            {activeTopTab === 'tasks' && <TodoPanelContainer messages={messages} />}
           </div>
         </div>
       </ResizablePanel>

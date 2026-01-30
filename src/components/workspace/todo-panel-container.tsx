@@ -6,7 +6,6 @@ import { TodoPanel } from '@/components/chat/todo-panel';
 import { useTodoTracker } from '@/components/chat/use-todo-tracker';
 
 export interface TodoPanelContainerProps {
-  workspaceId: string;
   messages: ChatMessage[];
 }
 
@@ -15,7 +14,6 @@ export interface TodoPanelContainerProps {
  * from the active Claude session in the workspace.
  */
 export const TodoPanelContainer = memo(function TodoPanelContainer({
-  workspaceId: _workspaceId,
   messages,
 }: TodoPanelContainerProps) {
   // Track todos from messages
