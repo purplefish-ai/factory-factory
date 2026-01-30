@@ -8,6 +8,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
+import { WS_READY_STATE } from '../../constants';
 import { terminalSessionAccessor } from '../../resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
 import { createLogger } from '../../services/index';
@@ -125,7 +126,7 @@ export function handleTerminalUpgrade(
         }
 
         const unsubOutput = terminalService.onOutput(terminal.id, (output) => {
-          if (ws.readyState === 1) {
+          if (ws.readyState === WS_READY_STATE.OPEN) {
             ws.send(JSON.stringify({ type: 'output', terminalId: terminal.id, data: output }));
           }
         });
@@ -133,7 +134,7 @@ export function handleTerminalUpgrade(
 
         const unsubExit = terminalService.onExit(terminal.id, (exitCode) => {
           logger.info('Terminal process exited', { terminalId: terminal.id, exitCode });
-          if (ws.readyState === 1) {
+          if (ws.readyState === WS_READY_STATE.OPEN) {
             ws.send(JSON.stringify({ type: 'exit', terminalId: terminal.id, exitCode }));
           }
           const exitCleanupMap = terminalListenerCleanup.get(ws);
@@ -202,7 +203,7 @@ export function handleTerminalUpgrade(
 
             logger.debug('Setting up output forwarding', { terminalId });
             const unsubOutput = terminalService.onOutput(terminalId, (output) => {
-              if (ws.readyState === 1) {
+              if (ws.readyState === WS_READY_STATE.OPEN) {
                 logger.debug('Forwarding output to client', {
                   terminalId,
                   outputLen: output.length,
@@ -219,7 +220,7 @@ export function handleTerminalUpgrade(
 
             const unsubExit = terminalService.onExit(terminalId, (exitCode) => {
               logger.info('Terminal process exited', { terminalId, exitCode });
-              if (ws.readyState === 1) {
+              if (ws.readyState === WS_READY_STATE.OPEN) {
                 ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
               }
               const exitCleanupMap = terminalListenerCleanup.get(ws);
@@ -321,7 +322,7 @@ export function handleTerminalUpgrade(
           isParsError,
         });
 
-        if (ws.readyState === 1) {
+        if (ws.readyState === WS_READY_STATE.OPEN) {
           ws.send(JSON.stringify({ type: 'error', message: errorMessage }));
         }
       }

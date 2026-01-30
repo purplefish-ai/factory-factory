@@ -90,7 +90,11 @@ export const workspaceRouter = router({
                 workspace.worktreePath,
                 defaultBranch
               );
-            } catch {
+            } catch (error) {
+              logger.debug('Failed to get git stats for workspace', {
+                workspaceId: workspace.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
               gitStatsResults[workspace.id] = null;
             }
           })
@@ -110,8 +114,11 @@ export const workspaceRouter = router({
             reviewCount = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
             cachedReviewCount = { count: reviewCount, fetchedAt: now };
           }
-        } catch {
-          // Silently fail - review count is non-critical
+        } catch (error) {
+          // Review count is non-critical, but log for debugging
+          logger.debug('Failed to fetch review count', {
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { HTTP_STATUS } from '../../constants';
 import { prisma } from '../../db';
 import { configService, createLogger, rateLimiter } from '../../services/index';
 
@@ -37,7 +38,7 @@ router.get('/database', async (_req, res) => {
     });
   } catch (error) {
     logger.error('Database health check failed', error as Error);
-    res.status(503).json({
+    res.status(HTTP_STATUS.SERVICE_UNAVAILABLE).json({
       status: 'error',
       timestamp: new Date().toISOString(),
       database: 'disconnected',
@@ -80,7 +81,7 @@ router.get('/all', async (_req, res) => {
     overallStatus = 'degraded';
   }
 
-  res.status(overallStatus === 'error' ? 503 : 200).json({
+  res.status(overallStatus === 'error' ? HTTP_STATUS.SERVICE_UNAVAILABLE : HTTP_STATUS.OK).json({
     status: overallStatus,
     timestamp: new Date().toISOString(),
     checks,

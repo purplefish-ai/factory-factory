@@ -1,6 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { ClaudeClient, type ClaudeClientOptions } from '../claude/index';
-import { ClaudeProcess, type ClaudeProcessOptions, type ResourceUsage } from '../claude/process';
+import type { ResourceUsage } from '../claude/process';
 import {
   getAllProcesses,
   getProcess,
@@ -28,7 +28,8 @@ class SessionService {
   private readonly clients = new Map<string, ClaudeClient>();
   private readonly pendingCreation = new Map<string, Promise<ClaudeClient>>();
   /**
-   * Start a Claude session
+   * Start a Claude session.
+   * Uses createClient() internally for unified lifecycle management.
    */
   async startClaudeSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
     const session = await claudeSessionAccessor.findById(sessionId);
@@ -42,95 +43,20 @@ class SessionService {
       throw new Error('Session is currently being stopped');
     }
 
-    const workspace = await workspaceAccessor.findById(session.workspaceId);
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${session.workspaceId}`);
-    }
-
-    const workingDir = workspace.worktreePath;
-    if (!workingDir) {
-      throw new Error('Workspace has no worktree path');
-    }
-
-    // Mark workspace as having had sessions (for kanban backlog/waiting distinction)
-    // Uses atomic conditional update - safe to call even if already true
-    await workspaceAccessor.markHasHadSessions(workspace.id);
-
-    // Get workflow prompt content
-    const workflowPrompt = getWorkflowContent(session.workflow);
-    logger.info('Loaded workflow prompt', {
-      sessionId,
-      workflow: session.workflow,
-      hasPrompt: !!workflowPrompt,
-      promptLength: workflowPrompt?.length ?? 0,
-      promptPreview: workflowPrompt?.slice(0, 200) ?? '(none)',
-    });
-
-    // Build process options
-    const processOptions: ClaudeProcessOptions = {
-      workingDir,
-      model: session.model,
-      resumeClaudeSessionId: session.claudeSessionId ?? undefined,
+    // Use createClient for unified lifecycle - it handles workspace validation,
+    // marking sessions, DB updates, and event handler setup
+    await this.createClient(sessionId, {
       initialPrompt: options?.initialPrompt ?? 'Continue with the task.',
       permissionMode: 'bypassPermissions',
-      systemPrompt: workflowPrompt ?? undefined,
-      sessionId, // Enable auto-registration in process registry
-    };
-
-    // Spawn Claude process (auto-registers in global registry)
-    const process = await ClaudeProcess.spawn(processOptions);
-    const pid = process.getPid();
-
-    // Update session with process info
-    await claudeSessionAccessor.update(sessionId, {
-      status: SessionStatus.RUNNING,
-      claudeProcessPid: pid ?? null,
     });
 
-    // Set up event handlers
-    process.on('session_id', async (claudeSessionId) => {
-      try {
-        await claudeSessionAccessor.update(sessionId, { claudeSessionId });
-      } catch (error) {
-        logger.warn('Failed to update session with Claude session ID', {
-          sessionId,
-          claudeSessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
-
-    process.on('exit', async () => {
-      // Process auto-unregisters from global registry on exit
-
-      // Skip status update if stopClaudeSession is handling this (prevents race condition)
-      // When stopping, the stopClaudeSession function will set the correct status (IDLE)
-      if (stoppingInProgress.has(sessionId)) {
-        logger.debug('Skipping exit handler status update - stop in progress', { sessionId });
-        return;
-      }
-
-      try {
-        await claudeSessionAccessor.update(sessionId, {
-          status: SessionStatus.COMPLETED,
-          claudeProcessPid: null,
-        });
-      } catch (error) {
-        logger.warn('Failed to update session status on exit', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
-
-    logger.info('Claude session started', { sessionId, pid });
+    logger.info('Claude session started via createClient', { sessionId });
   }
 
   /**
    * Stop a Claude session gracefully.
-   * Checks the clients Map first, then falls back to the process registry.
+   * All sessions use ClaudeClient for unified lifecycle management.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dual-path stop logic with fallback to process registry
   async stopClaudeSession(sessionId: string): Promise<void> {
     // Check if already stopping to prevent concurrent stop attempts
     if (stoppingInProgress.has(sessionId)) {
@@ -138,7 +64,6 @@ class SessionService {
       return;
     }
 
-    // Check clients Map first (preferred path)
     const client = this.clients.get(sessionId);
     if (client) {
       stoppingInProgress.add(sessionId);
@@ -153,22 +78,6 @@ class SessionService {
       } finally {
         stoppingInProgress.delete(sessionId);
         this.clients.delete(sessionId);
-      }
-    } else {
-      // Fallback to process registry (for processes started via legacy path)
-      const process = getProcess(sessionId);
-      if (process) {
-        stoppingInProgress.add(sessionId);
-        try {
-          await process.interrupt();
-        } catch (error) {
-          logger.error('Failed to interrupt process', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } finally {
-          stoppingInProgress.delete(sessionId);
-        }
       }
     }
 
@@ -270,6 +179,7 @@ class SessionService {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
+      initialPrompt?: string;
     }
   ): Promise<ClaudeClient> {
     const sessionOpts = await this.getSessionOptions(sessionId);
@@ -292,6 +202,7 @@ class SessionService {
       permissionMode: options?.permissionMode ?? 'bypassPermissions',
       includePartialMessages: true,
       thinkingEnabled: options?.thinkingEnabled,
+      initialPrompt: options?.initialPrompt,
       sessionId, // Enable auto-registration in process registry
     };
 
