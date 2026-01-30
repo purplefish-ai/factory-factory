@@ -1,7 +1,7 @@
 /**
  * Conversation-Based Branch Rename Interceptor
  *
- * Monitors conversation progress and triggers branch renaming after 5 user messages
+ * Monitors conversation progress and triggers branch renaming after 2 user messages
  * if the branch is still auto-generated. Uses conversation context to generate
  * a more descriptive branch name.
  */
@@ -28,7 +28,7 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Message count threshold for triggering rename (configurable via env var)
-const MESSAGE_THRESHOLD = Number.parseInt(process.env.BRANCH_RENAME_MESSAGE_THRESHOLD ?? '5', 10);
+const MESSAGE_THRESHOLD = Number.parseInt(process.env.BRANCH_RENAME_MESSAGE_THRESHOLD ?? '2', 10);
 
 // Periodically clean up old entries to prevent memory leak
 setInterval(() => {
