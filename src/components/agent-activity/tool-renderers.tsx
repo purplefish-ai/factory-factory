@@ -3,11 +3,15 @@
 import {
   AlertCircle,
   CheckCircle,
+  CheckSquare,
   ChevronDown,
   ChevronRight,
+  Circle,
   FileCode,
   Loader2,
+  Square,
   Terminal,
+  Zap,
 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
@@ -398,7 +402,152 @@ interface ToolInputRendererProps {
   input: Record<string, unknown>;
 }
 
+/**
+ * Renders a Task tool (subagent launch) with improved formatting
+ */
+const TaskToolRenderer = memo(function TaskToolRenderer({
+  input,
+}: {
+  input: Record<string, unknown>;
+}) {
+  const subagentType = input.subagent_type as string | undefined;
+  const description = input.description as string | undefined;
+  const prompt = input.prompt as string | undefined;
+
+  return (
+    <div className="space-y-2 w-0 min-w-full">
+      <div className="flex items-center gap-1.5">
+        <Zap className="h-4 w-4 shrink-0 text-primary" />
+        <span className="font-semibold text-sm">
+          {subagentType ? `${subagentType} Agent` : 'Subagent'}
+        </span>
+      </div>
+      {description && <div className="text-xs text-muted-foreground italic">{description}</div>}
+      {prompt && (
+        <div className="rounded bg-muted/50 px-2 py-1.5">
+          <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Task</div>
+          <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto">
+            {prompt}
+          </pre>
+        </div>
+      )}
+      {/* Show other parameters if present */}
+      {Object.keys(input).filter((k) => !['subagent_type', 'description', 'prompt'].includes(k))
+        .length > 0 && (
+        <details className="text-xs">
+          <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
+            Additional parameters
+          </summary>
+          <pre className="mt-1 text-xs overflow-x-auto rounded bg-muted px-1.5 py-1">
+            {JSON.stringify(
+              Object.fromEntries(
+                Object.entries(input).filter(
+                  ([k]) => !['subagent_type', 'description', 'prompt'].includes(k)
+                )
+              ),
+              null,
+              2
+            )}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+});
+
+/**
+ * Renders a single todo item
+ */
+const TodoItemRenderer = memo(function TodoItemRenderer({
+  todo,
+}: {
+  todo: { content: string; activeForm: string; status: 'pending' | 'in_progress' | 'completed' };
+}) {
+  const StatusIcon =
+    todo.status === 'completed' ? CheckSquare : todo.status === 'in_progress' ? Circle : Square;
+
+  const statusColor =
+    todo.status === 'completed'
+      ? 'text-success'
+      : todo.status === 'in_progress'
+        ? 'text-primary'
+        : 'text-muted-foreground';
+
+  return (
+    <div className="flex items-start gap-1.5">
+      <StatusIcon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', statusColor)} />
+      <div className="flex-1 min-w-0">
+        <div
+          className={cn(
+            'text-xs',
+            todo.status === 'completed' && 'line-through text-muted-foreground'
+          )}
+        >
+          {todo.status === 'in_progress' ? todo.activeForm : todo.content}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+/**
+ * Renders TodoWrite tool with visual task list and progress bar
+ */
+const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
+  input,
+}: {
+  input: Record<string, unknown>;
+}) {
+  const todos = input.todos as
+    | Array<{
+        content: string;
+        activeForm: string;
+        status: 'pending' | 'in_progress' | 'completed';
+      }>
+    | undefined;
+
+  if (!todos || todos.length === 0) {
+    return <div className="text-xs text-muted-foreground">No todos</div>;
+  }
+
+  const completedCount = todos.filter((t) => t.status === 'completed').length;
+  const totalCount = todos.length;
+  const progressPercent = Math.round((completedCount / totalCount) * 100);
+
+  return (
+    <div className="space-y-2 w-0 min-w-full">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">
+          Task List ({completedCount}/{totalCount})
+        </span>
+        <span className="text-xs text-muted-foreground">{progressPercent}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full bg-primary transition-all duration-300"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+      <div className="space-y-1.5">
+        {todos.map((todo, index) => (
+          <TodoItemRenderer key={`${todo.content}-${index}`} todo={todo} />
+        ))}
+      </div>
+    </div>
+  );
+});
+
 const ToolInputRenderer = memo(function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
+  // Special rendering for Task tool (subagent launches)
+  if (name === 'Task') {
+    return <TaskToolRenderer input={input} />;
+  }
+
+  // Special rendering for TodoWrite tool
+  if (name === 'TodoWrite') {
+    return <TodoWriteToolRenderer input={input} />;
+  }
+
   // Special rendering for common tools
   switch (name) {
     case 'Read':
