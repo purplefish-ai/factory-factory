@@ -355,7 +355,7 @@ async function handleChatMessage(
 
   switch (message.type) {
     case 'start': {
-      ws.send(JSON.stringify({ type: 'starting', sessionId }));
+      ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
 
       // Determine model to use
       const sessionOpts = await sessionService.getSessionOptions(sessionId);
@@ -375,7 +375,7 @@ async function handleChatMessage(
         planModeEnabled: message.planModeEnabled,
         model,
       });
-      ws.send(JSON.stringify({ type: 'started', sessionId }));
+      ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
       break;
     }
 
@@ -419,7 +419,7 @@ async function handleChatMessage(
         });
 
         ws.send(JSON.stringify({ type: 'message_queued', text }));
-        ws.send(JSON.stringify({ type: 'starting', sessionId }));
+        ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
 
         // Determine model to use
         const validModels = ['sonnet', 'opus'];
@@ -432,7 +432,7 @@ async function handleChatMessage(
           planModeEnabled: message.planModeEnabled,
           model,
         });
-        ws.send(JSON.stringify({ type: 'started', sessionId }));
+        ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
 
         // Drain pending messages
         const pending = pendingMessages.get(sessionId);
@@ -454,7 +454,7 @@ async function handleChatMessage(
       // Delegate to sessionService for unified session lifecycle management
       await sessionService.stopClaudeSession(sessionId);
       pendingMessages.delete(sessionId);
-      ws.send(JSON.stringify({ type: 'stopped', sessionId }));
+      ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
       break;
     }
 
@@ -463,9 +463,9 @@ async function handleChatMessage(
       const claudeSessionId = client?.getClaudeSessionId();
       if (claudeSessionId) {
         const history = await SessionManager.getHistory(claudeSessionId, workingDir);
-        ws.send(JSON.stringify({ type: 'history', sessionId, messages: history }));
+        ws.send(JSON.stringify({ type: 'history', dbSessionId: sessionId, messages: history }));
       } else {
-        ws.send(JSON.stringify({ type: 'history', sessionId, messages: [] }));
+        ws.send(JSON.stringify({ type: 'history', dbSessionId: sessionId, messages: [] }));
       }
       break;
     }
