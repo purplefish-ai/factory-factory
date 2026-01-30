@@ -76,11 +76,12 @@ export interface PermissionHandler {
 
 /**
  * Create an allow response for can_use_tool requests.
+ * Note: updatedInput must always be present for Claude CLI schema validation.
  */
 export function createAllowResponse(updatedInput?: Record<string, unknown>): AllowResponseData {
   return {
     behavior: 'allow',
-    ...(updatedInput && { updatedInput }),
+    updatedInput: updatedInput ?? {},
   };
 }
 
