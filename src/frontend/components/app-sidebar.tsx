@@ -82,8 +82,14 @@ export function AppSidebar() {
   const utils = trpc.useUtils();
 
   // Use the workspace list state management hook
-  const { workspaceList, existingNames, isCreating, startCreating, startArchiving } =
-    useWorkspaceListState(serverWorkspaces);
+  const {
+    workspaceList,
+    existingNames,
+    isCreating,
+    startCreating,
+    cancelCreating,
+    startArchiving,
+  } = useWorkspaceListState(serverWorkspaces);
 
   const createWorkspace = trpc.workspace.create.useMutation();
   const archiveWorkspace = trpc.workspace.archive.useMutation({
@@ -105,19 +111,24 @@ export function AppSidebar() {
     const name = generateUniqueWorkspaceName(existingNames);
     startCreating(name);
 
-    // Create workspace (branchName defaults to project's default branch)
-    // Don't create a session - user will choose workflow in workspace page
-    const workspace = await createWorkspace.mutateAsync({
-      projectId: selectedProjectId,
-      name,
-    });
+    try {
+      // Create workspace (branchName defaults to project's default branch)
+      // Don't create a session - user will choose workflow in workspace page
+      const workspace = await createWorkspace.mutateAsync({
+        projectId: selectedProjectId,
+        name,
+      });
 
-    // Invalidate caches to trigger immediate refetch
-    utils.workspace.list.invalidate({ projectId: selectedProjectId });
-    utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+      // Invalidate caches to trigger immediate refetch
+      utils.workspace.list.invalidate({ projectId: selectedProjectId });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
 
-    // Navigate to workspace (workflow selection will be shown)
-    navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
+      // Navigate to workspace (workflow selection will be shown)
+      navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
+    } catch {
+      // Clear the creating state on error so the UI doesn't get stuck
+      cancelCreating();
+    }
   };
 
   // Get current workspace ID from URL

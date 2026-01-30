@@ -6,24 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export type WorkspaceUIState = 'normal' | 'creating' | 'archiving';
 
-export interface WorkspaceListItem {
-  id: string;
-  name: string;
-  branchName?: string | null;
-  prUrl?: string | null;
-  prNumber?: number | null;
-  prState?: string | null;
-  prCiStatus?: string | null;
-  isWorking: boolean;
-  gitStats: {
-    total: number;
-    additions: number;
-    deletions: number;
-    hasUncommitted: boolean;
-  } | null;
-  uiState: WorkspaceUIState;
-}
-
 export interface ServerWorkspace {
   id: string;
   name: string;
@@ -39,6 +21,10 @@ export interface ServerWorkspace {
     deletions: number;
     hasUncommitted: boolean;
   } | null;
+}
+
+export interface WorkspaceListItem extends ServerWorkspace {
+  uiState: WorkspaceUIState;
 }
 
 // =============================================================================
@@ -65,12 +51,19 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
     branchName?: string | null;
   } | null>(null);
 
+  // Check if creating workspace has appeared in the server list
+  const creatingWorkspaceInList = creatingWorkspace
+    ? serverWorkspaces?.some((w) => w.name === creatingWorkspace.name)
+    : false;
+
   // Build the unified workspace list with UI states
   const workspaceList = useMemo((): WorkspaceListItem[] => {
     const items: WorkspaceListItem[] = [];
 
-    // Add "creating" placeholder at the top if we're creating a new workspace
-    if (creatingWorkspace) {
+    // Add "creating" placeholder at the top ONLY if:
+    // 1. We're creating a new workspace
+    // 2. The workspace hasn't appeared in the server list yet (prevents duplicates)
+    if (creatingWorkspace && !creatingWorkspaceInList) {
       items.push({
         id: `creating-${creatingWorkspace.name}`,
         name: creatingWorkspace.name,
@@ -103,12 +96,7 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
     // The archivingWorkspace state will be cleared after a brief delay for visual feedback.
 
     return items;
-  }, [serverWorkspaces, creatingWorkspace, archivingWorkspace]);
-
-  // Check if creating workspace has appeared in the server list
-  const creatingWorkspaceInList = creatingWorkspace
-    ? serverWorkspaces?.some((w) => w.name === creatingWorkspace.name)
-    : false;
+  }, [serverWorkspaces, creatingWorkspace, creatingWorkspaceInList, archivingWorkspace]);
 
   // Clear creating state when workspace appears in list
   useEffect(() => {
@@ -147,6 +135,10 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
     setCreatingWorkspace({ name });
   }, []);
 
+  const cancelCreating = useCallback(() => {
+    setCreatingWorkspace(null);
+  }, []);
+
   const startArchiving = useCallback(
     (id: string) => {
       const workspace = serverWorkspaces?.find((w) => w.id === id);
@@ -166,6 +158,7 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
     existingNames,
     isCreating: !!creatingWorkspace,
     startCreating,
+    cancelCreating,
     startArchiving,
   };
 }
