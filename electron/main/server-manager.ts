@@ -47,9 +47,10 @@ export class ServerManager {
     this.ensureDataDir(databasePath);
 
     // Get paths for production build
-    const resourcesPath = this.getResourcesPath();
-    const frontendDist = join(resourcesPath, 'dist', 'client');
-    const migrationsPath = join(resourcesPath, 'prisma', 'migrations');
+    // - Migrations are in Resources/prisma/migrations (via extraResources)
+    // - Frontend is in Resources/app.asar.unpacked/dist/client (unpacked from asar)
+    const migrationsPath = join(process.resourcesPath, 'prisma', 'migrations');
+    const frontendDist = join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'client');
 
     // Set environment variables BEFORE importing the backend
     // These are read at module load time by db.ts and config.service.ts
@@ -126,21 +127,6 @@ export class ServerManager {
     await this.serverInstance.stop();
     this.serverInstance = null;
     console.log('[electron] Backend server stopped');
-  }
-
-  /**
-   * Get the resources path for static files.
-   * In production, this is the app.asar.unpacked directory.
-   * In development, this is the project root.
-   */
-  private getResourcesPath(): string {
-    if (app.isPackaged) {
-      // In production, use unpacked resources (for native modules and static files)
-      return join(process.resourcesPath, 'app.asar.unpacked');
-    }
-    // In development, use the project root
-    // Compiled file is at electron/dist/electron/main/server-manager.js
-    return join(__dirname, '..', '..', '..', '..');
   }
 
   /**
