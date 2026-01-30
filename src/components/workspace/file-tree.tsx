@@ -103,7 +103,7 @@ const DirectoryNode = memo(function DirectoryNode({
         ) : (
           <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         )}
-        <Folder className="h-4 w-4 text-amber-600 dark:text-brand flex-shrink-0" />
+        <Folder className="h-4 w-4 text-brand flex-shrink-0" />
         <span className="truncate">{entry.name}</span>
       </button>
 
