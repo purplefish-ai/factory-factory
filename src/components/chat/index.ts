@@ -3,6 +3,7 @@
 // Types
 export type { ChatMessage } from '@/lib/claude-types';
 export { ChatInput } from './chat-input';
+export { LatestThinking } from './latest-thinking';
 export { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 export { QuestionPrompt } from './question-prompt';
 export { QueuedMessages } from './queued-messages';

@@ -50,6 +50,8 @@ export interface UseChatWebSocketReturn {
   inputDraft: string;
   // Message queue state
   queuedMessages: QueuedMessage[];
+  // Latest thinking content from extended thinking mode
+  latestThinking: string | null;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -149,6 +151,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     chatSettings: chat.chatSettings,
     inputDraft: chat.inputDraft,
     queuedMessages: chat.queuedMessages,
+    latestThinking: chat.latestThinking,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,

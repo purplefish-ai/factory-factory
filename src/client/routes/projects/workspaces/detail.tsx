@@ -100,6 +100,7 @@ interface ChatContentProps {
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
+  latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
   /** Database session ID for detecting session changes (auto-focus) */
   selectedDbSessionId: string | null;
 }
@@ -133,6 +134,7 @@ const ChatContent = memo(function ChatContent({
   setInputDraft,
   queuedMessages,
   removeQueuedMessage,
+  latestThinking,
   selectedDbSessionId,
 }: ChatContentProps) {
   // Group adjacent tool calls for display (memoized)
@@ -185,6 +187,7 @@ const ChatContent = memo(function ChatContent({
             onScroll={onScroll}
             messagesEndRef={messagesEndRef}
             isNearBottom={isNearBottom}
+            latestThinking={latestThinking}
           />
         </KeyboardStateProvider>
       </div>
@@ -290,6 +293,7 @@ function WorkspaceChatContent() {
     chatSettings,
     inputDraft,
     queuedMessages,
+    latestThinking,
     sendMessage,
     stopChat,
     approvePermission,
@@ -529,6 +533,7 @@ function WorkspaceChatContent() {
                 setInputDraft={setInputDraft}
                 queuedMessages={queuedMessages}
                 removeQueuedMessage={removeQueuedMessage}
+                latestThinking={latestThinking}
                 selectedDbSessionId={selectedDbSessionId}
               />
             </WorkspaceContentView>
