@@ -418,6 +418,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         gitBranch: action.payload.gitBranch,
         running: action.payload.running,
         loadingSession: false,
+        startingSession: false, // Clear to allow queue draining after session loads
         toolUseIdToIndex: new Map(),
         pendingPermission,
         pendingQuestion,
