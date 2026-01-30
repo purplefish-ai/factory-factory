@@ -79,11 +79,12 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   isNearBottomRef.current = isNearBottom;
 
   // Initialize virtualizer with dynamic measurement
+  // Reduce overscan during active running to improve performance
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => 80, // Estimated average height
-    overscan: 5, // Render 5 extra items above/below viewport
+    overscan: running ? 3 : 5, // Fewer items when streaming for better performance
     getItemKey: (index) => messages[index].id,
   });
 
@@ -99,11 +100,12 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     // If messages were added and user is near bottom, scroll to bottom
     if (currentCount > prevCount && isNearBottomRef.current && scrollContainerRef.current) {
       isAutoScrollingRef.current = true;
-      virtualizer.scrollToIndex(currentCount - 1, { align: 'end' });
-      // Reset flag after scroll animation completes (match parent's 500ms timeout)
-      setTimeout(() => {
+      // Use 'auto' behavior instead of smooth to prevent animation jitter during rapid updates
+      virtualizer.scrollToIndex(currentCount - 1, { align: 'end', behavior: 'auto' });
+      // Reset flag immediately for instant scroll
+      requestAnimationFrame(() => {
         isAutoScrollingRef.current = false;
-      }, 500);
+      });
     }
   }, [messages.length, virtualizer, scrollContainerRef]);
 
