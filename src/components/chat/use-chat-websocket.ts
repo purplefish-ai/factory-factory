@@ -22,6 +22,64 @@ import {
 } from '@/lib/websocket-config';
 
 // =============================================================================
+// Draft Persistence
+// =============================================================================
+
+/**
+ * Get the sessionStorage key for a draft.
+ */
+function getDraftKey(sessionId: string): string {
+  return `chat-draft-${sessionId}`;
+}
+
+/**
+ * Load draft from sessionStorage for a specific session.
+ */
+function loadDraft(sessionId: string | null): string {
+  if (!sessionId) {
+    return '';
+  }
+  try {
+    return sessionStorage.getItem(getDraftKey(sessionId)) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Persist draft to sessionStorage for a specific session.
+ */
+function persistDraft(sessionId: string | null, draft: string): void {
+  if (!sessionId) {
+    return;
+  }
+  try {
+    if (draft.trim()) {
+      sessionStorage.setItem(getDraftKey(sessionId), draft);
+    } else {
+      // Clear empty drafts to avoid clutter
+      sessionStorage.removeItem(getDraftKey(sessionId));
+    }
+  } catch {
+    // Silently ignore storage errors
+  }
+}
+
+/**
+ * Clear draft from sessionStorage for a specific session.
+ */
+function clearDraft(sessionId: string | null): void {
+  if (!sessionId) {
+    return;
+  }
+  try {
+    sessionStorage.removeItem(getDraftKey(sessionId));
+  } catch {
+    // Silently ignore storage errors
+  }
+}
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -611,7 +669,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       messageQueueRef.current = [];
     }
 
-    // Load queue and settings from storage for the new session
+    // Load queue, settings, and draft from storage for the new session
     if (newDbSessionId) {
       const storedQueue = loadQueue(newDbSessionId);
       setQueuedMessages(storedQueue);
@@ -619,8 +677,13 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       // Load settings from storage, falling back to defaults
       const storedSettings = loadSettings(newDbSessionId);
       setChatSettings(storedSettings ?? DEFAULT_CHAT_SETTINGS);
+
+      // Load draft from storage
+      const storedDraft = loadDraft(newDbSessionId);
+      setInputDraft(storedDraft);
     } else {
       setChatSettings(DEFAULT_CHAT_SETTINGS);
+      setInputDraft('');
     }
   }, [dbSessionId]);
 
@@ -986,6 +1049,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setQueuedMessages(remaining);
     persistQueue(dbSessionId, remaining);
 
+    // Clear draft when sending a message
+    setInputDraft('');
+    clearDraft(dbSessionId);
+
     // Add to messages (optimistic UI)
     setMessages((prev) => [...prev, createUserMessage(nextMsg.text)]);
 
@@ -1090,6 +1157,15 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [dbSessionId]
   );
 
+  // Wrap setInputDraft to persist to sessionStorage
+  const persistInputDraft = useCallback(
+    (draft: string) => {
+      setInputDraft(draft);
+      persistDraft(dbSessionId, draft);
+    },
+    [dbSessionId]
+  );
+
   return {
     // State
     messages,
@@ -1112,7 +1188,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     approvePermission,
     answerQuestion,
     updateSettings,
-    setInputDraft,
+    setInputDraft: persistInputDraft,
     removeQueuedMessage,
     // Refs
     inputRef,
