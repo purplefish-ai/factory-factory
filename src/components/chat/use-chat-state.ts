@@ -541,6 +541,15 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     }, 300);
   }, []);
 
+  // Clean up pending debounced persist on unmount to prevent stale writes
+  useEffect(() => {
+    return () => {
+      if (persistDraftDebounced.current) {
+        clearTimeout(persistDraftDebounced.current);
+      }
+    };
+  }, []);
+
   // =============================================================================
   // Return Value
   // =============================================================================
