@@ -827,10 +827,64 @@ describe('chatReducer', () => {
           timestamp: '2024-01-01T00:00:00.000Z',
         },
       };
-      const action: ChatAction = { type: 'PERMISSION_RESPONSE' };
+      const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: true } };
       const newState = chatReducer(state, action);
 
       expect(newState.pendingPermission).toBeNull();
+    });
+
+    it('should disable plan mode when ExitPlanMode is approved', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatSettings: { ...initialState.chatSettings, planModeEnabled: true },
+        pendingPermission: {
+          requestId: 'req-1',
+          toolName: 'ExitPlanMode',
+          toolInput: {},
+          timestamp: '2024-01-01T00:00:00.000Z',
+        },
+      };
+      const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: true } };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingPermission).toBeNull();
+      expect(newState.chatSettings.planModeEnabled).toBe(false);
+    });
+
+    it('should not disable plan mode when ExitPlanMode is denied', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatSettings: { ...initialState.chatSettings, planModeEnabled: true },
+        pendingPermission: {
+          requestId: 'req-1',
+          toolName: 'ExitPlanMode',
+          toolInput: {},
+          timestamp: '2024-01-01T00:00:00.000Z',
+        },
+      };
+      const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: false } };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingPermission).toBeNull();
+      expect(newState.chatSettings.planModeEnabled).toBe(true);
+    });
+
+    it('should not affect plan mode for other tools', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatSettings: { ...initialState.chatSettings, planModeEnabled: true },
+        pendingPermission: {
+          requestId: 'req-1',
+          toolName: 'Bash',
+          toolInput: {},
+          timestamp: '2024-01-01T00:00:00.000Z',
+        },
+      };
+      const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: true } };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingPermission).toBeNull();
+      expect(newState.chatSettings.planModeEnabled).toBe(true);
     });
   });
 
