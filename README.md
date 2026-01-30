@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo-full-dark.svg" alt="Factory Factory" width="400">
+  <img src="public/logo-full.svg" alt="Factory Factory" width="400">
 </p>
 
 <p align="center">
