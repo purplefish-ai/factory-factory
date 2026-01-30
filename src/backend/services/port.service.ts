@@ -11,6 +11,7 @@ const logger = createLogger('port-service');
 
 /**
  * Check if a port is available by attempting to create a server on it.
+ * Checks all interfaces (not just localhost) to match server.listen() behavior.
  */
 export function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -21,7 +22,8 @@ export function isPortAvailable(port: number): Promise<boolean> {
     testServer.once('listening', () => {
       testServer.close(() => resolve(true));
     });
-    testServer.listen(port, 'localhost');
+    // Listen on all interfaces (like server.listen does) not just localhost
+    testServer.listen(port);
   });
 }
 
