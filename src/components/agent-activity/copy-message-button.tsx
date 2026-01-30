@@ -7,62 +7,6 @@ import { cn } from '@/lib/utils';
 const COPY_SUCCESS_DURATION_MS = 2000;
 
 // =============================================================================
-// Keyboard State Context
-// =============================================================================
-
-/**
- * Shared context for tracking Ctrl/Cmd key state.
- * This prevents multiple event listeners when there are many copy buttons.
- */
-const KeyboardStateContext = React.createContext<{
-  isCtrlPressed: boolean;
-}>({ isCtrlPressed: false });
-
-/**
- * Provider that manages global keyboard state for all copy buttons.
- */
-export function KeyboardStateProvider({ children }: { children: React.ReactNode }) {
-  const [isCtrlPressed, setIsCtrlPressed] = React.useState(false);
-
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Meta key (Command on Mac), Control key (Ctrl on Windows/Linux)
-      if (e.key === 'Control' || e.key === 'Meta' || e.metaKey || e.ctrlKey) {
-        setIsCtrlPressed(true);
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      // Only reset if Control or Meta key was released
-      if (e.key === 'Control' || e.key === 'Meta') {
-        setIsCtrlPressed(false);
-      }
-    };
-
-    // Handle blur to reset state when window loses focus
-    const handleBlur = () => {
-      setIsCtrlPressed(false);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleBlur);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, []);
-
-  return (
-    <KeyboardStateContext.Provider value={{ isCtrlPressed }}>
-      {children}
-    </KeyboardStateContext.Provider>
-  );
-}
-
-// =============================================================================
 // Copy Message Button
 // =============================================================================
 
@@ -74,11 +18,10 @@ interface CopyMessageButtonProps {
 }
 
 /**
- * A copy-to-clipboard button that appears when Ctrl/Cmd is pressed.
+ * A copy-to-clipboard button that appears on hover of the parent message.
  * Shows a checkmark briefly after successful copy.
  */
 export function CopyMessageButton({ textContent, className }: CopyMessageButtonProps) {
-  const { isCtrlPressed } = React.useContext(KeyboardStateContext);
   const [isCopied, setIsCopied] = React.useState(false);
   const timeoutRef = React.useRef<number | undefined>(undefined);
 
@@ -110,10 +53,6 @@ export function CopyMessageButton({ textContent, className }: CopyMessageButtonP
     }
   };
 
-  if (!isCtrlPressed) {
-    return null;
-  }
-
   return (
     <button
       onClick={handleCopy}
@@ -123,12 +62,13 @@ export function CopyMessageButton({ textContent, className }: CopyMessageButtonP
         'bg-background/90 hover:bg-background',
         'border border-border',
         'shadow-sm',
+        'opacity-0 group-hover:opacity-100',
         'transition-all',
         'z-10',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className
       )}
-      title="Copy to clipboard (Ctrl/Cmd + Click)"
+      title="Copy to clipboard"
       type="button"
       aria-label="Copy message to clipboard"
     >

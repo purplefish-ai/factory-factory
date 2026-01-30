@@ -219,11 +219,12 @@ export function useSessionManagement({
           onSuccess: (session) => {
             // Setting the new session ID triggers WebSocket reconnection automatically
             setSelectedDbSessionId(session.id);
+            setTimeout(() => inputRef.current?.focus(), 0);
           },
         }
       );
     },
-    [createSession, workspaceId, getNextChatName, setSelectedDbSessionId, selectedModel]
+    [createSession, workspaceId, getNextChatName, setSelectedDbSessionId, inputRef, selectedModel]
   );
 
   const handleNewChat = useCallback(() => {
@@ -235,10 +236,18 @@ export function useSessionManagement({
         onSuccess: (session) => {
           // Setting the new session ID triggers WebSocket reconnection automatically
           setSelectedDbSessionId(session.id);
+          setTimeout(() => inputRef.current?.focus(), 0);
         },
       }
     );
-  }, [createSession, workspaceId, getNextChatName, setSelectedDbSessionId, selectedModel]);
+  }, [
+    createSession,
+    workspaceId,
+    getNextChatName,
+    setSelectedDbSessionId,
+    inputRef,
+    selectedModel,
+  ]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
@@ -280,10 +289,7 @@ export function useSessionManagement({
  * Hook for managing auto-scroll behavior with RAF throttling.
  * Optimized for virtualized lists - doesn't require contentRef.
  */
-export function useAutoScroll(
-  viewportRef: React.RefObject<HTMLDivElement | null>,
-  inputRef: React.RefObject<HTMLTextAreaElement | null>
-) {
+export function useAutoScroll(viewportRef: React.RefObject<HTMLDivElement | null>) {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
   // Track if we're currently animating a scroll-to-bottom to prevent flicker
@@ -341,14 +347,11 @@ export function useAutoScroll(
       behavior: 'smooth',
     });
 
-    // Focus the input for convenience
-    inputRef.current?.focus();
-
     // Clear the flag after animation completes (smooth scroll typically ~300-500ms)
     setTimeout(() => {
       isScrollingToBottomRef.current = false;
     }, 500);
-  }, [viewportRef, inputRef]);
+  }, [viewportRef]);
 
   return { onScroll, isNearBottom, scrollToBottom };
 }

@@ -42,8 +42,6 @@ interface ChatInputProps {
   // Settings
   settings?: ChatSettings;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
-  // Session tracking for auto-focus on new sessions
-  sessionId?: string | null;
   // Called when textarea height changes (for scroll adjustment)
   onHeightChange?: () => void;
   // Draft input value (for preserving across tab switches)
@@ -196,7 +194,6 @@ export const ChatInput = memo(function ChatInput({
   className,
   settings,
   onSettingsChange,
-  sessionId,
   onHeightChange,
   value,
   onChange,
@@ -274,7 +271,6 @@ export const ChatInput = memo(function ChatInput({
         inputRef.current.value = '';
         onChange?.('');
         setAttachments([]);
-        inputRef.current.focus();
       }
     }
   }, [onSend, inputRef, disabled, onChange, attachments]);
@@ -305,28 +301,6 @@ export const ChatInput = memo(function ChatInput({
       }
     };
   }, [inputRef, onHeightChange]);
-
-  // Track previous state to only auto-focus on specific transitions
-  const prevRunningRef = useRef(running);
-  const prevDisabledRef = useRef(disabled);
-  const prevSessionIdRef = useRef(sessionId);
-
-  // Focus input only when transitioning from running/disabled to idle, or when session changes
-  useEffect(() => {
-    const wasRunningOrDisabled = prevRunningRef.current || prevDisabledRef.current;
-    const isNowIdle = !(running || disabled);
-    const sessionChanged = prevSessionIdRef.current !== sessionId;
-
-    // Update refs for next render
-    prevRunningRef.current = running;
-    prevDisabledRef.current = disabled;
-    prevSessionIdRef.current = sessionId;
-
-    // Only focus when transitioning to idle state OR when session changes
-    if (inputRef?.current && isNowIdle && (wasRunningOrDisabled || sessionChanged)) {
-      inputRef.current.focus();
-    }
-  }, [running, disabled, inputRef, sessionId]);
 
   // Restore input value from draft when component mounts or value prop changes
   // This preserves the draft across tab switches

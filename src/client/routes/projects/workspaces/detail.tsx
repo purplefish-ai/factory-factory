@@ -13,7 +13,6 @@ import {
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
-import { KeyboardStateProvider } from '@/components/agent-activity';
 import {
   ChatInput,
   PermissionPrompt,
@@ -101,8 +100,6 @@ interface ChatContentProps {
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
-  /** Database session ID for detecting session changes (auto-focus) */
-  selectedDbSessionId: string | null;
 }
 
 /**
@@ -135,29 +132,9 @@ const ChatContent = memo(function ChatContent({
   queuedMessages,
   removeQueuedMessage,
   latestThinking,
-  selectedDbSessionId,
 }: ChatContentProps) {
   // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
-
-  // Focus input when clicking anywhere in the chat area (but not on interactive elements)
-  const handleChatClick = useCallback(
-    (e: React.MouseEvent) => {
-      // Don't steal focus from interactive elements (buttons, inputs, etc.)
-      const target = e.target as HTMLElement;
-      if (
-        target.closest(
-          'button, input, textarea, select, [role="button"], [data-radix-collection-item]'
-        )
-      ) {
-        return;
-      }
-      if (inputRef?.current && !running) {
-        inputRef.current.focus();
-      }
-    },
-    [inputRef, running]
-  );
 
   // Memoize onHeightChange to prevent recreating on every render
   const handleHeightChange = useCallback(() => {
@@ -172,24 +149,20 @@ const ChatContent = memo(function ChatContent({
   }, [isNearBottom, viewportRef]);
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: focus input on click is UX enhancement, not primary interaction
-    // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
-    <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
+    <div className="relative flex h-full flex-col overflow-hidden">
       {/* Virtualized Message List */}
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        <KeyboardStateProvider>
-          <VirtualizedMessageList
-            messages={groupedMessages}
-            running={running}
-            startingSession={startingSession}
-            loadingSession={loadingSession}
-            scrollContainerRef={viewportRef}
-            onScroll={onScroll}
-            messagesEndRef={messagesEndRef}
-            isNearBottom={isNearBottom}
-            latestThinking={latestThinking}
-          />
-        </KeyboardStateProvider>
+        <VirtualizedMessageList
+          messages={groupedMessages}
+          running={running}
+          startingSession={startingSession}
+          loadingSession={loadingSession}
+          scrollContainerRef={viewportRef}
+          onScroll={onScroll}
+          messagesEndRef={messagesEndRef}
+          isNearBottom={isNearBottom}
+          latestThinking={latestThinking}
+        />
       </div>
 
       {/* Scroll to Bottom Button */}
@@ -225,7 +198,6 @@ const ChatContent = memo(function ChatContent({
           }
           settings={chatSettings}
           onSettingsChange={updateSettings}
-          sessionId={selectedDbSessionId}
           value={inputDraft}
           onChange={setInputDraft}
           onHeightChange={handleHeightChange}
@@ -336,7 +308,7 @@ function WorkspaceChatContent() {
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll behavior with RAF throttling
-  const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef, inputRef);
+  const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
 
   // Show loading while fetching workspace (but not sessions - they can load in background)
   if (workspaceLoading) {
@@ -535,7 +507,6 @@ function WorkspaceChatContent() {
                 queuedMessages={queuedMessages}
                 removeQueuedMessage={removeQueuedMessage}
                 latestThinking={latestThinking}
-                selectedDbSessionId={selectedDbSessionId}
               />
             </WorkspaceContentView>
           </div>
