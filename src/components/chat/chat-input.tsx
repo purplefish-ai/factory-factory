@@ -2,7 +2,7 @@
 
 import { Brain, ChevronDown, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -188,8 +188,9 @@ function PlanModeToggle({
  * Chat input component with textarea, send button, and settings controls.
  * Uses InputGroup for a unified bordered container.
  * Supports Enter to send and Shift+Enter for new line.
+ * Memoized to prevent unnecessary re-renders from parent state changes.
  */
-export function ChatInput({
+export const ChatInput = memo(function ChatInput({
   onSend,
   onStop,
   disabled = false,
@@ -244,17 +245,30 @@ export function ChatInput({
   }, [onSend, inputRef, disabled, onChange]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
+  // Debounce to avoid excessive scroll calculations during rapid typing
   useEffect(() => {
     const textarea = inputRef?.current;
     if (!(textarea && onHeightChange)) {
       return;
     }
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver(() => {
-      onHeightChange();
+      // Debounce to reduce scroll thrashing during rapid typing
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => {
+        onHeightChange();
+      }, 50);
     });
     observer.observe(textarea);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [inputRef, onHeightChange]);
 
   // Track previous state to only auto-focus on specific transitions
@@ -388,4 +402,4 @@ export function ChatInput({
       </InputGroup>
     </div>
   );
-}
+});
