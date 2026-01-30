@@ -110,8 +110,8 @@ function SessionTab({
       <div
         className={cn(
           'h-2 w-2 rounded-full shrink-0',
-          isRunning && 'bg-yellow-500 animate-pulse',
-          !isRunning && session.status === 'RUNNING' && 'bg-yellow-500 animate-pulse',
+          isRunning && 'bg-brand animate-pulse',
+          !isRunning && session.status === 'RUNNING' && 'bg-brand animate-pulse',
           !isRunning && session.status === 'IDLE' && 'bg-green-500',
           !isRunning && session.status === 'PAUSED' && 'bg-gray-400',
           !isRunning && session.status === 'COMPLETED' && 'bg-blue-500',

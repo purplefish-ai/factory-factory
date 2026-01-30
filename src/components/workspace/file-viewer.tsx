@@ -87,9 +87,9 @@ export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
 
       {/* Warnings */}
       {data.truncated && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/20">
-          <AlertTriangle className="h-4 w-4 text-yellow-500" />
-          <span className="text-sm text-yellow-500">
+        <div className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b border-warning/20">
+          <AlertTriangle className="h-4 w-4 text-warning" />
+          <span className="text-sm text-warning">
             File truncated to 1MB. Actual size: {formatFileSize(data.size)}
           </span>
         </div>

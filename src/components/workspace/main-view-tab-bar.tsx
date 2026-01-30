@@ -140,7 +140,7 @@ function SessionTabItem({ label, isActive, isRunning, onSelect, onClose }: Sessi
     <BaseTabItem
       icon={
         <MessageSquare
-          className={cn('h-3.5 w-3.5 shrink-0', isRunning && 'animate-pulse text-yellow-500')}
+          className={cn('h-3.5 w-3.5 shrink-0', isRunning && 'animate-pulse text-brand')}
         />
       }
       label={label}

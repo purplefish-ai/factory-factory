@@ -38,7 +38,7 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
       <Card
         className={cn(
           'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
-          workspace.isWorking && 'border-green-500/50 bg-green-500/5'
+          workspace.isWorking && 'border-brand/50 bg-brand/5'
         )}
       >
         <CardHeader className="pb-2">
@@ -47,8 +47,8 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
               {workspace.name}
             </CardTitle>
             {workspace.isWorking && (
-              <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 shrink-0">
-                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="flex items-center gap-1 text-xs text-brand shrink-0">
+                <span className="h-2 w-2 rounded-full bg-brand animate-pulse" />
                 Working
               </span>
             )}

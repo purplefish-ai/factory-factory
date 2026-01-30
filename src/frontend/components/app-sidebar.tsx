@@ -231,8 +231,8 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <Link to="/projects">
           <Logo
-            iconClassName="size-6"
-            textClassName="text-sm"
+            showIcon={false}
+            textClassName="text-lg"
             className="hover:opacity-80 transition-opacity"
           />
         </Link>
@@ -504,7 +504,7 @@ export function AppSidebar() {
                               {isWorking && (
                                 <>
                                   <span>·</span>
-                                  <Loader2 className="h-3 w-3 animate-spin text-green-500 shrink-0" />
+                                  <Loader2 className="h-3 w-3 animate-spin text-brand shrink-0" />
                                 </>
                               )}
                             </div>

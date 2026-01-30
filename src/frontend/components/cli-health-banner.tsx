@@ -66,25 +66,25 @@ export function CLIHealthBanner() {
   }
 
   return (
-    <div className="border-b border-yellow-500/20 bg-yellow-500/10 px-4 py-3">
+    <div className="border-b border-warning/20 bg-warning/10 px-4 py-3">
       <div className="mx-auto max-w-7xl">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-600 dark:text-yellow-500" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
             <div className="space-y-2">
-              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+              <p className="text-sm font-medium text-warning-foreground dark:text-warning">
                 Some features require additional setup
               </p>
               <ul className="space-y-1.5">
                 {issues.map((issue) => (
-                  <li key={issue.title} className="text-sm text-yellow-700 dark:text-yellow-300">
+                  <li key={issue.title} className="text-sm text-foreground/80">
                     <span className="font-medium">{issue.title}:</span> {issue.description}
                     {issue.link && (
                       <a
                         href={issue.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="ml-1.5 inline-flex items-center gap-1 text-yellow-800 underline hover:text-yellow-900 dark:text-yellow-200 dark:hover:text-yellow-100"
+                        className="ml-1.5 inline-flex items-center gap-1 text-warning underline hover:text-warning/80"
                       >
                         Install
                         <ExternalLink className="h-3 w-3" />
@@ -101,7 +101,7 @@ export function CLIHealthBanner() {
               size="sm"
               onClick={() => refetch()}
               disabled={isRefetching}
-              className="h-8 text-yellow-700 hover:bg-yellow-500/20 hover:text-yellow-800 dark:text-yellow-300 dark:hover:text-yellow-200"
+              className="h-8 text-warning hover:bg-warning/20"
             >
               <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
               Recheck
@@ -110,7 +110,7 @@ export function CLIHealthBanner() {
               variant="ghost"
               size="icon"
               onClick={() => setDismissed(true)}
-              className="h-8 w-8 text-yellow-700 hover:bg-yellow-500/20 hover:text-yellow-800 dark:text-yellow-300 dark:hover:text-yellow-200"
+              className="h-8 w-8 text-warning hover:bg-warning/20"
             >
               <X className="h-4 w-4" />
               <span className="sr-only">Dismiss</span>
