@@ -22,6 +22,8 @@ interface WorkflowSelectorProps {
   recommendedWorkflow: string;
   onSelect: (workflowId: string) => void;
   disabled?: boolean;
+  /** Warning message to show if workspace is not ready for sessions */
+  warningMessage?: string;
 }
 
 // =============================================================================
@@ -52,6 +54,7 @@ export function WorkflowSelector({
   recommendedWorkflow,
   onSelect,
   disabled = false,
+  warningMessage,
 }: WorkflowSelectorProps) {
   const [selectedWorkflow, setSelectedWorkflow] = useState(recommendedWorkflow);
 
@@ -109,10 +112,18 @@ export function WorkflowSelector({
           })}
         </div>
 
+        {warningMessage && (
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md text-sm">
+            {warningMessage}
+          </div>
+        )}
+
         <div className="flex justify-center pt-2">
           <Button
             size="lg"
-            onClick={() => onSelect(selectedWorkflow)}
+            onClick={() => {
+              onSelect(selectedWorkflow);
+            }}
             disabled={disabled || !selectedWorkflow}
             className="gap-2"
           >

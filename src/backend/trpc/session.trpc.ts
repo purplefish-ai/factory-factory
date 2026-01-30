@@ -93,7 +93,8 @@ export const sessionRouter = router({
         });
       }
 
-      return claudeSessionAccessor.create(input);
+      const session = await claudeSessionAccessor.create(input);
+      return session;
     }),
 
   // Update a claude session (metadata only - use start/stop for status changes)

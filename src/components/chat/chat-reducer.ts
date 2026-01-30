@@ -375,7 +375,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         optimisticUserMessages.length > 0
           ? [...historyMessages, ...optimisticUserMessages]
           : historyMessages;
-
       return {
         ...state,
         messages,
