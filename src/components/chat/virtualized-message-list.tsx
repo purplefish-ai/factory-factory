@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import type { GroupedMessageItem } from '@/lib/claude-types';
+import { LatestThinking } from './latest-thinking';
 
 // =============================================================================
 // Types
@@ -23,6 +24,8 @@ interface VirtualizedMessageListProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   /** Whether user is near bottom of scroll - used to gate auto-scroll */
   isNearBottom?: boolean;
+  /** Latest accumulated thinking content from extended thinking mode */
+  latestThinking?: string | null;
 }
 
 // =============================================================================
@@ -71,6 +74,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onScroll,
   messagesEndRef,
   isNearBottom = true,
+  latestThinking,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
   const isAutoScrollingRef = useRef(false);
@@ -176,6 +180,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
           );
         })}
       </div>
+
+      {/* Latest thinking from extended thinking mode */}
+      {latestThinking && running && (
+        <LatestThinking thinking={latestThinking} running={running} className="mb-4" />
+      )}
 
       {/* Loading indicators after messages */}
       {running && <LoadingIndicator className="py-4" />}

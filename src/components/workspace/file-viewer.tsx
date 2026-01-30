@@ -1,10 +1,12 @@
 'use client';
 
-import { AlertCircle, AlertTriangle, FileCode, Loader2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Eye, FileCode, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-
+import { Button } from '@/components/ui/button';
+import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
 
@@ -43,6 +45,11 @@ export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
   });
 
   const syntaxTheme = resolvedTheme === 'dark' ? oneDark : oneLight;
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Check if file is markdown
+  const isMarkdown =
+    filePath.endsWith('.md') || filePath.endsWith('.markdown') || data?.language === 'markdown';
 
   if (isLoading) {
     return (
@@ -80,6 +87,17 @@ export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
           <span className="text-sm font-mono text-foreground truncate">{filePath}</span>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
+          {isMarkdown && !data.isBinary && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              className="h-7 gap-1.5"
+            >
+              {showPreview ? <FileCode className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {showPreview ? 'Code' : 'Preview'}
+            </Button>
+          )}
           <span>{formatFileSize(data.size)}</span>
           <span className="uppercase">{data.language}</span>
         </div>
@@ -107,6 +125,10 @@ export function FileViewer({ workspaceId, filePath }: FileViewerProps) {
         {data.isBinary ? (
           <div className="flex items-center justify-center h-full p-8">
             <p className="text-muted-foreground">{data.content}</p>
+          </div>
+        ) : isMarkdown && showPreview ? (
+          <div className="p-4">
+            <MarkdownRenderer content={data.content} />
           </div>
         ) : (
           <SyntaxHighlighter

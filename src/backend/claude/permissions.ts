@@ -145,7 +145,8 @@ export function shouldAutoApprove(mode: PermissionMode, toolName: string): boole
     case 'bypassPermissions':
       return true;
     case 'plan':
-      return toolName !== 'ExitPlanMode';
+      // ExitPlanMode already handled by INTERACTIVE_TOOLS check above
+      return true;
     case 'acceptEdits':
       return READ_ONLY_TOOLS.has(toolName) || EDIT_TOOLS.has(toolName);
     default:

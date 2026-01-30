@@ -201,6 +201,18 @@ describe('chatReducer', () => {
       expect(newState.running).toBe(true);
       expect(newState.startingSession).toBe(false);
     });
+
+    it('should clear latestThinking to prevent stale content flash', () => {
+      const state = {
+        ...initialState,
+        startingSession: true,
+        latestThinking: 'Stale thinking from previous session',
+      };
+      const action: ChatAction = { type: 'WS_STARTED' };
+      const newState = chatReducer(state, action);
+
+      expect(newState.latestThinking).toBeNull();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -680,6 +692,7 @@ describe('chatReducer', () => {
         },
         queuedMessages: [{ id: 'q-1', text: 'queued', timestamp: '2024-01-01T00:00:00.000Z' }],
         toolUseIdToIndex: new Map([['tool-1', 0]]),
+        latestThinking: 'Some thinking from previous session',
       };
 
       const action: ChatAction = { type: 'SESSION_SWITCH_START' };
@@ -694,6 +707,7 @@ describe('chatReducer', () => {
       expect(newState.running).toBe(false);
       expect(newState.queuedMessages).toEqual([]);
       expect(newState.toolUseIdToIndex.size).toBe(0);
+      expect(newState.latestThinking).toBeNull();
     });
   });
 
@@ -993,6 +1007,67 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.chatSettings).toEqual(newSettings);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // THINKING_DELTA Action (Extended Thinking Mode)
+  // -------------------------------------------------------------------------
+
+  describe('THINKING_DELTA action', () => {
+    it('should accumulate thinking content from null', () => {
+      const state: ChatState = { ...initialState, latestThinking: null };
+      const action: ChatAction = {
+        type: 'THINKING_DELTA',
+        payload: { thinking: 'First thought' },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.latestThinking).toBe('First thought');
+    });
+
+    it('should accumulate thinking content from existing', () => {
+      const state: ChatState = { ...initialState, latestThinking: 'First thought' };
+      const action: ChatAction = {
+        type: 'THINKING_DELTA',
+        payload: { thinking: ' and second thought' },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.latestThinking).toBe('First thought and second thought');
+    });
+
+    it('should handle empty delta', () => {
+      const state: ChatState = { ...initialState, latestThinking: 'Existing' };
+      const action: ChatAction = {
+        type: 'THINKING_DELTA',
+        payload: { thinking: '' },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.latestThinking).toBe('Existing');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // THINKING_CLEAR Action
+  // -------------------------------------------------------------------------
+
+  describe('THINKING_CLEAR action', () => {
+    it('should clear thinking content', () => {
+      const state: ChatState = { ...initialState, latestThinking: 'Some thinking' };
+      const action: ChatAction = { type: 'THINKING_CLEAR' };
+      const newState = chatReducer(state, action);
+
+      expect(newState.latestThinking).toBeNull();
+    });
+
+    it('should handle clearing already null thinking', () => {
+      const state: ChatState = { ...initialState, latestThinking: null };
+      const action: ChatAction = { type: 'THINKING_CLEAR' };
+      const newState = chatReducer(state, action);
+
+      expect(newState.latestThinking).toBeNull();
     });
   });
 

@@ -1,8 +1,10 @@
 'use client';
 
-import { AlertCircle, FileCode, Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { AlertCircle, Eye, FileCode, Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
@@ -83,6 +85,54 @@ function parseDiff(diff: string): DiffLine[] {
 // Sub-Components
 // =============================================================================
 
+interface MarkdownPreviewProps {
+  workspaceId: string;
+  filePath: string;
+}
+
+function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
+  const {
+    data: fileData,
+    isLoading: isLoadingFile,
+    error: fileError,
+  } = trpc.workspace.readFile.useQuery({
+    workspaceId,
+    path: filePath,
+  });
+
+  if (isLoadingFile) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (fileError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-lg font-medium text-destructive">Failed to load file</p>
+        <p className="text-sm text-muted-foreground mt-2">{fileError.message}</p>
+      </div>
+    );
+  }
+
+  if (fileData?.isBinary) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <p className="text-muted-foreground">Binary file cannot be previewed</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <MarkdownRenderer content={fileData?.content ?? ''} />
+    </div>
+  );
+}
+
 interface DiffLineProps {
   line: DiffLine;
 }
@@ -143,6 +193,11 @@ export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
     filePath,
   });
 
+  // Check if file is markdown
+  const isMarkdown = filePath.endsWith('.md') || filePath.endsWith('.markdown');
+
+  const [showPreview, setShowPreview] = useState(false);
+
   const parsedDiff = useMemo(() => {
     if (!data?.diff) {
       return [];
@@ -181,22 +236,41 @@ export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/30">
-        <FileCode className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-mono text-foreground">{filePath}</span>
+      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b bg-muted/30">
+        <div className="flex items-center gap-2 min-w-0">
+          <FileCode className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-sm font-mono text-foreground truncate">{filePath}</span>
+        </div>
+        {isMarkdown && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowPreview(!showPreview)}
+            className="h-7 gap-1.5 flex-shrink-0"
+          >
+            {showPreview ? <FileCode className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showPreview ? 'Diff' : 'Preview'}
+          </Button>
+        )}
       </div>
 
-      {/* Diff content */}
-      <ScrollArea className="flex-1">
-        <div className="min-w-fit">
-          {parsedDiff.map((line, index) => (
-            <DiffLineComponent
-              key={`${line.type}-${line.lineNumber?.old ?? ''}-${line.lineNumber?.new ?? ''}-${index}`}
-              line={line}
-            />
-          ))}
-        </div>
-      </ScrollArea>
+      {/* Content */}
+      {isMarkdown && showPreview ? (
+        <ScrollArea className="flex-1">
+          <MarkdownPreview workspaceId={workspaceId} filePath={filePath} />
+        </ScrollArea>
+      ) : (
+        <ScrollArea className="flex-1">
+          <div className="min-w-fit">
+            {parsedDiff.map((line, index) => (
+              <DiffLineComponent
+                key={`${line.type}-${line.lineNumber?.old ?? ''}-${line.lineNumber?.new ?? ''}-${index}`}
+                line={line}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      )}
     </div>
   );
 }

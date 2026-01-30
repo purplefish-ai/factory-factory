@@ -302,6 +302,8 @@ export class ClaudeClient extends EventEmitter {
    * Sends an interrupt signal and waits for graceful exit.
    */
   async stop(): Promise<void> {
+    this.pendingInteractiveRequests.clear();
+    this.interactiveHandler.cancelAll('Client stopping');
     if (this.process) {
       await this.process.interrupt();
     }
@@ -311,6 +313,8 @@ export class ClaudeClient extends EventEmitter {
    * Forcefully kill the Claude process.
    */
   kill(): void {
+    this.pendingInteractiveRequests.clear();
+    this.interactiveHandler.cancelAll('Client killed');
     if (this.process) {
       this.process.kill();
     }

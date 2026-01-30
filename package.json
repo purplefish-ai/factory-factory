@@ -86,6 +86,7 @@
     "geist": "^1.5.1",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.563.0",
+    "mermaid": "^11.12.2",
     "node-pty": "^1.1.0",
     "open": "^11.0.0",
     "p-limit": "^7.2.0",
