@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
@@ -109,19 +108,16 @@ export function KanbanBoard() {
   }
 
   return (
-    <ScrollArea className="w-full h-full whitespace-nowrap">
-      <div className="flex gap-4 pb-4 h-full">
-        {KANBAN_COLUMNS.map((column) => (
-          <KanbanColumn
-            key={column.id}
-            column={column}
-            workspaces={workspacesByColumn[column.id]}
-            projectSlug={projectSlug}
-            isHidden={hiddenColumns.includes(column.id)}
-          />
-        ))}
-      </div>
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+    <div className="flex gap-4 pb-4 h-full overflow-x-auto">
+      {KANBAN_COLUMNS.map((column) => (
+        <KanbanColumn
+          key={column.id}
+          column={column}
+          workspaces={workspacesByColumn[column.id]}
+          projectSlug={projectSlug}
+          isHidden={hiddenColumns.includes(column.id)}
+        />
+      ))}
+    </div>
   );
 }

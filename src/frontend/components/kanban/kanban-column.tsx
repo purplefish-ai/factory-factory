@@ -2,7 +2,6 @@
 
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
 interface ColumnConfig {
@@ -38,7 +37,7 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
   return (
     <div className="flex flex-col h-full w-[280px] shrink-0 overflow-hidden">
       {/* Column Header */}
-      <div className="flex items-center justify-between px-2 py-3 border-b bg-muted/30 rounded-t-lg">
+      <div className="flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
           <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
@@ -48,12 +47,7 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
       </div>
 
       {/* Column Content */}
-      <div
-        className={cn(
-          'flex-1 overflow-y-auto p-2 space-y-2 min-h-0 rounded-b-lg border border-t-0',
-          isEmpty && 'border-dashed'
-        )}
-      >
+      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0 rounded-b-lg bg-muted/30">
         {isEmpty ? (
           <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
             {column.description}
