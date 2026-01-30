@@ -1,8 +1,16 @@
 <p align="center">
-  <img src="public/logo-full.svg" alt="Factory Factory" width="300" height="200">
+  <img src="public/logo-full-dark.svg" alt="Factory Factory" width="400">
 </p>
 
-Workspace-based coding environment that lets you run multiple Claude Code sessions in parallel, each with their own isolated git worktree.
+<p align="center">
+  <strong>Workspace-based coding environment for running multiple Claude Code sessions in parallel.</strong>
+</p>
+
+<p align="center">
+  Each workspace gets its own isolated git worktree, enabling true parallel development.
+</p>
+
+---
 
 ## Installation
 
@@ -116,6 +124,18 @@ Project (repository configuration)
 - **Real-time chat:** WebSocket-based streaming from Claude Code CLI
 - **Terminal access:** Full PTY terminals per workspace
 - **Session persistence:** Resume previous Claude sessions
+
+## Brand
+
+| Color | Hex | Usage |
+|-------|-----|-------|
+| Factory Yellow | `#FFE500` | Primary accent |
+| White | `#FAFAFA` | Light backgrounds |
+| Black | `#0A0A0A` | Dark backgrounds |
+
+**Typography:**
+- **Inter Black** - Headlines and logotype
+- **IBM Plex Mono SemiBold** - Code and app icon
 
 ## Troubleshooting
 

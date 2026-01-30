@@ -251,7 +251,7 @@ export function DiffVsMainPanel({ workspaceId }: DiffVsMainPanelProps) {
   if (noMergeBase) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-4">
-        <AlertCircle className="h-8 w-8 text-yellow-500 mb-2" />
+        <AlertCircle className="h-8 w-8 text-warning mb-2" />
         <p className="text-sm font-medium text-muted-foreground">No common history with main</p>
         <p className="text-xs text-muted-foreground/70 mt-1">
           This branch doesn't share history with the main branch
