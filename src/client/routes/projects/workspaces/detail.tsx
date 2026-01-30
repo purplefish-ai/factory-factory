@@ -315,7 +315,8 @@ function WorkspaceChatContent() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref object
   useEffect(() => {
     if (
-      !hasFocusedOnEntryRef.current &&
+      !(hasFocusedOnEntryRef.current || workspaceLoading) &&
+      workspace &&
       selectedDbSessionId &&
       activeTabId === 'chat' &&
       !loadingSession
@@ -324,7 +325,7 @@ function WorkspaceChatContent() {
       // Use setTimeout to ensure the input is mounted and ready
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [selectedDbSessionId, activeTabId, loadingSession]);
+  }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace]);
 
   // Show loading while fetching workspace (but not sessions - they can load in background)
   if (workspaceLoading) {
