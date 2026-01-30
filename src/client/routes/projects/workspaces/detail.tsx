@@ -312,6 +312,7 @@ function WorkspaceChatContent() {
 
   // Auto-focus chat input when entering workspace with active chat tab
   const hasFocusedOnEntryRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref object
   useEffect(() => {
     if (
       !hasFocusedOnEntryRef.current &&
@@ -323,7 +324,7 @@ function WorkspaceChatContent() {
       // Use setTimeout to ensure the input is mounted and ready
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [selectedDbSessionId, activeTabId, loadingSession, inputRef]);
+  }, [selectedDbSessionId, activeTabId, loadingSession]);
 
   // Show loading while fetching workspace (but not sessions - they can load in background)
   if (workspaceLoading) {
