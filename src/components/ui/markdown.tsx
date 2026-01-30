@@ -1,14 +1,59 @@
 'use client';
 
 import { ExternalLink } from 'lucide-react';
-import { type ComponentPropsWithoutRef, memo, useMemo } from 'react';
+import mermaid from 'mermaid';
+import { type ComponentPropsWithoutRef, memo, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 
+// Initialize mermaid with strict security
+if (typeof window !== 'undefined') {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'default',
+    securityLevel: 'strict',
+  });
+}
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+}
+
+// Component to render Mermaid diagrams
+function MermaidDiagram({ chart }: { chart: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (ref.current && chart) {
+      const renderDiagram = async () => {
+        try {
+          setError(null);
+          const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+          const { svg } = await mermaid.render(id, chart);
+          if (ref.current) {
+            ref.current.innerHTML = svg;
+          }
+        } catch {
+          // Safely handle error without innerHTML injection
+          setError('Error rendering diagram');
+        }
+      };
+      renderDiagram();
+    }
+  }, [chart]);
+
+  if (error) {
+    return (
+      <div className="my-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+        <pre className="text-destructive text-xs">{error}</pre>
+      </div>
+    );
+  }
+
+  return <div ref={ref} className="my-4" />;
 }
 
 export const MarkdownRenderer = memo(function MarkdownRenderer({
@@ -22,7 +67,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       code: ({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) => {
         // Check if this is a code block (has language class) or inline code
         const hasLanguage = className?.startsWith('language-');
+        const language = className?.replace('language-', '');
+
         if (hasLanguage) {
+          // Check if it's a Mermaid diagram
+          if (language === 'mermaid') {
+            return <MermaidDiagram chart={String(children).trim()} />;
+          }
           return (
             <code className={className} {...props}>
               {children}
@@ -37,11 +88,19 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         );
       },
       // Override pre for code blocks
-      pre: ({ children, ...props }: ComponentPropsWithoutRef<'pre'>) => (
-        <pre className="bg-muted p-3 rounded-md overflow-x-auto" {...props}>
-          {children}
-        </pre>
-      ),
+      pre: ({ children, ...props }: ComponentPropsWithoutRef<'pre'>) => {
+        // Check if the child is a Mermaid diagram
+        // biome-ignore lint/suspicious/noExplicitAny: Need to check child props dynamically
+        const child = children as any;
+        if (child?.props?.className?.includes('language-mermaid')) {
+          return <>{children}</>;
+        }
+        return (
+          <pre className="bg-muted p-3 rounded-md overflow-x-auto" {...props}>
+            {children}
+          </pre>
+        );
+      },
       // Override link rendering
       a: ({ href, children }: ComponentPropsWithoutRef<'a'>) => (
         <a
