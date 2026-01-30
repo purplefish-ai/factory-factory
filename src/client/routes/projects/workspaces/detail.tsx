@@ -446,6 +446,7 @@ function useSessionManagement({
 
   const { data: availableIdesData } = trpc.workspace.getAvailableIdes.useQuery();
   const availableIdes = availableIdesData?.ides ?? [];
+  const preferredIde = availableIdesData?.preferredIde ?? 'cursor';
 
   const handleSelectSession = useCallback(
     (dbSessionId: string) => {
@@ -549,6 +550,7 @@ function useSessionManagement({
     archiveWorkspace,
     openInIde,
     availableIdes,
+    preferredIde,
     handleSelectSession,
     handleCloseSession,
     handleWorkflowSelect,
@@ -713,6 +715,7 @@ function WorkspaceChatContent() {
     archiveWorkspace,
     openInIde,
     availableIdes,
+    preferredIde,
     handleSelectSession,
     handleCloseSession,
     handleWorkflowSelect,
@@ -833,7 +836,7 @@ function WorkspaceChatContent() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => openInIde.mutate({ id: workspaceId, ide: availableIdes[0].id })}
+                  onClick={() => openInIde.mutate({ id: workspaceId })}
                   disabled={openInIde.isPending || !workspace.worktreePath}
                 >
                   {openInIde.isPending ? (
@@ -843,7 +846,9 @@ function WorkspaceChatContent() {
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Open in {availableIdes[0].name}</TooltipContent>
+              <TooltipContent>
+                Open in {availableIdes.find((ide) => ide.id === preferredIde)?.name ?? 'IDE'}
+              </TooltipContent>
             </Tooltip>
           )}
           <Tooltip>

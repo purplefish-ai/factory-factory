@@ -176,3 +176,17 @@ model TerminalSession {
   @@index([workspaceId])
   @@index([status])
 }
+
+model UserSettings {
+  id                String   @id @default(cuid())
+  userId            String   @default("default") @unique  // Single user for now, expandable later
+
+  // IDE Settings
+  preferredIde      String   @default("cursor")  // "cursor" | "vscode" | "custom"
+  customIdeCommand  String?  // For custom IDE, supports placeholders like {workspace}
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+}

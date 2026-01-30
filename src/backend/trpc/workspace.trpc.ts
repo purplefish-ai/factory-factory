@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { GitClientFactory } from '../clients/git.client';
 import { execCommand, gitCommand } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
+import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { githubCLIService } from '../services/github-cli.service';
 
@@ -328,9 +329,42 @@ async function checkIdeAvailable(ide: string): Promise<boolean> {
 }
 
 /**
- * Open a path in the specified IDE
+ * Execute a custom IDE command with path substitution
  */
-async function openPathInIde(ide: string, targetPath: string): Promise<boolean> {
+async function openCustomIde(customCommand: string, targetPath: string): Promise<boolean> {
+  // Validate command doesn't contain shell metacharacters for security
+  if (/[;&|`$()[\]{}]/.test(customCommand)) {
+    throw new Error('Custom command contains invalid characters');
+  }
+
+  // Properly escape the workspace path
+  const escapedPath = targetPath.replace(/"/g, '\\"');
+  const quotedPath = targetPath.includes(' ') ? `"${escapedPath}"` : targetPath;
+
+  // Replace placeholders in custom command
+  const command = customCommand.replace(/\{workspace\}/g, quotedPath);
+
+  // Parse command and arguments - split on whitespace but preserve quoted strings
+  const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  const cmd = parts[0]?.replace(/"/g, '');
+  const args = parts.slice(1).map((arg) => arg.replace(/"/g, ''));
+
+  if (!cmd) {
+    return false;
+  }
+
+  try {
+    await execCommand(cmd, args);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Open a built-in IDE using its CLI or macOS app
+ */
+async function openBuiltInIde(ide: string, targetPath: string): Promise<boolean> {
   const config = IDE_CONFIGS[ide];
   if (!config) {
     return false;
@@ -352,6 +386,27 @@ async function openPathInIde(ide: string, targetPath: string): Promise<boolean> 
     }
     return false;
   }
+}
+
+/**
+ * Open a path in the specified IDE
+ * @param ide - IDE identifier ('cursor', 'vscode', or 'custom')
+ * @param targetPath - Path to open
+ * @param customCommand - Custom command for 'custom' IDE (supports {workspace} placeholder)
+ */
+async function openPathInIde(
+  ide: string,
+  targetPath: string,
+  customCommand?: string | null
+): Promise<boolean> {
+  if (ide === 'custom') {
+    if (!customCommand) {
+      return false;
+    }
+    return await openCustomIde(customCommand, targetPath);
+  }
+
+  return await openBuiltInIde(ide, targetPath);
 }
 
 // =============================================================================
@@ -664,6 +719,7 @@ export const workspaceRouter = router({
   // Get list of available IDEs
   getAvailableIdes: publicProcedure.query(async () => {
     const ides: Array<{ id: string; name: string }> = [];
+    const settings = await userSettingsAccessor.get();
 
     // Check Cursor
     const cursorAvailable = await checkIdeAvailable('cursor');
@@ -677,12 +733,17 @@ export const workspaceRouter = router({
       ides.push({ id: 'vscode', name: 'VS Code' });
     }
 
-    return { ides };
+    // Add custom IDE if configured
+    if (settings.preferredIde === 'custom' && settings.customIdeCommand) {
+      ides.push({ id: 'custom', name: 'Custom IDE' });
+    }
+
+    return { ides, preferredIde: settings.preferredIde };
   }),
 
   // Open workspace in specified IDE
   openInIde: publicProcedure
-    .input(z.object({ id: z.string(), ide: z.string() }))
+    .input(z.object({ id: z.string(), ide: z.string().optional() }))
     .mutation(async ({ input }) => {
       const workspace = await workspaceAccessor.findById(input.id);
       if (!workspace) {
@@ -699,11 +760,33 @@ export const workspaceRouter = router({
         });
       }
 
-      const opened = await openPathInIde(input.ide, workspace.worktreePath);
+      // Get user settings to determine which IDE to use
+      const settings = await userSettingsAccessor.get();
+      const ideToUse = input.ide ?? settings.preferredIde;
+
+      // Validate custom IDE configuration
+      if (ideToUse === 'custom' && !settings.customIdeCommand) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'Custom IDE selected but no command configured. Please configure in Admin settings.',
+        });
+      }
+
+      const opened = await openPathInIde(
+        ideToUse,
+        workspace.worktreePath,
+        settings.customIdeCommand
+      );
       if (!opened) {
+        const errorMessage =
+          ideToUse === 'custom'
+            ? `Failed to open custom IDE. Check your command configuration in Admin settings.`
+            : `Failed to open ${ideToUse}. Make sure it is installed and configured correctly.`;
+
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: `Failed to open ${input.ide}. Make sure it is installed.`,
+          message: errorMessage,
         });
       }
 
