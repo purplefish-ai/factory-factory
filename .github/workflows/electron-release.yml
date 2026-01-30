@@ -1,0 +1,180 @@
+name: Build Electron App
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub release"
+        type: boolean
+        default: false
+      release_tag:
+        description: "Release tag (e.g., v0.1.0). Required if creating release."
+        type: string
+        default: ""
+      platforms:
+        description: "Platforms to build for"
+        type: choice
+        options:
+          - mac
+          - mac-windows-linux
+        default: mac
+
+  release:
+    types: [created]
+
+jobs:
+  build-mac:
+    name: Build macOS
+    runs-on: macos-latest
+    env:
+      DATABASE_URL: "file:./test.db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build Electron app
+        run: pnpm build:electron
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-mac
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.platforms == 'mac-windows-linux')
+    runs-on: windows-latest
+    env:
+      DATABASE_URL: "file:./test.db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build Electron app
+        run: pnpm build:electron
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-windows
+          path: release/*.exe
+          if-no-files-found: error
+
+  build-linux:
+    name: Build Linux
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.platforms == 'mac-windows-linux')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "file:./test.db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build Electron app
+        run: pnpm build:electron
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+
+  create-release:
+    name: Create Release
+    needs: [build-mac, build-windows, build-linux]
+    if: |
+      always() &&
+      needs.build-mac.result == 'success' &&
+      (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
+      (needs.build-linux.result == 'success' || needs.build-linux.result == 'skipped') &&
+      (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Upload to Release (from release event)
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+
+      - name: Create new Release (from workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: ${{ github.event.inputs.release_tag }}
+          draft: true
+          files: artifacts/**/*
+
+  # Simpler job for mac-only builds without release
+  upload-mac-only:
+    name: Summary (Mac Only)
+    needs: [build-mac]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.platforms == 'mac' &&
+      github.event.inputs.create_release != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build complete
+        run: echo "macOS build complete. Download artifacts from the workflow run."
