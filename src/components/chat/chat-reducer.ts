@@ -15,6 +15,7 @@ import type {
   ChatSettings,
   ClaudeMessage,
   HistoryMessage,
+  PendingInteractiveRequest,
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
@@ -76,14 +77,7 @@ export type ChatAction =
         gitBranch: string | null;
         running: boolean;
         settings?: ChatSettings;
-        pendingInteractiveRequest?: {
-          requestId: string;
-          toolName: string;
-          toolUseId: string;
-          input: Record<string, unknown>;
-          planContent: string | null;
-          timestamp: string;
-        } | null;
+        pendingInteractiveRequest?: PendingInteractiveRequest | null;
       };
     }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }

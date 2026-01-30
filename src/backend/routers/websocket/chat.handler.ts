@@ -686,6 +686,8 @@ function handleQuestionResponseMessage(
 
   const client = sessionService.getClient(sessionId);
   if (!client) {
+    // Clear stale pending request since client is gone
+    pendingInteractiveRequests.delete(sessionId);
     ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
     return;
   }
@@ -698,6 +700,8 @@ function handleQuestionResponseMessage(
       logger.info('[Chat WS] Answered question', { sessionId, requestId });
     }
   } catch (error) {
+    // Clear stale pending request on failure to prevent infinite retry loop
+    pendingInteractiveRequests.delete(sessionId);
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to answer question', {
       sessionId,
@@ -727,6 +731,8 @@ function handlePermissionResponseMessage(
 
   const client = sessionService.getClient(sessionId);
   if (!client) {
+    // Clear stale pending request since client is gone
+    pendingInteractiveRequests.delete(sessionId);
     ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
     return;
   }
@@ -743,6 +749,8 @@ function handlePermissionResponseMessage(
       logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
     }
   } catch (error) {
+    // Clear stale pending request on failure to prevent infinite retry loop
+    pendingInteractiveRequests.delete(sessionId);
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to respond to permission request', {
       sessionId,

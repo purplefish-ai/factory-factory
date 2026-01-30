@@ -291,6 +291,24 @@ export interface UserQuestionRequest {
 }
 
 // =============================================================================
+// Pending Interactive Request Types
+// =============================================================================
+
+/**
+ * Pending interactive request stored for session restore.
+ * When a user navigates away and returns, we need to restore the modal.
+ */
+export interface PendingInteractiveRequest {
+  requestId: string;
+  toolName: string;
+  toolUseId: string;
+  input: Record<string, unknown>;
+  /** Plan content for ExitPlanMode requests */
+  planContent: string | null;
+  timestamp: string;
+}
+
+// =============================================================================
 // Permission Request Types (Phase 9)
 // =============================================================================
 
@@ -424,14 +442,7 @@ export interface WebSocketMessage {
   // Message queued acknowledgment
   text?: string;
   // Pending interactive request for session restore
-  pendingInteractiveRequest?: {
-    requestId: string;
-    toolName: string;
-    toolUseId: string;
-    input: Record<string, unknown>;
-    planContent: string | null;
-    timestamp: string;
-  } | null;
+  pendingInteractiveRequest?: PendingInteractiveRequest | null;
 }
 
 // =============================================================================
