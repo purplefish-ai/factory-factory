@@ -1,0 +1,53 @@
+{
+  "triggerOnUpdates": false,
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax"],
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "*.lock",
+    "dist/**",
+    "build/**",
+    "node_modules/**",
+    "prisma/generated/**",
+    "*.min.js",
+    "*.min.css"
+  ],
+  "summarySection": {
+    "included": true,
+    "collapsible": false
+  },
+  "issuesTableSection": {
+    "included": true,
+    "collapsible": false
+  },
+  "sequenceDiagramSection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "files": [
+    {
+      "scope": ["**/*.ts", "**/*.tsx"],
+      "path": "CLAUDE.md",
+      "description": "Project architecture, code patterns, and development conventions."
+    }
+  ],
+  "rules": [
+    {
+      "scope": ["src/backend/**/*.ts"],
+      "instruction": "Backend code uses Express with tRPC. Database queries should go through resource_accessors. No .js extensions needed for imports."
+    },
+    {
+      "scope": ["src/client/**/*.tsx"],
+      "instruction": "Frontend uses React Router v7 with Vite. Routes are configured in src/client/router.tsx. Use path aliases @/* for src/ imports."
+    },
+    {
+      "scope": ["electron/**/*.ts"],
+      "instruction": "Electron main process code. Spawns backend as child process. Uses OS-specific paths for database storage."
+    },
+    {
+      "scope": ["prisma/**/*.prisma"],
+      "instruction": "SQLite database schema. Run pnpm db:generate after schema changes."
+    }
+  ]
+}
