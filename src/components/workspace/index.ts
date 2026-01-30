@@ -10,6 +10,7 @@ export * from './right-panel';
 export * from './terminal-instance';
 export * from './terminal-panel';
 export * from './terminal-tab-bar';
+export * from './todo-panel-container';
 export * from './use-terminal-websocket';
 export * from './workflow-selector';
 export * from './workspace-content-view';

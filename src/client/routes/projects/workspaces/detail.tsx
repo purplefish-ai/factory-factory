@@ -537,7 +537,7 @@ function WorkspaceChatContent() {
             <ResizableHandle />
             <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
               <div className="h-full border-l">
-                <RightPanel workspaceId={workspaceId} />
+                <RightPanel workspaceId={workspaceId} messages={messages} />
               </div>
             </ResizablePanel>
           </>

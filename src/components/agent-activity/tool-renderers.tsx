@@ -8,9 +8,12 @@ import {
   FileCode,
   Loader2,
   Terminal,
+  Zap,
 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
+import type { Todo } from '@/components/chat/use-todo-tracker';
+import { TodoItem } from '@/components/shared';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type {
@@ -25,6 +28,7 @@ import {
   isToolResultMessage,
   isToolUseMessage,
 } from '@/lib/claude-types';
+import { calculateTodoProgress } from '@/lib/todo-utils';
 import { cn } from '@/lib/utils';
 import type { FileReference, ToolCallInfo } from './types';
 
@@ -398,7 +402,109 @@ interface ToolInputRendererProps {
   input: Record<string, unknown>;
 }
 
+/**
+ * Renders a Task tool (subagent launch) with improved formatting
+ */
+const TaskToolRenderer = memo(function TaskToolRenderer({
+  input,
+}: {
+  input: Record<string, unknown>;
+}) {
+  const subagentType = input.subagent_type as string | undefined;
+  const description = input.description as string | undefined;
+  const prompt = input.prompt as string | undefined;
+
+  return (
+    <div className="space-y-2 w-0 min-w-full">
+      <div className="flex items-center gap-1.5">
+        <Zap className="h-4 w-4 shrink-0 text-primary" />
+        <span className="font-semibold text-sm">
+          {subagentType ? `${subagentType} Agent` : 'Subagent'}
+        </span>
+      </div>
+      {description && <div className="text-xs text-muted-foreground italic">{description}</div>}
+      {prompt && (
+        <div className="rounded bg-muted/50 px-2 py-1.5">
+          <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Task</div>
+          <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto">
+            {prompt}
+          </pre>
+        </div>
+      )}
+      {/* Show other parameters if present */}
+      {Object.keys(input).filter((k) => !['subagent_type', 'description', 'prompt'].includes(k))
+        .length > 0 && (
+        <details className="text-xs">
+          <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
+            Additional parameters
+          </summary>
+          <pre className="mt-1 text-xs overflow-x-auto rounded bg-muted px-1.5 py-1">
+            {JSON.stringify(
+              Object.fromEntries(
+                Object.entries(input).filter(
+                  ([k]) => !['subagent_type', 'description', 'prompt'].includes(k)
+                )
+              ),
+              null,
+              2
+            )}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+});
+
+/**
+ * Renders TodoWrite tool with visual task list and progress bar
+ */
+const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
+  input,
+}: {
+  input: Record<string, unknown>;
+}) {
+  const todos = input.todos as Todo[] | undefined;
+
+  if (!todos || todos.length === 0) {
+    return <div className="text-xs text-muted-foreground">No todos</div>;
+  }
+
+  const { completedCount, totalCount, progressPercent } = calculateTodoProgress(todos);
+
+  return (
+    <div className="space-y-2 w-0 min-w-full">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">
+          Task List ({completedCount}/{totalCount})
+        </span>
+        <span className="text-xs text-muted-foreground">{progressPercent}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full bg-primary transition-all duration-300"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+      <div className="space-y-1.5">
+        {todos.map((todo, index) => (
+          <TodoItem key={`${todo.content}-${index}`} todo={todo} />
+        ))}
+      </div>
+    </div>
+  );
+});
+
 const ToolInputRenderer = memo(function ToolInputRenderer({ name, input }: ToolInputRendererProps) {
+  // Special rendering for Task tool (subagent launches)
+  if (name === 'Task') {
+    return <TaskToolRenderer input={input} />;
+  }
+
+  // Special rendering for TodoWrite tool
+  if (name === 'TodoWrite') {
+    return <TodoWriteToolRenderer input={input} />;
+  }
+
   // Special rendering for common tools
   switch (name) {
     case 'Read':
