@@ -62,11 +62,10 @@ function ModelSelector({
   onChange,
   disabled,
 }: {
-  selectedModel: string | null;
-  onChange: (model: string | null) => void;
+  selectedModel: string;
+  onChange: (model: string) => void;
   disabled?: boolean;
 }) {
-  // Find the display name for the current model (null = default/first model)
   const currentModel = AVAILABLE_MODELS.find((m) => m.value === selectedModel);
   const displayName = currentModel?.displayName ?? AVAILABLE_MODELS[0].displayName;
 
@@ -84,13 +83,7 @@ function ModelSelector({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
-        <DropdownMenuRadioGroup
-          value={selectedModel ?? AVAILABLE_MODELS[0].value}
-          onValueChange={(value) => {
-            // If selecting the default (first) model, set to null
-            onChange(value === AVAILABLE_MODELS[0].value ? null : value);
-          }}
-        >
+        <DropdownMenuRadioGroup value={selectedModel} onValueChange={onChange}>
           {AVAILABLE_MODELS.map((model) => (
             <DropdownMenuRadioItem key={model.value} value={model.value}>
               {model.displayName}
@@ -324,7 +317,7 @@ export const ChatInput = memo(function ChatInput({
 
   // Settings change handlers
   const handleModelChange = useCallback(
-    (model: string | null) => {
+    (model: string) => {
       onSettingsChange?.({ selectedModel: model });
     },
     [onSettingsChange]
@@ -376,7 +369,7 @@ export const ChatInput = memo(function ChatInput({
           {/* Left side: Model selector and toggles */}
           <div className="flex items-center gap-1">
             <ModelSelector
-              selectedModel={settings?.selectedModel ?? null}
+              selectedModel={settings?.selectedModel ?? 'opus'}
               onChange={handleModelChange}
               disabled={running}
             />

@@ -12,6 +12,7 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type ClaudeClient, SessionManager } from '../../claude/index';
 import type { ClaudeContentItem } from '../../claude/types';
+import { WS_READY_STATE } from '../../constants';
 import { interceptorRegistry } from '../../interceptors';
 import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
 import { configService, createLogger, sessionService } from '../../services/index';
@@ -60,7 +61,7 @@ function forwardToConnections(dbSessionId: string | null, data: unknown): void {
 
   let connectionCount = 0;
   for (const info of chatConnections.values()) {
-    if (info.dbSessionId === dbSessionId && info.ws.readyState === 1) {
+    if (info.dbSessionId === dbSessionId && info.ws.readyState === WS_READY_STATE.OPEN) {
       connectionCount++;
     }
   }
@@ -86,7 +87,7 @@ function forwardToConnections(dbSessionId: string | null, data: unknown): void {
 
   const json = JSON.stringify(data);
   for (const info of chatConnections.values()) {
-    if (info.dbSessionId === dbSessionId && info.ws.readyState === 1) {
+    if (info.dbSessionId === dbSessionId && info.ws.readyState === WS_READY_STATE.OPEN) {
       info.ws.send(json);
     }
   }
@@ -322,26 +323,233 @@ async function getOrCreateChatClient(
   return client;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles multiple message types with settings
+// ============================================================================
+// Message Type Definition
+// ============================================================================
+
+interface ChatMessage {
+  type: string;
+  text?: string;
+  content?: string | ClaudeContentItem[];
+  workingDir?: string;
+  systemPrompt?: string;
+  model?: string;
+  thinkingEnabled?: boolean;
+  planModeEnabled?: boolean;
+  selectedModel?: string | null;
+}
+
+// ============================================================================
+// Message Handlers
+// ============================================================================
+
+const VALID_MODELS = ['sonnet', 'opus'];
+
+function getValidModel(message: ChatMessage): string | undefined {
+  const requestedModel = message.selectedModel || message.model;
+  return requestedModel && VALID_MODELS.includes(requestedModel) ? requestedModel : undefined;
+}
+
+async function handleStartMessage(
+  ws: WebSocket,
+  sessionId: string,
+  message: ChatMessage
+): Promise<void> {
+  ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
+
+  const sessionOpts = await sessionService.getSessionOptions(sessionId);
+  if (!sessionOpts) {
+    logger.error('[Chat WS] Failed to get session options', { sessionId });
+    ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+    return;
+  }
+
+  await getOrCreateChatClient(sessionId, {
+    thinkingEnabled: message.thinkingEnabled,
+    planModeEnabled: message.planModeEnabled,
+    model: getValidModel(message),
+  });
+  ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
+}
+
+async function handleUserInputMessage(
+  ws: WebSocket,
+  sessionId: string,
+  message: ChatMessage
+): Promise<void> {
+  const messageContent = message.content || message.text;
+  if (!messageContent) {
+    return;
+  }
+
+  // For text-only messages, ensure it's not empty
+  if (typeof messageContent === 'string' && !messageContent.trim()) {
+    return;
+  }
+
+  const existingClient = sessionService.getClient(sessionId);
+  if (existingClient?.isRunning()) {
+    existingClient.sendMessage(messageContent);
+    return;
+  }
+
+  // Queue message and start client
+  let queue = pendingMessages.get(sessionId);
+  if (!queue) {
+    queue = [];
+    pendingMessages.set(sessionId, queue);
+  }
+
+  if (queue.length >= MAX_PENDING_MESSAGES) {
+    logger.warn('[Chat WS] Pending message queue full, rejecting message', {
+      sessionId,
+      queueLength: queue.length,
+      maxSize: MAX_PENDING_MESSAGES,
+    });
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Session is still starting. Please wait a moment and try again.',
+      })
+    );
+    return;
+  }
+
+  queue.push({ content: messageContent, sentAt: new Date() });
+  logger.info('[Chat WS] Queued message for pending session', {
+    sessionId,
+    queueLength: queue.length,
+  });
+
+  const displayText = typeof messageContent === 'string' ? messageContent : '[Image message]';
+  ws.send(JSON.stringify({ type: 'message_queued', text: displayText }));
+  ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
+
+  const newClient = await getOrCreateChatClient(sessionId, {
+    thinkingEnabled: message.thinkingEnabled,
+    planModeEnabled: message.planModeEnabled,
+    model: getValidModel(message),
+  });
+  ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
+
+  // Drain pending messages
+  const pending = pendingMessages.get(sessionId);
+  pendingMessages.delete(sessionId);
+  if (pending && pending.length > 0) {
+    logger.info('[Chat WS] Sending queued messages after client ready', {
+      sessionId,
+      count: pending.length,
+    });
+    for (const msg of pending) {
+      newClient.sendMessage(msg.content);
+    }
+  }
+}
+
+async function handleStopMessage(ws: WebSocket, sessionId: string): Promise<void> {
+  await sessionService.stopClaudeSession(sessionId);
+  pendingMessages.delete(sessionId);
+  ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
+}
+
+async function handleGetHistoryMessage(
+  ws: WebSocket,
+  sessionId: string,
+  workingDir: string
+): Promise<void> {
+  const client = sessionService.getClient(sessionId);
+  const claudeSessionId = client?.getClaudeSessionId();
+  if (claudeSessionId) {
+    const history = await SessionManager.getHistory(claudeSessionId, workingDir);
+    ws.send(JSON.stringify({ type: 'history', dbSessionId: sessionId, messages: history }));
+  } else {
+    ws.send(JSON.stringify({ type: 'history', dbSessionId: sessionId, messages: [] }));
+  }
+}
+
+async function handleListSessionsMessage(ws: WebSocket, workingDir: string): Promise<void> {
+  const sessions = await SessionManager.listSessions(workingDir);
+  ws.send(JSON.stringify({ type: 'sessions', sessions }));
+}
+
+async function handleLoadSessionMessage(
+  ws: WebSocket,
+  sessionId: string,
+  workingDir: string
+): Promise<void> {
+  const dbSession = await claudeSessionAccessor.findById(sessionId);
+  if (!dbSession) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+    return;
+  }
+
+  const targetSessionId = dbSession.claudeSessionId ?? null;
+  const existingClient = sessionService.getClient(sessionId);
+  const running = existingClient?.isWorking() ?? false;
+
+  if (targetSessionId) {
+    const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
+      SessionManager.getHistory(targetSessionId, workingDir),
+      SessionManager.getSessionModel(targetSessionId, workingDir),
+      SessionManager.getSessionThinkingEnabled(targetSessionId, workingDir),
+      SessionManager.getSessionGitBranch(targetSessionId, workingDir),
+    ]);
+
+    const selectedModel = model?.includes('opus')
+      ? 'opus'
+      : model?.includes('haiku')
+        ? 'haiku'
+        : null;
+
+    ws.send(
+      JSON.stringify({
+        type: 'session_loaded',
+        messages: history,
+        gitBranch,
+        running,
+        settings: {
+          selectedModel,
+          thinkingEnabled,
+          planModeEnabled: false,
+        },
+      })
+    );
+  } else {
+    ws.send(
+      JSON.stringify({
+        type: 'session_loaded',
+        messages: [],
+        gitBranch: null,
+        running,
+        settings: {
+          selectedModel: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      })
+    );
+  }
+}
+
+// ============================================================================
+// Main Message Handler
+// ============================================================================
+
 async function handleChatMessage(
   ws: WebSocket,
   _connectionId: string,
   dbSessionId: string | null,
   workingDir: string,
-  message: {
-    type: string;
-    text?: string;
-    content?: string | ClaudeContentItem[];
-    workingDir?: string;
-    systemPrompt?: string;
-    model?: string;
-    thinkingEnabled?: boolean;
-    planModeEnabled?: boolean;
-    selectedModel?: string | null;
-  }
+  message: ChatMessage
 ): Promise<void> {
-  // Most operations require a session - reject if missing
-  if (!dbSessionId && message.type !== 'list_sessions') {
+  // list_sessions doesn't require a session
+  if (message.type === 'list_sessions') {
+    await handleListSessionsMessage(ws, workingDir);
+    return;
+  }
+
+  // All other operations require a session
+  if (!dbSessionId) {
     ws.send(
       JSON.stringify({
         type: 'error',
@@ -351,196 +559,22 @@ async function handleChatMessage(
     return;
   }
 
-  // At this point, dbSessionId is guaranteed to be non-null for all operations
-  // except 'list_sessions' (which doesn't use it)
-  const sessionId = dbSessionId as string;
-
   switch (message.type) {
-    case 'start': {
-      ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
-
-      // Determine model to use
-      const sessionOpts = await sessionService.getSessionOptions(sessionId);
-      if (!sessionOpts) {
-        logger.error('[Chat WS] Failed to get session options', { sessionId });
-        ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
-        break;
-      }
-
-      const validModels = ['sonnet', 'opus'];
-      const requestedModel = message.selectedModel || message.model;
-      const model =
-        requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
-
-      await getOrCreateChatClient(sessionId, {
-        thinkingEnabled: message.thinkingEnabled,
-        planModeEnabled: message.planModeEnabled,
-        model,
-      });
-      ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
+    case 'start':
+      await handleStartMessage(ws, dbSessionId, message);
       break;
-    }
-
-    case 'user_input': {
-      // Support both text and content array formats
-      const messageContent = message.content || message.text;
-      if (!messageContent) {
-        break;
-      }
-
-      // For text-only messages, ensure it's not empty
-      if (typeof messageContent === 'string' && !messageContent.trim()) {
-        break;
-      }
-
-      // Check if client exists and is running via sessionService
-      const existingClient = sessionService.getClient(sessionId);
-      if (existingClient?.isRunning()) {
-        existingClient.sendMessage(messageContent);
-      } else {
-        let queue = pendingMessages.get(sessionId);
-        if (!queue) {
-          queue = [];
-          pendingMessages.set(sessionId, queue);
-        }
-
-        if (queue.length >= MAX_PENDING_MESSAGES) {
-          logger.warn('[Chat WS] Pending message queue full, rejecting message', {
-            sessionId,
-            queueLength: queue.length,
-            maxSize: MAX_PENDING_MESSAGES,
-          });
-          ws.send(
-            JSON.stringify({
-              type: 'error',
-              message: 'Session is still starting. Please wait a moment and try again.',
-            })
-          );
-          break;
-        }
-
-        queue.push({ content: messageContent, sentAt: new Date() });
-
-        logger.info('[Chat WS] Queued message for pending session', {
-          sessionId,
-          queueLength: queue.length,
-        });
-
-        const displayText = typeof messageContent === 'string' ? messageContent : '[Image message]';
-        ws.send(JSON.stringify({ type: 'message_queued', text: displayText }));
-        ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
-
-        // Determine model to use
-        const validModels = ['sonnet', 'opus'];
-        const requestedModel = message.selectedModel || message.model;
-        const model =
-          requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
-
-        const newClient = await getOrCreateChatClient(sessionId, {
-          thinkingEnabled: message.thinkingEnabled,
-          planModeEnabled: message.planModeEnabled,
-          model,
-        });
-        ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
-
-        // Drain pending messages
-        const pending = pendingMessages.get(sessionId);
-        pendingMessages.delete(sessionId);
-        if (pending && pending.length > 0) {
-          logger.info('[Chat WS] Sending queued messages after client ready', {
-            sessionId,
-            count: pending.length,
-          });
-          for (const msg of pending) {
-            newClient.sendMessage(msg.content);
-          }
-        }
-      }
+    case 'user_input':
+      await handleUserInputMessage(ws, dbSessionId, message);
       break;
-    }
-
-    case 'stop': {
-      // Delegate to sessionService for unified session lifecycle management
-      await sessionService.stopClaudeSession(sessionId);
-      pendingMessages.delete(sessionId);
-      ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
+    case 'stop':
+      await handleStopMessage(ws, dbSessionId);
       break;
-    }
-
-    case 'get_history': {
-      const client = sessionService.getClient(sessionId);
-      const claudeSessionId = client?.getClaudeSessionId();
-      if (claudeSessionId) {
-        const history = await SessionManager.getHistory(claudeSessionId, workingDir);
-        ws.send(JSON.stringify({ type: 'history', dbSessionId: sessionId, messages: history }));
-      } else {
-        ws.send(JSON.stringify({ type: 'history', dbSessionId: sessionId, messages: [] }));
-      }
+    case 'get_history':
+      await handleGetHistoryMessage(ws, dbSessionId, workingDir);
       break;
-    }
-
-    case 'list_sessions': {
-      const sessions = await SessionManager.listSessions(workingDir);
-      ws.send(JSON.stringify({ type: 'sessions', sessions }));
+    case 'load_session':
+      await handleLoadSessionMessage(ws, dbSessionId, workingDir);
       break;
-    }
-
-    case 'load_session': {
-      const dbSession = await claudeSessionAccessor.findById(sessionId);
-      if (!dbSession) {
-        ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
-        break;
-      }
-
-      const targetSessionId = dbSession.claudeSessionId ?? null;
-
-      const existingClient = sessionService.getClient(sessionId);
-      const running = existingClient?.isWorking() ?? false;
-
-      if (targetSessionId) {
-        const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
-          SessionManager.getHistory(targetSessionId, workingDir),
-          SessionManager.getSessionModel(targetSessionId, workingDir),
-          SessionManager.getSessionThinkingEnabled(targetSessionId, workingDir),
-          SessionManager.getSessionGitBranch(targetSessionId, workingDir),
-        ]);
-
-        const selectedModel = model?.includes('opus')
-          ? 'opus'
-          : model?.includes('haiku')
-            ? 'haiku'
-            : null;
-
-        ws.send(
-          JSON.stringify({
-            type: 'session_loaded',
-            messages: history,
-            gitBranch,
-            running,
-            settings: {
-              selectedModel,
-              thinkingEnabled,
-              planModeEnabled: false,
-            },
-          })
-        );
-      } else {
-        ws.send(
-          JSON.stringify({
-            type: 'session_loaded',
-            messages: [],
-            gitBranch: null,
-            running,
-            settings: {
-              selectedModel: null,
-              thinkingEnabled: false,
-              planModeEnabled: false,
-            },
-          })
-        );
-      }
-      break;
-    }
   }
 }
 

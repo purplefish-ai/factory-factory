@@ -8,9 +8,9 @@ import {
   isPathSafe,
   MAX_FILE_SIZE,
 } from '../../lib/file-helpers';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
 import { createLogger } from '../../services/logger.service';
 import { publicProcedure, router } from '../trpc';
+import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
 
 const logger = createLogger('workspace-files-trpc');
 
@@ -24,30 +24,28 @@ export const workspaceFilesRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.workspaceId);
-      if (!workspace) {
-        throw new Error(`Workspace not found: ${input.workspaceId}`);
-      }
+      const result = await getWorkspaceWithWorktree(input.workspaceId);
 
       logger.info('listFiles called', {
         workspaceId: input.workspaceId,
-        worktreePath: workspace.worktreePath,
+        worktreePath: result?.worktreePath,
         requestedPath: input.path,
       });
 
-      if (!workspace.worktreePath) {
+      if (!result) {
         logger.warn('No worktreePath for workspace', { workspaceId: input.workspaceId });
         return { entries: [], hasWorktree: false };
       }
 
+      const { worktreePath } = result;
       const relativePath = input.path ?? '';
 
       // Validate path is safe
-      if (relativePath && !(await isPathSafe(workspace.worktreePath, relativePath))) {
+      if (relativePath && !(await isPathSafe(worktreePath, relativePath))) {
         throw new Error('Invalid file path');
       }
 
-      const fullPath = path.join(workspace.worktreePath, relativePath);
+      const fullPath = path.join(worktreePath, relativePath);
 
       try {
         const dirents = await readdir(fullPath, { withFileTypes: true });
@@ -107,21 +105,14 @@ export const workspaceFilesRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.workspaceId);
-      if (!workspace) {
-        throw new Error(`Workspace not found: ${input.workspaceId}`);
-      }
-
-      if (!workspace.worktreePath) {
-        throw new Error('Workspace has no worktree path');
-      }
+      const { worktreePath } = await getWorkspaceWithWorktreeOrThrow(input.workspaceId);
 
       // Validate path is safe
-      if (!(await isPathSafe(workspace.worktreePath, input.path))) {
+      if (!(await isPathSafe(worktreePath, input.path))) {
         throw new Error('Invalid file path');
       }
 
-      const fullPath = path.join(workspace.worktreePath, input.path);
+      const fullPath = path.join(worktreePath, input.path);
 
       // Get file stats to check size
       const stats = await stat(fullPath);
