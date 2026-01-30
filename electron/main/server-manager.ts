@@ -44,7 +44,8 @@ export class ServerManager {
     // Child processes can't read from asar, so all paths must use unpacked resources
     const unpackedPath = this.getUnpackedResourcesPath();
     const frontendDist = join(unpackedPath, 'dist', 'client');
-    const backendDist = join(unpackedPath, 'dist', 'src', 'backend', 'index.js');
+    // Use bundled backend (single file instead of compiled TS output)
+    const backendDist = join(unpackedPath, 'dist-bundle', 'backend.mjs');
 
     // Run database migrations
     await this.runMigrations(databasePath, unpackedPath);
@@ -184,7 +185,8 @@ export class ServerManager {
         ? join(process.resourcesPath, 'prisma', 'migrations')
         : join(unpackedPath, 'prisma', 'migrations');
 
-      const migrateScript = join(unpackedPath, 'dist', 'src', 'backend', 'migrate.js');
+      // Use bundled migration script
+      const migrateScript = join(unpackedPath, 'dist-bundle', 'migrate.mjs');
 
       const migrate = spawn('node', [migrateScript], {
         cwd: unpackedPath,
