@@ -20,9 +20,10 @@ export interface BranchRenameContext {
  * Build system instructions for renaming an auto-generated branch.
  */
 export function buildBranchRenameInstruction(context: BranchRenameContext): string {
+  // Build prefix instruction based on whether we have a GitHub username
   const prefixPart = context.branchPrefix
-    ? `Use the prefix "${context.branchPrefix}/" before the name.`
-    : '';
+    ? `Use the format "${context.branchPrefix}/descriptive-branch-name" where the descriptive part uses kebab-case.`
+    : 'Use kebab-case for the branch name (e.g., add-auth-feature).';
 
   const contextLines = [`- Workspace: ${context.workspaceName}`];
   if (context.workspaceDescription) {
