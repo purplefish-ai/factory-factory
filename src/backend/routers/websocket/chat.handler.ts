@@ -646,6 +646,16 @@ async function handleChatMessage(
       if (allow) {
         // Get the pending request to access its input
         const pendingRequest = handler.getPendingRequest(requestId);
+
+        logger.info('[Chat WS] Pending request lookup result', {
+          sessionId,
+          requestId,
+          found: !!pendingRequest,
+          hasRequest: pendingRequest?.request ? true : false,
+          requestSubtype: pendingRequest?.request?.subtype,
+          requestType: pendingRequest?.type,
+        });
+
         if (pendingRequest && pendingRequest.request.subtype === 'can_use_tool') {
           const toolName = pendingRequest.request.tool_name;
           const toolInput = pendingRequest.request.input;
