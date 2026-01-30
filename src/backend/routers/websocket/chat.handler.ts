@@ -650,8 +650,8 @@ async function handleChatMessage(
           const toolName = pendingRequest.request.tool_name;
           const toolInput = pendingRequest.request.input;
 
-          // Special handling for ExitPlanMode: return input and switch to bypass mode
-          if (toolName === 'ExitPlanMode') {
+          // Special handling for ExitPlanMode: return input only if non-empty
+          if (toolName === 'ExitPlanMode' && Object.keys(toolInput).length > 0) {
             handler.approve(requestId, toolInput);
           } else {
             handler.approve(requestId);
