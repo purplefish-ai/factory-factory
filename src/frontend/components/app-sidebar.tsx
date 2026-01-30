@@ -231,28 +231,26 @@ export function AppSidebar() {
           />
         </Link>
 
-        {projects && (
-          <div className="mt-3">
-            <Select value={selectedProjectSlug} onValueChange={handleProjectChange}>
-              <SelectTrigger id="project-select" className="w-full">
-                <SelectValue placeholder="Select a project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.slug}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value="__create__" className="text-muted-foreground">
-                  + Create project
+        <div className="mt-3">
+          <Select value={selectedProjectSlug} onValueChange={handleProjectChange}>
+            <SelectTrigger id="project-select" className="w-full">
+              <SelectValue placeholder="Select a project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects?.map((project) => (
+                <SelectItem key={project.id} value={project.slug}>
+                  {project.name}
                 </SelectItem>
-                <SelectItem value="__manage__" className="text-muted-foreground">
-                  Manage projects...
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+              ))}
+              <SelectItem value="__create__" className="text-muted-foreground">
+                + Create project
+              </SelectItem>
+              <SelectItem value="__manage__" className="text-muted-foreground">
+                Manage projects...
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </SidebarHeader>
 
       <SidebarContent className="flex flex-col">
