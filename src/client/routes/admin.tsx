@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, Terminal } from 'lucide-react';
+import { Bot, CheckCircle2, FileJson, Terminal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -368,6 +368,68 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
   );
 }
 
+function FactoryConfigSection() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileJson className="w-5 h-5" />
+          Factory Configuration
+        </CardTitle>
+        <CardDescription>
+          Configuration for workspace setup and run scripts (factory-factory.json)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-md border bg-muted/50 p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />
+            <div className="space-y-1 flex-1">
+              <p className="font-medium text-sm">Configuration Found</p>
+              <p className="text-xs text-muted-foreground">
+                factory-factory.json is configured in this repository
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 pl-8">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
+              <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                pnpm install
+              </code>
+              <p className="text-xs text-muted-foreground">
+                Runs automatically when a new workspace is created
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Run Script</p>
+              <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                pnpm dev
+              </code>
+              <p className="text-xs text-muted-foreground">
+                Available via the play button in each workspace
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p>
+            <strong>Location:</strong> factory-factory.json in repository root
+          </p>
+          <p>
+            <strong>Port Allocation:</strong> Use{' '}
+            <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for automatic
+            port allocation
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function IdeSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
@@ -544,6 +606,9 @@ export default function AdminDashboardPage() {
           <span className="text-muted-foreground">{getEnabledFeatures(stats?.features)}</span>
         </CardContent>
       </Card>
+
+      {/* Factory Configuration */}
+      <FactoryConfigSection />
 
       {/* IDE Settings */}
       <IdeSettingsSection />

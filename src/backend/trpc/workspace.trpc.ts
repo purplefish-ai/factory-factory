@@ -14,6 +14,7 @@ import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
 import { workspaceIdeRouter } from './workspace/ide.trpc';
 import { initializeWorkspaceWorktree, workspaceInitRouter } from './workspace/init.trpc';
+import { workspaceRunScriptRouter } from './workspace/run-script.trpc';
 
 // Re-export types for backward compatibility
 export type { GitFileStatus, GitStatusFile } from '../lib/git-helpers';
@@ -262,4 +263,5 @@ export const workspaceRouter = router({
   ...workspaceGitRouter._def.procedures,
   ...workspaceIdeRouter._def.procedures,
   ...workspaceInitRouter._def.procedures,
+  ...workspaceRunScriptRouter._def.procedures,
 });

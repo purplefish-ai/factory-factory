@@ -52,6 +52,11 @@ const baseWorkspace: WorkspaceWithKanban = {
   hasHadSessions: true,
   cachedKanbanColumn: 'IN_PROGRESS',
   stateComputedAt: new Date(),
+  runScriptCommand: null,
+  runScriptPid: null,
+  runScriptPort: null,
+  runScriptStartedAt: null,
+  runScriptStatus: 'IDLE',
 };
 
 export const NoPR: Story = {
