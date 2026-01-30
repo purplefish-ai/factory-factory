@@ -287,14 +287,33 @@ function setupChatClientEvents(
       data: request,
     });
 
-    // Forward to frontend as a special message type
-    forwardToConnections(dbSessionId, {
-      type: 'interactive_request',
-      requestId: request.requestId,
-      toolName: request.toolName,
-      toolUseId: request.toolUseId,
-      input: request.input,
-    });
+    // Route different interactive tools to appropriate frontend message types
+    if (request.toolName === 'AskUserQuestion') {
+      // AskUserQuestion: send as 'user_question' with questions extracted from input
+      const input = request.input as { questions?: unknown[] };
+      forwardToConnections(dbSessionId, {
+        type: 'user_question',
+        requestId: request.requestId,
+        questions: input.questions ?? [],
+      });
+    } else if (request.toolName === 'ExitPlanMode') {
+      // ExitPlanMode: send as 'permission_request' for plan approval
+      forwardToConnections(dbSessionId, {
+        type: 'permission_request',
+        requestId: request.requestId,
+        toolName: request.toolName,
+        input: request.input,
+      });
+    } else {
+      // Fallback: send as generic interactive_request
+      forwardToConnections(dbSessionId, {
+        type: 'interactive_request',
+        requestId: request.requestId,
+        toolName: request.toolName,
+        toolUseId: request.toolUseId,
+        input: request.input,
+      });
+    }
   });
 
   client.on('exit', (result) => {
