@@ -161,7 +161,7 @@ const ChatContent = memo(function ChatContent({
     // biome-ignore lint/a11y/noStaticElementInteractions: focus input on click is UX enhancement
     <div className="relative flex h-full flex-col overflow-hidden" onClick={handleChatClick}>
       {/* Virtualized Message List */}
-      <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto scroll-smooth">
+      <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
         <VirtualizedMessageList
           messages={groupedMessages}
           running={running}
