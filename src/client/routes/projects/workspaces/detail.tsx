@@ -353,17 +353,21 @@ function WorkspaceChatContent() {
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
   // Check if workspace is still initializing
-  const isInitializing = initStatus && initStatus.initStatus !== 'READY';
+  // A workspace is considered fully ready when:
+  // 1. initStatus is READY, AND
+  // 2. worktreePath is populated (required for sessions)
+  const isInitializing =
+    (initStatus && initStatus.initStatus !== 'READY') || !workspace?.worktreePath;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Initialization Overlay - shown while workspace is being set up */}
-      {isInitializing && initStatus && (
+      {isInitializing && (
         <InitializationOverlay
           workspaceId={workspaceId}
-          initStatus={initStatus.initStatus}
-          initErrorMessage={initStatus.initErrorMessage}
-          hasStartupScript={initStatus.hasStartupScript}
+          initStatus={initStatus?.initStatus ?? 'INITIALIZING'}
+          initErrorMessage={initStatus?.initErrorMessage ?? null}
+          hasStartupScript={initStatus?.hasStartupScript ?? false}
         />
       )}
 
@@ -498,6 +502,7 @@ function WorkspaceChatContent() {
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}
               maxSessions={maxSessions}
+              hasWorktreePath={!!workspace?.worktreePath}
             >
               <ChatContent
                 messages={messages}

@@ -17,8 +17,8 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
     { id: workspaceId },
     {
-      refetchInterval: 30_000, // Poll every 30s instead of 10s
-      staleTime: 15_000, // Data considered fresh for 15s
+      refetchInterval: 30_000, // Poll every 30s for background updates (worktreePath set on creation)
+      staleTime: 10_000, // Data considered fresh for 10s
       refetchOnWindowFocus: false, // Don't refetch on tab focus
     }
   );
@@ -28,7 +28,7 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
       { workspaceId },
       {
         refetchInterval: 10_000, // Poll every 10s instead of 5s
-        staleTime: 5000, // Data considered fresh for 5s
+        staleTime: 0, // Always refetch on invalidate - critical for session creation UX
         refetchOnWindowFocus: false,
       }
     );
@@ -128,7 +128,9 @@ export function useSessionManagement({
   }, [selectedDbSessionId, sendMessage]);
 
   const createSession = trpc.session.createClaudeSession.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data) => {
+      // Invalidate marks the data as stale, then immediately refetch
+      // With staleTime: 0, invalidate will trigger an immediate refetch
       utils.session.listClaudeSessions.invalidate({ workspaceId });
     },
   });
@@ -207,8 +209,9 @@ export function useSessionManagement({
 
   const handleWorkflowSelect = useCallback(
     (workflowId: string) => {
+      const chatName = getNextChatName();
       createSession.mutate(
-        { workspaceId, workflow: workflowId, model: 'sonnet', name: getNextChatName() },
+        { workspaceId, workflow: workflowId, model: 'sonnet', name: chatName },
         {
           onSuccess: (session) => {
             // Setting the new session ID triggers WebSocket reconnection automatically

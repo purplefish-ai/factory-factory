@@ -122,6 +122,7 @@ export const workspaceInitRouter = router({
         message: `Workspace not found: ${input.id}`,
       });
     }
+
     return {
       initStatus: workspace.initStatus,
       initErrorMessage: workspace.initErrorMessage,

@@ -34,6 +34,8 @@ interface WorkspaceContentViewProps {
   children: ReactNode;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
+  /** Whether the workspace has a worktree path (required for sessions) */
+  hasWorktreePath: boolean;
 }
 
 // =============================================================================
@@ -63,6 +65,7 @@ export function WorkspaceContentView({
   onCloseSession,
   children,
   maxSessions,
+  hasWorktreePath,
 }: WorkspaceContentViewProps) {
   // Show workflow selector when no sessions exist
   if (claudeSessions && claudeSessions.length === 0) {
@@ -73,7 +76,12 @@ export function WorkspaceContentView({
             workflows={workflows}
             recommendedWorkflow={recommendedWorkflow}
             onSelect={onWorkflowSelect}
-            disabled={isCreatingSession}
+            disabled={isCreatingSession || !hasWorktreePath}
+            warningMessage={
+              !hasWorktreePath
+                ? 'Workspace is initializing... Please wait for the worktree to be created.'
+                : undefined
+            }
           />
         ) : (
           <div className="flex items-center justify-center h-full">
