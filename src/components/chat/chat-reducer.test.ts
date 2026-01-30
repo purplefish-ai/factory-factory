@@ -487,51 +487,8 @@ describe('chatReducer', () => {
       expect(newState.messages[0].source).toBe('user');
     });
 
-    it('should deduplicate messages that exist in both state and history', () => {
-      // Scenario: WebSocket reconnect where the same message exists in both
-      // state and history - should not create duplicates
-      const timestamp = '2024-01-01T00:00:02.000Z';
-      const optimisticMessage: ChatMessage = {
-        id: 'msg-123',
-        source: 'user',
-        text: 'Help me debug this',
-        timestamp,
-      };
-
-      const historyMessages: HistoryMessage[] = [
-        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
-        { type: 'assistant', content: 'Hi there!', timestamp: '2024-01-01T00:00:01.000Z' },
-        // Same message as optimisticMessage
-        { type: 'user', content: 'Help me debug this', timestamp, uuid: 'history-123' },
-      ];
-
-      const state = {
-        ...initialState,
-        messages: [optimisticMessage],
-        loadingSession: true,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: historyMessages,
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should only have 3 messages (not 4), with no duplicates
-      expect(newState.messages).toHaveLength(3);
-      expect(newState.messages[0].source).toBe('user');
-      expect(newState.messages[0].text).toBe('Hello');
-      expect(newState.messages[1].source).toBe('claude');
-      expect(newState.messages[2].source).toBe('user');
-      expect(newState.messages[2].text).toBe('Help me debug this');
-    });
-
-    it('should handle timestamp variations when deduplicating', () => {
-      // Optimistic message has slightly different timestamp (within 5 seconds)
+    it('should not preserve messages that are older than last history message', () => {
+      // Scenario: WebSocket reconnect where message in state was already processed into history
       const optimisticMessage: ChatMessage = {
         id: 'msg-123',
         source: 'user',
@@ -540,8 +497,15 @@ describe('chatReducer', () => {
       };
 
       const historyMessages: HistoryMessage[] = [
-        // Same content but timestamp is 3 seconds earlier
-        { type: 'user', content: 'Help me debug this', timestamp: '2024-01-01T00:00:05.000Z' },
+        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
+        { type: 'assistant', content: 'Hi there!', timestamp: '2024-01-01T00:00:01.000Z' },
+        // Same message as optimisticMessage - already in history with same timestamp
+        {
+          type: 'user',
+          content: 'Help me debug this',
+          timestamp: '2024-01-01T00:00:02.000Z',
+          uuid: 'history-123',
+        },
       ];
 
       const state = {
@@ -560,9 +524,93 @@ describe('chatReducer', () => {
       };
       const newState = chatReducer(state, action);
 
-      // Should deduplicate despite small timestamp difference
-      expect(newState.messages).toHaveLength(1);
+      // Should only have 3 messages from history, optimistic message not added since it's not newer
+      expect(newState.messages).toHaveLength(3);
+      expect(newState.messages[0].source).toBe('user');
+      expect(newState.messages[0].text).toBe('Hello');
+      expect(newState.messages[1].source).toBe('claude');
+      expect(newState.messages[2].source).toBe('user');
+      expect(newState.messages[2].text).toBe('Help me debug this');
+    });
+
+    it('should preserve messages that are newer than last history message', () => {
+      // Optimistic message sent AFTER the last history message
+      const optimisticMessage: ChatMessage = {
+        id: 'msg-456',
+        source: 'user',
+        text: 'Another question',
+        timestamp: '2024-01-01T00:00:10.000Z', // 8 seconds after last history
+      };
+
+      const historyMessages: HistoryMessage[] = [
+        { type: 'user', content: 'Help me debug this', timestamp: '2024-01-01T00:00:02.000Z' },
+      ];
+
+      const state = {
+        ...initialState,
+        messages: [optimisticMessage],
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: historyMessages,
+          gitBranch: 'main',
+          running: false,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Should have history message + optimistic message
+      expect(newState.messages).toHaveLength(2);
       expect(newState.messages[0].text).toBe('Help me debug this');
+      expect(newState.messages[1].text).toBe('Another question');
+    });
+
+    it('should handle duplicate text messages sent at different times', () => {
+      // User sends "ok" twice within 5 seconds - both should be preserved if second is truly newer
+      const firstOkMessage: ChatMessage = {
+        id: 'msg-1',
+        source: 'user',
+        text: 'ok',
+        timestamp: '2024-01-01T00:00:02.000Z',
+      };
+
+      const secondOkMessage: ChatMessage = {
+        id: 'msg-2',
+        source: 'user',
+        text: 'ok',
+        timestamp: '2024-01-01T00:00:05.000Z',
+      };
+
+      const historyMessages: HistoryMessage[] = [
+        // Only the first "ok" is in history
+        { type: 'user', content: 'ok', timestamp: '2024-01-01T00:00:02.000Z' },
+      ];
+
+      const state = {
+        ...initialState,
+        messages: [firstOkMessage, secondOkMessage],
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: historyMessages,
+          gitBranch: 'main',
+          running: false,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Should have history message + second "ok" (which is newer)
+      expect(newState.messages).toHaveLength(2);
+      expect(newState.messages[0].text).toBe('ok');
+      expect(newState.messages[0].timestamp).toBe('2024-01-01T00:00:02.000Z');
+      expect(newState.messages[1].text).toBe('ok');
+      expect(newState.messages[1].timestamp).toBe('2024-01-01T00:00:05.000Z');
     });
   });
 

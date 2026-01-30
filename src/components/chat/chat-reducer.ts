@@ -351,26 +351,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_SESSION_LOADED': {
       const historyMessages = action.payload.messages.map(convertHistoryMessage);
 
-      // Preserve any optimistic user messages that were sent before session loaded
-      // These are messages with source='user' that don't have a corresponding message in history
+      // Preserve any optimistic user messages that were sent after the last history message
+      // This handles the case where the user sends a message and navigates away before
+      // the session processes it. We identify these by checking if the message timestamp
+      // is after the last message in history.
+      const lastHistoryTime =
+        historyMessages.length > 0
+          ? new Date(historyMessages[historyMessages.length - 1].timestamp).getTime()
+          : 0;
+
       const optimisticUserMessages = state.messages.filter((msg) => {
         if (msg.source !== 'user' || msg.text === undefined) {
           return false;
         }
 
-        // Check if this message already exists in history by comparing text content and timestamp
-        // We use a fuzzy timestamp match (within 5 seconds) since the optimistic message
-        // might have a slightly different timestamp than the history message
-        const existsInHistory = historyMessages.some((histMsg) => {
-          if (histMsg.source !== 'user' || histMsg.text !== msg.text) {
-            return false;
-          }
-          const msgTime = new Date(msg.timestamp).getTime();
-          const histTime = new Date(histMsg.timestamp).getTime();
-          return Math.abs(msgTime - histTime) < 5000; // Within 5 seconds
-        });
-
-        return !existsInHistory;
+        // Keep messages that are newer than the last history message
+        const msgTime = new Date(msg.timestamp).getTime();
+        return msgTime > lastHistoryTime;
       });
 
       // Combine history with any optimistic messages (optimistic messages come after history)
