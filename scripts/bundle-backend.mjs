@@ -20,8 +20,10 @@ const EXTERNAL_MODULES = [
   // Native Node.js addons
   'better-sqlite3',
   'node-pty',
-  // Prisma uses native query engine
-  '@prisma/client',
+  // Prisma generated client (uses native query engine)
+  '@prisma-gen/client',
+  // Prisma adapter for better-sqlite3
+  '@prisma/adapter-better-sqlite3',
 ];
 
 // Banner to add CJS compatibility to ESM bundle
@@ -44,6 +46,10 @@ const commonOptions = {
   sourcemap: true,
   // Mark native modules as external
   external: EXTERNAL_MODULES,
+  // Resolve TypeScript path aliases
+  alias: {
+    '@prisma-gen/client': join(projectRoot, 'prisma/generated/client'),
+  },
   // Tree-shake unused exports
   treeShaking: true,
   // Keep names for better error messages

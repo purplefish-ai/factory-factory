@@ -18,7 +18,8 @@ files:
   - node_modules/file-uri-to-path/**/*
   - node_modules/node-addon-api/**/*
   - node_modules/node-pty/**/*
-  # Prisma client and all its dependencies
+  # Prisma generated client and dependencies
+  - prisma/generated/**/*
   - node_modules/@prisma/**/*
   - node_modules/.prisma/**/*
   # pnpm store entries for Prisma (resolved symlinks)
@@ -56,6 +57,8 @@ asarUnpack:
   - node_modules/bindings/**/*
   - node_modules/file-uri-to-path/**/*
   - node_modules/node-pty/**/*
+  # Prisma generated client and runtime
+  - prisma/generated/**/*
   - node_modules/@prisma/**/*
   - node_modules/.prisma/**/*
   - node_modules/.pnpm/@prisma*/**/*
