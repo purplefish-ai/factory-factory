@@ -1,4 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
+import { ClaudeClient, type ClaudeClientOptions } from '../claude/index';
 import { ClaudeProcess, type ClaudeProcessOptions, type ResourceUsage } from '../claude/process';
 import {
   getAllProcesses,
@@ -23,6 +24,9 @@ const logger = createLogger('session');
 const stoppingInProgress = new Set<string>();
 
 class SessionService {
+  // Track ClaudeClients by dbSessionId - single source of truth for client lifecycle
+  private readonly clients = new Map<string, ClaudeClient>();
+  private readonly pendingCreation = new Map<string, Promise<ClaudeClient>>();
   /**
    * Start a Claude session
    */
@@ -123,8 +127,10 @@ class SessionService {
   }
 
   /**
-   * Stop a Claude session gracefully
+   * Stop a Claude session gracefully.
+   * Checks the clients Map first, then falls back to the process registry.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dual-path stop logic with fallback to process registry
   async stopClaudeSession(sessionId: string): Promise<void> {
     // Check if already stopping to prevent concurrent stop attempts
     if (stoppingInProgress.has(sessionId)) {
@@ -132,31 +138,41 @@ class SessionService {
       return;
     }
 
-    const process = getProcess(sessionId);
-    if (!process) {
-      // Process not in registry, just update DB
-      await claudeSessionAccessor.update(sessionId, {
-        status: SessionStatus.IDLE,
-        claudeProcessPid: null,
-      });
-      return;
+    // Check clients Map first (preferred path)
+    const client = this.clients.get(sessionId);
+    if (client) {
+      stoppingInProgress.add(sessionId);
+      try {
+        await client.stop();
+      } catch (error) {
+        logger.warn('Failed to stop client gracefully, forcing kill', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        client.kill();
+      } finally {
+        stoppingInProgress.delete(sessionId);
+        this.clients.delete(sessionId);
+      }
+    } else {
+      // Fallback to process registry (for processes started via legacy path)
+      const process = getProcess(sessionId);
+      if (process) {
+        stoppingInProgress.add(sessionId);
+        try {
+          await process.interrupt();
+        } catch (error) {
+          logger.error('Failed to interrupt process', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          stoppingInProgress.delete(sessionId);
+        }
+      }
     }
 
-    // Mark as stopping to prevent concurrent access
-    stoppingInProgress.add(sessionId);
-
-    try {
-      await process.interrupt();
-    } catch (error) {
-      logger.error('Failed to interrupt process', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      // Process auto-unregisters on exit, just clean up stopping flag
-      stoppingInProgress.delete(sessionId);
-    }
-
+    // Always update DB status
     await claudeSessionAccessor.update(sessionId, {
       status: SessionStatus.IDLE,
       claudeProcessPid: null,
@@ -187,6 +203,164 @@ class SessionService {
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
   }
+
+  // ===========================================================================
+  // Client Lifecycle (Single Source of Truth)
+  // ===========================================================================
+
+  /**
+   * Get or create a ClaudeClient for a session.
+   * This is the single source of truth for client lifecycle management.
+   *
+   * @param sessionId - The database session ID
+   * @param options - Optional client configuration overrides
+   * @returns The ClaudeClient instance
+   */
+  async getOrCreateClient(
+    sessionId: string,
+    options?: {
+      thinkingEnabled?: boolean;
+      permissionMode?: 'bypassPermissions' | 'plan';
+      model?: string;
+    }
+  ): Promise<ClaudeClient> {
+    // Return existing running client
+    const existing = this.clients.get(sessionId);
+    if (existing?.isRunning()) {
+      logger.debug('Returning existing running client', { sessionId });
+      return existing;
+    }
+
+    // Handle concurrent creation
+    const pending = this.pendingCreation.get(sessionId);
+    if (pending) {
+      logger.debug('Waiting for pending client creation', { sessionId });
+      return pending;
+    }
+
+    // Create new client
+    logger.info('Creating new ClaudeClient', { sessionId, options });
+    const createPromise = this.createClient(sessionId, options);
+    this.pendingCreation.set(sessionId, createPromise);
+
+    try {
+      return await createPromise;
+    } finally {
+      this.pendingCreation.delete(sessionId);
+    }
+  }
+
+  /**
+   * Get an existing ClaudeClient without creating one.
+   *
+   * @param sessionId - The database session ID
+   * @returns The ClaudeClient if it exists and is running, undefined otherwise
+   */
+  getClient(sessionId: string): ClaudeClient | undefined {
+    const client = this.clients.get(sessionId);
+    return client?.isRunning() ? client : undefined;
+  }
+
+  /**
+   * Internal: Create a new ClaudeClient for a session.
+   */
+  private async createClient(
+    sessionId: string,
+    options?: {
+      thinkingEnabled?: boolean;
+      permissionMode?: 'bypassPermissions' | 'plan';
+      model?: string;
+    }
+  ): Promise<ClaudeClient> {
+    const sessionOpts = await this.getSessionOptions(sessionId);
+    if (!sessionOpts) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    // Mark workspace as having sessions
+    const session = await claudeSessionAccessor.findById(sessionId);
+    if (session) {
+      await workspaceAccessor.markHasHadSessions(session.workspaceId);
+    }
+
+    // Build client options
+    const clientOptions: ClaudeClientOptions = {
+      workingDir: sessionOpts.workingDir,
+      resumeClaudeSessionId: sessionOpts.resumeClaudeSessionId,
+      systemPrompt: sessionOpts.systemPrompt,
+      model: options?.model ?? sessionOpts.model,
+      permissionMode: options?.permissionMode ?? 'bypassPermissions',
+      includePartialMessages: true,
+      thinkingEnabled: options?.thinkingEnabled,
+      sessionId, // Enable auto-registration in process registry
+    };
+
+    // Create client
+    const client = await ClaudeClient.create(clientOptions);
+    this.clients.set(sessionId, client);
+
+    // Set up DB update handlers
+    this.setupClientDbHandlers(sessionId, client);
+
+    // Update DB status
+    await claudeSessionAccessor.update(sessionId, {
+      status: SessionStatus.RUNNING,
+      claudeProcessPid: client.getPid() ?? null,
+    });
+
+    logger.info('ClaudeClient created', {
+      sessionId,
+      pid: client.getPid(),
+      model: options?.model ?? sessionOpts.model,
+    });
+
+    return client;
+  }
+
+  /**
+   * Internal: Set up handlers that update DB on client events.
+   */
+  private setupClientDbHandlers(sessionId: string, client: ClaudeClient): void {
+    client.on('session_id', async (claudeSessionId) => {
+      try {
+        await claudeSessionAccessor.update(sessionId, { claudeSessionId });
+        logger.debug('Updated session with claudeSessionId', { sessionId, claudeSessionId });
+      } catch (error) {
+        logger.warn('Failed to update session with claudeSessionId', {
+          sessionId,
+          claudeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+
+    client.on('exit', async () => {
+      this.clients.delete(sessionId);
+
+      // Skip status update if stopClaudeSession is handling this
+      if (stoppingInProgress.has(sessionId)) {
+        logger.debug('Skipping exit handler status update - stop in progress', { sessionId });
+        return;
+      }
+
+      try {
+        await claudeSessionAccessor.update(sessionId, {
+          status: SessionStatus.COMPLETED,
+          claudeProcessPid: null,
+        });
+        logger.debug('Updated session status to COMPLETED on exit', { sessionId });
+      } catch (error) {
+        logger.warn('Failed to update session status on exit', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+  }
+
+  // ===========================================================================
+  // Process Registry Access
+  // ===========================================================================
 
   /**
    * Get an active Claude process from the global registry.
@@ -316,6 +490,63 @@ class SessionService {
     }
 
     return processes;
+  }
+
+  /**
+   * Get all active clients for cleanup purposes.
+   * Returns an iterator of [sessionId, client] pairs.
+   */
+  getAllClients(): IterableIterator<[string, ClaudeClient]> {
+    return this.clients.entries();
+  }
+
+  /**
+   * Stop all active clients during shutdown.
+   * @param timeoutMs - Timeout for each client stop operation
+   */
+  async stopAllClients(timeoutMs = 5000): Promise<void> {
+    const stopPromises: Promise<void>[] = [];
+
+    for (const [sessionId, client] of this.clients) {
+      let didTimeout = false;
+      const stopPromise = Promise.race([
+        (async () => {
+          try {
+            await client.stop();
+          } catch {
+            client.kill();
+          }
+        })(),
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            didTimeout = true;
+            resolve();
+          }, timeoutMs)
+        ),
+      ]).then(() => {
+        if (didTimeout) {
+          logger.warn('Client stop timed out, force killing', { sessionId });
+        }
+        try {
+          client.kill();
+        } catch {
+          // Ignore kill errors
+        }
+      });
+
+      stopPromises.push(stopPromise);
+      logger.debug('Stopping chat client', { sessionId });
+    }
+
+    await Promise.all(stopPromises);
+
+    // Clean up listeners and clear map
+    for (const client of this.clients.values()) {
+      client.removeAllListeners();
+    }
+    this.clients.clear();
+
+    logger.info('All clients stopped and cleaned up');
   }
 }
 
