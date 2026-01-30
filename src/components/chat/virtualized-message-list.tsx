@@ -50,17 +50,13 @@ interface VirtualRowProps {
   measureElement: (node: HTMLElement | null) => void;
 }
 
-const VirtualRow = memo(
-  function VirtualRow({ item, index, measureElement }: VirtualRowProps) {
-    return (
-      <div ref={measureElement} data-index={index} className="pb-2">
-        <GroupedMessageItemRenderer item={item} />
-      </div>
-    );
-  },
-  // Custom comparison to prevent re-renders when item ID hasn't changed
-  (prev, next) => prev.item.id === next.item.id && prev.index === next.index
-);
+const VirtualRow = memo(function VirtualRow({ item, index, measureElement }: VirtualRowProps) {
+  return (
+    <div ref={measureElement} data-index={index} className="pb-2">
+      <GroupedMessageItemRenderer item={item} />
+    </div>
+  );
+});
 
 // =============================================================================
 // Main Component
