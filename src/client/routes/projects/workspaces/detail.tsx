@@ -471,7 +471,6 @@ function WorkspaceChatContent() {
               recommendedWorkflow={recommendedWorkflow}
               selectedSessionId={selectedDbSessionId}
               runningSessionId={runningSessionId}
-              running={running}
               isCreatingSession={createSession.isPending}
               isDeletingSession={deleteSession.isPending}
               onWorkflowSelect={handleWorkflowSelect}

@@ -24,7 +24,6 @@ interface WorkspaceContentViewProps {
   recommendedWorkflow: string | undefined;
   selectedSessionId: string | null;
   runningSessionId: string | undefined;
-  running: boolean;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
   onWorkflowSelect: (workflowId: string) => void;
@@ -56,7 +55,6 @@ export function WorkspaceContentView({
   recommendedWorkflow,
   selectedSessionId,
   runningSessionId,
-  running,
   isCreatingSession,
   isDeletingSession,
   onWorkflowSelect,
@@ -106,7 +104,7 @@ export function WorkspaceContentView({
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
-          disabled={running || isCreatingSession || isDeletingSession}
+          disabled={isCreatingSession || isDeletingSession}
           maxSessions={maxSessions}
         />
       </div>
