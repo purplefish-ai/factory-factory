@@ -47,7 +47,7 @@ export function KanbanColumn({ column, workspaces, projectSlug, isHidden }: Kanb
       </div>
 
       {/* Column Content */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0 rounded-b-lg bg-muted/30">
+      <div className="flex flex-col gap-2 flex-1 overflow-y-auto p-2 min-h-0 rounded-b-lg bg-muted/30">
         {isEmpty ? (
           <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
             {column.description}
