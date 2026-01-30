@@ -2,6 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { createTrpcClient, trpc } from './trpc';
 
+/** Hook to get non-archived projects list - used for sidebar visibility */
+export function useProjects() {
+  const { data: projects, isLoading } = trpc.project.list.useQuery({ isArchived: false });
+  return { projects, isLoading };
+}
+
 type ProjectContextValue = {
   projectId: string | undefined;
   taskId: string | undefined;

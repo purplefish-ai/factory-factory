@@ -1,21 +1,43 @@
-import { Outlet } from 'react-router';
+import { useEffect } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router';
 import { ResizableLayout } from '@/components/layout/resizable-layout';
 import { Toaster } from '@/components/ui/sonner';
 import { AppSidebar } from '@/frontend/components/app-sidebar';
 import { CLIHealthBanner } from '@/frontend/components/cli-health-banner';
 import { ThemeProvider } from '@/frontend/components/theme-provider';
-import { TRPCProvider } from '@/frontend/lib/providers';
+import { TRPCProvider, useProjects } from '@/frontend/lib/providers';
+
+function RootLayout() {
+  const { projects, isLoading } = useProjects();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const showSidebar = !isLoading && projects && projects.length > 0;
+
+  // Redirect to onboarding when no projects exist
+  useEffect(() => {
+    if (!isLoading && projects?.length === 0 && !pathname.startsWith('/projects/new')) {
+      navigate('/projects/new');
+    }
+  }, [isLoading, projects, pathname, navigate]);
+
+  return (
+    <div className="flex h-screen flex-col">
+      <CLIHealthBanner />
+      <ResizableLayout
+        sidebar={showSidebar ? <AppSidebar /> : null}
+        className="flex-1 overflow-hidden"
+      >
+        <Outlet />
+      </ResizableLayout>
+    </div>
+  );
+}
 
 export function Root() {
   return (
     <ThemeProvider>
       <TRPCProvider>
-        <div className="flex h-screen flex-col">
-          <CLIHealthBanner />
-          <ResizableLayout sidebar={<AppSidebar />} className="flex-1 overflow-hidden">
-            <Outlet />
-          </ResizableLayout>
-        </div>
+        <RootLayout />
         <Toaster />
       </TRPCProvider>
     </ThemeProvider>

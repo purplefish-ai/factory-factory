@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { useSidebarVisibility } from '@/components/layout/resizable-layout';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -50,13 +49,11 @@ function getProjectSlugFromPath(pathname: string): string | null {
   return match ? match[1] : null;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: sidebar has many interactive states (create, archive, working indicators)
 export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
   const navigate = useNavigate();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('');
-  const [hasCheckedProjects, setHasCheckedProjects] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
   const [archivingWorkspace, setArchivingWorkspace] = useState<{
@@ -65,9 +62,8 @@ export function AppSidebar() {
     branchName?: string | null;
   } | null>(null);
   const { setProjectContext } = useProjectContext();
-  const { setIsSidebarVisible } = useSidebarVisibility();
 
-  const { data: projects, isLoading: projectsLoading } = trpc.project.list.useQuery({
+  const { data: projects } = trpc.project.list.useQuery({
     isArchived: false,
   });
 
@@ -196,28 +192,14 @@ export function AppSidebar() {
     }
   }, [pathname]);
 
+  // Select first project if none selected
   useEffect(() => {
-    if (!projectsLoading && projects) {
-      setHasCheckedProjects(true);
-
-      if (projects.length === 0) {
-        if (!pathname.startsWith('/projects/new')) {
-          navigate('/projects/new');
-        }
-      } else if (!selectedProjectSlug) {
-        const firstSlug = projects[0].slug;
-        setSelectedProjectSlug(firstSlug);
-        localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
-      }
+    if (projects && projects.length > 0 && !selectedProjectSlug) {
+      const firstSlug = projects[0].slug;
+      setSelectedProjectSlug(firstSlug);
+      localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
     }
-  }, [projectsLoading, projects, selectedProjectSlug, pathname, navigate]);
-
-  // Hide sidebar panel when no projects exist - show onboarding flow
-  useEffect(() => {
-    if (projects) {
-      setIsSidebarVisible(projects.length > 0);
-    }
-  }, [projects, setIsSidebarVisible]);
+  }, [projects, selectedProjectSlug]);
 
   const handleProjectChange = (value: string) => {
     if (value === '__manage__') {
@@ -238,75 +220,6 @@ export function AppSidebar() {
     { href: '/admin', label: 'Admin', icon: Settings },
   ];
 
-  // Show loading skeleton while checking for projects
-  if (!hasCheckedProjects) {
-    return (
-      <Sidebar collapsible="none">
-        <SidebarHeader className="border-b border-sidebar-border p-4">
-          <Logo iconClassName="size-6" textClassName="text-sm" />
-          {/* Project selector skeleton */}
-          <div className="mt-3">
-            <Skeleton className="h-9 w-full rounded-md" />
-          </div>
-        </SidebarHeader>
-        <SidebarContent className="flex flex-col">
-          {/* Workspaces section skeleton */}
-          <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <SidebarGroupLabel>
-              <Skeleton className="h-4 w-20" />
-            </SidebarGroupLabel>
-            <SidebarGroupContent className="flex-1 min-h-0">
-              <SidebarMenu>
-                {/* Workspace item skeletons */}
-                {[1, 2, 3].map((i) => (
-                  <SidebarMenuItem key={i}>
-                    <SidebarMenuButton className="h-auto py-2 cursor-default">
-                      <div className="flex flex-col gap-1.5 w-full">
-                        <div className="flex items-center gap-1.5">
-                          <Skeleton className="h-3 w-3 shrink-0" />
-                          <Skeleton className="h-4 flex-1" />
-                        </div>
-                        <Skeleton className="h-3 w-24" />
-                      </div>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarSeparator />
-
-          {/* Navigation items skeleton */}
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {[1, 2].map((i) => (
-                  <SidebarMenuItem key={i}>
-                    <SidebarMenuButton className="cursor-default">
-                      <Skeleton className="h-4 w-4" />
-                      <Skeleton className="h-4 w-16" />
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarFooter className="border-t border-sidebar-border p-4">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-8 w-8 rounded-md" />
-          </div>
-        </SidebarFooter>
-      </Sidebar>
-    );
-  }
-
-  if (projects && projects.length === 0) {
-    return null;
-  }
-
   return (
     <Sidebar collapsible="none">
       <SidebarHeader className="border-b border-sidebar-border p-4">
@@ -318,7 +231,7 @@ export function AppSidebar() {
           />
         </Link>
 
-        {projects && projects.length > 0 && (
+        {projects && (
           <div className="mt-3">
             <Select value={selectedProjectSlug} onValueChange={handleProjectChange}>
               <SelectTrigger id="project-select" className="w-full">
