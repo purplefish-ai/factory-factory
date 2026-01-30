@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { HTTP_STATUS } from '../../constants';
 import { projectAccessor } from '../../resource_accessors/index';
 import { configService } from '../../services/config.service';
 import { createLogger } from '../../services/logger.service';
@@ -39,7 +40,7 @@ router.post('/create', async (req, res) => {
     // Validate repo path
     const repoValidation = await projectAccessor.validateRepoPath(validatedInput.repoPath);
     if (!repoValidation.valid) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         error: {
           code: 'INVALID_REPO_PATH',
@@ -54,7 +55,7 @@ router.post('/create', async (req, res) => {
       { worktreeBaseDir: configService.getWorktreeBaseDir() }
     );
 
-    return res.status(201).json({
+    return res.status(HTTP_STATUS.CREATED).json({
       success: true,
       data: {
         projectId: project.id,
@@ -68,7 +69,7 @@ router.post('/create', async (req, res) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         error: {
           code: 'INVALID_INPUT',
@@ -79,7 +80,7 @@ router.post('/create', async (req, res) => {
     }
 
     logger.error('Error creating project', error as Error);
-    return res.status(500).json({
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
@@ -98,7 +99,7 @@ router.get('/list', async (req, res) => {
     const isArchived = req.query.isArchived === 'true';
     const projects = await projectAccessor.list({ isArchived });
 
-    return res.status(200).json({
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         projects: projects.map((p) => ({
@@ -118,7 +119,7 @@ router.get('/list', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error listing projects', error as Error);
-    return res.status(500).json({
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
@@ -138,7 +139,7 @@ router.get('/:projectId', async (req, res) => {
     const project = await projectAccessor.findById(projectId);
 
     if (!project) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: {
           code: 'PROJECT_NOT_FOUND',
@@ -147,7 +148,7 @@ router.get('/:projectId', async (req, res) => {
       });
     }
 
-    return res.status(200).json({
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         id: project.id,
@@ -166,7 +167,7 @@ router.get('/:projectId', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error getting project', error as Error);
-    return res.status(500).json({
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
@@ -188,7 +189,7 @@ router.put('/:projectId', async (req, res) => {
     // Check project exists
     const existingProject = await projectAccessor.findById(projectId);
     if (!existingProject) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: {
           code: 'PROJECT_NOT_FOUND',
@@ -201,7 +202,7 @@ router.put('/:projectId', async (req, res) => {
     if (validatedInput.repoPath) {
       const repoValidation = await projectAccessor.validateRepoPath(validatedInput.repoPath);
       if (!repoValidation.valid) {
-        return res.status(400).json({
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
           error: {
             code: 'INVALID_REPO_PATH',
@@ -213,7 +214,7 @@ router.put('/:projectId', async (req, res) => {
 
     const project = await projectAccessor.update(projectId, validatedInput);
 
-    return res.status(200).json({
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         id: project.id,
@@ -227,7 +228,7 @@ router.put('/:projectId', async (req, res) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         error: {
           code: 'INVALID_INPUT',
@@ -238,7 +239,7 @@ router.put('/:projectId', async (req, res) => {
     }
 
     logger.error('Error updating project', error as Error);
-    return res.status(500).json({
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
@@ -259,7 +260,7 @@ router.delete('/:projectId', async (req, res) => {
     // Check project exists
     const existingProject = await projectAccessor.findById(projectId);
     if (!existingProject) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: {
           code: 'PROJECT_NOT_FOUND',
@@ -271,7 +272,7 @@ router.delete('/:projectId', async (req, res) => {
     // Archive (soft delete)
     const project = await projectAccessor.archive(projectId);
 
-    return res.status(200).json({
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         id: project.id,
@@ -280,7 +281,7 @@ router.delete('/:projectId', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error archiving project', error as Error);
-    return res.status(500).json({
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
@@ -300,7 +301,7 @@ router.post('/:projectId/validate', async (req, res) => {
 
     const project = await projectAccessor.findById(projectId);
     if (!project) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         error: {
           code: 'PROJECT_NOT_FOUND',
@@ -311,7 +312,7 @@ router.post('/:projectId/validate', async (req, res) => {
 
     const repoValidation = await projectAccessor.validateRepoPath(project.repoPath);
 
-    return res.status(200).json({
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         repoPath: {
@@ -322,7 +323,7 @@ router.post('/:projectId/validate', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error validating project', error as Error);
-    return res.status(500).json({
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
