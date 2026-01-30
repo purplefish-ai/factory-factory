@@ -24,7 +24,7 @@ const logger = createLogger('chat-handler');
 
 export interface ConnectionInfo {
   ws: WebSocket;
-  dbSessionId: string;
+  dbSessionId: string | null;
   workingDir: string;
 }
 
@@ -49,8 +49,11 @@ let chatWsMsgCounter = 0;
 // Helper Functions
 // ============================================================================
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket forwarding with debug logging
-function forwardToConnections(dbSessionId: string, data: unknown): void {
+function forwardToConnections(dbSessionId: string | null, data: unknown): void {
+  // Skip if no session (connection exists but no session selected yet)
+  if (!dbSessionId) {
+    return;
+  }
   chatWsMsgCounter++;
   const msgNum = chatWsMsgCounter;
 
@@ -322,7 +325,7 @@ async function getOrCreateChatClient(
 async function handleChatMessage(
   ws: WebSocket,
   _connectionId: string,
-  dbSessionId: string,
+  dbSessionId: string | null,
   workingDir: string,
   message: {
     type: string;
@@ -335,14 +338,29 @@ async function handleChatMessage(
     selectedModel?: string | null;
   }
 ): Promise<void> {
+  // Most operations require a session - reject if missing
+  if (!dbSessionId && message.type !== 'list_sessions') {
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'No session selected. Please create or select a session first.',
+      })
+    );
+    return;
+  }
+
+  // At this point, dbSessionId is guaranteed to be non-null for all operations
+  // except 'list_sessions' (which doesn't use it)
+  const sessionId = dbSessionId as string;
+
   switch (message.type) {
     case 'start': {
-      ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
+      ws.send(JSON.stringify({ type: 'starting', sessionId }));
 
       // Determine model to use
-      const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
+      const sessionOpts = await sessionService.getSessionOptions(sessionId);
       if (!sessionOpts) {
-        logger.error('[Chat WS] Failed to get session options', { dbSessionId });
+        logger.error('[Chat WS] Failed to get session options', { sessionId });
         ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
         break;
       }
@@ -352,12 +370,12 @@ async function handleChatMessage(
       const model =
         requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
 
-      await getOrCreateChatClient(dbSessionId, {
+      await getOrCreateChatClient(sessionId, {
         thinkingEnabled: message.thinkingEnabled,
         planModeEnabled: message.planModeEnabled,
         model,
       });
-      ws.send(JSON.stringify({ type: 'started', dbSessionId }));
+      ws.send(JSON.stringify({ type: 'started', sessionId }));
       break;
     }
 
@@ -368,19 +386,19 @@ async function handleChatMessage(
       }
 
       // Check if client exists and is running via sessionService
-      const existingClient = sessionService.getClient(dbSessionId);
+      const existingClient = sessionService.getClient(sessionId);
       if (existingClient?.isRunning()) {
         existingClient.sendMessage(text);
       } else {
-        let queue = pendingMessages.get(dbSessionId);
+        let queue = pendingMessages.get(sessionId);
         if (!queue) {
           queue = [];
-          pendingMessages.set(dbSessionId, queue);
+          pendingMessages.set(sessionId, queue);
         }
 
         if (queue.length >= MAX_PENDING_MESSAGES) {
           logger.warn('[Chat WS] Pending message queue full, rejecting message', {
-            dbSessionId,
+            sessionId,
             queueLength: queue.length,
             maxSize: MAX_PENDING_MESSAGES,
           });
@@ -396,12 +414,12 @@ async function handleChatMessage(
         queue.push({ text, sentAt: new Date() });
 
         logger.info('[Chat WS] Queued message for pending session', {
-          dbSessionId,
+          sessionId,
           queueLength: queue.length,
         });
 
         ws.send(JSON.stringify({ type: 'message_queued', text }));
-        ws.send(JSON.stringify({ type: 'starting', dbSessionId }));
+        ws.send(JSON.stringify({ type: 'starting', sessionId }));
 
         // Determine model to use
         const validModels = ['sonnet', 'opus'];
@@ -409,19 +427,19 @@ async function handleChatMessage(
         const model =
           requestedModel && validModels.includes(requestedModel) ? requestedModel : undefined;
 
-        const newClient = await getOrCreateChatClient(dbSessionId, {
+        const newClient = await getOrCreateChatClient(sessionId, {
           thinkingEnabled: message.thinkingEnabled,
           planModeEnabled: message.planModeEnabled,
           model,
         });
-        ws.send(JSON.stringify({ type: 'started', dbSessionId }));
+        ws.send(JSON.stringify({ type: 'started', sessionId }));
 
         // Drain pending messages
-        const pending = pendingMessages.get(dbSessionId);
-        pendingMessages.delete(dbSessionId);
+        const pending = pendingMessages.get(sessionId);
+        pendingMessages.delete(sessionId);
         if (pending && pending.length > 0) {
           logger.info('[Chat WS] Sending queued messages after client ready', {
-            dbSessionId,
+            sessionId,
             count: pending.length,
           });
           for (const msg of pending) {
@@ -434,20 +452,20 @@ async function handleChatMessage(
 
     case 'stop': {
       // Delegate to sessionService for unified session lifecycle management
-      await sessionService.stopClaudeSession(dbSessionId);
-      pendingMessages.delete(dbSessionId);
-      ws.send(JSON.stringify({ type: 'stopped', dbSessionId }));
+      await sessionService.stopClaudeSession(sessionId);
+      pendingMessages.delete(sessionId);
+      ws.send(JSON.stringify({ type: 'stopped', sessionId }));
       break;
     }
 
     case 'get_history': {
-      const client = sessionService.getClient(dbSessionId);
+      const client = sessionService.getClient(sessionId);
       const claudeSessionId = client?.getClaudeSessionId();
       if (claudeSessionId) {
         const history = await SessionManager.getHistory(claudeSessionId, workingDir);
-        ws.send(JSON.stringify({ type: 'history', dbSessionId, messages: history }));
+        ws.send(JSON.stringify({ type: 'history', sessionId, messages: history }));
       } else {
-        ws.send(JSON.stringify({ type: 'history', dbSessionId, messages: [] }));
+        ws.send(JSON.stringify({ type: 'history', sessionId, messages: [] }));
       }
       break;
     }
@@ -459,7 +477,7 @@ async function handleChatMessage(
     }
 
     case 'load_session': {
-      const dbSession = await claudeSessionAccessor.findById(dbSessionId);
+      const dbSession = await claudeSessionAccessor.findById(sessionId);
       if (!dbSession) {
         ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
         break;
@@ -467,7 +485,7 @@ async function handleChatMessage(
 
       const targetSessionId = dbSession.claudeSessionId ?? null;
 
-      const existingClient = sessionService.getClient(dbSessionId);
+      const existingClient = sessionService.getClient(sessionId);
       const running = existingClient?.isWorking() ?? false;
 
       if (targetSessionId) {
@@ -565,18 +583,11 @@ export function handleChatUpgrade(
   wsAliveMap: WeakMap<WebSocket, boolean>
 ): void {
   const connectionId = url.searchParams.get('connectionId') || `conn-${Date.now()}`;
-  const dbSessionId = url.searchParams.get('sessionId');
+  const dbSessionId = url.searchParams.get('sessionId') || null;
   const rawWorkingDir = url.searchParams.get('workingDir');
 
-  if (!dbSessionId) {
-    logger.warn('Missing sessionId (dbSessionId) parameter', { connectionId });
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\nMissing sessionId parameter');
-    socket.destroy();
-    return;
-  }
-
   if (!rawWorkingDir) {
-    logger.warn('Missing workingDir parameter', { dbSessionId, connectionId });
+    logger.warn('Missing workingDir parameter', { connectionId });
     socket.write('HTTP/1.1 400 Bad Request\r\n\r\nMissing workingDir parameter');
     socket.destroy();
     return;
@@ -600,13 +611,16 @@ export function handleChatUpgrade(
     wsAliveMap.set(ws, true);
     ws.on('pong', () => wsAliveMap.set(ws, true));
 
-    sessionFileLogger.initSession(dbSessionId);
-    sessionFileLogger.log(dbSessionId, 'INFO', {
-      event: 'connection_established',
-      connectionId,
-      dbSessionId,
-      workingDir,
-    });
+    // Only initialize file logging if we have a session
+    if (dbSessionId) {
+      sessionFileLogger.initSession(dbSessionId);
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        event: 'connection_established',
+        connectionId,
+        dbSessionId,
+        workingDir,
+      });
+    }
 
     const existingConnection = chatConnections.get(connectionId);
     if (existingConnection) {
@@ -639,7 +653,8 @@ export function handleChatUpgrade(
       });
     }
 
-    const client = sessionService.getClient(dbSessionId);
+    // Only check for running client if we have a session
+    const client = dbSessionId ? sessionService.getClient(dbSessionId) : null;
     const isRunning = client?.isWorking() ?? false;
 
     const initialStatus = {
@@ -647,37 +662,47 @@ export function handleChatUpgrade(
       dbSessionId,
       running: isRunning,
     };
-    sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
+    if (dbSessionId) {
+      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
+    }
     ws.send(JSON.stringify(initialStatus));
 
     ws.on('message', async (data) => {
       try {
         const message = JSON.parse(data.toString());
-        sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
+        if (dbSessionId) {
+          sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
+        }
         await handleChatMessage(ws, connectionId, dbSessionId, workingDir, message);
       } catch (error) {
         logger.error('Error handling chat message', error as Error);
         const errorResponse = { type: 'error', message: 'Invalid message format' };
-        sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
+        if (dbSessionId) {
+          sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
+        }
         ws.send(JSON.stringify(errorResponse));
       }
     });
 
     ws.on('close', () => {
       logger.info('Chat WebSocket connection closed', { connectionId, dbSessionId });
-      sessionFileLogger.log(dbSessionId, 'INFO', { event: 'connection_closed', connectionId });
-      sessionFileLogger.closeSession(dbSessionId);
+      if (dbSessionId) {
+        sessionFileLogger.log(dbSessionId, 'INFO', { event: 'connection_closed', connectionId });
+        sessionFileLogger.closeSession(dbSessionId);
+      }
 
       chatConnections.delete(connectionId);
     });
 
     ws.on('error', (error) => {
       logger.error('Chat WebSocket error', error);
-      sessionFileLogger.log(dbSessionId, 'INFO', {
-        event: 'connection_error',
-        connectionId,
-        error: error.message,
-      });
+      if (dbSessionId) {
+        sessionFileLogger.log(dbSessionId, 'INFO', {
+          event: 'connection_error',
+          connectionId,
+          error: error.message,
+        });
+      }
     });
   });
 }
