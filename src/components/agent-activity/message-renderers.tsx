@@ -4,12 +4,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';
-import type {
-  ChatMessage,
-  ClaudeMessage,
-  ClaudeStreamEvent,
-  ContentBlockDelta,
-} from '@/lib/claude-types';
+import type { ClaudeMessage, ClaudeStreamEvent, ContentBlockDelta } from '@/lib/claude-types';
 import {
   extractTextFromMessage,
   isTextContent,
@@ -410,7 +405,6 @@ const TextRenderer = memo(function TextRenderer({ text }: TextRendererProps) {
 // =============================================================================
 
 interface MessageWrapperProps {
-  chatMessage: ChatMessage;
   children: React.ReactNode;
   className?: string;
 }
@@ -419,7 +413,6 @@ interface MessageWrapperProps {
  * Wrapper component for consistent message styling.
  */
 export const MessageWrapper = memo(function MessageWrapper({
-  chatMessage,
   children,
   className,
 }: MessageWrapperProps) {
