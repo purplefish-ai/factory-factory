@@ -353,9 +353,25 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
       // Preserve any optimistic user messages that were sent before session loaded
       // These are messages with source='user' that don't have a corresponding message in history
-      const optimisticUserMessages = state.messages.filter(
-        (msg) => msg.source === 'user' && msg.text !== undefined
-      );
+      const optimisticUserMessages = state.messages.filter((msg) => {
+        if (msg.source !== 'user' || msg.text === undefined) {
+          return false;
+        }
+
+        // Check if this message already exists in history by comparing text content and timestamp
+        // We use a fuzzy timestamp match (within 5 seconds) since the optimistic message
+        // might have a slightly different timestamp than the history message
+        const existsInHistory = historyMessages.some((histMsg) => {
+          if (histMsg.source !== 'user' || histMsg.text !== msg.text) {
+            return false;
+          }
+          const msgTime = new Date(msg.timestamp).getTime();
+          const histTime = new Date(histMsg.timestamp).getTime();
+          return Math.abs(msgTime - histTime) < 5000; // Within 5 seconds
+        });
+
+        return !existsInHistory;
+      });
 
       // Combine history with any optimistic messages (optimistic messages come after history)
       const messages =
