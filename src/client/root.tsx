@@ -14,8 +14,15 @@ function RootLayout() {
   const showSidebar = !isLoading && projects && projects.length > 0;
 
   // Redirect to onboarding when no projects exist
+  // Only redirect from top-level paths, not from specific project routes
   useEffect(() => {
-    if (!isLoading && projects?.length === 0 && !pathname.startsWith('/projects/new')) {
+    const isProjectSpecificRoute = /^\/projects\/[^/]+/.test(pathname);
+    if (
+      !isLoading &&
+      projects?.length === 0 &&
+      !pathname.startsWith('/projects/new') &&
+      !isProjectSpecificRoute
+    ) {
       navigate('/projects/new');
     }
   }, [isLoading, projects, pathname, navigate]);
