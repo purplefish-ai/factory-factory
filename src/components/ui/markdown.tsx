@@ -17,7 +17,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 }: MarkdownRendererProps) {
   return (
     <div
-      className={cn('prose prose-sm dark:prose-invert max-w-none break-words text-sm', className)}
+      className={cn(
+        'prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-loose',
+        className
+      )}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -58,9 +61,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
               <ExternalLink className="h-3 w-3 shrink-0" />
             </a>
           ),
-          // Override paragraph to avoid extra margins
+          // Override paragraph with comfortable spacing
           p: ({ children }: ComponentPropsWithoutRef<'p'>) => (
-            <p className="mb-2 last:mb-0">{children}</p>
+            <p className="mb-4 last:mb-0">{children}</p>
           ),
         }}
       >
