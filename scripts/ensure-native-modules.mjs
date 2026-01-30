@@ -18,6 +18,9 @@ const ROOT = join(__dirname, '..');
 const CACHE_DIR = join(ROOT, '.native-cache');
 const MARKER_FILE = join(CACHE_DIR, '.current-target');
 
+// Get Node.js ABI version (process.versions.modules gives the NODE_MODULE_VERSION)
+const NODE_ABI_VERSION = process.versions.modules;
+
 const NATIVE_MODULES = [
   {
     name: 'better-sqlite3',
@@ -45,22 +48,36 @@ function findModulePath(moduleName) {
   return join(pnpmDir, match, 'node_modules', moduleName, 'build', 'Release');
 }
 
-function getCurrentTarget() {
+function getCurrentMarker() {
   if (!existsSync(MARKER_FILE)) {
     return null;
   }
   return readFileSync(MARKER_FILE, 'utf-8').trim();
 }
 
-function setCurrentTarget(target) {
+function getMarkerValue(target) {
+  // Include ABI version in marker for node target
+  return getCacheKey(target);
+}
+
+function setCurrentMarker(target) {
   if (!existsSync(CACHE_DIR)) {
     mkdirSync(CACHE_DIR, { recursive: true });
   }
-  writeFileSync(MARKER_FILE, target);
+  writeFileSync(MARKER_FILE, getMarkerValue(target));
+}
+
+function getCacheKey(target) {
+  // For Node.js, include the ABI version since binaries are version-specific
+  // For Electron, electron-rebuild handles the correct Electron ABI
+  if (target === 'node') {
+    return `node-abi${NODE_ABI_VERSION}`;
+  }
+  return target;
 }
 
 function getCachePath(target, moduleName) {
-  return join(CACHE_DIR, target, moduleName);
+  return join(CACHE_DIR, getCacheKey(target), moduleName);
 }
 
 function cacheExists(target) {
@@ -73,6 +90,40 @@ function cacheExists(target) {
     }
   }
   return true;
+}
+
+function cacheExistsForMarker(marker) {
+  // Check if cache exists for a specific marker (e.g., 'node-abi127', 'electron')
+  for (const mod of NATIVE_MODULES) {
+    const cachePath = join(CACHE_DIR, marker, mod.name);
+    for (const file of mod.files) {
+      if (!existsSync(join(cachePath, file))) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function copyToCacheWithMarker(marker) {
+  // Cache current binaries under a specific marker path
+  console.log(`  Caching binaries for ${marker}...`);
+  for (const mod of NATIVE_MODULES) {
+    const srcPath = findModulePath(mod.name);
+    if (!srcPath) {
+      console.warn(`  Warning: Could not find ${mod.name} build directory`);
+      continue;
+    }
+    const cachePath = join(CACHE_DIR, marker, mod.name);
+    mkdirSync(cachePath, { recursive: true });
+    for (const file of mod.files) {
+      const src = join(srcPath, file);
+      const dst = join(cachePath, file);
+      if (existsSync(src)) {
+        cpSync(src, dst);
+      }
+    }
+  }
 }
 
 function copyToCache(target) {
@@ -138,18 +189,27 @@ function main() {
     process.exit(1);
   }
 
-  const currentTarget = getCurrentTarget();
+  const currentMarker = getCurrentMarker();
+  const targetMarker = getMarkerValue(target);
 
-  if (currentTarget === target) {
-    console.log(`Native modules already built for ${target}`);
+  if (currentMarker === targetMarker) {
+    console.log(`Native modules already built for ${target}${target === 'node' ? ` (ABI ${NODE_ABI_VERSION})` : ''}`);
     return;
   }
 
-  console.log(`Switching native modules: ${currentTarget || 'unknown'} -> ${target}`);
+  const displayCurrent = currentMarker || 'unknown';
+  const displayTarget = target === 'node' ? `${target} (ABI ${NODE_ABI_VERSION})` : target;
+  console.log(`Switching native modules: ${displayCurrent} -> ${displayTarget}`);
 
   // Cache current binaries before switching (if we know what they are)
-  if (currentTarget && !cacheExists(currentTarget)) {
-    copyToCache(currentTarget);
+  // Note: currentMarker includes ABI version for node, so we need to extract the base target
+  if (currentMarker && !cacheExists(target)) {
+    // Only cache if current binaries match the current marker's target type
+    const currentIsNode = currentMarker.startsWith('node');
+    const currentIsElectron = currentMarker === 'electron';
+    if ((currentIsNode || currentIsElectron) && !cacheExistsForMarker(currentMarker)) {
+      copyToCacheWithMarker(currentMarker);
+    }
   }
 
   // Either restore from cache or rebuild
@@ -160,8 +220,8 @@ function main() {
     copyToCache(target);
   }
 
-  setCurrentTarget(target);
-  console.log(`Native modules ready for ${target}`);
+  setCurrentMarker(target);
+  console.log(`Native modules ready for ${target}${target === 'node' ? ` (ABI ${NODE_ABI_VERSION})` : ''}`);
 }
 
 main();
