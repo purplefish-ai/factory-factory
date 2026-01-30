@@ -227,7 +227,7 @@ function WorkspaceChatContent() {
     maxSessions,
   } = useWorkspaceData({ workspaceId: workspaceId });
 
-  const { rightPanelVisible } = useWorkspacePanel();
+  const { rightPanelVisible, activeTabId } = useWorkspacePanel();
 
   // Query init status to show initialization overlay
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
@@ -309,6 +309,21 @@ function WorkspaceChatContent() {
 
   // Auto-scroll behavior with RAF throttling
   const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
+
+  // Auto-focus chat input when entering workspace with active chat tab
+  const hasFocusedOnEntryRef = useRef(false);
+  useEffect(() => {
+    if (
+      !hasFocusedOnEntryRef.current &&
+      selectedDbSessionId &&
+      activeTabId === 'chat' &&
+      !loadingSession
+    ) {
+      hasFocusedOnEntryRef.current = true;
+      // Use setTimeout to ensure the input is mounted and ready
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [selectedDbSessionId, activeTabId, loadingSession, inputRef]);
 
   // Show loading while fetching workspace (but not sessions - they can load in background)
   if (workspaceLoading) {
