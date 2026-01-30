@@ -74,7 +74,7 @@ export default function NewProjectPage() {
   // Onboarding view when no projects exist
   if (!hasExistingProjects) {
     return (
-      <div className="flex min-h-[80vh] items-center justify-center">
+      <div className="flex min-h-[80vh] items-center justify-center p-6">
         <div className="w-full max-w-lg space-y-8">
           <div className="flex flex-col items-center space-y-4">
             <Logo iconClassName="size-16" textClassName="text-2xl" className="flex-col gap-3" />
@@ -143,7 +143,7 @@ export default function NewProjectPage() {
 
   // Normal view when projects already exist
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-2xl mx-auto space-y-4 p-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/projects">
