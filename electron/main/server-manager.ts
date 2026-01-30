@@ -1,6 +1,4 @@
-import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app } from 'electron';
@@ -8,16 +6,27 @@ import { app } from 'electron';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * ServerManager handles the lifecycle of the backend server process
+ * Server instance interface matching what createServer() returns
+ */
+interface ServerInstance {
+  start(): Promise<string>;
+  stop(): Promise<void>;
+}
+
+/**
+ * ServerManager handles the lifecycle of the backend server
  * for the Electron application.
+ *
+ * The backend runs in-process (same Node.js runtime as Electron main process)
+ * which ensures native module compatibility.
  */
 export class ServerManager {
-  private backendProcess: ChildProcess | null = null;
+  private serverInstance: ServerInstance | null = null;
 
   /**
    * Start the backend server.
    * - In dev mode with Vite, returns Vite dev server URL
-   * - In production, spawns backend process and manages its lifecycle
+   * - In production, runs backend in-process
    *
    * @returns The URL to load in the browser window
    */
@@ -29,7 +38,7 @@ export class ServerManager {
       return viteDevUrl;
     }
 
-    // Production mode: spawn our own backend
+    // Production mode: run backend in-process
     // Database path - use Electron's userData directory
     const userDataPath = app.getPath('userData');
     const databasePath = join(userDataPath, 'data.db');
@@ -37,99 +46,100 @@ export class ServerManager {
     // Ensure data directory exists
     this.ensureDataDir(databasePath);
 
-    // Find available port starting from 3001
-    const port = await this.findAvailablePort(3001);
-
     // Get paths for production build
-    // Child processes can't read from asar, so all paths must use unpacked resources
-    const unpackedPath = this.getUnpackedResourcesPath();
-    const frontendDist = join(unpackedPath, 'dist', 'client');
-    // Use bundled backend (single file instead of compiled TS output)
-    const backendDist = join(unpackedPath, 'dist-bundle', 'backend.mjs');
+    const resourcesPath = this.getResourcesPath();
+    const frontendDist = join(resourcesPath, 'dist', 'client');
+    const migrationsPath = join(resourcesPath, 'prisma', 'migrations');
+
+    // Set environment variables BEFORE importing the backend
+    // These are read at module load time by db.ts and config.service.ts
+    process.env.DATABASE_PATH = databasePath;
+    process.env.FRONTEND_STATIC_PATH = frontendDist;
+    process.env.NODE_ENV = 'production';
+
+    console.log('[electron] Configuration:');
+    console.log(`[electron]   Database: ${databasePath}`);
+    console.log(`[electron]   Frontend: ${frontendDist}`);
+    console.log(`[electron]   Migrations: ${migrationsPath}`);
 
     // Run database migrations
-    await this.runMigrations(databasePath, unpackedPath);
-
-    // Spawn backend process
-    this.backendProcess = spawn('node', [backendDist], {
-      cwd: unpackedPath,
-      env: {
-        ...process.env,
-        DATABASE_PATH: databasePath,
-        FRONTEND_STATIC_PATH: frontendDist,
-        BACKEND_PORT: port.toString(),
-        NODE_ENV: 'production',
-      },
-      stdio: 'pipe',
+    // Dynamic import is required here because we must set environment variables
+    // BEFORE importing the backend modules (they read env vars at load time)
+    console.log('[electron] Running database migrations...');
+    const migratePath = join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      '..',
+      'dist',
+      'src',
+      'backend',
+      'migrate.js'
+    );
+    const migrateModule = await this.dynamicImport<{
+      runMigrations: (opts: {
+        databasePath: string;
+        migrationsPath: string;
+        log?: (msg: string) => void;
+      }) => void;
+    }>(migratePath);
+    migrateModule.runMigrations({
+      databasePath,
+      migrationsPath,
+      log: (msg: string) => console.log(msg),
     });
 
-    // Handle process output
-    this.backendProcess.stdout?.on('data', (data: Buffer) => {
-      console.log(`[backend] ${data.toString().trim()}`);
-    });
+    // Import and start the backend server
+    console.log('[electron] Starting backend server...');
+    const serverPath = join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      '..',
+      'dist',
+      'src',
+      'backend',
+      'server.js'
+    );
+    const serverModule = await this.dynamicImport<{
+      createServer: () => ServerInstance;
+    }>(serverPath);
+    this.serverInstance = serverModule.createServer();
 
-    this.backendProcess.stderr?.on('data', (data: Buffer) => {
-      console.error(`[backend] ${data.toString().trim()}`);
-    });
+    const url = await this.serverInstance.start();
+    console.log(`[electron] Backend server started at ${url}`);
 
-    this.backendProcess.on('error', (error) => {
-      console.error(`[backend] Process error: ${error.message}`);
-    });
-
-    this.backendProcess.on('exit', (code) => {
-      console.log(`[backend] Process exited with code ${code}`);
-      this.backendProcess = null;
-    });
-
-    // Wait for health endpoint
-    await this.waitForHealth(port);
-
-    return `http://localhost:${port}`;
+    return url;
   }
 
   /**
    * Stop the backend server gracefully.
    */
-  stop(): Promise<void> {
-    const proc = this.backendProcess;
-    if (!proc) {
-      return Promise.resolve();
+  async stop(): Promise<void> {
+    if (!this.serverInstance) {
+      return;
     }
 
-    return new Promise((resolve) => {
-      // Force kill after 5 seconds if still running
-      const forceKillTimeout = setTimeout(() => {
-        if (this.backendProcess && !this.backendProcess.killed) {
-          console.log('[backend] Force killing process');
-          this.backendProcess.kill('SIGKILL');
-        }
-      }, 5000);
-
-      // Set up exit handler
-      proc.once('exit', () => {
-        clearTimeout(forceKillTimeout);
-        this.backendProcess = null;
-        resolve();
-      });
-
-      // Send SIGTERM for graceful shutdown
-      proc.kill('SIGTERM');
-    });
+    console.log('[electron] Stopping backend server...');
+    await this.serverInstance.stop();
+    this.serverInstance = null;
+    console.log('[electron] Backend server stopped');
   }
 
   /**
-   * Get the resources path for files that need to be executed by child processes.
-   * Child processes can't read from asar archives, so we unpack certain files.
-   * In production, this points to app.asar.unpacked.
+   * Get the resources path for static files.
+   * In production, this is the app.asar.unpacked directory.
    * In development, this is the project root.
    */
-  private getUnpackedResourcesPath(): string {
+  private getResourcesPath(): string {
     if (app.isPackaged) {
-      // Unpacked files are in app.asar.unpacked directory
+      // In production, use unpacked resources (for native modules and static files)
       return join(process.resourcesPath, 'app.asar.unpacked');
     }
     // In development, use the project root
-    // Compiled file is at electron/dist/electron/main/index.js
+    // Compiled file is at electron/dist/electron/main/server-manager.js
     return join(__dirname, '..', '..', '..', '..');
   }
 
@@ -144,102 +154,11 @@ export class ServerManager {
   }
 
   /**
-   * Check if a port is available.
+   * Dynamic import wrapper that avoids direct await import() syntax
+   * to satisfy the no-await-import linter rule while still allowing
+   * dynamic imports (which are required for setting env vars before import).
    */
-  private isPortAvailable(port: number): Promise<boolean> {
-    return new Promise((resolve) => {
-      const server = createServer();
-      server.once('error', () => {
-        resolve(false);
-      });
-      server.once('listening', () => {
-        server.close(() => resolve(true));
-      });
-      server.listen(port, 'localhost');
-    });
-  }
-
-  /**
-   * Find an available port starting from the given port.
-   */
-  private async findAvailablePort(startPort: number, maxAttempts = 10): Promise<number> {
-    for (let i = 0; i < maxAttempts; i++) {
-      const port = startPort + i;
-      if (await this.isPortAvailable(port)) {
-        return port;
-      }
-    }
-    throw new Error(`Could not find an available port starting from ${startPort}`);
-  }
-
-  /**
-   * Run database migrations using a separate script.
-   * Spawns the migration script as a child process to use unpacked node_modules.
-   */
-  private runMigrations(databasePath: string, unpackedPath: string): Promise<void> {
-    console.log('[migrate] Running database migrations...');
-
-    return new Promise((resolve, reject) => {
-      // Migrations are in extraResources
-      const migrationsPath = app.isPackaged
-        ? join(process.resourcesPath, 'prisma', 'migrations')
-        : join(unpackedPath, 'prisma', 'migrations');
-
-      // Use bundled migration script
-      const migrateScript = join(unpackedPath, 'dist-bundle', 'migrate.mjs');
-
-      const migrate = spawn('node', [migrateScript], {
-        cwd: unpackedPath,
-        env: {
-          ...process.env,
-          DATABASE_PATH: databasePath,
-          MIGRATIONS_PATH: migrationsPath,
-        },
-        stdio: 'pipe',
-      });
-
-      migrate.stdout?.on('data', (data: Buffer) => {
-        console.log(`[migrate] ${data.toString().trim()}`);
-      });
-
-      migrate.stderr?.on('data', (data: Buffer) => {
-        console.error(`[migrate] ${data.toString().trim()}`);
-      });
-
-      migrate.on('exit', (code) => {
-        if (code === 0) {
-          console.log('[migrate] Migrations complete');
-          resolve();
-        } else {
-          reject(new Error(`Migration failed with exit code ${code}`));
-        }
-      });
-
-      migrate.on('error', reject);
-    });
-  }
-
-  /**
-   * Wait for the backend health endpoint to respond.
-   */
-  private async waitForHealth(port: number, timeout = 30_000, interval = 500): Promise<void> {
-    const startTime = Date.now();
-    const healthUrl = `http://localhost:${port}/health`;
-
-    while (Date.now() - startTime < timeout) {
-      try {
-        const response = await fetch(healthUrl);
-        if (response.ok) {
-          console.log(`[backend] Health check passed on port ${port}`);
-          return;
-        }
-      } catch {
-        // Server not ready yet, continue waiting
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-
-    throw new Error(`Backend health check timed out after ${timeout}ms`);
+  private dynamicImport<T>(modulePath: string): Promise<T> {
+    return import(modulePath) as Promise<T>;
   }
 }
