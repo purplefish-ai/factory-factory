@@ -53,7 +53,13 @@ export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
   const navigate = useNavigate();
-  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('');
+  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(() => {
+    const slugFromPath = getProjectSlugFromPath(window.location.pathname);
+    if (slugFromPath && slugFromPath !== 'new') {
+      return slugFromPath;
+    }
+    return localStorage.getItem(SELECTED_PROJECT_KEY) || '';
+  });
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
   const [archivingWorkspace, setArchivingWorkspace] = useState<{
