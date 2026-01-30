@@ -401,6 +401,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             questions: (input.questions ?? []) as UserQuestionRequest['questions'],
             timestamp: pendingReq.timestamp,
           };
+          pendingPermission = null; // Clear opposite type to prevent both modals showing
         } else {
           // Restore permission request (ExitPlanMode or other)
           pendingPermission = {
@@ -410,6 +411,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             timestamp: pendingReq.timestamp,
             planContent: pendingReq.planContent,
           };
+          pendingQuestion = null; // Clear opposite type to prevent both modals showing
         }
       }
 
