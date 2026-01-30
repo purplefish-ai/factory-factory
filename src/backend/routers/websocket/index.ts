@@ -11,9 +11,4 @@ export {
   pendingMessages,
 } from './chat.handler';
 
-export {
-  handleTerminalUpgrade,
-  TERMINAL_GRACE_PERIOD_MS,
-  terminalConnections,
-  terminalGracePeriods,
-} from './terminal.handler';
+export { handleTerminalUpgrade, terminalConnections } from './terminal.handler';

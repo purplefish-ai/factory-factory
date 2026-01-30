@@ -28,11 +28,7 @@ import { healthRouter } from './routers/api/health.router';
 import { mcpRouter } from './routers/api/mcp.router';
 import { projectRouter } from './routers/api/project.router';
 import { initializeMcpTools } from './routers/mcp/index';
-import {
-  handleChatUpgrade,
-  handleTerminalUpgrade,
-  terminalGracePeriods,
-} from './routers/websocket';
+import { handleChatUpgrade, handleTerminalUpgrade } from './routers/websocket';
 import {
   configService,
   createLogger,
@@ -194,13 +190,7 @@ export function createServer(requestedPort?: number): ServerInstance {
 
     clearInterval(heartbeatInterval);
 
-    // Clear terminal grace periods
-    for (const [workspaceId, timeout] of terminalGracePeriods) {
-      clearTimeout(timeout);
-      logger.debug('Cancelled terminal grace period during shutdown', { workspaceId });
-    }
-    terminalGracePeriods.clear();
-
+    // Close WebSocket server
     wss.close();
     server.close();
 
