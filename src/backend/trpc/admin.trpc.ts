@@ -17,6 +17,7 @@ import {
   configService,
   createLogger,
   rateLimiter,
+  serverInstanceService,
   sessionService,
   terminalService,
 } from '../services/index';
@@ -25,6 +26,20 @@ import { publicProcedure, router } from './trpc';
 const logger = createLogger('admin-trpc');
 
 export const adminRouter = router({
+  /**
+   * Get server information (port, environment, etc.)
+   */
+  getServerInfo: publicProcedure.query(() => {
+    const backendPort = serverInstanceService.getPort();
+    const config = configService.getSystemConfig();
+
+    return {
+      backendPort,
+      environment: config.nodeEnv,
+      version: process.env.npm_package_version || '0.1.0',
+    };
+  }),
+
   /**
    * Get system statistics
    */

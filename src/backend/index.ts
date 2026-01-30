@@ -14,12 +14,15 @@
 
 import 'dotenv/config';
 import { createServer } from './server';
-import { createLogger } from './services/logger.service';
+import { createLogger, serverInstanceService } from './services/index';
 
 const logger = createLogger('server');
 
 // Create and start the server
 const serverInstance = createServer();
+
+// Register the server instance globally for access by tRPC endpoints
+serverInstanceService.setInstance(serverInstance);
 
 serverInstance.start().catch((error) => {
   logger.error('Failed to start server', error as Error);
