@@ -526,7 +526,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   }, []);
 
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
-  const persistDraftDebounced = useRef<ReturnType<typeof setTimeout>>();
+  const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Wrap setInputDraft to persist to sessionStorage (debounced)
   const setInputDraft = useCallback((draft: string) => {
