@@ -8,12 +8,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 
-// Initialize mermaid
+// Initialize mermaid with strict security
 if (typeof window !== 'undefined') {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'default',
-    securityLevel: 'loose',
+    securityLevel: 'strict',
   });
 }
 
@@ -25,25 +25,34 @@ interface MarkdownRendererProps {
 // Component to render Mermaid diagrams
 function MermaidDiagram({ chart }: { chart: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   useEffect(() => {
     if (ref.current && chart) {
       const renderDiagram = async () => {
         try {
+          setError(null);
           const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
           const { svg } = await mermaid.render(id, chart);
           if (ref.current) {
             ref.current.innerHTML = svg;
           }
-        } catch (error) {
-          if (ref.current) {
-            ref.current.innerHTML = `<pre class="text-destructive text-xs">Error rendering diagram: ${error}</pre>`;
-          }
+        } catch {
+          // Safely handle error without innerHTML injection
+          setError('Error rendering diagram');
         }
       };
       renderDiagram();
     }
   }, [chart]);
+
+  if (error) {
+    return (
+      <div className="my-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+        <pre className="text-destructive text-xs">{error}</pre>
+      </div>
+    );
+  }
 
   return <div ref={ref} className="my-4" />;
 }

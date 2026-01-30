@@ -97,7 +97,6 @@
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.1",
     "react-markdown": "^10.1.0",
-    "react-mermaid2": "^0.1.4",
     "react-resizable-panels": "^4.5.3",
     "react-router": "^7.13.0",
     "react-syntax-highlighter": "^16.1.0",
