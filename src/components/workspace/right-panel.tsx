@@ -1,14 +1,15 @@
 'use client';
 
-import { Files, GitBranch } from 'lucide-react';
+import { FileQuestion, Files, GitCompare } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
 
+import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
-import { GitSummaryPanel } from './git-summary-panel';
 import { TerminalPanel } from './terminal-panel';
+import { UnstagedChangesPanel } from './unstaged-changes-panel';
 
 // =============================================================================
 // Constants
@@ -20,7 +21,7 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // Types
 // =============================================================================
 
-type TopPanelTab = 'git' | 'files';
+type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files';
 
 // =============================================================================
 // Sub-Components
@@ -63,7 +64,7 @@ interface RightPanelProps {
 export function RightPanel({ workspaceId, className }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
-  const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('git');
+  const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
 
   // Load persisted tab from localStorage on mount or workspaceId change
   useEffect(() => {
@@ -74,7 +75,7 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
 
     try {
       const stored = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
-      if (stored === 'git' || stored === 'files') {
+      if (stored === 'unstaged' || stored === 'diff-vs-main' || stored === 'files') {
         setActiveTopTab(stored);
       }
     } catch {
@@ -104,10 +105,16 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
           {/* Tab bar */}
           <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
             <PanelTab
-              label="Git"
-              icon={<GitBranch className="h-3.5 w-3.5" />}
-              isActive={activeTopTab === 'git'}
-              onClick={() => handleTabChange('git')}
+              label="Unstaged"
+              icon={<FileQuestion className="h-3.5 w-3.5" />}
+              isActive={activeTopTab === 'unstaged'}
+              onClick={() => handleTabChange('unstaged')}
+            />
+            <PanelTab
+              label="Diff vs Main"
+              icon={<GitCompare className="h-3.5 w-3.5" />}
+              isActive={activeTopTab === 'diff-vs-main'}
+              onClick={() => handleTabChange('diff-vs-main')}
             />
             <PanelTab
               label="Files"
@@ -119,7 +126,8 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
 
           {/* Content */}
           <div className="flex-1 overflow-hidden">
-            {activeTopTab === 'git' && <GitSummaryPanel workspaceId={workspaceId} />}
+            {activeTopTab === 'unstaged' && <UnstagedChangesPanel workspaceId={workspaceId} />}
+            {activeTopTab === 'diff-vs-main' && <DiffVsMainPanel workspaceId={workspaceId} />}
             {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
           </div>
         </div>
