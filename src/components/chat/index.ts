@@ -1,4 +1,7 @@
 // Components
+
+// Types
+export type { ChatMessage } from '@/lib/claude-types';
 export { ChatInput } from './chat-input';
 export { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 export { QuestionPrompt } from './question-prompt';
