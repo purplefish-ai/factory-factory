@@ -300,7 +300,7 @@ function setupChatClientEvents(
       type: 'permission_request',
       requestId,
       toolName: request.tool_name,
-      input: request.input,
+      toolInput: request.input, // Frontend expects 'toolInput', not 'input'
     });
   });
 }
