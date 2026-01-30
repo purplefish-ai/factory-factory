@@ -1,5 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
-import { ClaudeClient, type ClaudeClientOptions } from '../claude/index';
+import { ClaudeClient, type ClaudeClientOptions, type PermissionHandler } from '../claude/index';
 import { ClaudeProcess, type ClaudeProcessOptions, type ResourceUsage } from '../claude/process';
 import {
   getAllProcesses,
@@ -221,6 +221,7 @@ class SessionService {
     options?: {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
+      permissionHandler?: PermissionHandler;
       model?: string;
     }
   ): Promise<ClaudeClient> {
@@ -269,6 +270,7 @@ class SessionService {
     options?: {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
+      permissionHandler?: PermissionHandler;
       model?: string;
     }
   ): Promise<ClaudeClient> {
@@ -290,6 +292,7 @@ class SessionService {
       systemPrompt: sessionOpts.systemPrompt,
       model: options?.model ?? sessionOpts.model,
       permissionMode: options?.permissionMode ?? 'bypassPermissions',
+      permissionHandler: options?.permissionHandler,
       includePartialMessages: true,
       thinkingEnabled: options?.thinkingEnabled,
       sessionId, // Enable auto-registration in process registry

@@ -10,8 +10,8 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
-import { type ClaudeClient, SessionManager } from '../../claude/index';
-import type { ClaudeContentItem } from '../../claude/types';
+import { type ClaudeClient, DeferredHandler, SessionManager } from '../../claude/index';
+import type { ClaudeContentItem, ControlRequest } from '../../claude/types';
 import { interceptorRegistry } from '../../interceptors';
 import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
 import { configService, createLogger, sessionService } from '../../services/index';
@@ -41,6 +41,7 @@ export interface PendingMessage {
 export const chatConnections = new Map<string, ConnectionInfo>();
 export const pendingMessages = new Map<string, PendingMessage[]>();
 export const clientEventSetup = new Set<string>();
+export const sessionPermissionHandlers = new Map<string, DeferredHandler>();
 
 const MAX_PENDING_MESSAGES = 100;
 const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
@@ -281,10 +282,49 @@ function setupChatClientEvents(
     client.removeAllListeners();
     clientEventSetup.delete(dbSessionId);
     pendingMessages.delete(dbSessionId);
+
+    // Clean up permission handler
+    const handler = sessionPermissionHandlers.get(dbSessionId);
+    if (handler) {
+      handler.cancelAll('Session exited');
+      sessionPermissionHandlers.delete(dbSessionId);
+    }
   });
 
   client.on('error', (error) => {
     forwardToConnections(dbSessionId, { type: 'error', message: error.message });
+  });
+
+  client.on('permission_request', (controlRequest: ControlRequest) => {
+    // Extract tool info from can_use_tool requests
+    if (controlRequest.request.subtype === 'can_use_tool') {
+      const toolName = controlRequest.request.tool_name;
+      const toolInput = controlRequest.request.input ?? {};
+      const requestId = controlRequest.request_id;
+
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Forwarding permission request', {
+          dbSessionId,
+          requestId,
+          toolName,
+        });
+      }
+
+      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', {
+        type: 'permission_request',
+        requestId,
+        toolName,
+        toolInput,
+      });
+
+      forwardToConnections(dbSessionId, {
+        type: 'permission_request',
+        requestId,
+        toolName,
+        toolInput,
+        timestamp: new Date().toISOString(),
+      });
+    }
   });
 }
 
@@ -304,10 +344,22 @@ async function getOrCreateChatClient(
     logger.info('[Chat WS] Getting or creating client via sessionService', { dbSessionId });
   }
 
+  // For plan mode, create and use a DeferredHandler to enable UI-based approval
+  let permissionHandler: DeferredHandler | undefined;
+  if (options.planModeEnabled) {
+    permissionHandler = new DeferredHandler({ timeout: 300_000 }); // 5 minute timeout
+    sessionPermissionHandlers.set(dbSessionId, permissionHandler);
+
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Created DeferredHandler for plan mode', { dbSessionId });
+    }
+  }
+
   // Delegate client lifecycle to sessionService
   const client = await sessionService.getOrCreateClient(dbSessionId, {
     thinkingEnabled: options.thinkingEnabled,
     permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
+    permissionHandler,
     model: options.model,
   });
 
@@ -338,6 +390,8 @@ async function handleChatMessage(
     thinkingEnabled?: boolean;
     planModeEnabled?: boolean;
     selectedModel?: string | null;
+    requestId?: string;
+    allow?: boolean;
   }
 ): Promise<void> {
   // Most operations require a session - reject if missing
@@ -463,6 +517,14 @@ async function handleChatMessage(
       // Delegate to sessionService for unified session lifecycle management
       await sessionService.stopClaudeSession(sessionId);
       pendingMessages.delete(sessionId);
+
+      // Clean up permission handler
+      const handler = sessionPermissionHandlers.get(sessionId);
+      if (handler) {
+        handler.cancelAll('Session stopped');
+        sessionPermissionHandlers.delete(sessionId);
+      }
+
       ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
       break;
     }
@@ -539,6 +601,44 @@ async function handleChatMessage(
           })
         );
       }
+      break;
+    }
+
+    case 'permission_response': {
+      // Handle permission approval/denial from the frontend
+      const { requestId, allow } = message;
+      if (!requestId || allow === undefined) {
+        logger.warn('[Chat WS] Invalid permission_response message', { sessionId, message });
+        break;
+      }
+
+      const handler = sessionPermissionHandlers.get(sessionId);
+      if (!handler) {
+        logger.warn('[Chat WS] No permission handler found for session', { sessionId, requestId });
+        break;
+      }
+
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Processing permission response', {
+          sessionId,
+          requestId,
+          allow,
+        });
+      }
+
+      sessionFileLogger.log(sessionId, 'IN_FROM_CLIENT', {
+        type: 'permission_response',
+        requestId,
+        allow,
+      });
+
+      // Approve or deny the pending request
+      if (allow) {
+        handler.approve(requestId);
+      } else {
+        handler.deny(requestId, 'User denied permission');
+      }
+
       break;
     }
   }
