@@ -1,4 +1,5 @@
 @plugin 'tailwindcss-animate';
+@plugin '@tailwindcss/typography';
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
