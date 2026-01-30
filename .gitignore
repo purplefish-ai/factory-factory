@@ -61,3 +61,6 @@ release/
 # Agent workspace context (ephemeral, for cross-agent collaboration)
 .context/
 dist-bundle/
+
+# Native module cache for Electron/Node switching
+.native-cache/
