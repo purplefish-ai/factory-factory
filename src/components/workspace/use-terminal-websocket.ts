@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { getReconnectDelay, MAX_RECONNECT_ATTEMPTS } from '@/lib/websocket-config';
+import { useCallback } from 'react';
+import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
+import { buildWebSocketUrl } from '@/lib/websocket-config';
 
 // =============================================================================
 // Types
@@ -37,6 +38,52 @@ interface UseTerminalWebSocketReturn {
 }
 
 // =============================================================================
+// Message Handler
+// =============================================================================
+
+interface MessageHandlerCallbacks {
+  onOutput?: (terminalId: string, data: string) => void;
+  onCreated?: (terminalId: string) => void;
+  onExit?: (terminalId: string, exitCode: number) => void;
+  onError?: (message: string) => void;
+  onTerminalList?: (
+    terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
+  ) => void;
+}
+
+function handleTerminalMessage(message: TerminalMessage, callbacks: MessageHandlerCallbacks): void {
+  const { onOutput, onCreated, onExit, onError, onTerminalList } = callbacks;
+
+  switch (message.type) {
+    case 'output':
+      if (message.terminalId && message.data) {
+        onOutput?.(message.terminalId, message.data);
+      }
+      break;
+    case 'created':
+      if (message.terminalId) {
+        onCreated?.(message.terminalId);
+      }
+      break;
+    case 'exit':
+      if (message.terminalId && message.exitCode !== undefined) {
+        onExit?.(message.terminalId, message.exitCode);
+      }
+      break;
+    case 'error':
+      if (message.message) {
+        onError?.(message.message);
+      }
+      break;
+    case 'terminal_list':
+      if (message.terminals) {
+        onTerminalList?.(message.terminals);
+      }
+      break;
+  }
+}
+
+// =============================================================================
 // Hook
 // =============================================================================
 
@@ -48,174 +95,55 @@ export function useTerminalWebSocket({
   onError,
   onTerminalList,
 }: UseTerminalWebSocketOptions): UseTerminalWebSocketReturn {
-  const [connected, setConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  // Track intentional closes to prevent reconnection during React Strict Mode unmount
-  const intentionalCloseRef = useRef(false);
+  const url = buildWebSocketUrl('/terminal', { workspaceId });
 
-  // Store callbacks in refs to avoid reconnection on callback changes
-  const onOutputRef = useRef(onOutput);
-  const onCreatedRef = useRef(onCreated);
-  const onExitRef = useRef(onExit);
-  const onErrorRef = useRef(onError);
-  const onTerminalListRef = useRef(onTerminalList);
+  const handleMessage = useCallback(
+    (data: unknown) => {
+      const message = data as TerminalMessage;
+      handleTerminalMessage(message, { onOutput, onCreated, onExit, onError, onTerminalList });
+    },
+    [onOutput, onCreated, onExit, onError, onTerminalList]
+  );
 
-  useEffect(() => {
-    onOutputRef.current = onOutput;
-    onCreatedRef.current = onCreated;
-    onExitRef.current = onExit;
-    onErrorRef.current = onError;
-    onTerminalListRef.current = onTerminalList;
-  }, [onOutput, onCreated, onExit, onError, onTerminalList]);
+  const { connected, send } = useWebSocketTransport({
+    url,
+    onMessage: handleMessage,
+  });
 
-  // Connect to WebSocket
-  const connect = useCallback(() => {
-    // Don't create new connection if one is already open
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
+  const create = useCallback(
+    (cols = 80, rows = 24) => {
+      send({ type: 'create', cols, rows });
+    },
+    [send]
+  );
 
-    // Close any existing WebSocket in a transitional state (CONNECTING, CLOSING)
-    // to prevent having multiple connections
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+  const sendInput = useCallback(
+    (terminalId: string, data: string) => {
+      send({ type: 'input', terminalId, data });
+    },
+    [send]
+  );
 
-    // Reset intentional close flag when establishing a new connection
-    intentionalCloseRef.current = false;
+  const resize = useCallback(
+    (terminalId: string, cols: number, rows: number) => {
+      send({ type: 'resize', terminalId, cols, rows });
+    },
+    [send]
+  );
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Use same origin - Vite proxies /terminal to backend in dev, backend serves directly in prod
-    const wsUrl = `${protocol}//${window.location.host}/terminal?workspaceId=${encodeURIComponent(workspaceId)}`;
+  const destroy = useCallback(
+    (terminalId: string) => {
+      send({ type: 'destroy', terminalId });
+    },
+    [send]
+  );
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setConnected(true);
-      reconnectAttemptsRef.current = 0;
-    };
-
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket message handler requires handling multiple message types
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data) as TerminalMessage;
-
-        switch (message.type) {
-          case 'output':
-            if (message.terminalId && message.data) {
-              onOutputRef.current?.(message.terminalId, message.data);
-            }
-            break;
-
-          case 'created':
-            if (message.terminalId) {
-              onCreatedRef.current?.(message.terminalId);
-            }
-            break;
-
-          case 'exit':
-            if (message.terminalId && message.exitCode !== undefined) {
-              onExitRef.current?.(message.terminalId, message.exitCode);
-            }
-            break;
-
-          case 'error':
-            if (message.message) {
-              onErrorRef.current?.(message.message);
-            }
-            break;
-
-          case 'terminal_list':
-            if (message.terminals) {
-              onTerminalListRef.current?.(message.terminals);
-            }
-            break;
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    };
-
-    ws.onclose = () => {
-      setConnected(false);
-      wsRef.current = null;
-
-      // Only attempt to reconnect if this wasn't an intentional close
-      // (e.g., from React Strict Mode unmount)
-      if (!intentionalCloseRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-        const delay = getReconnectDelay(reconnectAttemptsRef.current);
-        reconnectAttemptsRef.current += 1;
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, delay);
-      }
-    };
-
-    ws.onerror = () => {
-      // Don't report errors if this was an intentional close (e.g., React Strict Mode unmount)
-      // The browser will still log "WebSocket is closed before connection established" but we
-      // won't propagate it to our error handler
-      if (!intentionalCloseRef.current) {
-        onErrorRef.current?.('WebSocket connection error');
-      }
-    };
-  }, [workspaceId]);
-
-  // Connect on mount
-  useEffect(() => {
-    connect();
-
-    return () => {
-      // Mark as intentional close to prevent reconnection in onclose handler
-      intentionalCloseRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [connect]);
-
-  // Create a new terminal
-  const create = useCallback((cols = 80, rows = 24) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'create', cols, rows }));
-    }
-  }, []);
-
-  // Send input to a specific terminal
-  const sendInput = useCallback((terminalId: string, data: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'input', terminalId, data }));
-    }
-  }, []);
-
-  // Resize a specific terminal
-  const resize = useCallback((terminalId: string, cols: number, rows: number) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'resize', terminalId, cols, rows }));
-    }
-  }, []);
-
-  // Destroy a specific terminal
-  const destroy = useCallback((terminalId: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'destroy', terminalId }));
-    }
-  }, []);
-
-  // Set the active terminal (for MCP tools to know which terminal the user is viewing)
-  const setActive = useCallback((terminalId: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'set_active', terminalId }));
-    }
-  }, []);
+  const setActive = useCallback(
+    (terminalId: string) => {
+      send({ type: 'set_active', terminalId });
+    },
+    [send]
+  );
 
   return {
     connected,
