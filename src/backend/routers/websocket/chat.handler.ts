@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type ClaudeClient, SessionManager } from '../../claude/index';
+import type { ClaudeContentItem } from '../../claude/types';
 import { interceptorRegistry } from '../../interceptors';
 import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
 import { configService, createLogger, sessionService } from '../../services/index';
@@ -29,7 +30,7 @@ export interface ConnectionInfo {
 }
 
 export interface PendingMessage {
-  text: string;
+  content: string | ClaudeContentItem[];
   sentAt: Date;
 }
 
@@ -186,7 +187,7 @@ function setupChatClientEvents(
         count: pending.length,
       });
       for (const msg of pending) {
-        client.sendMessage(msg.text);
+        client.sendMessage(msg.content);
       }
     }
 
@@ -330,6 +331,7 @@ async function handleChatMessage(
   message: {
     type: string;
     text?: string;
+    content?: string | ClaudeContentItem[];
     workingDir?: string;
     systemPrompt?: string;
     model?: string;
@@ -380,15 +382,21 @@ async function handleChatMessage(
     }
 
     case 'user_input': {
-      const text = message.text || '';
-      if (!text.trim()) {
+      // Support both text and content array formats
+      const messageContent = message.content || message.text;
+      if (!messageContent) {
+        break;
+      }
+
+      // For text-only messages, ensure it's not empty
+      if (typeof messageContent === 'string' && !messageContent.trim()) {
         break;
       }
 
       // Check if client exists and is running via sessionService
       const existingClient = sessionService.getClient(sessionId);
       if (existingClient?.isRunning()) {
-        existingClient.sendMessage(text);
+        existingClient.sendMessage(messageContent);
       } else {
         let queue = pendingMessages.get(sessionId);
         if (!queue) {
@@ -411,14 +419,15 @@ async function handleChatMessage(
           break;
         }
 
-        queue.push({ text, sentAt: new Date() });
+        queue.push({ content: messageContent, sentAt: new Date() });
 
         logger.info('[Chat WS] Queued message for pending session', {
           sessionId,
           queueLength: queue.length,
         });
 
-        ws.send(JSON.stringify({ type: 'message_queued', text }));
+        const displayText = typeof messageContent === 'string' ? messageContent : '[Image message]';
+        ws.send(JSON.stringify({ type: 'message_queued', text: displayText }));
         ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
 
         // Determine model to use
@@ -443,7 +452,7 @@ async function handleChatMessage(
             count: pending.length,
           });
           for (const msg of pending) {
-            newClient.sendMessage(msg.text);
+            newClient.sendMessage(msg.content);
           }
         }
       }

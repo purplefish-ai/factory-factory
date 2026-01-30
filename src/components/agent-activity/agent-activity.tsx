@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
 import { extractTextFromMessage, isToolSequence, THINKING_SUFFIX } from '@/lib/claude-types';
 import { CopyMessageButton } from './copy-message-button';
@@ -39,11 +40,20 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
     const userText = stripThinkingSuffix(message.text);
     return (
       <MessageWrapper>
-        <div className="relative inline-block max-w-full">
-          <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
-            {userText}
-          </div>
-          {userText && <CopyMessageButton textContent={userText} />}
+        <div className="inline-block max-w-full space-y-2">
+          {/* Attachments */}
+          {message.attachments && message.attachments.length > 0 && (
+            <AttachmentPreview attachments={message.attachments} readOnly />
+          )}
+          {/* Text */}
+          {message.text && (
+            <div className="relative inline-block max-w-full">
+              <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
+                {userText}
+              </div>
+              {userText && <CopyMessageButton textContent={userText} />}
+            </div>
+          )}
         </div>
       </MessageWrapper>
     );
