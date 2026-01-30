@@ -10,7 +10,7 @@ import {
   Settings,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -34,13 +34,13 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
+import { useWorkspaceListState } from './use-workspace-list-state';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
@@ -62,11 +62,6 @@ export function AppSidebar() {
   });
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
-  const [archivingWorkspace, setArchivingWorkspace] = useState<{
-    id: string;
-    name: string;
-    branchName?: string | null;
-  } | null>(null);
   const { setProjectContext } = useProjectContext();
 
   const { data: projects } = trpc.project.list.useQuery({
@@ -81,10 +76,14 @@ export function AppSidebar() {
     { enabled: !!selectedProjectId, refetchInterval: 2000 }
   );
 
-  const workspaces = projectState?.workspaces;
+  const serverWorkspaces = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
 
   const utils = trpc.useUtils();
+
+  // Use the workspace list state management hook
+  const { workspaceList, existingNames, isCreating, startCreating, startArchiving } =
+    useWorkspaceListState(serverWorkspaces);
 
   const createWorkspace = trpc.workspace.create.useMutation();
   const archiveWorkspace = trpc.workspace.archive.useMutation({
@@ -98,30 +97,13 @@ export function AppSidebar() {
       }
     },
   });
-  // ID of workspace currently being archived - use archivingWorkspace state as source of truth
-  // (not isPending, which clears before cache updates)
-  const archivingWorkspaceId = archivingWorkspace?.id ?? null;
-  // Track pending workspace: name during creation, id+name after creation until it appears in list
-  const [pendingWorkspace, setPendingWorkspace] = useState<{
-    name: string;
-    id?: string;
-  } | null>(null);
-
-  const existingWorkspaceNames = useMemo(() => {
-    const names = workspaces?.map((w) => w.name) ?? [];
-    // Include pending name to prevent duplicates on rapid clicks
-    if (pendingWorkspace?.name) {
-      names.push(pendingWorkspace.name);
-    }
-    return names;
-  }, [workspaces, pendingWorkspace?.name]);
 
   const handleCreateWorkspace = async () => {
-    if (!selectedProjectId) {
+    if (!selectedProjectId || isCreating) {
       return;
     }
-    const name = generateUniqueWorkspaceName(existingWorkspaceNames);
-    setPendingWorkspace({ name });
+    const name = generateUniqueWorkspaceName(existingNames);
+    startCreating(name);
 
     // Create workspace (branchName defaults to project's default branch)
     // Don't create a session - user will choose workflow in workspace page
@@ -129,9 +111,6 @@ export function AppSidebar() {
       projectId: selectedProjectId,
       name,
     });
-
-    // Update pending workspace with ID so we can show it as selected
-    setPendingWorkspace({ name, id: workspace.id });
 
     // Invalidate caches to trigger immediate refetch
     utils.workspace.list.invalidate({ projectId: selectedProjectId });
@@ -143,41 +122,6 @@ export function AppSidebar() {
 
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
-  const isCreatingWorkspace = createWorkspace.isPending;
-
-  // Check if the pending workspace has appeared in the list yet
-  const pendingWorkspaceInList = pendingWorkspace?.id
-    ? workspaces?.some((w) => w.id === pendingWorkspace.id)
-    : workspaces?.some((w) => w.name === pendingWorkspace?.name);
-
-  // Clear pending workspace once it appears in the list
-  useEffect(() => {
-    if (pendingWorkspace && pendingWorkspaceInList) {
-      setPendingWorkspace(null);
-    }
-  }, [pendingWorkspace, pendingWorkspaceInList]);
-
-  // Clear archiving workspace state after it's removed from the list and mutation is complete
-  const archivingWorkspaceInList = archivingWorkspace
-    ? workspaces?.some((w) => w.id === archivingWorkspace.id)
-    : false;
-
-  useEffect(() => {
-    if (!archivingWorkspace || archiveWorkspace.isPending || archivingWorkspaceInList) {
-      return;
-    }
-    // Small delay for visual feedback before clearing
-    const timer = setTimeout(() => {
-      setArchivingWorkspace(null);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [archivingWorkspace, archiveWorkspace.isPending, archivingWorkspaceInList]);
-
-  // Show "Creating..." placeholder only during the mutation (before we have an ID)
-  const showCreatingPlaceholder = isCreatingWorkspace && !pendingWorkspace?.id;
-
-  // Show optimistic workspace entry after creation but before it appears in the list
-  const showOptimisticWorkspace = pendingWorkspace?.id && !pendingWorkspaceInList;
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -282,11 +226,11 @@ export function AppSidebar() {
               <button
                 type="button"
                 onClick={handleCreateWorkspace}
-                disabled={isCreatingWorkspace}
+                disabled={isCreating}
                 className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
                 title="New Workspace"
               >
-                {isCreatingWorkspace ? (
+                {isCreating ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Plus className="h-3.5 w-3.5" />
@@ -295,83 +239,47 @@ export function AppSidebar() {
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
               <SidebarMenu>
-                {showCreatingPlaceholder && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton className="h-auto py-2 cursor-default">
-                      <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
-                        <div className="flex items-center gap-1.5">
-                          <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
-                          <span className="truncate font-medium text-sm text-muted-foreground">
-                            Creating workspace...
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Skeleton className="h-3 w-24" />
-                        </div>
-                      </div>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-                {/* Optimistic workspace entry - shows immediately after creation before polling picks it up */}
-                {showOptimisticWorkspace && pendingWorkspace.id && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={currentWorkspaceId === pendingWorkspace.id}
-                      className="h-auto py-2"
-                    >
-                      <Link
-                        to={`/projects/${selectedProjectSlug}/workspaces/${pendingWorkspace.id}`}
-                      >
-                        <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
-                          <div className="flex items-center gap-1.5">
-                            <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
-                            <span className="truncate font-medium text-sm">
-                              {pendingWorkspace.name}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span className="truncate">Initializing...</span>
-                          </div>
-                        </div>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-                {/* Optimistic archiving entry - shows after workspace is removed from list but before mutation completes */}
-                {archivingWorkspace && !workspaces?.some((w) => w.id === archivingWorkspace.id) && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton className="h-auto py-2 opacity-50 pointer-events-none">
-                      <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
-                        <div className="flex items-center gap-1.5">
-                          <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
-                          <span className="truncate font-medium text-sm">Archiving...</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <span className="truncate">{archivingWorkspace.name}</span>
-                        </div>
-                      </div>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
                 {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conditional rendering for PR/CI status badges */}
-                {workspaces?.map((workspace) => {
+                {workspaceList.map((workspace) => {
+                  const isCreatingItem = workspace.uiState === 'creating';
+                  const isArchivingItem = workspace.uiState === 'archiving';
                   const isActive = currentWorkspaceId === workspace.id;
-                  const isArchiving = archivingWorkspaceId === workspace.id;
                   const { isWorking, gitStats: stats } = workspace;
                   const hasChanges =
                     stats && (stats.total > 0 || stats.additions > 0 || stats.deletions > 0);
+
+                  // Creating placeholder - non-clickable
+                  if (isCreatingItem) {
+                    return (
+                      <SidebarMenuItem key={workspace.id}>
+                        <SidebarMenuButton className="h-auto py-2 cursor-default">
+                          <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
+                            <div className="flex items-center gap-1.5">
+                              <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                              <span className="truncate font-medium text-sm text-muted-foreground">
+                                Creating workspace...
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span className="truncate">{workspace.name}</span>
+                            </div>
+                          </div>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  }
+
                   return (
                     <SidebarMenuItem key={workspace.id}>
                       <SidebarMenuButton
                         asChild
                         isActive={isActive}
-                        className={`h-auto py-2 ${isArchiving ? 'opacity-50 pointer-events-none' : ''}`}
+                        className={`h-auto py-2 ${isArchivingItem ? 'opacity-50 pointer-events-none' : ''}`}
                       >
                         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
                           <div className="flex flex-col gap-0.5 w-0 flex-1 overflow-hidden">
                             <div className="flex items-center gap-1.5">
-                              {isArchiving || !workspace.branchName ? (
+                              {isArchivingItem || !workspace.branchName ? (
                                 <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
                               ) : isWorking ? (
                                 <Loader2 className="h-3 w-3 shrink-0 text-brand animate-spin" />
@@ -379,7 +287,7 @@ export function AppSidebar() {
                                 <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
                               )}
                               <span className="truncate font-medium text-sm">
-                                {isArchiving
+                                {isArchivingItem
                                   ? 'Archiving...'
                                   : workspace.branchName || workspace.name}
                               </span>
@@ -480,7 +388,7 @@ export function AppSidebar() {
                                       </TooltipContent>
                                     </Tooltip>
                                   )}
-                                {!isArchiving && (
+                                {!isArchivingItem && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <button
@@ -510,7 +418,7 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   );
                 })}
-                {workspaces?.length === 0 && (
+                {workspaceList.length === 0 && (
                   <div className="px-2 py-4 text-xs text-muted-foreground text-center">
                     No active workspaces
                   </div>
@@ -569,15 +477,8 @@ export function AppSidebar() {
         variant="destructive"
         onConfirm={() => {
           if (workspaceToArchive) {
-            // Capture workspace info for optimistic UI before archiving
-            const workspace = workspaces?.find((w) => w.id === workspaceToArchive);
-            if (workspace) {
-              setArchivingWorkspace({
-                id: workspace.id,
-                name: workspace.name,
-                branchName: workspace.branchName,
-              });
-            }
+            // Start archiving state management (optimistic UI)
+            startArchiving(workspaceToArchive);
             archiveWorkspace.mutate({ id: workspaceToArchive });
           }
           setArchiveDialogOpen(false);
