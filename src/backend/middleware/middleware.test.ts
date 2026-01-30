@@ -114,22 +114,16 @@ describe('corsMiddleware', () => {
   let mockRes: MockRes;
   let mockNext: NextFunction;
 
-  const originalEnv = process.env.CORS_ALLOWED_ORIGINS;
-
   beforeEach(() => {
     mockRes = createMockRes();
     mockNext = vi.fn() as unknown as NextFunction;
-    // Reset env var before each test
-    process.env.CORS_ALLOWED_ORIGINS = undefined;
+    // Use vi.stubEnv to properly handle env var - this allows us to "unset" it
+    vi.unstubAllEnvs();
   });
 
   afterEach(() => {
-    // Restore original env var
-    if (originalEnv !== undefined) {
-      process.env.CORS_ALLOWED_ORIGINS = originalEnv;
-    } else {
-      process.env.CORS_ALLOWED_ORIGINS = undefined;
-    }
+    // Restore original env vars
+    vi.unstubAllEnvs();
   });
 
   describe('origin handling', () => {
@@ -172,7 +166,7 @@ describe('corsMiddleware', () => {
     });
 
     it('should use custom allowed origins from CORS_ALLOWED_ORIGINS env var', () => {
-      process.env.CORS_ALLOWED_ORIGINS = 'https://example.com,https://app.example.com';
+      vi.stubEnv('CORS_ALLOWED_ORIGINS', 'https://example.com,https://app.example.com');
 
       const mockReq = createMockReq({
         headers: { origin: 'https://example.com' },
@@ -184,7 +178,7 @@ describe('corsMiddleware', () => {
     });
 
     it('should reject default origins when custom env var is set', () => {
-      process.env.CORS_ALLOWED_ORIGINS = 'https://example.com';
+      vi.stubEnv('CORS_ALLOWED_ORIGINS', 'https://example.com');
 
       const mockReq = createMockReq({
         headers: { origin: 'http://localhost:3000' },
