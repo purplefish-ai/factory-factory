@@ -24,19 +24,11 @@ const logger = createLogger('terminal-handler');
  */
 export type TerminalConnectionsMap = Map<string, Set<WebSocket>>;
 
-/**
- * Map of workspace ID to grace period timeout
- */
-export type TerminalGracePeriodsMap = Map<string, NodeJS.Timeout>;
-
 // ============================================================================
 // State
 // ============================================================================
 
-export const TERMINAL_GRACE_PERIOD_MS = 30_000;
-
 export const terminalConnections: TerminalConnectionsMap = new Map();
-export const terminalGracePeriods: TerminalGracePeriodsMap = new Map();
 
 const terminalListenerCleanup = new WeakMap<WebSocket, Map<string, (() => void)[]>>();
 
@@ -86,13 +78,6 @@ export function handleTerminalUpgrade(
 
     wsAliveMap.set(ws, true);
     ws.on('pong', () => wsAliveMap.set(ws, true));
-
-    const existingGracePeriod = terminalGracePeriods.get(workspaceId);
-    if (existingGracePeriod) {
-      clearTimeout(existingGracePeriod);
-      terminalGracePeriods.delete(workspaceId);
-      logger.info('Cancelled terminal grace period due to reconnection', { workspaceId });
-    }
 
     if (!terminalConnections.has(workspaceId)) {
       terminalConnections.set(workspaceId, new Set());
@@ -352,20 +337,16 @@ export function handleTerminalUpgrade(
         connections.delete(ws);
         if (connections.size === 0) {
           terminalConnections.delete(workspaceId);
-          logger.info('Starting terminal grace period', {
+          logger.info('All WebSocket connections closed for workspace', {
             workspaceId,
-            gracePeriodMs: TERMINAL_GRACE_PERIOD_MS,
+            message:
+              'Terminals will persist until explicitly closed or workspace is archived/deleted',
           });
-          const gracePeriodTimeout = setTimeout(() => {
-            if (!terminalConnections.has(workspaceId)) {
-              logger.info('Grace period expired, destroying workspace terminals', {
-                workspaceId,
-              });
-              terminalService.destroyWorkspaceTerminals(workspaceId);
-            }
-            terminalGracePeriods.delete(workspaceId);
-          }, TERMINAL_GRACE_PERIOD_MS);
-          terminalGracePeriods.set(workspaceId, gracePeriodTimeout);
+          // NOTE: Do NOT destroy terminals when navigating away from a workspace.
+          // Terminals should persist across navigation and only be destroyed when:
+          // 1. User explicitly closes a terminal tab
+          // 2. Workspace is archived or deleted
+          // 3. Server shuts down
         }
       }
     });

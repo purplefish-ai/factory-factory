@@ -12,6 +12,8 @@ export interface BranchRenameContext {
   workspaceName: string;
   /** Optional workspace description */
   workspaceDescription?: string;
+  /** Optional conversation summary with key topics */
+  conversationSummary?: string;
 }
 
 /**
@@ -25,6 +27,9 @@ export function buildBranchRenameInstruction(context: BranchRenameContext): stri
   const contextLines = [`- Workspace: ${context.workspaceName}`];
   if (context.workspaceDescription) {
     contextLines.push(`- Description: ${context.workspaceDescription}`);
+  }
+  if (context.conversationSummary) {
+    contextLines.push(`- Conversation topics: ${context.conversationSummary}`);
   }
 
   return `<system_instruction>
