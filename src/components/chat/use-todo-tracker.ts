@@ -4,7 +4,7 @@
  */
 
 import { useMemo } from 'react';
-import type { ChatMessage } from '@/lib/claude-types';
+import type { ChatMessage, ClaudeMessage } from '@/lib/claude-types';
 import { isToolUseMessage } from '@/lib/claude-types';
 import { calculateTodoProgress } from '@/lib/todo-utils';
 
@@ -38,6 +38,53 @@ function calculateTodoState(todos: Todo[], timestamp: string): TodoState {
 }
 
 /**
+ * Helper to extract todos from a TodoWrite tool use in a stream event
+ */
+function extractTodosFromStreamEvent(
+  claudeMessage: ClaudeMessage,
+  timestamp: string
+): TodoState | null {
+  if (claudeMessage.type !== 'stream_event' || !claudeMessage.event) {
+    return null;
+  }
+
+  if (claudeMessage.event.type !== 'content_block_start') {
+    return null;
+  }
+
+  const block = claudeMessage.event.content_block;
+  if (block.type === 'tool_use' && block.name === 'TodoWrite') {
+    const input = block.input as { todos?: Todo[] };
+    const todos = input.todos || [];
+    return calculateTodoState(todos, timestamp);
+  }
+
+  return null;
+}
+
+/**
+ * Helper to extract todos from a TodoWrite tool use in an assistant message
+ */
+function extractTodosFromAssistantMessage(
+  claudeMessage: ClaudeMessage,
+  timestamp: string
+): TodoState | null {
+  if (!(claudeMessage.message && Array.isArray(claudeMessage.message.content))) {
+    return null;
+  }
+
+  for (const item of claudeMessage.message.content) {
+    if (item.type === 'tool_use' && item.name === 'TodoWrite') {
+      const input = item.input as { todos?: Todo[] };
+      const todos = input.todos || [];
+      return calculateTodoState(todos, timestamp);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Helper to extract todos from a TodoWrite tool call
  */
 function extractTodosFromMessage(message: ChatMessage): TodoState | null {
@@ -50,23 +97,14 @@ function extractTodosFromMessage(message: ChatMessage): TodoState | null {
     return null;
   }
 
-  // Check if this message contains a TodoWrite tool call
-  // claudeMessage.message.content is the actual content array
-  const messageContent = claudeMessage.message;
-  if (!(messageContent && Array.isArray(messageContent.content))) {
-    return null;
+  // Handle stream_event types - tool info is in event.content_block
+  const streamResult = extractTodosFromStreamEvent(claudeMessage, message.timestamp);
+  if (streamResult) {
+    return streamResult;
   }
 
-  const content = messageContent.content;
-  for (const item of content) {
-    if (item.type === 'tool_use' && item.name === 'TodoWrite') {
-      const input = item.input as { todos?: Todo[] };
-      const todos = input.todos || [];
-      return calculateTodoState(todos, message.timestamp);
-    }
-  }
-
-  return null;
+  // Handle assistant messages - tool info is in message.content
+  return extractTodosFromAssistantMessage(claudeMessage, message.timestamp);
 }
 
 /**

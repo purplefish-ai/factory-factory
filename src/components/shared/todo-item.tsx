@@ -2,14 +2,11 @@
 
 import { CheckSquare, Circle, Square } from 'lucide-react';
 import { memo } from 'react';
+import type { Todo } from '@/components/chat/use-todo-tracker';
 import { cn } from '@/lib/utils';
 
 export interface TodoItemProps {
-  todo: {
-    content: string;
-    activeForm: string;
-    status: 'pending' | 'in_progress' | 'completed';
-  };
+  todo: Todo;
 }
 
 /**

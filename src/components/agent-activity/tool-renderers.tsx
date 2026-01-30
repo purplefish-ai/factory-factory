@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
+import type { Todo } from '@/components/chat/use-todo-tracker';
 import { TodoItem } from '@/components/shared';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -462,13 +463,7 @@ const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
 }: {
   input: Record<string, unknown>;
 }) {
-  const todos = input.todos as
-    | Array<{
-        content: string;
-        activeForm: string;
-        status: 'pending' | 'in_progress' | 'completed';
-      }>
-    | undefined;
+  const todos = input.todos as Todo[] | undefined;
 
   if (!todos || todos.length === 0) {
     return <div className="text-xs text-muted-foreground">No todos</div>;
