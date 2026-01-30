@@ -206,6 +206,13 @@ export class ClaudeProtocol extends EventEmitter {
       },
     };
 
+    // biome-ignore lint/suspicious/noConsole: Debug logging for control responses
+    console.log('[Protocol] Sending control response:', {
+      requestId,
+      response,
+      messageJSON: JSON.stringify(message),
+    });
+
     await this.sendRaw(message);
   }
 

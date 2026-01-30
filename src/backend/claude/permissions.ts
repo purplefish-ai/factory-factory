@@ -446,7 +446,16 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     this.pendingRequests.delete(requestId);
 
     if (pending.type === 'permission') {
-      pending.resolve(createAllowResponse(updatedInput));
+      const response = createAllowResponse(updatedInput);
+      // biome-ignore lint/suspicious/noConsole: Debug logging for permission approval
+      console.log('[DeferredHandler] Approving with response:', {
+        requestId,
+        response,
+        hasUpdatedInput: 'updatedInput' in response,
+        updatedInputValue: updatedInput,
+        responseJSON: JSON.stringify(response),
+      });
+      pending.resolve(response);
     } else {
       // For hooks, determine the appropriate response based on the hook type
       const hookRequest = pending.request as HookCallbackRequest;

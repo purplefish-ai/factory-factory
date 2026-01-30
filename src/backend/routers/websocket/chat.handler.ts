@@ -650,10 +650,29 @@ async function handleChatMessage(
           const toolName = pendingRequest.request.tool_name;
           const toolInput = pendingRequest.request.input;
 
+          logger.info('[Chat WS] Permission approval details', {
+            sessionId,
+            requestId,
+            toolName,
+            toolInput,
+            inputKeys: Object.keys(toolInput),
+            inputLength: Object.keys(toolInput).length,
+          });
+
           // Special handling for ExitPlanMode: return input only if non-empty
           if (toolName === 'ExitPlanMode' && Object.keys(toolInput).length > 0) {
+            logger.info('[Chat WS] Approving ExitPlanMode with input', {
+              sessionId,
+              requestId,
+              toolInput,
+            });
             handler.approve(requestId, toolInput);
           } else {
+            logger.info('[Chat WS] Approving without input', {
+              sessionId,
+              requestId,
+              toolName,
+            });
             handler.approve(requestId);
           }
         } else {
