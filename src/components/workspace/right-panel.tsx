@@ -3,6 +3,7 @@
 import { FileQuestion, Files, GitCompare, ListTodo } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import type { ChatMessage } from '@/components/chat';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
 
@@ -60,9 +61,10 @@ function PanelTab({ label, icon, isActive, onClick }: PanelTabProps) {
 interface RightPanelProps {
   workspaceId: string;
   className?: string;
+  messages?: ChatMessage[];
 }
 
-export function RightPanel({ workspaceId, className }: RightPanelProps) {
+export function RightPanel({ workspaceId, className, messages = [] }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
@@ -141,7 +143,9 @@ export function RightPanel({ workspaceId, className }: RightPanelProps) {
             {activeTopTab === 'unstaged' && <UnstagedChangesPanel workspaceId={workspaceId} />}
             {activeTopTab === 'diff-vs-main' && <DiffVsMainPanel workspaceId={workspaceId} />}
             {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
-            {activeTopTab === 'tasks' && <TodoPanelContainer workspaceId={workspaceId} />}
+            {activeTopTab === 'tasks' && (
+              <TodoPanelContainer workspaceId={workspaceId} messages={messages} />
+            )}
           </div>
         </div>
       </ResizablePanel>

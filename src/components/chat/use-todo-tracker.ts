@@ -52,7 +52,12 @@ function extractTodosFromMessage(message: ChatMessage): TodoState | null {
   }
 
   // Check if this message contains a TodoWrite tool call
-  for (const item of claudeMessage.content) {
+  const content = claudeMessage.content;
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  for (const item of content) {
     if (item.type === 'tool_use' && item.name === 'TodoWrite') {
       const input = item.input as { todos?: Todo[] };
       const todos = input.todos || [];

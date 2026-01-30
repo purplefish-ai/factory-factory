@@ -1,12 +1,13 @@
 'use client';
 
 import { memo } from 'react';
+import type { ChatMessage } from '@/components/chat';
 import { TodoPanel } from '@/components/chat/todo-panel';
-import { useChatWebSocket } from '@/components/chat/use-chat-websocket';
 import { useTodoTracker } from '@/components/chat/use-todo-tracker';
 
 export interface TodoPanelContainerProps {
   workspaceId: string;
+  messages: ChatMessage[];
 }
 
 /**
@@ -15,10 +16,8 @@ export interface TodoPanelContainerProps {
  */
 export const TodoPanelContainer = memo(function TodoPanelContainer({
   workspaceId: _workspaceId,
+  messages,
 }: TodoPanelContainerProps) {
-  // Get messages from the active chat session
-  const { messages } = useChatWebSocket();
-
   // Track todos from messages
   const todoState = useTodoTracker(messages);
 
