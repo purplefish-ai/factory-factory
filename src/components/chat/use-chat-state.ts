@@ -525,10 +525,29 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     persistQueue(dbSessionIdRef.current, updated);
   }, []);
 
-  // Wrap setInputDraft to persist to sessionStorage
+  // Debounce sessionStorage persistence to avoid blocking on every keystroke
+  const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Wrap setInputDraft to persist to sessionStorage (debounced)
   const setInputDraft = useCallback((draft: string) => {
     setInputDraftState(draft);
-    persistDraft(dbSessionIdRef.current, draft);
+
+    // Debounce sessionStorage write to avoid blocking main thread on every keystroke
+    if (persistDraftDebounced.current) {
+      clearTimeout(persistDraftDebounced.current);
+    }
+    persistDraftDebounced.current = setTimeout(() => {
+      persistDraft(dbSessionIdRef.current, draft);
+    }, 300);
+  }, []);
+
+  // Clean up pending debounced persist on unmount to prevent stale writes
+  useEffect(() => {
+    return () => {
+      if (persistDraftDebounced.current) {
+        clearTimeout(persistDraftDebounced.current);
+      }
+    };
   }, []);
 
   // =============================================================================
