@@ -148,6 +148,77 @@ describe('GitClient', () => {
   });
 
   // ===========================================================================
+  // generateUniqueBranchName Tests
+  // ===========================================================================
+
+  describe('generateUniqueBranchName', () => {
+    it('should return base name when branch does not exist', async () => {
+      // Mock branchExists to always return false
+      client.branchExists = () => Promise.resolve(false);
+
+      const name = await client.generateUniqueBranchName('martin-purplefish', 'jaguar');
+      expect(name).toBe('martin-purplefish/jaguar');
+    });
+
+    it('should append -1 when base branch exists', async () => {
+      let callCount = 0;
+      client.branchExists = (_branchName: string) => {
+        callCount++;
+        // First call: base name exists
+        if (callCount === 1) {
+          return Promise.resolve(true);
+        }
+        // Second call: -1 doesn't exist
+        return Promise.resolve(false);
+      };
+
+      const name = await client.generateUniqueBranchName('martin-purplefish', 'jaguar');
+      expect(name).toBe('martin-purplefish/jaguar-1');
+    });
+
+    it('should increment until finding available name', async () => {
+      const existingNames = new Set([
+        'martin-purplefish/jaguar',
+        'martin-purplefish/jaguar-1',
+        'martin-purplefish/jaguar-2',
+      ]);
+
+      client.branchExists = (branchName: string) => Promise.resolve(existingNames.has(branchName));
+
+      const name = await client.generateUniqueBranchName('martin-purplefish', 'jaguar');
+      expect(name).toBe('martin-purplefish/jaguar-3');
+    });
+
+    it('should work without prefix', async () => {
+      let callCount = 0;
+      client.branchExists = () => {
+        callCount++;
+        return Promise.resolve(callCount === 1); // First one exists, second doesn't
+      };
+
+      const name = await client.generateUniqueBranchName(undefined, 'jaguar');
+      expect(name).toBe('jaguar-1');
+    });
+
+    it('should fallback to random hex after 1000 attempts', async () => {
+      // All branches exist
+      client.branchExists = () => Promise.resolve(true);
+
+      const name = await client.generateUniqueBranchName('martin-purplefish', 'jaguar');
+      // Should fallback to random 12-character hex
+      expect(name).toMatch(/^martin-purplefish\/[0-9a-f]{12}$/);
+    });
+
+    it('should handle auto-generated names (no workspace name)', async () => {
+      client.branchExists = () => Promise.resolve(false);
+
+      const name = await client.generateUniqueBranchName('martin-purplefish');
+      // Should be prefix + 6 hex chars
+      expect(name).toMatch(/^martin-purplefish\/[0-9a-f]{6}$/);
+    });
+  });
+
+  // ===========================================================================
   // getBranchName Tests (deprecated)
   // ===========================================================================
 

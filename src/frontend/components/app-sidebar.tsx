@@ -373,6 +373,8 @@ export function AppSidebar() {
                             <div className="flex items-center gap-1.5">
                               {isArchiving || !workspace.branchName ? (
                                 <Loader2 className="h-3 w-3 shrink-0 text-muted-foreground animate-spin" />
+                              ) : isWorking ? (
+                                <Loader2 className="h-3 w-3 shrink-0 text-brand animate-spin" />
                               ) : (
                                 <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
                               )}
@@ -501,12 +503,6 @@ export function AppSidebar() {
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <span className="truncate">{workspace.name}</span>
-                              {isWorking && (
-                                <>
-                                  <span>·</span>
-                                  <Loader2 className="h-3 w-3 animate-spin text-brand shrink-0" />
-                                </>
-                              )}
                             </div>
                           </div>
                         </Link>

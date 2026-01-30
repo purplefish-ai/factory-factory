@@ -37,7 +37,7 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
   if (message.source === 'user') {
     return (
       <MessageWrapper chatMessage={message}>
-        <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 inline-block max-w-full break-words text-sm text-left">
+        <div className="rounded bg-primary dark:bg-transparent dark:border dark:border-border text-primary-foreground dark:text-foreground px-3 py-2 inline-block max-w-full break-words text-sm text-left whitespace-pre-wrap">
           {stripThinkingSuffix(message.text)}
         </div>
       </MessageWrapper>
