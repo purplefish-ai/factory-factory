@@ -644,7 +644,21 @@ async function handleChatMessage(
 
       // Approve or deny the pending request
       if (allow) {
-        handler.approve(requestId);
+        // Get the pending request to access its input
+        const pendingRequest = handler.getPendingRequest(requestId);
+        if (pendingRequest && pendingRequest.request.subtype === 'can_use_tool') {
+          const toolName = pendingRequest.request.tool_name;
+          const toolInput = pendingRequest.request.input;
+
+          // Special handling for ExitPlanMode: return input and switch to bypass mode
+          if (toolName === 'ExitPlanMode') {
+            handler.approve(requestId, toolInput);
+          } else {
+            handler.approve(requestId);
+          }
+        } else {
+          handler.approve(requestId);
+        }
       } else {
         handler.deny(requestId, 'User denied permission');
       }

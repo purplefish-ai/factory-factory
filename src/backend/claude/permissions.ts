@@ -417,6 +417,16 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
   }
 
   /**
+   * Get a pending request by ID (for inspection before approval).
+   *
+   * @param requestId - The ID of the pending request
+   * @returns The pending request or undefined if not found
+   */
+  getPendingRequest(requestId: string): PendingPermissionRequest | undefined {
+    return this.pendingRequests.get(requestId);
+  }
+
+  /**
    * Approve a pending permission request.
    *
    * @param requestId - The ID of the pending request
