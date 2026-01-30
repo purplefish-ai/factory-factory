@@ -414,6 +414,78 @@ describe('chatReducer', () => {
       expect(newState.gitBranch).toBeNull();
       expect(newState.running).toBe(true);
     });
+
+    it('should preserve optimistic user messages when loading session', () => {
+      // Scenario: User sends a message, navigates away before session starts,
+      // then navigates back. The optimistic message should be preserved.
+      const optimisticMessage: ChatMessage = {
+        id: 'msg-123',
+        source: 'user',
+        text: 'Help me debug this',
+        timestamp: '2024-01-01T00:00:02.000Z',
+      };
+
+      const historyMessages: HistoryMessage[] = [
+        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
+        { type: 'assistant', content: 'Hi there!', timestamp: '2024-01-01T00:00:01.000Z' },
+      ];
+
+      const state = {
+        ...initialState,
+        messages: [optimisticMessage],
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: historyMessages,
+          gitBranch: 'main',
+          running: false,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Should have 2 history messages + 1 optimistic message
+      expect(newState.messages).toHaveLength(3);
+      expect(newState.messages[0].source).toBe('user');
+      expect(newState.messages[1].source).toBe('claude');
+      expect(newState.messages[2]).toEqual(optimisticMessage);
+    });
+
+    it('should not preserve non-user messages when loading session', () => {
+      // Claude messages in state should be replaced by history
+      const claudeMessage: ChatMessage = {
+        id: 'msg-456',
+        source: 'claude',
+        message: { type: 'assistant', role: 'assistant', content: 'Thinking...' } as ClaudeMessage,
+        timestamp: '2024-01-01T00:00:02.000Z',
+      };
+
+      const historyMessages: HistoryMessage[] = [
+        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
+      ];
+
+      const state = {
+        ...initialState,
+        messages: [claudeMessage],
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: historyMessages,
+          gitBranch: 'main',
+          running: false,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Should only have the history message, not the Claude message
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0].source).toBe('user');
+    });
   });
 
   // -------------------------------------------------------------------------
