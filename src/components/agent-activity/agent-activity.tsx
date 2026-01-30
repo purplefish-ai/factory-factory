@@ -47,7 +47,7 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
           )}
           {/* Text */}
           {message.text && (
-            <div className="relative inline-block max-w-full">
+            <div className="group relative inline-block max-w-full">
               <div className="rounded bg-background border border-border px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
                 {userText}
               </div>
@@ -65,7 +65,7 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
     return (
       <MessageWrapper>
         {assistantText ? (
-          <div className="relative">
+          <div className="group relative">
             <AssistantMessageRenderer message={message.message} messageId={message.id} />
             <CopyMessageButton textContent={assistantText} />
           </div>
