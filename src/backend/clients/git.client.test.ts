@@ -217,27 +217,6 @@ describe('GitClient', () => {
       expect(name).toMatch(/^martin-purplefish\/[0-9a-f]{6}$/);
     });
   });
-
-  // ===========================================================================
-  // getBranchName Tests (deprecated)
-  // ===========================================================================
-
-  describe('getBranchName (deprecated)', () => {
-    it('should return legacy format branch name', () => {
-      const name = client.getBranchName('workspace-abc123');
-      expect(name).toBe('factoryfactory/workspace-abc123');
-    });
-
-    it('should handle simple workspace names', () => {
-      const name = client.getBranchName('test');
-      expect(name).toBe('factoryfactory/test');
-    });
-
-    it('should preserve workspace name exactly', () => {
-      const name = client.getBranchName('My-Workspace_123');
-      expect(name).toBe('factoryfactory/My-Workspace_123');
-    });
-  });
 });
 
 // =============================================================================
