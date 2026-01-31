@@ -1,7 +1,10 @@
 # Source files (compiled versions are in dist/)
 src/
 electron/
-scripts/
+
+# Scripts (except postinstall.mjs which is in package.json files array)
+scripts/*
+!scripts/postinstall.mjs
 
 # Development and build configuration
 *.config.ts
