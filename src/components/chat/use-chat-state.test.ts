@@ -52,6 +52,11 @@ function createQueuedMessage(text: string): QueuedMessage {
     id: generateMessageId(),
     text: text.trim(),
     timestamp: new Date().toISOString(),
+    settings: {
+      selectedModel: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
   };
 }
 
@@ -437,6 +442,11 @@ describe('sendMessage pattern', () => {
       id: generateMessageId(),
       text: text.trim(),
       timestamp: new Date().toISOString(),
+      settings: {
+        selectedModel: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
     };
 
     const newQueue = [...currentQueue, queuedMsg];

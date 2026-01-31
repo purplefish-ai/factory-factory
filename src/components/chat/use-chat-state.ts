@@ -136,9 +136,13 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function createUserMessage(text: string, attachments?: MessageAttachment[]): ChatMessage {
+function createUserMessage(
+  id: string,
+  text: string,
+  attachments?: MessageAttachment[]
+): ChatMessage {
   return {
-    id: generateMessageId(),
+    id,
     source: 'user',
     text,
     timestamp: new Date().toISOString(),
@@ -441,12 +445,13 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         return;
       }
 
+      // Generate single ID for both optimistic UI and backend
       const id = generateMessageId();
 
-      // Optimistic UI: show message immediately in chat
+      // Optimistic UI: show message immediately in chat with the SAME ID sent to backend
       dispatch({
         type: 'USER_MESSAGE_SENT',
-        payload: createUserMessage(trimmedText, attachments),
+        payload: createUserMessage(id, trimmedText, attachments),
       });
 
       // Clear draft when sending a message

@@ -678,11 +678,19 @@ async function handleQueueMessage(
     text: text ?? '',
     attachments: message.attachments,
     settings,
-    queuedAt: new Date(),
+    timestamp: new Date().toISOString(),
   };
 
   // Enqueue the message
-  const { position } = messageQueueService.enqueue(sessionId, queuedMsg);
+  const result = messageQueueService.enqueue(sessionId, queuedMsg);
+
+  // Check for queue full error
+  if ('error' in result) {
+    ws.send(JSON.stringify({ type: 'error', message: result.error }));
+    return;
+  }
+
+  const { position } = result;
 
   // Acknowledge to the sender
   ws.send(JSON.stringify({ type: 'message_queued', id: message.id, position }));

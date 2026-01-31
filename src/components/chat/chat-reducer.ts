@@ -505,6 +505,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: state.messages.filter((m) => m.id !== action.payload.id),
+        queuedMessages: state.queuedMessages.filter((m) => m.id !== action.payload.id),
       };
 
     // SET_QUEUE: Restore queue state from backend (on reconnect/session load)

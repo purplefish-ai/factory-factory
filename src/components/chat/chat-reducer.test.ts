@@ -941,7 +941,14 @@ describe('chatReducer', () => {
           toolInput: {},
           timestamp: '2024-01-01T00:00:00.000Z',
         },
-        queuedMessages: [{ id: 'q-1', text: 'queued', timestamp: '2024-01-01T00:00:00.000Z' }],
+        queuedMessages: [
+          {
+            id: 'q-1',
+            text: 'queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ],
         toolUseIdToIndex: new Map([['tool-1', 0]]),
         latestThinking: 'Some thinking from previous session',
       };
@@ -1232,17 +1239,66 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(1);
       expect(newState.messages[0].id).toBe('msg-2');
     });
+
+    it('should remove message from both messages and queuedMessages', () => {
+      const state: ChatState = {
+        ...initialState,
+        messages: [
+          { id: 'msg-1', source: 'user', text: 'First', timestamp: '2024-01-01T00:00:00.000Z' },
+          { id: 'msg-2', source: 'user', text: 'Second', timestamp: '2024-01-01T00:00:01.000Z' },
+        ],
+        queuedMessages: [
+          {
+            id: 'msg-1',
+            text: 'First',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+          {
+            id: 'msg-2',
+            text: 'Second',
+            timestamp: '2024-01-01T00:00:01.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ],
+      };
+      const action: ChatAction = { type: 'MESSAGE_REMOVED', payload: { id: 'msg-1' } };
+      const newState = chatReducer(state, action);
+
+      // Should remove from both arrays
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0].id).toBe('msg-2');
+      expect(newState.queuedMessages).toHaveLength(1);
+      expect(newState.queuedMessages[0].id).toBe('msg-2');
+    });
   });
 
   describe('SET_QUEUE action', () => {
     it('should replace entire queue', () => {
       const state: ChatState = {
         ...initialState,
-        queuedMessages: [{ id: 'old-1', text: 'Old', timestamp: '2024-01-01T00:00:00.000Z' }],
+        queuedMessages: [
+          {
+            id: 'old-1',
+            text: 'Old',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ],
       };
       const newQueue: QueuedMessage[] = [
-        { id: 'new-1', text: 'New 1', timestamp: '2024-01-02T00:00:00.000Z' },
-        { id: 'new-2', text: 'New 2', timestamp: '2024-01-02T00:00:01.000Z' },
+        {
+          id: 'new-1',
+          text: 'New 1',
+          timestamp: '2024-01-02T00:00:00.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+        {
+          id: 'new-2',
+          text: 'New 2',
+          timestamp: '2024-01-02T00:00:01.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
       ];
       const action: ChatAction = { type: 'SET_QUEUE', payload: newQueue };
       const newState = chatReducer(state, action);
@@ -1410,7 +1466,14 @@ describe('chatReducer', () => {
         running: true,
         gitBranch: 'feature/test',
         chatSettings: { selectedModel: 'sonnet', thinkingEnabled: true, planModeEnabled: false },
-        queuedMessages: [{ id: 'q-1', text: 'queued', timestamp: '2024-01-01T00:00:00.000Z' }],
+        queuedMessages: [
+          {
+            id: 'q-1',
+            text: 'queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ],
       };
 
       const action: ChatAction = { type: 'RESET_FOR_SESSION_SWITCH' };

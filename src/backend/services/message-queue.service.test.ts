@@ -19,7 +19,7 @@ function createTestMessage(id: string, text = 'Test message'): QueuedMessage {
       thinkingEnabled: false,
       planModeEnabled: false,
     },
-    queuedAt: new Date(),
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -45,7 +45,10 @@ describe('MessageQueueService', () => {
       const msg = createTestMessage('msg-1');
       const result = messageQueueService.enqueue('session-1', msg);
 
-      expect(result.position).toBe(0);
+      expect('position' in result).toBe(true);
+      if ('position' in result) {
+        expect(result.position).toBe(0);
+      }
       expect(messageQueueService.getQueueLength('session-1')).toBe(1);
     });
 
@@ -58,9 +61,9 @@ describe('MessageQueueService', () => {
       const result2 = messageQueueService.enqueue('session-1', msg2);
       const result3 = messageQueueService.enqueue('session-1', msg3);
 
-      expect(result1.position).toBe(0);
-      expect(result2.position).toBe(1);
-      expect(result3.position).toBe(2);
+      expect('position' in result1 && result1.position).toBe(0);
+      expect('position' in result2 && result2.position).toBe(1);
+      expect('position' in result3 && result3.position).toBe(2);
     });
 
     it('should create separate queues for different sessions', () => {
@@ -82,7 +85,7 @@ describe('MessageQueueService', () => {
           { id: 'att-1', name: 'image.png', type: 'image/png', size: 1024, data: 'base64data' },
         ],
         settings: { selectedModel: 'opus', thinkingEnabled: true, planModeEnabled: false },
-        queuedAt: new Date(),
+        timestamp: new Date().toISOString(),
       };
 
       messageQueueService.enqueue('session-1', msg);
@@ -91,6 +94,21 @@ describe('MessageQueueService', () => {
       expect(queue[0].attachments).toHaveLength(1);
       expect(queue[0].attachments?.[0].name).toBe('image.png');
       expect(queue[0].settings.selectedModel).toBe('opus');
+    });
+
+    it('should return error when queue is full (max 100 messages)', () => {
+      // Fill the queue to max capacity
+      for (let i = 0; i < 100; i++) {
+        const result = messageQueueService.enqueue('session-1', createTestMessage(`msg-${i}`));
+        expect(result).toHaveProperty('position');
+      }
+
+      // 101st message should fail
+      const result = messageQueueService.enqueue('session-1', createTestMessage('msg-overflow'));
+
+      expect(result).toHaveProperty('error');
+      expect((result as { error: string }).error).toContain('Queue full');
+      expect(messageQueueService.getQueueLength('session-1')).toBe(100);
     });
   });
 

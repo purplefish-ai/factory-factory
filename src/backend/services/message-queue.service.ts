@@ -6,29 +6,16 @@
  * Claude when the session becomes idle.
  */
 
-import type { MessageAttachment } from '@/lib/claude-types';
+import type { QueuedMessage } from '@/lib/claude-types';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('message-queue-service');
 
-// =============================================================================
-// Types
-// =============================================================================
+// Re-export for backwards compatibility
+export type { QueuedMessage } from '@/lib/claude-types';
 
-/**
- * A message queued on the backend waiting to be dispatched to Claude.
- */
-export interface QueuedMessage {
-  id: string;
-  text: string;
-  attachments?: MessageAttachment[];
-  settings: {
-    selectedModel: string | null;
-    thinkingEnabled: boolean;
-    planModeEnabled: boolean;
-  };
-  queuedAt: Date;
-}
+// Max queue size to prevent runaway queueing
+const MAX_QUEUE_SIZE = 100;
 
 // =============================================================================
 // MessageQueueService Class
@@ -57,13 +44,24 @@ class MessageQueueService {
 
   /**
    * Enqueue a message for a session.
-   * @returns The position in the queue (0-indexed)
+   * @returns The position in the queue (0-indexed), or an error if queue is full
    */
-  enqueue(sessionId: string, msg: QueuedMessage): { position: number } {
+  enqueue(sessionId: string, msg: QueuedMessage): { position: number } | { error: string } {
     let queue = this.queues.get(sessionId);
     if (!queue) {
       queue = [];
       this.queues.set(sessionId, queue);
+    }
+
+    // Check queue size limit
+    if (queue.length >= MAX_QUEUE_SIZE) {
+      logger.warn('Queue full, rejecting message', {
+        sessionId,
+        messageId: msg.id,
+        queueLength: queue.length,
+        maxSize: MAX_QUEUE_SIZE,
+      });
+      return { error: `Queue full (max ${MAX_QUEUE_SIZE} messages)` };
     }
 
     queue.push(msg);

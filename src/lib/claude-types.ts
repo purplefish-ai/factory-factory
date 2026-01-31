@@ -463,12 +463,18 @@ export interface MessageAttachment {
 
 /**
  * A message queued to be sent when the agent becomes idle.
+ * This type is shared between frontend and backend.
  */
 export interface QueuedMessage {
   id: string;
   text: string;
   timestamp: string;
   attachments?: MessageAttachment[];
+  settings: {
+    selectedModel: string | null;
+    thinkingEnabled: boolean;
+    planModeEnabled: boolean;
+  };
 }
 
 // =============================================================================
