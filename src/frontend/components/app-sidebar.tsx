@@ -317,20 +317,18 @@ export function AppSidebar() {
                               {isArchivingItem ? 'Archiving...' : workspace.name}
                             </span>
 
-                            {/* Diff stats - fixed width columns */}
-                            <span className="w-11 text-right text-xs tabular-nums shrink-0">
-                              {stats && (stats.additions > 0 || stats.deletions > 0) && (
-                                <span className="text-green-600 dark:text-green-400">
-                                  +{stats.additions}
-                                </span>
-                              )}
-                            </span>
-                            <span className="w-11 text-right text-xs tabular-nums shrink-0">
-                              {stats && (stats.additions > 0 || stats.deletions > 0) && (
-                                <span className="text-red-600 dark:text-red-400">
-                                  -{stats.deletions}
-                                </span>
-                              )}
+                            {/* Diff stats - tight paired columns */}
+                            <span className="w-[4.5rem] flex text-xs tabular-nums shrink-0">
+                              {stats && (stats.additions > 0 || stats.deletions > 0) ? (
+                                <>
+                                  <span className="w-1/2 text-right text-green-600 dark:text-green-400">
+                                    +{stats.additions}
+                                  </span>
+                                  <span className="w-1/2 text-left pl-1 text-red-600 dark:text-red-400">
+                                    -{stats.deletions}
+                                  </span>
+                                </>
+                              ) : null}
                             </span>
 
                             {/* PR number - fixed width */}
