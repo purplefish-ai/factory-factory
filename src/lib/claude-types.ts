@@ -291,6 +291,18 @@ export interface UserQuestionRequest {
 }
 
 // =============================================================================
+// Pending Interactive Request Types
+// =============================================================================
+
+// Import and re-export from shared module (used by both frontend and backend)
+import type { PendingInteractiveRequest as PendingInteractiveRequestType } from '@/shared/pending-request-types';
+
+export type { PendingInteractiveRequest } from '@/shared/pending-request-types';
+
+// Alias for use within this file
+type PendingInteractiveRequest = PendingInteractiveRequestType;
+
+// =============================================================================
 // Permission Request Types (Phase 9)
 // =============================================================================
 
@@ -423,6 +435,8 @@ export interface WebSocketMessage {
   settings?: ChatSettings;
   // Message queued acknowledgment
   text?: string;
+  // Pending interactive request for session restore
+  pendingInteractiveRequest?: PendingInteractiveRequest | null;
 }
 
 // =============================================================================

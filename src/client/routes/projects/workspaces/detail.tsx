@@ -28,6 +28,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   QuickActionsMenu,
   RightPanel,
+  RunScriptButton,
+  RunScriptPortBadge,
   useWorkspacePanel,
   WorkspaceContentView,
   WorkspacePanelProvider,
@@ -383,6 +385,8 @@ function WorkspaceChatContent() {
           ) : (
             <h1 className="text-lg font-semibold">{workspace.name}</h1>
           )}
+          {/* Run Script Port Badge */}
+          <RunScriptPortBadge workspaceId={workspaceId} />
           {/* PR Link with CI Status */}
           {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
             <a
@@ -427,6 +431,7 @@ function WorkspaceChatContent() {
             }}
             disabled={running || createSession.isPending}
           />
+          <RunScriptButton workspaceId={workspaceId} />
           {availableIdes.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>

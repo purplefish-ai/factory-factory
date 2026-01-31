@@ -559,6 +559,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   const approvePermission = useCallback(
     (requestId: string, allow: boolean) => {
+      // Validate requestId matches pending permission to prevent stale responses
+      if (stateRef.current.pendingPermission?.requestId !== requestId) {
+        return;
+      }
       const msg: PermissionResponseMessage = { type: 'permission_response', requestId, allow };
       send(msg);
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
@@ -568,6 +572,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   const answerQuestion = useCallback(
     (requestId: string, answers: Record<string, string | string[]>) => {
+      // Validate requestId matches pending question to prevent stale responses
+      if (stateRef.current.pendingQuestion?.requestId !== requestId) {
+        return;
+      }
       const msg: QuestionResponseMessage = { type: 'question_response', requestId, answers };
       send(msg);
       dispatch({ type: 'QUESTION_RESPONSE' });

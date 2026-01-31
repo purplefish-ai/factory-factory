@@ -624,6 +624,161 @@ describe('chatReducer', () => {
       expect(newState.messages[1].text).toBe('ok');
       expect(newState.messages[1].timestamp).toBe('2024-01-01T00:00:05.000Z');
     });
+
+    it('should preserve existing pendingPermission when session_loaded has no pending request (race condition)', () => {
+      // Scenario: Permission request arrives during session loading, then session_loaded arrives
+      // without a pending request. The existing permission should be preserved.
+      const existingPermission: PermissionRequest = {
+        requestId: 'req-1',
+        toolName: 'ExitPlanMode',
+        toolInput: {},
+        timestamp: '2024-01-01T00:00:00.000Z',
+        planContent: '# My Plan',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingPermission: existingPermission,
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: [],
+          gitBranch: 'main',
+          running: true,
+          pendingInteractiveRequest: null, // No pending request from backend
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Should preserve the existing permission, not overwrite with null
+      expect(newState.pendingPermission).toEqual(existingPermission);
+    });
+
+    it('should preserve existing pendingQuestion when session_loaded has no pending request (race condition)', () => {
+      // Scenario: Question request arrives during session loading, then session_loaded arrives
+      // without a pending request. The existing question should be preserved.
+      const existingQuestion: UserQuestionRequest = {
+        requestId: 'req-2',
+        questions: [
+          { question: 'Which option?', header: 'Choice', options: [], multiSelect: false },
+        ],
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingQuestion: existingQuestion,
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: [],
+          gitBranch: 'main',
+          running: true,
+          pendingInteractiveRequest: null,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Should preserve the existing question, not overwrite with null
+      expect(newState.pendingQuestion).toEqual(existingQuestion);
+    });
+
+    it('should restore pendingPermission from backend when present', () => {
+      const state: ChatState = {
+        ...initialState,
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: [],
+          gitBranch: 'main',
+          running: true,
+          pendingInteractiveRequest: {
+            requestId: 'req-3',
+            toolName: 'ExitPlanMode',
+            toolUseId: 'tool-1',
+            input: { planFile: '/tmp/plan.md' },
+            planContent: '# Restored Plan',
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingPermission).toEqual({
+        requestId: 'req-3',
+        toolName: 'ExitPlanMode',
+        toolInput: { planFile: '/tmp/plan.md' },
+        timestamp: '2024-01-01T00:00:00.000Z',
+        planContent: '# Restored Plan',
+      });
+      expect(newState.pendingQuestion).toBeNull();
+    });
+
+    it('should restore pendingQuestion from backend when present', () => {
+      const state: ChatState = {
+        ...initialState,
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: [],
+          gitBranch: 'main',
+          running: true,
+          pendingInteractiveRequest: {
+            requestId: 'req-4',
+            toolName: 'AskUserQuestion',
+            toolUseId: 'tool-2',
+            input: {
+              questions: [
+                { question: 'Pick one', header: 'Test', options: [], multiSelect: false },
+              ],
+            },
+            planContent: null,
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingQuestion).toEqual({
+        requestId: 'req-4',
+        questions: [{ question: 'Pick one', header: 'Test', options: [], multiSelect: false }],
+        timestamp: '2024-01-01T00:00:00.000Z',
+      });
+      expect(newState.pendingPermission).toBeNull();
+    });
+
+    it('should clear startingSession flag when session is loaded', () => {
+      // Scenario: WS_STARTING sets startingSession=true, then WS_SESSION_LOADED arrives
+      // The startingSession flag should be cleared to allow queue draining
+      const state: ChatState = {
+        ...initialState,
+        startingSession: true,
+        loadingSession: true,
+      };
+
+      const action: ChatAction = {
+        type: 'WS_SESSION_LOADED',
+        payload: {
+          messages: [],
+          gitBranch: 'main',
+          running: false,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.startingSession).toBe(false);
+      expect(newState.loadingSession).toBe(false);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -642,6 +797,55 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.pendingPermission).toEqual(permissionRequest);
+    });
+
+    it('should overwrite existing pending permission request with newer one (matches backend behavior)', () => {
+      // Backend always overwrites stored request with the new one, so frontend must match
+      // to prevent responding to an old request while backend has the new one stored
+      const existingRequest: PermissionRequest = {
+        requestId: 'req-first',
+        toolName: 'Bash',
+        toolInput: { command: 'rm -rf /' },
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const newRequest: PermissionRequest = {
+        requestId: 'req-second',
+        toolName: 'Write',
+        toolInput: { file_path: '/tmp/test.txt' },
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingPermission: existingRequest,
+      };
+      const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: newRequest };
+      const newState = chatReducer(state, action);
+
+      // Should overwrite with the new request to match backend state
+      expect(newState.pendingPermission).toEqual(newRequest);
+    });
+
+    it('should clear pendingQuestion when permission request arrives', () => {
+      const existingQuestion: UserQuestionRequest = {
+        requestId: 'req-q1',
+        questions: [{ question: 'Which?', header: 'Q', options: [], multiSelect: false }],
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const permissionRequest: PermissionRequest = {
+        requestId: 'req-p1',
+        toolName: 'Bash',
+        toolInput: { command: 'ls' },
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingQuestion: existingQuestion,
+      };
+      const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: permissionRequest };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingPermission).toEqual(permissionRequest);
+      expect(newState.pendingQuestion).toBeNull();
     });
   });
 
@@ -668,6 +872,54 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.pendingQuestion).toEqual(questionRequest);
+    });
+
+    it('should overwrite existing pending question with newer one (matches backend behavior)', () => {
+      // Backend always overwrites stored request with the new one, so frontend must match
+      const existingQuestion: UserQuestionRequest = {
+        requestId: 'req-first',
+        questions: [{ question: 'First question?', header: 'Q1', options: [], multiSelect: false }],
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const newQuestion: UserQuestionRequest = {
+        requestId: 'req-second',
+        questions: [
+          { question: 'Second question?', header: 'Q2', options: [], multiSelect: false },
+        ],
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingQuestion: existingQuestion,
+      };
+      const action: ChatAction = { type: 'WS_USER_QUESTION', payload: newQuestion };
+      const newState = chatReducer(state, action);
+
+      // Should overwrite with the new question to match backend state
+      expect(newState.pendingQuestion).toEqual(newQuestion);
+    });
+
+    it('should clear pendingPermission when question request arrives', () => {
+      const existingPermission: PermissionRequest = {
+        requestId: 'req-p1',
+        toolName: 'Bash',
+        toolInput: { command: 'ls' },
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const questionRequest: UserQuestionRequest = {
+        requestId: 'req-q1',
+        questions: [{ question: 'Which?', header: 'Q', options: [], multiSelect: false }],
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingPermission: existingPermission,
+      };
+      const action: ChatAction = { type: 'WS_USER_QUESTION', payload: questionRequest };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingQuestion).toEqual(questionRequest);
+      expect(newState.pendingPermission).toBeNull();
     });
   });
 
@@ -1336,6 +1588,7 @@ describe('createActionFromWebSocketMessage', () => {
         gitBranch: 'main',
         running: false,
         settings,
+        pendingInteractiveRequest: null,
       },
     });
   });
@@ -1351,6 +1604,7 @@ describe('createActionFromWebSocketMessage', () => {
         gitBranch: null,
         running: false,
         settings: undefined,
+        pendingInteractiveRequest: null,
       },
     });
   });

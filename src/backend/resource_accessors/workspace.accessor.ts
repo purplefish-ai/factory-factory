@@ -3,6 +3,7 @@ import type {
   KanbanColumn,
   PRState,
   Prisma,
+  SessionStatus,
   Workspace,
   WorkspaceStatus,
 } from '@prisma-gen/client';
@@ -40,6 +41,13 @@ interface UpdateWorkspaceInput {
   provisioningStartedAt?: Date | null;
   provisioningCompletedAt?: Date | null;
   retryCount?: number;
+  // Run script tracking
+  runScriptCommand?: string | null;
+  runScriptCleanupCommand?: string | null;
+  runScriptPid?: number | null;
+  runScriptPort?: number | null;
+  runScriptStartedAt?: Date | null;
+  runScriptStatus?: SessionStatus;
 }
 
 interface FindByProjectIdFilters {
@@ -244,7 +252,12 @@ class WorkspaceAccessor {
    * Update worktree info (path and branch) with guard against ARCHIVED status.
    * Prevents setting worktree data on archived workspaces during provisioning race.
    */
-  async updateWorktreeInfo(id: string, worktreePath: string, branchName: string): Promise<void> {
+  async updateWorktreeInfo(
+    id: string,
+    worktreePath: string,
+    branchName: string,
+    runScriptInfo?: { command: string | null; cleanupCommand: string | null }
+  ): Promise<void> {
     await prisma.workspace.updateMany({
       where: {
         id,
@@ -253,6 +266,10 @@ class WorkspaceAccessor {
       data: {
         worktreePath,
         branchName,
+        ...(runScriptInfo && {
+          runScriptCommand: runScriptInfo.command,
+          runScriptCleanupCommand: runScriptInfo.cleanupCommand,
+        }),
       },
     });
   }

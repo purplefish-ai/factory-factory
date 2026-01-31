@@ -41,6 +41,12 @@ const baseWorkspace: WorkspaceWithKanban = {
   hasHadSessions: true,
   cachedKanbanColumn: 'IN_PROGRESS',
   stateComputedAt: new Date(),
+  runScriptCommand: null,
+  runScriptCleanupCommand: null,
+  runScriptPid: null,
+  runScriptPort: null,
+  runScriptStartedAt: null,
+  runScriptStatus: 'IDLE',
 };
 
 const mockWorkspaces: WorkspaceWithKanban[] = [

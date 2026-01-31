@@ -15,6 +15,7 @@ import type {
   ChatSettings,
   ClaudeMessage,
   HistoryMessage,
+  PendingInteractiveRequest,
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
@@ -76,6 +77,7 @@ export type ChatAction =
         gitBranch: string | null;
         running: boolean;
         settings?: ChatSettings;
+        pendingInteractiveRequest?: PendingInteractiveRequest | null;
       };
     }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
@@ -328,6 +330,7 @@ function handleToolInputUpdate(
 // Reducer
 // =============================================================================
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Reducer handles many action types by design
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     // WebSocket status messages
@@ -381,21 +384,57 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         optimisticUserMessages.length > 0
           ? [...historyMessages, ...optimisticUserMessages]
           : historyMessages;
+
+      // Restore pending interactive request if present from backend.
+      // Only overwrite existing state if backend has something to restore,
+      // otherwise preserve any pending state that may have arrived during loading (race condition fix).
+      const pendingReq = action.payload.pendingInteractiveRequest;
+      let pendingPermission: PermissionRequest | null = state.pendingPermission;
+      let pendingQuestion: UserQuestionRequest | null = state.pendingQuestion;
+
+      if (pendingReq) {
+        if (pendingReq.toolName === 'AskUserQuestion') {
+          // Restore AskUserQuestion modal
+          const input = pendingReq.input as { questions?: unknown[] };
+          pendingQuestion = {
+            requestId: pendingReq.requestId,
+            questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+            timestamp: pendingReq.timestamp,
+          };
+          pendingPermission = null; // Clear opposite type to prevent both modals showing
+        } else {
+          // Restore permission request (ExitPlanMode or other)
+          pendingPermission = {
+            requestId: pendingReq.requestId,
+            toolName: pendingReq.toolName,
+            toolInput: pendingReq.input,
+            timestamp: pendingReq.timestamp,
+            planContent: pendingReq.planContent,
+          };
+          pendingQuestion = null; // Clear opposite type to prevent both modals showing
+        }
+      }
+
       return {
         ...state,
         messages,
         gitBranch: action.payload.gitBranch,
         running: action.payload.running,
         loadingSession: false,
+        startingSession: false, // Clear to allow queue draining after session loads
         toolUseIdToIndex: new Map(),
+        pendingPermission,
+        pendingQuestion,
       };
     }
 
     // Permission and question requests
+    // Always accept new requests (overwriting existing) to match backend behavior.
+    // Clear opposite type to prevent both modals showing simultaneously.
     case 'WS_PERMISSION_REQUEST':
-      return { ...state, pendingPermission: action.payload };
+      return { ...state, pendingPermission: action.payload, pendingQuestion: null };
     case 'WS_USER_QUESTION':
-      return { ...state, pendingQuestion: action.payload };
+      return { ...state, pendingQuestion: action.payload, pendingPermission: null };
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings
       const shouldDisablePlanMode =
@@ -547,6 +586,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage): ChatAction {
       gitBranch: data.gitBranch ?? null,
       running: data.running ?? false,
       settings: data.settings,
+      pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
     },
   };
 }

@@ -10,6 +10,7 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
+import type { PendingInteractiveRequest } from '../../../shared/pending-request-types';
 import { type ClaudeClient, SessionManager } from '../../claude/index';
 import type { ClaudeContentItem } from '../../claude/types';
 import { WS_READY_STATE } from '../../constants';
@@ -42,6 +43,9 @@ export interface PendingMessage {
 export const chatConnections = new Map<string, ConnectionInfo>();
 export const pendingMessages = new Map<string, PendingMessage[]>();
 export const clientEventSetup = new Set<string>();
+
+/** Pending interactive requests by session ID (for restore on reconnect) */
+export const pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
 
 const MAX_PENDING_MESSAGES = 100;
 const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
@@ -154,6 +158,7 @@ function readPlanFileContent(planFile: string | undefined): string | null {
 
 /**
  * Route interactive tool requests to the appropriate WebSocket message format.
+ * Also stores the request for session restore when user navigates away and returns.
  */
 function routeInteractiveRequest(
   dbSessionId: string,
@@ -164,8 +169,24 @@ function routeInteractiveRequest(
     input: Record<string, unknown>;
   }
 ): void {
+  // Compute planContent for ExitPlanMode, null for others
+  const planContent =
+    request.toolName === 'ExitPlanMode'
+      ? readPlanFileContent((request.input as { planFile?: string }).planFile)
+      : null;
+
+  // Store for session restore (single location for all request types)
+  pendingInteractiveRequests.set(dbSessionId, {
+    requestId: request.requestId,
+    toolName: request.toolName,
+    toolUseId: request.toolUseId,
+    input: request.input,
+    planContent,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Route to appropriate WebSocket message format
   if (request.toolName === 'AskUserQuestion') {
-    // AskUserQuestion: send as 'user_question' with questions extracted from input
     const input = request.input as { questions?: unknown[] };
     forwardToConnections(dbSessionId, {
       type: 'user_question',
@@ -176,10 +197,6 @@ function routeInteractiveRequest(
   }
 
   if (request.toolName === 'ExitPlanMode') {
-    // ExitPlanMode: send as 'permission_request' for plan approval
-    const exitPlanInput = request.input as { planFile?: string };
-    const planContent = readPlanFileContent(exitPlanInput.planFile);
-
     forwardToConnections(dbSessionId, {
       type: 'permission_request',
       requestId: request.requestId,
@@ -365,6 +382,8 @@ function setupChatClientEvents(
     client.removeAllListeners();
     clientEventSetup.delete(dbSessionId);
     pendingMessages.delete(dbSessionId);
+    // Clear any pending interactive requests when process exits
+    pendingInteractiveRequests.delete(dbSessionId);
   });
 
   client.on('error', (error) => {
@@ -532,6 +551,7 @@ async function handleUserInputMessage(
 async function handleStopMessage(ws: WebSocket, sessionId: string): Promise<void> {
   await sessionService.stopClaudeSession(sessionId);
   pendingMessages.delete(sessionId);
+  pendingInteractiveRequests.delete(sessionId);
   ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
 }
 
@@ -570,6 +590,9 @@ async function handleLoadSessionMessage(
   const existingClient = sessionService.getClient(sessionId);
   const running = existingClient?.isWorking() ?? false;
 
+  // Check for pending interactive request to restore modal state
+  const pendingRequest = pendingInteractiveRequests.get(sessionId);
+
   if (targetSessionId) {
     const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
       SessionManager.getHistory(targetSessionId, workingDir),
@@ -595,6 +618,7 @@ async function handleLoadSessionMessage(
           thinkingEnabled,
           planModeEnabled: false,
         },
+        pendingInteractiveRequest: pendingRequest ?? null,
       })
     );
   } else {
@@ -609,8 +633,20 @@ async function handleLoadSessionMessage(
           thinkingEnabled: false,
           planModeEnabled: false,
         },
+        pendingInteractiveRequest: pendingRequest ?? null,
       })
     );
+  }
+}
+
+/**
+ * Clear pending interactive request only if the requestId matches.
+ * Prevents clearing a newer request when responding to a stale one.
+ */
+function clearPendingRequestIfMatches(sessionId: string, requestId: string): void {
+  const pending = pendingInteractiveRequests.get(sessionId);
+  if (pending?.requestId === requestId) {
+    pendingInteractiveRequests.delete(sessionId);
   }
 }
 
@@ -631,16 +667,22 @@ function handleQuestionResponseMessage(
 
   const client = sessionService.getClient(sessionId);
   if (!client) {
+    // Clear pending request only if it matches (client gone, but don't clear a newer request)
+    clearPendingRequestIfMatches(sessionId, requestId);
     ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
     return;
   }
 
   try {
     client.answerQuestion(requestId, answers);
+    // Clear the pending request only if requestId matches
+    clearPendingRequestIfMatches(sessionId, requestId);
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Answered question', { sessionId, requestId });
     }
   } catch (error) {
+    // Clear pending request only if it matches (prevents clearing newer request on stale response)
+    clearPendingRequestIfMatches(sessionId, requestId);
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to answer question', {
       sessionId,
@@ -670,6 +712,8 @@ function handlePermissionResponseMessage(
 
   const client = sessionService.getClient(sessionId);
   if (!client) {
+    // Clear pending request only if it matches (client gone, but don't clear a newer request)
+    clearPendingRequestIfMatches(sessionId, requestId);
     ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
     return;
   }
@@ -680,10 +724,14 @@ function handlePermissionResponseMessage(
     } else {
       client.denyInteractiveRequest(requestId, 'User denied');
     }
+    // Clear the pending request only if requestId matches
+    clearPendingRequestIfMatches(sessionId, requestId);
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
     }
   } catch (error) {
+    // Clear pending request only if it matches (prevents clearing newer request on stale response)
+    clearPendingRequestIfMatches(sessionId, requestId);
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to respond to permission request', {
       sessionId,
