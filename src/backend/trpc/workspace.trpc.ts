@@ -58,11 +58,11 @@ export const workspaceRouter = router({
   getProjectSummaryState: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
-      // 1. Fetch project (for defaultBranch) and READY workspaces with sessions in parallel
+      // 1. Fetch project (for defaultBranch) and non-archived workspaces with sessions in parallel
       const [project, workspaces] = await Promise.all([
         projectAccessor.findById(input.projectId),
         workspaceAccessor.findByProjectIdWithSessions(input.projectId, {
-          status: WorkspaceStatus.READY,
+          excludeStatuses: [WorkspaceStatus.ARCHIVED],
         }),
       ]);
 
@@ -219,13 +219,14 @@ export const workspaceRouter = router({
     }),
 
   // Update a workspace
+  // Note: status changes should go through dedicated endpoints (archive, retryInit, etc.)
+  // to ensure state machine validation
   update: publicProcedure
     .input(
       z.object({
         id: z.string(),
         name: z.string().min(1).optional(),
         description: z.string().optional(),
-        status: z.nativeEnum(WorkspaceStatus).optional(),
         worktreePath: z.string().optional(),
         branchName: z.string().optional(),
         prUrl: z.string().optional(),
