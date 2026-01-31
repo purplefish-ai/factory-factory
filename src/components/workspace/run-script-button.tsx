@@ -8,7 +8,7 @@ interface RunScriptButtonProps {
 }
 
 export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
-  // Query run script status
+  // Query run script status (React Query automatically deduplicates with same key)
   const { data: status, refetch } = trpc.workspace.getRunScriptStatus.useQuery(
     { workspaceId },
     {

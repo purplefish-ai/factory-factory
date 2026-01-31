@@ -136,6 +136,7 @@ export class RunScriptService {
           runScriptStatus: status,
           runScriptPid: null,
           runScriptPort: null,
+          runScriptStartedAt: null,
         });
       });
 
@@ -297,11 +298,12 @@ export class RunScriptService {
         }
       }
 
-      // Update workspace status
+      // Update workspace status and clear all run script state
       await workspaceAccessor.update(workspaceId, {
         runScriptStatus: 'IDLE',
         runScriptPid: null,
         runScriptPort: null,
+        runScriptStartedAt: null,
       });
 
       return { success: true };
@@ -444,6 +446,7 @@ let isShuttingDown = false;
 
 // Register cleanup handlers for graceful shutdown
 // These handlers allow async cleanup (unlike 'exit' which is synchronous)
+// Note: We don't call process.exit() to allow other shutdown handlers to run
 process.on('SIGINT', async () => {
   if (isShuttingDown) {
     return;
@@ -451,7 +454,6 @@ process.on('SIGINT', async () => {
   isShuttingDown = true;
   logger.info('Received SIGINT, cleaning up run scripts');
   await RunScriptService.cleanup();
-  process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
@@ -461,7 +463,6 @@ process.on('SIGTERM', async () => {
   isShuttingDown = true;
   logger.info('Received SIGTERM, cleaning up run scripts');
   await RunScriptService.cleanup();
-  process.exit(0);
 });
 
 // Fallback synchronous cleanup for 'exit' event

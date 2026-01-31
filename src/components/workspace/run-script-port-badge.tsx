@@ -6,7 +6,7 @@ interface RunScriptPortBadgeProps {
 }
 
 export function RunScriptPortBadge({ workspaceId }: RunScriptPortBadgeProps) {
-  // Query run script status
+  // Query run script status (React Query automatically deduplicates with same key)
   const { data: status } = trpc.workspace.getRunScriptStatus.useQuery(
     { workspaceId },
     {
