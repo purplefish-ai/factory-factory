@@ -304,6 +304,27 @@ export const workspaceRouter = router({
       };
     }),
 
+  // Get factory-factory.json configuration for a project
+  getFactoryConfig: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input }) => {
+      const project = await projectAccessor.findById(input.projectId);
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
+      try {
+        const config = await FactoryConfigService.readConfig(project.repoPath);
+        return config;
+      } catch (error) {
+        logger.error('Failed to read factory config', {
+          projectId: input.projectId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      }
+    }),
+
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,
   ...workspaceGitRouter._def.procedures,

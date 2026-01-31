@@ -439,15 +439,26 @@ export class RunScriptService {
   }
 }
 
+// Track whether we're shutting down to prevent double cleanup
+let isShuttingDown = false;
+
 // Register cleanup handlers for graceful shutdown
 // These handlers allow async cleanup (unlike 'exit' which is synchronous)
 process.on('SIGINT', async () => {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
   logger.info('Received SIGINT, cleaning up run scripts');
   await RunScriptService.cleanup();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
   logger.info('Received SIGTERM, cleaning up run scripts');
   await RunScriptService.cleanup();
   process.exit(0);
@@ -455,6 +466,9 @@ process.on('SIGTERM', async () => {
 
 // Fallback synchronous cleanup for 'exit' event
 // This won't run cleanup scripts, but will kill processes
+// Only runs if SIGINT/SIGTERM handlers didn't already clean up
 process.on('exit', () => {
-  RunScriptService.cleanupSync();
+  if (!isShuttingDown) {
+    RunScriptService.cleanupSync();
+  }
 });

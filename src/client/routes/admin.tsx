@@ -369,6 +369,8 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
 }
 
 function FactoryConfigSection({ projectId }: { projectId: string }) {
+  const { data: factoryConfig } = trpc.workspace.getFactoryConfig.useQuery({ projectId });
+
   const refreshConfigs = trpc.workspace.refreshFactoryConfigs.useMutation({
     onSuccess: (result) => {
       if (result.errors.length > 0) {
@@ -387,6 +389,23 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
   const handleRefresh = () => {
     refreshConfigs.mutate({ projectId });
   };
+
+  if (!factoryConfig) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileJson className="w-5 h-5" />
+            Factory Configuration
+          </CardTitle>
+          <CardDescription>
+            No factory-factory.json found in this repository. Create one to configure workspace
+            setup and run scripts.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -424,25 +443,39 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
           </div>
 
           <div className="space-y-2 pl-8">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
-              <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-                pnpm i && pnpm db:generate
-              </code>
-              <p className="text-xs text-muted-foreground">
-                Runs automatically when a new workspace is created
-              </p>
-            </div>
+            {factoryConfig.scripts.setup && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
+                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                  {factoryConfig.scripts.setup}
+                </code>
+                <p className="text-xs text-muted-foreground">
+                  Runs automatically when a new workspace is created
+                </p>
+              </div>
+            )}
 
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Run Script</p>
-              <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-                pnpm dev
-              </code>
-              <p className="text-xs text-muted-foreground">
-                Available via the play button in each workspace
-              </p>
-            </div>
+            {factoryConfig.scripts.run && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Run Script</p>
+                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                  {factoryConfig.scripts.run}
+                </code>
+                <p className="text-xs text-muted-foreground">
+                  Available via the play button in each workspace
+                </p>
+              </div>
+            )}
+
+            {factoryConfig.scripts.cleanup && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Cleanup Script</p>
+                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                  {factoryConfig.scripts.cleanup}
+                </code>
+                <p className="text-xs text-muted-foreground">Runs when stopping the dev server</p>
+              </div>
+            )}
           </div>
         </div>
 

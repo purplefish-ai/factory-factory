@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { createServer } from 'node:net';
 
 /**
  * Service for finding and allocating free network ports
@@ -12,19 +9,31 @@ export class PortAllocationService {
   private static readonly MAX_ATTEMPTS = 100;
 
   /**
-   * Check if a port is in use using lsof
+   * Check if a port is in use by attempting to bind to it
+   * Cross-platform compatible (works on Windows, macOS, Linux)
    * @param port - Port number to check
    * @returns true if port is in use, false if available
    */
-  static async isPortInUse(port: number): Promise<boolean> {
-    try {
-      // lsof -i :PORT returns exit code 0 if something is listening
-      await execAsync(`lsof -i :${port}`);
-      return true;
-    } catch {
-      // lsof returns non-zero exit code if nothing is listening
-      return false;
-    }
+  static isPortInUse(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const server = createServer();
+
+      server.once('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') {
+          resolve(true);
+        } else {
+          // For other errors (like EACCES), treat as unavailable
+          resolve(true);
+        }
+      });
+
+      server.once('listening', () => {
+        server.close();
+        resolve(false);
+      });
+
+      server.listen(port);
+    });
   }
 
   /**
