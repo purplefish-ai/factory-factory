@@ -96,12 +96,10 @@ interface SystemConfig {
 
   // Server settings
   backendPort: number;
-  frontendPort: number;
   nodeEnv: 'development' | 'production' | 'test';
 
   // Database (SQLite)
   databasePath: string;
-  migrationsPath?: string;
 
   // Default session profile
   defaultSessionProfile: SessionProfile;
@@ -266,6 +264,26 @@ function buildCorsConfig(): CorsConfig {
 }
 
 /**
+ * Build Claude process configuration from environment with validation
+ */
+function buildClaudeProcessConfig(): ClaudeProcessConfig {
+  const DEFAULT_HUNG_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes (matches original in process.ts)
+  const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
+
+  if (!envValue) {
+    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+  }
+
+  const parsed = Number.parseInt(envValue, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(`Invalid CLAUDE_HUNG_TIMEOUT_MS value: ${envValue}, using default (30 minutes)`);
+    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+  }
+
+  return { hungTimeoutMs: parsed };
+}
+
+/**
  * Get default base directory
  */
 function getDefaultBaseDir(): string {
@@ -298,12 +316,10 @@ function loadSystemConfig(): SystemConfig {
 
     // Server settings
     backendPort: Number.parseInt(process.env.BACKEND_PORT || '3001', 10),
-    frontendPort: Number.parseInt(process.env.FRONTEND_PORT || '3000', 10),
     nodeEnv,
 
     // Database (SQLite - defaults to ~/factory-factory/data.db)
     databasePath: process.env.DATABASE_PATH || join(baseDir, 'data.db'),
-    migrationsPath: process.env.MIGRATIONS_PATH,
 
     // Default session profile
     defaultSessionProfile: buildDefaultSessionProfile(),
@@ -331,9 +347,7 @@ function loadSystemConfig(): SystemConfig {
     notification: buildNotificationConfig(),
 
     // Claude process settings
-    claudeProcess: {
-      hungTimeoutMs: Number.parseInt(process.env.CLAUDE_HUNG_TIMEOUT_MS || '300000', 10), // 5 minutes default
-    },
+    claudeProcess: buildClaudeProcessConfig(),
 
     // CORS settings
     cors: buildCorsConfig(),
@@ -487,13 +501,6 @@ class ConfigService {
   }
 
   /**
-   * Get logger configuration
-   */
-  getLoggerConfig(): LoggerConfig {
-    return { ...this.config.logger };
-  }
-
-  /**
    * Get rate limiter configuration
    */
   getRateLimiterConfig(): RateLimiterConfig {
@@ -543,13 +550,6 @@ class ConfigService {
   }
 
   /**
-   * Get migrations path (if configured)
-   */
-  getMigrationsPath(): string | undefined {
-    return this.config.migrationsPath;
-  }
-
-  /**
    * Get branch rename message threshold
    */
   getBranchRenameMessageThreshold(): number {
@@ -561,20 +561,6 @@ class ConfigService {
    */
   getAppVersion(): string {
     return this.config.appVersion;
-  }
-
-  /**
-   * Get frontend port
-   */
-  getFrontendPort(): number {
-    return this.config.frontendPort;
-  }
-
-  /**
-   * Get default shell (for terminal sessions)
-   */
-  getDefaultShell(): string {
-    return process.env.SHELL || '/bin/bash';
   }
 
   /**

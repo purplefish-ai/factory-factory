@@ -58,13 +58,7 @@ export interface ApiUsageStats {
  * Get default configuration from centralized config service
  */
 function getDefaultConfig(): RateLimiterConfig {
-  const config = configService.getRateLimiterConfig();
-  return {
-    claudeRequestsPerMinute: config.claudeRequestsPerMinute,
-    claudeRequestsPerHour: config.claudeRequestsPerHour,
-    maxQueueSize: config.maxQueueSize,
-    queueTimeoutMs: config.queueTimeoutMs,
-  };
+  return configService.getRateLimiterConfig();
 }
 
 /**
