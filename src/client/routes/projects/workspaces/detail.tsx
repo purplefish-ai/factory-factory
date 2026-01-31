@@ -1,4 +1,15 @@
-import { AppWindow, Archive, ArrowDown, Check, GitBranch, Loader2, PanelRight } from 'lucide-react';
+import {
+  AppWindow,
+  Archive,
+  ArrowDown,
+  Check,
+  CheckCircle2,
+  Circle,
+  GitBranch,
+  Loader2,
+  PanelRight,
+  XCircle,
+} from 'lucide-react';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -397,16 +408,28 @@ function WorkspaceChatContent() {
               href={workspace.prUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={`text-xs hover:opacity-80 transition-opacity ${
+              className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
                 workspace.prState === 'MERGED'
                   ? 'text-purple-500'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               #{workspace.prNumber}
-              <span className="inline-block w-3.5 ml-0.5">
-                {workspace.prState === 'MERGED' && <Check className="h-3 w-3 inline" />}
-              </span>
+              {workspace.prState === 'MERGED' ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <>
+                  {workspace.prCiStatus === 'SUCCESS' && (
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  )}
+                  {workspace.prCiStatus === 'FAILURE' && (
+                    <XCircle className="h-3 w-3 text-red-500" />
+                  )}
+                  {workspace.prCiStatus === 'PENDING' && (
+                    <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
+                  )}
+                </>
+              )}
             </a>
           )}
         </div>

@@ -342,7 +342,7 @@ export function AppSidebar() {
                             </span>
 
                             {/* PR number - fixed width */}
-                            <span className="w-12 shrink-0 text-right">
+                            <span className="w-14 shrink-0 text-right">
                               {workspace.prNumber &&
                                 workspace.prState !== 'NONE' &&
                                 workspace.prUrl && (
