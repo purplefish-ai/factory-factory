@@ -17,6 +17,7 @@ import { WS_READY_STATE } from '../../constants';
 import { interceptorRegistry } from '../../interceptors';
 import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
 import { configService, createLogger, sessionService } from '../../services/index';
+import { messageQueueService, type QueuedMessage } from '../../services/message-queue.service';
 import { sessionFileLogger } from '../../services/session-file-logger.service';
 
 const logger = createLogger('chat-handler');
@@ -31,23 +32,16 @@ export interface ConnectionInfo {
   workingDir: string;
 }
 
-export interface PendingMessage {
-  content: string | ClaudeContentItem[];
-  sentAt: Date;
-}
-
 // ============================================================================
 // State
 // ============================================================================
 
 export const chatConnections = new Map<string, ConnectionInfo>();
-export const pendingMessages = new Map<string, PendingMessage[]>();
 export const clientEventSetup = new Set<string>();
 
 /** Pending interactive requests by session ID (for restore on reconnect) */
 export const pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
 
-const MAX_PENDING_MESSAGES = 100;
 const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
 let chatWsMsgCounter = 0;
 
@@ -217,6 +211,134 @@ function routeInteractiveRequest(
   });
 }
 
+/**
+ * Thinking mode suffix appended to messages.
+ */
+const THINKING_SUFFIX = ' ultrathink';
+
+/**
+ * Build message content for sending to Claude.
+ * Handles text with thinking suffix and attachments.
+ */
+function buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
+  const textWithThinking = msg.settings.thinkingEnabled
+    ? `${msg.text}${THINKING_SUFFIX}`
+    : msg.text;
+
+  // If there are attachments, send as content array
+  if (msg.attachments && msg.attachments.length > 0) {
+    const content: ClaudeContentItem[] = [];
+
+    // Add text if present
+    if (textWithThinking) {
+      content.push({ type: 'text', text: textWithThinking });
+    }
+
+    // Add images
+    for (const attachment of msg.attachments) {
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: attachment.type,
+          data: attachment.data,
+        },
+      } as unknown as ClaudeContentItem);
+    }
+
+    return content;
+  }
+
+  return textWithThinking;
+}
+
+/**
+ * Auto-start a client for queue dispatch using settings from the next queued message.
+ * Returns the client or null if auto-start failed.
+ */
+async function autoStartClientForQueue(dbSessionId: string): Promise<ClaudeClient | null> {
+  const queue = messageQueueService.getQueue(dbSessionId);
+  if (queue.length === 0) {
+    return null;
+  }
+
+  const nextMsg = queue[0];
+
+  if (DEBUG_CHAT_WS) {
+    logger.info('[Chat WS] Auto-starting client for queued message', { dbSessionId });
+  }
+
+  try {
+    return await getOrCreateChatClient(dbSessionId, {
+      thinkingEnabled: nextMsg.settings.thinkingEnabled,
+      planModeEnabled: nextMsg.settings.planModeEnabled,
+      model: nextMsg.settings.selectedModel ?? undefined,
+    });
+  } catch (error) {
+    logger.error('[Chat WS] Failed to auto-start client for queue dispatch', {
+      dbSessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Dispatch a single queued message to the client.
+ */
+function dispatchQueuedMessage(dbSessionId: string, client: ClaudeClient): void {
+  const msg = messageQueueService.dequeue(dbSessionId);
+  if (!msg) {
+    return;
+  }
+
+  // Notify all connections that message is being dispatched
+  forwardToConnections(dbSessionId, { type: 'message_dispatched', id: msg.id });
+
+  // Build content and send to Claude
+  const content = buildMessageContent(msg);
+  client.sendMessage(content);
+
+  if (DEBUG_CHAT_WS) {
+    logger.info('[Chat WS] Dispatched queued message to Claude', {
+      dbSessionId,
+      messageId: msg.id,
+      remainingInQueue: messageQueueService.getQueueLength(dbSessionId),
+    });
+  }
+}
+
+/**
+ * Try to dispatch the next queued message to Claude.
+ * Auto-starts the client if needed.
+ */
+async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
+  if (!messageQueueService.hasMessages(dbSessionId)) {
+    return;
+  }
+
+  let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
+
+  // Auto-start: create client if needed
+  if (!client) {
+    const newClient = await autoStartClientForQueue(dbSessionId);
+    if (!newClient) {
+      return;
+    }
+    client = newClient;
+  }
+
+  // Check if Claude is busy
+  if (client.isWorking()) {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Claude is working, skipping queue dispatch', { dbSessionId });
+    }
+    return;
+  }
+
+  dispatchQueuedMessage(dbSessionId, client);
+}
+
 function setupChatClientEvents(
   dbSessionId: string,
   client: ClaudeClient,
@@ -262,22 +384,23 @@ function setupChatClientEvents(
       });
     }
 
-    // Drain any pending messages
-    const pending = pendingMessages.get(dbSessionId);
-    pendingMessages.delete(dbSessionId);
-    if (pending && pending.length > 0) {
-      logger.info('[Chat WS] Draining pending messages on session_id', {
-        dbSessionId,
-        count: pending.length,
-      });
-      for (const msg of pending) {
-        client.sendMessage(msg.content);
-      }
-    }
-
     forwardToConnections(dbSessionId, {
       type: 'status',
       running: true,
+    });
+  });
+
+  // Hook into idle event to dispatch next queued message
+  client.on('idle', () => {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Claude became idle, checking queue', { dbSessionId });
+    }
+    // Fire and forget - don't await
+    tryDispatchNextMessage(dbSessionId).catch((error) => {
+      logger.error('[Chat WS] Error dispatching queued message on idle', {
+        dbSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
   });
 
@@ -381,7 +504,8 @@ function setupChatClientEvents(
     });
     client.removeAllListeners();
     clientEventSetup.delete(dbSessionId);
-    pendingMessages.delete(dbSessionId);
+    // Note: We intentionally do NOT clear the message queue on exit
+    // Queue is preserved so messages can be sent when user starts next interaction
     // Clear any pending interactive requests when process exits
     pendingInteractiveRequests.delete(dbSessionId);
   });
@@ -439,6 +563,22 @@ interface ChatMessage {
   thinkingEnabled?: boolean;
   planModeEnabled?: boolean;
   selectedModel?: string | null;
+  // Queue message fields
+  id?: string;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    data: string;
+  }>;
+  settings?: {
+    selectedModel: string | null;
+    thinkingEnabled: boolean;
+    planModeEnabled: boolean;
+  };
+  // Remove queued message fields
+  messageId?: string;
 }
 
 // ============================================================================
@@ -474,11 +614,11 @@ async function handleStartMessage(
   ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
 }
 
-async function handleUserInputMessage(
-  ws: WebSocket,
-  sessionId: string,
-  message: ChatMessage
-): Promise<void> {
+/**
+ * Handle direct user_input messages (legacy/bypass path).
+ * For the new queue-based flow, use queue_message instead.
+ */
+function handleUserInputMessage(ws: WebSocket, sessionId: string, message: ChatMessage): void {
   const messageContent = message.content || message.text;
   if (!messageContent) {
     return;
@@ -495,62 +635,101 @@ async function handleUserInputMessage(
     return;
   }
 
-  // Queue message and start client
-  let queue = pendingMessages.get(sessionId);
-  if (!queue) {
-    queue = [];
-    pendingMessages.set(sessionId, queue);
-  }
+  // If no client running, reject - frontend should use queue_message instead
+  ws.send(
+    JSON.stringify({
+      type: 'error',
+      message: 'No active Claude session. Use queue_message to queue messages.',
+    })
+  );
+}
 
-  if (queue.length >= MAX_PENDING_MESSAGES) {
-    logger.warn('[Chat WS] Pending message queue full, rejecting message', {
-      sessionId,
-      queueLength: queue.length,
-      maxSize: MAX_PENDING_MESSAGES,
-    });
-    ws.send(
-      JSON.stringify({
-        type: 'error',
-        message: 'Session is still starting. Please wait a moment and try again.',
-      })
-    );
+/**
+ * Handle queue_message - the primary way to send messages.
+ * Messages are queued and dispatched when Claude becomes idle.
+ */
+async function handleQueueMessage(
+  ws: WebSocket,
+  sessionId: string,
+  _workingDir: string,
+  message: ChatMessage
+): Promise<void> {
+  const text = message.text?.trim();
+  if (!text && (!message.attachments || message.attachments.length === 0)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Empty message' }));
     return;
   }
 
-  queue.push({ content: messageContent, sentAt: new Date() });
-  logger.info('[Chat WS] Queued message for pending session', {
-    sessionId,
-    queueLength: queue.length,
-  });
+  if (!message.id) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Missing message id' }));
+    return;
+  }
 
-  const displayText = typeof messageContent === 'string' ? messageContent : '[Image message]';
-  ws.send(JSON.stringify({ type: 'message_queued', text: displayText }));
-  ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
+  // Build settings from message or use defaults
+  const settings = message.settings ?? {
+    selectedModel: message.selectedModel ?? null,
+    thinkingEnabled: message.thinkingEnabled ?? false,
+    planModeEnabled: message.planModeEnabled ?? false,
+  };
 
-  const newClient = await getOrCreateChatClient(sessionId, {
-    thinkingEnabled: message.thinkingEnabled,
-    planModeEnabled: message.planModeEnabled,
-    model: getValidModel(message),
-  });
-  ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
+  // Create queued message
+  const queuedMsg: QueuedMessage = {
+    id: message.id,
+    text: text ?? '',
+    attachments: message.attachments,
+    settings,
+    queuedAt: new Date(),
+  };
 
-  // Drain pending messages
-  const pending = pendingMessages.get(sessionId);
-  pendingMessages.delete(sessionId);
-  if (pending && pending.length > 0) {
-    logger.info('[Chat WS] Sending queued messages after client ready', {
+  // Enqueue the message
+  const { position } = messageQueueService.enqueue(sessionId, queuedMsg);
+
+  // Acknowledge to the sender
+  ws.send(JSON.stringify({ type: 'message_queued', id: message.id, position }));
+
+  // Broadcast to all connections viewing this session
+  forwardToConnections(sessionId, { type: 'message_queued', id: message.id, position });
+
+  if (DEBUG_CHAT_WS) {
+    logger.info('[Chat WS] Message queued', {
       sessionId,
-      count: pending.length,
+      messageId: message.id,
+      position,
     });
-    for (const msg of pending) {
-      newClient.sendMessage(msg.content);
+  }
+
+  // Try to dispatch immediately if Claude is idle
+  await tryDispatchNextMessage(sessionId);
+}
+
+/**
+ * Handle remove_queued_message - cancel a message before it's dispatched.
+ */
+function handleRemoveQueuedMessage(ws: WebSocket, sessionId: string, message: ChatMessage): void {
+  const messageId = message.messageId;
+  if (!messageId) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Missing messageId' }));
+    return;
+  }
+
+  const removed = messageQueueService.remove(sessionId, messageId);
+
+  if (removed) {
+    // Broadcast removal to all connections
+    forwardToConnections(sessionId, { type: 'message_removed', id: messageId });
+
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Queued message removed', { sessionId, messageId });
     }
+  } else {
+    ws.send(JSON.stringify({ type: 'error', message: 'Message not found in queue' }));
   }
 }
 
 async function handleStopMessage(ws: WebSocket, sessionId: string): Promise<void> {
   await sessionService.stopClaudeSession(sessionId);
-  pendingMessages.delete(sessionId);
+  // Note: We intentionally do NOT clear the message queue on stop
+  // Queue is preserved so messages can be sent when user resumes interaction
   pendingInteractiveRequests.delete(sessionId);
   ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
 }
@@ -593,6 +772,9 @@ async function handleLoadSessionMessage(
   // Check for pending interactive request to restore modal state
   const pendingRequest = pendingInteractiveRequests.get(sessionId);
 
+  // Get queued messages for this session
+  const queuedMessages = messageQueueService.getQueue(sessionId);
+
   if (targetSessionId) {
     const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
       SessionManager.getHistory(targetSessionId, workingDir),
@@ -619,6 +801,7 @@ async function handleLoadSessionMessage(
           planModeEnabled: false,
         },
         pendingInteractiveRequest: pendingRequest ?? null,
+        queuedMessages,
       })
     );
   } else {
@@ -634,6 +817,7 @@ async function handleLoadSessionMessage(
           planModeEnabled: false,
         },
         pendingInteractiveRequest: pendingRequest ?? null,
+        queuedMessages,
       })
     );
   }
@@ -780,7 +964,13 @@ async function handleChatMessage(
       await handleStartMessage(ws, dbSessionId, message);
       break;
     case 'user_input':
-      await handleUserInputMessage(ws, dbSessionId, message);
+      handleUserInputMessage(ws, dbSessionId, message);
+      break;
+    case 'queue_message':
+      await handleQueueMessage(ws, dbSessionId, workingDir, message);
+      break;
+    case 'remove_queued_message':
+      handleRemoveQueuedMessage(ws, dbSessionId, message);
       break;
     case 'stop':
       await handleStopMessage(ws, dbSessionId);

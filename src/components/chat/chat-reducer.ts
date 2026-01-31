@@ -78,6 +78,7 @@ export type ChatAction =
         running: boolean;
         settings?: ChatSettings;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
+        queuedMessages?: QueuedMessage[];
       };
     }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
@@ -96,10 +97,10 @@ export type ChatAction =
   | { type: 'STOP_REQUESTED' }
   // User message action
   | { type: 'USER_MESSAGE_SENT'; payload: ChatMessage }
-  // Queue actions
-  | { type: 'QUEUE_MESSAGE'; payload: QueuedMessage }
-  | { type: 'DEQUEUE_MESSAGE' }
-  | { type: 'REMOVE_QUEUED_MESSAGE'; payload: { id: string } }
+  // Queue actions (backend-managed queue)
+  | { type: 'MESSAGE_QUEUED'; payload: { id: string; position: number } }
+  | { type: 'MESSAGE_DISPATCHED'; payload: { id: string } }
+  | { type: 'MESSAGE_REMOVED'; payload: { id: string } }
   | { type: 'SET_QUEUE'; payload: QueuedMessage[] }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
@@ -421,10 +422,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         gitBranch: action.payload.gitBranch,
         running: action.payload.running,
         loadingSession: false,
-        startingSession: false, // Clear to allow queue draining after session loads
+        startingSession: false,
         toolUseIdToIndex: new Map(),
         pendingPermission,
         pendingQuestion,
+        // Restore queued messages from backend
+        queuedMessages: action.payload.queuedMessages ?? [],
       };
     }
 
@@ -485,16 +488,26 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'USER_MESSAGE_SENT':
       return { ...state, messages: [...state.messages, action.payload] };
 
-    // Queue management
-    case 'QUEUE_MESSAGE':
-      return { ...state, queuedMessages: [...state.queuedMessages, action.payload] };
-    case 'DEQUEUE_MESSAGE':
-      return { ...state, queuedMessages: state.queuedMessages.slice(1) };
-    case 'REMOVE_QUEUED_MESSAGE':
+    // Queue management (backend-managed queue)
+    // MESSAGE_QUEUED: Acknowledgment from backend - message is in queue
+    // With optimistic UI, the message is already in chat messages, no state change needed
+    case 'MESSAGE_QUEUED':
+      return state;
+
+    // MESSAGE_DISPATCHED: Backend is sending message to Claude
+    // No state change needed - message stays in chat, Claude will process it
+    case 'MESSAGE_DISPATCHED':
+      return state;
+
+    // MESSAGE_REMOVED: User cancelled a queued message before dispatch
+    // Remove from both queue display and chat messages (undo optimistic update)
+    case 'MESSAGE_REMOVED':
       return {
         ...state,
-        queuedMessages: state.queuedMessages.filter((msg) => msg.id !== action.payload.id),
+        messages: state.messages.filter((m) => m.id !== action.payload.id),
       };
+
+    // SET_QUEUE: Restore queue state from backend (on reconnect/session load)
     case 'SET_QUEUE':
       return { ...state, queuedMessages: action.payload };
 
@@ -587,6 +600,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage): ChatAction {
       running: data.running ?? false,
       settings: data.settings,
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+      queuedMessages: data.queuedMessages ?? [],
     },
   };
 }
@@ -649,8 +663,15 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
+    // Queue events from backend
     case 'message_queued':
-      return null; // Acknowledgment - no state change needed
+      return data.id
+        ? { type: 'MESSAGE_QUEUED', payload: { id: data.id, position: data.position ?? 0 } }
+        : null;
+    case 'message_dispatched':
+      return data.id ? { type: 'MESSAGE_DISPATCHED', payload: { id: data.id } } : null;
+    case 'message_removed':
+      return data.id ? { type: 'MESSAGE_REMOVED', payload: { id: data.id } } : null;
     default:
       return null;
   }
@@ -667,16 +688,4 @@ export function createUserMessageAction(text: string): ChatAction {
     timestamp: new Date().toISOString(),
   };
   return { type: 'USER_MESSAGE_SENT', payload: chatMessage };
-}
-
-/**
- * Creates a queue message action.
- */
-export function createQueueMessageAction(text: string): ChatAction {
-  const queuedMsg: QueuedMessage = {
-    id: generateMessageId(),
-    text: text.trim(),
-    timestamp: new Date().toISOString(),
-  };
-  return { type: 'QUEUE_MESSAGE', payload: queuedMsg };
 }

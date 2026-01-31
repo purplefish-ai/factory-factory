@@ -602,39 +602,37 @@ describe('session switching queue behavior', () => {
 // =============================================================================
 
 describe('queue state transitions', () => {
-  it('should support full queue lifecycle: add -> drain -> empty', () => {
+  // Note: Queue is now managed on the backend. Frontend receives queue state via
+  // SET_QUEUE action (from session_loaded) and MESSAGE_REMOVED (for cancelled messages).
+
+  it('should support SET_QUEUE to restore queue state from backend', () => {
     // Start with empty state
     let state = createInitialChatState();
     expect(state.queuedMessages).toEqual([]);
 
-    // Add first message
+    // Set queue from backend (e.g., on session load)
     const msg1 = createQueuedMessage('First');
-    state = chatReducer(state, { type: 'QUEUE_MESSAGE', payload: msg1 });
-    expect(state.queuedMessages).toHaveLength(1);
-
-    // Add second message
     const msg2 = createQueuedMessage('Second');
-    state = chatReducer(state, { type: 'QUEUE_MESSAGE', payload: msg2 });
+    state = chatReducer(state, { type: 'SET_QUEUE', payload: [msg1, msg2] });
     expect(state.queuedMessages).toHaveLength(2);
 
-    // Drain first message (simulated via SET_QUEUE)
+    // Queue drained on backend (simulated via SET_QUEUE with remaining messages)
     state = chatReducer(state, { type: 'SET_QUEUE', payload: [msg2] });
     expect(state.queuedMessages).toHaveLength(1);
     expect(state.queuedMessages[0].id).toBe(msg2.id);
 
-    // Drain second message
+    // Queue emptied
     state = chatReducer(state, { type: 'SET_QUEUE', payload: [] });
     expect(state.queuedMessages).toEqual([]);
   });
 
-  it('should maintain queue order when adding multiple messages', () => {
+  it('should maintain queue order with SET_QUEUE', () => {
     let state = createInitialChatState();
 
     const messages = ['First', 'Second', 'Third', 'Fourth', 'Fifth'].map(createQueuedMessage);
 
-    for (const msg of messages) {
-      state = chatReducer(state, { type: 'QUEUE_MESSAGE', payload: msg });
-    }
+    // Set full queue from backend
+    state = chatReducer(state, { type: 'SET_QUEUE', payload: messages });
 
     expect(state.queuedMessages).toHaveLength(5);
     expect(state.queuedMessages[0].text).toBe('First');

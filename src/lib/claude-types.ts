@@ -412,7 +412,9 @@ export interface WebSocketMessage {
     | 'agent_metadata'
     | 'permission_request'
     | 'user_question'
-    | 'message_queued';
+    | 'message_queued'
+    | 'message_dispatched'
+    | 'message_removed';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -435,6 +437,11 @@ export interface WebSocketMessage {
   settings?: ChatSettings;
   // Message queued acknowledgment
   text?: string;
+  // Message queue fields
+  id?: string;
+  position?: number;
+  // Queued messages for session restore
+  queuedMessages?: QueuedMessage[];
   // Pending interactive request for session restore
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
 }

@@ -3,22 +3,21 @@
  *
  * Note: These tests verify the persistence logic without browser APIs.
  * The actual sessionStorage integration is tested by mocking the storage.
+ *
+ * Message queue persistence has been removed - queue is now managed on the backend.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatSettings, QueuedMessage } from '@/lib/claude-types';
+import type { ChatSettings } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 import {
   clearAllSessionData,
   clearDraft,
-  clearQueue,
   clearSettings,
   loadAllSessionData,
   loadDraft,
-  loadQueue,
   loadSettings,
   loadSettingsWithDefaults,
   persistDraft,
-  persistQueue,
   persistSettings,
 } from './chat-persistence';
 
@@ -288,123 +287,6 @@ describe('settings persistence', () => {
 });
 
 // =============================================================================
-// Queue Persistence Tests
-// =============================================================================
-
-describe('queue persistence', () => {
-  describe('loadQueue', () => {
-    it('should return empty array for null sessionId', () => {
-      const result = loadQueue(null);
-      expect(result).toEqual([]);
-    });
-
-    it('should return empty array when no queue exists', () => {
-      const result = loadQueue('session-123');
-      expect(result).toEqual([]);
-    });
-
-    it('should return stored queue', () => {
-      const queue: QueuedMessage[] = [
-        { id: 'q-1', text: 'First', timestamp: '2024-01-01T00:00:00.000Z' },
-        { id: 'q-2', text: 'Second', timestamp: '2024-01-01T00:00:01.000Z' },
-      ];
-      mockStorage.set('chat-queue-session-123', JSON.stringify(queue));
-      const result = loadQueue('session-123');
-      expect(result).toEqual(queue);
-    });
-
-    it('should return empty array for invalid JSON', () => {
-      mockStorage.set('chat-queue-session-123', 'not json');
-      const result = loadQueue('session-123');
-      expect(result).toEqual([]);
-    });
-
-    it('should return empty array for non-array JSON', () => {
-      mockStorage.set('chat-queue-session-123', JSON.stringify({ not: 'array' }));
-      const result = loadQueue('session-123');
-      expect(result).toEqual([]);
-    });
-
-    it('should filter out malformed queue entries', () => {
-      const mixedQueue = [
-        { id: 'q-1', text: 'Valid', timestamp: '2024-01-01T00:00:00.000Z' },
-        { id: 'q-2', text: 123, timestamp: '2024-01-01T00:00:00.000Z' }, // text is not string
-        { id: 'q-3', timestamp: '2024-01-01T00:00:00.000Z' }, // missing text
-        { text: 'Missing id', timestamp: '2024-01-01T00:00:00.000Z' }, // missing id
-        { id: 'q-5', text: 'Valid 2', timestamp: '2024-01-01T00:00:01.000Z' },
-      ];
-      mockStorage.set('chat-queue-session-123', JSON.stringify(mixedQueue));
-      const result = loadQueue('session-123');
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('q-1');
-      expect(result[1].id).toBe('q-5');
-    });
-
-    it('should return empty array on storage error', () => {
-      mockSessionStorage.getItem.mockImplementationOnce(() => {
-        throw new Error('Storage error');
-      });
-      const result = loadQueue('session-123');
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('persistQueue', () => {
-    it('should not persist for null sessionId', () => {
-      persistQueue(null, []);
-      expect(mockSessionStorage.setItem).not.toHaveBeenCalled();
-    });
-
-    it('should persist non-empty queue as JSON', () => {
-      const queue: QueuedMessage[] = [
-        { id: 'q-1', text: 'Message', timestamp: '2024-01-01T00:00:00.000Z' },
-      ];
-      persistQueue('session-123', queue);
-      const stored = mockStorage.get('chat-queue-session-123');
-      expect(stored).toBeDefined();
-      expect(JSON.parse(stored ?? '')).toEqual(queue);
-    });
-
-    it('should remove storage when queue is empty', () => {
-      mockStorage.set('chat-queue-session-123', JSON.stringify([{ id: 'old' }]));
-      persistQueue('session-123', []);
-      expect(mockStorage.has('chat-queue-session-123')).toBe(false);
-    });
-
-    it('should silently handle storage errors', () => {
-      mockSessionStorage.setItem.mockImplementationOnce(() => {
-        throw new Error('Storage full');
-      });
-      expect(() =>
-        persistQueue('session-123', [
-          { id: 'q-1', text: 'Test', timestamp: '2024-01-01T00:00:00.000Z' },
-        ])
-      ).not.toThrow();
-    });
-  });
-
-  describe('clearQueue', () => {
-    it('should not clear for null sessionId', () => {
-      clearQueue(null);
-      expect(mockSessionStorage.removeItem).not.toHaveBeenCalled();
-    });
-
-    it('should remove queue from storage', () => {
-      mockStorage.set('chat-queue-session-123', JSON.stringify([{ id: 'q-1' }]));
-      clearQueue('session-123');
-      expect(mockStorage.has('chat-queue-session-123')).toBe(false);
-    });
-
-    it('should silently handle storage errors', () => {
-      mockSessionStorage.removeItem.mockImplementationOnce(() => {
-        throw new Error('Storage error');
-      });
-      expect(() => clearQueue('session-123')).not.toThrow();
-    });
-  });
-});
-
-// =============================================================================
 // Session Cleanup Tests
 // =============================================================================
 
@@ -415,16 +297,14 @@ describe('session cleanup', () => {
       expect(mockSessionStorage.removeItem).not.toHaveBeenCalled();
     });
 
-    it('should clear draft, settings, and queue for session', () => {
+    it('should clear draft and settings for session', () => {
       mockStorage.set('chat-draft-session-123', 'draft');
       mockStorage.set('chat-settings-session-123', JSON.stringify(DEFAULT_CHAT_SETTINGS));
-      mockStorage.set('chat-queue-session-123', JSON.stringify([]));
 
       clearAllSessionData('session-123');
 
       expect(mockStorage.has('chat-draft-session-123')).toBe(false);
       expect(mockStorage.has('chat-settings-session-123')).toBe(false);
-      expect(mockStorage.has('chat-queue-session-123')).toBe(false);
     });
   });
 
@@ -434,7 +314,6 @@ describe('session cleanup', () => {
       expect(result).toEqual({
         draft: '',
         settings: DEFAULT_CHAT_SETTINGS,
-        queue: [],
       });
     });
 
@@ -443,7 +322,6 @@ describe('session cleanup', () => {
       expect(result).toEqual({
         draft: '',
         settings: DEFAULT_CHAT_SETTINGS,
-        queue: [],
       });
     });
 
@@ -453,31 +331,24 @@ describe('session cleanup', () => {
         thinkingEnabled: true,
         planModeEnabled: false,
       };
-      const queue: QueuedMessage[] = [
-        { id: 'q-1', text: 'Message', timestamp: '2024-01-01T00:00:00.000Z' },
-      ];
 
       mockStorage.set('chat-draft-session-123', 'My draft');
       mockStorage.set('chat-settings-session-123', JSON.stringify(settings));
-      mockStorage.set('chat-queue-session-123', JSON.stringify(queue));
 
       const result = loadAllSessionData('session-123');
 
       expect(result.draft).toBe('My draft');
       expect(result.settings).toEqual(settings);
-      expect(result.queue).toEqual(queue);
     });
 
     it('should return partial data when some items invalid', () => {
       mockStorage.set('chat-draft-session-123', 'My draft');
       mockStorage.set('chat-settings-session-123', 'invalid json'); // Invalid
-      mockStorage.set('chat-queue-session-123', JSON.stringify([]));
 
       const result = loadAllSessionData('session-123');
 
       expect(result.draft).toBe('My draft');
       expect(result.settings).toEqual(DEFAULT_CHAT_SETTINGS); // Falls back to defaults
-      expect(result.queue).toEqual([]);
     });
   });
 });
@@ -538,12 +409,5 @@ describe('storage key format', () => {
   it('should use chat-settings- prefix for settings', () => {
     persistSettings('session-abc', DEFAULT_CHAT_SETTINGS);
     expect(mockStorage.has('chat-settings-session-abc')).toBe(true);
-  });
-
-  it('should use chat-queue- prefix for queue', () => {
-    persistQueue('session-abc', [
-      { id: 'q-1', text: 'test', timestamp: '2024-01-01T00:00:00.000Z' },
-    ]);
-    expect(mockStorage.has('chat-queue-session-abc')).toBe(true);
   });
 });
