@@ -1,15 +1,4 @@
-import {
-  AppWindow,
-  Archive,
-  ArrowDown,
-  CheckCircle2,
-  Circle,
-  GitBranch,
-  GitPullRequest,
-  Loader2,
-  PanelRight,
-  XCircle,
-} from 'lucide-react';
+import { AppWindow, Archive, ArrowDown, Check, GitBranch, Loader2, PanelRight } from 'lucide-react';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -406,32 +395,16 @@ function WorkspaceChatContent() {
               href={workspace.prUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-colors text-sm font-medium ${
+              className={`text-xs hover:opacity-80 transition-opacity ${
                 workspace.prState === 'MERGED'
-                  ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300 hover:bg-purple-500/35'
-                  : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
+                  ? 'text-purple-500'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <GitPullRequest className="h-4 w-4" />
-              <span>#{workspace.prNumber}</span>
-              {workspace.prState === 'MERGED' ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 text-purple-500" />
-                  <span className="text-xs">Merged</span>
-                </>
-              ) : (
-                <>
-                  {workspace.prCiStatus === 'SUCCESS' && (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  )}
-                  {workspace.prCiStatus === 'FAILURE' && (
-                    <XCircle className="h-4 w-4 text-red-500" />
-                  )}
-                  {workspace.prCiStatus === 'PENDING' && (
-                    <Circle className="h-4 w-4 text-yellow-500 animate-pulse" />
-                  )}
-                </>
-              )}
+              #{workspace.prNumber}
+              <span className="inline-block w-3.5 ml-0.5">
+                {workspace.prState === 'MERGED' && <Check className="h-3 w-3 inline" />}
+              </span>
             </a>
           )}
         </div>
