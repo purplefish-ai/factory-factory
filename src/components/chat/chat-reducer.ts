@@ -539,15 +539,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
       // Convert queued messages to ChatMessages for inline display
       // These will appear grayed out at the end of the messages list
-      const queuedAsChatMessages: ChatMessage[] = queuedMessagesArray.map((qm) => ({
-        id: qm.id,
-        source: 'user' as const,
-        text: qm.text,
-        timestamp: qm.timestamp,
-        attachments: qm.attachments,
-      }));
+      // Filter out any that are already in messages to prevent duplicates
+      // (can happen if optimistic messages overlap with backend queued messages)
+      const existingMessageIds = new Set(messages.map((m) => m.id));
+      const queuedAsChatMessages: ChatMessage[] = queuedMessagesArray
+        .filter((qm) => !existingMessageIds.has(qm.id))
+        .map((qm) => ({
+          id: qm.id,
+          source: 'user' as const,
+          text: qm.text,
+          timestamp: qm.timestamp,
+          attachments: qm.attachments,
+        }));
 
-      // Combine history + optimistic + queued messages
+      // Combine history + optimistic + queued messages (deduplicated)
       const allMessages = [...messages, ...queuedAsChatMessages];
 
       return {
