@@ -86,8 +86,12 @@ export interface ChatState {
   pendingRequest: PendingRequest;
   /** Chat settings (model, thinking, plan mode) */
   chatSettings: ChatSettings;
-  /** Queued messages waiting to be sent */
-  queuedMessages: QueuedMessage[];
+  /**
+   * Queued messages waiting to be sent.
+   * Map from message ID to QueuedMessage - enforces uniqueness by design.
+   * Maps automatically de-dupe: adding the same ID twice simply overwrites.
+   */
+  queuedMessages: Map<string, QueuedMessage>;
   /** Tool use ID to message index map for O(1) updates */
   toolUseIdToIndex: Map<string, number>;
   /** Latest accumulated thinking content from extended thinking mode */
@@ -312,7 +316,7 @@ function createSessionSwitchResetState(): Pick<
 > {
   return {
     ...createBaseResetState(),
-    queuedMessages: [],
+    queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
   };
 }
@@ -325,7 +329,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     availableSessions: [],
     pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,
-    queuedMessages: [],
+    queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),
     latestThinking: null,
     pendingMessages: new Map(),
@@ -526,6 +530,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
 
+      // Convert incoming array to Map for O(1) lookups and automatic de-duplication
+      const queuedMessagesArray = action.payload.queuedMessages ?? [];
+      const queuedMessagesMap = new Map<string, QueuedMessage>();
+      for (const msg of queuedMessagesArray) {
+        queuedMessagesMap.set(msg.id, msg);
+      }
+
       return {
         ...state,
         messages,
@@ -534,8 +545,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
         toolUseIdToIndex: new Map(),
         pendingRequest,
-        // Restore queued messages from backend
-        queuedMessages: action.payload.queuedMessages ?? [],
+        // Restore queued messages from backend (converted to Map)
+        queuedMessages: queuedMessagesMap,
         // Clear pending message state to remove stale indicators and prevent memory leaks
         pendingMessages: new Map(),
         // Clear stale rejected message to prevent recovery effect from restoring old content
@@ -595,11 +606,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // Queue management (backend-managed queue)
     // ADD_TO_QUEUE: Optimistically add message to queuedMessages for queue display
-    case 'ADD_TO_QUEUE':
+    case 'ADD_TO_QUEUE': {
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.set(action.payload.id, action.payload);
       return {
         ...state,
-        queuedMessages: [...state.queuedMessages, action.payload],
+        queuedMessages: newQueuedMessages,
       };
+    }
 
     // MESSAGE_QUEUED: Acknowledgment from backend - message is in queue
     // With optimistic UI, the message is already in chat messages and queuedMessages, no state change needed
@@ -608,27 +622,44 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // MESSAGE_DISPATCHED: Backend is sending message to Claude
     // Remove from queuedMessages (no longer pending), message stays in chat
-    case 'MESSAGE_DISPATCHED':
+    case 'MESSAGE_DISPATCHED': {
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.delete(action.payload.id);
       return {
         ...state,
-        queuedMessages: state.queuedMessages.filter((m) => m.id !== action.payload.id),
+        queuedMessages: newQueuedMessages,
       };
+    }
 
     // MESSAGE_REMOVED: User cancelled a queued message before dispatch
     // Remove from both queue display and chat messages (undo optimistic update)
-    case 'MESSAGE_REMOVED':
+    case 'MESSAGE_REMOVED': {
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.delete(action.payload.id);
       return {
         ...state,
         messages: state.messages.filter((m) => m.id !== action.payload.id),
-        queuedMessages: state.queuedMessages.filter((m) => m.id !== action.payload.id),
+        queuedMessages: newQueuedMessages,
       };
+    }
 
     // MESSAGE_ACCEPTED: Backend confirmed message is in queue
     // Add to messages and queuedMessages, remove from pending
+    // De-duplication: Skip if message ID already exists (handles reconnect/multi-tab scenarios)
     case 'MESSAGE_ACCEPTED': {
+      const queuedMsg = action.payload.message;
+
+      // De-dupe check: Skip if message already exists in messages array
+      if (state.messages.some((m) => m.id === queuedMsg.id)) {
+        // Still remove from pending since backend confirmed it
+        const newPendingMessages = new Map(state.pendingMessages);
+        newPendingMessages.delete(action.payload.id);
+        return { ...state, pendingMessages: newPendingMessages };
+      }
+
       const newPendingMessages = new Map(state.pendingMessages);
       newPendingMessages.delete(action.payload.id);
-      const queuedMsg = action.payload.message;
+
       // Create user message from queued message
       const userMessage: ChatMessage = {
         id: queuedMsg.id,
@@ -637,10 +668,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         timestamp: queuedMsg.timestamp,
         attachments: queuedMsg.attachments,
       };
+
+      // Add to queuedMessages Map - automatically de-dupes by ID
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.set(queuedMsg.id, queuedMsg);
+
       return {
         ...state,
         messages: [...state.messages, userMessage],
-        queuedMessages: [...state.queuedMessages, queuedMsg],
+        queuedMessages: newQueuedMessages,
         pendingMessages: newPendingMessages,
       };
     }
@@ -687,8 +723,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
 
     // SET_QUEUE: Restore queue state from backend (on reconnect/session load)
-    case 'SET_QUEUE':
-      return { ...state, queuedMessages: action.payload };
+    case 'SET_QUEUE': {
+      const queuedMessagesMap = new Map<string, QueuedMessage>();
+      for (const msg of action.payload) {
+        queuedMessagesMap.set(msg.id, msg);
+      }
+      return { ...state, queuedMessages: queuedMessagesMap };
+    }
 
     // Settings
     case 'UPDATE_SETTINGS':

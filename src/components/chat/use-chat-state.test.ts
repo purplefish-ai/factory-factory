@@ -61,6 +61,25 @@ function createQueuedMessage(text: string): QueuedMessage {
 }
 
 /**
+ * Helper to convert array of QueuedMessages to Map.
+ * Used for setting up test state since queuedMessages is now a Map.
+ */
+function toQueuedMessagesMap(messages: QueuedMessage[]): Map<string, QueuedMessage> {
+  const map = new Map<string, QueuedMessage>();
+  for (const msg of messages) {
+    map.set(msg.id, msg);
+  }
+  return map;
+}
+
+/**
+ * Helper to convert Map to array for test assertions.
+ */
+function queuedMessagesAsArray(map: Map<string, QueuedMessage>): QueuedMessage[] {
+  return Array.from(map.values());
+}
+
+/**
  * Simulates the drainQueue logic from use-chat-state.ts.
  * Returns the actions that would be dispatched and messages that would be sent.
  */
@@ -75,8 +94,11 @@ interface DrainQueueResult {
 function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQueueResult {
   const { sessionStatus, queuedMessages, chatSettings } = state;
 
+  // Convert Map to array for processing
+  const queueArray = queuedMessagesAsArray(queuedMessages);
+
   // Check if we should drain - only drain when ready (not running, starting, loading, or stopping)
-  if (sessionStatus.phase !== 'ready' || queuedMessages.length === 0) {
+  if (sessionStatus.phase !== 'ready' || queueArray.length === 0) {
     return {
       shouldDrain: false,
       actions: [],
@@ -86,7 +108,7 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
     };
   }
 
-  const [nextMsg, ...remaining] = queuedMessages;
+  const [nextMsg, ...remaining] = queueArray;
   const actions: Array<{ type: string; payload?: unknown }> = [];
   const sentMessages: Array<{ type: string; [key: string]: unknown }> = [];
 
@@ -155,7 +177,7 @@ describe('queue draining conditions', () => {
   it('should NOT drain when running is true', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'running' } as const,
-      queuedMessages: [createQueuedMessage('Hello')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello')]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -168,7 +190,7 @@ describe('queue draining conditions', () => {
   it('should NOT drain when startingSession is true', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'starting' } as const,
-      queuedMessages: [createQueuedMessage('Hello')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello')]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -181,7 +203,7 @@ describe('queue draining conditions', () => {
   it('should NOT drain when queue is empty', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [],
+      queuedMessages: new Map(),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -192,7 +214,7 @@ describe('queue draining conditions', () => {
   it('should drain when idle and queue has messages', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello')]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -205,7 +227,10 @@ describe('queue draining conditions', () => {
   it('should drain when both running and startingSession are false', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('First'), createQueuedMessage('Second')],
+      queuedMessages: toQueuedMessagesMap([
+        createQueuedMessage('First'),
+        createQueuedMessage('Second'),
+      ]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -274,7 +299,7 @@ describe('queue draining actions', () => {
 
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [msg1, msg2, msg3],
+      queuedMessages: toQueuedMessagesMap([msg1, msg2, msg3]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -293,7 +318,7 @@ describe('queue draining actions', () => {
 
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello')]),
       chatSettings: settings,
     });
 
@@ -309,7 +334,7 @@ describe('queue draining actions', () => {
   it('should send user_input message with original text when thinking disabled', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello Claude')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello Claude')]),
       chatSettings: {
         ...DEFAULT_CHAT_SETTINGS,
         thinkingEnabled: false,
@@ -325,7 +350,7 @@ describe('queue draining actions', () => {
   it('should append THINKING_SUFFIX when thinking enabled', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello Claude')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello Claude')]),
       chatSettings: {
         ...DEFAULT_CHAT_SETTINGS,
         thinkingEnabled: true,
@@ -341,7 +366,7 @@ describe('queue draining actions', () => {
   it('should dispatch WS_STARTING action', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello')]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -353,7 +378,7 @@ describe('queue draining actions', () => {
   it('should dispatch USER_MESSAGE_SENT for optimistic UI', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello world')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello world')]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -366,7 +391,7 @@ describe('queue draining actions', () => {
   it('should clear draft when draining', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello')]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -533,35 +558,38 @@ describe('removeQueuedMessage pattern', () => {
 describe('session switching queue behavior', () => {
   it('should clear queue on SESSION_SWITCH_START', () => {
     const state = createInitialChatState({
-      queuedMessages: [createQueuedMessage('Queued 1'), createQueuedMessage('Queued 2')],
+      queuedMessages: toQueuedMessagesMap([
+        createQueuedMessage('Queued 1'),
+        createQueuedMessage('Queued 2'),
+      ]),
     });
 
     const newState = chatReducer(state, { type: 'SESSION_SWITCH_START' });
 
-    expect(newState.queuedMessages).toEqual([]);
+    expect(newState.queuedMessages.size).toBe(0);
   });
 
   it('should clear queue on RESET_FOR_SESSION_SWITCH', () => {
     const state = createInitialChatState({
-      queuedMessages: [createQueuedMessage('Queued')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Queued')]),
     });
 
     const newState = chatReducer(state, { type: 'RESET_FOR_SESSION_SWITCH' });
 
-    expect(newState.queuedMessages).toEqual([]);
+    expect(newState.queuedMessages.size).toBe(0);
   });
 
   it('should NOT clear queue on CLEAR_CHAT', () => {
     const msg = createQueuedMessage('Queued');
     const state = createInitialChatState({
-      queuedMessages: [msg],
+      queuedMessages: toQueuedMessagesMap([msg]),
     });
 
     const newState = chatReducer(state, { type: 'CLEAR_CHAT' });
 
     // CLEAR_CHAT resets messages but doesn't explicitly clear queue
     // (the actual queue clearing happens via persistence in the hook)
-    expect(newState.queuedMessages).toEqual([msg]);
+    expect(newState.queuedMessages.has(msg.id)).toBe(true);
   });
 });
 
@@ -576,22 +604,22 @@ describe('queue state transitions', () => {
   it('should support SET_QUEUE to restore queue state from backend', () => {
     // Start with empty state
     let state = createInitialChatState();
-    expect(state.queuedMessages).toEqual([]);
+    expect(state.queuedMessages.size).toBe(0);
 
     // Set queue from backend (e.g., on session load)
     const msg1 = createQueuedMessage('First');
     const msg2 = createQueuedMessage('Second');
     state = chatReducer(state, { type: 'SET_QUEUE', payload: [msg1, msg2] });
-    expect(state.queuedMessages).toHaveLength(2);
+    expect(state.queuedMessages.size).toBe(2);
 
     // Queue drained on backend (simulated via SET_QUEUE with remaining messages)
     state = chatReducer(state, { type: 'SET_QUEUE', payload: [msg2] });
-    expect(state.queuedMessages).toHaveLength(1);
-    expect(state.queuedMessages[0].id).toBe(msg2.id);
+    expect(state.queuedMessages.size).toBe(1);
+    expect(state.queuedMessages.get(msg2.id)?.id).toBe(msg2.id);
 
     // Queue emptied
     state = chatReducer(state, { type: 'SET_QUEUE', payload: [] });
-    expect(state.queuedMessages).toEqual([]);
+    expect(state.queuedMessages.size).toBe(0);
   });
 
   it('should maintain queue order with SET_QUEUE', () => {
@@ -602,26 +630,27 @@ describe('queue state transitions', () => {
     // Set full queue from backend
     state = chatReducer(state, { type: 'SET_QUEUE', payload: messages });
 
-    expect(state.queuedMessages).toHaveLength(5);
-    expect(state.queuedMessages[0].text).toBe('First');
-    expect(state.queuedMessages[4].text).toBe('Fifth');
+    expect(state.queuedMessages.size).toBe(5);
+    const queueArray = queuedMessagesAsArray(state.queuedMessages);
+    expect(queueArray[0].text).toBe('First');
+    expect(queueArray[4].text).toBe('Fifth');
   });
 
   it('should not affect queue when receiving WS messages', () => {
     const queuedMsg = createQueuedMessage('Queued');
     const state = createInitialChatState({
-      queuedMessages: [queuedMsg],
+      queuedMessages: toQueuedMessagesMap([queuedMsg]),
     });
 
     // Simulate receiving various WS messages
     let newState = chatReducer(state, { type: 'WS_STATUS', payload: { running: true } });
-    expect(newState.queuedMessages).toEqual([queuedMsg]);
+    expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
 
     newState = chatReducer(newState, { type: 'WS_STARTING' });
-    expect(newState.queuedMessages).toEqual([queuedMsg]);
+    expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
 
     newState = chatReducer(newState, { type: 'WS_STOPPED' });
-    expect(newState.queuedMessages).toEqual([queuedMsg]);
+    expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
   });
 });
 
@@ -633,7 +662,7 @@ describe('queue edge cases', () => {
   it('should handle draining with null sessionId', () => {
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage('Hello')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello')]),
     });
 
     // Should still drain even with null sessionId (persistence just won't happen)
@@ -646,7 +675,7 @@ describe('queue edge cases', () => {
     const longText = 'a'.repeat(10_000);
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage(longText)],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage(longText)]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -660,7 +689,7 @@ describe('queue edge cases', () => {
     const specialText = 'Hello "world" with \'quotes\' and\nnewlines\tand\ttabs 🎉';
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage(specialText)],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage(specialText)]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -673,7 +702,7 @@ describe('queue edge cases', () => {
     const unicodeText = 'Hello 世界 مرحبا שלום';
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
-      queuedMessages: [createQueuedMessage(unicodeText)],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage(unicodeText)]),
     });
 
     const result = simulateDrainQueue(state, 'session-123');
@@ -685,7 +714,7 @@ describe('queue edge cases', () => {
   it('should handle rapid state transitions', () => {
     // Simulate rapid running state changes
     let state = createInitialChatState({
-      queuedMessages: [createQueuedMessage('Message')],
+      queuedMessages: toQueuedMessagesMap([createQueuedMessage('Message')]),
     });
 
     // Start running

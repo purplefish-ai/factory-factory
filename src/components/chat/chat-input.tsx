@@ -211,12 +211,16 @@ export const ChatInput = memo(function ChatInput({
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
 
   // Use controlled or uncontrolled attachments based on props
-  const isControlled = controlledAttachments !== undefined;
-  const attachments = isControlled ? controlledAttachments : internalAttachments;
+  // Controlled mode requires the setter (onAttachmentsChange) - the setter is what makes it controlled
+  // If only `attachments` is passed without `onAttachmentsChange`, component is uncontrolled (uses internal state)
+  const isControlled = onAttachmentsChange !== undefined;
+  const attachments = isControlled ? (controlledAttachments ?? []) : internalAttachments;
   const setAttachments = useCallback(
     (updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])) => {
-      if (isControlled && onAttachmentsChange) {
-        const newValue = typeof updater === 'function' ? updater(controlledAttachments) : updater;
+      if (isControlled) {
+        // In controlled mode, always use the external setter
+        const currentValue = controlledAttachments ?? [];
+        const newValue = typeof updater === 'function' ? updater(currentValue) : updater;
         onAttachmentsChange(newValue);
       } else {
         setInternalAttachments(updater);

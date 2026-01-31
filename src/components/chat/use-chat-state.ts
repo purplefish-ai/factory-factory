@@ -30,6 +30,7 @@ import type {
   ChatSettings,
   ClaudeMessage,
   MessageAttachment,
+  QueuedMessage,
   WebSocketMessage,
 } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
@@ -69,7 +70,10 @@ export interface UseChatStateOptions {
   connected: boolean;
 }
 
-export interface UseChatStateReturn extends ChatState {
+export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
+  // Override queuedMessages to expose as array for UI consumption
+  // (Internal state uses Map for O(1) lookups and automatic de-duplication)
+  queuedMessages: QueuedMessage[];
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -586,6 +590,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     () => ({
       // Spread all state from reducer
       ...state,
+      // Convert queuedMessages Map to array for UI consumption
+      // (Internal state uses Map for O(1) lookups and automatic de-duplication)
+      queuedMessages: Array.from(state.queuedMessages.values()),
       // Connection state from transport
       connected,
       // Actions (stable - use stateRef internally)

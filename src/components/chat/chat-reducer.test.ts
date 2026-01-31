@@ -30,6 +30,18 @@ import {
 // Test Helpers
 // =============================================================================
 
+/**
+ * Helper to convert array of QueuedMessages to Map.
+ * Used for setting up test state since queuedMessages is now a Map.
+ */
+function toQueuedMessagesMap(messages: QueuedMessage[]): Map<string, QueuedMessage> {
+  const map = new Map<string, QueuedMessage>();
+  for (const msg of messages) {
+    map.set(msg.id, msg);
+  }
+  return map;
+}
+
 function createTestToolUseMessage(toolUseId: string): ClaudeMessage {
   return {
     type: 'stream_event',
@@ -110,7 +122,8 @@ describe('createInitialChatState', () => {
     expect(state.availableSessions).toEqual([]);
     expect(state.pendingRequest).toEqual({ type: 'none' });
     expect(state.chatSettings).toEqual(DEFAULT_CHAT_SETTINGS);
-    expect(state.queuedMessages).toEqual([]);
+    expect(state.queuedMessages).toBeInstanceOf(Map);
+    expect(state.queuedMessages.size).toBe(0);
     expect(state.toolUseIdToIndex).toBeInstanceOf(Map);
     expect(state.toolUseIdToIndex.size).toBe(0);
   });
@@ -938,14 +951,14 @@ describe('chatReducer', () => {
             timestamp: '2024-01-01T00:00:00.000Z',
           },
         },
-        queuedMessages: [
+        queuedMessages: toQueuedMessagesMap([
           {
             id: 'q-1',
             text: 'queued',
             timestamp: '2024-01-01T00:00:00.000Z',
             settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
           },
-        ],
+        ]),
         toolUseIdToIndex: new Map([['tool-1', 0]]),
         latestThinking: 'Some thinking from previous session',
       };
@@ -957,7 +970,7 @@ describe('chatReducer', () => {
       expect(newState.gitBranch).toBeNull();
       expect(newState.pendingRequest).toEqual({ type: 'none' });
       expect(newState.sessionStatus).toEqual({ phase: 'loading' });
-      expect(newState.queuedMessages).toEqual([]);
+      expect(newState.queuedMessages.size).toBe(0);
       expect(newState.toolUseIdToIndex.size).toBe(0);
       expect(newState.latestThinking).toBeNull();
     });
@@ -1224,8 +1237,8 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: queuedMessage };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.queuedMessages).toHaveLength(1);
-      expect(newState.queuedMessages[0]).toEqual(queuedMessage);
+      expect(newState.queuedMessages.size).toBe(1);
+      expect(newState.queuedMessages.get(queuedMessage.id)).toEqual(queuedMessage);
     });
 
     it('should append to existing queue', () => {
@@ -1237,7 +1250,7 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
-        queuedMessages: [existingMessage],
+        queuedMessages: toQueuedMessagesMap([existingMessage]),
       };
       const newMessage: QueuedMessage = {
         id: 'q-2',
@@ -1248,9 +1261,9 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: newMessage };
       const newState = chatReducer(state, action);
 
-      expect(newState.queuedMessages).toHaveLength(2);
-      expect(newState.queuedMessages[0]).toEqual(existingMessage);
-      expect(newState.queuedMessages[1]).toEqual(newMessage);
+      expect(newState.queuedMessages.size).toBe(2);
+      expect(newState.queuedMessages.get(existingMessage.id)).toEqual(existingMessage);
+      expect(newState.queuedMessages.get(newMessage.id)).toEqual(newMessage);
     });
   });
 
@@ -1268,7 +1281,7 @@ describe('chatReducer', () => {
     it('should remove message from queuedMessages', () => {
       const state: ChatState = {
         ...initialState,
-        queuedMessages: [
+        queuedMessages: toQueuedMessagesMap([
           {
             id: 'q-1',
             text: 'First',
@@ -1281,33 +1294,33 @@ describe('chatReducer', () => {
             timestamp: '2024-01-01T00:00:01.000Z',
             settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
           },
-        ],
+        ]),
       };
       const action: ChatAction = { type: 'MESSAGE_DISPATCHED', payload: { id: 'q-1' } };
       const newState = chatReducer(state, action);
 
-      expect(newState.queuedMessages).toHaveLength(1);
-      expect(newState.queuedMessages[0].id).toBe('q-2');
+      expect(newState.queuedMessages.size).toBe(1);
+      expect(newState.queuedMessages.has('q-2')).toBe(true);
     });
 
     it('should handle dispatching message not in queue gracefully', () => {
       const state: ChatState = {
         ...initialState,
-        queuedMessages: [
+        queuedMessages: toQueuedMessagesMap([
           {
             id: 'q-1',
             text: 'First',
             timestamp: '2024-01-01T00:00:00.000Z',
             settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
           },
-        ],
+        ]),
       };
       const action: ChatAction = { type: 'MESSAGE_DISPATCHED', payload: { id: 'nonexistent' } };
       const newState = chatReducer(state, action);
 
       // Queue should be unchanged
-      expect(newState.queuedMessages).toHaveLength(1);
-      expect(newState.queuedMessages[0].id).toBe('q-1');
+      expect(newState.queuedMessages.size).toBe(1);
+      expect(newState.queuedMessages.has('q-1')).toBe(true);
     });
   });
 
@@ -1334,7 +1347,7 @@ describe('chatReducer', () => {
           { id: 'msg-1', source: 'user', text: 'First', timestamp: '2024-01-01T00:00:00.000Z' },
           { id: 'msg-2', source: 'user', text: 'Second', timestamp: '2024-01-01T00:00:01.000Z' },
         ],
-        queuedMessages: [
+        queuedMessages: toQueuedMessagesMap([
           {
             id: 'msg-1',
             text: 'First',
@@ -1347,16 +1360,16 @@ describe('chatReducer', () => {
             timestamp: '2024-01-01T00:00:01.000Z',
             settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
           },
-        ],
+        ]),
       };
       const action: ChatAction = { type: 'MESSAGE_REMOVED', payload: { id: 'msg-1' } };
       const newState = chatReducer(state, action);
 
-      // Should remove from both arrays
+      // Should remove from both messages and queuedMessages
       expect(newState.messages).toHaveLength(1);
       expect(newState.messages[0].id).toBe('msg-2');
-      expect(newState.queuedMessages).toHaveLength(1);
-      expect(newState.queuedMessages[0].id).toBe('msg-2');
+      expect(newState.queuedMessages.size).toBe(1);
+      expect(newState.queuedMessages.has('msg-2')).toBe(true);
     });
   });
 
@@ -1364,14 +1377,14 @@ describe('chatReducer', () => {
     it('should replace entire queue', () => {
       const state: ChatState = {
         ...initialState,
-        queuedMessages: [
+        queuedMessages: toQueuedMessagesMap([
           {
             id: 'old-1',
             text: 'Old',
             timestamp: '2024-01-01T00:00:00.000Z',
             settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
           },
-        ],
+        ]),
       };
       const newQueue: QueuedMessage[] = [
         {
@@ -1390,7 +1403,10 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'SET_QUEUE', payload: newQueue };
       const newState = chatReducer(state, action);
 
-      expect(newState.queuedMessages).toEqual(newQueue);
+      // SET_QUEUE converts array to Map
+      expect(newState.queuedMessages.size).toBe(2);
+      expect(newState.queuedMessages.get('new-1')?.text).toBe('New 1');
+      expect(newState.queuedMessages.get('new-2')?.text).toBe('New 2');
     });
   });
 
@@ -1553,14 +1569,14 @@ describe('chatReducer', () => {
         sessionStatus: { phase: 'running' } as const,
         gitBranch: 'feature/test',
         chatSettings: { selectedModel: 'sonnet', thinkingEnabled: true, planModeEnabled: false },
-        queuedMessages: [
+        queuedMessages: toQueuedMessagesMap([
           {
             id: 'q-1',
             text: 'queued',
             timestamp: '2024-01-01T00:00:00.000Z',
             settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
           },
-        ],
+        ]),
       };
 
       const action: ChatAction = { type: 'RESET_FOR_SESSION_SWITCH' };
@@ -1569,7 +1585,7 @@ describe('chatReducer', () => {
       expect(newState.messages).toEqual([]);
       expect(newState.gitBranch).toBeNull();
       expect(newState.sessionStatus).toEqual({ phase: 'loading' });
-      expect(newState.queuedMessages).toEqual([]);
+      expect(newState.queuedMessages.size).toBe(0);
       // Settings are preserved
       expect(newState.chatSettings).toEqual(state.chatSettings);
     });

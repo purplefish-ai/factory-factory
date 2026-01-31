@@ -703,12 +703,22 @@ async function handleQueueMessage(
     return;
   }
 
-  // Build settings from message or use defaults
-  const settings = message.settings ?? {
-    selectedModel: message.selectedModel ?? null,
-    thinkingEnabled: message.thinkingEnabled ?? false,
-    planModeEnabled: message.planModeEnabled ?? false,
-  };
+  // Validate model at enqueue time to ensure all queued messages have valid settings
+  // This prevents invalid model strings from causing client creation failures later
+  const rawModel = message.settings?.selectedModel ?? message.selectedModel ?? null;
+  const validModel = rawModel && VALID_MODELS.includes(rawModel) ? rawModel : null;
+
+  // Build settings from message or use defaults (with validated model)
+  const settings = message.settings
+    ? {
+        ...message.settings,
+        selectedModel: validModel,
+      }
+    : {
+        selectedModel: validModel,
+        thinkingEnabled: message.thinkingEnabled ?? false,
+        planModeEnabled: message.planModeEnabled ?? false,
+      };
 
   // Create queued message
   const queuedMsg: QueuedMessage = {
