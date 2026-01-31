@@ -143,6 +143,21 @@ class MessageQueueService {
   }
 
   /**
+   * Re-queue a message at the front of the queue.
+   * Used when a dequeued message cannot be dispatched (e.g., client busy or failed to start).
+   */
+  requeue(sessionId: string, msg: QueuedMessage): void {
+    const queue = this.getOrCreateQueue(sessionId);
+    queue.unshift(msg);
+
+    logger.info('Message re-queued at front', {
+      sessionId,
+      messageId: msg.id,
+      queueLength: queue.length,
+    });
+  }
+
+  /**
    * Get the current queue for a session (for state restoration).
    * Returns a copy to prevent external mutation.
    */

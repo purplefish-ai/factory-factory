@@ -269,26 +269,22 @@ function buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
 }
 
 /**
- * Auto-start a client for queue dispatch using settings from the next queued message.
+ * Auto-start a client for queue dispatch using settings from the provided message.
  * Returns the client or null if auto-start failed.
  */
-async function autoStartClientForQueue(dbSessionId: string): Promise<ClaudeClient | null> {
-  const queue = messageQueueService.getQueue(dbSessionId);
-  if (queue.length === 0) {
-    return null;
-  }
-
-  const nextMsg = queue[0];
-
+async function autoStartClientForQueue(
+  dbSessionId: string,
+  msg: QueuedMessage
+): Promise<ClaudeClient | null> {
   if (DEBUG_CHAT_WS) {
     logger.info('[Chat WS] Auto-starting client for queued message', { dbSessionId });
   }
 
   try {
     return await getOrCreateChatClient(dbSessionId, {
-      thinkingEnabled: nextMsg.settings.thinkingEnabled,
-      planModeEnabled: nextMsg.settings.planModeEnabled,
-      model: nextMsg.settings.selectedModel ?? undefined,
+      thinkingEnabled: msg.settings.thinkingEnabled,
+      planModeEnabled: msg.settings.planModeEnabled,
+      model: msg.settings.selectedModel ?? undefined,
     });
   } catch (error) {
     logger.error('[Chat WS] Failed to auto-start client for queue dispatch', {
@@ -300,14 +296,10 @@ async function autoStartClientForQueue(dbSessionId: string): Promise<ClaudeClien
 }
 
 /**
- * Dispatch a single queued message to the client.
+ * Dispatch a message to the client.
+ * The message should already be dequeued before calling this.
  */
-function dispatchQueuedMessage(dbSessionId: string, client: ClaudeClient): void {
-  const msg = messageQueueService.dequeue(dbSessionId);
-  if (!msg) {
-    return;
-  }
-
+function dispatchMessage(dbSessionId: string, client: ClaudeClient, msg: QueuedMessage): void {
   // Notify all connections that message is being dispatched
   forwardToConnections(dbSessionId, { type: 'message_dispatched', id: msg.id });
 
@@ -328,6 +320,10 @@ function dispatchQueuedMessage(dbSessionId: string, client: ClaudeClient): void 
  * Try to dispatch the next queued message to Claude.
  * Auto-starts the client if needed.
  * Uses a guard to prevent concurrent dispatch calls for the same session.
+ *
+ * Dequeues the message BEFORE starting the client to prevent race conditions
+ * where a message could be removed during async client creation, causing a
+ * different message to be dispatched with the wrong client settings.
  */
 async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
   // Guard against concurrent dispatch calls for the same session
@@ -340,17 +336,24 @@ async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
 
   dispatchInProgress.set(dbSessionId, true);
 
-  try {
-    if (!messageQueueService.hasMessages(dbSessionId)) {
-      return;
-    }
+  // Dequeue first to claim the message atomically before any async operations.
+  // This prevents race conditions where remove_queued_message could change
+  // which message is at the front during async client creation.
+  const msg = messageQueueService.dequeue(dbSessionId);
+  if (!msg) {
+    dispatchInProgress.set(dbSessionId, false);
+    return;
+  }
 
+  try {
     let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
 
-    // Auto-start: create client if needed
+    // Auto-start: create client if needed, using the dequeued message's settings
     if (!client) {
-      const newClient = await autoStartClientForQueue(dbSessionId);
+      const newClient = await autoStartClientForQueue(dbSessionId, msg);
       if (!newClient) {
+        // Re-queue the message at the front so it's not lost
+        messageQueueService.requeue(dbSessionId, msg);
         return;
       }
       client = newClient;
@@ -359,20 +362,24 @@ async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
     // Check if Claude is busy
     if (client.isWorking()) {
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Claude is working, skipping queue dispatch', { dbSessionId });
+        logger.info('[Chat WS] Claude is working, re-queueing message', { dbSessionId });
       }
+      // Re-queue the message at the front since we can't dispatch it now
+      messageQueueService.requeue(dbSessionId, msg);
       return;
     }
 
     // Check if Claude process is still alive (isWorking() returns false for both idle AND exited clients)
     if (!client.isRunning()) {
-      logger.warn('[Chat WS] Claude process has exited, cannot dispatch queued message', {
+      logger.warn('[Chat WS] Claude process has exited, re-queueing message', {
         dbSessionId,
       });
+      // Re-queue the message so it's not lost
+      messageQueueService.requeue(dbSessionId, msg);
       return;
     }
 
-    dispatchQueuedMessage(dbSessionId, client);
+    dispatchMessage(dbSessionId, client, msg);
   } finally {
     dispatchInProgress.set(dbSessionId, false);
   }

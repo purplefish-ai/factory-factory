@@ -204,6 +204,61 @@ describe('MessageQueueService', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // requeue
+  // ---------------------------------------------------------------------------
+
+  describe('requeue', () => {
+    it('should add message to front of existing queue', () => {
+      const msg1 = createTestMessage('msg-1');
+      const msg2 = createTestMessage('msg-2');
+      const msgToRequeue = createTestMessage('msg-requeued');
+
+      messageQueueService.enqueue('session-1', msg1);
+      messageQueueService.enqueue('session-1', msg2);
+      messageQueueService.requeue('session-1', msgToRequeue);
+
+      const queue = messageQueueService.getQueue('session-1');
+      expect(queue).toHaveLength(3);
+      expect(queue[0].id).toBe('msg-requeued');
+      expect(queue[1].id).toBe('msg-1');
+      expect(queue[2].id).toBe('msg-2');
+    });
+
+    it('should create queue if it does not exist', () => {
+      const msg = createTestMessage('msg-1');
+
+      messageQueueService.requeue('session-1', msg);
+
+      expect(messageQueueService.getQueueLength('session-1')).toBe(1);
+      expect(messageQueueService.getQueue('session-1')[0].id).toBe('msg-1');
+    });
+
+    it('should work correctly after dequeue and requeue cycle', () => {
+      const msg1 = createTestMessage('msg-1');
+      const msg2 = createTestMessage('msg-2');
+
+      messageQueueService.enqueue('session-1', msg1);
+      messageQueueService.enqueue('session-1', msg2);
+
+      // Dequeue first message
+      const dequeued = messageQueueService.dequeue('session-1');
+      expect(dequeued).toBeDefined();
+      expect(dequeued?.id).toBe('msg-1');
+
+      // Requeue it at the front (dequeued is guaranteed defined by assertion above)
+      if (dequeued) {
+        messageQueueService.requeue('session-1', dequeued);
+      }
+
+      // Now msg-1 should be back at the front
+      const queue = messageQueueService.getQueue('session-1');
+      expect(queue).toHaveLength(2);
+      expect(queue[0].id).toBe('msg-1');
+      expect(queue[1].id).toBe('msg-2');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // getQueue
   // ---------------------------------------------------------------------------
 
