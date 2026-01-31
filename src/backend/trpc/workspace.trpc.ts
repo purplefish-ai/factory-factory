@@ -208,14 +208,22 @@ export const workspaceRouter = router({
       // Create the workspace record
       const workspace = await workspaceAccessor.create(input);
 
-      // Initialize the worktree synchronously so workspace is ready when returned
-      // This ensures worktreePath is set before the user can start sessions
-      await initializeWorkspaceWorktree(workspace.id, input.branchName);
+      // Initialize the worktree in the background so the frontend can navigate
+      // immediately. The workspace detail page polls for initialization status
+      // and shows an overlay spinner until the workspace is fully ready.
+      // The function has internal error handling but we add a catch here to handle
+      // any unexpected errors (e.g., if markFailed throws due to DB issues).
+      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
+        logger.error(
+          'Unexpected error during background workspace initialization',
+          error as Error,
+          {
+            workspaceId: workspace.id,
+          }
+        );
+      });
 
-      // Refetch workspace to get updated worktreePath and initStatus
-      const initializedWorkspace = await workspaceAccessor.findById(workspace.id);
-
-      return initializedWorkspace ?? workspace;
+      return workspace;
     }),
 
   // Update a workspace
