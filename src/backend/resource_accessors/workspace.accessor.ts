@@ -264,7 +264,7 @@ class WorkspaceAccessor {
   > {
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
+        status: 'READY',
         prUrl: { not: null },
       },
       select: {

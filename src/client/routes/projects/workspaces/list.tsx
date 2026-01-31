@@ -21,8 +21,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
+import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
