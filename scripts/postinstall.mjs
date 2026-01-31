@@ -9,10 +9,9 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, chmodSync } from 'node:fs';
+import { existsSync, chmodSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { glob } from 'node:fs/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
@@ -38,24 +37,27 @@ if (existsSync(schemaPath)) {
 // Fix node-pty spawn-helper permissions (Unix only)
 if (process.platform !== 'win32') {
 	try {
-		const spawnHelperPattern = join(
+		const prebuildsDir = join(
 			projectRoot,
 			'node_modules',
 			'node-pty',
 			'prebuilds',
-			'*',
-			'spawn-helper',
 		);
 
-		// Use glob to find spawn-helper files
-		for await (const file of glob(spawnHelperPattern)) {
-			try {
-				chmodSync(file, 0o755);
-			} catch {
-				// Ignore permission errors
+		if (existsSync(prebuildsDir)) {
+			// Find all spawn-helper files in prebuild directories
+			for (const platform of readdirSync(prebuildsDir)) {
+				const spawnHelper = join(prebuildsDir, platform, 'spawn-helper');
+				if (existsSync(spawnHelper)) {
+					try {
+						chmodSync(spawnHelper, 0o755);
+					} catch {
+						// Ignore permission errors
+					}
+				}
 			}
 		}
 	} catch {
-		// Ignore if node-pty doesn't exist or glob fails
+		// Ignore if node-pty doesn't exist
 	}
 }
