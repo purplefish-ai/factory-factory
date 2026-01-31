@@ -1,193 +1,187 @@
 # Architecture
 
-**Analysis Date:** 2026-01-29
+**Analysis Date:** 2026-01-31
 
 ## Pattern Overview
 
-**Overall:** Three-tier fullstack architecture with React frontend, Express + tRPC backend, and SQLite database. Supports both web and Electron desktop modes. Real-time bidirectional communication via WebSocket for chat/terminal sessions.
+**Overall:** Layered Monolith with Workspace Isolation
 
 **Key Characteristics:**
-- **API Layer:** tRPC with type-safe RPC procedures (no OpenAPI schema needed)
-- **Real-time Communication:** WebSocket for Claude Code CLI streaming and terminal sessions
-- **Process Management:** Child process spawning for Claude CLI and terminal PTYs
-- **Workspace Isolation:** Git worktrees isolate each workspace as independent branches
-- **MCP Integration:** Model Context Protocol server for Claude agent tool execution
+- Full-stack TypeScript monorepo with shared types
+- Express + tRPC backend with WebSocket real-time communication
+- React Router v7 SPA frontend with tRPC client
+- SQLite (Prisma ORM) for persistence
+- Electron wrapper for desktop distribution
+- Git worktrees for workspace isolation
 
 ## Layers
 
-**Frontend (React + Vite):**
-- Purpose: Project management UI, workspace dashboard, real-time chat and terminal display
-- Location: `src/client/`, `src/components/`
-- Contains: Route handlers, layout components, UI primitives, hooks
-- Depends on: tRPC client, React Router v7, TanStack Query, WebSocket
-- Used by: Browser/Electron renderer process
+**Frontend (React SPA):**
+- Purpose: User interface for workspace management and Claude Code chat
+- Location: `src/client/` (routes), `src/components/` (shared components), `src/frontend/` (app-specific components)
+- Contains: React components, hooks, route definitions
+- Depends on: tRPC client, WebSocket connections
+- Used by: Browser/Electron renderer
 
-**Backend (Express + tRPC):**
-- Purpose: API server, session management, git operations, process spawning, WebSocket handlers
-- Location: `src/backend/`
-- Contains: tRPC routers, service layer, resource accessors, interceptors
-- Depends on: Prisma ORM, git CLI, node-pty, Claude CLI client
-- Used by: Frontend via tRPC, CLI, Electron main process
+**Backend API (Express + tRPC):**
+- Purpose: REST/tRPC API endpoints for CRUD operations
+- Location: `src/backend/trpc/`, `src/backend/routers/api/`
+- Contains: tRPC routers, Express route handlers
+- Depends on: Resource accessors, services
+- Used by: Frontend via tRPC client
 
-**Database (SQLite + Prisma):**
-- Purpose: Persistent storage for projects, workspaces, sessions, decision logs
-- Location: `prisma/schema.prisma`, stored at `~/factory-factory/data.db` (configurable)
-- Contains: Project, Workspace, ClaudeSession, TerminalSession, DecisionLog models
-- Depends on: Better SQLite3 adapter
-- Used by: Backend resource accessors
+**WebSocket Handlers:**
+- Purpose: Real-time bidirectional communication
+- Location: `src/backend/routers/websocket/`
+- Contains: Chat handler (Claude CLI), terminal handler (PTY), dev-logs handler
+- Depends on: Claude client, terminal service, session service
+- Used by: Frontend WebSocket connections
 
-**CLI (Node.js):**
-- Purpose: Standalone command-line interface for serving the app
-- Location: `src/cli/index.ts`
-- Contains: Commander.js CLI commands, child process orchestration
-- Depends on: Express backend, Vite frontend build
-- Used by: Manual invocation, Electron app
+**Resource Accessors (Repository Layer):**
+- Purpose: Database access abstraction
+- Location: `src/backend/resource_accessors/`
+- Contains: Type-safe Prisma query wrappers
+- Depends on: Prisma client
+- Used by: tRPC routers, services
 
-**Electron Desktop App:**
-- Purpose: Native desktop wrapper with OS integration
-- Location: `electron/main/`, `electron/preload/`
-- Contains: BrowserWindow manager, server lifecycle management
-- Depends on: Express backend, compiled frontend
-- Used by: Desktop users
+**Services Layer:**
+- Purpose: Business logic and cross-cutting concerns
+- Location: `src/backend/services/`
+- Contains: Session management, terminal service, scheduler, reconciliation
+- Depends on: Resource accessors, external systems
+- Used by: Routers, handlers
+
+**Claude Integration:**
+- Purpose: Interface with Claude Code CLI subprocess
+- Location: `src/backend/claude/`
+- Contains: ClaudeClient, SessionManager, protocol parsing
+- Depends on: Node.js child_process, session files
+- Used by: Chat WebSocket handler
+
+**Interceptors:**
+- Purpose: Tool event observation and side effects
+- Location: `src/backend/interceptors/`
+- Contains: PR detection, branch rename, conversation rename
+- Depends on: Tool events from Claude client
+- Used by: Chat handler
+
+**Electron Shell:**
+- Purpose: Desktop app wrapper, backend lifecycle management
+- Location: `electron/`
+- Contains: Main process, preload scripts, server manager
+- Depends on: Backend server module
+- Used by: Desktop distribution
 
 ## Data Flow
 
-**Project Creation:**
-1. User submits form in `src/client/routes/projects/new.tsx`
-2. tRPC call to `src/backend/trpc/project.trpc.ts` → `createProject()`
-3. Resource accessor `src/backend/resource_accessors/project.accessor.ts` writes to Prisma
-4. Database returns created Project record
-5. Frontend refetches project list via TanStack Query
+**User Sends Chat Message:**
 
-**Workspace Creation & Initialization:**
-1. User creates workspace in `src/client/routes/projects/workspaces/new.tsx`
-2. tRPC call to `src/backend/trpc/workspace.trpc.ts` → `create()`
-3. `workspaceAccessor` creates Workspace record with `initStatus: PENDING`
-4. `startupScriptService` queues initialization
-5. Async startup script runs (creates git worktree, installs deps)
-6. Status progresses: `PENDING` → `INITIALIZING` → `READY` or `FAILED`
-7. Frontend polls workspace status or receives WebSocket notification
+1. User types in ChatInput component (`src/components/chat/chat-input.tsx`)
+2. Message queued via `messageQueueService` with settings (model, thinking, etc.)
+3. Queue dispatches when Claude is idle
+4. Chat WebSocket handler (`src/backend/routers/websocket/chat.handler.ts`) receives message
+5. `sessionService` creates/reuses ClaudeClient subprocess
+6. ClaudeClient sends message to Claude Code CLI via stdin JSON protocol
+7. ClaudeClient emits stream events as Claude responds
+8. Chat handler forwards events to all connected WebSocket clients
+9. Frontend `useChatWebSocket` hook updates React state
+10. VirtualizedMessageList renders new messages
 
-**Claude Session Workflow:**
-1. User creates session in workspace detail page
-2. tRPC call to `src/backend/trpc/session.trpc.ts` → `createSession()`
-3. `sessionService` spawns Claude CLI child process via `agentProcessAdapter`
-4. `ClaudeClient` establishes pipe communication with Claude process
-5. Frontend opens WebSocket to `/chat` endpoint
-6. Backend streams Claude responses through `ClaudeSession` message protocol
-7. Terminal session created separately for workspace shell access
+**Workspace Creation:**
 
-**Terminal Session Flow:**
-1. WebSocket connects to `/terminal` endpoint
-2. `terminalService` creates PTY via `node-pty`
-3. Terminal I/O streams bidirectionally through WebSocket
-4. Each workspace has independent PTY instance
-
-**Git Workflow with Interceptors:**
-1. Workspace git operations call `GitClientFactory.create()`
-2. Interceptor registry (`src/backend/interceptors/registry.ts`) wraps execution
-3. `pr-detection.interceptor.ts` detects PR creation and updates workspace.prUrl
-4. `branch-rename.interceptor.ts` tracks branch renames
-5. `githubCLIService` syncs PR status from GitHub
-6. Kanban state computed from PR state + CI status
+1. User submits form in NewWorkspacePage (`src/client/routes/projects/workspaces/new.tsx`)
+2. tRPC mutation `workspace.create` called
+3. Backend creates Workspace record with status `NEW`
+4. Async initialization: GitClient creates worktree, runs startup script
+5. Status updated to `PROVISIONING` -> `READY` (or `FAILED`)
+6. Frontend polls or receives real-time updates
 
 **State Management:**
-- **Backend:** Prisma database as source of truth
-- **Frontend:** TanStack Query caches, syncs on interval or explicit refetch
-- **Real-time:** WebSocket broadcasts for terminal and chat (not automatically for project changes)
-- **Context:** ProjectContext provides projectId/taskId to child components via `useProjectContext()`
+- Server state: Prisma/SQLite for persistence
+- Runtime state: In-memory services (sessionService, terminalService)
+- Client state: React Query cache (via tRPC) + local React state
+- Real-time sync: WebSocket events update client state
 
 ## Key Abstractions
 
-**Resource Accessor Pattern:**
-- Purpose: Centralize all database queries, enforce consistent patterns
-- Examples: `src/backend/resource_accessors/workspace.accessor.ts`, `src/backend/resource_accessors/project.accessor.ts`
-- Pattern: Static methods, typed inputs/outputs, Prisma queries encapsulated
+**Workspace:**
+- Purpose: Isolated development environment with git worktree
+- Examples: `src/backend/resource_accessors/workspace.accessor.ts`, `src/backend/trpc/workspace.trpc.ts`
+- Pattern: Has status lifecycle (NEW -> PROVISIONING -> READY/FAILED -> ARCHIVED)
 
-**Service Layer:**
-- Purpose: Business logic, orchestration, external integrations
-- Examples: `src/backend/services/session.service.ts`, `src/backend/services/terminal.service.ts`, `src/backend/services/github-cli.service.ts`
-- Pattern: Singleton instances created in `src/backend/services/index.ts`, exported globally
+**ClaudeSession:**
+- Purpose: Chat session with Claude Code CLI
+- Examples: `src/backend/resource_accessors/claude-session.accessor.ts`, `src/backend/claude/session.ts`
+- Pattern: Maps to Claude CLI session file (~/.claude/projects/...)
 
-**tRPC Router Pattern:**
-- Purpose: Type-safe API endpoints with automatic client code generation
-- Examples: `src/backend/trpc/workspace.trpc.ts`, `src/backend/trpc/project.trpc.ts`
-- Pattern: Public procedures grouped by domain, context injection via headers
+**ClaudeClient:**
+- Purpose: Wrapper around Claude Code CLI subprocess
+- Examples: `src/backend/clients/` (referenced), `src/backend/services/session.service.ts`
+- Pattern: EventEmitter for stream events, request/response for interactive tools
 
-**Interceptor Registry:**
-- Purpose: Hook into git operations without modifying core client
-- Location: `src/backend/interceptors/registry.ts`
-- Pattern: Decorators applied to shell commands, execute before/after hooks
+**Project:**
+- Purpose: Repository configuration and workspace container
+- Examples: `src/backend/resource_accessors/project.accessor.ts`, `src/backend/trpc/project.trpc.ts`
+- Pattern: One project per git repository
 
-**WebSocket Protocol:**
-- Purpose: Real-time streaming without polling
-- Implementations: `/chat` (Claude streaming), `/terminal` (PTY I/O)
-- Pattern: Message dispatch based on connection type, JSON message framing
+**ToolInterceptor:**
+- Purpose: React to Claude tool executions
+- Examples: `src/backend/interceptors/pr-detection.interceptor.ts`, `src/backend/interceptors/branch-rename.interceptor.ts`
+- Pattern: Observer pattern - registered at startup, notified on tool events
 
 ## Entry Points
 
-**Backend Server:**
-- Location: `src/backend/index.ts`
-- Triggers: `pnpm dev` or `pnpm start`
-- Responsibilities: Express setup, WebSocket server, tRPC middleware, service initialization, cleanup
-
-**Frontend:**
-- Location: `src/client/main.tsx`
-- Triggers: Vite dev server or production build
-- Responsibilities: Root render, provider setup, router initialization
-
-**CLI:**
+**CLI (Web Mode):**
 - Location: `src/cli/index.ts`
-- Triggers: `pnpm dev` or direct CLI invocation
-- Responsibilities: Command parsing, backend spawning, browser opening, process management
+- Triggers: `ff serve`, `pnpm dev`, `pnpm start`
+- Responsibilities: Start backend, run migrations, optionally start Vite dev server
+
+**Backend Server:**
+- Location: `src/backend/index.ts` (entry), `src/backend/server.ts` (implementation)
+- Triggers: CLI serve command, Electron server manager
+- Responsibilities: Express app setup, WebSocket server, tRPC mounting
+
+**Frontend SPA:**
+- Location: `src/client/main.tsx` (entry), `src/client/router.tsx` (routes)
+- Triggers: Browser load, Electron window load
+- Responsibilities: React app rendering, routing
 
 **Electron Main:**
 - Location: `electron/main/index.ts`
-- Triggers: `pnpm dev:electron` or `electron .`
-- Responsibilities: Window creation, backend lifecycle, IPC setup
-
-**Router Configuration:**
-- Location: `src/client/router.tsx`
-- Triggers: Application load
-- Responsibilities: React Router v7 route tree definition, nested layouts
+- Triggers: Electron app launch
+- Responsibilities: Window creation, backend lifecycle via ServerManager
 
 ## Error Handling
 
-**Strategy:** Layered validation with Zod schemas at tRPC boundary, try-catch in services, graceful degradation in UI.
+**Strategy:** Layered with graceful degradation
 
 **Patterns:**
-- **tRPC Procedures:** Input validation with Zod, TRPCError thrown on failures (automatic HTTP serialization)
-- **Git Operations:** Shell command failures captured, logged via `createLogger()`, often wrapped in try-catch with fallback
-- **Process Management:** Child process errors logged, status tracked in database, UI shows error state
-- **Frontend:** Error boundaries (`src/client/error-boundary.tsx`) catch React render errors, fallback UI displayed
-- **WebSocket:** Connection errors handled per session, automatic reconnect logic (not visible in codebase shown, likely handled by client)
+- tRPC errors bubble to frontend with type-safe error codes
+- WebSocket errors sent as JSON messages with `type: 'error'`
+- Claude client errors forwarded to connected clients
+- Uncaught exceptions logged, process stays alive
+- Graceful shutdown on SIGTERM/SIGINT with timeout
 
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Framework: `src/backend/services/logger.service.ts` - wraps console, adds context labels
-- Usage: Every service and router imports `createLogger('module-name')` for structured logging
+- Custom `createLogger()` in `src/backend/services/logger.service.ts`
+- Structured logging with context objects
+- Session file logging for WebSocket debugging
 
 **Validation:**
-- Zod schemas in tRPC routers (all inputs validated before hitting procedures)
-- Custom validation in services where domain logic applies
+- Zod schemas in tRPC procedures
+- URL/path validation in WebSocket handlers
 
 **Authentication:**
-- Not detected in codebase - appears to be single-user or environment-based
-- No JWT/session middleware visible, context headers are informational (projectId, taskId)
+- None (single-user desktop app assumption)
+- WorkingDir validation constrains paths to worktree base
 
-**Rate Limiting:**
-- Framework: `src/backend/services/rate-limiter.service.ts`
-- Integration: Middleware applied in `src/backend/index.ts`
-
-**File Locking:**
-- Purpose: Prevent concurrent workspace initialization
-- Implementation: `src/backend/services/file-lock.service.ts` with retries
-
-**Scheduling:**
-- Framework: `src/backend/services/scheduler.service.ts`
-- Use: Queues reconciliation tasks, workspace initialization, periodic PR syncs
+**Configuration:**
+- Environment variables read at startup
+- `configService` centralizes config access
+- `factory-factory.json` per-project config support
 
 ---
 
-*Architecture analysis: 2026-01-29*
+*Architecture analysis: 2026-01-31*
