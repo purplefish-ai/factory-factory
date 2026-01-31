@@ -73,8 +73,12 @@ function popNextMessage(sessionId: string): PendingMessageData | undefined {
   return message;
 }
 
+/** Guard to prevent concurrent drains for the same session */
+const drainInProgress = new Set<string>();
+
 function clearPendingMessages(sessionId: string): void {
   pendingMessagesQueue.delete(sessionId);
+  drainInProgress.delete(sessionId);
 }
 
 function removeMessageFromQueue(sessionId: string, messageId: string): boolean {
@@ -98,6 +102,11 @@ function removeMessageFromQueue(sessionId: string, messageId: string): boolean {
  * Called when Claude becomes ready (idle).
  */
 function drainNextMessage(sessionId: string): void {
+  // Prevent concurrent drains for the same session
+  if (drainInProgress.has(sessionId)) {
+    return;
+  }
+
   const client = sessionService.getClient(sessionId);
   if (!client) {
     return;
@@ -113,6 +122,8 @@ function drainNextMessage(sessionId: string): void {
     return;
   }
 
+  drainInProgress.add(sessionId);
+
   logger.info('[Chat WS] Draining next queued message', {
     sessionId,
     messageId: msg.id,
@@ -127,6 +138,9 @@ function drainNextMessage(sessionId: string): void {
 
   const messageContent = msg.content ? (msg.content as ClaudeContentItem[]) : msg.text;
   client.sendMessage(messageContent);
+
+  // Clear guard after message is sent (client.isWorking() should now be true)
+  drainInProgress.delete(sessionId);
 }
 
 const MAX_PENDING_MESSAGES = 100;
