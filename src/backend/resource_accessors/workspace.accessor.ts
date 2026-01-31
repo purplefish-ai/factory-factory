@@ -329,18 +329,19 @@ class WorkspaceAccessor {
 
   /**
    * Increment retry count and reset status for a retry attempt.
-   * Returns null if max retries exceeded or workspace is archived.
+   * Returns null if max retries exceeded or workspace is not FAILED.
    *
    * @param maxRetries - Maximum number of retries allowed (default 3)
    */
   async incrementRetryCount(id: string, maxRetries = 3): Promise<Workspace | null> {
     // Use raw update to atomically check and increment
-    // Also check not ARCHIVED to prevent un-archiving workspaces
+    // Only allow retry if status is FAILED to prevent race conditions
+    // (e.g., concurrent retries where first succeeds and second would demote READY back to PROVISIONING)
     const result = await prisma.workspace.updateMany({
       where: {
         id,
         retryCount: { lt: maxRetries },
-        status: { not: 'ARCHIVED' },
+        status: 'FAILED',
       },
       data: {
         retryCount: { increment: 1 },
@@ -351,7 +352,7 @@ class WorkspaceAccessor {
     });
 
     if (result.count === 0) {
-      return null; // Max retries exceeded or workspace archived
+      return null; // Max retries exceeded or workspace not in FAILED state
     }
 
     return prisma.workspace.findUnique({ where: { id } });
