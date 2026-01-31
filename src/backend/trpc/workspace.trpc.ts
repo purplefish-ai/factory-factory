@@ -211,7 +211,17 @@ export const workspaceRouter = router({
       // Initialize the worktree in the background so the frontend can navigate
       // immediately. The workspace detail page polls for initialization status
       // and shows an overlay spinner until the workspace is fully ready.
-      initializeWorkspaceWorktree(workspace.id, input.branchName);
+      // The function has internal error handling but we add a catch here to handle
+      // any unexpected errors (e.g., if markFailed throws due to DB issues).
+      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
+        logger.error(
+          'Unexpected error during background workspace initialization',
+          error as Error,
+          {
+            workspaceId: workspace.id,
+          }
+        );
+      });
 
       return workspace;
     }),
