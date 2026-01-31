@@ -358,6 +358,8 @@ async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
       if (!newClient) {
         // Re-queue the message at the front so it's not lost
         messageQueueService.requeue(dbSessionId, msg);
+        // Notify frontend that starting failed so UI doesn't get stuck
+        forwardToConnections(dbSessionId, { type: 'stopped', dbSessionId });
         return;
       }
       client = newClient;
