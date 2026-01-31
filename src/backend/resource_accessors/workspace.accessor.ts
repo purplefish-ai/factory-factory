@@ -271,8 +271,11 @@ class WorkspaceAccessor {
   /**
    * Update workspace provisioning status atomically.
    * Includes timestamps for tracking.
+   *
+   * IMPORTANT: Only updates if workspace is not ARCHIVED, to prevent
+   * race conditions where provisioning completion overwrites user's archive action.
    */
-  updateProvisioningStatus(
+  async updateProvisioningStatus(
     id: string,
     status: 'PROVISIONING' | 'READY' | 'FAILED',
     errorMessage?: string | null
@@ -293,10 +296,30 @@ class WorkspaceAccessor {
       data.errorMessage = errorMessage;
     }
 
-    return prisma.workspace.update({
-      where: { id },
+    // Use updateMany with status check to prevent race condition with archive
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: { not: 'ARCHIVED' },
+      },
       data,
     });
+
+    // If no rows updated, workspace was likely archived - return current state
+    if (result.count === 0) {
+      const workspace = await prisma.workspace.findUnique({ where: { id } });
+      if (!workspace) {
+        throw new Error(`Workspace not found: ${id}`);
+      }
+      return workspace;
+    }
+
+    // Return the updated workspace
+    const workspace = await prisma.workspace.findUnique({ where: { id } });
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${id}`);
+    }
+    return workspace;
   }
 
   /**

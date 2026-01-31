@@ -348,13 +348,14 @@ function WorkspaceChatContent() {
 
   // Check if workspace is still provisioning
   // Show overlay for NEW, PROVISIONING, or FAILED states
-  // READY and ARCHIVED workspaces don't need the overlay
+  // READY and ARCHIVED workspaces don't need the overlay (even if worktreePath is missing)
+  const status = workspaceStatus?.status;
   const isProvisioning =
-    (workspaceStatus &&
-      (workspaceStatus.status === 'NEW' ||
-        workspaceStatus.status === 'PROVISIONING' ||
-        workspaceStatus.status === 'FAILED')) ||
-    !workspace?.worktreePath;
+    status === 'NEW' ||
+    status === 'PROVISIONING' ||
+    status === 'FAILED' ||
+    // Fallback: if we don't have status yet but worktreePath is missing, assume provisioning
+    !(status || workspace?.worktreePath);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
