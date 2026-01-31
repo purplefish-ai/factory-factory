@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, CheckCircle2, FileJson, Terminal } from 'lucide-react';
+import { Bot, CheckCircle2, FileJson, RefreshCw, Terminal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -368,17 +368,48 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
   );
 }
 
-function FactoryConfigSection() {
+function FactoryConfigSection({ projectId }: { projectId: string }) {
+  const refreshConfigs = trpc.workspace.refreshFactoryConfigs.useMutation({
+    onSuccess: (result) => {
+      if (result.errors.length > 0) {
+        toast.warning(
+          `Refreshed ${result.updatedCount} workspace(s), but ${result.errors.length} failed`
+        );
+      } else {
+        toast.success(`Refreshed factory-factory.json for ${result.updatedCount} workspace(s)`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Failed to refresh configurations: ${error.message}`);
+    },
+  });
+
+  const handleRefresh = () => {
+    refreshConfigs.mutate({ projectId });
+  };
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileJson className="w-5 h-5" />
-          Factory Configuration
-        </CardTitle>
-        <CardDescription>
-          Configuration for workspace setup and run scripts (factory-factory.json)
-        </CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <FileJson className="w-5 h-5" />
+            Factory Configuration
+          </CardTitle>
+          <CardDescription>
+            Configuration for workspace setup and run scripts (factory-factory.json)
+          </CardDescription>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshConfigs.isPending}
+          className="gap-2"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
+          Refresh All Workspaces
+        </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-md border bg-muted/50 p-4 space-y-3">
@@ -396,7 +427,7 @@ function FactoryConfigSection() {
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
               <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-                pnpm install
+                pnpm i && pnpm db:generate
               </code>
               <p className="text-xs text-muted-foreground">
                 Runs automatically when a new workspace is created
@@ -423,6 +454,10 @@ function FactoryConfigSection() {
             <strong>Port Allocation:</strong> Use{' '}
             <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for automatic
             port allocation
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            <strong>Note:</strong> Click "Refresh All Workspaces" to update existing workspaces
+            after changing factory-factory.json
           </p>
         </div>
       </CardContent>
@@ -569,6 +604,9 @@ export default function AdminDashboardPage() {
     }
   );
 
+  // Get first project for factory config refresh
+  const { data: projects } = trpc.project.list.useQuery();
+
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
       refetch();
@@ -581,37 +619,39 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <PageHeader title="Admin Dashboard" description="System monitoring and management" />
+    <div className="h-full overflow-y-auto">
+      <div className="space-y-6 p-6">
+        <PageHeader title="Admin Dashboard" description="System monitoring and management" />
 
-      <ApiUsageSection
-        apiUsage={stats?.apiUsage}
-        onReset={() => resetApiStats.mutate()}
-        isResetting={resetApiStats.isPending}
-      />
+        <ApiUsageSection
+          apiUsage={stats?.apiUsage}
+          onReset={() => resetApiStats.mutate()}
+          isResetting={resetApiStats.isPending}
+        />
 
-      {isLoadingProcesses ? (
-        <ProcessesSectionSkeleton />
-      ) : (
-        <ProcessesSection processes={processes} />
-      )}
+        {isLoadingProcesses ? (
+          <ProcessesSectionSkeleton />
+        ) : (
+          <ProcessesSection processes={processes} />
+        )}
 
-      {/* Environment Info */}
-      <Card className="bg-muted/50">
-        <CardContent className="py-4">
-          <span className="font-medium">Environment:</span>{' '}
-          <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
-          <span className="mx-2">|</span>
-          <span className="font-medium">Features:</span>{' '}
-          <span className="text-muted-foreground">{getEnabledFeatures(stats?.features)}</span>
-        </CardContent>
-      </Card>
+        {/* Environment Info */}
+        <Card className="bg-muted/50">
+          <CardContent className="py-4">
+            <span className="font-medium">Environment:</span>{' '}
+            <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
+            <span className="mx-2">|</span>
+            <span className="font-medium">Features:</span>{' '}
+            <span className="text-muted-foreground">{getEnabledFeatures(stats?.features)}</span>
+          </CardContent>
+        </Card>
 
-      {/* Factory Configuration */}
-      <FactoryConfigSection />
+        {/* Factory Configuration */}
+        {projects && projects.length > 0 && <FactoryConfigSection projectId={projects[0].id} />}
 
-      {/* IDE Settings */}
-      <IdeSettingsSection />
+        {/* IDE Settings */}
+        <IdeSettingsSection />
+      </div>
     </div>
   );
 }

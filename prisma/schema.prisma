@@ -117,11 +117,12 @@ model Workspace {
   initRetryCount      Int                 @default(0)
 
   // Run script tracking (from factory-factory.json)
-  runScriptCommand    String?           // The run script command to execute
-  runScriptPid        Int?              // Process ID of running script
-  runScriptPort       Int?              // Allocated port for the running script
-  runScriptStartedAt  DateTime?         // When the run script was started
-  runScriptStatus     SessionStatus     @default(IDLE)  // IDLE, RUNNING, FAILED, etc.
+  runScriptCommand        String?           // The run script command to execute
+  runScriptCleanupCommand String?           // The cleanup script command to execute on stop
+  runScriptPid            Int?              // Process ID of running script
+  runScriptPort           Int?              // Allocated port for the running script
+  runScriptStartedAt      DateTime?         // When the run script was started
+  runScriptStatus         SessionStatus     @default(IDLE)  // IDLE, RUNNING, FAILED, etc.
 
   prUrl               String?
   githubIssueNumber   Int?

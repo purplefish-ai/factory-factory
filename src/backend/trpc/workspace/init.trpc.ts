@@ -77,6 +77,7 @@ export async function initializeWorkspaceWorktree(
           workspaceId,
           hasSetup: !!factoryConfig.scripts.setup,
           hasRun: !!factoryConfig.scripts.run,
+          hasCleanup: !!factoryConfig.scripts.cleanup,
         });
       }
     } catch (error) {
@@ -91,6 +92,7 @@ export async function initializeWorkspaceWorktree(
       worktreePath,
       branchName: worktreeInfo.branchName,
       runScriptCommand: factoryConfig?.scripts.run ?? null,
+      runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
     });
 
     // Run setup script from factory-factory.json if configured

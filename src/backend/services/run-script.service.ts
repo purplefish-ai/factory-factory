@@ -6,12 +6,21 @@ import { PortAllocationService } from './port-allocation.service';
 
 const logger = createLogger('run-script-service');
 
+// Max output buffer size per run script (500KB)
+const MAX_OUTPUT_BUFFER_SIZE = 500 * 1024;
+
 /**
  * Service for managing run script execution from factory-factory.json
  */
 export class RunScriptService {
   // Track running processes by workspace ID
   private static runningProcesses = new Map<string, ChildProcess>();
+
+  // Output buffers by workspace ID (persists even after process stops)
+  private static outputBuffers = new Map<string, string>();
+
+  // Output listeners by workspace ID
+  private static outputListeners = new Map<string, Set<(data: string) => void>>();
 
   /**
    * Start the run script for a workspace
@@ -98,6 +107,10 @@ export class RunScriptService {
       // Store process reference
       RunScriptService.runningProcesses.set(workspaceId, childProcess);
 
+      // Clear and initialize output buffer for new run
+      const startMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting ${command}\n\n`;
+      RunScriptService.outputBuffers.set(workspaceId, startMessage);
+
       // Update workspace status
       await workspaceAccessor.update(workspaceId, {
         runScriptStatus: 'RUNNING',
@@ -116,6 +129,7 @@ export class RunScriptService {
         });
 
         RunScriptService.runningProcesses.delete(workspaceId);
+        RunScriptService.outputListeners.delete(workspaceId);
 
         const status = code === 0 ? 'COMPLETED' : 'FAILED';
         await workspaceAccessor.update(workspaceId, {
@@ -125,22 +139,32 @@ export class RunScriptService {
         });
       });
 
-      // Log stdout/stderr
-      childProcess.stdout?.on('data', (data) => {
-        logger.debug('Run script stdout', {
-          workspaceId,
-          pid,
-          output: data.toString(),
-        });
-      });
+      // Capture and broadcast stdout/stderr
+      const handleOutput = (data: Buffer) => {
+        const output = data.toString();
 
-      childProcess.stderr?.on('data', (data) => {
-        logger.debug('Run script stderr', {
-          workspaceId,
-          pid,
-          output: data.toString(),
-        });
-      });
+        // Add to buffer (with size limit)
+        const currentBuffer = RunScriptService.outputBuffers.get(workspaceId) ?? '';
+        let newBuffer = currentBuffer + output;
+
+        // Trim buffer if it exceeds max size (keep last N chars)
+        if (newBuffer.length > MAX_OUTPUT_BUFFER_SIZE) {
+          newBuffer = newBuffer.slice(-MAX_OUTPUT_BUFFER_SIZE);
+        }
+
+        RunScriptService.outputBuffers.set(workspaceId, newBuffer);
+
+        // Broadcast to listeners
+        const listeners = RunScriptService.outputListeners.get(workspaceId);
+        if (listeners) {
+          for (const listener of listeners) {
+            listener(output);
+          }
+        }
+      };
+
+      childProcess.stdout?.on('data', handleOutput);
+      childProcess.stderr?.on('data', handleOutput);
 
       // Handle spawn errors
       childProcess.on('error', async (error) => {
@@ -192,6 +216,62 @@ export class RunScriptService {
           success: false,
           error: 'No run script is running',
         };
+      }
+
+      // Run cleanup script if configured
+      if (workspace.runScriptCleanupCommand && workspace.worktreePath) {
+        logger.info('Running cleanup script before stopping', {
+          workspaceId,
+          cleanupCommand: workspace.runScriptCleanupCommand,
+        });
+
+        try {
+          const cleanupCommand = workspace.runScriptPort
+            ? FactoryConfigService.substitutePort(
+                workspace.runScriptCleanupCommand,
+                workspace.runScriptPort
+              )
+            : workspace.runScriptCleanupCommand;
+
+          const cleanupProcess = spawn('bash', ['-c', cleanupCommand], {
+            cwd: workspace.worktreePath,
+            detached: false,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+
+          // Wait for cleanup to complete (with timeout)
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+              logger.warn('Cleanup script timed out, proceeding anyway', {
+                workspaceId,
+              });
+              cleanupProcess.kill('SIGTERM');
+              resolve();
+            }, 5000); // 5 second timeout
+
+            cleanupProcess.on('exit', (code) => {
+              clearTimeout(timeout);
+              logger.info('Cleanup script completed', {
+                workspaceId,
+                exitCode: code,
+              });
+              resolve();
+            });
+
+            cleanupProcess.on('error', (error) => {
+              clearTimeout(timeout);
+              logger.error('Cleanup script error', error, {
+                workspaceId,
+              });
+              resolve(); // Continue despite error
+            });
+          });
+        } catch (error) {
+          logger.error('Failed to run cleanup script', error as Error, {
+            workspaceId,
+          });
+          // Continue with stopping the process even if cleanup fails
+        }
       }
 
       // Kill the process
@@ -280,33 +360,101 @@ export class RunScriptService {
   }
 
   /**
+   * Get the output buffer for a workspace's run script
+   */
+  static getOutputBuffer(workspaceId: string): string {
+    return RunScriptService.outputBuffers.get(workspaceId) ?? '';
+  }
+
+  /**
+   * Subscribe to output from a workspace's run script
+   * @returns Unsubscribe function
+   */
+  static subscribeToOutput(workspaceId: string, listener: (data: string) => void): () => void {
+    let listeners = RunScriptService.outputListeners.get(workspaceId);
+    if (!listeners) {
+      listeners = new Set();
+      RunScriptService.outputListeners.set(workspaceId, listeners);
+    }
+    listeners.add(listener);
+
+    // Return unsubscribe function
+    return () => {
+      const listeners = RunScriptService.outputListeners.get(workspaceId);
+      if (listeners) {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          RunScriptService.outputListeners.delete(workspaceId);
+        }
+      }
+    };
+  }
+
+  /**
    * Cleanup all running scripts (called on server shutdown)
    */
-  static cleanup() {
+  static async cleanup() {
     logger.info('Cleaning up all running scripts', {
       count: RunScriptService.runningProcesses.size,
     });
 
-    for (const [workspaceId, childProcess] of RunScriptService.runningProcesses.entries()) {
-      try {
-        childProcess.kill('SIGTERM');
-        logger.info('Killed run script on cleanup', {
-          workspaceId,
-          pid: childProcess.pid,
-        });
-      } catch (error) {
-        logger.error('Failed to kill run script on cleanup', error as Error, {
-          workspaceId,
-          pid: childProcess.pid,
-        });
-      }
-    }
+    // Stop all running scripts using the stopRunScript method
+    // This ensures cleanup scripts are run
+    const workspaceIds = Array.from(RunScriptService.runningProcesses.keys());
+    await Promise.all(
+      workspaceIds.map(async (workspaceId) => {
+        try {
+          await RunScriptService.stopRunScript(workspaceId);
+        } catch (error) {
+          logger.error('Failed to stop run script during cleanup', error as Error, {
+            workspaceId,
+          });
+        }
+      })
+    );
 
     RunScriptService.runningProcesses.clear();
   }
+
+  /**
+   * Synchronous cleanup for 'exit' event - kills processes without running cleanup scripts
+   * @internal
+   */
+  static cleanupSync() {
+    logger.info('Process exiting, killing any remaining run scripts');
+    for (const [workspaceId, childProcess] of RunScriptService.runningProcesses.entries()) {
+      try {
+        childProcess.kill('SIGKILL');
+        logger.info('Force killed run script on exit', {
+          workspaceId,
+          pid: childProcess.pid,
+        });
+      } catch {
+        // Ignore errors during forced shutdown
+      }
+    }
+    RunScriptService.runningProcesses.clear();
+    RunScriptService.outputBuffers.clear();
+    RunScriptService.outputListeners.clear();
+  }
 }
 
-// Register cleanup handler
+// Register cleanup handlers for graceful shutdown
+// These handlers allow async cleanup (unlike 'exit' which is synchronous)
+process.on('SIGINT', async () => {
+  logger.info('Received SIGINT, cleaning up run scripts');
+  await RunScriptService.cleanup();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('Received SIGTERM, cleaning up run scripts');
+  await RunScriptService.cleanup();
+  process.exit(0);
+});
+
+// Fallback synchronous cleanup for 'exit' event
+// This won't run cleanup scripts, but will kill processes
 process.on('exit', () => {
-  RunScriptService.cleanup();
+  RunScriptService.cleanupSync();
 });

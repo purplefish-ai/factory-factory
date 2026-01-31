@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getWorkspaceGitStats } from '../lib/git-helpers';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { FactoryConfigService } from '../services/factory-config.service';
 import { githubCLIService } from '../services/github-cli.service';
 import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
@@ -257,6 +258,51 @@ export const workspaceRouter = router({
     }
     return workspaceAccessor.delete(input.id);
   }),
+
+  // Refresh factory-factory.json configuration for all workspaces
+  refreshFactoryConfigs: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ input }) => {
+      // Get all workspaces for this project that have worktrees
+      const workspaces = await workspaceAccessor.findByProjectId(input.projectId);
+
+      let updatedCount = 0;
+      const errors: Array<{ workspaceId: string; error: string }> = [];
+
+      for (const workspace of workspaces) {
+        if (!workspace.worktreePath) {
+          continue;
+        }
+
+        try {
+          // Read factory-factory.json from the worktree
+          const factoryConfig = await FactoryConfigService.readConfig(workspace.worktreePath);
+
+          // Update workspace with new config
+          await workspaceAccessor.update(workspace.id, {
+            runScriptCommand: factoryConfig?.scripts.run ?? null,
+            runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
+          });
+
+          updatedCount++;
+        } catch (error) {
+          errors.push({
+            workspaceId: workspace.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          logger.error('Failed to refresh factory config for workspace', {
+            workspaceId: workspace.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      return {
+        updatedCount,
+        totalWorkspaces: workspaces.length,
+        errors,
+      };
+    }),
 
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,

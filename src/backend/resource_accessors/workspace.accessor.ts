@@ -45,6 +45,7 @@ interface UpdateWorkspaceInput {
   initRetryCount?: number;
   // Run script tracking
   runScriptCommand?: string | null;
+  runScriptCleanupCommand?: string | null;
   runScriptPid?: number | null;
   runScriptPort?: number | null;
   runScriptStartedAt?: Date | null;

@@ -28,7 +28,11 @@ import { healthRouter } from './routers/api/health.router';
 import { mcpRouter } from './routers/api/mcp.router';
 import { projectRouter } from './routers/api/project.router';
 import { initializeMcpTools } from './routers/mcp/index';
-import { handleChatUpgrade, handleTerminalUpgrade } from './routers/websocket';
+import {
+  handleChatUpgrade,
+  handleDevLogsUpgrade,
+  handleTerminalUpgrade,
+} from './routers/websocket';
 import {
   configService,
   createLogger,
@@ -140,7 +144,8 @@ export function createServer(requestedPort?: number): ServerInstance {
         req.path.startsWith('/mcp') ||
         req.path.startsWith('/health') ||
         req.path === '/chat' ||
-        req.path === '/terminal'
+        req.path === '/terminal' ||
+        req.path === '/dev-logs'
       ) {
         return next();
       }
@@ -174,6 +179,11 @@ export function createServer(requestedPort?: number): ServerInstance {
 
     if (url.pathname === '/terminal') {
       handleTerminalUpgrade(request, socket, head, url, wss, wsAliveMap);
+      return;
+    }
+
+    if (url.pathname === '/dev-logs') {
+      handleDevLogsUpgrade(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 

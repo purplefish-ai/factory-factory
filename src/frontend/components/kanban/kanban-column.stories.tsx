@@ -46,6 +46,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   cachedKanbanColumn: 'IN_PROGRESS',
   stateComputedAt: new Date(),
   runScriptCommand: null,
+  runScriptCleanupCommand: null,
   runScriptPid: null,
   runScriptPort: null,
   runScriptStartedAt: null,
