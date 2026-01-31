@@ -157,6 +157,7 @@ class WorkspaceAccessor {
   /**
    * Find workspaces that need worktree provisioning.
    * - NEW workspaces always need provisioning
+   * - PROVISIONING workspaces with null worktreePath (stuck after crash)
    * - FAILED workspaces only if they don't have a worktree yet
    *   (failure during startup script means worktree exists)
    * Includes project for worktree creation.
@@ -164,7 +165,11 @@ class WorkspaceAccessor {
   findNeedingWorktree(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        OR: [{ status: 'NEW' }, { status: 'FAILED', worktreePath: null }],
+        OR: [
+          { status: 'NEW' },
+          { status: 'PROVISIONING', worktreePath: null },
+          { status: 'FAILED', worktreePath: null },
+        ],
       },
       include: {
         project: true,
@@ -324,16 +329,18 @@ class WorkspaceAccessor {
 
   /**
    * Increment retry count and reset status for a retry attempt.
-   * Returns null if max retries exceeded.
+   * Returns null if max retries exceeded or workspace is archived.
    *
    * @param maxRetries - Maximum number of retries allowed (default 3)
    */
   async incrementRetryCount(id: string, maxRetries = 3): Promise<Workspace | null> {
     // Use raw update to atomically check and increment
+    // Also check not ARCHIVED to prevent un-archiving workspaces
     const result = await prisma.workspace.updateMany({
       where: {
         id,
         retryCount: { lt: maxRetries },
+        status: { not: 'ARCHIVED' },
       },
       data: {
         retryCount: { increment: 1 },
@@ -344,7 +351,7 @@ class WorkspaceAccessor {
     });
 
     if (result.count === 0) {
-      return null; // Max retries exceeded
+      return null; // Max retries exceeded or workspace archived
     }
 
     return prisma.workspace.findUnique({ where: { id } });
