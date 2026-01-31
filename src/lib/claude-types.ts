@@ -968,12 +968,6 @@ export interface ToolSequence {
   type: 'tool_sequence';
   id: string;
   pairedCalls: PairedToolCall[];
-  /** @deprecated Use pairedCalls instead */
-  messages: ChatMessage[];
-  /** @deprecated Use pairedCalls instead */
-  toolNames: string[];
-  /** @deprecated Use pairedCalls instead */
-  statuses: Array<'pending' | 'success' | 'error'>;
 }
 
 /**
@@ -993,11 +987,7 @@ export function isToolSequence(item: GroupedMessageItem): item is ToolSequence {
  * Each tool_use is paired with its corresponding tool_result.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but necessary nested conditions for message type checking
-function extractPairedToolCalls(toolMessages: ChatMessage[]): {
-  pairedCalls: PairedToolCall[];
-  toolNames: string[];
-  statuses: Array<'pending' | 'success' | 'error'>;
-} {
+function extractPairedToolCalls(toolMessages: ChatMessage[]): PairedToolCall[] {
   const pairedCalls: PairedToolCall[] = [];
   const toolUseIdToIndex = new Map<string, number>(); // Maps tool_use_id to pairedCalls index
 
@@ -1034,11 +1024,7 @@ function extractPairedToolCalls(toolMessages: ChatMessage[]): {
     }
   }
 
-  // Extract deprecated fields for backwards compatibility
-  const toolNames = pairedCalls.map((pc) => pc.name);
-  const statuses = pairedCalls.map((pc) => pc.status);
-
-  return { pairedCalls, toolNames, statuses };
+  return pairedCalls;
 }
 
 /**
@@ -1055,16 +1041,13 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
       return;
     }
 
-    const { pairedCalls, toolNames, statuses } = extractPairedToolCalls(currentToolSequence);
+    const pairedCalls = extractPairedToolCalls(currentToolSequence);
 
     // Always create a sequence, even for single tools (so they're paired with results)
     const sequence: ToolSequence = {
       type: 'tool_sequence',
       id: `tool-seq-${currentToolSequence[0].id}`,
       pairedCalls,
-      messages: currentToolSequence,
-      toolNames,
-      statuses,
     };
     result.push(sequence);
     currentToolSequence = [];

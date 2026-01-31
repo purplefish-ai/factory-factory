@@ -127,17 +127,31 @@ export const workspaceRouter = router({
 
       // 5. Build response
       return {
-        workspaces: workspaces.map((w) => ({
-          id: w.id,
-          name: w.name,
-          branchName: w.branchName,
-          prUrl: w.prUrl,
-          prNumber: w.prNumber,
-          prState: w.prState,
-          prCiStatus: w.prCiStatus,
-          isWorking: workingStatusByWorkspace.get(w.id) ?? false,
-          gitStats: gitStatsResults[w.id] ?? null,
-        })),
+        workspaces: workspaces.map((w) => {
+          // Compute last activity from most recent session (Claude or Terminal)
+          // Returns null if no sessions exist (avoid misleading timestamps from metadata changes)
+          const sessionDates = [
+            ...(w.claudeSessions?.map((s) => s.updatedAt) ?? []),
+            ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
+          ].filter(Boolean) as Date[];
+          const lastActivityAt =
+            sessionDates.length > 0
+              ? sessionDates.reduce((latest, d) => (d > latest ? d : latest)).toISOString()
+              : null;
+
+          return {
+            id: w.id,
+            name: w.name,
+            branchName: w.branchName,
+            prUrl: w.prUrl,
+            prNumber: w.prNumber,
+            prState: w.prState,
+            prCiStatus: w.prCiStatus,
+            isWorking: workingStatusByWorkspace.get(w.id) ?? false,
+            gitStats: gitStatsResults[w.id] ?? null,
+            lastActivityAt,
+          };
+        }),
         reviewCount,
       };
     }),
@@ -208,14 +222,22 @@ export const workspaceRouter = router({
       // Create the workspace record
       const workspace = await workspaceAccessor.create(input);
 
-      // Initialize the worktree synchronously so workspace is ready when returned
-      // This ensures worktreePath is set before the user can start sessions
-      await initializeWorkspaceWorktree(workspace.id, input.branchName);
+      // Initialize the worktree in the background so the frontend can navigate
+      // immediately. The workspace detail page polls for initialization status
+      // and shows an overlay spinner until the workspace is fully ready.
+      // The function has internal error handling but we add a catch here to handle
+      // any unexpected errors (e.g., if markFailed throws due to DB issues).
+      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
+        logger.error(
+          'Unexpected error during background workspace initialization',
+          error as Error,
+          {
+            workspaceId: workspace.id,
+          }
+        );
+      });
 
-      // Refetch workspace to get updated worktreePath and initStatus
-      const initializedWorkspace = await workspaceAccessor.findById(workspace.id);
-
-      return initializedWorkspace ?? workspace;
+      return workspace;
     }),
 
   // Update a workspace

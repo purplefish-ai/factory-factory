@@ -19,7 +19,7 @@ router.get('/', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'factoryfactory-backend',
-    version: process.env.npm_package_version || '0.1.0',
+    version: configService.getAppVersion(),
     environment: configService.getEnvironment(),
   });
 });

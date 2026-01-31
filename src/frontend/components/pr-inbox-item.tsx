@@ -1,24 +1,16 @@
 'use client';
 
 import { forwardRef } from 'react';
+import { formatRelativeTime } from '@/lib/utils';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { CIStatusDot } from './pr-status-badges';
 
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffMins < 60) {
-    return `${diffMins}m ago`;
+function formatRelativeTimeWithAgo(dateString: string): string {
+  const relative = formatRelativeTime(dateString);
+  if (!relative || relative === 'now') {
+    return relative;
   }
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-  return `${diffDays}d ago`;
+  return `${relative} ago`;
 }
 
 export interface PRInboxItemProps {
@@ -85,7 +77,7 @@ export const PRInboxItem = forwardRef<HTMLDivElement, PRInboxItemProps>(function
             )}
             <span className="flex-1" />
             <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-              {formatRelativeTime(pr.updatedAt)}
+              {formatRelativeTimeWithAgo(pr.updatedAt)}
             </span>
           </div>
 

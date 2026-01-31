@@ -148,13 +148,6 @@ export class GitClient {
     return this.generateBranchName(prefix, crypto.randomBytes(6).toString('hex'));
   }
 
-  /**
-   * @deprecated Use generateBranchName instead. This method is kept for backwards compatibility.
-   */
-  getBranchName(worktreeName: string): string {
-    return `factoryfactory/${worktreeName}`;
-  }
-
   async checkWorktreeExists(name: string): Promise<boolean> {
     const worktreePath = this.getWorktreePath(name);
     const result = await gitCommandC(this.baseRepoPath, ['worktree', 'list']);

@@ -114,7 +114,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     if (currentCount > prevCount && isNearBottomRef.current && scrollContainerRef.current) {
       isAutoScrollingRef.current = true;
       // Use 'auto' behavior instead of smooth to prevent animation jitter during rapid updates
-      virtualizer.scrollToIndex(currentCount - 1, { align: 'end', behavior: 'auto' });
+      // Wrap in try-catch to handle edge cases where scroll element becomes null during unmount
+      // or rapid component updates (see: https://github.com/TanStack/virtual/issues/696)
+      try {
+        virtualizer.scrollToIndex(currentCount - 1, { align: 'end', behavior: 'auto' });
+      } catch {
+        // Scroll element likely became null during unmount - safe to ignore
+      }
       // Reset flag immediately for instant scroll
       requestAnimationFrame(() => {
         isAutoScrollingRef.current = false;

@@ -117,7 +117,7 @@ describe('SessionManager', () => {
         response: {
           subtype: 'success',
           request_id: 'req-123',
-          response: { behavior: 'allow' },
+          response: { behavior: 'allow', updatedInput: {} },
         },
       };
       expect(SessionManager.extractClaudeSessionId(msg)).toBeUndefined();

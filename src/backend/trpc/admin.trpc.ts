@@ -36,7 +36,7 @@ export const adminRouter = router({
     return {
       backendPort,
       environment: config.nodeEnv,
-      version: process.env.npm_package_version || '0.1.0',
+      version: configService.getAppVersion(),
     };
   }),
 

@@ -159,6 +159,7 @@ const controlResponse: ControlResponse = {
     request_id: 'req-123',
     response: {
       behavior: 'allow',
+      updatedInput: {},
     },
   },
 };

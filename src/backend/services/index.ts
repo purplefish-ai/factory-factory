@@ -4,10 +4,16 @@
  * Central export point for all backend services.
  */
 
+// Chat connection service
+export { type ConnectionInfo, chatConnectionService } from './chat-connection.service';
+// Chat event forwarder service
+export { chatEventForwarderService } from './chat-event-forwarder.service';
+// Chat message handlers service
+export { type ChatMessage, chatMessageHandlerService } from './chat-message-handlers.service';
 // CLI health service
 export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
-export { configService } from './config.service';
+export { configService, type SessionProfile } from './config.service';
 // GitHub CLI service
 export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.service';
 // Kanban state service

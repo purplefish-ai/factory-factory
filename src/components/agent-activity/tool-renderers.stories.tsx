@@ -5,7 +5,7 @@ import {
   SAMPLE_FILE_CONTENTS,
   SAMPLE_FILE_PATHS,
 } from '@/lib/claude-fixtures';
-import type { ChatMessage, ClaudeMessage, ToolSequence } from '@/lib/claude-types';
+import type { ClaudeMessage, ToolSequence } from '@/lib/claude-types';
 import { ToolCallGroupRenderer, ToolInfoRenderer, ToolSequenceGroup } from './tool-renderers';
 import type { ToolCallInfo } from './types';
 
@@ -582,46 +582,11 @@ export const ToolResultStates: Story = {
 // =============================================================================
 
 /**
- * Helper to create a ChatMessage from a tool use.
- */
-function createToolUseChatMessage(
-  toolName: string,
-  input: Record<string, unknown>,
-  toolId = `toolu_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-): ChatMessage {
-  return {
-    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    source: 'claude',
-    message: createToolUseClaudeMessage(toolName, input, toolId),
-    timestamp: new Date().toISOString(),
-  };
-}
-
-/**
- * Helper to create a ChatMessage from a tool result.
- */
-function createToolResultChatMessage(
-  toolUseId: string,
-  content: string,
-  isError = false
-): ChatMessage {
-  return {
-    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    source: 'claude',
-    message: createToolResultClaudeMessage(toolUseId, content, isError),
-    timestamp: new Date().toISOString(),
-  };
-}
-
-/**
  * Creates a ToolSequence for testing.
  */
 function createToolSequence(
   tools: Array<{ name: string; input: Record<string, unknown>; result?: string; isError?: boolean }>
 ): ToolSequence {
-  const messages: ChatMessage[] = [];
-  const toolNames: string[] = [];
-  const statuses: Array<'pending' | 'success' | 'error'> = [];
   const pairedCalls: Array<{
     id: string;
     name: string;
@@ -632,12 +597,9 @@ function createToolSequence(
 
   for (const tool of tools) {
     const toolId = `toolu_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    messages.push(createToolUseChatMessage(tool.name, tool.input, toolId));
-    toolNames.push(tool.name);
 
     const status: 'pending' | 'success' | 'error' =
       tool.result !== undefined ? (tool.isError ? 'error' : 'success') : 'pending';
-    statuses.push(status);
 
     pairedCalls.push({
       id: toolId,
@@ -649,19 +611,12 @@ function createToolSequence(
           ? { content: tool.result, isError: tool.isError ?? false }
           : undefined,
     });
-
-    if (tool.result !== undefined) {
-      messages.push(createToolResultChatMessage(toolId, tool.result, tool.isError));
-    }
   }
 
   return {
     type: 'tool_sequence',
     id: `tool-seq-${Date.now()}`,
     pairedCalls,
-    messages,
-    toolNames,
-    statuses,
   };
 }
 

@@ -9,6 +9,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import pidusage from 'pidusage';
+import { configService } from '../services/config.service';
 import { createLogger } from '../services/logger.service';
 import { ClaudeProtocol } from './protocol';
 import { registerProcess, unregisterProcess } from './registry';
@@ -118,19 +119,11 @@ export class ClaudeProcess extends EventEmitter {
   private static readonly SPAWN_TIMEOUT = 30_000;
 
   /**
-   * Get the default activity timeout from environment variable.
+   * Get the default activity timeout from config service.
    * CLAUDE_HUNG_TIMEOUT_MS: Time in ms without activity before killing process (default: 30 minutes)
    */
   private static getDefaultActivityTimeoutMs(): number {
-    const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
-    if (envValue) {
-      const parsed = Number.parseInt(envValue, 10);
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        return parsed;
-      }
-      logger.warn('Invalid CLAUDE_HUNG_TIMEOUT_MS value, using default', { envValue });
-    }
-    return 30 * 60 * 1000; // 30 minutes default
+    return configService.getClaudeProcessConfig().hungTimeoutMs;
   }
 
   /**

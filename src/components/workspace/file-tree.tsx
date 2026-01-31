@@ -1,10 +1,12 @@
 'use client';
 
 import { ChevronDown, ChevronRight, File, FileCode, Folder, Loader2 } from 'lucide-react';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback } from 'react';
 
 import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
+
+import { useFileTreeExpansion } from './file-tree-context';
 
 // =============================================================================
 // Types
@@ -80,11 +82,12 @@ const DirectoryNode = memo(function DirectoryNode({
   depth,
   onFileSelect,
 }: DirectoryNodeProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const { isExpanded: checkExpanded, toggleExpanded } = useFileTreeExpansion();
+  const isExpanded = checkExpanded(entry.path);
 
   const toggleExpand = useCallback(() => {
-    setIsExpanded((prev) => !prev);
-  }, []);
+    toggleExpanded(entry.path);
+  }, [toggleExpanded, entry.path]);
 
   return (
     <div>
