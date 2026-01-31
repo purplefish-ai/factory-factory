@@ -1,8 +1,7 @@
-import type { Workspace, WorkspaceInitStatus, WorkspaceStatus } from '@prisma-gen/browser';
+import type { Workspace, WorkspaceStatus } from '@prisma-gen/browser';
 import { Kanban, List, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
@@ -22,26 +21,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { InitStatusBadge } from '@/components/workspace/init-status-badge';
+import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../../../frontend/lib/trpc';
 
-const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
-  ACTIVE: 'default',
-  COMPLETED: 'secondary',
-  ARCHIVED: 'outline',
-};
-
-const workspaceStatuses: WorkspaceStatus[] = ['ACTIVE', 'COMPLETED', 'ARCHIVED'];
+const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
 
 type ViewMode = 'list' | 'board';
 
 type WorkspaceWithSessions = Workspace & {
   claudeSessions?: unknown[];
-  initStatus: WorkspaceInitStatus;
-  initErrorMessage?: string | null;
 };
 
 export default function WorkspacesListPage() {
@@ -155,7 +146,6 @@ export default function WorkspacesListPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Init</TableHead>
                 <TableHead>Sessions</TableHead>
                 <TableHead>Branch</TableHead>
                 <TableHead>Created</TableHead>
@@ -181,18 +171,15 @@ export default function WorkspacesListPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariants[workspace.status] || 'default'}>
-                      {workspace.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {workspace.initStatus === 'READY' ? (
+                    <WorkspaceStatusBadge
+                      status={workspace.status}
+                      errorMessage={workspace.initErrorMessage}
+                    />
+                    {workspace.status === 'READY' && (
                       <span className="text-xs text-muted-foreground">Ready</span>
-                    ) : (
-                      <InitStatusBadge
-                        status={workspace.initStatus}
-                        errorMessage={workspace.initErrorMessage}
-                      />
+                    )}
+                    {workspace.status === 'ARCHIVED' && (
+                      <span className="text-xs text-muted-foreground">Archived</span>
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">

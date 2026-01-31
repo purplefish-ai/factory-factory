@@ -1,11 +1,12 @@
 import { SessionStatus } from '@prisma-gen/client';
-import { GitClientFactory } from '../clients/git.client';
 import {
   claudeSessionAccessor,
   terminalSessionAccessor,
   workspaceAccessor,
 } from '../resource_accessors/index';
+import { initializeWorkspaceWorktree } from '../trpc/workspace/init.trpc';
 import { createLogger } from './logger.service';
+import { workspaceStateMachine } from './workspace-state-machine.service';
 
 const logger = createLogger('reconciliation');
 
@@ -70,52 +71,48 @@ class ReconciliationService {
   }
 
   /**
-   * Create worktrees for ACTIVE workspaces that don't have one
+   * Initialize workspaces that need worktrees via the state machine.
+   * Uses initializeWorkspaceWorktree to ensure proper state transitions
+   * (NEW -> PROVISIONING -> READY/FAILED), factory-factory.json support,
+   * and startup script handling.
+   *
+   * For stale PROVISIONING workspaces (stuck due to server crash), marks
+   * them as FAILED so users can manually retry via the UI.
    */
   private async reconcileWorkspaces(): Promise<void> {
     const workspacesNeedingWorktree = await workspaceAccessor.findNeedingWorktree();
 
     for (const workspace of workspacesNeedingWorktree) {
-      try {
-        await this.createWorktreeForWorkspace(workspace.id);
-        logger.info('Created worktree for workspace', {
-          workspaceId: workspace.id,
-        });
-      } catch (error) {
-        logger.error('Failed to create worktree', error as Error, {
-          workspaceId: workspace.id,
-        });
+      if (workspace.status === 'PROVISIONING') {
+        // Stale provisioning - mark as failed so user can retry
+        try {
+          await workspaceStateMachine.markFailed(
+            workspace.id,
+            'Provisioning timed out. This may indicate a server restart during initialization. Please retry.'
+          );
+          logger.warn('Marked stale provisioning workspace as failed', {
+            workspaceId: workspace.id,
+            initStartedAt: workspace.initStartedAt,
+          });
+        } catch (error) {
+          logger.error('Failed to mark stale workspace as failed', error as Error, {
+            workspaceId: workspace.id,
+          });
+        }
+      } else {
+        // NEW workspace - initialize normally
+        try {
+          await initializeWorkspaceWorktree(workspace.id, workspace.branchName ?? undefined);
+          logger.info('Initialized workspace via reconciliation', {
+            workspaceId: workspace.id,
+          });
+        } catch (error) {
+          logger.error('Failed to initialize workspace', error as Error, {
+            workspaceId: workspace.id,
+          });
+        }
       }
     }
-  }
-
-  /**
-   * Create a worktree for a workspace
-   */
-  private async createWorktreeForWorkspace(workspaceId: string): Promise<void> {
-    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
-    if (!workspace?.project) {
-      throw new Error(`Workspace ${workspaceId} not found or has no project`);
-    }
-
-    const project = workspace.project;
-    const gitClient = GitClientFactory.forProject({
-      repoPath: project.repoPath,
-      worktreeBasePath: project.worktreeBasePath,
-    });
-
-    const worktreeName = `workspace-${workspaceId}`;
-    const baseBranch = workspace.branchName ?? project.defaultBranch;
-
-    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
-      branchPrefix: project.githubOwner ?? undefined,
-    });
-    const worktreePath = gitClient.getWorktreePath(worktreeName);
-
-    await workspaceAccessor.update(workspaceId, {
-      worktreePath,
-      branchName: worktreeInfo.branchName,
-    });
   }
 
   /**
