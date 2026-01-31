@@ -665,6 +665,12 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handleUserQuestionMessage(data);
     case 'message_queued':
       return null; // Acknowledgment - no state change needed
+    case 'message_dequeued':
+      // Backend drained this message - remove from queue
+      if (data.id) {
+        return { type: 'REMOVE_QUEUED_MESSAGE', payload: { id: data.id } };
+      }
+      return null;
     default:
       return null;
   }

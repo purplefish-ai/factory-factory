@@ -412,7 +412,8 @@ export interface WebSocketMessage {
     | 'agent_metadata'
     | 'permission_request'
     | 'user_question'
-    | 'message_queued';
+    | 'message_queued'
+    | 'message_dequeued';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
