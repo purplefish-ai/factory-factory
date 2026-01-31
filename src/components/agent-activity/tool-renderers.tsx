@@ -232,7 +232,45 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   }
 
   // Multiple tool calls - render as collapsible group
+  // Count statuses for summary display
+  const statusCounts = {
+    success: pairedCalls.filter((c) => c.status === 'success').length,
+    error: pairedCalls.filter((c) => c.status === 'error').length,
+    pending: pairedCalls.filter((c) => c.status === 'pending').length,
+  };
+
   const renderStatusIndicators = () => {
+    // Show counts instead of individual icons when there are many tool calls
+    const MAX_INDIVIDUAL_ICONS = 8;
+    if (pairedCalls.length > MAX_INDIVIDUAL_ICONS) {
+      return (
+        <>
+          {statusCounts.success > 0 && (
+            <span
+              className="flex items-center gap-0.5"
+              title={`${statusCounts.success} successful`}
+            >
+              <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success" />
+              <span className="text-[10px] text-success">{statusCounts.success}</span>
+            </span>
+          )}
+          {statusCounts.error > 0 && (
+            <span className="flex items-center gap-0.5" title={`${statusCounts.error} failed`}>
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+              <span className="text-[10px] text-destructive">{statusCounts.error}</span>
+            </span>
+          )}
+          {statusCounts.pending > 0 && (
+            <span className="flex items-center gap-0.5" title={`${statusCounts.pending} pending`}>
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">{statusCounts.pending}</span>
+            </span>
+          )}
+        </>
+      );
+    }
+
+    // Show individual icons for small numbers of tool calls
     return pairedCalls.map((call) => {
       const key = `${sequence.id}-status-${call.id}`;
       switch (call.status) {
