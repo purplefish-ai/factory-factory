@@ -32,15 +32,17 @@ function stripThinkingSuffix(text: string | undefined): string {
 
 export interface MessageItemProps {
   message: ChatMessage;
+  /** Whether this message is still queued (not yet dispatched to agent) */
+  isQueued?: boolean;
 }
 
-export const MessageItem = memo(function MessageItem({ message }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, isQueued }: MessageItemProps) {
   // User messages
   if (message.source === 'user') {
     const userText = stripThinkingSuffix(message.text);
     return (
       <MessageWrapper>
-        <div className="inline-block max-w-full space-y-2">
+        <div className={`inline-block max-w-full space-y-2 ${isQueued ? 'opacity-50' : ''}`}>
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
             <AttachmentPreview attachments={message.attachments} readOnly />
@@ -85,6 +87,8 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
 
 export interface GroupedMessageItemRendererProps {
   item: GroupedMessageItem;
+  /** Whether this message is still queued (not yet dispatched to agent) */
+  isQueued?: boolean;
 }
 
 /**
@@ -92,9 +96,10 @@ export interface GroupedMessageItemRendererProps {
  */
 export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRenderer({
   item,
+  isQueued,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     return <ToolSequenceGroup sequence={item} />;
   }
-  return <MessageItem message={item} />;
+  return <MessageItem message={item} isQueued={isQueued} />;
 });
