@@ -1,15 +1,22 @@
 {
-  "name": "factoryfactory",
+  "name": "factory-factory",
   "version": "0.1.0",
-  "private": true,
+  "description": "Workspace-based coding environment for Claude Code",
+  "private": false,
   "license": "MIT",
   "type": "module",
-  "main": "electron/dist/electron/main/index.js",
+  "main": "dist/src/cli/index.js",
   "packageManager": "pnpm@10.28.1",
   "bin": {
     "ff": "./dist/src/cli/index.js",
     "factory-factory": "./dist/src/cli/index.js"
   },
+  "files": [
+    "dist",
+    "prisma/migrations",
+    "prisma/schema.prisma",
+    "prompts"
+  ],
   "scripts": {
     "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
     "build": "tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && cp -r prompts dist/ && vite build",
@@ -30,7 +37,7 @@
     "build:electron": "pnpm build && pnpm exec tsc -p tsconfig.electron.json && node scripts/ensure-native-modules.mjs electron && electron-builder",
     "rebuild:electron": "electron-rebuild -f -m . -o better-sqlite3,node-pty",
     "start:electron": "electron .",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "postinstall": "prisma generate && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "prepare": "husky",
     "deps:check": "depcruise src --config .dependency-cruiser.cjs",
     "knip": "knip --include files,dependencies,unlisted"
