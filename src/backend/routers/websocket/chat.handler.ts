@@ -10,6 +10,7 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
+import type { PendingInteractiveRequest } from '../../../shared/pending-request-types';
 import { type ClaudeClient, SessionManager } from '../../claude/index';
 import type { ClaudeContentItem } from '../../claude/types';
 import { WS_READY_STATE } from '../../constants';
@@ -43,22 +44,8 @@ export const chatConnections = new Map<string, ConnectionInfo>();
 export const pendingMessages = new Map<string, PendingMessage[]>();
 export const clientEventSetup = new Set<string>();
 
-/**
- * Pending interactive request stored for session restore.
- * When a user navigates away and returns, we need to show the modal again.
- */
-export interface StoredInteractiveRequest {
-  requestId: string;
-  toolName: string;
-  toolUseId: string;
-  input: Record<string, unknown>;
-  /** Plan content for ExitPlanMode requests */
-  planContent: string | null;
-  timestamp: string;
-}
-
 /** Pending interactive requests by session ID (for restore on reconnect) */
-export const pendingInteractiveRequests = new Map<string, StoredInteractiveRequest>();
+export const pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
 
 const MAX_PENDING_MESSAGES = 100;
 const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
@@ -652,6 +639,17 @@ async function handleLoadSessionMessage(
   }
 }
 
+/**
+ * Clear pending interactive request only if the requestId matches.
+ * Prevents clearing a newer request when responding to a stale one.
+ */
+function clearPendingRequestIfMatches(sessionId: string, requestId: string): void {
+  const pending = pendingInteractiveRequests.get(sessionId);
+  if (pending?.requestId === requestId) {
+    pendingInteractiveRequests.delete(sessionId);
+  }
+}
+
 function handleQuestionResponseMessage(
   ws: WebSocket,
   sessionId: string,
@@ -669,22 +667,22 @@ function handleQuestionResponseMessage(
 
   const client = sessionService.getClient(sessionId);
   if (!client) {
-    // Clear stale pending request since client is gone
-    pendingInteractiveRequests.delete(sessionId);
+    // Clear pending request only if it matches (client gone, but don't clear a newer request)
+    clearPendingRequestIfMatches(sessionId, requestId);
     ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
     return;
   }
 
   try {
     client.answerQuestion(requestId, answers);
-    // Clear the pending request after successful response
-    pendingInteractiveRequests.delete(sessionId);
+    // Clear the pending request only if requestId matches
+    clearPendingRequestIfMatches(sessionId, requestId);
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Answered question', { sessionId, requestId });
     }
   } catch (error) {
-    // Clear stale pending request on failure to prevent infinite retry loop
-    pendingInteractiveRequests.delete(sessionId);
+    // Clear pending request only if it matches (prevents clearing newer request on stale response)
+    clearPendingRequestIfMatches(sessionId, requestId);
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to answer question', {
       sessionId,
@@ -714,8 +712,8 @@ function handlePermissionResponseMessage(
 
   const client = sessionService.getClient(sessionId);
   if (!client) {
-    // Clear stale pending request since client is gone
-    pendingInteractiveRequests.delete(sessionId);
+    // Clear pending request only if it matches (client gone, but don't clear a newer request)
+    clearPendingRequestIfMatches(sessionId, requestId);
     ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
     return;
   }
@@ -726,14 +724,14 @@ function handlePermissionResponseMessage(
     } else {
       client.denyInteractiveRequest(requestId, 'User denied');
     }
-    // Clear the pending request after successful response
-    pendingInteractiveRequests.delete(sessionId);
+    // Clear the pending request only if requestId matches
+    clearPendingRequestIfMatches(sessionId, requestId);
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
     }
   } catch (error) {
-    // Clear stale pending request on failure to prevent infinite retry loop
-    pendingInteractiveRequests.delete(sessionId);
+    // Clear pending request only if it matches (prevents clearing newer request on stale response)
+    clearPendingRequestIfMatches(sessionId, requestId);
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to respond to permission request', {
       sessionId,

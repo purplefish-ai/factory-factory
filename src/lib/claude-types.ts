@@ -294,19 +294,13 @@ export interface UserQuestionRequest {
 // Pending Interactive Request Types
 // =============================================================================
 
-/**
- * Pending interactive request stored for session restore.
- * When a user navigates away and returns, we need to restore the modal.
- */
-export interface PendingInteractiveRequest {
-  requestId: string;
-  toolName: string;
-  toolUseId: string;
-  input: Record<string, unknown>;
-  /** Plan content for ExitPlanMode requests */
-  planContent: string | null;
-  timestamp: string;
-}
+// Import and re-export from shared module (used by both frontend and backend)
+import type { PendingInteractiveRequest as PendingInteractiveRequestType } from '@/shared/pending-request-types';
+
+export type { PendingInteractiveRequest } from '@/shared/pending-request-types';
+
+// Alias for use within this file
+type PendingInteractiveRequest = PendingInteractiveRequestType;
 
 // =============================================================================
 // Permission Request Types (Phase 9)
