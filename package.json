@@ -15,7 +15,8 @@
     "dist",
     "prisma/migrations",
     "prisma/schema.prisma",
-    "prompts"
+    "prompts",
+    "scripts/postinstall.mjs"
   ],
   "scripts": {
     "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
@@ -37,7 +38,7 @@
     "build:electron": "pnpm build && pnpm exec tsc -p tsconfig.electron.json && node scripts/ensure-native-modules.mjs electron && electron-builder",
     "rebuild:electron": "electron-rebuild -f -m . -o better-sqlite3,node-pty",
     "start:electron": "electron .",
-    "postinstall": "prisma generate && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "postinstall": "node scripts/postinstall.mjs",
     "prepare": "husky",
     "deps:check": "depcruise src --config .dependency-cruiser.cjs",
     "knip": "knip --include files,dependencies,unlisted"
