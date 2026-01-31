@@ -413,7 +413,8 @@ export interface WebSocketMessage {
     | 'permission_request'
     | 'user_question'
     | 'message_queued'
-    | 'message_dequeued';
+    | 'message_dequeued'
+    | 'message_removed';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;

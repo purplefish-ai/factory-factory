@@ -18,6 +18,7 @@ const meta = {
     ),
   ],
   args: {
+    removingIds: new Set<string>(),
     onRemove: fn(),
   },
 } satisfies Meta<typeof QueuedMessages>;
@@ -75,5 +76,13 @@ export const ManyMessages: Story = {
       { id: '4', text: 'Fourth task: update changelog', timestamp: new Date().toISOString() },
       { id: '5', text: 'Fifth task: deploy to staging', timestamp: new Date().toISOString() },
     ],
+  },
+};
+
+export const WithRemovingState: Story = {
+  name: 'With Removing State (spinner)',
+  args: {
+    messages: mockMessages,
+    removingIds: new Set(['2']),
   },
 };

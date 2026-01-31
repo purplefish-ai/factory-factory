@@ -51,6 +51,8 @@ export interface ChatState {
   chatSettings: ChatSettings;
   /** Queued messages waiting to be sent */
   queuedMessages: QueuedMessage[];
+  /** Message IDs currently being removed (pending backend confirmation) */
+  removingMessageIds: Set<string>;
   /** Tool use ID to message index map for O(1) updates */
   toolUseIdToIndex: Map<string, number>;
   /** Latest accumulated thinking content from extended thinking mode */
@@ -101,6 +103,7 @@ export type ChatAction =
   // Queue actions
   | { type: 'QUEUE_MESSAGE'; payload: QueuedMessage }
   | { type: 'DEQUEUE_MESSAGE' }
+  | { type: 'REMOVING_QUEUED_MESSAGE'; payload: { id: string } }
   | { type: 'REMOVE_QUEUED_MESSAGE'; payload: { id: string } }
   | { type: 'SET_QUEUE'; payload: QueuedMessage[] }
   // Settings action
@@ -229,6 +232,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     startingSession: false,
     chatSettings: DEFAULT_CHAT_SETTINGS,
     queuedMessages: [],
+    removingMessageIds: new Set(),
     toolUseIdToIndex: new Map(),
     latestThinking: null,
     ...overrides,
@@ -348,6 +352,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         running: true,
         latestThinking: null,
         queuedMessages: [],
+        removingMessageIds: new Set(),
       };
     case 'WS_STOPPED':
       return { ...state, running: false, stopping: false, startingSession: false };
@@ -472,6 +477,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         loadingSession: true,
         running: false,
         queuedMessages: [],
+        removingMessageIds: new Set(),
         toolUseIdToIndex: new Map(),
         latestThinking: null,
       };
@@ -503,11 +509,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, queuedMessages: [...state.queuedMessages, action.payload] };
     case 'DEQUEUE_MESSAGE':
       return { ...state, queuedMessages: state.queuedMessages.slice(1) };
-    case 'REMOVE_QUEUED_MESSAGE':
+    case 'REMOVING_QUEUED_MESSAGE': {
+      const newRemovingIds = new Set(state.removingMessageIds);
+      newRemovingIds.add(action.payload.id);
+      return { ...state, removingMessageIds: newRemovingIds };
+    }
+    case 'REMOVE_QUEUED_MESSAGE': {
+      const newRemovingIds = new Set(state.removingMessageIds);
+      newRemovingIds.delete(action.payload.id);
       return {
         ...state,
         queuedMessages: state.queuedMessages.filter((msg) => msg.id !== action.payload.id),
+        removingMessageIds: newRemovingIds,
       };
+    }
     case 'SET_QUEUE':
       return { ...state, queuedMessages: action.payload };
 
@@ -551,6 +566,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         loadingSession: true,
         running: false,
         queuedMessages: [],
+        removingMessageIds: new Set(),
         toolUseIdToIndex: new Map(),
         latestThinking: null,
       };
@@ -667,6 +683,12 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return null; // Acknowledgment - no state change needed
     case 'message_dequeued':
       // Backend drained this message - remove from queue
+      if (data.id) {
+        return { type: 'REMOVE_QUEUED_MESSAGE', payload: { id: data.id } };
+      }
+      return null;
+    case 'message_removed':
+      // Backend confirmed message was removed from queue
       if (data.id) {
         return { type: 'REMOVE_QUEUED_MESSAGE', payload: { id: data.id } };
       }

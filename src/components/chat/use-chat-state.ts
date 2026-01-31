@@ -529,9 +529,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   const removeQueuedMessage = useCallback(
     (id: string) => {
-      // Remove from frontend display
-      dispatch({ type: 'REMOVE_QUEUED_MESSAGE', payload: { id } });
-      // Notify backend to remove from queue
+      // Mark as removing (shows spinner in UI)
+      dispatch({ type: 'REMOVING_QUEUED_MESSAGE', payload: { id } });
+      // Notify backend to remove from queue - backend will send message_removed confirmation
       send({ type: 'remove_queued_message', id } as unknown as ChatMessage);
     },
     [send]

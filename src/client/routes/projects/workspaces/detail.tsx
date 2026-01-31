@@ -100,6 +100,7 @@ interface ChatContentProps {
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
+  removingMessageIds: ReturnType<typeof useChatWebSocket>['removingMessageIds'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
 }
@@ -132,6 +133,7 @@ const ChatContent = memo(function ChatContent({
   inputDraft,
   setInputDraft,
   queuedMessages,
+  removingMessageIds,
   removeQueuedMessage,
   latestThinking,
 }: ChatContentProps) {
@@ -185,7 +187,11 @@ const ChatContent = memo(function ChatContent({
       {/* Input Section with Queue and Prompts */}
       <div className="border-t">
         {/* Queue is managed by backend - show pending messages from session_loaded */}
-        <QueuedMessages messages={queuedMessages} onRemove={removeQueuedMessage} />
+        <QueuedMessages
+          messages={queuedMessages}
+          removingIds={removingMessageIds}
+          onRemove={removeQueuedMessage}
+        />
         <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
         <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
 
@@ -268,6 +274,7 @@ function WorkspaceChatContent() {
     chatSettings,
     inputDraft,
     queuedMessages,
+    removingMessageIds,
     latestThinking,
     sendMessage,
     stopChat,
@@ -527,6 +534,7 @@ function WorkspaceChatContent() {
                 inputDraft={inputDraft}
                 setInputDraft={setInputDraft}
                 queuedMessages={queuedMessages}
+                removingMessageIds={removingMessageIds}
                 removeQueuedMessage={removeQueuedMessage}
                 latestThinking={latestThinking}
               />

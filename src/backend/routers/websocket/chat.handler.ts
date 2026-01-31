@@ -888,6 +888,8 @@ async function handleChatMessage(
             messageId: message.id,
           });
         }
+        // Send confirmation to frontend (always, even if not found - to clear pending state)
+        ws.send(JSON.stringify({ type: 'message_removed', id: message.id }));
       }
       break;
   }
