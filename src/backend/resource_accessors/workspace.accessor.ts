@@ -9,6 +9,13 @@ import type {
 } from '@prisma-gen/client';
 import { prisma } from '../db';
 
+/**
+ * Threshold for considering a PROVISIONING workspace as stale.
+ * Workspaces in PROVISIONING state for longer than this are considered
+ * stuck (e.g., due to server crash) and will be recovered by reconciliation.
+ */
+const STALE_PROVISIONING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
 interface CreateWorkspaceInput {
   projectId: string;
   name: string;
@@ -19,7 +26,7 @@ interface CreateWorkspaceInput {
 interface UpdateWorkspaceInput {
   name?: string;
   description?: string;
-  status?: WorkspaceStatus;
+  // Note: status changes must go through workspaceStateMachine, not direct updates
   worktreePath?: string | null;
   branchName?: string | null;
   prUrl?: string | null;
@@ -106,11 +113,18 @@ class WorkspaceAccessor {
 
   /**
    * Find workspaces with sessions included (for kanban state computation).
+   *
+   * @throws Error if both status and excludeStatuses filters are specified
    */
   findByProjectIdWithSessions(
     projectId: string,
     filters?: FindByProjectIdFilters
   ): Promise<WorkspaceWithSessions[]> {
+    // Validate mutually exclusive filters
+    if (filters?.status && filters?.excludeStatuses?.length) {
+      throw new Error('Cannot specify both status and excludeStatuses filters');
+    }
+
     const where: Prisma.WorkspaceWhereInput = { projectId };
 
     if (filters?.status) {
@@ -150,22 +164,29 @@ class WorkspaceAccessor {
     });
   }
 
-  archive(id: string): Promise<Workspace> {
-    return prisma.workspace.update({
-      where: { id },
-      data: { status: 'ARCHIVED' },
-    });
-  }
+  // Note: archive functionality is provided by workspaceStateMachine.archive()
 
   /**
-   * Find NEW workspaces that haven't started provisioning yet.
+   * Find workspaces that need worktree creation or recovery.
+   * Returns:
+   * - NEW workspaces that haven't started provisioning yet
+   * - PROVISIONING workspaces that are stale (>10 minutes) and likely stuck due to server crash
+   *
    * Used for reconciliation to ensure all workspaces are initialized.
    * Includes project for worktree creation.
    */
   findNeedingWorktree(): Promise<WorkspaceWithProject[]> {
+    const staleThreshold = new Date(Date.now() - STALE_PROVISIONING_THRESHOLD_MS);
+
     return prisma.workspace.findMany({
       where: {
-        status: 'NEW',
+        OR: [
+          { status: 'NEW' },
+          {
+            status: 'PROVISIONING',
+            initStartedAt: { lt: staleThreshold },
+          },
+        ],
       },
       include: {
         project: true,

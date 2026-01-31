@@ -249,6 +249,14 @@ export function createServer(requestedPort?: number): ServerInstance {
             logger.error('Failed to cleanup orphan sessions on startup', error as Error);
           }
 
+          // Reconcile workspaces that may have been left in inconsistent states
+          // (e.g., stuck in PROVISIONING due to server crash)
+          try {
+            await reconciliationService.reconcile();
+          } catch (error) {
+            logger.error('Failed to reconcile workspaces on startup', error as Error);
+          }
+
           sessionFileLogger.cleanupOldLogs();
           reconciliationService.startPeriodicCleanup();
           schedulerService.start();
