@@ -36,25 +36,54 @@ export interface RejectedMessageInfo {
   error: string;
 }
 
+/** Content stored for a pending message (for recovery on rejection) */
+export interface PendingMessageContent {
+  text: string;
+  attachments?: MessageAttachment[];
+}
+
+/**
+ * Pending interactive request - a discriminated union that makes it impossible
+ * to have both a permission request and question request simultaneously.
+ * Replaces separate pendingPermission and pendingQuestion nullable fields.
+ */
+export type PendingRequest =
+  | { type: 'none' }
+  | { type: 'permission'; request: PermissionRequest }
+  | { type: 'question'; request: UserQuestionRequest };
+
+/**
+ * Session status - a discriminated union that makes invalid states unrepresentable.
+ * Replaces separate running, stopping, loadingSession, and startingSession booleans.
+ *
+ * State transitions:
+ *   idle → loading → starting → ready ↔ running → stopping → ready
+ */
+export type SessionStatus =
+  | { phase: 'idle' }
+  | { phase: 'loading' }
+  | { phase: 'starting' }
+  | { phase: 'ready' }
+  | { phase: 'running' }
+  | { phase: 'stopping' };
+
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
-  /** Whether Claude is currently processing */
-  running: boolean;
-  /** Whether a stop request is in progress */
-  stopping: boolean;
+  /**
+   * Session lifecycle status - a discriminated union that makes invalid states unrepresentable.
+   * Replaces separate running, stopping, loadingSession, and startingSession booleans.
+   */
+  sessionStatus: SessionStatus;
   /** Current git branch for the session */
   gitBranch: string | null;
   /** Available Claude CLI sessions */
   availableSessions: SessionInfo[];
-  /** Pending permission request awaiting user response */
-  pendingPermission: PermissionRequest | null;
-  /** Pending user question awaiting user response */
-  pendingQuestion: UserQuestionRequest | null;
-  /** Whether session is currently loading */
-  loadingSession: boolean;
-  /** Whether Claude CLI is starting up */
-  startingSession: boolean;
+  /**
+   * Pending interactive request awaiting user response.
+   * Discriminated union ensures only one request type can be active at a time.
+   */
+  pendingRequest: PendingRequest;
   /** Chat settings (model, thinking, plan mode) */
   chatSettings: ChatSettings;
   /** Queued messages waiting to be sent */
@@ -63,10 +92,12 @@ export interface ChatState {
   toolUseIdToIndex: Map<string, number>;
   /** Latest accumulated thinking content from extended thinking mode */
   latestThinking: string | null;
-  /** Message IDs that are pending backend confirmation (shown with "sending..." indicator) */
-  pendingMessageIds: Set<string>;
-  /** Content of pending messages by ID (for recovery on rejection) */
-  pendingMessageContent: Map<string, { text: string; attachments?: MessageAttachment[] }>;
+  /**
+   * Pending messages awaiting backend confirmation (shown with "sending..." indicator).
+   * Map from message ID to content. Presence in map = pending, content = for recovery on rejection.
+   * Replaces separate pendingMessageIds Set and pendingMessageContent Map.
+   */
+  pendingMessages: Map<string, PendingMessageContent>;
   /** Last rejected message for recovery (allows restoring to input) */
   lastRejectedMessage: RejectedMessageInfo | null;
 }
@@ -237,23 +268,67 @@ function getToolUseIdFromMessage(claudeMsg: ClaudeMessage): string | null {
 // Initial State
 // =============================================================================
 
+/**
+ * Creates the base reset state used by CLEAR_CHAT, RESET_FOR_SESSION_SWITCH,
+ * and SESSION_SWITCH_START. This eliminates duplication and ensures all reset
+ * actions clear the same fields consistently.
+ */
+function createBaseResetState(): Pick<
+  ChatState,
+  | 'messages'
+  | 'gitBranch'
+  | 'pendingRequest'
+  | 'toolUseIdToIndex'
+  | 'latestThinking'
+  | 'pendingMessages'
+  | 'lastRejectedMessage'
+> {
+  return {
+    messages: [],
+    gitBranch: null,
+    pendingRequest: { type: 'none' },
+    toolUseIdToIndex: new Map(),
+    latestThinking: null,
+    pendingMessages: new Map(),
+    lastRejectedMessage: null,
+  };
+}
+
+/**
+ * Creates extended reset state for session switches, which also clears
+ * queue and session status.
+ */
+function createSessionSwitchResetState(): Pick<
+  ChatState,
+  | 'messages'
+  | 'gitBranch'
+  | 'pendingRequest'
+  | 'toolUseIdToIndex'
+  | 'latestThinking'
+  | 'pendingMessages'
+  | 'lastRejectedMessage'
+  | 'queuedMessages'
+  | 'sessionStatus'
+> {
+  return {
+    ...createBaseResetState(),
+    queuedMessages: [],
+    sessionStatus: { phase: 'loading' },
+  };
+}
+
 export function createInitialChatState(overrides?: Partial<ChatState>): ChatState {
   return {
     messages: [],
-    running: false,
-    stopping: false,
+    sessionStatus: { phase: 'idle' },
     gitBranch: null,
     availableSessions: [],
-    pendingPermission: null,
-    pendingQuestion: null,
-    loadingSession: false,
-    startingSession: false,
+    pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,
     queuedMessages: [],
     toolUseIdToIndex: new Map(),
     latestThinking: null,
-    pendingMessageIds: new Set(),
-    pendingMessageContent: new Map(),
+    pendingMessages: new Map(),
     lastRejectedMessage: null,
     ...overrides,
   };
@@ -267,12 +342,15 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
 function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage): ChatState {
-  // Always clear starting state when receiving a Claude message
-  let baseState: ChatState = { ...state, startingSession: false };
+  // Transition from starting to running when receiving a Claude message
+  let baseState: ChatState =
+    state.sessionStatus.phase === 'starting'
+      ? { ...state, sessionStatus: { phase: 'running' } }
+      : state;
 
-  // Set running to false when we receive a result
+  // Set to ready when we receive a result
   if (claudeMsg.type === 'result') {
-    baseState = { ...baseState, running: false };
+    baseState = { ...baseState, sessionStatus: { phase: 'ready' } };
   }
 
   // Check if message should be stored
@@ -361,13 +439,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     // WebSocket status messages
     case 'WS_STATUS':
-      return { ...state, running: action.payload.running };
+      // WS_STATUS updates running state - transition to running or ready based on payload
+      return {
+        ...state,
+        sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
+      };
     case 'WS_STARTING':
-      return { ...state, startingSession: true };
+      return { ...state, sessionStatus: { phase: 'starting' } };
     case 'WS_STARTED':
-      return { ...state, startingSession: false, running: true, latestThinking: null };
+      return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      return { ...state, running: false, stopping: false, startingSession: false };
+      return { ...state, sessionStatus: { phase: 'ready' } };
 
     // Claude message handling (delegated to helper)
     case 'WS_CLAUDE_MESSAGE':
@@ -415,29 +497,32 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Only overwrite existing state if backend has something to restore,
       // otherwise preserve any pending state that may have arrived during loading (race condition fix).
       const pendingReq = action.payload.pendingInteractiveRequest;
-      let pendingPermission: PermissionRequest | null = state.pendingPermission;
-      let pendingQuestion: UserQuestionRequest | null = state.pendingQuestion;
+      let pendingRequest: PendingRequest = state.pendingRequest;
 
       if (pendingReq) {
         if (pendingReq.toolName === 'AskUserQuestion') {
           // Restore AskUserQuestion modal
           const input = pendingReq.input as { questions?: unknown[] };
-          pendingQuestion = {
-            requestId: pendingReq.requestId,
-            questions: (input.questions ?? []) as UserQuestionRequest['questions'],
-            timestamp: pendingReq.timestamp,
+          pendingRequest = {
+            type: 'question',
+            request: {
+              requestId: pendingReq.requestId,
+              questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+              timestamp: pendingReq.timestamp,
+            },
           };
-          pendingPermission = null; // Clear opposite type to prevent both modals showing
         } else {
           // Restore permission request (ExitPlanMode or other)
-          pendingPermission = {
-            requestId: pendingReq.requestId,
-            toolName: pendingReq.toolName,
-            toolInput: pendingReq.input,
-            timestamp: pendingReq.timestamp,
-            planContent: pendingReq.planContent,
+          pendingRequest = {
+            type: 'permission',
+            request: {
+              requestId: pendingReq.requestId,
+              toolName: pendingReq.toolName,
+              toolInput: pendingReq.input,
+              timestamp: pendingReq.timestamp,
+              planContent: pendingReq.planContent,
+            },
           };
-          pendingQuestion = null; // Clear opposite type to prevent both modals showing
         }
       }
 
@@ -445,17 +530,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         messages,
         gitBranch: action.payload.gitBranch,
-        running: action.payload.running,
-        loadingSession: false,
-        startingSession: false,
+        // Session is ready (or running if backend says so)
+        sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
         toolUseIdToIndex: new Map(),
-        pendingPermission,
-        pendingQuestion,
+        pendingRequest,
         // Restore queued messages from backend
         queuedMessages: action.payload.queuedMessages ?? [],
         // Clear pending message state to remove stale indicators and prevent memory leaks
-        pendingMessageIds: new Set(),
-        pendingMessageContent: new Map(),
+        pendingMessages: new Map(),
         // Clear stale rejected message to prevent recovery effect from restoring old content
         lastRejectedMessage: null,
       };
@@ -463,46 +545,36 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // Permission and question requests
     // Always accept new requests (overwriting existing) to match backend behavior.
-    // Clear opposite type to prevent both modals showing simultaneously.
+    // Discriminated union naturally prevents both types being active simultaneously.
     case 'WS_PERMISSION_REQUEST':
-      return { ...state, pendingPermission: action.payload, pendingQuestion: null };
+      return { ...state, pendingRequest: { type: 'permission', request: action.payload } };
     case 'WS_USER_QUESTION':
-      return { ...state, pendingQuestion: action.payload, pendingPermission: null };
+      return { ...state, pendingRequest: { type: 'question', request: action.payload } };
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings
       const shouldDisablePlanMode =
-        action.payload.allow && state.pendingPermission?.toolName === 'ExitPlanMode';
+        action.payload.allow &&
+        state.pendingRequest.type === 'permission' &&
+        state.pendingRequest.request.toolName === 'ExitPlanMode';
       return {
         ...state,
-        pendingPermission: null,
+        pendingRequest: { type: 'none' },
         ...(shouldDisablePlanMode && {
           chatSettings: { ...state.chatSettings, planModeEnabled: false },
         }),
       };
     }
     case 'QUESTION_RESPONSE':
-      return { ...state, pendingQuestion: null };
+      return { ...state, pendingRequest: { type: 'none' } };
 
     // Session switching
     case 'SESSION_SWITCH_START':
       return {
         ...state,
-        messages: [],
-        gitBranch: null,
-        pendingPermission: null,
-        pendingQuestion: null,
-        startingSession: false,
-        loadingSession: true,
-        running: false,
-        queuedMessages: [],
-        toolUseIdToIndex: new Map(),
-        latestThinking: null,
-        pendingMessageIds: new Set(),
-        pendingMessageContent: new Map(),
-        lastRejectedMessage: null,
+        ...createSessionSwitchResetState(),
       };
     case 'SESSION_LOADING_START':
-      return { ...state, loadingSession: true };
+      return { ...state, sessionStatus: { phase: 'loading' } };
 
     // Tool input streaming (delegated to helper)
     case 'TOOL_INPUT_UPDATE':
@@ -515,7 +587,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // Stop request
     case 'STOP_REQUESTED':
-      return { ...state, stopping: true };
+      return { ...state, sessionStatus: { phase: 'stopping' } };
 
     // User messages
     case 'USER_MESSAGE_SENT':
@@ -554,10 +626,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     // MESSAGE_ACCEPTED: Backend confirmed message is in queue
     // Add to messages and queuedMessages, remove from pending
     case 'MESSAGE_ACCEPTED': {
-      const newPendingIds = new Set(state.pendingMessageIds);
-      newPendingIds.delete(action.payload.id);
-      const newPendingContent = new Map(state.pendingMessageContent);
-      newPendingContent.delete(action.payload.id);
+      const newPendingMessages = new Map(state.pendingMessages);
+      newPendingMessages.delete(action.payload.id);
       const queuedMsg = action.payload.message;
       // Create user message from queued message
       const userMessage: ChatMessage = {
@@ -571,24 +641,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         messages: [...state.messages, userMessage],
         queuedMessages: [...state.queuedMessages, queuedMsg],
-        pendingMessageIds: newPendingIds,
-        pendingMessageContent: newPendingContent,
+        pendingMessages: newPendingMessages,
       };
     }
 
     // MESSAGE_REJECTED: Backend rejected message (queue full, etc.)
     // Remove from pending and store for recovery so user can retry
     case 'MESSAGE_REJECTED': {
-      const newPendingIds = new Set(state.pendingMessageIds);
-      newPendingIds.delete(action.payload.id);
-      // Retrieve pending content for recovery
-      const pendingContent = state.pendingMessageContent.get(action.payload.id);
-      const newPendingContent = new Map(state.pendingMessageContent);
-      newPendingContent.delete(action.payload.id);
+      // Retrieve pending content for recovery before deleting
+      const pendingContent = state.pendingMessages.get(action.payload.id);
+      const newPendingMessages = new Map(state.pendingMessages);
+      newPendingMessages.delete(action.payload.id);
       return {
         ...state,
-        pendingMessageIds: newPendingIds,
-        pendingMessageContent: newPendingContent,
+        pendingMessages: newPendingMessages,
         // Store rejected message info for recovery (restore to input)
         lastRejectedMessage: pendingContent
           ? {
@@ -602,17 +668,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // MESSAGE_SENDING: Mark a message as pending backend confirmation and store content for recovery
     case 'MESSAGE_SENDING': {
-      const newPendingIds = new Set(state.pendingMessageIds);
-      newPendingIds.add(action.payload.id);
-      const newPendingContent = new Map(state.pendingMessageContent);
-      newPendingContent.set(action.payload.id, {
+      const newPendingMessages = new Map(state.pendingMessages);
+      newPendingMessages.set(action.payload.id, {
         text: action.payload.text,
         attachments: action.payload.attachments,
       });
       return {
         ...state,
-        pendingMessageIds: newPendingIds,
-        pendingMessageContent: newPendingContent,
+        pendingMessages: newPendingMessages,
       };
     }
 
@@ -643,37 +706,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, latestThinking: null };
 
     // Clear/reset
-    case 'CLEAR_CHAT':
+    case 'CLEAR_CHAT': {
+      // Preserve running state, but reset stopping/starting to ready
+      const sessionStatus: SessionStatus =
+        state.sessionStatus.phase === 'running' ? state.sessionStatus : { phase: 'ready' };
       return {
         ...state,
-        messages: [],
-        gitBranch: null,
-        pendingPermission: null,
-        pendingQuestion: null,
-        startingSession: false,
-        stopping: false,
+        ...createBaseResetState(),
+        sessionStatus,
         chatSettings: DEFAULT_CHAT_SETTINGS,
-        toolUseIdToIndex: new Map(),
-        latestThinking: null,
-        pendingMessageContent: new Map(),
-        lastRejectedMessage: null,
       };
+    }
     case 'RESET_FOR_SESSION_SWITCH':
       return {
         ...state,
-        messages: [],
-        gitBranch: null,
-        pendingPermission: null,
-        pendingQuestion: null,
-        startingSession: false,
-        loadingSession: true,
-        running: false,
-        queuedMessages: [],
-        toolUseIdToIndex: new Map(),
-        latestThinking: null,
-        pendingMessageIds: new Set(),
-        pendingMessageContent: new Map(),
-        lastRejectedMessage: null,
+        ...createSessionSwitchResetState(),
       };
 
     default:

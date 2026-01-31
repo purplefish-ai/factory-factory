@@ -105,14 +105,10 @@ describe('createInitialChatState', () => {
     const state = createInitialChatState();
 
     expect(state.messages).toEqual([]);
-    expect(state.running).toBe(false);
-    expect(state.stopping).toBe(false);
+    expect(state.sessionStatus).toEqual({ phase: 'idle' });
     expect(state.gitBranch).toBeNull();
     expect(state.availableSessions).toEqual([]);
-    expect(state.pendingPermission).toBeNull();
-    expect(state.pendingQuestion).toBeNull();
-    expect(state.loadingSession).toBe(false);
-    expect(state.startingSession).toBe(false);
+    expect(state.pendingRequest).toEqual({ type: 'none' });
     expect(state.chatSettings).toEqual(DEFAULT_CHAT_SETTINGS);
     expect(state.queuedMessages).toEqual([]);
     expect(state.toolUseIdToIndex).toBeInstanceOf(Map);
@@ -127,17 +123,16 @@ describe('createInitialChatState', () => {
     };
 
     const state = createInitialChatState({
-      running: true,
+      sessionStatus: { phase: 'running' },
       gitBranch: 'feature/test',
       chatSettings: customSettings,
     });
 
-    expect(state.running).toBe(true);
+    expect(state.sessionStatus).toEqual({ phase: 'running' });
     expect(state.gitBranch).toBe('feature/test');
     expect(state.chatSettings).toEqual(customSettings);
     // Other values should still be defaults
     expect(state.messages).toEqual([]);
-    expect(state.stopping).toBe(false);
   });
 });
 
@@ -158,19 +153,19 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('WS_STATUS action', () => {
-    it('should set running to true', () => {
+    it('should set sessionStatus to running when payload.running is true', () => {
       const action: ChatAction = { type: 'WS_STATUS', payload: { running: true } };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.running).toBe(true);
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
     });
 
-    it('should set running to false', () => {
-      const state = { ...initialState, running: true };
+    it('should set sessionStatus to ready when payload.running is false', () => {
+      const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
       const action: ChatAction = { type: 'WS_STATUS', payload: { running: false } };
       const newState = chatReducer(state, action);
 
-      expect(newState.running).toBe(false);
+      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
     });
   });
 
@@ -179,11 +174,11 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('WS_STARTING action', () => {
-    it('should set startingSession to true', () => {
+    it('should set sessionStatus to starting', () => {
       const action: ChatAction = { type: 'WS_STARTING' };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.startingSession).toBe(true);
+      expect(newState.sessionStatus).toEqual({ phase: 'starting' });
     });
   });
 
@@ -192,19 +187,18 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('WS_STARTED action', () => {
-    it('should set running to true and clear starting flag', () => {
-      const state = { ...initialState, startingSession: true };
+    it('should set sessionStatus to running', () => {
+      const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const action: ChatAction = { type: 'WS_STARTED' };
       const newState = chatReducer(state, action);
 
-      expect(newState.running).toBe(true);
-      expect(newState.startingSession).toBe(false);
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
     });
 
     it('should clear latestThinking to prevent stale content flash', () => {
       const state = {
         ...initialState,
-        startingSession: true,
+        sessionStatus: { phase: 'starting' } as const,
         latestThinking: 'Stale thinking from previous session',
       };
       const action: ChatAction = { type: 'WS_STARTED' };
@@ -219,14 +213,12 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('WS_STOPPED action', () => {
-    it('should clear running, stopping, and startingSession flags', () => {
-      const state = { ...initialState, running: true, stopping: true, startingSession: true };
+    it('should set sessionStatus to ready', () => {
+      const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
       const action: ChatAction = { type: 'WS_STOPPED' };
       const newState = chatReducer(state, action);
 
-      expect(newState.running).toBe(false);
-      expect(newState.stopping).toBe(false);
-      expect(newState.startingSession).toBe(false);
+      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
     });
   });
 
@@ -245,22 +237,22 @@ describe('chatReducer', () => {
       expect(newState.messages[0].message).toEqual(claudeMsg);
     });
 
-    it('should clear startingSession when receiving a Claude message', () => {
-      const state = { ...initialState, startingSession: true };
+    it('should transition from starting to running when receiving a Claude message', () => {
+      const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();
       const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: claudeMsg };
       const newState = chatReducer(state, action);
 
-      expect(newState.startingSession).toBe(false);
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
     });
 
-    it('should set running to false when receiving a result message', () => {
-      const state = { ...initialState, running: true };
+    it('should set sessionStatus to ready when receiving a result message', () => {
+      const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
       const resultMsg = createTestResultMessage();
       const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: resultMsg };
       const newState = chatReducer(state, action);
 
-      expect(newState.running).toBe(false);
+      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
       expect(newState.messages).toHaveLength(1);
     });
 
@@ -404,13 +396,12 @@ describe('chatReducer', () => {
 
       expect(newState.messages).toHaveLength(2);
       expect(newState.gitBranch).toBe('main');
-      expect(newState.running).toBe(false);
-      expect(newState.loadingSession).toBe(false);
+      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
       expect(newState.toolUseIdToIndex.size).toBe(0);
     });
 
     it('should handle empty history', () => {
-      const state = { ...initialState, loadingSession: true };
+      const state = { ...initialState, sessionStatus: { phase: 'loading' } as const };
       const action: ChatAction = {
         type: 'WS_SESSION_LOADED',
         payload: {
@@ -423,7 +414,7 @@ describe('chatReducer', () => {
 
       expect(newState.messages).toEqual([]);
       expect(newState.gitBranch).toBeNull();
-      expect(newState.running).toBe(true);
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
     });
 
     it('should preserve optimistic user messages when loading session', () => {
@@ -444,7 +435,7 @@ describe('chatReducer', () => {
       const state = {
         ...initialState,
         messages: [optimisticMessage],
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -480,7 +471,7 @@ describe('chatReducer', () => {
       const state = {
         ...initialState,
         messages: [claudeMessage],
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -522,7 +513,7 @@ describe('chatReducer', () => {
       const state = {
         ...initialState,
         messages: [optimisticMessage],
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -560,7 +551,7 @@ describe('chatReducer', () => {
       const state = {
         ...initialState,
         messages: [optimisticMessage],
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -603,7 +594,7 @@ describe('chatReducer', () => {
       const state = {
         ...initialState,
         messages: [firstOkMessage, secondOkMessage],
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -636,8 +627,8 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
-        pendingPermission: existingPermission,
-        loadingSession: true,
+        pendingRequest: { type: 'permission', request: existingPermission },
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -652,7 +643,7 @@ describe('chatReducer', () => {
       const newState = chatReducer(state, action);
 
       // Should preserve the existing permission, not overwrite with null
-      expect(newState.pendingPermission).toEqual(existingPermission);
+      expect(newState.pendingRequest).toEqual({ type: 'permission', request: existingPermission });
     });
 
     it('should preserve existing pendingQuestion when session_loaded has no pending request (race condition)', () => {
@@ -667,8 +658,8 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
-        pendingQuestion: existingQuestion,
-        loadingSession: true,
+        pendingRequest: { type: 'question', request: existingQuestion },
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -683,13 +674,13 @@ describe('chatReducer', () => {
       const newState = chatReducer(state, action);
 
       // Should preserve the existing question, not overwrite with null
-      expect(newState.pendingQuestion).toEqual(existingQuestion);
+      expect(newState.pendingRequest).toEqual({ type: 'question', request: existingQuestion });
     });
 
-    it('should restore pendingPermission from backend when present', () => {
+    it('should restore pendingRequest as permission from backend when present', () => {
       const state: ChatState = {
         ...initialState,
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -710,20 +701,22 @@ describe('chatReducer', () => {
       };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingPermission).toEqual({
-        requestId: 'req-3',
-        toolName: 'ExitPlanMode',
-        toolInput: { planFile: '/tmp/plan.md' },
-        timestamp: '2024-01-01T00:00:00.000Z',
-        planContent: '# Restored Plan',
+      expect(newState.pendingRequest).toEqual({
+        type: 'permission',
+        request: {
+          requestId: 'req-3',
+          toolName: 'ExitPlanMode',
+          toolInput: { planFile: '/tmp/plan.md' },
+          timestamp: '2024-01-01T00:00:00.000Z',
+          planContent: '# Restored Plan',
+        },
       });
-      expect(newState.pendingQuestion).toBeNull();
     });
 
-    it('should restore pendingQuestion from backend when present', () => {
+    it('should restore pendingRequest as question from backend when present', () => {
       const state: ChatState = {
         ...initialState,
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -748,21 +741,22 @@ describe('chatReducer', () => {
       };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingQuestion).toEqual({
-        requestId: 'req-4',
-        questions: [{ question: 'Pick one', header: 'Test', options: [], multiSelect: false }],
-        timestamp: '2024-01-01T00:00:00.000Z',
+      expect(newState.pendingRequest).toEqual({
+        type: 'question',
+        request: {
+          requestId: 'req-4',
+          questions: [{ question: 'Pick one', header: 'Test', options: [], multiSelect: false }],
+          timestamp: '2024-01-01T00:00:00.000Z',
+        },
       });
-      expect(newState.pendingPermission).toBeNull();
     });
 
     it('should clear startingSession flag when session is loaded', () => {
-      // Scenario: WS_STARTING sets startingSession=true, then WS_SESSION_LOADED arrives
-      // The startingSession flag should be cleared to allow queue draining
+      // Scenario: WS_STARTING sets sessionStatus to starting, then WS_SESSION_LOADED arrives
+      // The sessionStatus should transition to ready to allow queue draining
       const state: ChatState = {
         ...initialState,
-        startingSession: true,
-        loadingSession: true,
+        sessionStatus: { phase: 'loading' } as const,
       };
 
       const action: ChatAction = {
@@ -775,8 +769,8 @@ describe('chatReducer', () => {
       };
       const newState = chatReducer(state, action);
 
-      expect(newState.startingSession).toBe(false);
-      expect(newState.loadingSession).toBe(false);
+      expect(newState.sessionStatus.phase).not.toBe('starting');
+      expect(newState.sessionStatus.phase).not.toBe('loading');
     });
   });
 
@@ -795,7 +789,7 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: permissionRequest };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.pendingPermission).toEqual(permissionRequest);
+      expect(newState.pendingRequest).toEqual({ type: 'permission', request: permissionRequest });
     });
 
     it('should overwrite existing pending permission request with newer one (matches backend behavior)', () => {
@@ -815,16 +809,16 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
-        pendingPermission: existingRequest,
+        pendingRequest: { type: 'permission', request: existingRequest },
       };
       const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: newRequest };
       const newState = chatReducer(state, action);
 
       // Should overwrite with the new request to match backend state
-      expect(newState.pendingPermission).toEqual(newRequest);
+      expect(newState.pendingRequest).toEqual({ type: 'permission', request: newRequest });
     });
 
-    it('should clear pendingQuestion when permission request arrives', () => {
+    it('should replace pendingQuestion when permission request arrives', () => {
       const existingQuestion: UserQuestionRequest = {
         requestId: 'req-q1',
         questions: [{ question: 'Which?', header: 'Q', options: [], multiSelect: false }],
@@ -838,13 +832,13 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
-        pendingQuestion: existingQuestion,
+        pendingRequest: { type: 'question', request: existingQuestion },
       };
       const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: permissionRequest };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingPermission).toEqual(permissionRequest);
-      expect(newState.pendingQuestion).toBeNull();
+      // Discriminated union naturally replaces the question with permission
+      expect(newState.pendingRequest).toEqual({ type: 'permission', request: permissionRequest });
     });
   });
 
@@ -870,7 +864,7 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'WS_USER_QUESTION', payload: questionRequest };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.pendingQuestion).toEqual(questionRequest);
+      expect(newState.pendingRequest).toEqual({ type: 'question', request: questionRequest });
     });
 
     it('should overwrite existing pending question with newer one (matches backend behavior)', () => {
@@ -889,16 +883,16 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
-        pendingQuestion: existingQuestion,
+        pendingRequest: { type: 'question', request: existingQuestion },
       };
       const action: ChatAction = { type: 'WS_USER_QUESTION', payload: newQuestion };
       const newState = chatReducer(state, action);
 
       // Should overwrite with the new question to match backend state
-      expect(newState.pendingQuestion).toEqual(newQuestion);
+      expect(newState.pendingRequest).toEqual({ type: 'question', request: newQuestion });
     });
 
-    it('should clear pendingPermission when question request arrives', () => {
+    it('should replace pendingPermission when question request arrives', () => {
       const existingPermission: PermissionRequest = {
         requestId: 'req-p1',
         toolName: 'Bash',
@@ -912,13 +906,13 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
-        pendingPermission: existingPermission,
+        pendingRequest: { type: 'permission', request: existingPermission },
       };
       const action: ChatAction = { type: 'WS_USER_QUESTION', payload: questionRequest };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingQuestion).toEqual(questionRequest);
-      expect(newState.pendingPermission).toBeNull();
+      // Discriminated union naturally replaces the permission with question
+      expect(newState.pendingRequest).toEqual({ type: 'question', request: questionRequest });
     });
   });
 
@@ -933,13 +927,16 @@ describe('chatReducer', () => {
         messages: [
           { id: 'msg-1', source: 'user', text: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
         ],
-        running: true,
+        sessionStatus: { phase: 'running' } as const,
         gitBranch: 'old-branch',
-        pendingPermission: {
-          requestId: 'req-1',
-          toolName: 'Test',
-          toolInput: {},
-          timestamp: '2024-01-01T00:00:00.000Z',
+        pendingRequest: {
+          type: 'permission',
+          request: {
+            requestId: 'req-1',
+            toolName: 'Test',
+            toolInput: {},
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
         },
         queuedMessages: [
           {
@@ -958,11 +955,8 @@ describe('chatReducer', () => {
 
       expect(newState.messages).toEqual([]);
       expect(newState.gitBranch).toBeNull();
-      expect(newState.pendingPermission).toBeNull();
-      expect(newState.pendingQuestion).toBeNull();
-      expect(newState.startingSession).toBe(false);
-      expect(newState.loadingSession).toBe(true);
-      expect(newState.running).toBe(false);
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
+      expect(newState.sessionStatus).toEqual({ phase: 'loading' });
       expect(newState.queuedMessages).toEqual([]);
       expect(newState.toolUseIdToIndex.size).toBe(0);
       expect(newState.latestThinking).toBeNull();
@@ -978,7 +972,7 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'SESSION_LOADING_START' };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.loadingSession).toBe(true);
+      expect(newState.sessionStatus).toEqual({ phase: 'loading' });
     });
   });
 
@@ -1075,37 +1069,43 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('PERMISSION_RESPONSE action', () => {
-    it('should clear pending permission', () => {
+    it('should clear pending request', () => {
       const state: ChatState = {
         ...initialState,
-        pendingPermission: {
-          requestId: 'req-1',
-          toolName: 'Bash',
-          toolInput: {},
-          timestamp: '2024-01-01T00:00:00.000Z',
+        pendingRequest: {
+          type: 'permission',
+          request: {
+            requestId: 'req-1',
+            toolName: 'Bash',
+            toolInput: {},
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
         },
       };
       const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: true } };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingPermission).toBeNull();
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
     });
 
     it('should disable plan mode when ExitPlanMode is approved', () => {
       const state: ChatState = {
         ...initialState,
         chatSettings: { ...initialState.chatSettings, planModeEnabled: true },
-        pendingPermission: {
-          requestId: 'req-1',
-          toolName: 'ExitPlanMode',
-          toolInput: {},
-          timestamp: '2024-01-01T00:00:00.000Z',
+        pendingRequest: {
+          type: 'permission',
+          request: {
+            requestId: 'req-1',
+            toolName: 'ExitPlanMode',
+            toolInput: {},
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
         },
       };
       const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: true } };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingPermission).toBeNull();
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
       expect(newState.chatSettings.planModeEnabled).toBe(false);
     });
 
@@ -1113,17 +1113,20 @@ describe('chatReducer', () => {
       const state: ChatState = {
         ...initialState,
         chatSettings: { ...initialState.chatSettings, planModeEnabled: true },
-        pendingPermission: {
-          requestId: 'req-1',
-          toolName: 'ExitPlanMode',
-          toolInput: {},
-          timestamp: '2024-01-01T00:00:00.000Z',
+        pendingRequest: {
+          type: 'permission',
+          request: {
+            requestId: 'req-1',
+            toolName: 'ExitPlanMode',
+            toolInput: {},
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
         },
       };
       const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: false } };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingPermission).toBeNull();
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
       expect(newState.chatSettings.planModeEnabled).toBe(true);
     });
 
@@ -1131,17 +1134,20 @@ describe('chatReducer', () => {
       const state: ChatState = {
         ...initialState,
         chatSettings: { ...initialState.chatSettings, planModeEnabled: true },
-        pendingPermission: {
-          requestId: 'req-1',
-          toolName: 'Bash',
-          toolInput: {},
-          timestamp: '2024-01-01T00:00:00.000Z',
+        pendingRequest: {
+          type: 'permission',
+          request: {
+            requestId: 'req-1',
+            toolName: 'Bash',
+            toolInput: {},
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
         },
       };
       const action: ChatAction = { type: 'PERMISSION_RESPONSE', payload: { allow: true } };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingPermission).toBeNull();
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
       expect(newState.chatSettings.planModeEnabled).toBe(true);
     });
   });
@@ -1151,19 +1157,22 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('QUESTION_RESPONSE action', () => {
-    it('should clear pending question', () => {
+    it('should clear pending request', () => {
       const state: ChatState = {
         ...initialState,
-        pendingQuestion: {
-          requestId: 'req-1',
-          questions: [],
-          timestamp: '2024-01-01T00:00:00.000Z',
+        pendingRequest: {
+          type: 'question',
+          request: {
+            requestId: 'req-1',
+            questions: [],
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
         },
       };
       const action: ChatAction = { type: 'QUESTION_RESPONSE' };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingQuestion).toBeNull();
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
     });
   });
 
@@ -1176,7 +1185,7 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'STOP_REQUESTED' };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.stopping).toBe(true);
+      expect(newState.sessionStatus).toEqual({ phase: 'stopping' });
     });
   });
 
@@ -1500,16 +1509,17 @@ describe('chatReducer', () => {
         messages: [
           { id: 'msg-1', source: 'user', text: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
         ],
-        running: true,
-        stopping: true,
+        sessionStatus: { phase: 'running' } as const,
         gitBranch: 'feature/test',
-        pendingPermission: {
-          requestId: 'req-1',
-          toolName: 'Test',
-          toolInput: {},
-          timestamp: '2024-01-01T00:00:00.000Z',
+        pendingRequest: {
+          type: 'permission',
+          request: {
+            requestId: 'req-1',
+            toolName: 'Test',
+            toolInput: {},
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
         },
-        startingSession: true,
         chatSettings: { selectedModel: 'sonnet', thinkingEnabled: true, planModeEnabled: true },
         toolUseIdToIndex: new Map([['tool-1', 0]]),
       };
@@ -1519,14 +1529,13 @@ describe('chatReducer', () => {
 
       expect(newState.messages).toEqual([]);
       expect(newState.gitBranch).toBeNull();
-      expect(newState.pendingPermission).toBeNull();
-      expect(newState.pendingQuestion).toBeNull();
-      expect(newState.startingSession).toBe(false);
-      expect(newState.stopping).toBe(false);
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
+      // CLEAR_CHAT preserves running state but resets starting/stopping to ready
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
       expect(newState.chatSettings).toEqual(DEFAULT_CHAT_SETTINGS);
       expect(newState.toolUseIdToIndex.size).toBe(0);
-      // running state is not reset by CLEAR_CHAT
-      expect(newState.running).toBe(true);
+      // running state is preserved by CLEAR_CHAT (not reset to ready)
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
     });
   });
 
@@ -1541,7 +1550,7 @@ describe('chatReducer', () => {
         messages: [
           { id: 'msg-1', source: 'user', text: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
         ],
-        running: true,
+        sessionStatus: { phase: 'running' } as const,
         gitBranch: 'feature/test',
         chatSettings: { selectedModel: 'sonnet', thinkingEnabled: true, planModeEnabled: false },
         queuedMessages: [
@@ -1559,8 +1568,7 @@ describe('chatReducer', () => {
 
       expect(newState.messages).toEqual([]);
       expect(newState.gitBranch).toBeNull();
-      expect(newState.loadingSession).toBe(true);
-      expect(newState.running).toBe(false);
+      expect(newState.sessionStatus).toEqual({ phase: 'loading' });
       expect(newState.queuedMessages).toEqual([]);
       // Settings are preserved
       expect(newState.chatSettings).toEqual(state.chatSettings);

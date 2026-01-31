@@ -482,8 +482,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   );
 
   const stopChat = useCallback(() => {
-    const { running, stopping } = stateRef.current;
-    if (running && !stopping) {
+    const { sessionStatus } = stateRef.current;
+    // Only allow stop when running (not already stopping or idle)
+    if (sessionStatus.phase === 'running') {
       dispatch({ type: 'STOP_REQUESTED' });
       send({ type: 'stop' } as StopMessage);
     }
@@ -491,7 +492,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   const clearChat = useCallback(() => {
     // Stop any running Claude process
-    if (stateRef.current.running) {
+    if (stateRef.current.sessionStatus.phase === 'running') {
       dispatch({ type: 'STOP_REQUESTED' });
       send({ type: 'stop' } as StopMessage);
     }
@@ -506,7 +507,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const approvePermission = useCallback(
     (requestId: string, allow: boolean) => {
       // Validate requestId matches pending permission to prevent stale responses
-      if (stateRef.current.pendingPermission?.requestId !== requestId) {
+      const { pendingRequest } = stateRef.current;
+      if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
         return;
       }
       const msg: PermissionResponseMessage = { type: 'permission_response', requestId, allow };
@@ -519,7 +521,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const answerQuestion = useCallback(
     (requestId: string, answers: Record<string, string | string[]>) => {
       // Validate requestId matches pending question to prevent stale responses
-      if (stateRef.current.pendingQuestion?.requestId !== requestId) {
+      const { pendingRequest } = stateRef.current;
+      if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
       const msg: QuestionResponseMessage = { type: 'question_response', requestId, answers };

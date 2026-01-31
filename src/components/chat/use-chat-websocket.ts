@@ -6,12 +6,11 @@ import type {
   ChatMessage,
   ChatSettings,
   MessageAttachment,
-  PermissionRequest,
   QueuedMessage,
   SessionInfo,
-  UserQuestionRequest,
 } from '@/lib/claude-types';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+import type { PendingMessageContent, PendingRequest, SessionStatus } from './chat-reducer';
 import { useChatState } from './use-chat-state';
 
 // =============================================================================
@@ -33,18 +32,12 @@ export interface UseChatWebSocketReturn {
   // State
   messages: ChatMessage[];
   connected: boolean;
-  running: boolean;
-  stopping: boolean;
+  // Session lifecycle status (replaces running, stopping, loadingSession, startingSession)
+  sessionStatus: SessionStatus;
   gitBranch: string | null;
   availableSessions: SessionInfo[];
-  // Permission request state (Phase 9)
-  pendingPermission: PermissionRequest | null;
-  // User question state (Phase 11)
-  pendingQuestion: UserQuestionRequest | null;
-  // Session loading state
-  loadingSession: boolean;
-  // Session starting state (Claude CLI is spinning up)
-  startingSession: boolean;
+  // Pending interactive request (permission or user question)
+  pendingRequest: PendingRequest;
   // Chat settings
   chatSettings: ChatSettings;
   // Input draft (preserved across tab switches)
@@ -55,8 +48,8 @@ export interface UseChatWebSocketReturn {
   queuedMessages: QueuedMessage[];
   // Latest thinking content from extended thinking mode
   latestThinking: string | null;
-  // Pending message IDs (awaiting backend confirmation)
-  pendingMessageIds: Set<string>;
+  // Pending messages awaiting backend confirmation (Map from ID to content for recovery)
+  pendingMessages: Map<string, PendingMessageContent>;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -146,20 +139,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     // State from chat
     messages: chat.messages,
     connected: transport.connected,
-    running: chat.running,
-    stopping: chat.stopping,
+    sessionStatus: chat.sessionStatus,
     gitBranch: chat.gitBranch,
     availableSessions: chat.availableSessions,
-    pendingPermission: chat.pendingPermission,
-    pendingQuestion: chat.pendingQuestion,
-    loadingSession: chat.loadingSession,
-    startingSession: chat.startingSession,
+    pendingRequest: chat.pendingRequest,
     chatSettings: chat.chatSettings,
     inputDraft: chat.inputDraft,
     inputAttachments: chat.inputAttachments,
     queuedMessages: chat.queuedMessages,
     latestThinking: chat.latestThinking,
-    pendingMessageIds: chat.pendingMessageIds,
+    pendingMessages: chat.pendingMessages,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,

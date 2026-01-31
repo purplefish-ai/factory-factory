@@ -73,10 +73,10 @@ interface DrainQueueResult {
 }
 
 function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQueueResult {
-  const { running, startingSession, queuedMessages, chatSettings } = state;
+  const { sessionStatus, queuedMessages, chatSettings } = state;
 
-  // Check if we should drain
-  if (running || startingSession || queuedMessages.length === 0) {
+  // Check if we should drain - only drain when ready (not running, starting, loading, or stopping)
+  if (sessionStatus.phase !== 'ready' || queuedMessages.length === 0) {
     return {
       shouldDrain: false,
       actions: [],
@@ -132,15 +132,15 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
 
 /**
  * Simulates the idle detection logic from use-chat-state.ts useEffect.
+ * Now uses sessionStatus phase instead of separate booleans.
  */
 function shouldDrainOnStateChange(
-  prevRunning: boolean,
-  running: boolean,
-  startingSession: boolean,
+  prevPhase: string,
+  currentPhase: string,
   queueLength: number
 ): boolean {
-  const wasRunning = prevRunning;
-  const isNowIdle = !(running || startingSession);
+  const wasRunning = prevPhase === 'running' || prevPhase === 'starting';
+  const isNowIdle = currentPhase === 'ready';
   const becameIdle = wasRunning && isNowIdle;
   const hasQueuedMessages = queueLength > 0;
 
@@ -154,8 +154,7 @@ function shouldDrainOnStateChange(
 describe('queue draining conditions', () => {
   it('should NOT drain when running is true', () => {
     const state = createInitialChatState({
-      running: true,
-      startingSession: false,
+      sessionStatus: { phase: 'running' } as const,
       queuedMessages: [createQueuedMessage('Hello')],
     });
 
@@ -168,8 +167,7 @@ describe('queue draining conditions', () => {
 
   it('should NOT drain when startingSession is true', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: true,
+      sessionStatus: { phase: 'starting' } as const,
       queuedMessages: [createQueuedMessage('Hello')],
     });
 
@@ -182,8 +180,7 @@ describe('queue draining conditions', () => {
 
   it('should NOT drain when queue is empty', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [],
     });
 
@@ -194,8 +191,7 @@ describe('queue draining conditions', () => {
 
   it('should drain when idle and queue has messages', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello')],
     });
 
@@ -208,8 +204,7 @@ describe('queue draining conditions', () => {
 
   it('should drain when both running and startingSession are false', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('First'), createQueuedMessage('Second')],
     });
 
@@ -220,82 +215,52 @@ describe('queue draining conditions', () => {
 });
 
 describe('queue draining idle detection', () => {
-  it('should drain when becoming idle (was running, now not)', () => {
-    const prevRunning = true;
-    const running = false;
-    const startingSession = false;
+  it('should drain when becoming idle (was running, now ready)', () => {
+    const prevPhase = 'running';
+    const currentPhase = 'ready';
     const queueLength = 1;
 
-    const shouldDrain = shouldDrainOnStateChange(
-      prevRunning,
-      running,
-      startingSession,
-      queueLength
-    );
+    const shouldDrain = shouldDrainOnStateChange(prevPhase, currentPhase, queueLength);
 
     expect(shouldDrain).toBe(true);
   });
 
-  it('should drain when already idle and has messages', () => {
-    const prevRunning = false;
-    const running = false;
-    const startingSession = false;
+  it('should drain when already idle (ready) and has messages', () => {
+    const prevPhase = 'ready';
+    const currentPhase = 'ready';
     const queueLength = 1;
 
-    const shouldDrain = shouldDrainOnStateChange(
-      prevRunning,
-      running,
-      startingSession,
-      queueLength
-    );
+    const shouldDrain = shouldDrainOnStateChange(prevPhase, currentPhase, queueLength);
 
     expect(shouldDrain).toBe(true);
   });
 
-  it('should NOT drain when becoming busy (was not running, now running)', () => {
-    const prevRunning = false;
-    const running = true;
-    const startingSession = false;
+  it('should NOT drain when becoming busy (was ready, now running)', () => {
+    const prevPhase = 'ready';
+    const currentPhase = 'running';
     const queueLength = 1;
 
-    const shouldDrain = shouldDrainOnStateChange(
-      prevRunning,
-      running,
-      startingSession,
-      queueLength
-    );
+    const shouldDrain = shouldDrainOnStateChange(prevPhase, currentPhase, queueLength);
 
     expect(shouldDrain).toBe(false);
   });
 
   it('should NOT drain when starting session even with queued messages', () => {
-    const prevRunning = false;
-    const running = false;
-    const startingSession = true;
+    const prevPhase = 'ready';
+    const currentPhase = 'starting';
     const queueLength = 1;
 
-    const shouldDrain = shouldDrainOnStateChange(
-      prevRunning,
-      running,
-      startingSession,
-      queueLength
-    );
+    const shouldDrain = shouldDrainOnStateChange(prevPhase, currentPhase, queueLength);
 
     expect(shouldDrain).toBe(false);
   });
 
   it('should NOT drain when idle but queue is empty', () => {
-    const prevRunning = true;
-    const running = false;
-    const startingSession = false;
+    const prevPhase = 'running';
+    const currentPhase = 'ready';
     const queueLength = 0;
 
-    const shouldDrain = shouldDrainOnStateChange(
-      prevRunning,
-      running,
-      startingSession,
-      queueLength
-    );
+    const shouldDrain = shouldDrainOnStateChange(prevPhase, currentPhase, queueLength);
 
     expect(shouldDrain).toBe(false);
   });
@@ -308,8 +273,7 @@ describe('queue draining actions', () => {
     const msg3 = createQueuedMessage('Third');
 
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [msg1, msg2, msg3],
     });
 
@@ -328,8 +292,7 @@ describe('queue draining actions', () => {
     };
 
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello')],
       chatSettings: settings,
     });
@@ -345,8 +308,7 @@ describe('queue draining actions', () => {
 
   it('should send user_input message with original text when thinking disabled', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello Claude')],
       chatSettings: {
         ...DEFAULT_CHAT_SETTINGS,
@@ -362,8 +324,7 @@ describe('queue draining actions', () => {
 
   it('should append THINKING_SUFFIX when thinking enabled', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello Claude')],
       chatSettings: {
         ...DEFAULT_CHAT_SETTINGS,
@@ -379,8 +340,7 @@ describe('queue draining actions', () => {
 
   it('should dispatch WS_STARTING action', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello')],
     });
 
@@ -392,8 +352,7 @@ describe('queue draining actions', () => {
 
   it('should dispatch USER_MESSAGE_SENT for optimistic UI', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello world')],
     });
 
@@ -406,8 +365,7 @@ describe('queue draining actions', () => {
 
   it('should clear draft when draining', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello')],
     });
 
@@ -674,8 +632,7 @@ describe('queue state transitions', () => {
 describe('queue edge cases', () => {
   it('should handle draining with null sessionId', () => {
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage('Hello')],
     });
 
@@ -688,8 +645,7 @@ describe('queue edge cases', () => {
   it('should handle very long message text', () => {
     const longText = 'a'.repeat(10_000);
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage(longText)],
     });
 
@@ -703,8 +659,7 @@ describe('queue edge cases', () => {
   it('should handle message with special characters', () => {
     const specialText = 'Hello "world" with \'quotes\' and\nnewlines\tand\ttabs 🎉';
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage(specialText)],
     });
 
@@ -717,8 +672,7 @@ describe('queue edge cases', () => {
   it('should handle unicode characters in message', () => {
     const unicodeText = 'Hello 世界 مرحبا שלום';
     const state = createInitialChatState({
-      running: false,
-      startingSession: false,
+      sessionStatus: { phase: 'ready' } as const,
       queuedMessages: [createQueuedMessage(unicodeText)],
     });
 
@@ -736,10 +690,10 @@ describe('queue edge cases', () => {
 
     // Start running
     state = chatReducer(state, { type: 'WS_STATUS', payload: { running: true } });
-    expect(shouldDrainOnStateChange(false, state.running, state.startingSession, 1)).toBe(false);
+    expect(shouldDrainOnStateChange('idle', state.sessionStatus.phase, 1)).toBe(false);
 
-    // Stop running
+    // Stop running (becomes ready)
     state = chatReducer(state, { type: 'WS_STATUS', payload: { running: false } });
-    expect(shouldDrainOnStateChange(true, state.running, state.startingSession, 1)).toBe(true);
+    expect(shouldDrainOnStateChange('running', state.sessionStatus.phase, 1)).toBe(true);
   });
 });
