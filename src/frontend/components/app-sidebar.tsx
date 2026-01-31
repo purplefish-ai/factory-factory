@@ -403,7 +403,7 @@ export function AppSidebar() {
                                 formatRelativeTime(workspace.lastActivityAt)}
                             </span>
 
-                            {/* Archive button (hover) */}
+                            {/* Archive button (hover, or always visible in yellow for closed/merged PRs) */}
                             {!isArchivingItem && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -415,7 +415,13 @@ export function AppSidebar() {
                                       setWorkspaceToArchive(workspace.id);
                                       setArchiveDialogOpen(true);
                                     }}
-                                    className="shrink-0 ml-1 p-0.5 rounded opacity-0 group-hover/menu-item:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    className={cn(
+                                      'shrink-0 ml-1 p-0.5 rounded transition-opacity',
+                                      workspace.prState === 'MERGED' ||
+                                        workspace.prState === 'CLOSED'
+                                        ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
+                                        : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    )}
                                   >
                                     <Archive className="h-3 w-3" />
                                   </button>
