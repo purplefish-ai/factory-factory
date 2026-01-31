@@ -459,7 +459,9 @@ class ChatMessageHandlerService {
 
   private async handleStopMessage(ws: WebSocket, sessionId: string): Promise<void> {
     await sessionService.stopClaudeSession(sessionId);
-    chatEventForwarderService.cleanupSession(sessionId);
+    // Only clear pending requests here - clientEventSetup cleanup happens in the exit handler
+    // to avoid race conditions where a new client is created before the old one exits
+    chatEventForwarderService.clearPendingRequest(sessionId);
     ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
   }
 

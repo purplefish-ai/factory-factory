@@ -10,6 +10,7 @@
  * - ChatMessageHandlerService: Message dispatch and all message type handlers
  */
 
+import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
@@ -129,7 +130,7 @@ export function handleChatUpgrade(
   wss: WebSocketServer,
   wsAliveMap: WeakMap<WebSocket, boolean>
 ): void {
-  const connectionId = url.searchParams.get('connectionId') || `conn-${Date.now()}`;
+  const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
   const dbSessionId = url.searchParams.get('sessionId') || null;
   const rawWorkingDir = url.searchParams.get('workingDir');
 

@@ -65,6 +65,14 @@ class ChatEventForwarderService {
   }
 
   /**
+   * Clear pending interactive request unconditionally.
+   * Used when stopping a session - the pending request is no longer valid.
+   */
+  clearPendingRequest(dbSessionId: string): void {
+    this.pendingInteractiveRequests.delete(dbSessionId);
+  }
+
+  /**
    * Clear pending interactive request only if the requestId matches.
    * Prevents clearing a newer request when responding to a stale one.
    */
