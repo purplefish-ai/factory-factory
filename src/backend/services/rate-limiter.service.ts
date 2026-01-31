@@ -5,23 +5,10 @@
  * Implements token bucket algorithm for API rate limiting.
  */
 
-import { configService } from './config.service';
+import { configService, type RateLimiterConfig } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('rate-limiter');
-
-/**
- * Rate limiter configuration
- */
-export interface RateLimiterConfig {
-  // Claude API rate limits
-  claudeRequestsPerMinute: number;
-  claudeRequestsPerHour: number;
-
-  // Queue settings
-  maxQueueSize: number;
-  queueTimeoutMs: number;
-}
 
 /**
  * Request priority levels
