@@ -80,6 +80,8 @@ export interface UseChatStateReturn extends ChatState {
   // Additional state/actions
   inputDraft: string;
   setInputDraft: (draft: string) => void;
+  inputAttachments: MessageAttachment[];
+  setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
@@ -335,6 +337,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Local state for input draft (not in reducer since it's UI-specific)
   const [inputDraft, setInputDraftState] = useState('');
+  // Local state for input attachments (for recovery on rejection)
+  const [inputAttachments, setInputAttachments] = useState<MessageAttachment[]>([]);
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -395,14 +399,18 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Rejected Message Recovery Effect
   // =============================================================================
 
-  // When a message is rejected, restore the text to the input draft for retry
+  // When a message is rejected, restore the text and attachments to the input for retry
   useEffect(() => {
     if (state.lastRejectedMessage) {
-      const { text, error } = state.lastRejectedMessage;
+      const { text, attachments, error } = state.lastRejectedMessage;
       // Restore the message text to the input so user can retry
       setInputDraftState(text);
+      // Restore attachments if present
+      if (attachments && attachments.length > 0) {
+        setInputAttachments(attachments);
+      }
       // Log the error for debugging
-      debug.log('Message rejected, restored to draft:', { text, error });
+      debug.log('Message rejected, restored to draft:', { text, attachments, error });
       // Clear the rejected message state after processing
       dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
     }
@@ -454,8 +462,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Store text and attachments for recovery if message is rejected
       dispatch({ type: 'MESSAGE_SENDING', payload: { id, text: trimmedText, attachments } });
 
-      // Clear draft when sending a message
+      // Clear draft and attachments when sending a message
       setInputDraftState('');
+      setInputAttachments([]);
       clearDraft(dbSessionIdRef.current);
 
       // Send to backend for queueing/dispatch
@@ -586,6 +595,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Additional state/actions
       inputDraft,
       setInputDraft,
+      inputAttachments,
+      setInputAttachments,
       removeQueuedMessage,
       // Message handler for transport (stable - no deps)
       handleMessage,
@@ -597,6 +608,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       state,
       connected,
       inputDraft,
+      inputAttachments,
       // These are stable but included for exhaustive-deps correctness
       sendMessage,
       stopChat,

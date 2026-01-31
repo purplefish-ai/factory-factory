@@ -99,6 +99,8 @@ interface ChatContentProps {
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
+  inputAttachments: ReturnType<typeof useChatWebSocket>['inputAttachments'];
+  setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
@@ -132,6 +134,8 @@ const ChatContent = memo(function ChatContent({
   updateSettings,
   inputDraft,
   setInputDraft,
+  inputAttachments,
+  setInputAttachments,
   queuedMessages,
   removeQueuedMessage,
   latestThinking,
@@ -204,6 +208,8 @@ const ChatContent = memo(function ChatContent({
           onSettingsChange={updateSettings}
           value={inputDraft}
           onChange={setInputDraft}
+          attachments={inputAttachments}
+          onAttachmentsChange={setInputAttachments}
           onHeightChange={handleHeightChange}
           pendingMessageCount={pendingMessageIds.size}
         />
@@ -269,6 +275,7 @@ function WorkspaceChatContent() {
     startingSession,
     chatSettings,
     inputDraft,
+    inputAttachments,
     queuedMessages,
     latestThinking,
     pendingMessageIds,
@@ -278,6 +285,7 @@ function WorkspaceChatContent() {
     answerQuestion,
     updateSettings,
     setInputDraft,
+    setInputAttachments,
     removeQueuedMessage,
     inputRef,
     messagesEndRef,
@@ -529,6 +537,8 @@ function WorkspaceChatContent() {
                 updateSettings={updateSettings}
                 inputDraft={inputDraft}
                 setInputDraft={setInputDraft}
+                inputAttachments={inputAttachments}
+                setInputAttachments={setInputAttachments}
                 queuedMessages={queuedMessages}
                 removeQueuedMessage={removeQueuedMessage}
                 latestThinking={latestThinking}

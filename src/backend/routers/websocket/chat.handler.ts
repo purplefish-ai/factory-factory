@@ -236,16 +236,17 @@ const THINKING_SUFFIX = ' ultrathink';
  * Handles text with thinking suffix and attachments.
  */
 function buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-  const textWithThinking = msg.settings.thinkingEnabled
-    ? `${msg.text}${THINKING_SUFFIX}`
-    : msg.text;
+  // Only append thinking suffix if there's actual text content
+  // This prevents sending " ultrathink" for image-only uploads
+  const textWithThinking =
+    msg.settings.thinkingEnabled && msg.text ? `${msg.text}${THINKING_SUFFIX}` : msg.text;
 
   // If there are attachments, send as content array
   if (msg.attachments && msg.attachments.length > 0) {
     const content: ClaudeContentItem[] = [];
 
-    // Add text if present
-    if (textWithThinking) {
+    // Add text if original message had text (not just thinking suffix)
+    if (msg.text) {
       content.push({ type: 'text', text: textWithThinking });
     }
 

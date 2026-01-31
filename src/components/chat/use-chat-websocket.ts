@@ -5,6 +5,7 @@ import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import type {
   ChatMessage,
   ChatSettings,
+  MessageAttachment,
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
@@ -48,6 +49,8 @@ export interface UseChatWebSocketReturn {
   chatSettings: ChatSettings;
   // Input draft (preserved across tab switches)
   inputDraft: string;
+  // Input attachments (for recovery on rejection)
+  inputAttachments: MessageAttachment[];
   // Message queue state
   queuedMessages: QueuedMessage[];
   // Latest thinking content from extended thinking mode
@@ -62,6 +65,7 @@ export interface UseChatWebSocketReturn {
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   setInputDraft: (draft: string) => void;
+  setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -152,6 +156,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     startingSession: chat.startingSession,
     chatSettings: chat.chatSettings,
     inputDraft: chat.inputDraft,
+    inputAttachments: chat.inputAttachments,
     queuedMessages: chat.queuedMessages,
     latestThinking: chat.latestThinking,
     pendingMessageIds: chat.pendingMessageIds,
@@ -163,6 +168,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     answerQuestion: chat.answerQuestion,
     updateSettings: chat.updateSettings,
     setInputDraft: chat.setInputDraft,
+    setInputAttachments: chat.setInputAttachments,
     removeQueuedMessage: chat.removeQueuedMessage,
     // Refs from chat
     inputRef: chat.inputRef,

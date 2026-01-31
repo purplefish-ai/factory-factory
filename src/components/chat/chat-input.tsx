@@ -50,6 +50,10 @@ interface ChatInputProps {
   onChange?: (value: string) => void;
   // Number of messages pending backend confirmation
   pendingMessageCount?: number;
+  // Controlled attachments (for recovery on rejection)
+  attachments?: MessageAttachment[];
+  // Called when attachments change
+  onAttachmentsChange?: (attachments: MessageAttachment[]) => void;
 }
 
 // =============================================================================
@@ -200,9 +204,27 @@ export const ChatInput = memo(function ChatInput({
   value,
   onChange,
   pendingMessageCount = 0,
+  attachments: controlledAttachments,
+  onAttachmentsChange,
 }: ChatInputProps) {
-  // State for file attachments
-  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
+  // State for file attachments (uncontrolled mode only)
+  const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
+
+  // Use controlled or uncontrolled attachments based on props
+  const isControlled = controlledAttachments !== undefined;
+  const attachments = isControlled ? controlledAttachments : internalAttachments;
+  const setAttachments = useCallback(
+    (updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])) => {
+      if (isControlled && onAttachmentsChange) {
+        const newValue = typeof updater === 'function' ? updater(controlledAttachments) : updater;
+        onAttachmentsChange(newValue);
+      } else {
+        setInternalAttachments(updater);
+      }
+    },
+    [isControlled, controlledAttachments, onAttachmentsChange]
+  );
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle input changes to preserve draft across tab switches
@@ -214,38 +236,44 @@ export const ChatInput = memo(function ChatInput({
   );
 
   // Handle file selection
-  const handleFileSelect = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    const newAttachments: MessageAttachment[] = [];
-
-    for (const file of Array.from(files)) {
-      try {
-        const attachment = await fileToAttachment(file);
-        newAttachments.push(attachment);
-      } catch {
-        // Silently ignore errors for now
-        // TODO: Show error toast/notification for failed uploads
+  const handleFileSelect = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) {
+        return;
       }
-    }
 
-    if (newAttachments.length > 0) {
-      setAttachments((prev) => [...prev, ...newAttachments]);
-    }
+      const newAttachments: MessageAttachment[] = [];
 
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }, []);
+      for (const file of Array.from(files)) {
+        try {
+          const attachment = await fileToAttachment(file);
+          newAttachments.push(attachment);
+        } catch {
+          // Silently ignore errors for now
+          // TODO: Show error toast/notification for failed uploads
+        }
+      }
+
+      if (newAttachments.length > 0) {
+        setAttachments((prev) => [...prev, ...newAttachments]);
+      }
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    },
+    [setAttachments]
+  );
 
   // Handle removing an attachment
-  const handleRemoveAttachment = useCallback((id: string) => {
-    setAttachments((prev) => prev.filter((att) => att.id !== id));
-  }, []);
+  const handleRemoveAttachment = useCallback(
+    (id: string) => {
+      setAttachments((prev) => prev.filter((att) => att.id !== id));
+    },
+    [setAttachments]
+  );
 
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
@@ -262,7 +290,7 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     },
-    [onSend, disabled, onChange, attachments]
+    [onSend, disabled, onChange, attachments, setAttachments]
   );
 
   // Handle send button click
@@ -276,7 +304,7 @@ export const ChatInput = memo(function ChatInput({
         setAttachments([]);
       }
     }
-  }, [onSend, inputRef, disabled, onChange, attachments]);
+  }, [onSend, inputRef, disabled, onChange, attachments, setAttachments]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
   // Debounce to avoid excessive scroll calculations during rapid typing
