@@ -9,7 +9,8 @@
  *   NEW → PROVISIONING (initialization starts)
  *   PROVISIONING → READY (success)
  *   PROVISIONING → FAILED (error)
- *   FAILED → PROVISIONING (retry, with count check)
+ *   FAILED → PROVISIONING (retry startup script, with count check)
+ *   FAILED → NEW (retry from scratch when worktree creation failed)
  *   READY → ARCHIVED
  *   FAILED → ARCHIVED
  */
@@ -27,7 +28,7 @@ const VALID_TRANSITIONS: Record<WorkspaceStatus, WorkspaceStatus[]> = {
   NEW: ['PROVISIONING'],
   PROVISIONING: ['READY', 'FAILED'],
   READY: ['ARCHIVED'],
-  FAILED: ['PROVISIONING', 'ARCHIVED'],
+  FAILED: ['PROVISIONING', 'NEW', 'ARCHIVED'],
   ARCHIVED: [],
 };
 
@@ -235,6 +236,64 @@ class WorkspaceStateMachineService {
    */
   archive(workspaceId: string): Promise<Workspace> {
     return this.transition(workspaceId, 'ARCHIVED');
+  }
+
+  /**
+   * Reset a failed workspace back to NEW state for retry.
+   * Used when worktree creation itself failed (not just startup script).
+   * Increments retry count to enforce max retries.
+   */
+  async resetToNew(workspaceId: string, maxRetries = 3): Promise<Workspace | null> {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    if (workspace.status !== 'FAILED') {
+      throw new WorkspaceStateMachineError(
+        workspaceId,
+        workspace.status,
+        'NEW',
+        'Can only reset to NEW from FAILED status'
+      );
+    }
+
+    // Use atomic conditional update to check retry count
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id: workspaceId,
+        status: 'FAILED',
+        initRetryCount: { lt: maxRetries },
+      },
+      data: {
+        status: 'NEW',
+        initRetryCount: { increment: 1 },
+        initStartedAt: null,
+        initCompletedAt: null,
+        initErrorMessage: null,
+      },
+    });
+
+    if (result.count === 0) {
+      logger.warn('Max retries exceeded for workspace reset', {
+        workspaceId,
+        maxRetries,
+        currentRetryCount: workspace.initRetryCount,
+      });
+      return null; // Max retries exceeded
+    }
+
+    const updated = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+
+    logger.debug('Workspace reset to NEW for retry', {
+      workspaceId,
+      retryCount: updated?.initRetryCount,
+    });
+
+    return updated;
   }
 }
 

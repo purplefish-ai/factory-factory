@@ -56,6 +56,10 @@ describe('WorkspaceStateMachineService', () => {
       expect(workspaceStateMachine.isValidTransition('FAILED', 'ARCHIVED')).toBe(true);
     });
 
+    it('should allow FAILED → NEW (reset for worktree retry)', () => {
+      expect(workspaceStateMachine.isValidTransition('FAILED', 'NEW')).toBe(true);
+    });
+
     it('should allow READY → ARCHIVED', () => {
       expect(workspaceStateMachine.isValidTransition('READY', 'ARCHIVED')).toBe(true);
     });
@@ -405,6 +409,84 @@ describe('WorkspaceStateMachineService', () => {
 
       await expect(workspaceStateMachine.archive('ws-1')).rejects.toThrow(
         WorkspaceStateMachineError
+      );
+    });
+  });
+
+  describe('resetToNew', () => {
+    it('should transition from FAILED to NEW', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 1 };
+      const updatedWorkspace = { ...workspace, status: 'NEW', initRetryCount: 2 };
+
+      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      const result = await workspaceStateMachine.resetToNew('ws-1');
+
+      expect(result?.status).toBe('NEW');
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'ws-1',
+          status: 'FAILED',
+          initRetryCount: { lt: 3 },
+        },
+        data: expect.objectContaining({
+          status: 'NEW',
+          initRetryCount: { increment: 1 },
+          initStartedAt: null,
+          initCompletedAt: null,
+          initErrorMessage: null,
+        }),
+      });
+    });
+
+    it('should return null when max retries exceeded', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 3 };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 }); // No update happened
+
+      const result = await workspaceStateMachine.resetToNew('ws-1');
+
+      expect(result).toBeNull();
+    });
+
+    it('should respect custom maxRetries option', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 4 };
+      const updatedWorkspace = { ...workspace, status: 'NEW', initRetryCount: 5 };
+
+      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      const result = await workspaceStateMachine.resetToNew('ws-1', 5);
+
+      expect(result?.status).toBe('NEW');
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          initRetryCount: { lt: 5 },
+        }),
+        data: expect.any(Object),
+      });
+    });
+
+    it('should throw error when status is not FAILED', async () => {
+      const workspace = { id: 'ws-1', status: 'READY' };
+      mockFindUnique.mockResolvedValue(workspace);
+
+      await expect(workspaceStateMachine.resetToNew('ws-1')).rejects.toThrow(
+        WorkspaceStateMachineError
+      );
+
+      await expect(workspaceStateMachine.resetToNew('ws-1')).rejects.toThrow(
+        /Can only reset to NEW from FAILED status/
+      );
+    });
+
+    it('should throw error for non-existent workspace', async () => {
+      mockFindUnique.mockResolvedValue(null);
+
+      await expect(workspaceStateMachine.resetToNew('non-existent')).rejects.toThrow(
+        'Workspace not found: non-existent'
       );
     });
   });

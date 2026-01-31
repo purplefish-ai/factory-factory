@@ -211,15 +211,24 @@ export const workspaceInitRouter = router({
       });
     }
 
+    const maxRetries = 3;
+
+    // If worktree wasn't created (early failure), re-run full initialization
     if (!workspace.worktreePath) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Workspace has no worktree path',
-      });
+      // Reset to NEW state so initializeWorkspaceWorktree can transition properly
+      const resetResult = await workspaceStateMachine.resetToNew(workspace.id, maxRetries);
+      if (!resetResult) {
+        throw new TRPCError({
+          code: 'TOO_MANY_REQUESTS',
+          message: `Maximum retry attempts (${maxRetries}) exceeded`,
+        });
+      }
+      // Run full initialization (creates worktree + runs startup script)
+      initializeWorkspaceWorktree(workspace.id, workspace.branchName ?? undefined);
+      return workspaceAccessor.findById(input.id);
     }
 
-    // Atomically transition to PROVISIONING and increment retry count (max 3 retries)
-    const maxRetries = 3;
+    // Worktree exists - just retry the startup script
     const updatedWorkspace = await workspaceStateMachine.startProvisioning(input.id, {
       maxRetries,
     });
