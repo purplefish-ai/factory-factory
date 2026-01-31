@@ -9,6 +9,7 @@
 import { EventEmitter } from 'node:events';
 import {
   AutoApproveHandler,
+  createAllowResponse,
   DeferredHandler,
   INTERACTIVE_TOOLS,
   ModeBasedHandler,
@@ -578,7 +579,7 @@ export class ClaudeClient extends EventEmitter {
     }
 
     // Unknown hook type - allow by default
-    return { behavior: 'allow' };
+    return createAllowResponse();
   }
 }
 

@@ -420,10 +420,14 @@ export type SdkToCliRequest = InitializeRequest | SetPermissionModeRequest | Int
 
 /**
  * Response data to allow tool execution.
+ *
+ * Note: updatedInput is required by Claude CLI's Zod schema validation.
+ * Pass the original tool input to keep it unchanged, or pass modified input
+ * to override what the tool receives.
  */
 export interface AllowResponseData {
   behavior: 'allow';
-  updatedInput?: Record<string, unknown>;
+  updatedInput: Record<string, unknown>;
   updatedPermissions?: PermissionUpdate[];
 }
 

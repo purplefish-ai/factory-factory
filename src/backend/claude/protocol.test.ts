@@ -207,14 +207,14 @@ describe('ClaudeProtocol', () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendControlResponse('req-123', { behavior: 'allow' });
+      protocol.sendControlResponse('req-123', { behavior: 'allow', updatedInput: {} });
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
       expect(parsed.type).toBe('control_response');
       expect(parsed.response.request_id).toBe('req-123');
       expect(parsed.response.subtype).toBe('success');
-      expect(parsed.response.response).toEqual({ behavior: 'allow' });
+      expect(parsed.response.response).toEqual({ behavior: 'allow', updatedInput: {} });
     });
 
     it('should send deny response with message', () => {

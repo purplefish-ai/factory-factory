@@ -76,11 +76,14 @@ export interface PermissionHandler {
 
 /**
  * Create an allow response for can_use_tool requests.
+ *
+ * Note: updatedInput is required by the Claude CLI Zod schema, not optional.
+ * When omitted, defaults to an empty object.
  */
 export function createAllowResponse(updatedInput?: Record<string, unknown>): AllowResponseData {
   return {
     behavior: 'allow',
-    ...(updatedInput && { updatedInput }),
+    updatedInput: updatedInput ?? {},
   };
 }
 
@@ -428,7 +431,8 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
    * Approve a pending permission request.
    *
    * @param requestId - The ID of the pending request
-   * @param updatedInput - Optional updated input to pass to the tool
+   * @param updatedInput - Optional updated input to pass to the tool. If not provided,
+   *                       the original tool input from the request is used.
    */
   approve(requestId: string, updatedInput?: Record<string, unknown>): void {
     const pending = this.pendingRequests.get(requestId);
@@ -444,7 +448,10 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     this.pendingRequests.delete(requestId);
 
     if (pending.type === 'permission') {
-      pending.resolve(createAllowResponse(updatedInput));
+      // Use provided updatedInput, or fall back to original tool input from the request
+      const canUseToolRequest = pending.request as CanUseToolRequest;
+      const inputToUse = updatedInput ?? (canUseToolRequest.input as Record<string, unknown>) ?? {};
+      pending.resolve(createAllowResponse(inputToUse));
     } else {
       // For hooks, determine the appropriate response based on the hook type
       const hookRequest = pending.request as HookCallbackRequest;
