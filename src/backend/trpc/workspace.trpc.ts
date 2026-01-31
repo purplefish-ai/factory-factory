@@ -127,17 +127,30 @@ export const workspaceRouter = router({
 
       // 5. Build response
       return {
-        workspaces: workspaces.map((w) => ({
-          id: w.id,
-          name: w.name,
-          branchName: w.branchName,
-          prUrl: w.prUrl,
-          prNumber: w.prNumber,
-          prState: w.prState,
-          prCiStatus: w.prCiStatus,
-          isWorking: workingStatusByWorkspace.get(w.id) ?? false,
-          gitStats: gitStatsResults[w.id] ?? null,
-        })),
+        workspaces: workspaces.map((w) => {
+          // Compute last activity from most recent session (Claude or Terminal)
+          const sessionDates = [
+            ...(w.claudeSessions?.map((s) => s.updatedAt) ?? []),
+            ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
+          ].filter(Boolean) as Date[];
+          const lastActivityAt =
+            sessionDates.length > 0
+              ? sessionDates.reduce((latest, d) => (d > latest ? d : latest))
+              : w.updatedAt;
+
+          return {
+            id: w.id,
+            name: w.name,
+            branchName: w.branchName,
+            prUrl: w.prUrl,
+            prNumber: w.prNumber,
+            prState: w.prState,
+            prCiStatus: w.prCiStatus,
+            isWorking: workingStatusByWorkspace.get(w.id) ?? false,
+            gitStats: gitStatsResults[w.id] ?? null,
+            lastActivityAt: lastActivityAt.toISOString(),
+          };
+        }),
         reviewCount,
       };
     }),

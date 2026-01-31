@@ -21,6 +21,7 @@ export interface ServerWorkspace {
     deletions: number;
     hasUncommitted: boolean;
   } | null;
+  lastActivityAt?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {
