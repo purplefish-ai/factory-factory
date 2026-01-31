@@ -413,7 +413,24 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Handle session_loaded specially for settings override
       if (wsMessage.type === 'session_loaded') {
         handleSessionLoaded(wsMessage, dbSessionIdRef, toolInputAccumulatorRef, dispatch);
+
+        // If session loaded with running=true, the first queued message was already sent
+        // and is being processed. Dequeue it to prevent duplicate sends.
+        if (wsMessage.running && stateRef.current.queuedMessages.length > 0) {
+          dispatch({ type: 'DEQUEUE_MESSAGE' });
+          const updatedQueue = stateRef.current.queuedMessages.slice(1);
+          persistQueue(dbSessionIdRef.current, updatedQueue);
+        }
         return;
+      }
+
+      // Handle 'started' - now we can safely dequeue the message
+      // The message stayed in queue until we had confirmation Claude received it
+      if (wsMessage.type === 'started') {
+        dispatch({ type: 'DEQUEUE_MESSAGE' });
+        // Persist the updated queue (now without the sent message)
+        const updatedQueue = stateRef.current.queuedMessages.slice(1);
+        persistQueue(dbSessionIdRef.current, updatedQueue);
       }
 
       // Convert WebSocket message to action and dispatch
@@ -438,11 +455,11 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       return;
     }
 
-    const [nextMsg, ...remaining] = queuedMessages;
+    const [nextMsg] = queuedMessages;
 
-    // Update queue in state
-    dispatch({ type: 'SET_QUEUE', payload: remaining });
-    persistQueue(dbSessionIdRef.current, remaining);
+    // Note: We intentionally do NOT remove from queue or persist here.
+    // The message stays in the queue until we receive 'started' confirmation.
+    // This ensures the message survives navigation if the send doesn't complete.
 
     // Clear draft when sending a message
     setInputDraftState('');
