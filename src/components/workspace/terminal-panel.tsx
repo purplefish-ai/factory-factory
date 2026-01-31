@@ -259,11 +259,7 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
     return (
       <div className={cn('h-full flex flex-col', className)}>
         {/* Header */}
-        <div className="flex items-center justify-between gap-1.5 px-3 py-2 bg-muted/50 border-b">
-          <div className="flex items-center gap-1.5">
-            <Terminal className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Terminal</span>
-          </div>
+        <div className="flex items-center justify-end gap-1.5 px-3 py-2 bg-muted/50 border-b">
           <TerminalTabBar
             tabs={[]}
             activeTabId={null}
@@ -292,11 +288,7 @@ export function TerminalPanel({ workspaceId, className }: TerminalPanelProps) {
   return (
     <div className={cn('h-full flex flex-col', className)}>
       {/* Header with tabs */}
-      <div className="flex items-center justify-between gap-1.5 px-3 py-2 bg-muted/50 border-b">
-        <div className="flex items-center gap-1.5">
-          <Terminal className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">Terminal</span>
-        </div>
+      <div className="flex items-center justify-end gap-1.5 px-3 py-2 bg-muted/50 border-b">
         <TerminalTabBar
           tabs={tabs}
           activeTabId={activeTabId}
