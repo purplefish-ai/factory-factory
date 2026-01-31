@@ -6,6 +6,7 @@ import { FactoryConfigService } from '../../services/factory-config.service';
 import { githubCLIService } from '../../services/github-cli.service';
 import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
+import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import { publicProcedure, router } from '../trpc';
 
 const logger = createLogger('workspace-init-trpc');
@@ -33,8 +34,8 @@ export async function initializeWorkspaceWorktree(
       throw new Error('Workspace project not found');
     }
 
-    // Mark as initializing
-    await workspaceAccessor.updateInitStatus(workspaceId, 'INITIALIZING');
+    // Transition to PROVISIONING state
+    await workspaceStateMachine.startProvisioning(workspaceId);
 
     const project = workspaceWithProject.project;
     const gitClient = GitClientFactory.forProject({
@@ -148,13 +149,13 @@ export async function initializeWorkspaceWorktree(
     }
 
     // No startup script - mark as ready
-    await workspaceAccessor.updateInitStatus(workspaceId, 'READY');
+    await workspaceStateMachine.markReady(workspaceId);
   } catch (error) {
     logger.error('Failed to initialize workspace worktree', error as Error, {
       workspaceId,
     });
     // Mark workspace as failed so user can see the error and retry
-    await workspaceAccessor.updateInitStatus(workspaceId, 'FAILED', (error as Error).message);
+    await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
   }
 }
 
@@ -174,7 +175,8 @@ export const workspaceInitRouter = router({
     }
 
     return {
-      initStatus: workspace.initStatus,
+      // Return status field - frontend maps NEW/PROVISIONING/FAILED to show overlay
+      status: workspace.status,
       initErrorMessage: workspace.initErrorMessage,
       initStartedAt: workspace.initStartedAt,
       initCompletedAt: workspace.initCompletedAt,
@@ -194,7 +196,7 @@ export const workspaceInitRouter = router({
       });
     }
 
-    if (workspace.initStatus !== 'FAILED') {
+    if (workspace.status !== 'FAILED') {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'Can only retry failed initializations',
@@ -208,9 +210,11 @@ export const workspaceInitRouter = router({
       });
     }
 
-    // Atomically increment retry count (max 3 retries)
+    // Atomically transition to PROVISIONING and increment retry count (max 3 retries)
     const maxRetries = 3;
-    const updatedWorkspace = await workspaceAccessor.incrementRetryCount(input.id, maxRetries);
+    const updatedWorkspace = await workspaceStateMachine.startProvisioning(input.id, {
+      maxRetries,
+    });
     if (!updatedWorkspace) {
       throw new TRPCError({
         code: 'TOO_MANY_REQUESTS',

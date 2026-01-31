@@ -5,7 +5,6 @@ import type {
   Prisma,
   SessionStatus,
   Workspace,
-  WorkspaceInitStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
 import { prisma } from '../db';
@@ -37,12 +36,6 @@ interface UpdateWorkspaceInput {
   // Cached kanban column
   cachedKanbanColumn?: KanbanColumn;
   stateComputedAt?: Date | null;
-  // Initialization tracking
-  initStatus?: WorkspaceInitStatus;
-  initErrorMessage?: string | null;
-  initStartedAt?: Date | null;
-  initCompletedAt?: Date | null;
-  initRetryCount?: number;
   // Run script tracking
   runScriptCommand?: string | null;
   runScriptCleanupCommand?: string | null;
@@ -165,15 +158,14 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces where worktreePath is null.
-   * Used for reconciliation to ensure all active workspaces have worktrees.
+   * Find NEW workspaces that haven't started provisioning yet.
+   * Used for reconciliation to ensure all workspaces are initialized.
    * Includes project for worktree creation.
    */
   findNeedingWorktree(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
-        worktreePath: null,
+        status: 'NEW',
       },
       include: {
         project: true,
@@ -196,7 +188,7 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces with PR URLs that need sync.
+   * Find READY workspaces with PR URLs that need sync.
    * Used for Inngest PR status sync job.
    */
   findNeedingPRSync(staleThresholdMinutes = 5): Promise<WorkspaceWithProject[]> {
@@ -204,7 +196,7 @@ class WorkspaceAccessor {
 
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
+        status: 'READY',
         prUrl: { not: null },
         OR: [{ prUpdatedAt: null }, { prUpdatedAt: { lt: staleThreshold } }],
       },
@@ -216,13 +208,13 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces without PR URLs that have a branch name.
+   * Find READY workspaces without PR URLs that have a branch name.
    * Used for detecting newly created PRs.
    */
   findNeedingPRDiscovery(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
+        status: 'READY',
         prUrl: null,
         branchName: { not: null },
       },
@@ -275,65 +267,6 @@ class WorkspaceAccessor {
         project: true,
       },
     });
-  }
-
-  /**
-   * Update workspace initialization status atomically.
-   * Includes timestamps for tracking.
-   */
-  updateInitStatus(
-    id: string,
-    status: WorkspaceInitStatus,
-    errorMessage?: string | null
-  ): Promise<Workspace> {
-    const now = new Date();
-    const data: Prisma.WorkspaceUpdateInput = {
-      initStatus: status,
-    };
-
-    if (status === 'INITIALIZING') {
-      data.initStartedAt = now;
-      data.initErrorMessage = null;
-    } else if (status === 'READY' || status === 'FAILED') {
-      data.initCompletedAt = now;
-    }
-
-    if (errorMessage !== undefined) {
-      data.initErrorMessage = errorMessage;
-    }
-
-    return prisma.workspace.update({
-      where: { id },
-      data,
-    });
-  }
-
-  /**
-   * Increment retry count and reset init status for a retry attempt.
-   * Returns null if max retries exceeded.
-   *
-   * @param maxRetries - Maximum number of retries allowed (default 3)
-   */
-  async incrementRetryCount(id: string, maxRetries = 3): Promise<Workspace | null> {
-    // Use raw update to atomically check and increment
-    const result = await prisma.workspace.updateMany({
-      where: {
-        id,
-        initRetryCount: { lt: maxRetries },
-      },
-      data: {
-        initRetryCount: { increment: 1 },
-        initStatus: 'INITIALIZING',
-        initStartedAt: new Date(),
-        initErrorMessage: null,
-      },
-    });
-
-    if (result.count === 0) {
-      return null; // Max retries exceeded
-    }
-
-    return prisma.workspace.findUnique({ where: { id } });
   }
 }
 

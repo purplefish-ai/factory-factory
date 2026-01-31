@@ -10,6 +10,7 @@ import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
 import { terminalService } from '../services/terminal.service';
+import { workspaceStateMachine } from '../services/workspace-state-machine.service';
 import { publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -57,11 +58,11 @@ export const workspaceRouter = router({
   getProjectSummaryState: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
-      // 1. Fetch project (for defaultBranch) and ACTIVE workspaces with sessions in parallel
+      // 1. Fetch project (for defaultBranch) and READY workspaces with sessions in parallel
       const [project, workspaces] = await Promise.all([
         projectAccessor.findById(input.projectId),
         workspaceAccessor.findByProjectIdWithSessions(input.projectId, {
-          status: WorkspaceStatus.ACTIVE,
+          status: WorkspaceStatus.READY,
         }),
       ]);
 
@@ -249,7 +250,7 @@ export const workspaceRouter = router({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return workspaceAccessor.archive(input.id);
+    return workspaceStateMachine.archive(input.id);
   }),
 
   // Delete a workspace

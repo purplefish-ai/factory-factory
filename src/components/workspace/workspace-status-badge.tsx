@@ -5,10 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-export type InitStatus = 'PENDING' | 'INITIALIZING' | 'READY' | 'FAILED';
+export type WorkspaceStatus = 'NEW' | 'PROVISIONING' | 'READY' | 'FAILED' | 'ARCHIVED';
 
-interface InitStatusBadgeProps {
-  status: InitStatus;
+interface WorkspaceStatusBadgeProps {
+  status: WorkspaceStatus;
   errorMessage?: string | null;
   className?: string;
 }
@@ -20,14 +20,14 @@ interface StatusConfig {
   iconClassName?: string;
 }
 
-// Only include statuses that are actually rendered (READY returns null)
-const statusConfig: Record<Exclude<InitStatus, 'READY'>, StatusConfig> = {
-  PENDING: {
+// Only include statuses that are actually rendered (READY/ARCHIVED return null)
+const statusConfig: Record<Exclude<WorkspaceStatus, 'READY' | 'ARCHIVED'>, StatusConfig> = {
+  NEW: {
     icon: Clock,
     label: 'Pending',
     variant: 'outline',
   },
-  INITIALIZING: {
+  PROVISIONING: {
     icon: Loader2,
     label: 'Setting up',
     variant: 'secondary',
@@ -40,12 +40,13 @@ const statusConfig: Record<Exclude<InitStatus, 'READY'>, StatusConfig> = {
   },
 };
 
-export function InitStatusBadge({
+export function WorkspaceStatusBadge({
   status,
   errorMessage,
   className,
-}: InitStatusBadgeProps): React.ReactNode {
-  if (status === 'READY') {
+}: WorkspaceStatusBadgeProps): React.ReactNode {
+  // Don't show badge for READY or ARCHIVED workspaces
+  if (status === 'READY' || status === 'ARCHIVED') {
     return null;
   }
 
@@ -75,3 +76,7 @@ export function InitStatusBadge({
 
   return badge;
 }
+
+// Re-export with old name for backward compatibility during migration
+export { WorkspaceStatusBadge as InitStatusBadge };
+export type { WorkspaceStatus as InitStatus };
