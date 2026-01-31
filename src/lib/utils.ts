@@ -12,7 +12,12 @@ export function formatRelativeTime(date: string | Date | null | undefined): stri
   if (!date) {
     return '';
   }
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  const ms = new Date(date).getTime();
+  if (!Number.isFinite(ms)) {
+    return '';
+  }
+  const seconds = Math.floor((Date.now() - ms) / 1000);
+  // Future dates or very recent: show "now"
   if (seconds < 60) {
     return 'now';
   }

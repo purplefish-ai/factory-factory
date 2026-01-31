@@ -129,14 +129,15 @@ export const workspaceRouter = router({
       return {
         workspaces: workspaces.map((w) => {
           // Compute last activity from most recent session (Claude or Terminal)
+          // Returns null if no sessions exist (avoid misleading timestamps from metadata changes)
           const sessionDates = [
             ...(w.claudeSessions?.map((s) => s.updatedAt) ?? []),
             ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
           ].filter(Boolean) as Date[];
           const lastActivityAt =
             sessionDates.length > 0
-              ? sessionDates.reduce((latest, d) => (d > latest ? d : latest))
-              : w.updatedAt;
+              ? sessionDates.reduce((latest, d) => (d > latest ? d : latest)).toISOString()
+              : null;
 
           return {
             id: w.id,
@@ -148,7 +149,7 @@ export const workspaceRouter = router({
             prCiStatus: w.prCiStatus,
             isWorking: workingStatusByWorkspace.get(w.id) ?? false,
             gitStats: gitStatsResults[w.id] ?? null,
-            lastActivityAt: lastActivityAt.toISOString(),
+            lastActivityAt,
           };
         }),
         reviewCount,

@@ -41,7 +41,7 @@ function getProjectSlugFromPath(pathname: string): string | null {
 
 /**
  * Get status dot color class for a workspace.
- * Priority: working > merged > CI failure > CI pending > uncommitted > default
+ * Priority: working > merged > CI failure > CI pending > CI success > uncommitted > default
  */
 function getStatusDotClass(workspace: WorkspaceListItem): string {
   if (workspace.isWorking) {
@@ -55,6 +55,9 @@ function getStatusDotClass(workspace: WorkspaceListItem): string {
   }
   if (workspace.prCiStatus === 'PENDING') {
     return 'bg-yellow-500 animate-pulse';
+  }
+  if (workspace.prCiStatus === 'SUCCESS') {
+    return 'bg-green-500';
   }
   if (workspace.gitStats?.hasUncommitted) {
     return 'bg-orange-500';
