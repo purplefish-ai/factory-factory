@@ -1,4 +1,5 @@
 import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import pLimit from 'p-limit';
 import { z } from 'zod';
 import { getWorkspaceGitStats } from '../lib/git-helpers';
@@ -10,6 +11,7 @@ import { computeKanbanColumn } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
 import { terminalService } from '../services/terminal.service';
+import { archive as archiveWorkspace } from '../services/workspace-state-machine';
 import { publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -250,7 +252,35 @@ export const workspaceRouter = router({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return workspaceAccessor.archive(input.id);
+
+    const result = await archiveWorkspace(input.id);
+
+    if (!result.success) {
+      switch (result.reason) {
+        case 'not_found':
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: `Workspace not found: ${input.id}`,
+          });
+        case 'wrong_state':
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: `Cannot archive workspace: already archived`,
+          });
+        case 'invalid_transition':
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Invalid state transition to ARCHIVED from ${result.currentStatus}`,
+          });
+        default:
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `Failed to archive workspace: ${result.reason}`,
+          });
+      }
+    }
+
+    return result.workspace;
   }),
 
   // Delete a workspace

@@ -6,6 +6,11 @@ import {
   workspaceAccessor,
 } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
+import {
+  completeProvisioning,
+  failProvisioning,
+  startProvisioning,
+} from './workspace-state-machine';
 
 const logger = createLogger('reconciliation');
 
@@ -99,10 +104,15 @@ class ReconciliationService {
       throw new Error(`Workspace ${workspaceId} not found or has no project`);
     }
 
-    // Mark as provisioning (guards against ARCHIVED - returns current state if archived)
-    const updated = await workspaceAccessor.updateProvisioningStatus(workspaceId, 'PROVISIONING');
-    if (updated.status === 'ARCHIVED') {
-      logger.info('Workspace was archived, skipping worktree creation', { workspaceId });
+    // Attempt to transition to PROVISIONING state
+    const transitionResult = await startProvisioning(workspaceId);
+    if (!transitionResult.success) {
+      // Workspace is already being handled (wrong state) or doesn't exist
+      logger.info('Skipping workspace - could not start provisioning', {
+        workspaceId,
+        reason: transitionResult.reason,
+        currentStatus: transitionResult.currentStatus,
+      });
       return;
     }
 
@@ -121,20 +131,21 @@ class ReconciliationService {
       });
       const worktreePath = gitClient.getWorktreePath(worktreeName);
 
-      await workspaceAccessor.update(workspaceId, {
+      // Mark as ready with worktree data
+      const completeResult = await completeProvisioning(workspaceId, {
         worktreePath,
         branchName: worktreeInfo.branchName,
       });
-
-      // Mark as ready
-      await workspaceAccessor.updateProvisioningStatus(workspaceId, 'READY');
+      if (!completeResult.success) {
+        logger.warn('Failed to complete provisioning', {
+          workspaceId,
+          reason: completeResult.reason,
+          currentStatus: completeResult.currentStatus,
+        });
+      }
     } catch (error) {
       // Mark as failed so user can retry
-      await workspaceAccessor.updateProvisioningStatus(
-        workspaceId,
-        'FAILED',
-        (error as Error).message
-      );
+      await failProvisioning(workspaceId, (error as Error).message);
       throw error;
     }
   }

@@ -6,6 +6,12 @@ import { FactoryConfigService } from '../../services/factory-config.service';
 import { githubCLIService } from '../../services/github-cli.service';
 import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
+import {
+  completeProvisioning,
+  failProvisioning,
+  retryProvisioning,
+  startProvisioning,
+} from '../../services/workspace-state-machine';
 import { publicProcedure, router } from '../trpc';
 
 const logger = createLogger('workspace-init-trpc');
@@ -34,7 +40,15 @@ export async function initializeWorkspaceWorktree(
     }
 
     // Mark as provisioning
-    await workspaceAccessor.updateProvisioningStatus(workspaceId, 'PROVISIONING');
+    const provisioningResult = await startProvisioning(workspaceId);
+    if (!provisioningResult.success) {
+      logger.warn('Could not start provisioning', {
+        workspaceId,
+        reason: provisioningResult.reason,
+        currentStatus: provisioningResult.currentStatus,
+      });
+      return;
+    }
 
     const project = workspaceWithProject.project;
     const gitClient = GitClientFactory.forProject({
@@ -153,17 +167,27 @@ export async function initializeWorkspaceWorktree(
     }
 
     // No startup script - mark as ready
-    await workspaceAccessor.updateProvisioningStatus(workspaceId, 'READY');
+    const readyResult = await completeProvisioning(workspaceId);
+    if (!readyResult.success) {
+      logger.warn('Could not complete provisioning', {
+        workspaceId,
+        reason: readyResult.reason,
+        currentStatus: readyResult.currentStatus,
+      });
+    }
   } catch (error) {
     logger.error('Failed to initialize workspace worktree', error as Error, {
       workspaceId,
     });
     // Mark workspace as failed so user can see the error and retry
-    await workspaceAccessor.updateProvisioningStatus(
-      workspaceId,
-      'FAILED',
-      (error as Error).message
-    );
+    const failResult = await failProvisioning(workspaceId, (error as Error).message);
+    if (!failResult.success) {
+      logger.warn('Could not mark provisioning as failed', {
+        workspaceId,
+        reason: failResult.reason,
+        currentStatus: failResult.currentStatus,
+      });
+    }
   }
 }
 
@@ -217,19 +241,25 @@ export const workspaceInitRouter = router({
       });
     }
 
-    // Atomically increment retry count (max 3 retries)
+    // Atomically increment retry count and transition to PROVISIONING (max 3 retries)
     const maxRetries = 3;
-    const updatedWorkspace = await workspaceAccessor.incrementRetryCount(input.id, maxRetries);
-    if (!updatedWorkspace) {
+    const retryResult = await retryProvisioning(input.id, maxRetries);
+    if (!retryResult.success) {
+      if (retryResult.reason === 'max_retries_exceeded') {
+        throw new TRPCError({
+          code: 'TOO_MANY_REQUESTS',
+          message: `Maximum retry attempts (${maxRetries}) exceeded`,
+        });
+      }
       throw new TRPCError({
-        code: 'TOO_MANY_REQUESTS',
-        message: `Maximum retry attempts (${maxRetries}) exceeded`,
+        code: 'BAD_REQUEST',
+        message: `Cannot retry: ${retryResult.reason}`,
       });
     }
 
     // Run script with the updated workspace (retry count already incremented)
     await startupScriptService.runStartupScript(
-      { ...workspace, ...updatedWorkspace },
+      { ...workspace, ...retryResult.workspace },
       workspace.project
     );
 

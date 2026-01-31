@@ -32,3 +32,13 @@ export { sessionService } from './session.service';
 export { SessionFileLogger, sessionFileLogger } from './session-file-logger.service';
 // Terminal service
 export { terminalService } from './terminal.service';
+// Workspace state machine
+export {
+  archive,
+  completeProvisioning,
+  failProvisioning,
+  isValidTransition,
+  retryProvisioning,
+  startProvisioning,
+  type TransitionResult,
+} from './workspace-state-machine';

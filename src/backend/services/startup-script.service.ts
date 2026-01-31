@@ -9,10 +9,23 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Project, Workspace } from '@prisma-gen/client';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { createLogger } from './logger.service';
+import { completeProvisioning, failProvisioning } from './workspace-state-machine';
 
 const logger = createLogger('startup-script');
+
+/** Log a warning if a state transition failed */
+function logTransitionFailure(
+  context: string,
+  workspaceId: string,
+  result: { success: false; reason: string; currentStatus?: string }
+): void {
+  logger.warn(`Failed to ${context}`, {
+    workspaceId,
+    reason: result.reason,
+    currentStatus: result.currentStatus,
+  });
+}
 
 export interface StartupScriptResult {
   success: boolean;
@@ -38,16 +51,7 @@ class StartupScriptService {
 
     // Check if project has a startup script configured
     if (!(project.startupScriptCommand || project.startupScriptPath)) {
-      // No script configured - mark as ready immediately
-      await workspaceAccessor.updateProvisioningStatus(workspace.id, 'READY');
-      return {
-        success: true,
-        exitCode: 0,
-        stdout: '',
-        stderr: '',
-        timedOut: false,
-        durationMs: 0,
-      };
+      return this.handleNoScript(workspace.id);
     }
 
     // Note: Caller is responsible for setting status to PROVISIONING before calling this
@@ -63,48 +67,78 @@ class StartupScriptService {
         project.startupScriptPath,
         timeoutMs
       );
-
       const durationMs = Date.now() - startTime;
-
-      if (result.success) {
-        await workspaceAccessor.updateProvisioningStatus(workspace.id, 'READY');
-        logger.info('Startup script completed successfully', {
-          workspaceId: workspace.id,
-          durationMs,
-        });
-      } else {
-        const errorMessage = result.timedOut
-          ? `Script timed out after ${project.startupScriptTimeout}s`
-          : `Script exited with code ${result.exitCode}: ${result.stderr.slice(0, 500)}`;
-
-        await workspaceAccessor.updateProvisioningStatus(workspace.id, 'FAILED', errorMessage);
-        logger.error('Startup script failed', {
-          workspaceId: workspace.id,
-          exitCode: result.exitCode,
-          timedOut: result.timedOut,
-          stderr: result.stderr.slice(0, 500),
-        });
-      }
-
+      await this.handleScriptResult(
+        workspace.id,
+        result,
+        project.startupScriptTimeout ?? 300,
+        durationMs
+      );
       return { ...result, durationMs };
     } catch (error) {
-      const durationMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-      await workspaceAccessor.updateProvisioningStatus(workspace.id, 'FAILED', errorMessage);
-      logger.error('Startup script execution error', error as Error, {
-        workspaceId: workspace.id,
-      });
-
-      return {
-        success: false,
-        exitCode: null,
-        stdout: '',
-        stderr: errorMessage,
-        timedOut: false,
-        durationMs,
-      };
+      return this.handleScriptError(workspace.id, error, Date.now() - startTime);
     }
+  }
+
+  /** Handle case when no startup script is configured */
+  private async handleNoScript(workspaceId: string): Promise<StartupScriptResult> {
+    const transitionResult = await completeProvisioning(workspaceId);
+    if (!transitionResult.success) {
+      logTransitionFailure('complete provisioning (no script)', workspaceId, transitionResult);
+    }
+    return { success: true, exitCode: 0, stdout: '', stderr: '', timedOut: false, durationMs: 0 };
+  }
+
+  /** Handle script execution result and update workspace status */
+  private async handleScriptResult(
+    workspaceId: string,
+    result: Omit<StartupScriptResult, 'durationMs'>,
+    timeoutSeconds: number,
+    durationMs: number
+  ): Promise<void> {
+    if (result.success) {
+      const transitionResult = await completeProvisioning(workspaceId);
+      if (!transitionResult.success) {
+        logTransitionFailure('complete provisioning', workspaceId, transitionResult);
+      }
+      logger.info('Startup script completed successfully', { workspaceId, durationMs });
+    } else {
+      const errorMessage = result.timedOut
+        ? `Script timed out after ${timeoutSeconds}s`
+        : `Script exited with code ${result.exitCode}: ${result.stderr.slice(0, 500)}`;
+      const transitionResult = await failProvisioning(workspaceId, errorMessage);
+      if (!transitionResult.success) {
+        logTransitionFailure('mark provisioning as failed', workspaceId, transitionResult);
+      }
+      logger.error('Startup script failed', {
+        workspaceId,
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+        stderr: result.stderr.slice(0, 500),
+      });
+    }
+  }
+
+  /** Handle script execution error */
+  private async handleScriptError(
+    workspaceId: string,
+    error: unknown,
+    durationMs: number
+  ): Promise<StartupScriptResult> {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const transitionResult = await failProvisioning(workspaceId, errorMessage);
+    if (!transitionResult.success) {
+      logTransitionFailure('mark provisioning as failed', workspaceId, transitionResult);
+    }
+    logger.error('Startup script execution error', error as Error, { workspaceId });
+    return {
+      success: false,
+      exitCode: null,
+      stdout: '',
+      stderr: errorMessage,
+      timedOut: false,
+      durationMs,
+    };
   }
 
   /**

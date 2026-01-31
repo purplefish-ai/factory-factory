@@ -19,7 +19,6 @@ interface CreateWorkspaceInput {
 interface UpdateWorkspaceInput {
   name?: string;
   description?: string;
-  status?: WorkspaceStatus;
   worktreePath?: string | null;
   branchName?: string | null;
   prUrl?: string | null;
@@ -155,29 +154,19 @@ class WorkspaceAccessor {
     });
   }
 
-  archive(id: string): Promise<Workspace> {
-    return prisma.workspace.update({
-      where: { id },
-      data: { status: 'ARCHIVED' },
-    });
-  }
-
   /**
    * Find workspaces that need worktree provisioning.
    * - NEW workspaces always need provisioning
    * - PROVISIONING workspaces with null worktreePath (stuck after crash)
-   * - FAILED workspaces only if they don't have a worktree yet
-   *   (failure during startup script means worktree exists)
+   *
+   * Note: FAILED workspaces are NOT included because they failed during
+   * startup script execution, which happens after worktree creation.
    * Includes project for worktree creation.
    */
   findNeedingWorktree(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        OR: [
-          { status: 'NEW' },
-          { status: 'PROVISIONING', worktreePath: null },
-          { status: 'FAILED', worktreePath: null },
-        ],
+        OR: [{ status: 'NEW' }, { status: 'PROVISIONING', worktreePath: null }],
       },
       include: {
         project: true,
@@ -305,91 +294,6 @@ class WorkspaceAccessor {
         project: true,
       },
     });
-  }
-
-  /**
-   * Update workspace provisioning status atomically.
-   * Includes timestamps for tracking.
-   *
-   * IMPORTANT: Only updates if workspace is not ARCHIVED, to prevent
-   * race conditions where provisioning completion overwrites user's archive action.
-   */
-  async updateProvisioningStatus(
-    id: string,
-    status: 'PROVISIONING' | 'READY' | 'FAILED',
-    errorMessage?: string | null
-  ): Promise<Workspace> {
-    const now = new Date();
-    const data: Prisma.WorkspaceUpdateInput = {
-      status: status,
-    };
-
-    if (status === 'PROVISIONING') {
-      data.provisioningStartedAt = now;
-      data.errorMessage = null;
-    } else if (status === 'READY' || status === 'FAILED') {
-      data.provisioningCompletedAt = now;
-    }
-
-    if (errorMessage !== undefined) {
-      data.errorMessage = errorMessage;
-    }
-
-    // Use updateMany with status check to prevent race condition with archive
-    const result = await prisma.workspace.updateMany({
-      where: {
-        id,
-        status: { not: 'ARCHIVED' },
-      },
-      data,
-    });
-
-    // If no rows updated, workspace was likely archived - return current state
-    if (result.count === 0) {
-      const workspace = await prisma.workspace.findUnique({ where: { id } });
-      if (!workspace) {
-        throw new Error(`Workspace not found: ${id}`);
-      }
-      return workspace;
-    }
-
-    // Return the updated workspace
-    const workspace = await prisma.workspace.findUnique({ where: { id } });
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${id}`);
-    }
-    return workspace;
-  }
-
-  /**
-   * Increment retry count and reset status for a retry attempt.
-   * Returns null if max retries exceeded or workspace is not FAILED.
-   *
-   * @param maxRetries - Maximum number of retries allowed (default 3)
-   */
-  async incrementRetryCount(id: string, maxRetries = 3): Promise<Workspace | null> {
-    // Use raw update to atomically check and increment
-    // Only allow retry if status is FAILED to prevent race conditions
-    // (e.g., concurrent retries where first succeeds and second would demote READY back to PROVISIONING)
-    const result = await prisma.workspace.updateMany({
-      where: {
-        id,
-        retryCount: { lt: maxRetries },
-        status: 'FAILED',
-      },
-      data: {
-        retryCount: { increment: 1 },
-        status: 'PROVISIONING',
-        provisioningStartedAt: new Date(),
-        errorMessage: null,
-      },
-    });
-
-    if (result.count === 0) {
-      return null; // Max retries exceeded or workspace not in FAILED state
-    }
-
-    return prisma.workspace.findUnique({ where: { id } });
   }
 }
 
