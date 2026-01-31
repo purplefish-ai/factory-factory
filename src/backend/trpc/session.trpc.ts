@@ -7,6 +7,7 @@ import { claudeSessionAccessor } from '../resource_accessors/claude-session.acce
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from '../services/config.service';
+import { messageQueueService } from '../services/message-queue.service';
 import { sessionService } from '../services/session.service';
 import { publicProcedure, router } from './trpc';
 
@@ -142,6 +143,8 @@ export const sessionRouter = router({
     .mutation(async ({ input }) => {
       // Stop process first to prevent orphaned Claude processes
       await sessionService.stopClaudeSession(input.id);
+      // Clear any queued messages to prevent memory leak
+      messageQueueService.clear(input.id);
       return claudeSessionAccessor.delete(input.id);
     }),
 

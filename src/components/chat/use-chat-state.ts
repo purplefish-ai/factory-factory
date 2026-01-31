@@ -5,11 +5,13 @@
  *
  * This hook manages:
  * - Chat state via useReducer (messages, running state, permissions, etc.)
- * - Session persistence (settings, drafts, message queue)
+ * - Session persistence (settings, drafts)
  * - WebSocket message handling (converts to reducer actions)
  * - Action callbacks for UI (sendMessage, stopChat, etc.)
- * - Message queue draining when agent becomes idle
  * - Session switching effects
+ *
+ * Message queue is managed on the backend - frontend sends queue_message and
+ * receives queue events (message_queued, message_dispatched, message_removed).
  *
  * Usage:
  * ```ts
@@ -25,22 +27,19 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type {
-  ChatMessage,
   ChatSettings,
   ClaudeMessage,
-  ImageContent,
   MessageAttachment,
   QueuedMessage,
   WebSocketMessage,
 } from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
+import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import {
   clearDraft,
   loadAllSessionData,
   loadSettings,
   persistDraft,
-  persistQueue,
   persistSettings,
 } from './chat-persistence';
 import {
@@ -71,7 +70,10 @@ export interface UseChatStateOptions {
   connected: boolean;
 }
 
-export interface UseChatStateReturn extends ChatState {
+export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
+  // Override queuedMessages to expose as array for UI consumption
+  // (Internal state uses Map for O(1) lookups and automatic de-duplication)
+  queuedMessages: QueuedMessage[];
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -82,6 +84,8 @@ export interface UseChatStateReturn extends ChatState {
   // Additional state/actions
   inputDraft: string;
   setInputDraft: (draft: string) => void;
+  inputAttachments: MessageAttachment[];
+  setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
@@ -96,16 +100,25 @@ export interface UseChatStateReturn extends ChatState {
 // WebSocket Message Types (outgoing) - used by action callbacks
 // =============================================================================
 
-interface StartMessage {
-  type: 'start';
-  workingDir?: string;
-  selectedModel?: string | null;
-  thinkingEnabled?: boolean;
-  planModeEnabled?: boolean;
-}
-
 interface StopMessage {
   type: 'stop';
+}
+
+interface QueueMessageRequest {
+  type: 'queue_message';
+  id: string;
+  text: string;
+  attachments?: MessageAttachment[];
+  settings: {
+    selectedModel: string | null;
+    thinkingEnabled: boolean;
+    planModeEnabled: boolean;
+  };
+}
+
+interface RemoveQueuedMessageRequest {
+  type: 'remove_queued_message';
+  messageId: string;
 }
 
 interface PermissionResponseMessage {
@@ -126,16 +139,6 @@ interface QuestionResponseMessage {
 
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function createUserMessage(text: string, attachments?: MessageAttachment[]): ChatMessage {
-  return {
-    id: generateMessageId(),
-    source: 'user',
-    text,
-    timestamp: new Date().toISOString(),
-    attachments,
-  };
 }
 
 // Type for stream event structure
@@ -338,6 +341,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Local state for input draft (not in reducer since it's UI-specific)
   const [inputDraft, setInputDraftState] = useState('');
+  // Local state for input attachments (for recovery on rejection)
+  const [inputAttachments, setInputAttachments] = useState<MessageAttachment[]>([]);
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -346,8 +351,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   // Track previous dbSessionId to detect session switches
   const prevDbSessionIdRef = useRef<string | null>(null);
-  // Track previous running state to detect idle transitions
-  const prevRunningRef = useRef(false);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
   // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
@@ -377,12 +380,12 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       toolInputAccumulatorRef.current.clear();
     }
 
-    // Load persisted data for the new session
+    // Load persisted data for the new session (queue comes from backend via session_loaded)
     if (newDbSessionId) {
       const persistedData = loadAllSessionData(newDbSessionId);
       setInputDraftState(persistedData.draft);
       dispatch({ type: 'SET_SETTINGS', payload: persistedData.settings });
-      dispatch({ type: 'SET_QUEUE', payload: persistedData.queue });
+      // Queue is loaded from backend via session_loaded message, not from frontend persistence
 
       // Set loading state for initial load (when prevDbSessionId was null)
       // This prevents "No messages yet" flash while WebSocket connects and loads session
@@ -393,9 +396,29 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     } else {
       setInputDraftState('');
       dispatch({ type: 'SET_SETTINGS', payload: DEFAULT_CHAT_SETTINGS });
-      dispatch({ type: 'SET_QUEUE', payload: [] });
     }
   }, [dbSessionId]);
+
+  // =============================================================================
+  // Rejected Message Recovery Effect
+  // =============================================================================
+
+  // When a message is rejected, restore the text and attachments to the input for retry
+  useEffect(() => {
+    if (state.lastRejectedMessage) {
+      const { text, attachments, error } = state.lastRejectedMessage;
+      // Restore the message text to the input so user can retry
+      setInputDraftState(text);
+      // Restore attachments if present
+      if (attachments && attachments.length > 0) {
+        setInputAttachments(attachments);
+      }
+      // Log the error for debugging
+      debug.log('Message rejected, restored to draft:', { text, attachments, error });
+      // Clear the rejected message state after processing
+      dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
+    }
+  }, [state.lastRejectedMessage]);
 
   // =============================================================================
   // WebSocket Message Handler
@@ -426,118 +449,46 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   );
 
   // =============================================================================
-  // Queue Draining
-  // =============================================================================
-
-  // Drain next message from queue and send to Claude
-  // Uses stateRef to access current state without recreating callback on state changes
-  const drainQueue = useCallback(() => {
-    const { running, startingSession, queuedMessages, chatSettings } = stateRef.current;
-
-    if (running || startingSession || queuedMessages.length === 0) {
-      return;
-    }
-
-    const [nextMsg, ...remaining] = queuedMessages;
-
-    // Update queue in state
-    dispatch({ type: 'SET_QUEUE', payload: remaining });
-    persistQueue(dbSessionIdRef.current, remaining);
-
-    // Clear draft when sending a message
-    setInputDraftState('');
-    clearDraft(dbSessionIdRef.current);
-
-    // Add to messages (optimistic UI)
-    dispatch({
-      type: 'USER_MESSAGE_SENT',
-      payload: createUserMessage(nextMsg.text, nextMsg.attachments),
-    });
-
-    // Start Claude if not running
-    dispatch({ type: 'WS_STARTING' });
-    const startMsg: StartMessage = {
-      type: 'start',
-      selectedModel: chatSettings.selectedModel,
-      thinkingEnabled: chatSettings.thinkingEnabled,
-      planModeEnabled: chatSettings.planModeEnabled,
-    };
-    send(startMsg);
-
-    // Send the user input
-    const messageToSend = chatSettings.thinkingEnabled
-      ? `${nextMsg.text}${THINKING_SUFFIX}`
-      : nextMsg.text;
-
-    // If there are attachments, send as content array; otherwise send as text
-    if (nextMsg.attachments && nextMsg.attachments.length > 0) {
-      const content: Array<{ type: 'text'; text: string } | ImageContent> = [];
-
-      // Add text if present
-      if (messageToSend) {
-        content.push({ type: 'text', text: messageToSend });
-      }
-
-      // Add images
-      for (const attachment of nextMsg.attachments) {
-        content.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: attachment.type,
-            data: attachment.data,
-          },
-        });
-      }
-
-      send({ type: 'user_input', content });
-    } else {
-      send({ type: 'user_input', text: messageToSend });
-    }
-  }, [send]);
-
-  // Drain queue when agent becomes idle
-  // Destructure state values for cleaner logic
-  const { running, startingSession, queuedMessages } = state;
-
-  useEffect(() => {
-    const wasRunning = prevRunningRef.current;
-    const isNowIdle = !(running || startingSession);
-    const becameIdle = wasRunning && isNowIdle;
-    const hasQueuedMessages = queuedMessages.length > 0;
-
-    // Update ref for next render
-    prevRunningRef.current = running;
-
-    // Only drain if we just became idle, or if we're already idle and have messages
-    if ((becameIdle || isNowIdle) && hasQueuedMessages) {
-      drainQueue();
-    }
-  }, [running, startingSession, queuedMessages.length, drainQueue]);
-
-  // =============================================================================
   // Action Callbacks
   // =============================================================================
 
-  const sendMessage = useCallback((text: string, attachments?: MessageAttachment[]) => {
-    if (!text.trim() && (!attachments || attachments.length === 0)) {
-      return;
-    }
+  const sendMessage = useCallback(
+    (text: string, attachments?: MessageAttachment[]) => {
+      const trimmedText = text.trim();
+      if (!trimmedText && (!attachments || attachments.length === 0)) {
+        return;
+      }
 
-    const queuedMsg: QueuedMessage = {
-      id: generateMessageId(),
-      text: text.trim(),
-      timestamp: new Date().toISOString(),
-      attachments,
-    };
+      // Generate single ID for tracking
+      const id = generateMessageId();
 
-    dispatch({ type: 'QUEUE_MESSAGE', payload: queuedMsg });
-    persistQueue(dbSessionIdRef.current, [...stateRef.current.queuedMessages, queuedMsg]);
-  }, []);
+      // Mark message as pending backend confirmation (shows "sending..." indicator)
+      // Store text and attachments for recovery if message is rejected
+      dispatch({ type: 'MESSAGE_SENDING', payload: { id, text: trimmedText, attachments } });
+
+      // Clear draft and attachments when sending a message
+      setInputDraftState('');
+      setInputAttachments([]);
+      clearDraft(dbSessionIdRef.current);
+
+      // Send to backend for queueing/dispatch
+      // Message will be added to state when MESSAGE_ACCEPTED is received
+      const msg: QueueMessageRequest = {
+        type: 'queue_message',
+        id,
+        text: trimmedText,
+        attachments,
+        settings: stateRef.current.chatSettings,
+      };
+      send(msg);
+    },
+    [send]
+  );
 
   const stopChat = useCallback(() => {
-    const { running, stopping } = stateRef.current;
-    if (running && !stopping) {
+    const { sessionStatus } = stateRef.current;
+    // Only allow stop when running (not already stopping or idle)
+    if (sessionStatus.phase === 'running') {
       dispatch({ type: 'STOP_REQUESTED' });
       send({ type: 'stop' } as StopMessage);
     }
@@ -545,7 +496,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   const clearChat = useCallback(() => {
     // Stop any running Claude process
-    if (stateRef.current.running) {
+    if (stateRef.current.sessionStatus.phase === 'running') {
       dispatch({ type: 'STOP_REQUESTED' });
       send({ type: 'stop' } as StopMessage);
     }
@@ -560,7 +511,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const approvePermission = useCallback(
     (requestId: string, allow: boolean) => {
       // Validate requestId matches pending permission to prevent stale responses
-      if (stateRef.current.pendingPermission?.requestId !== requestId) {
+      const { pendingRequest } = stateRef.current;
+      if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
         return;
       }
       const msg: PermissionResponseMessage = { type: 'permission_response', requestId, allow };
@@ -573,7 +525,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const answerQuestion = useCallback(
     (requestId: string, answers: Record<string, string | string[]>) => {
       // Validate requestId matches pending question to prevent stale responses
-      if (stateRef.current.pendingQuestion?.requestId !== requestId) {
+      const { pendingRequest } = stateRef.current;
+      if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
       const msg: QuestionResponseMessage = { type: 'question_response', requestId, answers };
@@ -590,11 +543,18 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     persistSettings(dbSessionIdRef.current, newSettings);
   }, []);
 
-  const removeQueuedMessage = useCallback((id: string) => {
-    dispatch({ type: 'REMOVE_QUEUED_MESSAGE', payload: { id } });
-    const updated = stateRef.current.queuedMessages.filter((msg) => msg.id !== id);
-    persistQueue(dbSessionIdRef.current, updated);
-  }, []);
+  const removeQueuedMessage = useCallback(
+    (id: string) => {
+      // Send removal request to backend
+      const msg: RemoveQueuedMessageRequest = {
+        type: 'remove_queued_message',
+        messageId: id,
+      };
+      send(msg);
+      // State update will come via message_removed WebSocket event
+    },
+    [send]
+  );
 
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
   const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -630,6 +590,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     () => ({
       // Spread all state from reducer
       ...state,
+      // Convert queuedMessages Map to array for UI consumption
+      // (Internal state uses Map for O(1) lookups and automatic de-duplication)
+      queuedMessages: Array.from(state.queuedMessages.values()),
       // Connection state from transport
       connected,
       // Actions (stable - use stateRef internally)
@@ -642,6 +605,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Additional state/actions
       inputDraft,
       setInputDraft,
+      inputAttachments,
+      setInputAttachments,
       removeQueuedMessage,
       // Message handler for transport (stable - no deps)
       handleMessage,
@@ -653,6 +618,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       state,
       connected,
       inputDraft,
+      inputAttachments,
       // These are stable but included for exhaustive-deps correctness
       sendMessage,
       stopChat,

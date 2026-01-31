@@ -215,6 +215,7 @@ export class ClaudeClient extends EventEmitter {
     if (!this.process) {
       throw new Error('ClaudeClient not initialized');
     }
+    // Status is automatically set to 'running' by the protocol's 'sending' event
     this.process.protocol.sendUserMessage(content);
   }
 
@@ -418,6 +419,7 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'exit', handler: (result: ExitResult) => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'session_id', handler: (claudeSessionId: string) => void): this;
+  override on(event: 'idle', handler: () => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -432,6 +434,7 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'exit', result: ExitResult): boolean;
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'session_id', claudeSessionId: string): boolean;
+  override emit(event: 'idle'): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -465,6 +468,11 @@ export class ClaudeClient extends EventEmitter {
     // Forward errors
     this.process.on('error', (error: Error) => {
       this.emit('error', error);
+    });
+
+    // Forward idle (for message queue dispatch)
+    this.process.on('idle', () => {
+      this.emit('idle');
     });
   }
 

@@ -499,6 +499,7 @@ export class ClaudeProcess extends EventEmitter {
   override on(event: 'exit', handler: (result: ExitResult) => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'status', handler: (status: ProcessStatus) => void): this;
+  override on(event: 'idle', handler: () => void): this;
   override on(
     event: 'resource_exceeded',
     handler: (data: { type: 'memory' | 'cpu'; value: number }) => void
@@ -519,6 +520,7 @@ export class ClaudeProcess extends EventEmitter {
   override emit(event: 'exit', result: ExitResult): boolean;
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'status', status: ProcessStatus): boolean;
+  override emit(event: 'idle'): boolean;
   override emit(
     event: 'resource_exceeded',
     data: { type: 'memory' | 'cpu'; value: number }
@@ -595,6 +597,12 @@ export class ClaudeProcess extends EventEmitter {
    * Set up event forwarding from protocol to process.
    */
   private setupEventForwarding(): void {
+    // Mark as working when sending a user message (prevents race condition
+    // where another message could be dispatched before Claude responds)
+    this.protocol.on('sending', () => {
+      this.setStatus('running');
+    });
+
     // Forward all messages
     this.protocol.on('message', (msg: ClaudeJson) => {
       this.emit('message', msg);
@@ -606,6 +614,8 @@ export class ClaudeProcess extends EventEmitter {
         this.setStatus('running');
       } else if (msg.type === 'result') {
         this.setStatus('ready');
+        // Emit idle event to signal queue can dispatch next message
+        this.emit('idle');
       }
     });
 

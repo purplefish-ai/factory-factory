@@ -186,6 +186,7 @@ export class ClaudeProtocol extends EventEmitter {
       },
     };
 
+    this.emit('sending'); // Notify listeners before sending (for status updates)
     await this.sendRaw(message);
   }
 
@@ -490,6 +491,7 @@ export class ClaudeProtocol extends EventEmitter {
   override on(event: 'control_request', handler: (req: ControlRequest) => void): this;
   override on(event: 'stream_event', handler: (event: StreamEventMessage) => void): this;
   override on(event: 'control_cancel', handler: (req: ControlCancelRequest) => void): this;
+  override on(event: 'sending', handler: () => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'close', handler: () => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
@@ -501,6 +503,7 @@ export class ClaudeProtocol extends EventEmitter {
   override emit(event: 'control_request', req: ControlRequest): boolean;
   override emit(event: 'stream_event', event_: StreamEventMessage): boolean;
   override emit(event: 'control_cancel', req: ControlCancelRequest): boolean;
+  override emit(event: 'sending'): boolean;
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'close'): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit

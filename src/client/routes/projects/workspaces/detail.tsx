@@ -78,17 +78,13 @@ function ToggleRightPanelButton() {
 
 interface ChatContentProps {
   messages: ReturnType<typeof useChatWebSocket>['messages'];
-  running: boolean;
-  stopping: boolean;
-  loadingSession: boolean;
-  startingSession: boolean;
+  sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   viewportRef: React.RefObject<HTMLDivElement | null>;
   isNearBottom: boolean;
   scrollToBottom: () => void;
   onScroll: () => void;
-  pendingPermission: ReturnType<typeof useChatWebSocket>['pendingPermission'];
-  pendingQuestion: ReturnType<typeof useChatWebSocket>['pendingQuestion'];
+  pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
   approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
   answerQuestion: ReturnType<typeof useChatWebSocket>['answerQuestion'];
   connected: boolean;
@@ -99,9 +95,12 @@ interface ChatContentProps {
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
+  inputAttachments: ReturnType<typeof useChatWebSocket>['inputAttachments'];
+  setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
+  pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
 }
 
 /**
@@ -110,17 +109,13 @@ interface ChatContentProps {
  */
 const ChatContent = memo(function ChatContent({
   messages,
-  running,
-  stopping,
-  loadingSession,
-  startingSession,
+  sessionStatus,
   messagesEndRef,
   viewportRef,
   isNearBottom,
   scrollToBottom,
   onScroll,
-  pendingPermission,
-  pendingQuestion,
+  pendingRequest,
   approvePermission,
   answerQuestion,
   connected,
@@ -131,9 +126,12 @@ const ChatContent = memo(function ChatContent({
   updateSettings,
   inputDraft,
   setInputDraft,
+  inputAttachments,
+  setInputAttachments,
   queuedMessages,
   removeQueuedMessage,
   latestThinking,
+  pendingMessages,
 }: ChatContentProps) {
   // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
@@ -149,6 +147,12 @@ const ChatContent = memo(function ChatContent({
       });
     }
   }, [isNearBottom, viewportRef]);
+
+  // Derive boolean flags from sessionStatus for components that still use them
+  const running = sessionStatus.phase === 'running';
+  const stopping = sessionStatus.phase === 'stopping';
+  const startingSession = sessionStatus.phase === 'starting';
+  const loadingSession = sessionStatus.phase === 'loading';
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -185,8 +189,14 @@ const ChatContent = memo(function ChatContent({
       {/* Input Section with Queue and Prompts */}
       <div className="border-t">
         <QueuedMessages messages={queuedMessages} onRemove={removeQueuedMessage} />
-        <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
-        <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
+        <PermissionPrompt
+          permission={pendingRequest.type === 'permission' ? pendingRequest.request : null}
+          onApprove={approvePermission}
+        />
+        <QuestionPrompt
+          question={pendingRequest.type === 'question' ? pendingRequest.request : null}
+          onAnswer={answerQuestion}
+        />
 
         <ChatInput
           onSend={sendMessage}
@@ -202,7 +212,10 @@ const ChatContent = memo(function ChatContent({
           onSettingsChange={updateSettings}
           value={inputDraft}
           onChange={setInputDraft}
+          attachments={inputAttachments}
+          onAttachmentsChange={setInputAttachments}
           onHeightChange={handleHeightChange}
+          pendingMessageCount={pendingMessages.size}
         />
       </div>
     </div>
@@ -259,22 +272,21 @@ function WorkspaceChatContent() {
   const {
     messages,
     connected,
-    running,
-    stopping,
-    pendingPermission,
-    pendingQuestion,
-    loadingSession,
-    startingSession,
+    sessionStatus,
+    pendingRequest,
     chatSettings,
     inputDraft,
+    inputAttachments,
     queuedMessages,
     latestThinking,
+    pendingMessages,
     sendMessage,
     stopChat,
     approvePermission,
     answerQuestion,
     updateSettings,
     setInputDraft,
+    setInputAttachments,
     removeQueuedMessage,
     inputRef,
     messagesEndRef,
@@ -282,6 +294,10 @@ function WorkspaceChatContent() {
     workingDir: workspace?.worktreePath ?? undefined,
     dbSessionId: selectedDbSessionId,
   });
+
+  // Derive boolean flags from sessionStatus for local use
+  const running = sessionStatus.phase === 'running';
+  const loadingSession = sessionStatus.phase === 'loading';
 
   // Session management
   const {
@@ -505,17 +521,13 @@ function WorkspaceChatContent() {
             >
               <ChatContent
                 messages={messages}
-                running={running}
-                stopping={stopping}
-                loadingSession={loadingSession}
-                startingSession={startingSession}
+                sessionStatus={sessionStatus}
                 messagesEndRef={messagesEndRef}
                 viewportRef={viewportRef}
                 isNearBottom={isNearBottom}
                 scrollToBottom={scrollToBottom}
                 onScroll={onScroll}
-                pendingPermission={pendingPermission}
-                pendingQuestion={pendingQuestion}
+                pendingRequest={pendingRequest}
                 approvePermission={approvePermission}
                 answerQuestion={answerQuestion}
                 connected={connected}
@@ -526,9 +538,12 @@ function WorkspaceChatContent() {
                 updateSettings={updateSettings}
                 inputDraft={inputDraft}
                 setInputDraft={setInputDraft}
+                inputAttachments={inputAttachments}
+                setInputAttachments={setInputAttachments}
                 queuedMessages={queuedMessages}
                 removeQueuedMessage={removeQueuedMessage}
                 latestThinking={latestThinking}
+                pendingMessages={pendingMessages}
               />
             </WorkspaceContentView>
           </div>

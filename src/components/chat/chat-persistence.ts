@@ -4,13 +4,15 @@
  * This module handles persisting and loading:
  * - Chat settings (model, thinking mode, plan mode)
  * - Input drafts (preserved across tab switches)
- * - Message queue (messages waiting to be sent)
  *
- * Settings and queue use sessionStorage (per-tab persistence).
+ * Note: Message queue is now managed on the backend. Queue state is restored
+ * via session_loaded WebSocket message, not frontend persistence.
+ *
+ * Settings use sessionStorage (per-tab persistence).
  * Drafts use sessionStorage keyed by session ID.
  */
 
-import type { ChatSettings, QueuedMessage } from '@/lib/claude-types';
+import type { ChatSettings } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 
 // =============================================================================
@@ -18,7 +20,6 @@ import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 // =============================================================================
 
 const DRAFT_KEY_PREFIX = 'chat-draft-';
-const QUEUE_KEY_PREFIX = 'chat-queue-';
 const SETTINGS_KEY_PREFIX = 'chat-settings-';
 
 // =============================================================================
@@ -158,79 +159,6 @@ export function loadSettingsWithDefaults(sessionId: string | null): ChatSettings
 }
 
 // =============================================================================
-// Queue Persistence
-// =============================================================================
-
-/**
- * Validate that an object has the required QueuedMessage shape.
- */
-function isValidQueuedMessage(obj: unknown): obj is QueuedMessage {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    typeof (obj as QueuedMessage).id === 'string' &&
-    typeof (obj as QueuedMessage).text === 'string' &&
-    typeof (obj as QueuedMessage).timestamp === 'string'
-  );
-}
-
-/**
- * Load queued messages from sessionStorage for a specific session.
- */
-export function loadQueue(sessionId: string | null): QueuedMessage[] {
-  if (!sessionId || typeof window === 'undefined') {
-    return [];
-  }
-  try {
-    const stored = sessionStorage.getItem(`${QUEUE_KEY_PREFIX}${sessionId}`);
-    if (!stored) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(stored);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    // Filter out any malformed entries
-    return parsed.filter(isValidQueuedMessage);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Persist queued messages to sessionStorage for a specific session.
- * Clears storage if queue is empty.
- */
-export function persistQueue(sessionId: string | null, messages: QueuedMessage[]): void {
-  if (!sessionId || typeof window === 'undefined') {
-    return;
-  }
-  try {
-    if (messages.length === 0) {
-      sessionStorage.removeItem(`${QUEUE_KEY_PREFIX}${sessionId}`);
-    } else {
-      sessionStorage.setItem(`${QUEUE_KEY_PREFIX}${sessionId}`, JSON.stringify(messages));
-    }
-  } catch {
-    // Silently ignore storage errors
-  }
-}
-
-/**
- * Clear queued messages from sessionStorage for a specific session.
- */
-export function clearQueue(sessionId: string | null): void {
-  if (!sessionId || typeof window === 'undefined') {
-    return;
-  }
-  try {
-    sessionStorage.removeItem(`${QUEUE_KEY_PREFIX}${sessionId}`);
-  } catch {
-    // Silently ignore storage errors
-  }
-}
-
-// =============================================================================
 // Session Cleanup
 // =============================================================================
 
@@ -241,23 +169,22 @@ export function clearQueue(sessionId: string | null): void {
 export function clearAllSessionData(sessionId: string | null): void {
   clearDraft(sessionId);
   clearSettings(sessionId);
-  clearQueue(sessionId);
 }
 
 /**
  * Load all persisted data for a session.
  * Returns an object with all session-related persisted state.
+ *
+ * Note: Queue is managed on the backend and restored via WebSocket.
  */
 export interface PersistedSessionData {
   draft: string;
   settings: ChatSettings;
-  queue: QueuedMessage[];
 }
 
 export function loadAllSessionData(sessionId: string | null): PersistedSessionData {
   return {
     draft: loadDraft(sessionId),
     settings: loadSettingsWithDefaults(sessionId),
-    queue: loadQueue(sessionId),
   };
 }

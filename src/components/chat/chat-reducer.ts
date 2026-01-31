@@ -15,6 +15,7 @@ import type {
   ChatSettings,
   ClaudeMessage,
   HistoryMessage,
+  MessageAttachment,
   PendingInteractiveRequest,
   PermissionRequest,
   QueuedMessage,
@@ -28,33 +29,81 @@ import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types
 // State Types
 // =============================================================================
 
+/** Information about a rejected message for recovery */
+export interface RejectedMessageInfo {
+  text: string;
+  attachments?: MessageAttachment[];
+  error: string;
+}
+
+/** Content stored for a pending message (for recovery on rejection) */
+export interface PendingMessageContent {
+  text: string;
+  attachments?: MessageAttachment[];
+}
+
+/**
+ * Pending interactive request - a discriminated union that makes it impossible
+ * to have both a permission request and question request simultaneously.
+ * Replaces separate pendingPermission and pendingQuestion nullable fields.
+ */
+export type PendingRequest =
+  | { type: 'none' }
+  | { type: 'permission'; request: PermissionRequest }
+  | { type: 'question'; request: UserQuestionRequest };
+
+/**
+ * Session status - a discriminated union that makes invalid states unrepresentable.
+ * Replaces separate running, stopping, loadingSession, and startingSession booleans.
+ *
+ * State transitions:
+ *   idle → loading → starting → ready ↔ running → stopping → ready
+ */
+export type SessionStatus =
+  | { phase: 'idle' }
+  | { phase: 'loading' }
+  | { phase: 'starting' }
+  | { phase: 'ready' }
+  | { phase: 'running' }
+  | { phase: 'stopping' };
+
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
-  /** Whether Claude is currently processing */
-  running: boolean;
-  /** Whether a stop request is in progress */
-  stopping: boolean;
+  /**
+   * Session lifecycle status - a discriminated union that makes invalid states unrepresentable.
+   * Replaces separate running, stopping, loadingSession, and startingSession booleans.
+   */
+  sessionStatus: SessionStatus;
   /** Current git branch for the session */
   gitBranch: string | null;
   /** Available Claude CLI sessions */
   availableSessions: SessionInfo[];
-  /** Pending permission request awaiting user response */
-  pendingPermission: PermissionRequest | null;
-  /** Pending user question awaiting user response */
-  pendingQuestion: UserQuestionRequest | null;
-  /** Whether session is currently loading */
-  loadingSession: boolean;
-  /** Whether Claude CLI is starting up */
-  startingSession: boolean;
+  /**
+   * Pending interactive request awaiting user response.
+   * Discriminated union ensures only one request type can be active at a time.
+   */
+  pendingRequest: PendingRequest;
   /** Chat settings (model, thinking, plan mode) */
   chatSettings: ChatSettings;
-  /** Queued messages waiting to be sent */
-  queuedMessages: QueuedMessage[];
+  /**
+   * Queued messages waiting to be sent.
+   * Map from message ID to QueuedMessage - enforces uniqueness by design.
+   * Maps automatically de-dupe: adding the same ID twice simply overwrites.
+   */
+  queuedMessages: Map<string, QueuedMessage>;
   /** Tool use ID to message index map for O(1) updates */
   toolUseIdToIndex: Map<string, number>;
   /** Latest accumulated thinking content from extended thinking mode */
   latestThinking: string | null;
+  /**
+   * Pending messages awaiting backend confirmation (shown with "sending..." indicator).
+   * Map from message ID to content. Presence in map = pending, content = for recovery on rejection.
+   * Replaces separate pendingMessageIds Set and pendingMessageContent Map.
+   */
+  pendingMessages: Map<string, PendingMessageContent>;
+  /** Last rejected message for recovery (allows restoring to input) */
+  lastRejectedMessage: RejectedMessageInfo | null;
 }
 
 // =============================================================================
@@ -78,6 +127,7 @@ export type ChatAction =
         running: boolean;
         settings?: ChatSettings;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
+        queuedMessages?: QueuedMessage[];
       };
     }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
@@ -96,11 +146,19 @@ export type ChatAction =
   | { type: 'STOP_REQUESTED' }
   // User message action
   | { type: 'USER_MESSAGE_SENT'; payload: ChatMessage }
-  // Queue actions
-  | { type: 'QUEUE_MESSAGE'; payload: QueuedMessage }
-  | { type: 'DEQUEUE_MESSAGE' }
-  | { type: 'REMOVE_QUEUED_MESSAGE'; payload: { id: string } }
+  // Queue actions (backend-managed queue)
+  | { type: 'ADD_TO_QUEUE'; payload: QueuedMessage }
+  | { type: 'MESSAGE_QUEUED'; payload: { id: string; position: number } }
+  | { type: 'MESSAGE_DISPATCHED'; payload: { id: string } }
+  | { type: 'MESSAGE_REMOVED'; payload: { id: string } }
   | { type: 'SET_QUEUE'; payload: QueuedMessage[] }
+  | { type: 'MESSAGE_ACCEPTED'; payload: { id: string; position: number; message: QueuedMessage } }
+  | { type: 'MESSAGE_REJECTED'; payload: { id: string; error: string } }
+  | {
+      type: 'MESSAGE_SENDING';
+      payload: { id: string; text: string; attachments?: MessageAttachment[] };
+    }
+  | { type: 'CLEAR_REJECTED_MESSAGE' }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -214,21 +272,68 @@ function getToolUseIdFromMessage(claudeMsg: ClaudeMessage): string | null {
 // Initial State
 // =============================================================================
 
+/**
+ * Creates the base reset state used by CLEAR_CHAT, RESET_FOR_SESSION_SWITCH,
+ * and SESSION_SWITCH_START. This eliminates duplication and ensures all reset
+ * actions clear the same fields consistently.
+ */
+function createBaseResetState(): Pick<
+  ChatState,
+  | 'messages'
+  | 'gitBranch'
+  | 'pendingRequest'
+  | 'toolUseIdToIndex'
+  | 'latestThinking'
+  | 'pendingMessages'
+  | 'lastRejectedMessage'
+> {
+  return {
+    messages: [],
+    gitBranch: null,
+    pendingRequest: { type: 'none' },
+    toolUseIdToIndex: new Map(),
+    latestThinking: null,
+    pendingMessages: new Map(),
+    lastRejectedMessage: null,
+  };
+}
+
+/**
+ * Creates extended reset state for session switches, which also clears
+ * queue and session status.
+ */
+function createSessionSwitchResetState(): Pick<
+  ChatState,
+  | 'messages'
+  | 'gitBranch'
+  | 'pendingRequest'
+  | 'toolUseIdToIndex'
+  | 'latestThinking'
+  | 'pendingMessages'
+  | 'lastRejectedMessage'
+  | 'queuedMessages'
+  | 'sessionStatus'
+> {
+  return {
+    ...createBaseResetState(),
+    queuedMessages: new Map(),
+    sessionStatus: { phase: 'loading' },
+  };
+}
+
 export function createInitialChatState(overrides?: Partial<ChatState>): ChatState {
   return {
     messages: [],
-    running: false,
-    stopping: false,
+    sessionStatus: { phase: 'idle' },
     gitBranch: null,
     availableSessions: [],
-    pendingPermission: null,
-    pendingQuestion: null,
-    loadingSession: false,
-    startingSession: false,
+    pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,
-    queuedMessages: [],
+    queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),
     latestThinking: null,
+    pendingMessages: new Map(),
+    lastRejectedMessage: null,
     ...overrides,
   };
 }
@@ -241,12 +346,15 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
 function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage): ChatState {
-  // Always clear starting state when receiving a Claude message
-  let baseState: ChatState = { ...state, startingSession: false };
+  // Transition from starting to running when receiving a Claude message
+  let baseState: ChatState =
+    state.sessionStatus.phase === 'starting'
+      ? { ...state, sessionStatus: { phase: 'running' } }
+      : state;
 
-  // Set running to false when we receive a result
+  // Set to ready when we receive a result
   if (claudeMsg.type === 'result') {
-    baseState = { ...baseState, running: false };
+    baseState = { ...baseState, sessionStatus: { phase: 'ready' } };
   }
 
   // Check if message should be stored
@@ -335,13 +443,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     // WebSocket status messages
     case 'WS_STATUS':
-      return { ...state, running: action.payload.running };
+      // WS_STATUS updates running state - transition to running or ready based on payload
+      return {
+        ...state,
+        sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
+      };
     case 'WS_STARTING':
-      return { ...state, startingSession: true };
+      return { ...state, sessionStatus: { phase: 'starting' } };
     case 'WS_STARTED':
-      return { ...state, startingSession: false, running: true, latestThinking: null };
+      return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      return { ...state, running: false, stopping: false, startingSession: false };
+      return { ...state, sessionStatus: { phase: 'ready' } };
 
     // Claude message handling (delegated to helper)
     case 'WS_CLAUDE_MESSAGE':
@@ -389,84 +501,91 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Only overwrite existing state if backend has something to restore,
       // otherwise preserve any pending state that may have arrived during loading (race condition fix).
       const pendingReq = action.payload.pendingInteractiveRequest;
-      let pendingPermission: PermissionRequest | null = state.pendingPermission;
-      let pendingQuestion: UserQuestionRequest | null = state.pendingQuestion;
+      let pendingRequest: PendingRequest = state.pendingRequest;
 
       if (pendingReq) {
         if (pendingReq.toolName === 'AskUserQuestion') {
           // Restore AskUserQuestion modal
           const input = pendingReq.input as { questions?: unknown[] };
-          pendingQuestion = {
-            requestId: pendingReq.requestId,
-            questions: (input.questions ?? []) as UserQuestionRequest['questions'],
-            timestamp: pendingReq.timestamp,
+          pendingRequest = {
+            type: 'question',
+            request: {
+              requestId: pendingReq.requestId,
+              questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+              timestamp: pendingReq.timestamp,
+            },
           };
-          pendingPermission = null; // Clear opposite type to prevent both modals showing
         } else {
           // Restore permission request (ExitPlanMode or other)
-          pendingPermission = {
-            requestId: pendingReq.requestId,
-            toolName: pendingReq.toolName,
-            toolInput: pendingReq.input,
-            timestamp: pendingReq.timestamp,
-            planContent: pendingReq.planContent,
+          pendingRequest = {
+            type: 'permission',
+            request: {
+              requestId: pendingReq.requestId,
+              toolName: pendingReq.toolName,
+              toolInput: pendingReq.input,
+              timestamp: pendingReq.timestamp,
+              planContent: pendingReq.planContent,
+            },
           };
-          pendingQuestion = null; // Clear opposite type to prevent both modals showing
         }
+      }
+
+      // Convert incoming array to Map for O(1) lookups and automatic de-duplication
+      const queuedMessagesArray = action.payload.queuedMessages ?? [];
+      const queuedMessagesMap = new Map<string, QueuedMessage>();
+      for (const msg of queuedMessagesArray) {
+        queuedMessagesMap.set(msg.id, msg);
       }
 
       return {
         ...state,
         messages,
         gitBranch: action.payload.gitBranch,
-        running: action.payload.running,
-        loadingSession: false,
-        startingSession: false, // Clear to allow queue draining after session loads
+        // Session is ready (or running if backend says so)
+        sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
         toolUseIdToIndex: new Map(),
-        pendingPermission,
-        pendingQuestion,
+        pendingRequest,
+        // Restore queued messages from backend (converted to Map)
+        queuedMessages: queuedMessagesMap,
+        // Clear pending message state to remove stale indicators and prevent memory leaks
+        pendingMessages: new Map(),
+        // Clear stale rejected message to prevent recovery effect from restoring old content
+        lastRejectedMessage: null,
       };
     }
 
     // Permission and question requests
     // Always accept new requests (overwriting existing) to match backend behavior.
-    // Clear opposite type to prevent both modals showing simultaneously.
+    // Discriminated union naturally prevents both types being active simultaneously.
     case 'WS_PERMISSION_REQUEST':
-      return { ...state, pendingPermission: action.payload, pendingQuestion: null };
+      return { ...state, pendingRequest: { type: 'permission', request: action.payload } };
     case 'WS_USER_QUESTION':
-      return { ...state, pendingQuestion: action.payload, pendingPermission: null };
+      return { ...state, pendingRequest: { type: 'question', request: action.payload } };
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings
       const shouldDisablePlanMode =
-        action.payload.allow && state.pendingPermission?.toolName === 'ExitPlanMode';
+        action.payload.allow &&
+        state.pendingRequest.type === 'permission' &&
+        state.pendingRequest.request.toolName === 'ExitPlanMode';
       return {
         ...state,
-        pendingPermission: null,
+        pendingRequest: { type: 'none' },
         ...(shouldDisablePlanMode && {
           chatSettings: { ...state.chatSettings, planModeEnabled: false },
         }),
       };
     }
     case 'QUESTION_RESPONSE':
-      return { ...state, pendingQuestion: null };
+      return { ...state, pendingRequest: { type: 'none' } };
 
     // Session switching
     case 'SESSION_SWITCH_START':
       return {
         ...state,
-        messages: [],
-        gitBranch: null,
-        pendingPermission: null,
-        pendingQuestion: null,
-        startingSession: false,
-        loadingSession: true,
-        running: false,
-        queuedMessages: [],
-        toolUseIdToIndex: new Map(),
-        latestThinking: null,
+        ...createSessionSwitchResetState(),
       };
     case 'SESSION_LOADING_START':
-      return { ...state, loadingSession: true };
+      return { ...state, sessionStatus: { phase: 'loading' } };
 
     // Tool input streaming (delegated to helper)
     case 'TOOL_INPUT_UPDATE':
@@ -479,24 +598,138 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // Stop request
     case 'STOP_REQUESTED':
-      return { ...state, stopping: true };
+      return { ...state, sessionStatus: { phase: 'stopping' } };
 
     // User messages
     case 'USER_MESSAGE_SENT':
       return { ...state, messages: [...state.messages, action.payload] };
 
-    // Queue management
-    case 'QUEUE_MESSAGE':
-      return { ...state, queuedMessages: [...state.queuedMessages, action.payload] };
-    case 'DEQUEUE_MESSAGE':
-      return { ...state, queuedMessages: state.queuedMessages.slice(1) };
-    case 'REMOVE_QUEUED_MESSAGE':
+    // Queue management (backend-managed queue)
+    // ADD_TO_QUEUE: Optimistically add message to queuedMessages for queue display
+    case 'ADD_TO_QUEUE': {
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.set(action.payload.id, action.payload);
       return {
         ...state,
-        queuedMessages: state.queuedMessages.filter((msg) => msg.id !== action.payload.id),
+        queuedMessages: newQueuedMessages,
       };
-    case 'SET_QUEUE':
-      return { ...state, queuedMessages: action.payload };
+    }
+
+    // MESSAGE_QUEUED: Acknowledgment from backend - message is in queue
+    // With optimistic UI, the message is already in chat messages and queuedMessages, no state change needed
+    case 'MESSAGE_QUEUED':
+      return state;
+
+    // MESSAGE_DISPATCHED: Backend is sending message to Claude
+    // Remove from queuedMessages (no longer pending), message stays in chat
+    case 'MESSAGE_DISPATCHED': {
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.delete(action.payload.id);
+      return {
+        ...state,
+        queuedMessages: newQueuedMessages,
+      };
+    }
+
+    // MESSAGE_REMOVED: User cancelled a queued message before dispatch
+    // Remove from both queue display and chat messages (undo optimistic update)
+    case 'MESSAGE_REMOVED': {
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.delete(action.payload.id);
+      return {
+        ...state,
+        messages: state.messages.filter((m) => m.id !== action.payload.id),
+        queuedMessages: newQueuedMessages,
+      };
+    }
+
+    // MESSAGE_ACCEPTED: Backend confirmed message is in queue
+    // Add to messages and queuedMessages, remove from pending
+    // De-duplication: Skip if message ID already exists (handles reconnect/multi-tab scenarios)
+    case 'MESSAGE_ACCEPTED': {
+      const queuedMsg = action.payload.message;
+
+      // De-dupe check: Skip if message already exists in messages array
+      if (state.messages.some((m) => m.id === queuedMsg.id)) {
+        // Still remove from pending since backend confirmed it
+        const newPendingMessages = new Map(state.pendingMessages);
+        newPendingMessages.delete(action.payload.id);
+        return { ...state, pendingMessages: newPendingMessages };
+      }
+
+      const newPendingMessages = new Map(state.pendingMessages);
+      newPendingMessages.delete(action.payload.id);
+
+      // Create user message from queued message
+      const userMessage: ChatMessage = {
+        id: queuedMsg.id,
+        source: 'user',
+        text: queuedMsg.text,
+        timestamp: queuedMsg.timestamp,
+        attachments: queuedMsg.attachments,
+      };
+
+      // Add to queuedMessages Map - automatically de-dupes by ID
+      const newQueuedMessages = new Map(state.queuedMessages);
+      newQueuedMessages.set(queuedMsg.id, queuedMsg);
+
+      return {
+        ...state,
+        messages: [...state.messages, userMessage],
+        queuedMessages: newQueuedMessages,
+        pendingMessages: newPendingMessages,
+      };
+    }
+
+    // MESSAGE_REJECTED: Backend rejected message (queue full, etc.)
+    // Remove from pending and store for recovery so user can retry
+    case 'MESSAGE_REJECTED': {
+      // Retrieve pending content for recovery before deleting
+      const pendingContent = state.pendingMessages.get(action.payload.id);
+      const newPendingMessages = new Map(state.pendingMessages);
+      newPendingMessages.delete(action.payload.id);
+      return {
+        ...state,
+        pendingMessages: newPendingMessages,
+        // Store rejected message info for recovery (restore to input)
+        lastRejectedMessage: pendingContent
+          ? {
+              text: pendingContent.text,
+              attachments: pendingContent.attachments,
+              error: action.payload.error,
+            }
+          : null,
+      };
+    }
+
+    // MESSAGE_SENDING: Mark a message as pending backend confirmation and store content for recovery
+    case 'MESSAGE_SENDING': {
+      const newPendingMessages = new Map(state.pendingMessages);
+      newPendingMessages.set(action.payload.id, {
+        text: action.payload.text,
+        attachments: action.payload.attachments,
+      });
+      return {
+        ...state,
+        pendingMessages: newPendingMessages,
+      };
+    }
+
+    // CLEAR_REJECTED_MESSAGE: Clear the rejected message after user has seen it
+    case 'CLEAR_REJECTED_MESSAGE':
+      return {
+        ...state,
+        lastRejectedMessage: null,
+      };
+
+    // SET_QUEUE: Restore queue state from backend (on reconnect/session load)
+    case 'SET_QUEUE': {
+      const queuedMessagesMap = new Map<string, QueuedMessage>();
+      for (const msg of action.payload) {
+        queuedMessagesMap.set(msg.id, msg);
+      }
+      return { ...state, queuedMessages: queuedMessagesMap };
+    }
 
     // Settings
     case 'UPDATE_SETTINGS':
@@ -514,32 +747,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, latestThinking: null };
 
     // Clear/reset
-    case 'CLEAR_CHAT':
+    case 'CLEAR_CHAT': {
+      // Preserve running state, but reset stopping/starting to ready
+      const sessionStatus: SessionStatus =
+        state.sessionStatus.phase === 'running' ? state.sessionStatus : { phase: 'ready' };
       return {
         ...state,
-        messages: [],
-        gitBranch: null,
-        pendingPermission: null,
-        pendingQuestion: null,
-        startingSession: false,
-        stopping: false,
+        ...createBaseResetState(),
+        sessionStatus,
         chatSettings: DEFAULT_CHAT_SETTINGS,
-        toolUseIdToIndex: new Map(),
-        latestThinking: null,
       };
+    }
     case 'RESET_FOR_SESSION_SWITCH':
       return {
         ...state,
-        messages: [],
-        gitBranch: null,
-        pendingPermission: null,
-        pendingQuestion: null,
-        startingSession: false,
-        loadingSession: true,
-        running: false,
-        queuedMessages: [],
-        toolUseIdToIndex: new Map(),
-        latestThinking: null,
+        ...createSessionSwitchResetState(),
       };
 
     default:
@@ -587,6 +809,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage): ChatAction {
       running: data.running ?? false,
       settings: data.settings,
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+      queuedMessages: data.queuedMessages ?? [],
     },
   };
 }
@@ -649,8 +872,30 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
+    // Queue events from backend
     case 'message_queued':
-      return null; // Acknowledgment - no state change needed
+      return data.id
+        ? { type: 'MESSAGE_QUEUED', payload: { id: data.id, position: data.position ?? 0 } }
+        : null;
+    case 'message_dispatched':
+      return data.id ? { type: 'MESSAGE_DISPATCHED', payload: { id: data.id } } : null;
+    case 'message_removed':
+      return data.id ? { type: 'MESSAGE_REMOVED', payload: { id: data.id } } : null;
+    case 'message_accepted':
+      return data.id && data.queuedMessage
+        ? {
+            type: 'MESSAGE_ACCEPTED',
+            payload: {
+              id: data.id,
+              position: data.position ?? 0,
+              message: data.queuedMessage,
+            },
+          }
+        : null;
+    case 'message_rejected':
+      return data.id
+        ? { type: 'MESSAGE_REJECTED', payload: { id: data.id, error: data.message ?? '' } }
+        : null;
     default:
       return null;
   }
@@ -667,16 +912,4 @@ export function createUserMessageAction(text: string): ChatAction {
     timestamp: new Date().toISOString(),
   };
   return { type: 'USER_MESSAGE_SENT', payload: chatMessage };
-}
-
-/**
- * Creates a queue message action.
- */
-export function createQueueMessageAction(text: string): ChatAction {
-  const queuedMsg: QueuedMessage = {
-    id: generateMessageId(),
-    text: text.trim(),
-    timestamp: new Date().toISOString(),
-  };
-  return { type: 'QUEUE_MESSAGE', payload: queuedMsg };
 }

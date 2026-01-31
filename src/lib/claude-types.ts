@@ -412,7 +412,11 @@ export interface WebSocketMessage {
     | 'agent_metadata'
     | 'permission_request'
     | 'user_question'
-    | 'message_queued';
+    | 'message_queued'
+    | 'message_dispatched'
+    | 'message_removed'
+    | 'message_accepted'
+    | 'message_rejected';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -435,6 +439,13 @@ export interface WebSocketMessage {
   settings?: ChatSettings;
   // Message queued acknowledgment
   text?: string;
+  // Message queue fields
+  id?: string;
+  position?: number;
+  // Single queued message for message_accepted event
+  queuedMessage?: QueuedMessage;
+  // Queued messages for session restore
+  queuedMessages?: QueuedMessage[];
   // Pending interactive request for session restore
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
 }
@@ -456,12 +467,18 @@ export interface MessageAttachment {
 
 /**
  * A message queued to be sent when the agent becomes idle.
+ * This type is shared between frontend and backend.
  */
 export interface QueuedMessage {
   id: string;
   text: string;
   timestamp: string;
   attachments?: MessageAttachment[];
+  settings: {
+    selectedModel: string | null;
+    thinkingEnabled: boolean;
+    planModeEnabled: boolean;
+  };
 }
 
 // =============================================================================
