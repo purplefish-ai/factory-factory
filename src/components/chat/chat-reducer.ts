@@ -453,8 +453,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         pendingQuestion,
         // Restore queued messages from backend
         queuedMessages: action.payload.queuedMessages ?? [],
-        // Clear pending message IDs to remove stale "Sending..." indicators after reconnect
+        // Clear pending message state to remove stale indicators and prevent memory leaks
         pendingMessageIds: new Set(),
+        pendingMessageContent: new Map(),
+        // Clear stale rejected message to prevent recovery effect from restoring old content
+        lastRejectedMessage: null,
       };
     }
 
