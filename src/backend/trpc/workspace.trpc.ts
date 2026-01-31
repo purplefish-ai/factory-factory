@@ -205,14 +205,17 @@ export const workspaceRouter = router({
       // Create the workspace record
       const workspace = await workspaceAccessor.create(input);
 
-      // Initialize the worktree synchronously so workspace is ready when returned
-      // This ensures worktreePath is set before the user can start sessions
-      await initializeWorkspaceWorktree(workspace.id, input.branchName);
+      // Start worktree initialization in the background - don't await
+      // This allows the API to return immediately so the user sees the workspace page faster.
+      // The detail page will show an initialization overlay and poll for ready status.
+      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
+        // Log but don't throw - the workspace initStatus will be FAILED which the UI handles
+        logger.error('Background workspace initialization failed', error as Error, {
+          workspaceId: workspace.id,
+        });
+      });
 
-      // Refetch workspace to get updated worktreePath and initStatus
-      const initializedWorkspace = await workspaceAccessor.findById(workspace.id);
-
-      return initializedWorkspace ?? workspace;
+      return workspace;
     }),
 
   // Update a workspace

@@ -350,8 +350,9 @@ function WorkspaceChatContent() {
   // A workspace is considered fully ready when:
   // 1. initStatus is READY, AND
   // 2. worktreePath is populated (required for sessions)
+  // Show overlay if initStatus hasn't loaded yet OR if status isn't READY OR if worktreePath missing
   const isInitializing =
-    (initStatus && initStatus.initStatus !== 'READY') || !workspace?.worktreePath;
+    !initStatus || initStatus.initStatus !== 'READY' || !workspace?.worktreePath;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">

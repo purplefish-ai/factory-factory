@@ -112,19 +112,19 @@ export function AppSidebar() {
     startCreating(name);
 
     try {
-      // Create workspace (branchName defaults to project's default branch)
+      // Create workspace - returns immediately, initialization happens in background
       // Don't create a session - user will choose workflow in workspace page
       const workspace = await createWorkspace.mutateAsync({
         projectId: selectedProjectId,
         name,
       });
 
-      // Invalidate caches to trigger immediate refetch
+      // Navigate immediately - workspace detail page shows initialization overlay
+      navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
+
+      // Invalidate caches in background (navigation already happened)
       utils.workspace.list.invalidate({ projectId: selectedProjectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-
-      // Navigate to workspace (workflow selection will be shown)
-      navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
     } catch {
       // Clear the creating state on error so the UI doesn't get stuck
       cancelCreating();
