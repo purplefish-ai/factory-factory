@@ -597,6 +597,12 @@ export class ClaudeProcess extends EventEmitter {
    * Set up event forwarding from protocol to process.
    */
   private setupEventForwarding(): void {
+    // Mark as working when sending a user message (prevents race condition
+    // where another message could be dispatched before Claude responds)
+    this.protocol.on('sending', () => {
+      this.setStatus('running');
+    });
+
     // Forward all messages
     this.protocol.on('message', (msg: ClaudeJson) => {
       this.emit('message', msg);
@@ -722,15 +728,6 @@ export class ClaudeProcess extends EventEmitter {
         this.emit('session_id', claudeSessionId);
       }
     }
-  }
-
-  /**
-   * Mark the process as working/running.
-   * Call this immediately before sending a user message to prevent race conditions
-   * where isWorking() returns false between message dispatch and Claude's response.
-   */
-  markAsWorking(): void {
-    this.setStatus('running');
   }
 
   /**

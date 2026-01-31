@@ -215,10 +215,7 @@ export class ClaudeClient extends EventEmitter {
     if (!this.process) {
       throw new Error('ClaudeClient not initialized');
     }
-    // Mark as working BEFORE sending to prevent race condition where another
-    // message could be dispatched before Claude responds (isWorking() would
-    // return false in that window otherwise)
-    this.process.markAsWorking();
+    // Status is automatically set to 'running' by the protocol's 'sending' event
     this.process.protocol.sendUserMessage(content);
   }
 
