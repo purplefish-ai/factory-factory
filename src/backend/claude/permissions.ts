@@ -167,8 +167,8 @@ export function shouldAutoApprove(mode: PermissionMode, toolName: string): boole
  * Useful for autonomous agent mode.
  */
 export class AutoApproveHandler implements PermissionHandler {
-  onCanUseTool(_request: CanUseToolRequest): Promise<ControlResponseBody> {
-    return Promise.resolve(createAllowResponse());
+  onCanUseTool(request: CanUseToolRequest): Promise<ControlResponseBody> {
+    return Promise.resolve(createAllowResponse(request.input as Record<string, unknown>));
   }
 
   onPreToolUseHook(_request: HookCallbackRequest): Promise<ControlResponseBody> {
@@ -235,7 +235,7 @@ export class ModeBasedHandler implements PermissionHandler {
 
   onCanUseTool(request: CanUseToolRequest): Promise<ControlResponseBody> {
     if (shouldAutoApprove(this.mode, request.tool_name)) {
-      return Promise.resolve(createAllowResponse());
+      return Promise.resolve(createAllowResponse(request.input as Record<string, unknown>));
     }
 
     // If we have an onAsk callback, use it

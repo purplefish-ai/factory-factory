@@ -432,19 +432,28 @@ describe('AutoApproveHandler', () => {
   const handler = new AutoApproveHandler();
 
   describe('onCanUseTool', () => {
-    it('should approve all tool requests', async () => {
+    it('should approve all tool requests with original input', async () => {
       const response = await handler.onCanUseTool(canUseToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { file_path: '/test.txt' },
+      });
     });
 
-    it('should approve Bash tool requests', async () => {
+    it('should approve Bash tool requests with original input', async () => {
       const response = await handler.onCanUseTool(bashToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { command: 'npm test' },
+      });
     });
 
-    it('should approve Write tool requests', async () => {
+    it('should approve Write tool requests with original input', async () => {
       const response = await handler.onCanUseTool(writeToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { file_path: '/test.txt', content: 'hello' },
+      });
     });
   });
 
@@ -545,9 +554,12 @@ describe('ModeBasedHandler', () => {
   describe('default mode without onAsk', () => {
     const handler = new ModeBasedHandler('default');
 
-    it('should auto-approve read-only tools', async () => {
+    it('should auto-approve read-only tools with original input', async () => {
       const response = await handler.onCanUseTool(canUseToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { file_path: '/test.txt' },
+      });
     });
 
     it('should deny non-read-only tools with message', async () => {
@@ -589,14 +601,20 @@ describe('ModeBasedHandler', () => {
   describe('acceptEdits mode', () => {
     const handler = new ModeBasedHandler('acceptEdits');
 
-    it('should auto-approve read-only tools', async () => {
+    it('should auto-approve read-only tools with original input', async () => {
       const response = await handler.onCanUseTool(canUseToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { file_path: '/test.txt' },
+      });
     });
 
-    it('should auto-approve Write tool', async () => {
+    it('should auto-approve Write tool with original input', async () => {
       const response = await handler.onCanUseTool(writeToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { file_path: '/test.txt', content: 'hello' },
+      });
     });
 
     it('should deny Bash tool', async () => {
@@ -611,9 +629,12 @@ describe('ModeBasedHandler', () => {
   describe('plan mode', () => {
     const handler = new ModeBasedHandler('plan');
 
-    it('should auto-approve all tools except ExitPlanMode', async () => {
+    it('should auto-approve all tools except ExitPlanMode with original input', async () => {
       const response = await handler.onCanUseTool(bashToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { command: 'npm test' },
+      });
     });
 
     it('should deny ExitPlanMode', async () => {
@@ -628,9 +649,12 @@ describe('ModeBasedHandler', () => {
   describe('bypassPermissions mode', () => {
     const handler = new ModeBasedHandler('bypassPermissions');
 
-    it('should auto-approve all tools', async () => {
+    it('should auto-approve all tools with original input', async () => {
       const response = await handler.onCanUseTool(bashToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { command: 'npm test' },
+      });
     });
 
     it('should NOT auto-approve ExitPlanMode (interactive tool)', async () => {
@@ -710,10 +734,13 @@ describe('ModeBasedHandler', () => {
         message: "Tool 'Bash' requires manual approval",
       });
 
-      // After changing mode, allow Bash
+      // After changing mode, allow Bash with original input
       handler.setMode('bypassPermissions');
       response = await handler.onCanUseTool(bashToolRequest);
-      expect(response).toEqual({ behavior: 'allow', updatedInput: {} });
+      expect(response).toEqual({
+        behavior: 'allow',
+        updatedInput: { command: 'npm test' },
+      });
     });
   });
 });
