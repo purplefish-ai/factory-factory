@@ -26,6 +26,8 @@ interface VirtualizedMessageListProps {
   isNearBottom?: boolean;
   /** Latest accumulated thinking content from extended thinking mode */
   latestThinking?: string | null;
+  /** Set of message IDs that are still queued (not yet dispatched to agent) */
+  queuedMessageIds?: Set<string>;
 }
 
 // =============================================================================
@@ -51,12 +53,18 @@ interface VirtualRowProps {
   item: GroupedMessageItem;
   index: number;
   measureElement: (node: HTMLElement | null) => void;
+  isQueued?: boolean;
 }
 
-const VirtualRow = memo(function VirtualRow({ item, index, measureElement }: VirtualRowProps) {
+const VirtualRow = memo(function VirtualRow({
+  item,
+  index,
+  measureElement,
+  isQueued,
+}: VirtualRowProps) {
   return (
     <div ref={measureElement} data-index={index} className="pb-2">
-      <GroupedMessageItemRenderer item={item} />
+      <GroupedMessageItemRenderer item={item} isQueued={isQueued} />
     </div>
   );
 });
@@ -75,6 +83,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   messagesEndRef,
   isNearBottom = true,
   latestThinking,
+  queuedMessageIds,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
   const isAutoScrollingRef = useRef(false);
@@ -160,6 +169,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       >
         {virtualItems.map((virtualRow) => {
           const item = messages[virtualRow.index];
+          const isQueued = queuedMessageIds?.has(item.id) ?? false;
           return (
             <div
               key={virtualRow.key}
@@ -175,6 +185,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
                 item={item}
                 index={virtualRow.index}
                 measureElement={virtualizer.measureElement}
+                isQueued={isQueued}
               />
             </div>
           );

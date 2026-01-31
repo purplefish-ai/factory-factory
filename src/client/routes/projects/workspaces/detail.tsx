@@ -17,7 +17,6 @@ import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
-  QueuedMessages,
   useChatWebSocket,
   VirtualizedMessageList,
 } from '@/components/chat';
@@ -98,7 +97,6 @@ interface ChatContentProps {
   inputAttachments: ReturnType<typeof useChatWebSocket>['inputAttachments'];
   setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
-  removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
 }
@@ -129,12 +127,17 @@ const ChatContent = memo(function ChatContent({
   inputAttachments,
   setInputAttachments,
   queuedMessages,
-  removeQueuedMessage,
   latestThinking,
   pendingMessages,
 }: ChatContentProps) {
   // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
+
+  // Convert queued messages array to Set of IDs for efficient lookup (memoized)
+  const queuedMessageIds = useMemo(
+    () => new Set(queuedMessages.map((msg) => msg.id)),
+    [queuedMessages]
+  );
 
   // Memoize onHeightChange to prevent recreating on every render
   const handleHeightChange = useCallback(() => {
@@ -168,6 +171,7 @@ const ChatContent = memo(function ChatContent({
           messagesEndRef={messagesEndRef}
           isNearBottom={isNearBottom}
           latestThinking={latestThinking}
+          queuedMessageIds={queuedMessageIds}
         />
       </div>
 
@@ -186,9 +190,8 @@ const ChatContent = memo(function ChatContent({
         </div>
       )}
 
-      {/* Input Section with Queue and Prompts */}
+      {/* Input Section with Prompts */}
       <div className="border-t">
-        <QueuedMessages messages={queuedMessages} onRemove={removeQueuedMessage} />
         <PermissionPrompt
           permission={pendingRequest.type === 'permission' ? pendingRequest.request : null}
           onApprove={approvePermission}
@@ -287,7 +290,6 @@ function WorkspaceChatContent() {
     updateSettings,
     setInputDraft,
     setInputAttachments,
-    removeQueuedMessage,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
@@ -541,7 +543,6 @@ function WorkspaceChatContent() {
                 inputAttachments={inputAttachments}
                 setInputAttachments={setInputAttachments}
                 queuedMessages={queuedMessages}
-                removeQueuedMessage={removeQueuedMessage}
                 latestThinking={latestThinking}
                 pendingMessages={pendingMessages}
               />

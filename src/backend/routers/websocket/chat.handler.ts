@@ -350,6 +350,10 @@ async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
 
     // Auto-start: create client if needed, using the dequeued message's settings
     if (!client) {
+      // Notify frontend that agent is starting BEFORE creating the client
+      // This provides immediate feedback when the first message is sent
+      forwardToConnections(dbSessionId, { type: 'starting', dbSessionId });
+
       const newClient = await autoStartClientForQueue(dbSessionId, msg);
       if (!newClient) {
         // Re-queue the message at the front so it's not lost
