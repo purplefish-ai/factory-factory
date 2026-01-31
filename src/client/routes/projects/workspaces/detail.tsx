@@ -350,17 +350,11 @@ function WorkspaceChatContent() {
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
   // Check if workspace is still initializing
-  // Use inclusion logic - explicitly list states that should show the overlay.
-  // The state machine guarantees READY workspaces have worktreePath, so we don't
-  // need the !worktreePath fallback (which would incorrectly show overlay for
-  // ARCHIVED workspaces that failed before worktree creation).
+  // Show overlay for NEW, PROVISIONING, or FAILED states.
   // Include isPending to prevent flash of main UI while query is loading.
+  const status = workspaceInitStatus?.status;
   const isInitializing =
-    isInitStatusPending ||
-    (workspaceInitStatus &&
-      (workspaceInitStatus.status === 'NEW' ||
-        workspaceInitStatus.status === 'PROVISIONING' ||
-        workspaceInitStatus.status === 'FAILED'));
+    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">

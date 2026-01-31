@@ -52,14 +52,12 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
                 Working
               </span>
             )}
-            {!workspace.isWorking &&
-              workspace.status !== 'READY' &&
-              workspace.status !== 'ARCHIVED' && (
-                <WorkspaceStatusBadge
-                  status={workspace.status}
-                  errorMessage={workspace.initErrorMessage}
-                />
-              )}
+            {!workspace.isWorking && (
+              <WorkspaceStatusBadge
+                status={workspace.status}
+                errorMessage={workspace.initErrorMessage}
+              />
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

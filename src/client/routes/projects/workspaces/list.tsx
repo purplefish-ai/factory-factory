@@ -175,6 +175,12 @@ export default function WorkspacesListPage() {
                       status={workspace.status}
                       errorMessage={workspace.initErrorMessage}
                     />
+                    {workspace.status === 'READY' && (
+                      <span className="text-xs text-muted-foreground">Ready</span>
+                    )}
+                    {workspace.status === 'ARCHIVED' && (
+                      <span className="text-xs text-muted-foreground">Archived</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {workspace.claudeSessions?.length ?? 0} sessions
