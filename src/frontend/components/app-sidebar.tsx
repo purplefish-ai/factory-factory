@@ -297,96 +297,103 @@ export function AppSidebar() {
                         )}
                       >
                         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
-                          <div className="flex items-center gap-2 w-full min-w-0">
+                          <div className="flex items-center w-full min-w-0">
                             {/* Status dot */}
-                            {isArchivingItem || !workspace.branchName ? (
-                              <Loader2 className="h-2 w-2 shrink-0 text-muted-foreground animate-spin" />
-                            ) : (
-                              <span
-                                className={cn(
-                                  'h-2 w-2 rounded-full shrink-0',
-                                  getStatusDotClass(workspace)
-                                )}
-                              />
-                            )}
-
-                            {/* Name (truncates) */}
-                            <span className="truncate font-medium text-sm min-w-[60px]">
-                              {isArchivingItem
-                                ? 'Archiving...'
-                                : workspace.branchName || workspace.name}
+                            <span className="w-4 shrink-0 flex justify-center">
+                              {isArchivingItem ? (
+                                <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
+                              ) : (
+                                <span
+                                  className={cn(
+                                    'h-2 w-2 rounded-full',
+                                    getStatusDotClass(workspace)
+                                  )}
+                                />
+                              )}
                             </span>
 
-                            {/* Diff stats */}
-                            {stats && (stats.additions > 0 || stats.deletions > 0) && (
-                              <>
-                                <span className="text-green-600 dark:text-green-400 text-xs tabular-nums shrink-0">
+                            {/* Name (truncates) */}
+                            <span className="truncate font-medium text-sm flex-1 min-w-0">
+                              {isArchivingItem ? 'Archiving...' : workspace.name}
+                            </span>
+
+                            {/* Diff stats - fixed width columns */}
+                            <span className="w-11 text-right text-xs tabular-nums shrink-0">
+                              {stats && (stats.additions > 0 || stats.deletions > 0) && (
+                                <span className="text-green-600 dark:text-green-400">
                                   +{stats.additions}
                                 </span>
-                                <span className="text-red-600 dark:text-red-400 text-xs tabular-nums shrink-0">
+                              )}
+                            </span>
+                            <span className="w-11 text-right text-xs tabular-nums shrink-0">
+                              {stats && (stats.additions > 0 || stats.deletions > 0) && (
+                                <span className="text-red-600 dark:text-red-400">
                                   -{stats.deletions}
                                 </span>
-                              </>
-                            )}
-
-                            {/* PR number */}
-                            {workspace.prNumber &&
-                              workspace.prState !== 'NONE' &&
-                              workspace.prUrl && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (workspace.prUrl) {
-                                          window.open(
-                                            workspace.prUrl,
-                                            '_blank',
-                                            'noopener,noreferrer'
-                                          );
-                                        }
-                                      }}
-                                      className="text-muted-foreground text-xs hover:text-foreground transition-colors shrink-0"
-                                    >
-                                      #{workspace.prNumber}
-                                      {workspace.prState === 'MERGED' && (
-                                        <Check className="h-3 w-3 inline ml-0.5 text-purple-500" />
-                                      )}
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right">
-                                    <p>
-                                      PR #{workspace.prNumber}
-                                      {workspace.prState === 'MERGED'
-                                        ? ' · Merged'
-                                        : workspace.prState === 'CLOSED'
-                                          ? ' · Closed'
-                                          : workspace.prCiStatus === 'SUCCESS'
-                                            ? ' · CI passed'
-                                            : workspace.prCiStatus === 'FAILURE'
-                                              ? ' · CI failed'
-                                              : workspace.prCiStatus === 'PENDING'
-                                                ? ' · CI running'
-                                                : ''}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      Click to open on GitHub
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
                               )}
+                            </span>
 
-                            {/* Spacer */}
-                            <span className="flex-1" />
+                            {/* PR number - fixed width */}
+                            <span className="w-16 text-right shrink-0">
+                              {workspace.prNumber &&
+                                workspace.prState !== 'NONE' &&
+                                workspace.prUrl && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          if (workspace.prUrl) {
+                                            window.open(
+                                              workspace.prUrl,
+                                              '_blank',
+                                              'noopener,noreferrer'
+                                            );
+                                          }
+                                        }}
+                                        className={cn(
+                                          'text-xs hover:opacity-80 transition-opacity',
+                                          workspace.prState === 'MERGED'
+                                            ? 'text-purple-500'
+                                            : 'text-muted-foreground hover:text-foreground'
+                                        )}
+                                      >
+                                        #{workspace.prNumber}
+                                        {workspace.prState === 'MERGED' && (
+                                          <Check className="h-3 w-3 inline ml-0.5" />
+                                        )}
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right">
+                                      <p>
+                                        PR #{workspace.prNumber}
+                                        {workspace.prState === 'MERGED'
+                                          ? ' · Merged'
+                                          : workspace.prState === 'CLOSED'
+                                            ? ' · Closed'
+                                            : workspace.prCiStatus === 'SUCCESS'
+                                              ? ' · CI passed'
+                                              : workspace.prCiStatus === 'FAILURE'
+                                                ? ' · CI failed'
+                                                : workspace.prCiStatus === 'PENDING'
+                                                  ? ' · CI running'
+                                                  : ''}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        Click to open on GitHub
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                            </span>
 
-                            {/* Timestamp */}
-                            {workspace.lastActivityAt && (
-                              <span className="text-muted-foreground text-xs shrink-0">
-                                {formatRelativeTime(workspace.lastActivityAt)}
-                              </span>
-                            )}
+                            {/* Timestamp - fixed width */}
+                            <span className="w-16 text-right text-muted-foreground text-xs shrink-0">
+                              {workspace.lastActivityAt &&
+                                formatRelativeTime(workspace.lastActivityAt)}
+                            </span>
 
                             {/* Archive button (hover) */}
                             {!isArchivingItem && (
@@ -400,7 +407,7 @@ export function AppSidebar() {
                                       setWorkspaceToArchive(workspace.id);
                                       setArchiveDialogOpen(true);
                                     }}
-                                    className="shrink-0 p-0.5 rounded opacity-0 group-hover/menu-item:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    className="shrink-0 ml-1 p-0.5 rounded opacity-0 group-hover/menu-item:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted"
                                   >
                                     <Archive className="h-3 w-3" />
                                   </button>
