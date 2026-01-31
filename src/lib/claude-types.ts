@@ -414,7 +414,9 @@ export interface WebSocketMessage {
     | 'user_question'
     | 'message_queued'
     | 'message_dispatched'
-    | 'message_removed';
+    | 'message_removed'
+    | 'message_accepted'
+    | 'message_rejected';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -440,6 +442,8 @@ export interface WebSocketMessage {
   // Message queue fields
   id?: string;
   position?: number;
+  // Single queued message for message_accepted event
+  queuedMessage?: QueuedMessage;
   // Queued messages for session restore
   queuedMessages?: QueuedMessage[];
   // Pending interactive request for session restore

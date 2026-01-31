@@ -102,6 +102,7 @@ interface ChatContentProps {
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
+  pendingMessageIds: ReturnType<typeof useChatWebSocket>['pendingMessageIds'];
 }
 
 /**
@@ -134,6 +135,7 @@ const ChatContent = memo(function ChatContent({
   queuedMessages,
   removeQueuedMessage,
   latestThinking,
+  pendingMessageIds,
 }: ChatContentProps) {
   // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
@@ -203,6 +205,7 @@ const ChatContent = memo(function ChatContent({
           value={inputDraft}
           onChange={setInputDraft}
           onHeightChange={handleHeightChange}
+          pendingMessageCount={pendingMessageIds.size}
         />
       </div>
     </div>
@@ -268,6 +271,7 @@ function WorkspaceChatContent() {
     inputDraft,
     queuedMessages,
     latestThinking,
+    pendingMessageIds,
     sendMessage,
     stopChat,
     approvePermission,
@@ -528,6 +532,7 @@ function WorkspaceChatContent() {
                 queuedMessages={queuedMessages}
                 removeQueuedMessage={removeQueuedMessage}
                 latestThinking={latestThinking}
+                pendingMessageIds={pendingMessageIds}
               />
             </WorkspaceContentView>
           </div>

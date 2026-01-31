@@ -52,6 +52,8 @@ export interface UseChatWebSocketReturn {
   queuedMessages: QueuedMessage[];
   // Latest thinking content from extended thinking mode
   latestThinking: string | null;
+  // Pending message IDs (awaiting backend confirmation)
+  pendingMessageIds: Set<string>;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -152,6 +154,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     inputDraft: chat.inputDraft,
     queuedMessages: chat.queuedMessages,
     latestThinking: chat.latestThinking,
+    pendingMessageIds: chat.pendingMessageIds,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,

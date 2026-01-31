@@ -48,6 +48,8 @@ interface ChatInputProps {
   value?: string;
   // Called when input value changes
   onChange?: (value: string) => void;
+  // Number of messages pending backend confirmation
+  pendingMessageCount?: number;
 }
 
 // =============================================================================
@@ -197,6 +199,7 @@ export const ChatInput = memo(function ChatInput({
   onHeightChange,
   value,
   onChange,
+  pendingMessageCount = 0,
 }: ChatInputProps) {
   // State for file attachments
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
@@ -417,8 +420,15 @@ export const ChatInput = memo(function ChatInput({
             />
           </div>
 
-          {/* Right side: Stop button (when running) + Send button */}
+          {/* Right side: Sending indicator + Stop button (when running) + Send button */}
           <div className="flex items-center gap-1">
+            {/* Show sending indicator when messages are pending backend confirmation */}
+            {pendingMessageCount > 0 && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Sending...</span>
+              </div>
+            )}
             {running && (
               <Button
                 variant="ghost"

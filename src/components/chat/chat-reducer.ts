@@ -55,6 +55,8 @@ export interface ChatState {
   toolUseIdToIndex: Map<string, number>;
   /** Latest accumulated thinking content from extended thinking mode */
   latestThinking: string | null;
+  /** Message IDs that are pending backend confirmation (shown with "sending..." indicator) */
+  pendingMessageIds: Set<string>;
 }
 
 // =============================================================================
@@ -103,6 +105,9 @@ export type ChatAction =
   | { type: 'MESSAGE_DISPATCHED'; payload: { id: string } }
   | { type: 'MESSAGE_REMOVED'; payload: { id: string } }
   | { type: 'SET_QUEUE'; payload: QueuedMessage[] }
+  | { type: 'MESSAGE_ACCEPTED'; payload: { id: string; position: number; message: QueuedMessage } }
+  | { type: 'MESSAGE_REJECTED'; payload: { id: string; error: string } }
+  | { type: 'MESSAGE_SENDING'; payload: { id: string } }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -231,6 +236,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     queuedMessages: [],
     toolUseIdToIndex: new Map(),
     latestThinking: null,
+    pendingMessageIds: new Set(),
     ...overrides,
   };
 }
@@ -468,6 +474,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         queuedMessages: [],
         toolUseIdToIndex: new Map(),
         latestThinking: null,
+        pendingMessageIds: new Set(),
       };
     case 'SESSION_LOADING_START':
       return { ...state, loadingSession: true };
@@ -519,6 +526,49 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         queuedMessages: state.queuedMessages.filter((m) => m.id !== action.payload.id),
       };
 
+    // MESSAGE_ACCEPTED: Backend confirmed message is in queue
+    // Add to messages and queuedMessages, remove from pending
+    case 'MESSAGE_ACCEPTED': {
+      const newPendingIds = new Set(state.pendingMessageIds);
+      newPendingIds.delete(action.payload.id);
+      const queuedMsg = action.payload.message;
+      // Create user message from queued message
+      const userMessage: ChatMessage = {
+        id: queuedMsg.id,
+        source: 'user',
+        text: queuedMsg.text,
+        timestamp: queuedMsg.timestamp,
+        attachments: queuedMsg.attachments,
+      };
+      return {
+        ...state,
+        messages: [...state.messages, userMessage],
+        queuedMessages: [...state.queuedMessages, queuedMsg],
+        pendingMessageIds: newPendingIds,
+      };
+    }
+
+    // MESSAGE_REJECTED: Backend rejected message (queue full, etc.)
+    // Remove from pending, show error (handled by UI via pendingMessageIds change)
+    case 'MESSAGE_REJECTED': {
+      const newPendingIds = new Set(state.pendingMessageIds);
+      newPendingIds.delete(action.payload.id);
+      return {
+        ...state,
+        pendingMessageIds: newPendingIds,
+      };
+    }
+
+    // MESSAGE_SENDING: Mark a message as pending backend confirmation
+    case 'MESSAGE_SENDING': {
+      const newPendingIds = new Set(state.pendingMessageIds);
+      newPendingIds.add(action.payload.id);
+      return {
+        ...state,
+        pendingMessageIds: newPendingIds,
+      };
+    }
+
     // SET_QUEUE: Restore queue state from backend (on reconnect/session load)
     case 'SET_QUEUE':
       return { ...state, queuedMessages: action.payload };
@@ -565,6 +615,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         queuedMessages: [],
         toolUseIdToIndex: new Map(),
         latestThinking: null,
+        pendingMessageIds: new Set(),
       };
 
     default:
@@ -684,6 +735,21 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return data.id ? { type: 'MESSAGE_DISPATCHED', payload: { id: data.id } } : null;
     case 'message_removed':
       return data.id ? { type: 'MESSAGE_REMOVED', payload: { id: data.id } } : null;
+    case 'message_accepted':
+      return data.id && data.queuedMessage
+        ? {
+            type: 'MESSAGE_ACCEPTED',
+            payload: {
+              id: data.id,
+              position: data.position ?? 0,
+              message: data.queuedMessage,
+            },
+          }
+        : null;
+    case 'message_rejected':
+      return data.id
+        ? { type: 'MESSAGE_REJECTED', payload: { id: data.id, error: data.message ?? '' } }
+        : null;
     default:
       return null;
   }

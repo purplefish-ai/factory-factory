@@ -27,7 +27,6 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type {
-  ChatMessage,
   ChatSettings,
   ClaudeMessage,
   MessageAttachment,
@@ -134,20 +133,6 @@ interface QuestionResponseMessage {
 
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function createUserMessage(
-  id: string,
-  text: string,
-  attachments?: MessageAttachment[]
-): ChatMessage {
-  return {
-    id,
-    source: 'user',
-    text,
-    timestamp: new Date().toISOString(),
-    attachments,
-  };
 }
 
 // Type for stream event structure
@@ -445,33 +430,18 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         return;
       }
 
-      // Generate single ID for both optimistic UI and backend
+      // Generate single ID for tracking
       const id = generateMessageId();
-      const timestamp = new Date().toISOString();
 
-      // Optimistic UI: show message immediately in chat with the SAME ID sent to backend
-      dispatch({
-        type: 'USER_MESSAGE_SENT',
-        payload: createUserMessage(id, trimmedText, attachments),
-      });
-
-      // Optimistic UI: add to queuedMessages for queue display
-      dispatch({
-        type: 'ADD_TO_QUEUE',
-        payload: {
-          id,
-          text: trimmedText,
-          timestamp,
-          attachments,
-          settings: stateRef.current.chatSettings,
-        },
-      });
+      // Mark message as pending backend confirmation (shows "sending..." indicator)
+      dispatch({ type: 'MESSAGE_SENDING', payload: { id } });
 
       // Clear draft when sending a message
       setInputDraftState('');
       clearDraft(dbSessionIdRef.current);
 
       // Send to backend for queueing/dispatch
+      // Message will be added to state when MESSAGE_ACCEPTED is received
       const msg: QueueMessageRequest = {
         type: 'queue_message',
         id,

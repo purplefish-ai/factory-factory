@@ -694,17 +694,25 @@ async function handleQueueMessage(
 
   // Check for queue full error
   if ('error' in result) {
-    ws.send(JSON.stringify({ type: 'error', message: result.error }));
+    // Send message_rejected with the message ID so frontend can clean up
+    ws.send(JSON.stringify({ type: 'message_rejected', id: message.id, message: result.error }));
     return;
   }
 
   const { position } = result;
 
-  // Acknowledge to the sender
-  ws.send(JSON.stringify({ type: 'message_queued', id: message.id, position }));
+  // Send message_accepted to the sender with full message for state update
+  ws.send(
+    JSON.stringify({ type: 'message_accepted', id: message.id, position, queuedMessage: queuedMsg })
+  );
 
-  // Broadcast to all connections viewing this session
-  forwardToConnections(sessionId, { type: 'message_queued', id: message.id, position });
+  // Broadcast to all other connections viewing this session
+  forwardToConnections(sessionId, {
+    type: 'message_accepted',
+    id: message.id,
+    position,
+    queuedMessage: queuedMsg,
+  });
 
   if (DEBUG_CHAT_WS) {
     logger.info('[Chat WS] Message queued', {
