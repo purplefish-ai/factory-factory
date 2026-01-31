@@ -230,6 +230,7 @@ const ChatContent = memo(function ChatContent({
 function WorkspaceChatContent() {
   const { slug = '', id: workspaceId = '' } = useParams<{ slug: string; id: string }>();
   const navigate = useNavigate();
+  const utils = trpc.useUtils();
 
   // Fetch workspace and session data
   const {
@@ -256,6 +257,20 @@ function WorkspaceChatContent() {
         },
       }
     );
+
+  // When init status becomes READY, refetch workspace to get updated worktreePath
+  const prevInitStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const currentStatus = workspaceInitStatus?.status;
+    const prevStatus = prevInitStatusRef.current;
+
+    // Refetch workspace when transitioning to READY (worktreePath now available)
+    if (prevStatus && prevStatus !== 'READY' && currentStatus === 'READY') {
+      utils.workspace.get.invalidate({ id: workspaceId });
+    }
+
+    prevInitStatusRef.current = currentStatus;
+  }, [workspaceInitStatus?.status, workspaceId, utils.workspace.get]);
 
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
