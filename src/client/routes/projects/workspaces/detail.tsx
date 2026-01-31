@@ -349,14 +349,15 @@ function WorkspaceChatContent() {
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
   // Check if workspace is still initializing
-  // A workspace is considered fully ready when:
-  // 1. status is READY, AND
-  // 2. worktreePath is populated (required for sessions)
+  // Use inclusion logic - explicitly list states that should show the overlay.
+  // The state machine guarantees READY workspaces have worktreePath, so we don't
+  // need the !worktreePath fallback (which would incorrectly show overlay for
+  // ARCHIVED workspaces that failed before worktree creation).
   const isInitializing =
-    (workspaceInitStatus &&
-      workspaceInitStatus.status !== 'READY' &&
-      workspaceInitStatus.status !== 'ARCHIVED') ||
-    !workspace?.worktreePath;
+    workspaceInitStatus &&
+    (workspaceInitStatus.status === 'NEW' ||
+      workspaceInitStatus.status === 'PROVISIONING' ||
+      workspaceInitStatus.status === 'FAILED');
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">

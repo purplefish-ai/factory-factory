@@ -28,14 +28,22 @@ export async function initializeWorkspaceWorktree(
   workspaceId: string,
   requestedBranchName?: string
 ): Promise<void> {
+  // Transition to PROVISIONING state first, before any validation.
+  // This ensures that any error during initialization can be properly surfaced
+  // via markFailed() since PROVISIONING -> FAILED is a valid transition.
+  try {
+    await workspaceStateMachine.startProvisioning(workspaceId);
+  } catch (error) {
+    // If we can't start provisioning (e.g., workspace deleted), log and return
+    logger.error('Failed to start provisioning', error as Error, { workspaceId });
+    return;
+  }
+
   try {
     const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspaceId);
     if (!workspaceWithProject?.project) {
       throw new Error('Workspace project not found');
     }
-
-    // Transition to PROVISIONING state
-    await workspaceStateMachine.startProvisioning(workspaceId);
 
     const project = workspaceWithProject.project;
     const gitClient = GitClientFactory.forProject({

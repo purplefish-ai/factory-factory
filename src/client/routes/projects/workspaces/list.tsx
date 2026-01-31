@@ -2,7 +2,6 @@ import type { Workspace, WorkspaceStatus } from '@prisma-gen/browser';
 import { Kanban, List, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
@@ -27,14 +26,6 @@ import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/componen
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../../../frontend/lib/trpc';
-
-const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
-  NEW: 'outline',
-  PROVISIONING: 'secondary',
-  READY: 'default',
-  FAILED: 'outline',
-  ARCHIVED: 'outline',
-};
 
 const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
 
@@ -180,15 +171,10 @@ export default function WorkspacesListPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={statusVariants[workspace.status] || 'default'}>
-                        {workspace.status}
-                      </Badge>
-                      <WorkspaceStatusBadge
-                        status={workspace.status}
-                        errorMessage={workspace.initErrorMessage}
-                      />
-                    </div>
+                    <WorkspaceStatusBadge
+                      status={workspace.status}
+                      errorMessage={workspace.initErrorMessage}
+                    />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {workspace.claudeSessions?.length ?? 0} sessions
