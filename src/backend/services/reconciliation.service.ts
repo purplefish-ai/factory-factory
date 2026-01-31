@@ -90,7 +90,8 @@ class ReconciliationService {
   }
 
   /**
-   * Create a worktree for a workspace
+   * Create a worktree for a workspace.
+   * Follows the state machine: marks PROVISIONING, creates worktree, marks READY/FAILED.
    */
   private async createWorktreeForWorkspace(workspaceId: string): Promise<void> {
     const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
@@ -98,24 +99,44 @@ class ReconciliationService {
       throw new Error(`Workspace ${workspaceId} not found or has no project`);
     }
 
-    const project = workspace.project;
-    const gitClient = GitClientFactory.forProject({
-      repoPath: project.repoPath,
-      worktreeBasePath: project.worktreeBasePath,
-    });
+    // Mark as provisioning (guards against ARCHIVED - returns current state if archived)
+    const updated = await workspaceAccessor.updateProvisioningStatus(workspaceId, 'PROVISIONING');
+    if (updated.status === 'ARCHIVED') {
+      logger.info('Workspace was archived, skipping worktree creation', { workspaceId });
+      return;
+    }
 
-    const worktreeName = `workspace-${workspaceId}`;
-    const baseBranch = workspace.branchName ?? project.defaultBranch;
+    try {
+      const project = workspace.project;
+      const gitClient = GitClientFactory.forProject({
+        repoPath: project.repoPath,
+        worktreeBasePath: project.worktreeBasePath,
+      });
 
-    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
-      branchPrefix: project.githubOwner ?? undefined,
-    });
-    const worktreePath = gitClient.getWorktreePath(worktreeName);
+      const worktreeName = `workspace-${workspaceId}`;
+      const baseBranch = workspace.branchName ?? project.defaultBranch;
 
-    await workspaceAccessor.update(workspaceId, {
-      worktreePath,
-      branchName: worktreeInfo.branchName,
-    });
+      const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
+        branchPrefix: project.githubOwner ?? undefined,
+      });
+      const worktreePath = gitClient.getWorktreePath(worktreeName);
+
+      await workspaceAccessor.update(workspaceId, {
+        worktreePath,
+        branchName: worktreeInfo.branchName,
+      });
+
+      // Mark as ready
+      await workspaceAccessor.updateProvisioningStatus(workspaceId, 'READY');
+    } catch (error) {
+      // Mark as failed so user can retry
+      await workspaceAccessor.updateProvisioningStatus(
+        workspaceId,
+        'FAILED',
+        (error as Error).message
+      );
+      throw error;
+    }
   }
 
   /**

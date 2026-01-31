@@ -50,8 +50,8 @@ class StartupScriptService {
       };
     }
 
-    // Mark as provisioning
-    await workspaceAccessor.updateProvisioningStatus(workspace.id, 'PROVISIONING');
+    // Note: Caller is responsible for setting status to PROVISIONING before calling this
+    // (either initializeWorkspaceWorktree or incrementRetryCount already did this)
 
     const startTime = Date.now();
     const timeoutMs = (project.startupScriptTimeout ?? 300) * 1000;

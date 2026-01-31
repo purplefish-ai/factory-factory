@@ -216,13 +216,14 @@ export const workspaceRouter = router({
     }),
 
   // Update a workspace
+  // Note: status is NOT exposed here - use dedicated endpoints (archive, retryInit)
+  // to ensure proper state machine transitions
   update: publicProcedure
     .input(
       z.object({
         id: z.string(),
         name: z.string().min(1).optional(),
         description: z.string().optional(),
-        status: z.nativeEnum(WorkspaceStatus).optional(),
         worktreePath: z.string().optional(),
         branchName: z.string().optional(),
         prUrl: z.string().optional(),

@@ -66,11 +66,8 @@ export async function initializeWorkspaceWorktree(
     });
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
-    // Update workspace with worktree info
-    await workspaceAccessor.update(workspaceId, {
-      worktreePath,
-      branchName: worktreeInfo.branchName,
-    });
+    // Update workspace with worktree info (guarded against ARCHIVED)
+    await workspaceAccessor.updateWorktreeInfo(workspaceId, worktreePath, worktreeInfo.branchName);
 
     // Run startup script if configured
     if (startupScriptService.hasStartupScript(project)) {

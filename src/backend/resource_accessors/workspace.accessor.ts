@@ -241,6 +241,23 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Update worktree info (path and branch) with guard against ARCHIVED status.
+   * Prevents setting worktree data on archived workspaces during provisioning race.
+   */
+  async updateWorktreeInfo(id: string, worktreePath: string, branchName: string): Promise<void> {
+    await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: { not: 'ARCHIVED' },
+      },
+      data: {
+        worktreePath,
+        branchName,
+      },
+    });
+  }
+
+  /**
    * Find multiple workspaces by their IDs.
    * Used for batch lookups when enriching process info.
    */
