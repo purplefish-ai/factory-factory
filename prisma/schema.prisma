@@ -13,9 +13,11 @@ datasource db {
 // Enums
 
 enum WorkspaceStatus {
-  ACTIVE
-  COMPLETED
-  ARCHIVED
+  NEW           // Initial state, workspace record created but not yet provisioned
+  PROVISIONING  // Worktree/branch creation and startup script running
+  READY         // Successfully provisioned and ready to use
+  FAILED        // Provisioning failed
+  ARCHIVED      // Workspace has been archived
 }
 
 enum SessionStatus {
@@ -53,12 +55,6 @@ enum KanbanColumn {
   DONE
 }
 
-enum WorkspaceInitStatus {
-  PENDING       // Initial state after DB record creation
-  INITIALIZING  // Startup script is running
-  READY         // Successfully initialized
-  FAILED        // Script execution failed
-}
 
 // Models
 model Project {
@@ -105,16 +101,15 @@ model Workspace {
   project             Project           @relation(fields: [projectId], references: [id])
   name                String
   description         String?
-  status              WorkspaceStatus   @default(ACTIVE)
+  status              WorkspaceStatus   @default(NEW)
   worktreePath        String?
   branchName          String?
 
-  // Initialization tracking
-  initStatus          WorkspaceInitStatus @default(PENDING)
-  initErrorMessage    String?
-  initStartedAt       DateTime?
-  initCompletedAt     DateTime?
-  initRetryCount      Int                 @default(0)
+  // Provisioning tracking
+  errorMessage          String?
+  provisioningStartedAt DateTime?
+  provisioningCompletedAt DateTime?
+  retryCount            Int               @default(0)
 
   prUrl               String?
   githubIssueNumber   Int?

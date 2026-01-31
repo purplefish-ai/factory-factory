@@ -37,16 +37,15 @@ const baseWorkspace: WorkspaceWithKanban = {
   prReviewState: null,
   prCiStatus: 'UNKNOWN',
   prUpdatedAt: null,
-  status: 'ACTIVE',
+  status: 'READY',
   createdAt: new Date(),
   updatedAt: new Date(),
   kanbanColumn: 'IN_PROGRESS',
   isWorking: false,
-  initStatus: 'READY',
-  initErrorMessage: null,
-  initStartedAt: null,
-  initCompletedAt: null,
-  initRetryCount: 0,
+  errorMessage: null,
+  provisioningStartedAt: null,
+  provisioningCompletedAt: null,
+  retryCount: 0,
   githubIssueNumber: null,
   githubIssueUrl: null,
   hasHadSessions: true,
@@ -156,12 +155,12 @@ export const Working: Story = {
   },
 };
 
-export const Initializing: Story = {
+export const Provisioning: Story = {
   args: {
     workspace: {
       ...baseWorkspace,
       name: 'New workspace',
-      initStatus: 'INITIALIZING',
+      status: 'PROVISIONING',
       branchName: null,
     },
     projectSlug: 'my-project',

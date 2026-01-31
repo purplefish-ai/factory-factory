@@ -25,10 +25,22 @@ export interface WorkspaceWithKanbanState {
 export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn {
   const { lifecycle, isWorking, prState, hasHadSessions } = input;
 
-  // Done: User explicitly marked complete or archived
-  if (lifecycle === WorkspaceStatus.COMPLETED || lifecycle === WorkspaceStatus.ARCHIVED) {
+  // Archived workspaces go to Done column
+  if (lifecycle === WorkspaceStatus.ARCHIVED) {
     return KanbanColumn.DONE;
   }
+
+  // NEW/PROVISIONING/FAILED workspaces always go to Backlog
+  // They are not yet ready for work
+  if (
+    lifecycle === WorkspaceStatus.NEW ||
+    lifecycle === WorkspaceStatus.PROVISIONING ||
+    lifecycle === WorkspaceStatus.FAILED
+  ) {
+    return KanbanColumn.BACKLOG;
+  }
+
+  // From here on, workspace is READY
 
   // In Progress: Any active work (overrides PR state)
   if (isWorking) {

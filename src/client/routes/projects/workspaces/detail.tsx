@@ -229,13 +229,13 @@ function WorkspaceChatContent() {
 
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
 
-  // Query init status to show initialization overlay
-  const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
+  // Query workspace status to show initialization overlay
+  const { data: workspaceStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
     {
       // Poll while not ready
       refetchInterval: (query) => {
-        const status = query.state.data?.initStatus;
+        const status = query.state.data?.status;
         return status === 'READY' || status === 'FAILED' ? false : 1000;
       },
     }
@@ -348,20 +348,20 @@ function WorkspaceChatContent() {
 
   // Check if workspace is still initializing
   // A workspace is considered fully ready when:
-  // 1. initStatus is READY, AND
+  // 1. status is READY, AND
   // 2. worktreePath is populated (required for sessions)
-  const isInitializing =
-    (initStatus && initStatus.initStatus !== 'READY') || !workspace?.worktreePath;
+  const isProvisioning =
+    (workspaceStatus && workspaceStatus.status !== 'READY') || !workspace?.worktreePath;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Initialization Overlay - shown while workspace is being set up */}
-      {isInitializing && (
+      {isProvisioning && (
         <InitializationOverlay
           workspaceId={workspaceId}
-          initStatus={initStatus?.initStatus ?? 'INITIALIZING'}
-          initErrorMessage={initStatus?.initErrorMessage ?? null}
-          hasStartupScript={initStatus?.hasStartupScript ?? false}
+          status={workspaceStatus?.status ?? 'PROVISIONING'}
+          errorMessage={workspaceStatus?.errorMessage ?? null}
+          hasStartupScript={workspaceStatus?.hasStartupScript ?? false}
         />
       )}
 

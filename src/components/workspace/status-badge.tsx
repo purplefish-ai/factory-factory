@@ -1,14 +1,13 @@
 'use client';
 
+import type { WorkspaceStatus } from '@prisma-gen/browser';
 import { AlertCircle, Clock, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-export type InitStatus = 'PENDING' | 'INITIALIZING' | 'READY' | 'FAILED';
-
-interface InitStatusBadgeProps {
-  status: InitStatus;
+interface StatusBadgeProps {
+  status: WorkspaceStatus;
   errorMessage?: string | null;
   className?: string;
 }
@@ -20,14 +19,14 @@ interface StatusConfig {
   iconClassName?: string;
 }
 
-// Only include statuses that are actually rendered (READY returns null)
-const statusConfig: Record<Exclude<InitStatus, 'READY'>, StatusConfig> = {
-  PENDING: {
+// Only include statuses that are actually rendered (READY and ARCHIVED return null)
+const statusConfig: Record<Exclude<WorkspaceStatus, 'READY' | 'ARCHIVED'>, StatusConfig> = {
+  NEW: {
     icon: Clock,
     label: 'Pending',
     variant: 'outline',
   },
-  INITIALIZING: {
+  PROVISIONING: {
     icon: Loader2,
     label: 'Setting up',
     variant: 'secondary',
@@ -40,12 +39,13 @@ const statusConfig: Record<Exclude<InitStatus, 'READY'>, StatusConfig> = {
   },
 };
 
-export function InitStatusBadge({
+export function StatusBadge({
   status,
   errorMessage,
   className,
-}: InitStatusBadgeProps): React.ReactNode {
-  if (status === 'READY') {
+}: StatusBadgeProps): React.ReactNode {
+  // Don't render badge for READY or ARCHIVED states
+  if (status === 'READY' || status === 'ARCHIVED') {
     return null;
   }
 

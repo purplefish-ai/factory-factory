@@ -4,7 +4,6 @@ import type {
   PRState,
   Prisma,
   Workspace,
-  WorkspaceInitStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
 import { prisma } from '../db';
@@ -36,12 +35,11 @@ interface UpdateWorkspaceInput {
   // Cached kanban column
   cachedKanbanColumn?: KanbanColumn;
   stateComputedAt?: Date | null;
-  // Initialization tracking
-  initStatus?: WorkspaceInitStatus;
-  initErrorMessage?: string | null;
-  initStartedAt?: Date | null;
-  initCompletedAt?: Date | null;
-  initRetryCount?: number;
+  // Provisioning tracking
+  errorMessage?: string | null;
+  provisioningStartedAt?: Date | null;
+  provisioningCompletedAt?: Date | null;
+  retryCount?: number;
 }
 
 interface FindByProjectIdFilters {
@@ -157,15 +155,14 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces where worktreePath is null.
-   * Used for reconciliation to ensure all active workspaces have worktrees.
+   * Find NEW or FAILED workspaces that need provisioning.
+   * Used for reconciliation to ensure all workspaces get provisioned.
    * Includes project for worktree creation.
    */
   findNeedingWorktree(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
-        worktreePath: null,
+        status: { in: ['NEW', 'FAILED'] },
       },
       include: {
         project: true,
@@ -188,7 +185,7 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces with PR URLs that need sync.
+   * Find READY workspaces with PR URLs that need sync.
    * Used for Inngest PR status sync job.
    */
   findNeedingPRSync(staleThresholdMinutes = 5): Promise<WorkspaceWithProject[]> {
@@ -196,7 +193,7 @@ class WorkspaceAccessor {
 
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
+        status: 'READY',
         prUrl: { not: null },
         OR: [{ prUpdatedAt: null }, { prUpdatedAt: { lt: staleThreshold } }],
       },
@@ -208,13 +205,13 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces without PR URLs that have a branch name.
+   * Find READY workspaces without PR URLs that have a branch name.
    * Used for detecting newly created PRs.
    */
   findNeedingPRDiscovery(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
+        status: 'READY',
         prUrl: null,
         branchName: { not: null },
       },
@@ -270,28 +267,28 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Update workspace initialization status atomically.
+   * Update workspace provisioning status atomically.
    * Includes timestamps for tracking.
    */
-  updateInitStatus(
+  updateProvisioningStatus(
     id: string,
-    status: WorkspaceInitStatus,
+    status: 'PROVISIONING' | 'READY' | 'FAILED',
     errorMessage?: string | null
   ): Promise<Workspace> {
     const now = new Date();
     const data: Prisma.WorkspaceUpdateInput = {
-      initStatus: status,
+      status: status,
     };
 
-    if (status === 'INITIALIZING') {
-      data.initStartedAt = now;
-      data.initErrorMessage = null;
+    if (status === 'PROVISIONING') {
+      data.provisioningStartedAt = now;
+      data.errorMessage = null;
     } else if (status === 'READY' || status === 'FAILED') {
-      data.initCompletedAt = now;
+      data.provisioningCompletedAt = now;
     }
 
     if (errorMessage !== undefined) {
-      data.initErrorMessage = errorMessage;
+      data.errorMessage = errorMessage;
     }
 
     return prisma.workspace.update({
@@ -301,7 +298,7 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Increment retry count and reset init status for a retry attempt.
+   * Increment retry count and reset status for a retry attempt.
    * Returns null if max retries exceeded.
    *
    * @param maxRetries - Maximum number of retries allowed (default 3)
@@ -311,13 +308,13 @@ class WorkspaceAccessor {
     const result = await prisma.workspace.updateMany({
       where: {
         id,
-        initRetryCount: { lt: maxRetries },
+        retryCount: { lt: maxRetries },
       },
       data: {
-        initRetryCount: { increment: 1 },
-        initStatus: 'INITIALIZING',
-        initStartedAt: new Date(),
-        initErrorMessage: null,
+        retryCount: { increment: 1 },
+        status: 'PROVISIONING',
+        provisioningStartedAt: new Date(),
+        errorMessage: null,
       },
     });
 

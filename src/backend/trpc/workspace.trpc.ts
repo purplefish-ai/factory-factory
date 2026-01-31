@@ -55,11 +55,11 @@ export const workspaceRouter = router({
   getProjectSummaryState: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
-      // 1. Fetch project (for defaultBranch) and ACTIVE workspaces with sessions in parallel
+      // 1. Fetch project (for defaultBranch) and READY workspaces with sessions in parallel
       const [project, workspaces] = await Promise.all([
         projectAccessor.findById(input.projectId),
         workspaceAccessor.findByProjectIdWithSessions(input.projectId, {
-          status: WorkspaceStatus.ACTIVE,
+          status: WorkspaceStatus.READY,
         }),
       ]);
 
@@ -209,7 +209,7 @@ export const workspaceRouter = router({
       // This ensures worktreePath is set before the user can start sessions
       await initializeWorkspaceWorktree(workspace.id, input.branchName);
 
-      // Refetch workspace to get updated worktreePath and initStatus
+      // Refetch workspace to get updated worktreePath and status
       const initializedWorkspace = await workspaceAccessor.findById(workspace.id);
 
       return initializedWorkspace ?? workspace;

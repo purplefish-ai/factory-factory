@@ -1,27 +1,27 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { InitStatusBadge } from './init-status-badge';
+import { StatusBadge } from './status-badge';
 
 const meta = {
-  title: 'Workspace/InitStatusBadge',
-  component: InitStatusBadge,
+  title: 'Workspace/StatusBadge',
+  component: StatusBadge,
   parameters: {
     layout: 'centered',
   },
   tags: ['autodocs'],
-} satisfies Meta<typeof InitStatusBadge>;
+} satisfies Meta<typeof StatusBadge>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Pending: Story = {
+export const New: Story = {
   args: {
-    status: 'PENDING',
+    status: 'NEW',
   },
 };
 
-export const Initializing: Story = {
+export const Provisioning: Story = {
   args: {
-    status: 'INITIALIZING',
+    status: 'PROVISIONING',
   },
 };
 
@@ -29,6 +29,13 @@ export const Ready: Story = {
   name: 'Ready (renders null)',
   args: {
     status: 'READY',
+  },
+};
+
+export const Archived: Story = {
+  name: 'Archived (renders null)',
+  args: {
+    status: 'ARCHIVED',
   },
 };
 
@@ -50,25 +57,29 @@ export const AllStates: Story = {
     () => (
       <div className="flex flex-col gap-4 items-start">
         <div className="flex items-center gap-2">
-          <span className="w-24 text-sm text-muted-foreground">Pending:</span>
-          <InitStatusBadge status="PENDING" />
+          <span className="w-24 text-sm text-muted-foreground">New:</span>
+          <StatusBadge status="NEW" />
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-24 text-sm text-muted-foreground">Initializing:</span>
-          <InitStatusBadge status="INITIALIZING" />
+          <span className="w-24 text-sm text-muted-foreground">Provisioning:</span>
+          <StatusBadge status="PROVISIONING" />
         </div>
         <div className="flex items-center gap-2">
           <span className="w-24 text-sm text-muted-foreground">Ready:</span>
           <span className="text-xs text-muted-foreground">(renders null)</span>
         </div>
         <div className="flex items-center gap-2">
+          <span className="w-24 text-sm text-muted-foreground">Archived:</span>
+          <span className="text-xs text-muted-foreground">(renders null)</span>
+        </div>
+        <div className="flex items-center gap-2">
           <span className="w-24 text-sm text-muted-foreground">Failed:</span>
-          <InitStatusBadge status="FAILED" errorMessage="Example error message" />
+          <StatusBadge status="FAILED" errorMessage="Example error message" />
         </div>
       </div>
     ),
   ],
   args: {
-    status: 'PENDING',
+    status: 'NEW',
   },
 };

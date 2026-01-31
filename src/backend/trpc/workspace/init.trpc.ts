@@ -31,8 +31,8 @@ export async function initializeWorkspaceWorktree(
       throw new Error('Workspace project not found');
     }
 
-    // Mark as initializing
-    await workspaceAccessor.updateInitStatus(workspaceId, 'INITIALIZING');
+    // Mark as provisioning
+    await workspaceAccessor.updateProvisioningStatus(workspaceId, 'PROVISIONING');
 
     const project = workspaceWithProject.project;
     const gitClient = GitClientFactory.forProject({
@@ -90,7 +90,7 @@ export async function initializeWorkspaceWorktree(
         const finalWorkspace = await workspaceAccessor.findById(workspaceId);
         logger.warn('Startup script failed but workspace created', {
           workspaceId,
-          error: finalWorkspace?.initErrorMessage,
+          error: finalWorkspace?.errorMessage,
         });
       }
       // startup script service already updates init status
@@ -98,13 +98,17 @@ export async function initializeWorkspaceWorktree(
     }
 
     // No startup script - mark as ready
-    await workspaceAccessor.updateInitStatus(workspaceId, 'READY');
+    await workspaceAccessor.updateProvisioningStatus(workspaceId, 'READY');
   } catch (error) {
     logger.error('Failed to initialize workspace worktree', error as Error, {
       workspaceId,
     });
     // Mark workspace as failed so user can see the error and retry
-    await workspaceAccessor.updateInitStatus(workspaceId, 'FAILED', (error as Error).message);
+    await workspaceAccessor.updateProvisioningStatus(
+      workspaceId,
+      'FAILED',
+      (error as Error).message
+    );
   }
 }
 
@@ -124,10 +128,10 @@ export const workspaceInitRouter = router({
     }
 
     return {
-      initStatus: workspace.initStatus,
-      initErrorMessage: workspace.initErrorMessage,
-      initStartedAt: workspace.initStartedAt,
-      initCompletedAt: workspace.initCompletedAt,
+      status: workspace.status,
+      errorMessage: workspace.errorMessage,
+      provisioningStartedAt: workspace.provisioningStartedAt,
+      provisioningCompletedAt: workspace.provisioningCompletedAt,
       hasStartupScript: !!(
         workspace.project?.startupScriptCommand || workspace.project?.startupScriptPath
       ),
@@ -144,7 +148,7 @@ export const workspaceInitRouter = router({
       });
     }
 
-    if (workspace.initStatus !== 'FAILED') {
+    if (workspace.status !== 'FAILED') {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'Can only retry failed initializations',

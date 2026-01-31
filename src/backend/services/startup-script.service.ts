@@ -26,7 +26,7 @@ export interface StartupScriptResult {
 class StartupScriptService {
   /**
    * Run the startup script for a workspace synchronously.
-   * Updates workspace initStatus throughout execution.
+   * Updates workspace status throughout execution.
    *
    * @returns Result of script execution
    */
@@ -39,7 +39,7 @@ class StartupScriptService {
     // Check if project has a startup script configured
     if (!(project.startupScriptCommand || project.startupScriptPath)) {
       // No script configured - mark as ready immediately
-      await workspaceAccessor.updateInitStatus(workspace.id, 'READY');
+      await workspaceAccessor.updateProvisioningStatus(workspace.id, 'READY');
       return {
         success: true,
         exitCode: 0,
@@ -50,8 +50,8 @@ class StartupScriptService {
       };
     }
 
-    // Mark as initializing
-    await workspaceAccessor.updateInitStatus(workspace.id, 'INITIALIZING');
+    // Mark as provisioning
+    await workspaceAccessor.updateProvisioningStatus(workspace.id, 'PROVISIONING');
 
     const startTime = Date.now();
     const timeoutMs = (project.startupScriptTimeout ?? 300) * 1000;
@@ -67,7 +67,7 @@ class StartupScriptService {
       const durationMs = Date.now() - startTime;
 
       if (result.success) {
-        await workspaceAccessor.updateInitStatus(workspace.id, 'READY');
+        await workspaceAccessor.updateProvisioningStatus(workspace.id, 'READY');
         logger.info('Startup script completed successfully', {
           workspaceId: workspace.id,
           durationMs,
@@ -77,7 +77,7 @@ class StartupScriptService {
           ? `Script timed out after ${project.startupScriptTimeout}s`
           : `Script exited with code ${result.exitCode}: ${result.stderr.slice(0, 500)}`;
 
-        await workspaceAccessor.updateInitStatus(workspace.id, 'FAILED', errorMessage);
+        await workspaceAccessor.updateProvisioningStatus(workspace.id, 'FAILED', errorMessage);
         logger.error('Startup script failed', {
           workspaceId: workspace.id,
           exitCode: result.exitCode,
@@ -91,7 +91,7 @@ class StartupScriptService {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      await workspaceAccessor.updateInitStatus(workspace.id, 'FAILED', errorMessage);
+      await workspaceAccessor.updateProvisioningStatus(workspace.id, 'FAILED', errorMessage);
       logger.error('Startup script execution error', error as Error, {
         workspaceId: workspace.id,
       });

@@ -8,17 +8,19 @@ import { trpc } from '@/frontend/lib/trpc';
 // Workspace Initialization Overlay
 // =============================================================================
 
+import type { WorkspaceStatus } from '@prisma-gen/browser';
+
 interface InitializationOverlayProps {
   workspaceId: string;
-  initStatus: 'PENDING' | 'INITIALIZING' | 'READY' | 'FAILED';
-  initErrorMessage: string | null;
+  status: WorkspaceStatus;
+  errorMessage: string | null;
   hasStartupScript: boolean;
 }
 
 export function InitializationOverlay({
   workspaceId,
-  initStatus,
-  initErrorMessage,
+  status,
+  errorMessage,
   hasStartupScript,
 }: InitializationOverlayProps) {
   const utils = trpc.useUtils();
@@ -32,8 +34,8 @@ export function InitializationOverlay({
     },
   });
 
-  const isFailed = initStatus === 'FAILED';
-  const isInitializing = initStatus === 'INITIALIZING';
+  const isFailed = status === 'FAILED';
+  const isProvisioning = status === 'PROVISIONING';
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -46,7 +48,7 @@ export function InitializationOverlay({
             <div className="space-y-2">
               <h2 className="text-lg font-semibold">Workspace Setup Failed</h2>
               <p className="text-sm text-muted-foreground">
-                {initErrorMessage || 'An error occurred while setting up this workspace.'}
+                {errorMessage || 'An error occurred while setting up this workspace.'}
               </p>
             </div>
             <Button
@@ -72,7 +74,7 @@ export function InitializationOverlay({
             <div className="space-y-2">
               <h2 className="text-lg font-semibold">Setting up workspace...</h2>
               <p className="text-sm text-muted-foreground">
-                {isInitializing && hasStartupScript
+                {isProvisioning && hasStartupScript
                   ? 'Running startup script. This may take a few minutes.'
                   : 'Creating git worktree and preparing your workspace.'}
               </p>

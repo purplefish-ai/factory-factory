@@ -197,7 +197,7 @@ class ProjectAccessor {
         _count: {
           select: {
             workspaces: {
-              where: { status: 'ACTIVE' },
+              where: { status: 'READY' },
             },
           },
         },
