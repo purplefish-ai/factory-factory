@@ -537,9 +537,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         queuedMessagesMap.set(msg.id, msg);
       }
 
+      // Convert queued messages to ChatMessages for inline display
+      // These will appear grayed out at the end of the messages list
+      const queuedAsChatMessages: ChatMessage[] = queuedMessagesArray.map((qm) => ({
+        id: qm.id,
+        source: 'user' as const,
+        text: qm.text,
+        timestamp: qm.timestamp,
+        attachments: qm.attachments,
+      }));
+
+      // Combine history + optimistic + queued messages
+      const allMessages = [...messages, ...queuedAsChatMessages];
+
       return {
         ...state,
-        messages,
+        messages: allMessages,
         gitBranch: action.payload.gitBranch,
         // Session is ready (or running if backend says so)
         sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
