@@ -74,7 +74,7 @@ export type ControlResponseBody = ControlResponseData;
  * protocol.on('message', (msg) => console.log('Received:', msg));
  * protocol.on('control_request', (req) => {
  *   // Handle permission request
- *   protocol.sendControlResponse(req.request_id, { behavior: 'allow' });
+ *   protocol.sendControlResponse(req.request_id, { behavior: 'allow', updatedInput: {} });
  * });
  *
  * protocol.start();
