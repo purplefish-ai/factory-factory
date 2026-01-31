@@ -659,7 +659,6 @@ function handleUserInputMessage(ws: WebSocket, sessionId: string, message: ChatM
 async function handleQueueMessage(
   ws: WebSocket,
   sessionId: string,
-  _workingDir: string,
   message: ChatMessage
 ): Promise<void> {
   const text = message.text?.trim();
@@ -778,6 +777,22 @@ async function handleListSessionsMessage(ws: WebSocket, workingDir: string): Pro
   ws.send(JSON.stringify({ type: 'sessions', sessions }));
 }
 
+/**
+ * Parse model string to extract model type.
+ */
+function parseModelType(model: string | null | undefined): string | null {
+  if (!model) {
+    return null;
+  }
+  if (model.includes('opus')) {
+    return 'opus';
+  }
+  if (model.includes('haiku')) {
+    return 'haiku';
+  }
+  return null;
+}
+
 async function handleLoadSessionMessage(
   ws: WebSocket,
   sessionId: string,
@@ -792,59 +807,43 @@ async function handleLoadSessionMessage(
   const targetSessionId = dbSession.claudeSessionId ?? null;
   const existingClient = sessionService.getClient(sessionId);
   const running = existingClient?.isWorking() ?? false;
-
-  // Check for pending interactive request to restore modal state
-  const pendingRequest = pendingInteractiveRequests.get(sessionId);
-
-  // Get queued messages for this session
+  const pendingInteractiveRequest = pendingInteractiveRequests.get(sessionId) ?? null;
   const queuedMessages = messageQueueService.getQueue(sessionId);
 
+  // Build session data - fetch from Claude session if available
+  let messages: Awaited<ReturnType<typeof SessionManager.getHistory>> = [];
+  let gitBranch: string | null = null;
+  let selectedModel: string | null = null;
+  let thinkingEnabled = false;
+
   if (targetSessionId) {
-    const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
+    const [history, model, thinking, branch] = await Promise.all([
       SessionManager.getHistory(targetSessionId, workingDir),
       SessionManager.getSessionModel(targetSessionId, workingDir),
       SessionManager.getSessionThinkingEnabled(targetSessionId, workingDir),
       SessionManager.getSessionGitBranch(targetSessionId, workingDir),
     ]);
-
-    const selectedModel = model?.includes('opus')
-      ? 'opus'
-      : model?.includes('haiku')
-        ? 'haiku'
-        : null;
-
-    ws.send(
-      JSON.stringify({
-        type: 'session_loaded',
-        messages: history,
-        gitBranch,
-        running,
-        settings: {
-          selectedModel,
-          thinkingEnabled,
-          planModeEnabled: false,
-        },
-        pendingInteractiveRequest: pendingRequest ?? null,
-        queuedMessages,
-      })
-    );
-  } else {
-    ws.send(
-      JSON.stringify({
-        type: 'session_loaded',
-        messages: [],
-        gitBranch: null,
-        running,
-        settings: {
-          selectedModel: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
-        pendingInteractiveRequest: pendingRequest ?? null,
-        queuedMessages,
-      })
-    );
+    messages = history;
+    gitBranch = branch;
+    selectedModel = parseModelType(model);
+    thinkingEnabled = thinking;
   }
+
+  ws.send(
+    JSON.stringify({
+      type: 'session_loaded',
+      messages,
+      gitBranch,
+      running,
+      settings: {
+        selectedModel,
+        thinkingEnabled,
+        planModeEnabled: false,
+      },
+      pendingInteractiveRequest,
+      queuedMessages,
+    })
+  );
 }
 
 /**
@@ -991,7 +990,7 @@ async function handleChatMessage(
       handleUserInputMessage(ws, dbSessionId, message);
       break;
     case 'queue_message':
-      await handleQueueMessage(ws, dbSessionId, workingDir, message);
+      await handleQueueMessage(ws, dbSessionId, message);
       break;
     case 'remove_queued_message':
       handleRemoveQueuedMessage(ws, dbSessionId, message);

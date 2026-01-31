@@ -43,17 +43,33 @@ class MessageQueueService {
   private queues = new Map<string, QueuedMessage[]>();
 
   /**
-   * Enqueue a message for a session.
-   * @returns The position in the queue (0-indexed), or an error if queue is full
+   * Get or create a queue for a session.
    */
-  enqueue(sessionId: string, msg: QueuedMessage): { position: number } | { error: string } {
+  private getOrCreateQueue(sessionId: string): QueuedMessage[] {
     let queue = this.queues.get(sessionId);
     if (!queue) {
       queue = [];
       this.queues.set(sessionId, queue);
     }
+    return queue;
+  }
 
-    // Check queue size limit
+  /**
+   * Clean up empty queue for a session.
+   */
+  private cleanupEmptyQueue(sessionId: string, queue: QueuedMessage[]): void {
+    if (queue.length === 0) {
+      this.queues.delete(sessionId);
+    }
+  }
+
+  /**
+   * Enqueue a message for a session.
+   * @returns The position in the queue (0-indexed), or an error if queue is full
+   */
+  enqueue(sessionId: string, msg: QueuedMessage): { position: number } | { error: string } {
+    const queue = this.getOrCreateQueue(sessionId);
+
     if (queue.length >= MAX_QUEUE_SIZE) {
       logger.warn('Queue full, rejecting message', {
         sessionId,
@@ -95,11 +111,7 @@ class MessageQueueService {
       remainingInQueue: queue.length,
     });
 
-    // Clean up empty queues
-    if (queue.length === 0) {
-      this.queues.delete(sessionId);
-    }
-
+    this.cleanupEmptyQueue(sessionId, queue);
     return msg;
   }
 
@@ -126,11 +138,7 @@ class MessageQueueService {
       remainingInQueue: queue.length,
     });
 
-    // Clean up empty queues
-    if (queue.length === 0) {
-      this.queues.delete(sessionId);
-    }
-
+    this.cleanupEmptyQueue(sessionId, queue);
     return true;
   }
 
