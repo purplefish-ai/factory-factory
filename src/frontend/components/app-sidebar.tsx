@@ -302,7 +302,7 @@ export function AppSidebar() {
                         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
                           <div className="flex items-center w-full min-w-0">
                             {/* Status dot */}
-                            <span className="w-4 shrink-0 flex justify-center">
+                            <span className="w-3 shrink-0 flex justify-center">
                               {isArchivingItem ? (
                                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
                               ) : (
@@ -316,12 +316,12 @@ export function AppSidebar() {
                             </span>
 
                             {/* Name (truncates) */}
-                            <span className="truncate font-medium text-sm flex-1 min-w-0">
+                            <span className="truncate font-medium text-sm flex-1 min-w-0 ml-1">
                               {isArchivingItem ? 'Archiving...' : workspace.name}
                             </span>
 
-                            {/* Diff stats - tight paired columns */}
-                            <span className="w-[4.5rem] flex text-xs tabular-nums shrink-0">
+                            {/* Diff stats - fixed width columns */}
+                            <span className="w-14 flex text-xs tabular-nums shrink-0">
                               {stats &&
                               (stats.additions > 0 || stats.deletions > 0 || stats.total > 0) ? (
                                 stats.additions > 0 || stats.deletions > 0 ? (
@@ -329,7 +329,7 @@ export function AppSidebar() {
                                     <span className="w-1/2 text-right text-green-600 dark:text-green-400">
                                       +{stats.additions}
                                     </span>
-                                    <span className="w-1/2 text-left pl-1 text-red-600 dark:text-red-400">
+                                    <span className="w-1/2 text-left pl-0.5 text-red-600 dark:text-red-400">
                                       -{stats.deletions}
                                     </span>
                                   </>
@@ -342,7 +342,7 @@ export function AppSidebar() {
                             </span>
 
                             {/* PR number - fixed width */}
-                            <span className="w-14 shrink-0">
+                            <span className="w-14 shrink-0 text-right">
                               {workspace.prNumber &&
                                 workspace.prState !== 'NONE' &&
                                 workspace.prUrl && (
@@ -369,9 +369,11 @@ export function AppSidebar() {
                                         )}
                                       >
                                         #{workspace.prNumber}
-                                        {workspace.prState === 'MERGED' && (
-                                          <Check className="h-3 w-3 inline ml-0.5" />
-                                        )}
+                                        <span className="inline-block w-3.5 ml-0.5">
+                                          {workspace.prState === 'MERGED' && (
+                                            <Check className="h-3 w-3 inline" />
+                                          )}
+                                        </span>
                                       </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="right">
@@ -398,7 +400,7 @@ export function AppSidebar() {
                             </span>
 
                             {/* Timestamp - fixed width */}
-                            <span className="w-16 text-right text-muted-foreground text-xs shrink-0">
+                            <span className="w-10 text-right text-muted-foreground text-xs shrink-0">
                               {workspace.lastActivityAt &&
                                 formatRelativeTime(workspace.lastActivityAt)}
                             </span>

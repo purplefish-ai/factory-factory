@@ -2,10 +2,10 @@ import {
   AppWindow,
   Archive,
   ArrowDown,
+  Check,
   CheckCircle2,
   Circle,
   GitBranch,
-  GitPullRequest,
   Loader2,
   PanelRight,
   XCircle,
@@ -431,29 +431,25 @@ function WorkspaceChatContent() {
               href={workspace.prUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-colors text-sm font-medium ${
+              className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
                 workspace.prState === 'MERGED'
-                  ? 'bg-purple-500/25 text-purple-700 dark:text-purple-300 hover:bg-purple-500/35'
-                  : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25'
+                  ? 'text-purple-500'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <GitPullRequest className="h-4 w-4" />
-              <span>#{workspace.prNumber}</span>
+              #{workspace.prNumber}
               {workspace.prState === 'MERGED' ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 text-purple-500" />
-                  <span className="text-xs">Merged</span>
-                </>
+                <Check className="h-3 w-3" />
               ) : (
                 <>
                   {workspace.prCiStatus === 'SUCCESS' && (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
                   )}
                   {workspace.prCiStatus === 'FAILURE' && (
-                    <XCircle className="h-4 w-4 text-red-500" />
+                    <XCircle className="h-3 w-3 text-red-500" />
                   )}
                   {workspace.prCiStatus === 'PENDING' && (
-                    <Circle className="h-4 w-4 text-yellow-500 animate-pulse" />
+                    <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
                   )}
                 </>
               )}
