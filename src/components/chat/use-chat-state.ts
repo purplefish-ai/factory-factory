@@ -447,11 +447,24 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
       // Generate single ID for both optimistic UI and backend
       const id = generateMessageId();
+      const timestamp = new Date().toISOString();
 
       // Optimistic UI: show message immediately in chat with the SAME ID sent to backend
       dispatch({
         type: 'USER_MESSAGE_SENT',
         payload: createUserMessage(id, trimmedText, attachments),
+      });
+
+      // Optimistic UI: add to queuedMessages for queue display
+      dispatch({
+        type: 'ADD_TO_QUEUE',
+        payload: {
+          id,
+          text: trimmedText,
+          timestamp,
+          attachments,
+          settings: stateRef.current.chatSettings,
+        },
       });
 
       // Clear draft when sending a message

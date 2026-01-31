@@ -336,6 +336,14 @@ async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
     return;
   }
 
+  // Check if Claude process is still alive (isWorking() returns false for both idle AND exited clients)
+  if (!client.isRunning()) {
+    logger.warn('[Chat WS] Claude process has exited, cannot dispatch queued message', {
+      dbSessionId,
+    });
+    return;
+  }
+
   dispatchQueuedMessage(dbSessionId, client);
 }
 

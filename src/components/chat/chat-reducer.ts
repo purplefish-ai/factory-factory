@@ -98,6 +98,7 @@ export type ChatAction =
   // User message action
   | { type: 'USER_MESSAGE_SENT'; payload: ChatMessage }
   // Queue actions (backend-managed queue)
+  | { type: 'ADD_TO_QUEUE'; payload: QueuedMessage }
   | { type: 'MESSAGE_QUEUED'; payload: { id: string; position: number } }
   | { type: 'MESSAGE_DISPATCHED'; payload: { id: string } }
   | { type: 'MESSAGE_REMOVED'; payload: { id: string } }
@@ -489,15 +490,25 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, messages: [...state.messages, action.payload] };
 
     // Queue management (backend-managed queue)
+    // ADD_TO_QUEUE: Optimistically add message to queuedMessages for queue display
+    case 'ADD_TO_QUEUE':
+      return {
+        ...state,
+        queuedMessages: [...state.queuedMessages, action.payload],
+      };
+
     // MESSAGE_QUEUED: Acknowledgment from backend - message is in queue
-    // With optimistic UI, the message is already in chat messages, no state change needed
+    // With optimistic UI, the message is already in chat messages and queuedMessages, no state change needed
     case 'MESSAGE_QUEUED':
       return state;
 
     // MESSAGE_DISPATCHED: Backend is sending message to Claude
-    // No state change needed - message stays in chat, Claude will process it
+    // Remove from queuedMessages (no longer pending), message stays in chat
     case 'MESSAGE_DISPATCHED':
-      return state;
+      return {
+        ...state,
+        queuedMessages: state.queuedMessages.filter((m) => m.id !== action.payload.id),
+      };
 
     // MESSAGE_REMOVED: User cancelled a queued message before dispatch
     // Remove from both queue display and chat messages (undo optimistic update)

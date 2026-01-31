@@ -1204,6 +1204,47 @@ describe('chatReducer', () => {
   // Queue Actions (Backend-managed)
   // -------------------------------------------------------------------------
 
+  describe('ADD_TO_QUEUE action', () => {
+    it('should add message to queuedMessages', () => {
+      const queuedMessage: QueuedMessage = {
+        id: 'q-1',
+        text: 'Hello',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+      };
+      const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: queuedMessage };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.queuedMessages).toHaveLength(1);
+      expect(newState.queuedMessages[0]).toEqual(queuedMessage);
+    });
+
+    it('should append to existing queue', () => {
+      const existingMessage: QueuedMessage = {
+        id: 'q-1',
+        text: 'First',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+      };
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: [existingMessage],
+      };
+      const newMessage: QueuedMessage = {
+        id: 'q-2',
+        text: 'Second',
+        timestamp: '2024-01-01T00:00:01.000Z',
+        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+      };
+      const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: newMessage };
+      const newState = chatReducer(state, action);
+
+      expect(newState.queuedMessages).toHaveLength(2);
+      expect(newState.queuedMessages[0]).toEqual(existingMessage);
+      expect(newState.queuedMessages[1]).toEqual(newMessage);
+    });
+  });
+
   describe('MESSAGE_QUEUED action', () => {
     it('should be a no-op (optimistic UI already shows message)', () => {
       const action: ChatAction = { type: 'MESSAGE_QUEUED', payload: { id: 'q-1', position: 0 } };
@@ -1215,12 +1256,49 @@ describe('chatReducer', () => {
   });
 
   describe('MESSAGE_DISPATCHED action', () => {
-    it('should be a no-op (message stays in chat)', () => {
+    it('should remove message from queuedMessages', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: [
+          {
+            id: 'q-1',
+            text: 'First',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+          {
+            id: 'q-2',
+            text: 'Second',
+            timestamp: '2024-01-01T00:00:01.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ],
+      };
       const action: ChatAction = { type: 'MESSAGE_DISPATCHED', payload: { id: 'q-1' } };
-      const newState = chatReducer(initialState, action);
+      const newState = chatReducer(state, action);
 
-      // State should be unchanged
-      expect(newState).toEqual(initialState);
+      expect(newState.queuedMessages).toHaveLength(1);
+      expect(newState.queuedMessages[0].id).toBe('q-2');
+    });
+
+    it('should handle dispatching message not in queue gracefully', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: [
+          {
+            id: 'q-1',
+            text: 'First',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ],
+      };
+      const action: ChatAction = { type: 'MESSAGE_DISPATCHED', payload: { id: 'nonexistent' } };
+      const newState = chatReducer(state, action);
+
+      // Queue should be unchanged
+      expect(newState.queuedMessages).toHaveLength(1);
+      expect(newState.queuedMessages[0].id).toBe('q-1');
     });
   });
 
@@ -1728,11 +1806,39 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toBeNull();
   });
 
-  it('should return null for message_queued type', () => {
+  it('should return null for message_queued without id', () => {
     const wsMessage: WebSocketMessage = { type: 'message_queued' };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
+  });
+
+  it('should convert message_queued to MESSAGE_QUEUED action', () => {
+    const wsMessage: WebSocketMessage = { type: 'message_queued', id: 'msg-1', position: 2 };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({ type: 'MESSAGE_QUEUED', payload: { id: 'msg-1', position: 2 } });
+  });
+
+  it('should convert message_dispatched to MESSAGE_DISPATCHED action', () => {
+    const wsMessage: WebSocketMessage = { type: 'message_dispatched', id: 'msg-1' };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({ type: 'MESSAGE_DISPATCHED', payload: { id: 'msg-1' } });
+  });
+
+  it('should return null for message_dispatched without id', () => {
+    const wsMessage: WebSocketMessage = { type: 'message_dispatched' };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toBeNull();
+  });
+
+  it('should convert message_removed to MESSAGE_REMOVED action', () => {
+    const wsMessage: WebSocketMessage = { type: 'message_removed', id: 'msg-1' };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({ type: 'MESSAGE_REMOVED', payload: { id: 'msg-1' } });
   });
 
   it('should return null for unknown message type', () => {
