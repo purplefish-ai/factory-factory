@@ -6,6 +6,7 @@
  */
 
 import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/shell';
+import { configService } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('notification');
@@ -22,20 +23,10 @@ interface NotificationConfig {
 }
 
 /**
- * Get notification configuration from environment variables
+ * Get notification configuration from centralized config service
  */
 function getConfig(): NotificationConfig {
-  return {
-    soundEnabled: process.env.NOTIFICATION_SOUND_ENABLED !== 'false',
-    pushEnabled: process.env.NOTIFICATION_PUSH_ENABLED !== 'false',
-    soundFile: process.env.NOTIFICATION_SOUND_FILE,
-    quietHoursStart: process.env.NOTIFICATION_QUIET_HOURS_START
-      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_START, 10)
-      : undefined,
-    quietHoursEnd: process.env.NOTIFICATION_QUIET_HOURS_END
-      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_END, 10)
-      : undefined,
-  };
+  return configService.getNotificationConfig();
 }
 
 /**

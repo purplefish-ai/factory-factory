@@ -7,7 +7,7 @@
 // CLI health service
 export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
-export { configService } from './config.service';
+export { configService, type SessionProfile } from './config.service';
 // GitHub CLI service
 export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.service';
 // Kanban state service

@@ -28,6 +28,62 @@ export interface SessionProfile {
 }
 
 /**
+ * Log levels for the logger service
+ */
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+
+/**
+ * Logger configuration
+ */
+export interface LoggerConfig {
+  level: LogLevel;
+  prettyPrint: boolean;
+  serviceName: string;
+}
+
+/**
+ * Rate limiter configuration
+ */
+export interface RateLimiterConfig {
+  claudeRequestsPerMinute: number;
+  claudeRequestsPerHour: number;
+  maxQueueSize: number;
+  queueTimeoutMs: number;
+}
+
+/**
+ * Notification configuration
+ */
+export interface NotificationConfig {
+  soundEnabled: boolean;
+  pushEnabled: boolean;
+  soundFile?: string;
+  quietHoursStart?: number;
+  quietHoursEnd?: number;
+}
+
+/**
+ * Claude process configuration
+ */
+export interface ClaudeProcessConfig {
+  hungTimeoutMs: number;
+}
+
+/**
+ * CORS configuration
+ */
+export interface CorsConfig {
+  allowedOrigins: string[];
+}
+
+/**
+ * Debug configuration
+ */
+export interface DebugConfig {
+  chatWebSocket: boolean;
+}
+
+/**
  * System configuration
  */
 interface SystemConfig {
@@ -35,10 +91,11 @@ interface SystemConfig {
   baseDir: string;
   worktreeBaseDir: string;
   debugLogDir: string;
+  wsLogsPath: string;
+  frontendStaticPath?: string;
 
   // Server settings
   backendPort: number;
-  frontendPort: number;
   nodeEnv: 'development' | 'production' | 'test';
 
   // Database (SQLite)
@@ -59,6 +116,30 @@ interface SystemConfig {
     metrics: boolean;
     errorTracking: boolean;
   };
+
+  // Logger settings
+  logger: LoggerConfig;
+
+  // Rate limiter settings
+  rateLimiter: RateLimiterConfig;
+
+  // Notification settings
+  notification: NotificationConfig;
+
+  // Claude process settings
+  claudeProcess: ClaudeProcessConfig;
+
+  // CORS settings
+  cors: CorsConfig;
+
+  // Debug settings
+  debug: DebugConfig;
+
+  // Conversation rename settings
+  branchRenameMessageThreshold: number;
+
+  // App version
+  appVersion: string;
 }
 
 /**
@@ -128,6 +209,81 @@ function buildDefaultSessionProfile(): SessionProfile {
 }
 
 /**
+ * Build logger configuration from environment
+ */
+function buildLoggerConfig(nodeEnv: string): LoggerConfig {
+  const envLevel = process.env.LOG_LEVEL?.toLowerCase() as LogLevel | undefined;
+  const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug'];
+
+  return {
+    level: validLevels.includes(envLevel as LogLevel) ? (envLevel as LogLevel) : 'info',
+    prettyPrint: nodeEnv !== 'production',
+    serviceName: process.env.SERVICE_NAME || 'factoryfactory',
+  };
+}
+
+/**
+ * Build rate limiter configuration from environment
+ */
+function buildRateLimiterConfig(): RateLimiterConfig {
+  return {
+    claudeRequestsPerMinute: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_MINUTE || '60', 10),
+    claudeRequestsPerHour: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_HOUR || '1000', 10),
+    maxQueueSize: Number.parseInt(process.env.RATE_LIMIT_QUEUE_SIZE || '100', 10),
+    queueTimeoutMs: Number.parseInt(process.env.RATE_LIMIT_QUEUE_TIMEOUT_MS || '30000', 10),
+  };
+}
+
+/**
+ * Build notification configuration from environment
+ */
+function buildNotificationConfig(): NotificationConfig {
+  return {
+    soundEnabled: process.env.NOTIFICATION_SOUND_ENABLED !== 'false',
+    pushEnabled: process.env.NOTIFICATION_PUSH_ENABLED !== 'false',
+    soundFile: process.env.NOTIFICATION_SOUND_FILE,
+    quietHoursStart: process.env.NOTIFICATION_QUIET_HOURS_START
+      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_START, 10)
+      : undefined,
+    quietHoursEnd: process.env.NOTIFICATION_QUIET_HOURS_END
+      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_END, 10)
+      : undefined,
+  };
+}
+
+/**
+ * Build CORS configuration from environment
+ */
+function buildCorsConfig(): CorsConfig {
+  const originsEnv = process.env.CORS_ALLOWED_ORIGINS;
+  const defaultOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+
+  return {
+    allowedOrigins: originsEnv ? originsEnv.split(',').map((o) => o.trim()) : defaultOrigins,
+  };
+}
+
+/**
+ * Build Claude process configuration from environment with validation
+ */
+function buildClaudeProcessConfig(): ClaudeProcessConfig {
+  const DEFAULT_HUNG_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes (matches original in process.ts)
+  const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
+
+  if (!envValue) {
+    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+  }
+
+  const parsed = Number.parseInt(envValue, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(`Invalid CLAUDE_HUNG_TIMEOUT_MS value: ${envValue}, using default (30 minutes)`);
+    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+  }
+
+  return { hungTimeoutMs: parsed };
+}
+
+/**
  * Get default base directory
  */
 function getDefaultBaseDir(): string {
@@ -148,16 +304,19 @@ function loadSystemConfig(): SystemConfig {
     ? expandEnvVars(rawWorktreeDir)
     : join(baseDir, 'worktrees');
 
+  const nodeEnv = (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development';
+
   const config: SystemConfig = {
     // Directory paths
     baseDir,
     worktreeBaseDir,
     debugLogDir: join(baseDir, 'debug'),
+    wsLogsPath: process.env.WS_LOGS_PATH || join(process.cwd(), '.context', 'ws-logs'),
+    frontendStaticPath: process.env.FRONTEND_STATIC_PATH,
 
     // Server settings
     backendPort: Number.parseInt(process.env.BACKEND_PORT || '3001', 10),
-    frontendPort: Number.parseInt(process.env.FRONTEND_PORT || '3000', 10),
-    nodeEnv: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
+    nodeEnv,
 
     // Database (SQLite - defaults to ~/factory-factory/data.db)
     databasePath: process.env.DATABASE_PATH || join(baseDir, 'data.db'),
@@ -177,6 +336,35 @@ function loadSystemConfig(): SystemConfig {
       metrics: process.env.FEATURE_METRICS === 'true',
       errorTracking: process.env.FEATURE_ERROR_TRACKING === 'true',
     },
+
+    // Logger settings
+    logger: buildLoggerConfig(nodeEnv),
+
+    // Rate limiter settings
+    rateLimiter: buildRateLimiterConfig(),
+
+    // Notification settings
+    notification: buildNotificationConfig(),
+
+    // Claude process settings
+    claudeProcess: buildClaudeProcessConfig(),
+
+    // CORS settings
+    cors: buildCorsConfig(),
+
+    // Debug settings
+    debug: {
+      chatWebSocket: process.env.DEBUG_CHAT_WS === 'true',
+    },
+
+    // Conversation rename settings
+    branchRenameMessageThreshold: Number.parseInt(
+      process.env.BRANCH_RENAME_MESSAGE_THRESHOLD || '2',
+      10
+    ),
+
+    // App version
+    appVersion: process.env.npm_package_version || '0.1.0',
   };
 
   return config;
@@ -310,6 +498,69 @@ class ConfigService {
    */
   getAvailablePermissionModes(): PermissionMode[] {
     return ['strict', 'relaxed', 'yolo'];
+  }
+
+  /**
+   * Get rate limiter configuration
+   */
+  getRateLimiterConfig(): RateLimiterConfig {
+    return { ...this.config.rateLimiter };
+  }
+
+  /**
+   * Get notification configuration
+   */
+  getNotificationConfig(): NotificationConfig {
+    return { ...this.config.notification };
+  }
+
+  /**
+   * Get Claude process configuration
+   */
+  getClaudeProcessConfig(): ClaudeProcessConfig {
+    return { ...this.config.claudeProcess };
+  }
+
+  /**
+   * Get CORS configuration
+   */
+  getCorsConfig(): CorsConfig {
+    return { ...this.config.cors };
+  }
+
+  /**
+   * Get debug configuration
+   */
+  getDebugConfig(): DebugConfig {
+    return { ...this.config.debug };
+  }
+
+  /**
+   * Get WebSocket logs path
+   */
+  getWsLogsPath(): string {
+    return this.config.wsLogsPath;
+  }
+
+  /**
+   * Get frontend static path (if configured)
+   */
+  getFrontendStaticPath(): string | undefined {
+    return this.config.frontendStaticPath;
+  }
+
+  /**
+   * Get branch rename message threshold
+   */
+  getBranchRenameMessageThreshold(): number {
+    return this.config.branchRenameMessageThreshold;
+  }
+
+  /**
+   * Get app version
+   */
+  getAppVersion(): string {
+    return this.config.appVersion;
   }
 
   /**

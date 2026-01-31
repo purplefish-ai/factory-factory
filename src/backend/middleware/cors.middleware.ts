@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { configService } from '../services/index';
 
 /**
  * CORS middleware.
@@ -7,10 +8,7 @@ import type { NextFunction, Request, Response } from 'express';
  * Handles OPTIONS preflight requests.
  */
 export function corsMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS?.split(',') || [
-    'http://localhost:3000',
-    'http://localhost:3001',
-  ];
+  const ALLOWED_ORIGINS = configService.getCorsConfig().allowedOrigins;
 
   const origin = req.headers.origin;
   if (origin && ALLOWED_ORIGINS.includes(origin)) {

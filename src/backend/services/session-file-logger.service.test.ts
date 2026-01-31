@@ -1,4 +1,15 @@
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Hoist the mock function so it's available before the mock is evaluated
+const mockGetWsLogsPath = vi.hoisted(() => vi.fn());
+
+// Mock config service before importing the service
+vi.mock('./config.service', () => ({
+  configService: {
+    getWsLogsPath: mockGetWsLogsPath,
+  },
+}));
 
 // Mock logger before importing the service
 vi.mock('./logger.service', () => ({
@@ -34,15 +45,15 @@ import {
 import { SessionFileLogger } from './session-file-logger.service';
 
 describe('SessionFileLogger', () => {
-  const originalEnv = process.env;
+  const defaultWsLogsPath = join(process.cwd(), '.context', 'ws-logs');
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset env
-    process.env = { ...originalEnv };
-    process.env.WS_LOGS_PATH = undefined;
 
-    // Default mocks
+    // Default config mock - use default path
+    mockGetWsLogsPath.mockReturnValue(defaultWsLogsPath);
+
+    // Default fs mocks
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(mkdirSync).mockReturnValue(undefined);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
@@ -53,7 +64,7 @@ describe('SessionFileLogger', () => {
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -75,8 +86,8 @@ describe('SessionFileLogger', () => {
       expect(mkdirSync).not.toHaveBeenCalled();
     });
 
-    it('should use WS_LOGS_PATH env var when set', () => {
-      process.env.WS_LOGS_PATH = '/custom/path/ws-logs';
+    it('should use custom path from config when set', () => {
+      mockGetWsLogsPath.mockReturnValue('/custom/path/ws-logs');
       vi.mocked(existsSync).mockReturnValue(false);
 
       new SessionFileLogger();
@@ -84,8 +95,8 @@ describe('SessionFileLogger', () => {
       expect(mkdirSync).toHaveBeenCalledWith('/custom/path/ws-logs', { recursive: true });
     });
 
-    it('should use default path when WS_LOGS_PATH is not set', () => {
-      process.env.WS_LOGS_PATH = undefined;
+    it('should use default path from config when not customized', () => {
+      mockGetWsLogsPath.mockReturnValue(defaultWsLogsPath);
       vi.mocked(existsSync).mockReturnValue(false);
 
       new SessionFileLogger();

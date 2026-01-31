@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Mock dependencies before importing the router
 const mockQueryRaw = vi.fn();
 const mockGetEnvironment = vi.fn();
+const mockGetAppVersion = vi.fn();
 const mockGetApiUsageStats = vi.fn();
 
 vi.mock('../../db', () => ({
@@ -16,6 +17,7 @@ vi.mock('../../db', () => ({
 vi.mock('../../services/index', () => ({
   configService: {
     getEnvironment: () => mockGetEnvironment(),
+    getAppVersion: () => mockGetAppVersion(),
   },
   createLogger: () => ({
     info: vi.fn(),
@@ -41,6 +43,7 @@ describe('healthRouter', () => {
 
     // Set default mock returns
     mockGetEnvironment.mockReturnValue('development');
+    mockGetAppVersion.mockReturnValue('0.1.0');
     mockQueryRaw.mockResolvedValue([{ '1': 1 }]);
     mockGetApiUsageStats.mockReturnValue({
       requestsLastMinute: 10,
