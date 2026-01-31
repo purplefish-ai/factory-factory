@@ -232,16 +232,17 @@ function WorkspaceChatContent() {
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
 
   // Query workspace status to show initialization overlay
-  const { data: workspaceInitStatus } = trpc.workspace.getInitStatus.useQuery(
-    { id: workspaceId },
-    {
-      // Poll while not ready
-      refetchInterval: (query) => {
-        const status = query.state.data?.status;
-        return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
-      },
-    }
-  );
+  const { data: workspaceInitStatus, isPending: isInitStatusPending } =
+    trpc.workspace.getInitStatus.useQuery(
+      { id: workspaceId },
+      {
+        // Poll while not ready
+        refetchInterval: (query) => {
+          const status = query.state.data?.status;
+          return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
+        },
+      }
+    );
 
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
@@ -353,11 +354,13 @@ function WorkspaceChatContent() {
   // The state machine guarantees READY workspaces have worktreePath, so we don't
   // need the !worktreePath fallback (which would incorrectly show overlay for
   // ARCHIVED workspaces that failed before worktree creation).
+  // Include isPending to prevent flash of main UI while query is loading.
   const isInitializing =
-    workspaceInitStatus &&
-    (workspaceInitStatus.status === 'NEW' ||
-      workspaceInitStatus.status === 'PROVISIONING' ||
-      workspaceInitStatus.status === 'FAILED');
+    isInitStatusPending ||
+    (workspaceInitStatus &&
+      (workspaceInitStatus.status === 'NEW' ||
+        workspaceInitStatus.status === 'PROVISIONING' ||
+        workspaceInitStatus.status === 'FAILED'));
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">

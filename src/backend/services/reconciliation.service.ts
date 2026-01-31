@@ -1,10 +1,10 @@
 import { SessionStatus } from '@prisma-gen/client';
-import { GitClientFactory } from '../clients/git.client';
 import {
   claudeSessionAccessor,
   terminalSessionAccessor,
   workspaceAccessor,
 } from '../resource_accessors/index';
+import { initializeWorkspaceWorktree } from '../trpc/workspace/init.trpc';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('reconciliation');
@@ -70,52 +70,26 @@ class ReconciliationService {
   }
 
   /**
-   * Create worktrees for ACTIVE workspaces that don't have one
+   * Initialize workspaces that need worktrees via the state machine.
+   * Uses initializeWorkspaceWorktree to ensure proper state transitions
+   * (NEW -> PROVISIONING -> READY/FAILED), factory-factory.json support,
+   * and startup script handling.
    */
   private async reconcileWorkspaces(): Promise<void> {
     const workspacesNeedingWorktree = await workspaceAccessor.findNeedingWorktree();
 
     for (const workspace of workspacesNeedingWorktree) {
       try {
-        await this.createWorktreeForWorkspace(workspace.id);
-        logger.info('Created worktree for workspace', {
+        await initializeWorkspaceWorktree(workspace.id, workspace.branchName ?? undefined);
+        logger.info('Initialized workspace via reconciliation', {
           workspaceId: workspace.id,
         });
       } catch (error) {
-        logger.error('Failed to create worktree', error as Error, {
+        logger.error('Failed to initialize workspace', error as Error, {
           workspaceId: workspace.id,
         });
       }
     }
-  }
-
-  /**
-   * Create a worktree for a workspace
-   */
-  private async createWorktreeForWorkspace(workspaceId: string): Promise<void> {
-    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
-    if (!workspace?.project) {
-      throw new Error(`Workspace ${workspaceId} not found or has no project`);
-    }
-
-    const project = workspace.project;
-    const gitClient = GitClientFactory.forProject({
-      repoPath: project.repoPath,
-      worktreeBasePath: project.worktreeBasePath,
-    });
-
-    const worktreeName = `workspace-${workspaceId}`;
-    const baseBranch = workspace.branchName ?? project.defaultBranch;
-
-    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
-      branchPrefix: project.githubOwner ?? undefined,
-    });
-    const worktreePath = gitClient.getWorktreePath(worktreeName);
-
-    await workspaceAccessor.update(workspaceId, {
-      worktreePath,
-      branchName: worktreeInfo.branchName,
-    });
   }
 
   /**
