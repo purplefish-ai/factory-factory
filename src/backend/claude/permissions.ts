@@ -301,7 +301,7 @@ interface PendingPermissionRequest {
  * Options for DeferredHandler configuration.
  */
 export interface DeferredHandlerOptions {
-  /** Timeout in milliseconds for pending requests. Default: 300000 (5 minutes) */
+  /** Timeout in milliseconds for pending requests. Default: 0 (no timeout) */
   timeout?: number;
 }
 
