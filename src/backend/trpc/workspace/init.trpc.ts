@@ -6,6 +6,7 @@ import { FactoryConfigService } from '../../services/factory-config.service';
 import { githubCLIService } from '../../services/github-cli.service';
 import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
+import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import { publicProcedure, router } from '../trpc';
 
 const logger = createLogger('workspace-init-trpc');
@@ -27,14 +28,22 @@ export async function initializeWorkspaceWorktree(
   workspaceId: string,
   requestedBranchName?: string
 ): Promise<void> {
+  // Transition to PROVISIONING state first, before any validation.
+  // This ensures that any error during initialization can be properly surfaced
+  // via markFailed() since PROVISIONING -> FAILED is a valid transition.
+  try {
+    await workspaceStateMachine.startProvisioning(workspaceId);
+  } catch (error) {
+    // If we can't start provisioning (e.g., workspace deleted), log and return
+    logger.error('Failed to start provisioning', error as Error, { workspaceId });
+    return;
+  }
+
   try {
     const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspaceId);
     if (!workspaceWithProject?.project) {
       throw new Error('Workspace project not found');
     }
-
-    // Mark as initializing
-    await workspaceAccessor.updateInitStatus(workspaceId, 'INITIALIZING');
 
     const project = workspaceWithProject.project;
     const gitClient = GitClientFactory.forProject({
@@ -148,13 +157,13 @@ export async function initializeWorkspaceWorktree(
     }
 
     // No startup script - mark as ready
-    await workspaceAccessor.updateInitStatus(workspaceId, 'READY');
+    await workspaceStateMachine.markReady(workspaceId);
   } catch (error) {
     logger.error('Failed to initialize workspace worktree', error as Error, {
       workspaceId,
     });
     // Mark workspace as failed so user can see the error and retry
-    await workspaceAccessor.updateInitStatus(workspaceId, 'FAILED', (error as Error).message);
+    await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
   }
 }
 
@@ -174,7 +183,8 @@ export const workspaceInitRouter = router({
     }
 
     return {
-      initStatus: workspace.initStatus,
+      // Return status field - frontend maps NEW/PROVISIONING/FAILED to show overlay
+      status: workspace.status,
       initErrorMessage: workspace.initErrorMessage,
       initStartedAt: workspace.initStartedAt,
       initCompletedAt: workspace.initCompletedAt,
@@ -194,23 +204,34 @@ export const workspaceInitRouter = router({
       });
     }
 
-    if (workspace.initStatus !== 'FAILED') {
+    if (workspace.status !== 'FAILED') {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'Can only retry failed initializations',
       });
     }
 
+    const maxRetries = 3;
+
+    // If worktree wasn't created (early failure), re-run full initialization
     if (!workspace.worktreePath) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Workspace has no worktree path',
-      });
+      // Reset to NEW state so initializeWorkspaceWorktree can transition properly
+      const resetResult = await workspaceStateMachine.resetToNew(workspace.id, maxRetries);
+      if (!resetResult) {
+        throw new TRPCError({
+          code: 'TOO_MANY_REQUESTS',
+          message: `Maximum retry attempts (${maxRetries}) exceeded`,
+        });
+      }
+      // Run full initialization (creates worktree + runs startup script)
+      initializeWorkspaceWorktree(workspace.id, workspace.branchName ?? undefined);
+      return workspaceAccessor.findById(input.id);
     }
 
-    // Atomically increment retry count (max 3 retries)
-    const maxRetries = 3;
-    const updatedWorkspace = await workspaceAccessor.incrementRetryCount(input.id, maxRetries);
+    // Worktree exists - just retry the startup script
+    const updatedWorkspace = await workspaceStateMachine.startProvisioning(input.id, {
+      maxRetries,
+    });
     if (!updatedWorkspace) {
       throw new TRPCError({
         code: 'TOO_MANY_REQUESTS',

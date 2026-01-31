@@ -5,10 +5,16 @@ import type {
   Prisma,
   SessionStatus,
   Workspace,
-  WorkspaceInitStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
 import { prisma } from '../db';
+
+/**
+ * Threshold for considering a PROVISIONING workspace as stale.
+ * Workspaces in PROVISIONING state for longer than this are considered
+ * stuck (e.g., due to server crash) and will be recovered by reconciliation.
+ */
+const STALE_PROVISIONING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
 interface CreateWorkspaceInput {
   projectId: string;
@@ -20,7 +26,7 @@ interface CreateWorkspaceInput {
 interface UpdateWorkspaceInput {
   name?: string;
   description?: string;
-  status?: WorkspaceStatus;
+  // Note: status changes must go through workspaceStateMachine, not direct updates
   worktreePath?: string | null;
   branchName?: string | null;
   prUrl?: string | null;
@@ -37,12 +43,6 @@ interface UpdateWorkspaceInput {
   // Cached kanban column
   cachedKanbanColumn?: KanbanColumn;
   stateComputedAt?: Date | null;
-  // Initialization tracking
-  initStatus?: WorkspaceInitStatus;
-  initErrorMessage?: string | null;
-  initStartedAt?: Date | null;
-  initCompletedAt?: Date | null;
-  initRetryCount?: number;
   // Run script tracking
   runScriptCommand?: string | null;
   runScriptCleanupCommand?: string | null;
@@ -113,11 +113,18 @@ class WorkspaceAccessor {
 
   /**
    * Find workspaces with sessions included (for kanban state computation).
+   *
+   * @throws Error if both status and excludeStatuses filters are specified
    */
   findByProjectIdWithSessions(
     projectId: string,
     filters?: FindByProjectIdFilters
   ): Promise<WorkspaceWithSessions[]> {
+    // Validate mutually exclusive filters
+    if (filters?.status && filters?.excludeStatuses?.length) {
+      throw new Error('Cannot specify both status and excludeStatuses filters');
+    }
+
     const where: Prisma.WorkspaceWhereInput = { projectId };
 
     if (filters?.status) {
@@ -157,23 +164,29 @@ class WorkspaceAccessor {
     });
   }
 
-  archive(id: string): Promise<Workspace> {
-    return prisma.workspace.update({
-      where: { id },
-      data: { status: 'ARCHIVED' },
-    });
-  }
+  // Note: archive functionality is provided by workspaceStateMachine.archive()
 
   /**
-   * Find ACTIVE workspaces where worktreePath is null.
-   * Used for reconciliation to ensure all active workspaces have worktrees.
+   * Find workspaces that need worktree creation or recovery.
+   * Returns:
+   * - NEW workspaces that haven't started provisioning yet
+   * - PROVISIONING workspaces that are stale (>10 minutes) and likely stuck due to server crash
+   *
+   * Used for reconciliation to ensure all workspaces are initialized.
    * Includes project for worktree creation.
    */
   findNeedingWorktree(): Promise<WorkspaceWithProject[]> {
+    const staleThreshold = new Date(Date.now() - STALE_PROVISIONING_THRESHOLD_MS);
+
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
-        worktreePath: null,
+        OR: [
+          { status: 'NEW' },
+          {
+            status: 'PROVISIONING',
+            initStartedAt: { lt: staleThreshold },
+          },
+        ],
       },
       include: {
         project: true,
@@ -196,7 +209,7 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces with PR URLs that need sync.
+   * Find READY workspaces with PR URLs that need sync.
    * Used for Inngest PR status sync job.
    */
   findNeedingPRSync(staleThresholdMinutes = 5): Promise<WorkspaceWithProject[]> {
@@ -204,7 +217,7 @@ class WorkspaceAccessor {
 
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
+        status: 'READY',
         prUrl: { not: null },
         OR: [{ prUpdatedAt: null }, { prUpdatedAt: { lt: staleThreshold } }],
       },
@@ -216,13 +229,13 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ACTIVE workspaces without PR URLs that have a branch name.
+   * Find READY workspaces without PR URLs that have a branch name.
    * Used for detecting newly created PRs.
    */
   findNeedingPRDiscovery(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        status: 'ACTIVE',
+        status: 'READY',
         prUrl: null,
         branchName: { not: null },
       },
@@ -275,65 +288,6 @@ class WorkspaceAccessor {
         project: true,
       },
     });
-  }
-
-  /**
-   * Update workspace initialization status atomically.
-   * Includes timestamps for tracking.
-   */
-  updateInitStatus(
-    id: string,
-    status: WorkspaceInitStatus,
-    errorMessage?: string | null
-  ): Promise<Workspace> {
-    const now = new Date();
-    const data: Prisma.WorkspaceUpdateInput = {
-      initStatus: status,
-    };
-
-    if (status === 'INITIALIZING') {
-      data.initStartedAt = now;
-      data.initErrorMessage = null;
-    } else if (status === 'READY' || status === 'FAILED') {
-      data.initCompletedAt = now;
-    }
-
-    if (errorMessage !== undefined) {
-      data.initErrorMessage = errorMessage;
-    }
-
-    return prisma.workspace.update({
-      where: { id },
-      data,
-    });
-  }
-
-  /**
-   * Increment retry count and reset init status for a retry attempt.
-   * Returns null if max retries exceeded.
-   *
-   * @param maxRetries - Maximum number of retries allowed (default 3)
-   */
-  async incrementRetryCount(id: string, maxRetries = 3): Promise<Workspace | null> {
-    // Use raw update to atomically check and increment
-    const result = await prisma.workspace.updateMany({
-      where: {
-        id,
-        initRetryCount: { lt: maxRetries },
-      },
-      data: {
-        initRetryCount: { increment: 1 },
-        initStatus: 'INITIALIZING',
-        initStartedAt: new Date(),
-        initErrorMessage: null,
-      },
-    });
-
-    if (result.count === 0) {
-      return null; // Max retries exceeded
-    }
-
-    return prisma.workspace.findUnique({ where: { id } });
   }
 }
 

@@ -231,17 +231,18 @@ function WorkspaceChatContent() {
 
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
 
-  // Query init status to show initialization overlay
-  const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
-    { id: workspaceId },
-    {
-      // Poll while not ready
-      refetchInterval: (query) => {
-        const status = query.state.data?.initStatus;
-        return status === 'READY' || status === 'FAILED' ? false : 1000;
-      },
-    }
-  );
+  // Query workspace status to show initialization overlay
+  const { data: workspaceInitStatus, isPending: isInitStatusPending } =
+    trpc.workspace.getInitStatus.useQuery(
+      { id: workspaceId },
+      {
+        // Poll while not ready
+        refetchInterval: (query) => {
+          const status = query.state.data?.status;
+          return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
+        },
+      }
+    );
 
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
@@ -349,11 +350,11 @@ function WorkspaceChatContent() {
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
   // Check if workspace is still initializing
-  // A workspace is considered fully ready when:
-  // 1. initStatus is READY, AND
-  // 2. worktreePath is populated (required for sessions)
+  // Show overlay for NEW, PROVISIONING, or FAILED states.
+  // Include isPending to prevent flash of main UI while query is loading.
+  const status = workspaceInitStatus?.status;
   const isInitializing =
-    (initStatus && initStatus.initStatus !== 'READY') || !workspace?.worktreePath;
+    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -361,9 +362,9 @@ function WorkspaceChatContent() {
       {isInitializing && (
         <InitializationOverlay
           workspaceId={workspaceId}
-          initStatus={initStatus?.initStatus ?? 'INITIALIZING'}
-          initErrorMessage={initStatus?.initErrorMessage ?? null}
-          hasStartupScript={initStatus?.hasStartupScript ?? false}
+          status={workspaceInitStatus?.status ?? 'PROVISIONING'}
+          initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
+          hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
         />
       )}
 

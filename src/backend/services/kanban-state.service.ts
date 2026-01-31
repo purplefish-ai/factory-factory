@@ -21,21 +21,37 @@ export interface WorkspaceWithKanbanState {
 /**
  * Pure function to compute kanban column from workspace state.
  * This is the core derivation logic for the kanban board.
+ *
+ * Status handling:
+ * - NEW, PROVISIONING, FAILED → BACKLOG (workspace not ready for work)
+ * - READY → normal PR-based logic
+ * - ARCHIVED → DONE
  */
 export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn {
   const { lifecycle, isWorking, prState, hasHadSessions } = input;
 
-  // Done: User explicitly marked complete or archived
-  if (lifecycle === WorkspaceStatus.COMPLETED || lifecycle === WorkspaceStatus.ARCHIVED) {
+  // Done: Workspace archived
+  if (lifecycle === WorkspaceStatus.ARCHIVED) {
     return KanbanColumn.DONE;
   }
+
+  // Backlog: Workspace still initializing or failed (not ready for work)
+  if (
+    lifecycle === WorkspaceStatus.NEW ||
+    lifecycle === WorkspaceStatus.PROVISIONING ||
+    lifecycle === WorkspaceStatus.FAILED
+  ) {
+    return KanbanColumn.BACKLOG;
+  }
+
+  // From here, lifecycle === READY
 
   // In Progress: Any active work (overrides PR state)
   if (isWorking) {
     return KanbanColumn.IN_PROGRESS;
   }
 
-  // Merged: PR merged but not marked done
+  // Merged: PR merged but not archived yet
   if (prState === PRState.MERGED) {
     return KanbanColumn.MERGED;
   }
