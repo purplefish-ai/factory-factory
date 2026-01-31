@@ -76,7 +76,3 @@ export function WorkspaceStatusBadge({
 
   return badge;
 }
-
-// Re-export with old name for backward compatibility during migration
-export { WorkspaceStatusBadge as InitStatusBadge };
-export type { WorkspaceStatus as InitStatus };
