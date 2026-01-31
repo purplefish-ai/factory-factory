@@ -824,6 +824,29 @@ describe('chatReducer', () => {
       // Should overwrite with the new request to match backend state
       expect(newState.pendingPermission).toEqual(newRequest);
     });
+
+    it('should clear pendingQuestion when permission request arrives', () => {
+      const existingQuestion: UserQuestionRequest = {
+        requestId: 'req-q1',
+        questions: [{ question: 'Which?', header: 'Q', options: [], multiSelect: false }],
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const permissionRequest: PermissionRequest = {
+        requestId: 'req-p1',
+        toolName: 'Bash',
+        toolInput: { command: 'ls' },
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingQuestion: existingQuestion,
+      };
+      const action: ChatAction = { type: 'WS_PERMISSION_REQUEST', payload: permissionRequest };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingPermission).toEqual(permissionRequest);
+      expect(newState.pendingQuestion).toBeNull();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -874,6 +897,29 @@ describe('chatReducer', () => {
 
       // Should overwrite with the new question to match backend state
       expect(newState.pendingQuestion).toEqual(newQuestion);
+    });
+
+    it('should clear pendingPermission when question request arrives', () => {
+      const existingPermission: PermissionRequest = {
+        requestId: 'req-p1',
+        toolName: 'Bash',
+        toolInput: { command: 'ls' },
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const questionRequest: UserQuestionRequest = {
+        requestId: 'req-q1',
+        questions: [{ question: 'Which?', header: 'Q', options: [], multiSelect: false }],
+        timestamp: '2024-01-01T00:00:01.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingPermission: existingPermission,
+      };
+      const action: ChatAction = { type: 'WS_USER_QUESTION', payload: questionRequest };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingQuestion).toEqual(questionRequest);
+      expect(newState.pendingPermission).toBeNull();
     });
   });
 

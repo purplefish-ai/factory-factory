@@ -430,11 +430,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // Permission and question requests
     // Always accept new requests (overwriting existing) to match backend behavior.
-    // Backend always stores the latest request, so frontend must show the same one.
+    // Clear opposite type to prevent both modals showing simultaneously.
     case 'WS_PERMISSION_REQUEST':
-      return { ...state, pendingPermission: action.payload };
+      return { ...state, pendingPermission: action.payload, pendingQuestion: null };
     case 'WS_USER_QUESTION':
-      return { ...state, pendingQuestion: action.payload };
+      return { ...state, pendingQuestion: action.payload, pendingPermission: null };
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings
       const shouldDisablePlanMode =
