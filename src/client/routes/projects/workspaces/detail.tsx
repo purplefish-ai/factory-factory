@@ -258,19 +258,27 @@ function WorkspaceChatContent() {
       }
     );
 
-  // When init status becomes READY, refetch workspace to get updated worktreePath
+  // When init status becomes READY, refetch workspace to get updated worktreePath.
+  // Also handles edge case where init is already READY on first load but workspace
+  // data is stale (missing worktreePath).
   const prevInitStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const currentStatus = workspaceInitStatus?.status;
     const prevStatus = prevInitStatusRef.current;
 
-    // Refetch workspace when transitioning to READY (worktreePath now available)
-    if (prevStatus && prevStatus !== 'READY' && currentStatus === 'READY') {
-      utils.workspace.get.invalidate({ id: workspaceId });
+    if (currentStatus === 'READY') {
+      // Invalidate on status transition to READY, or if status was already READY
+      // on first load but workspace is missing worktreePath (stale data)
+      const isTransitionToReady = prevStatus !== undefined && prevStatus !== 'READY';
+      const isStaleOnFirstLoad = prevStatus === undefined && !workspace?.worktreePath;
+
+      if (isTransitionToReady || isStaleOnFirstLoad) {
+        utils.workspace.get.invalidate({ id: workspaceId });
+      }
     }
 
     prevInitStatusRef.current = currentStatus;
-  }, [workspaceInitStatus?.status, workspaceId, utils.workspace.get]);
+  }, [workspaceInitStatus?.status, workspaceId, utils, workspace?.worktreePath]);
 
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
