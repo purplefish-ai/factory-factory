@@ -182,11 +182,8 @@ const ChatContent = memo(function ChatContent({
 
       {/* Input Section with Queue and Prompts */}
       <div className="border-t">
-        {/* Hide first queued message while sending - it's already shown in messages list */}
-        <QueuedMessages
-          messages={running || startingSession ? queuedMessages.slice(1) : queuedMessages}
-          onRemove={removeQueuedMessage}
-        />
+        {/* Queue is managed by backend - show pending messages from session_loaded */}
+        <QueuedMessages messages={queuedMessages} onRemove={removeQueuedMessage} />
         <PermissionPrompt permission={pendingPermission} onApprove={approvePermission} />
         <QuestionPrompt question={pendingQuestion} onAnswer={answerQuestion} />
 

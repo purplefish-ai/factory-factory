@@ -30,17 +30,16 @@ import type {
   ClaudeMessage,
   ImageContent,
   MessageAttachment,
-  QueuedMessage,
   WebSocketMessage,
 } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import {
   clearDraft,
-  loadAllSessionData,
+  loadDraft,
   loadSettings,
+  loadSettingsWithDefaults,
   persistDraft,
-  persistQueue,
   persistSettings,
 } from './chat-persistence';
 import {
@@ -95,14 +94,6 @@ export interface UseChatStateReturn extends ChatState {
 // =============================================================================
 // WebSocket Message Types (outgoing) - used by action callbacks
 // =============================================================================
-
-interface StartMessage {
-  type: 'start';
-  workingDir?: string;
-  selectedModel?: string | null;
-  thinkingEnabled?: boolean;
-  planModeEnabled?: boolean;
-}
 
 interface StopMessage {
   type: 'stop';
@@ -346,8 +337,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   // Track previous dbSessionId to detect session switches
   const prevDbSessionIdRef = useRef<string | null>(null);
-  // Track previous running state to detect idle transitions
-  const prevRunningRef = useRef(false);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
   // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
@@ -377,12 +366,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       toolInputAccumulatorRef.current.clear();
     }
 
-    // Load persisted data for the new session
+    // Load persisted data for the new session (draft and settings only - queue is managed by backend)
     if (newDbSessionId) {
-      const persistedData = loadAllSessionData(newDbSessionId);
-      setInputDraftState(persistedData.draft);
-      dispatch({ type: 'SET_SETTINGS', payload: persistedData.settings });
-      dispatch({ type: 'SET_QUEUE', payload: persistedData.queue });
+      setInputDraftState(loadDraft(newDbSessionId));
+      dispatch({ type: 'SET_SETTINGS', payload: loadSettingsWithDefaults(newDbSessionId) });
 
       // Set loading state for initial load (when prevDbSessionId was null)
       // This prevents "No messages yet" flash while WebSocket connects and loads session
@@ -393,7 +380,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     } else {
       setInputDraftState('');
       dispatch({ type: 'SET_SETTINGS', payload: DEFAULT_CHAT_SETTINGS });
-      dispatch({ type: 'SET_QUEUE', payload: [] });
     }
   }, [dbSessionId]);
 
@@ -413,24 +399,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Handle session_loaded specially for settings override
       if (wsMessage.type === 'session_loaded') {
         handleSessionLoaded(wsMessage, dbSessionIdRef, toolInputAccumulatorRef, dispatch);
-
-        // If session loaded with running=true, the first queued message was already sent
-        // and is being processed. Dequeue it to prevent duplicate sends.
-        if (wsMessage.running && stateRef.current.queuedMessages.length > 0) {
-          dispatch({ type: 'DEQUEUE_MESSAGE' });
-          const updatedQueue = stateRef.current.queuedMessages.slice(1);
-          persistQueue(dbSessionIdRef.current, updatedQueue);
-        }
         return;
-      }
-
-      // Handle 'started' - now we can safely dequeue the message
-      // The message stayed in queue until we had confirmation Claude received it
-      if (wsMessage.type === 'started') {
-        dispatch({ type: 'DEQUEUE_MESSAGE' });
-        // Persist the updated queue (now without the sent message)
-        const updatedQueue = stateRef.current.queuedMessages.slice(1);
-        persistQueue(dbSessionIdRef.current, updatedQueue);
       }
 
       // Convert WebSocket message to action and dispatch
@@ -443,114 +412,65 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   );
 
   // =============================================================================
-  // Queue Draining
-  // =============================================================================
-
-  // Drain next message from queue and send to Claude
-  // Uses stateRef to access current state without recreating callback on state changes
-  const drainQueue = useCallback(() => {
-    const { running, startingSession, queuedMessages, chatSettings } = stateRef.current;
-
-    if (running || startingSession || queuedMessages.length === 0) {
-      return;
-    }
-
-    const [nextMsg] = queuedMessages;
-
-    // Note: We intentionally do NOT remove from queue or persist here.
-    // The message stays in the queue until we receive 'started' confirmation.
-    // This ensures the message survives navigation if the send doesn't complete.
-
-    // Clear draft when sending a message
-    setInputDraftState('');
-    clearDraft(dbSessionIdRef.current);
-
-    // Add to messages (optimistic UI)
-    dispatch({
-      type: 'USER_MESSAGE_SENT',
-      payload: createUserMessage(nextMsg.text, nextMsg.attachments),
-    });
-
-    // Start Claude if not running
-    dispatch({ type: 'WS_STARTING' });
-    const startMsg: StartMessage = {
-      type: 'start',
-      selectedModel: chatSettings.selectedModel,
-      thinkingEnabled: chatSettings.thinkingEnabled,
-      planModeEnabled: chatSettings.planModeEnabled,
-    };
-    send(startMsg);
-
-    // Send the user input
-    const messageToSend = chatSettings.thinkingEnabled
-      ? `${nextMsg.text}${THINKING_SUFFIX}`
-      : nextMsg.text;
-
-    // If there are attachments, send as content array; otherwise send as text
-    if (nextMsg.attachments && nextMsg.attachments.length > 0) {
-      const content: Array<{ type: 'text'; text: string } | ImageContent> = [];
-
-      // Add text if present
-      if (messageToSend) {
-        content.push({ type: 'text', text: messageToSend });
-      }
-
-      // Add images
-      for (const attachment of nextMsg.attachments) {
-        content.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: attachment.type,
-            data: attachment.data,
-          },
-        });
-      }
-
-      send({ type: 'user_input', content });
-    } else {
-      send({ type: 'user_input', text: messageToSend });
-    }
-  }, [send]);
-
-  // Drain queue when agent becomes idle
-  // Destructure state values for cleaner logic
-  const { running, startingSession, queuedMessages } = state;
-
-  useEffect(() => {
-    const wasRunning = prevRunningRef.current;
-    const isNowIdle = !(running || startingSession);
-    const becameIdle = wasRunning && isNowIdle;
-    const hasQueuedMessages = queuedMessages.length > 0;
-
-    // Update ref for next render
-    prevRunningRef.current = running;
-
-    // Only drain if we just became idle, or if we're already idle and have messages
-    if ((becameIdle || isNowIdle) && hasQueuedMessages) {
-      drainQueue();
-    }
-  }, [running, startingSession, queuedMessages.length, drainQueue]);
-
-  // =============================================================================
   // Action Callbacks
   // =============================================================================
 
-  const sendMessage = useCallback((text: string, attachments?: MessageAttachment[]) => {
-    if (!text.trim() && (!attachments || attachments.length === 0)) {
-      return;
-    }
+  // Helper to build user input message with attachments
+  const buildUserInputMessage = useCallback(
+    (text: string, attachments: MessageAttachment[] | undefined, thinkingEnabled: boolean) => {
+      const messageText = thinkingEnabled ? `${text}${THINKING_SUFFIX}` : text;
 
-    const queuedMsg: QueuedMessage = {
-      id: generateMessageId(),
-      text: text.trim(),
-      timestamp: new Date().toISOString(),
-      attachments,
-    };
+      if (attachments && attachments.length > 0) {
+        const content: Array<{ type: 'text'; text: string } | ImageContent> = [];
+        if (messageText) {
+          content.push({ type: 'text', text: messageText });
+        }
+        for (const attachment of attachments) {
+          content.push({
+            type: 'image',
+            source: { type: 'base64', media_type: attachment.type, data: attachment.data },
+          });
+        }
+        return { type: 'user_input' as const, content };
+      }
+      return { type: 'user_input' as const, text: messageText };
+    },
+    []
+  );
 
-    dispatch({ type: 'QUEUE_MESSAGE', payload: queuedMsg });
-    persistQueue(dbSessionIdRef.current, [...stateRef.current.queuedMessages, queuedMsg]);
-  }, []);
+  const sendMessage = useCallback(
+    (text: string, attachments?: MessageAttachment[]) => {
+      if (!text.trim() && (!attachments || attachments.length === 0)) {
+        return;
+      }
+
+      const { chatSettings } = stateRef.current;
+      const trimmedText = text.trim();
+
+      // Clear draft
+      setInputDraftState('');
+      clearDraft(dbSessionIdRef.current);
+
+      // Add to messages immediately (optimistic UI)
+      dispatch({
+        type: 'USER_MESSAGE_SENT',
+        payload: createUserMessage(trimmedText, attachments),
+      });
+
+      // Mark as starting and send start message
+      dispatch({ type: 'WS_STARTING' });
+      send({
+        type: 'start',
+        selectedModel: chatSettings.selectedModel,
+        thinkingEnabled: chatSettings.thinkingEnabled,
+        planModeEnabled: chatSettings.planModeEnabled,
+      });
+
+      // Send user input - backend handles queuing if needed
+      send(buildUserInputMessage(trimmedText, attachments, chatSettings.thinkingEnabled));
+    },
+    [send, buildUserInputMessage]
+  );
 
   const stopChat = useCallback(() => {
     const { running, stopping } = stateRef.current;
@@ -608,9 +528,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   }, []);
 
   const removeQueuedMessage = useCallback((id: string) => {
+    // Remove from frontend display (backend queue management not yet implemented)
+    // TODO: Send message to backend to remove from database queue
     dispatch({ type: 'REMOVE_QUEUED_MESSAGE', payload: { id } });
-    const updated = stateRef.current.queuedMessages.filter((msg) => msg.id !== id);
-    persistQueue(dbSessionIdRef.current, updated);
   }, []);
 
   // Debounce sessionStorage persistence to avoid blocking on every keystroke

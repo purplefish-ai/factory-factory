@@ -15,7 +15,10 @@ import { type ClaudeClient, SessionManager } from '../../claude/index';
 import type { ClaudeContentItem } from '../../claude/types';
 import { WS_READY_STATE } from '../../constants';
 import { interceptorRegistry } from '../../interceptors';
-import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
+import {
+  claudeSessionAccessor,
+  type PendingMessageData,
+} from '../../resource_accessors/claude-session.accessor';
 import { configService, createLogger, sessionService } from '../../services/index';
 import { sessionFileLogger } from '../../services/session-file-logger.service';
 
@@ -31,17 +34,11 @@ export interface ConnectionInfo {
   workingDir: string;
 }
 
-export interface PendingMessage {
-  content: string | ClaudeContentItem[];
-  sentAt: Date;
-}
-
 // ============================================================================
 // State
 // ============================================================================
 
 export const chatConnections = new Map<string, ConnectionInfo>();
-export const pendingMessages = new Map<string, PendingMessage[]>();
 export const clientEventSetup = new Set<string>();
 
 /** Pending interactive requests by session ID (for restore on reconnect) */
@@ -262,18 +259,25 @@ function setupChatClientEvents(
       });
     }
 
-    // Drain any pending messages
-    const pending = pendingMessages.get(dbSessionId);
-    pendingMessages.delete(dbSessionId);
-    if (pending && pending.length > 0) {
-      logger.info('[Chat WS] Draining pending messages on session_id', {
-        dbSessionId,
-        count: pending.length,
+    // Drain any pending messages from database
+    claudeSessionAccessor
+      .popPendingMessages(dbSessionId)
+      .then((pending) => {
+        if (pending.length > 0) {
+          logger.info('[Chat WS] Draining pending messages on session_id', {
+            dbSessionId,
+            count: pending.length,
+          });
+          for (const msg of pending) {
+            // Send content if available (for images), otherwise send text
+            const messageContent = msg.content ? (msg.content as ClaudeContentItem[]) : msg.text;
+            client.sendMessage(messageContent);
+          }
+        }
+      })
+      .catch((err) => {
+        logger.error('[Chat WS] Failed to drain pending messages', { dbSessionId, error: err });
       });
-      for (const msg of pending) {
-        client.sendMessage(msg.content);
-      }
-    }
 
     forwardToConnections(dbSessionId, {
       type: 'status',
@@ -381,7 +385,6 @@ function setupChatClientEvents(
     });
     client.removeAllListeners();
     clientEventSetup.delete(dbSessionId);
-    pendingMessages.delete(dbSessionId);
     // Clear any pending interactive requests when process exits
     pendingInteractiveRequests.delete(dbSessionId);
   });
@@ -495,17 +498,12 @@ async function handleUserInputMessage(
     return;
   }
 
-  // Queue message and start client
-  let queue = pendingMessages.get(sessionId);
-  if (!queue) {
-    queue = [];
-    pendingMessages.set(sessionId, queue);
-  }
-
-  if (queue.length >= MAX_PENDING_MESSAGES) {
+  // Check queue size from database
+  const existingQueue = await claudeSessionAccessor.getPendingMessages(sessionId);
+  if (existingQueue.length >= MAX_PENDING_MESSAGES) {
     logger.warn('[Chat WS] Pending message queue full, rejecting message', {
       sessionId,
-      queueLength: queue.length,
+      queueLength: existingQueue.length,
       maxSize: MAX_PENDING_MESSAGES,
     });
     ws.send(
@@ -517,14 +515,22 @@ async function handleUserInputMessage(
     return;
   }
 
-  queue.push({ content: messageContent, sentAt: new Date() });
+  // Queue message to database
+  const displayText = typeof messageContent === 'string' ? messageContent : '[Image message]';
+  const pendingMessage: PendingMessageData = {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    text: displayText,
+    timestamp: new Date().toISOString(),
+    content: typeof messageContent === 'string' ? undefined : (messageContent as unknown[]),
+  };
+  await claudeSessionAccessor.addPendingMessage(sessionId, pendingMessage);
+
   logger.info('[Chat WS] Queued message for pending session', {
     sessionId,
-    queueLength: queue.length,
+    queueLength: existingQueue.length + 1,
   });
 
-  const displayText = typeof messageContent === 'string' ? messageContent : '[Image message]';
-  ws.send(JSON.stringify({ type: 'message_queued', text: displayText }));
+  ws.send(JSON.stringify({ type: 'message_queued', text: displayText, id: pendingMessage.id }));
   ws.send(JSON.stringify({ type: 'starting', dbSessionId: sessionId }));
 
   const newClient = await getOrCreateChatClient(sessionId, {
@@ -534,23 +540,23 @@ async function handleUserInputMessage(
   });
   ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
 
-  // Drain pending messages
-  const pending = pendingMessages.get(sessionId);
-  pendingMessages.delete(sessionId);
-  if (pending && pending.length > 0) {
+  // Drain pending messages from database
+  const pending = await claudeSessionAccessor.popPendingMessages(sessionId);
+  if (pending.length > 0) {
     logger.info('[Chat WS] Sending queued messages after client ready', {
       sessionId,
       count: pending.length,
     });
     for (const msg of pending) {
-      newClient.sendMessage(msg.content);
+      const messageContent = msg.content ? (msg.content as ClaudeContentItem[]) : msg.text;
+      newClient.sendMessage(messageContent);
     }
   }
 }
 
 async function handleStopMessage(ws: WebSocket, sessionId: string): Promise<void> {
   await sessionService.stopClaudeSession(sessionId);
-  pendingMessages.delete(sessionId);
+  await claudeSessionAccessor.clearPendingMessages(sessionId);
   pendingInteractiveRequests.delete(sessionId);
   ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
 }
@@ -593,6 +599,9 @@ async function handleLoadSessionMessage(
   // Check for pending interactive request to restore modal state
   const pendingRequest = pendingInteractiveRequests.get(sessionId);
 
+  // Get pending messages from database
+  const pendingMessages = await claudeSessionAccessor.getPendingMessages(sessionId);
+
   if (targetSessionId) {
     const [history, model, thinkingEnabled, gitBranch] = await Promise.all([
       SessionManager.getHistory(targetSessionId, workingDir),
@@ -611,6 +620,7 @@ async function handleLoadSessionMessage(
       JSON.stringify({
         type: 'session_loaded',
         messages: history,
+        pendingMessages,
         gitBranch,
         running,
         settings: {
@@ -626,6 +636,7 @@ async function handleLoadSessionMessage(
       JSON.stringify({
         type: 'session_loaded',
         messages: [],
+        pendingMessages,
         gitBranch: null,
         running,
         settings: {

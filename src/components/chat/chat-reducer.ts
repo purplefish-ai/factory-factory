@@ -74,12 +74,14 @@ export type ChatAction =
       type: 'WS_SESSION_LOADED';
       payload: {
         messages: HistoryMessage[];
+        pendingMessages?: QueuedMessage[];
         gitBranch: string | null;
         running: boolean;
         settings?: ChatSettings;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
       };
     }
+  | { type: 'WS_MESSAGE_QUEUED'; payload: QueuedMessage }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
   // Session actions
@@ -339,7 +341,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTING':
       return { ...state, startingSession: true };
     case 'WS_STARTED':
-      return { ...state, startingSession: false, running: true, latestThinking: null };
+      // Clear queue - backend has drained it
+      return {
+        ...state,
+        startingSession: false,
+        running: true,
+        latestThinking: null,
+        queuedMessages: [],
+      };
     case 'WS_STOPPED':
       return { ...state, running: false, stopping: false, startingSession: false };
 
@@ -418,10 +427,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages,
+        queuedMessages: action.payload.pendingMessages ?? [],
         gitBranch: action.payload.gitBranch,
         running: action.payload.running,
         loadingSession: false,
-        startingSession: false, // Clear to allow queue draining after session loads
+        startingSession: false,
         toolUseIdToIndex: new Map(),
         pendingPermission,
         pendingQuestion,
@@ -485,7 +495,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'USER_MESSAGE_SENT':
       return { ...state, messages: [...state.messages, action.payload] };
 
-    // Queue management
+    // Queue management (queue is now managed by backend, frontend just displays)
+    case 'WS_MESSAGE_QUEUED':
+      // Backend confirmed message was queued - add to display queue
+      return { ...state, queuedMessages: [...state.queuedMessages, action.payload] };
     case 'QUEUE_MESSAGE':
       return { ...state, queuedMessages: [...state.queuedMessages, action.payload] };
     case 'DEQUEUE_MESSAGE':
@@ -583,6 +596,7 @@ function handleSessionLoadedMessage(data: WebSocketMessage): ChatAction {
     type: 'WS_SESSION_LOADED',
     payload: {
       messages: (data.messages as HistoryMessage[]) ?? [],
+      pendingMessages: data.pendingMessages,
       gitBranch: data.gitBranch ?? null,
       running: data.running ?? false,
       settings: data.settings,

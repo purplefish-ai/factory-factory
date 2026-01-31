@@ -435,6 +435,9 @@ export interface WebSocketMessage {
   settings?: ChatSettings;
   // Message queued acknowledgment
   text?: string;
+  id?: string; // Message ID for queued messages
+  // Pending messages from backend (returned in session_loaded)
+  pendingMessages?: QueuedMessage[];
   // Pending interactive request for session restore
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
 }
