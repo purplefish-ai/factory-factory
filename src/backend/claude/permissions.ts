@@ -301,7 +301,7 @@ interface PendingPermissionRequest {
  * Options for DeferredHandler configuration.
  */
 export interface DeferredHandlerOptions {
-  /** Timeout in milliseconds for pending requests. Default: 300000 (5 minutes) */
+  /** Timeout in milliseconds for pending requests. Default: 0 (no timeout) */
   timeout?: number;
 }
 
@@ -336,7 +336,7 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
   constructor(options?: DeferredHandlerOptions) {
     super();
     this.pendingRequests = new Map();
-    this.timeout = options?.timeout ?? 300_000; // 5 minutes default
+    this.timeout = options?.timeout ?? 0; // No timeout by default - user may need time to respond
     this.requestCounter = 0;
   }
 
