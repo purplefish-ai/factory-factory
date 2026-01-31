@@ -1,216 +1,199 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-01-29
+**Analysis Date:** 2026-01-31
 
 ## Tech Debt
 
-**Large monolithic backend file:**
-- Issue: `src/backend/index.ts` is 1980 lines - contains server initialization, WebSocket handlers, chat client management, terminal lifecycle, and message routing all in one file.
-- Files: `src/backend/index.ts`
-- Impact: Difficult to navigate, test, and maintain. Changes to WebSocket logic require touching server setup. Hard to reason about state management across concerns.
-- Fix approach: Extract WebSocket handlers into dedicated modules (`chat-websocket.ts`, `terminal-websocket.ts`), move client/session management to separate services. Reduce file to ~500 lines of pure server setup.
+**Deprecated API Fields (claude-types.ts):**
+- Issue: ToolSequence has deprecated fields `messages`, `toolNames`, `statuses` alongside new `pairedCalls`
+- Files: `src/lib/claude-types.ts:971-976`
+- Impact: Increases bundle size, confusing API surface, maintenance burden
+- Fix approach: Remove deprecated fields after confirming no consumers, update any code using old fields
 
-**Large hook file with tight coupling:**
-- Issue: `src/components/chat/use-chat-websocket.ts` is 1057 lines with complex state management, message queuing, reconnection logic, settings persistence, and WebSocket lifecycle all mixed together.
-- Files: `src/components/chat/use-chat-websocket.ts`
-- Impact: Difficult to test individual concerns, high risk of regressions when modifying reconnection or message handling logic.
-- Fix approach: Extract reconnection logic to `use-websocket-reconnect.ts`, message queue handling to `use-message-queue.ts`, settings persistence to `use-chat-settings.ts`. Current file should be 300-400 lines.
+**Deprecated Methods (git.client.ts):**
+- Issue: `getBranchName()` marked deprecated but still present
+- Files: `src/backend/clients/git.client.ts:152-156`
+- Impact: Confusing API, potential for incorrect usage
+- Fix approach: Complete migration to `generateBranchName()`, remove deprecated method
 
-**Complex component with embedded state:**
-- Issue: `src/client/routes/projects/workspaces/detail.tsx` is 1055 lines mixing layout rendering, chat integration, workspace panel management, git operations, and session switching.
-- Files: `src/client/routes/projects/workspaces/detail.tsx`
-- Impact: Hard to modify chat layout, panel behavior, or session management independently. Single responsibility violated.
-- Fix approach: Extract `ChatSection`, `WorkspacePanelWrapper`, `SessionManager` components. Main component becomes 300 lines orchestrating these pieces.
+**Deprecated WebSocket Config:**
+- Issue: `RECONNECT_DELAY` constant deprecated in favor of `getReconnectDelay()`
+- Files: `src/lib/websocket-config.ts:30`
+- Impact: Confusion for developers on which to use
+- Fix approach: Remove deprecated constant after verifying no usage
 
-**Test-related large fixture file:**
-- Issue: `src/lib/claude-fixtures.ts` is 1111 lines and `src/lib/claude-types.ts` is 1052 lines - both contain type definitions, test fixtures, and utilities mixed together.
-- Files: `src/lib/claude-fixtures.ts`, `src/lib/claude-types.ts`
-- Impact: Difficult to find what you need; importing from these files pulls in many unrelated dependencies and types.
-- Fix approach: Separate types from fixtures. Create `src/lib/claude-types-core.ts` with just type definitions, `src/backend/testing/fixtures.ts` for backend test fixtures.
+**Biome Lint Suppressions:**
+- Issue: 40+ `biome-ignore` comments scattered throughout codebase, many for cognitive complexity
+- Files: Multiple files including `src/backend/routers/websocket/chat.handler.ts:1134`, `src/backend/routers/websocket/terminal.handler.ts:76,152`, `src/frontend/components/pr-detail-panel.tsx:48,111,138`
+- Impact: These mark areas needing refactoring that were deferred
+- Fix approach: Extract complex handlers into smaller functions, simplify conditional logic
 
-## Known Bugs
+**Single-Process File Lock Limitation:**
+- Issue: Advisory file locks are in-memory only, not shared across Node.js processes
+- Files: `src/backend/services/file-lock.service.ts:13-16`
+- Impact: Locks don't work in clustered deployments, only on restart via file persistence
+- Fix approach: Consider Redis-based locking for multi-process support if clustering is needed
 
-**WebSocket reconnection may lose pending messages:**
-- Symptoms: Messages queued while Claude CLI is starting can be lost if the WebSocket disconnects and reconnects while messages are in `pendingMessages` Map.
-- Files: `src/backend/index.ts` (lines 1028-1061), `src/components/chat/use-chat-websocket.ts` (pending message handling)
-- Trigger: User sends message while session is starting, then network disconnects before session fully initializes. Reconnect loads session state but queue was in-memory only.
-- Workaround: Messages are persisted to localStorage on frontend, but backend has no durability guarantee. Manual reload required if queue is lost.
+## Known Issues
 
-**Race condition in client creation during concurrent starts:**
-- Symptoms: Multiple `getOrCreateChatClient` calls in rapid succession may create duplicate ClaudeClient instances before `pendingClientCreation` promise settles.
-- Files: `src/backend/index.ts` (lines 870-960)
-- Trigger: Frontend sends multiple `start` messages before first session is ready, or React renders component twice in StrictMode.
-- Current mitigation: `pendingClientCreation` Map prevents most cases, but early race window exists between client creation and map insertion.
-- Safe fix: Move `pendingClientCreation.set()` to happen BEFORE the async function starts executing.
-
-**Terminal resource monitoring never auto-kills (intentional design):**
-- Symptoms: Long-running terminals with memory leaks will consume unbounded memory but won't be killed.
-- Files: `src/backend/services/terminal.service.ts` (lines 1-12 explicitly state this is intentional)
-- Impact: One runaway terminal can eventually cause server OOM.
-- Fix approach: Document clearly in admin dashboard. Add optional TTL configuration per terminal. Emit warnings when resource usage exceeds thresholds.
+**Silent Upload Failures:**
+- Issue: File upload errors are silently ignored with a TODO comment
+- Files: `src/components/chat/chat-input.tsx:256-258`
+- Impact: Users don't know when file uploads fail
+- Fix approach: Add toast notification system for upload errors
 
 ## Security Considerations
 
-**File path traversal protection has gaps:**
-- Risk: `validateWorkingDir()` checks for `..` and resolves symlinks, but path validation happens per-message. Symlink changes between validation and use could be exploited.
-- Files: `src/backend/index.ts` (lines 1221-1263)
-- Current mitigation: `realpathSync()` resolves symlinks, prevents escaping via symlinks created after initial check.
-- Recommendations: Add whitelist of allowed directories in config. Store validated paths in session context to avoid re-validating each message. Consider read-only file access for file operations.
+**Shell Command Execution:**
+- Risk: Multiple spawn/exec calls throughout codebase for shell operations
+- Files: `src/backend/claude/process.ts:216`, `src/backend/services/terminal.service.ts:242`, `src/backend/services/startup-script.service.ts:181`, `src/backend/services/run-script.service.ts:96,237`, `src/backend/lib/shell.ts:131`
+- Current mitigation: `src/backend/lib/shell.ts` provides centralized safe shell execution with input validation and escaping
+- Recommendations: Ensure all shell execution goes through the centralized shell library; audit any direct spawn calls
 
-**WebSocket authentication is implicit (trusts frontend):**
-- Risk: `dbSessionId` parameter in WebSocket URL comes from frontend without explicit authentication. Any client knowing session ID can hijack the chat session.
-- Files: `src/backend/index.ts` (lines 1274-1284)
-- Current mitigation: Session ID is a UUID, hard to guess. Frontend loads sessions from database.
-- Recommendations: Add HMAC signature of sessionId + timestamp. Require authentication token in WebSocket header. Validate that connecting user owns the workspace.
+**Environment Variable Exposure:**
+- Risk: Many process.env accesses throughout codebase without centralized validation
+- Files: 40+ files access `process.env` directly
+- Current mitigation: `src/backend/services/config.service.ts` provides centralized config, `src/backend/lib/env.ts` for path expansion
+- Recommendations: Migrate all env var access to go through config service
 
-**CLI process spawning inherits parent environment:**
-- Risk: Sensitive environment variables (API keys, tokens) from parent process are inherited by spawned Claude CLI processes.
-- Files: `src/backend/claude/process.ts` (spawn inherits process.env by default)
-- Current mitigation: No explicit mitigation found.
-- Recommendations: Explicitly whitelist safe env vars to pass to child process. Create clean env object with only required vars (NODE_ENV, PATH, HOME, etc.). Clear sensitive vars before spawn.
+**Security Headers (Basic):**
+- Risk: Security middleware only sets basic headers
+- Files: `src/backend/middleware/security.middleware.ts`
+- Current mitigation: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy headers set
+- Recommendations: Add Content-Security-Policy header, consider HSTS for production
 
-**MCP tool execution lacks input validation:**
-- Risk: Tool inputs from Claude are not validated before execution, relying on tool handlers to validate safely.
-- Files: `src/backend/routers/mcp/server.ts`
-- Current mitigation: Individual tools (terminal, system) have some validation, but no centralized input sanitization.
-- Recommendations: Implement schema validation for all MCP tools. Use Zod/TypeBox for input validation before passing to handlers.
+**User Settings Command Validation:**
+- Risk: Custom IDE command allows arbitrary shell execution
+- Files: `src/backend/trpc/user-settings.trpc.ts:45-87`
+- Current mitigation: Validates presence of `{workspace}` placeholder, blocks shell metacharacters
+- Recommendations: Consider allowlist approach for IDE commands rather than blocklist
 
-## Performance Bottlenecks
+## Performance Concerns
 
-**Chat message broadcasting iterates entire connection map:**
-- Problem: `forwardToConnections()` loops through all chat connections every time Claude sends a message, even if only one client is viewing the session.
-- Files: `src/backend/index.ts` (lines 601-639)
-- Cause: Linear scan of `chatConnections` Map to find matching `dbSessionId`. With many concurrent sessions, this becomes O(n).
-- Improvement path: Index `chatConnections` by dbSessionId: `Map<dbSessionId, Set<connectionId>>`. Reduces lookup from O(n) to O(1).
+**Large Files - Potential Complexity Hotspots:**
+- Problem: Several files exceed 600+ lines indicating potential refactoring needs
+- Files:
+  - `src/components/chat/chat-reducer.test.ts` (1907 lines)
+  - `src/backend/routers/websocket/chat.handler.ts` (1238 lines)
+  - `src/lib/claude-types.ts` (1125 lines)
+  - `src/backend/claude/process.ts` (861 lines)
+  - `src/components/agent-activity/tool-renderers.tsx` (796 lines)
+  - `src/components/ui/sidebar.tsx` (745 lines)
+- Cause: Feature accumulation over time, complex state management
+- Improvement path: Split into smaller modules, extract shared utilities
 
-**Terminal output buffer unbounded:**
-- Problem: `outputBuffer` in `TerminalInstance` accumulates all terminal output, no limit on size.
-- Files: `src/backend/services/terminal.service.ts` (line 48)
-- Cause: Buffer is meant for reconnection restoration but grows indefinitely with long-running terminals.
-- Improvement path: Implement circular buffer with max size (e.g., 100KB). Store older output in rotating file. Reduce memory footprint for long sessions.
+**Message List Performance:**
+- Problem: Virtualized message list has performance considerations during streaming
+- Files: `src/components/chat/virtualized-message-list.tsx:86-91`
+- Cause: Reduces overscan during active running for better performance
+- Improvement path: Already optimized with conditional overscan; monitor for further issues
 
-**Pending messages queue enforced globally, not per-session:**
-- Problem: `MAX_PENDING_MESSAGES` constant (grep shows no definition - needs checking) limits total queue size, but all sessions share same limit.
-- Files: `src/backend/index.ts` (lines 1035-1048)
-- Cause: If one slow session starts, others can't queue messages.
-- Improvement path: Make limit per-session or per-dbSessionId, not global. Allow configurable queue size.
-
-**File lock persistence reads/writes entire lock store each operation:**
-- Problem: Every lock acquire/release reads entire `advisory-locks.json`, modifies one lock, writes entire file back.
-- Files: `src/backend/services/file-lock.service.ts` (lines 1-30 document this)
-- Cause: In-memory Map for speed, but file I/O not optimized.
-- Improvement path: Implement journaling or delta persistence. Only write changed locks to file. Batch writes for multiple operations.
+**Concurrent Operation Limits:**
+- Problem: Rate limiting for PR syncs and git operations
+- Files: `src/backend/services/scheduler.service.ts:18,24`, `src/backend/trpc/workspace.trpc.ts:27`
+- Cause: Prevents resource exhaustion on simultaneous operations
+- Improvement path: Monitor limits, adjust MAX_CONCURRENT_PR_SYNCS (5) if needed
 
 ## Fragile Areas
 
-**Claude process lifecycle with orphan cleanup:**
-- Files: `src/backend/claude/process.ts`, `src/backend/services/reconciliation.service.ts`
-- Why fragile: Process can crash, be killed externally, or hang. Reconciliation cleanup runs periodically (not on-demand). If reconciliation fails, orphan processes accumulate.
-- Safe modification: Add explicit process state validation before every operation. Don't assume process is alive. All process operations should check `this.process?.pid` exists.
-- Test coverage: Missing tests for hung process detection, cleanup of killed processes, orphan recovery after reconciliation failure.
+**Chat WebSocket Handler:**
+- Files: `src/backend/routers/websocket/chat.handler.ts`
+- Why fragile: 1238 lines handling session lifecycle, message forwarding, tool interception, pending requests
+- Safe modification: Understand the full session state machine, test with multiple concurrent sessions
+- Test coverage: No dedicated test file exists for this handler
 
-**WebSocket message ordering with concurrent operations:**
-- Files: `src/backend/index.ts` (message handling in handleChatMessage)
-- Why fragile: Messages arriving out of order (network reordering) can cause state inconsistency. Example: `stop` arrives before `user_input` completes, or settings change mid-execution.
-- Safe modification: Implement message sequence numbers. Reject out-of-order messages or buffer them. Add request/response correlation IDs.
-- Test coverage: No tests for concurrent message handling, message reordering, or race conditions between start/stop/input.
+**Workspace State Machine:**
+- Files: `src/backend/services/workspace-state-machine.service.ts`
+- Why fragile: Controls critical workspace provisioning transitions with atomic updates
+- Safe modification: All changes must go through state machine methods, never direct DB updates
+- Test coverage: Good coverage at `src/backend/services/workspace-state-machine.service.test.ts` (518 lines)
 
-**Terminal session state with network flakiness:**
-- Files: `src/backend/index.ts` (terminal WebSocket handlers, lines 1530-1680)
-- Why fragile: Terminal state in server doesn't sync with frontend UI if network hiccups. Terminal can die but frontend still thinks it's alive.
-- Safe modification: Implement heartbeat on terminal connection. Send periodic `alive` messages. Frontend should detect stale terminal and prompt user.
-- Test coverage: Missing tests for terminal death detection, reconnection recovery, state sync on reconnect.
+**Claude Process Management:**
+- Files: `src/backend/claude/process.ts`, `src/backend/claude/index.ts`
+- Why fragile: Complex IPC with Claude CLI, hung process detection, graceful shutdown logic
+- Safe modification: Test with actual Claude CLI, watch for timing issues
+- Test coverage: Protocol tested at `src/backend/claude/protocol.test.ts`
+
+**Pending Interactive Requests:**
+- Files: `src/backend/routers/websocket/chat.handler.ts:42-44`
+- Why fragile: Session state for pending permission/question requests must survive reconnections
+- Safe modification: Ensure pendingInteractiveRequests Map stays in sync with session state
+- Test coverage: Limited direct testing of reconnection scenarios
 
 ## Scaling Limits
 
-**In-memory session tracking for distributed deployments:**
-- Current capacity: Single process only. Can't scale horizontally.
-- Limit: Where it breaks: Adding second Node.js instance - each has own `chatClients`, `chatConnections`, `pendingMessages` Maps. Messages sent to wrong server, sessions can't migrate.
-- Scaling path: Move session state to Redis. Use Redis Pub/Sub for message broadcasting across servers. Implement server-to-server routing by workspaceId.
+**SQLite Database:**
+- Current capacity: Single-file SQLite database
+- Limit: Concurrent write contention, single-node only
+- Scaling path: Database path configurable; migrate to PostgreSQL if multi-node needed
 
-**Database is SQLite, single-file for all users:**
-- Current capacity: Good for <10 concurrent projects. SQLite has table-level locking.
-- Limit: Multiple Claude processes writing to DB simultaneously will hit locks. PR sync scheduler competes with user queries.
-- Scaling path: Migrate to PostgreSQL for concurrent writes. Add connection pooling with PgBouncer. Implement optimistic concurrency with version fields.
+**In-Memory State:**
+- Current capacity: `chatConnections`, `pendingInteractiveRequests`, terminal instances all in-memory
+- Limit: Memory grows with active sessions, lost on restart
+- Scaling path: Consider Redis for session state if horizontal scaling needed
 
-**Process registry uses in-memory Map:**
-- Current capacity: Can track ~100 processes per server.
-- Limit: Long-running servers accumulate dead processes if cleanup fails. Memory doesn't get reclaimed.
-- Scaling path: Implement periodic process cleanup by PID validation. Use WeakMap where feasible. Add persistent process registry to database.
+**File Lock Service:**
+- Current capacity: In-memory per-process locks with file persistence
+- Limit: Not shared across processes in cluster mode
+- Scaling path: Redis-based distributed locking
 
 ## Dependencies at Risk
 
-**node-pty dependency (terminal emulation):**
-- Risk: Node-pty is a native module with binary components. Breaking changes between Node.js versions common. Limited maintainers.
-- Impact: Terminal feature breaks on Node.js upgrades until node-pty updates.
-- Migration plan: Monitor node-pty releases. Document required Node.js version in README. Consider fallback to simpler subprocess spawning if node-pty unavailable.
+**node-pty:**
+- Risk: Native module requiring compilation, can break on Node.js version upgrades
+- Files: `src/backend/services/terminal.service.ts:14,242`
+- Impact: Terminal functionality depends on this
+- Migration plan: Keep Node.js version stable, test terminal on upgrades
 
-**@prisma/adapter-better-sqlite3 (database):**
-- Risk: Better-sqlite3 is a native SQLite binding. If it becomes incompatible with latest Node.js, app can't start.
-- Impact: Database queries fail, entire backend crashes.
-- Migration plan: Review better-sqlite3 releases monthly. Have migration path to PostgreSQL adapter ready. Test with new Node.js versions in CI before release.
-
-**pidusage (process monitoring):**
-- Risk: pidusage is a native module for reading process stats. Not heavily maintained.
-- Impact: Resource monitoring in admin dashboard fails, process killing based on resource limits doesn't work.
-- Migration plan: Consider reading /proc directly on Linux. Use built-in process.memoryUsage() for initial implementation.
+**EventEmitter Type Safety:**
+- Risk: Multiple biome-ignore comments for `noExplicitAny` on EventEmitter handlers
+- Files: `src/backend/claude/process.ts:513,534`, `src/backend/claude/permissions.ts:559,576,578`, `src/backend/claude/protocol.ts:497,509`, `src/backend/claude/index.ts:423,438`
+- Impact: Type safety reduced for event handling
+- Migration plan: Consider typed-emitter library or custom typed event system
 
 ## Missing Critical Features
 
-**No audit trail for Claude tool execution:**
-- Problem: No way to know which tools were executed, when, and with what inputs (except session file logs). Can't trace security issues.
-- Blocks: Compliance audits, debugging production issues, rollback decisions.
+**Error Notification System:**
+- Problem: TODO to show error toast for failed uploads
+- Files: `src/components/chat/chat-input.tsx:258`
+- Blocks: Users don't get feedback on upload failures
 
-**No rate limiting on Claude message sends:**
-- Problem: User can spam messages and Claude will process all of them, causing high resource usage.
-- Blocks: Protecting server from user abuse, fair resource allocation.
-
-**No session persistence/recovery mechanism:**
-- Problem: If server crashes, all in-flight Claude sessions are lost. No way to recover state.
-- Blocks: Long-running sessions, production deployments, enterprise features.
-
-**No multi-workspace session management:**
-- Problem: Each session is tied to one workspace. Can't switch contexts quickly.
-- Blocks: Users managing multiple parallel tasks.
+**Test Coverage for WebSocket Handlers:**
+- Problem: Chat and terminal WebSocket handlers lack dedicated test files
+- Files: `src/backend/routers/websocket/chat.handler.ts`, `src/backend/routers/websocket/terminal.handler.ts`
+- Blocks: Refactoring is risky without tests
 
 ## Test Coverage Gaps
 
-**WebSocket connection lifecycle untested:**
-- What's not tested: Connection establishment, disconnection, reconnection, message buffering during downtime, heartbeat detection of dead connections.
-- Files: `src/backend/index.ts` (WebSocket handlers), `src/components/chat/use-chat-websocket.ts`
-- Risk: Core communication channel has no automated tests. Regressions in reconnection could break app.
-- Priority: High - this is critical path.
+**WebSocket Handlers Untested:**
+- What's not tested: Chat handler message routing, terminal handler attach/detach
+- Files: `src/backend/routers/websocket/chat.handler.ts`, `src/backend/routers/websocket/terminal.handler.ts`
+- Risk: Regressions in core real-time functionality
+- Priority: High
 
-**Claude CLI process spawning and cleanup:**
-- What's not tested: Process spawn failure, graceful shutdown, hung process detection, resource limit enforcement.
-- Files: `src/backend/claude/process.ts`
-- Risk: Process lifecycle bugs could accumulate orphan processes, leak resources.
-- Priority: High - resource management is critical.
+**Frontend Components with Stories but No Tests:**
+- What's not tested: 25 Storybook story files for visual testing but limited unit test coverage
+- Files: Various `.stories.tsx` files in `src/components/` and `src/frontend/components/`
+- Risk: Interaction logic not tested
+- Priority: Medium
 
-**Chat message ordering and concurrency:**
-- What's not tested: Messages arriving out of order, concurrent start/stop, message sending while session starting, queue overflow.
-- Files: `src/backend/index.ts` (lines 962-1100)
-- Risk: Race conditions in message handling could lose messages or cause state inconsistency.
-- Priority: High - affects core chat flow.
+**Skipped Tests:**
+- What's not tested: `src/components/chat/use-todo-tracker.ts` has skipped tests
+- Files: `src/components/chat/use-todo-tracker.ts`
+- Risk: Todo tracking functionality may have untested edge cases
+- Priority: Low
 
-**Terminal session with network flakiness:**
-- What's not tested: Terminal death detection, reconnection with missed output, output buffer restoration.
-- Files: `src/backend/index.ts` (terminal handlers), `src/backend/services/terminal.service.ts`
-- Risk: Terminal sessions fail silently, user doesn't know terminal is dead.
-- Priority: Medium - impacts terminal experience but not critical path.
+**Integration Tests:**
+- What's not tested: End-to-end flows (project creation, workspace initialization, Claude session lifecycle)
+- Risk: Multi-component interactions not verified
+- Priority: Medium
 
-**File lock service under concurrent access:**
-- What's not tested: Concurrent lock acquisition on same file, lock expiration race, TTL cleanup.
-- Files: `src/backend/services/file-lock.service.ts`
-- Risk: File locks could deadlock or not be released, blocking workspace operations.
-- Priority: Medium - only used during concurrent Claude sessions.
-
-**Git operations in workspace module:**
-- What's not tested: Branch creation during concurrent changes, PR detection race conditions, git command failures.
-- Files: `src/backend/clients/git.client.ts` (tested), but interceptors untested.
-- Risk: Branch/PR operations could fail silently or create inconsistent state.
-- Priority: Medium - affects workflow but not core chat.
+**tRPC Routers:**
+- What's not tested: Most tRPC routers lack dedicated test files except `workspace.trpc.test.ts`
+- Files: `src/backend/trpc/project.trpc.ts`, `src/backend/trpc/session.trpc.ts`, `src/backend/trpc/admin.trpc.ts`
+- Risk: API contract regressions
+- Priority: High
 
 ---
 
-*Concerns audit: 2026-01-29*
+*Concerns audit: 2026-01-31*

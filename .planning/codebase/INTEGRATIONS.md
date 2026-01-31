@@ -1,177 +1,182 @@
 # External Integrations
 
-**Analysis Date:** 2026-01-29
+**Analysis Date:** 2026-01-31
 
 ## APIs & External Services
 
-**GitHub (via GitHub CLI):**
-- Service: GitHub repository and pull request management
-  - SDK/Client: `gh` CLI (spawned as subprocess, not npm package)
-  - Implementation: `src/backend/services/github-cli.service.ts` (624 lines)
-  - Auth: GitHub CLI authentication (`gh auth login` required)
-- Use cases:
-  - Fetch PR details, status, review state
-  - List PRs where user is requested as reviewer
-  - Detect PR creation from workspace branches
-  - CI status checks via GitHub GraphQL API (via `gh` CLI)
+**Claude Code CLI:**
+- Primary integration for AI-powered coding assistance
+- SDK/Client: Spawned as child process via `spawn('claude', args)` in `src/backend/claude/process.ts`
+- Auth: Uses OAuth via `claude login` (no API key required)
+- Protocol: JSON streaming over stdio (`--output-format stream-json`, `--input-format stream-json`)
+- Features used: Session resume, permission modes, system prompts, model selection
+- Process management: Full lifecycle with resource monitoring, hung process detection
+- Configuration: `ORCHESTRATOR_MODEL`, `SUPERVISOR_MODEL`, `WORKER_MODEL` env vars
 
-**Claude AI (via Claude CLI):**
-- Service: AI-powered chat and code analysis
-  - SDK/Client: `claude` CLI (spawned as child process)
-  - Implementation: `src/backend/claude/process.ts`, `src/backend/claude/session.ts`, `src/backend/claude/protocol.ts`
-  - Auth: OAuth via `claude login` (credentials stored in `~/.claude/auth/`)
-- Use cases:
-  - Chat sessions with Claude Code CLI
-  - Code exploration and analysis
-  - Guided implementation workflows
-  - PR review suggestions
-  - Decision logging via Claude integration
-- Models supported:
-  - claude-sonnet-4-5-20250929 (default)
-  - claude-opus-4-5-20251101
-  - claude-3-5-haiku-20241022
-- Features:
-  - Session resumption (via `--resume-session-id`)
-  - Extended thinking (enabled via `--thinking`)
-  - Streaming JSON protocol for real-time communication
-  - Permission modes: strict, relaxed, yolo
-  - Resource monitoring (CPU, memory, activity timeouts)
+**GitHub CLI (gh):**
+- Purpose: PR management, review workflows, repository interactions
+- SDK/Client: `gh` CLI via `execFileAsync()` in `src/backend/services/github-cli.service.ts`
+- Auth: Local `gh auth login` (uses existing GitHub authentication)
+- Features used:
+  - `gh pr view` - PR status, reviews, CI status
+  - `gh pr list` - Find PRs for branches
+  - `gh pr review` - Submit approvals, request changes
+  - `gh pr diff` - Fetch PR diffs
+  - `gh search prs` - List review requests
+  - `gh api user` - Get authenticated username
+- Error handling: Classifies CLI errors (not_installed, auth_required, pr_not_found, network_error)
 
 ## Data Storage
 
-**Databases:**
-- SQLite (embedded)
-  - Type: SQLite 3
-  - Location: Configurable via `DATABASE_PATH` env var
-    - Default web/CLI: `~/factory-factory/data.db`
-    - Electron macOS: `~/Library/Application Support/Factory Factory/data.db`
-    - Electron Windows: `%APPDATA%/Factory Factory/data.db`
-    - Electron Linux: `~/.config/Factory Factory/data.db`
-  - Client: `better-sqlite3` (native binding)
-  - ORM: Prisma 7.3.0 with `@prisma/adapter-better-sqlite3`
-  - Schema: `prisma/schema.prisma`
-  - Tables: Project, Workspace, ClaudeSession, TerminalSession, DecisionLog
+**Database:**
+- SQLite via better-sqlite3 native driver
+- Connection: `DATABASE_PATH` env var or computed from `BASE_DIR`
+- ORM: Prisma 7.3.0 with `@prisma/adapter-better-sqlite3`
+- Schema: `prisma/schema.prisma`
+- Generated client: `prisma/generated/`
+- Models: Project, Workspace, ClaudeSession, TerminalSession, DecisionLog, UserSettings
 
 **File Storage:**
 - Local filesystem only
-  - Worktrees: `BASE_DIR/worktrees/` (git worktree directories)
-  - Database: Configurable location (default `BASE_DIR/data.db`)
-  - Logs: `BASE_DIR/logs/` (debug and runtime logs)
-  - Migrations: `prisma/migrations/` (Prisma migration history)
+- Worktrees: `WORKTREE_BASE_DIR` (default: `~/factory-factory/worktrees`)
+- Session logs: `BASE_DIR/logs/`
+- Debug files: `BASE_DIR/debug/`
 
 **Caching:**
-- None detected (no Redis, Memcached, or in-process cache dependency)
-
-## Authentication & Identity
-
-**Auth Provider:**
-- Custom (no third-party OAuth service)
-
-**Implementation:**
-- GitHub CLI (`gh auth login`) - Requires manual authentication
-  - Credentials stored in `~/.config/gh/` (GitHub CLI home)
-  - Checked via `gh auth status` in `github-cli.service.ts`
-
-- Claude CLI (`claude login`) - OAuth via Anthropic
-  - Credentials stored in `~/.claude/auth/`
-  - No API key needed (uses OAuth token)
-
-- No user authentication for FactoryFactory UI itself (feature flag `FEATURE_AUTHENTICATION` disabled by default)
-
-## Monitoring & Observability
-
-**Error Tracking:**
-- Not detected in dependencies
-- Feature flag `FEATURE_ERROR_TRACKING` disabled by default
-- Could be added via environment configuration
-
-**Logs:**
-- Winston logger (`src/backend/services/logger.service.ts`)
-  - Pretty print in development, JSON in production
-  - Configurable via `LOG_LEVEL` env var (error, warn, info, debug)
-  - Service name: `SERVICE_NAME` env var
-
-**Health Checks:**
-- Health check service (`src/backend/services/health-check.service.ts`)
-  - Interval: `HEALTH_CHECK_INTERVAL_MS` (default 5 minutes)
-  - Agent heartbeat threshold: `AGENT_HEARTBEAT_THRESHOLD_MINUTES` (default 7)
-  - Crash recovery monitoring with max attempts (`MAX_WORKER_ATTEMPTS`)
-
-**Monitoring:**
-- Resource monitoring for Claude processes:
-  - CPU usage tracking (via `pidusage`)
-  - Memory usage with limits (default 2GB)
-  - Activity timeout detection (default 30 minutes)
-  - Process hung detection
-
-## CI/CD & Deployment
-
-**Hosting:**
-- None configured for the application itself
-- GitHub repository for source code
-- Electron desktop app (self-hosted distribution)
-
-**CI Pipeline:**
-- GitHub Actions workflows (in `.github/workflows/`, content not analyzed)
-
-**Building:**
-- `pnpm build` - Compiles TypeScript, builds frontend with Vite, generates Electron bundle
-- `pnpm build:electron` - Builds distributable Electron packages (`.dmg`, `.exe`, `.deb`, `.AppImage`)
-
-**Deployment:**
-- Desktop app: Manual or auto-update via Electron's update mechanism (not configured)
-- CLI tool: npm/pnpm package (entries in `bin` field)
-  - `ff` or `factory-factory` commands
-
-## Environment Configuration
-
-**Required env vars:**
-- `DATABASE_PATH` - Optional (falls back to default)
-- `BACKEND_PORT` - Optional (default 3001)
-- `FRONTEND_PORT` - Optional (default 4000)
-- `NODE_ENV` - Optional (default development)
-- `BASE_DIR` - Optional (defaults to `~/factory-factory`)
-
-**Authentication env vars:**
-- No `ANTHROPIC_API_KEY` needed (uses OAuth via Claude CLI)
-
-**Feature flags:**
-- `FEATURE_AUTHENTICATION` - Enable/disable app-level auth (default false)
-- `FEATURE_METRICS` - Enable Prometheus metrics (default false)
-- `FEATURE_ERROR_TRACKING` - Enable error tracking (default false)
-
-**Secrets location:**
-- GitHub: `~/.config/gh/` (gh CLI authentication)
-- Claude: `~/.claude/auth/` (Claude CLI OAuth)
-- Database: `DATABASE_PATH` location (SQLite file)
-- No secrets in `.env` file (OAuth-based, not token-based)
-
-## Webhooks & Callbacks
-
-**Incoming:**
-- `/chat` WebSocket - Claude Code CLI streaming protocol (JSON messages)
-- `/terminal` WebSocket - PTY terminal session output
-
-**Outgoing:**
-- Git operations (via child process, no network webhooks)
-- GitHub CLI calls (via subprocess, results polled)
-- Claude CLI calls (via subprocess, streaming JSON protocol)
+- None (all state in SQLite)
 
 ## Real-time Communication
 
 **WebSocket Endpoints:**
-- `ws://localhost:{BACKEND_PORT}/chat` - Claude session messages
-  - Used for streaming Claude responses from CLI
-  - Protocol: Custom JSON format (`src/backend/claude/protocol.ts`)
+- `/chat` - Claude Code CLI streaming (JSON protocol)
+  - Handler: `src/backend/routers/websocket/chat.handler.ts`
+  - Bidirectional message streaming with session management
+- `/terminal` - PTY terminal sessions
+  - Handler: `src/backend/routers/websocket/terminal.handler.ts`
+  - Uses `node-pty` for pseudo-terminal multiplexing
+- `/dev-logs` - Development logging stream
+  - Handler: `src/backend/routers/websocket/dev-logs.handler.ts`
 
-- `ws://localhost:{BACKEND_PORT}/terminal` - PTY terminal output
-  - Used for terminal session streaming
-  - Real-time terminal data from `node-pty`
+**WebSocket Server:**
+- Implementation: `ws` library
+- Features: Heartbeat detection (30s), zombie connection cleanup
+- Upgrade handling in `src/backend/server.ts`
 
-**HTTP Endpoints:**
-- `/api/trpc/*` - tRPC RPC procedures
-  - Routers: `project.trpc.ts`, `workspace.trpc.ts`, `session.trpc.ts`, `admin.trpc.ts`, `pr-review.trpc.ts`
+## Authentication & Identity
+
+**Auth Provider:**
+- None currently (`FEATURE_AUTHENTICATION=false` default)
+- Single-user mode with `UserSettings.userId = "default"`
+
+**External Auth Dependencies:**
+- Claude CLI: OAuth via `claude login`
+- GitHub CLI: `gh auth login`
+
+## Terminal & Process Management
+
+**PTY Terminal:**
+- Library: `node-pty` 1.1.0
+- Service: `src/backend/services/terminal.service.ts`
+- Features: Shell detection, workspace-scoped sessions, resize support
+
+**Process Spawning:**
+- Child process management throughout:
+  - Claude CLI: `src/backend/claude/process.ts`
+  - Startup scripts: `src/backend/services/startup-script.service.ts`
+  - Run scripts: `src/backend/services/run-script.service.ts`
+  - Shell commands: `src/backend/lib/shell.ts`
+
+**Resource Monitoring:**
+- Library: `pidusage` 4.0.1
+- Features: Memory limits (2GB default), CPU warnings, hung process detection
+- Config: `CLAUDE_HUNG_TIMEOUT_MS` env var (default: 30 minutes)
+
+## Monitoring & Observability
+
+**Error Tracking:**
+- Feature flag: `FEATURE_ERROR_TRACKING=false` (disabled by default)
+- No external service configured
+
+**Logging:**
+- Custom logger service: `src/backend/services/logger.service.ts`
+- Levels: error, warn, info, debug (via `LOG_LEVEL` env var)
+- Session file logging: `src/backend/services/session-file-logger.service.ts`
+
+**Metrics:**
+- Feature flag: `FEATURE_METRICS=false` (disabled by default)
+- No Prometheus/metrics endpoint configured
+
+**Health Checks:**
+- Endpoint: `/health`, `/health/all`
+- Router: `src/backend/routers/api/health.router.ts`
+- Interval: `HEALTH_CHECK_INTERVAL_MS` (default: 5 minutes)
+
+## CI/CD & Deployment
+
+**Hosting:**
+- Electron desktop app (primary distribution)
+- Can run as web server via CLI (`ff serve`)
+
+**CI Pipeline:**
+- Not detected in codebase (likely external)
+
+**Build Commands:**
+```bash
+pnpm build           # Production build (backend + frontend)
+pnpm build:electron  # Electron distribution package
+```
+
+## Environment Configuration
+
+**Required env vars (production):**
+- None strictly required (sensible defaults exist)
+
+**Recommended env vars:**
+- `DATABASE_PATH` - SQLite database location
+- `BASE_DIR` - Root for all data (worktrees, logs)
+- `BACKEND_PORT` - Server port (default: 4001)
+- `FRONTEND_PORT` - Frontend port (default: 4000)
+
+**Optional integrations:**
+- `CORS_ALLOWED_ORIGINS` - Allowed CORS origins
+- `LOG_LEVEL` - Logging verbosity (error, warn, info, debug)
+
+**Secrets location:**
+- No secrets stored in codebase
+- External CLIs handle their own auth:
+  - Claude: `~/.claude/` directory
+  - GitHub: `~/.config/gh/` directory
+
+## MCP (Model Context Protocol)
+
+**MCP Server:**
+- Router: `src/backend/routers/api/mcp.router.ts`
+- Tools initialization: `src/backend/routers/mcp/index.ts`
+- Purpose: Exposes tools to Claude via MCP protocol
+
+## Webhooks & Callbacks
+
+**Incoming:**
+- None detected
+
+**Outgoing:**
+- None detected (GitHub interactions are pull-based via CLI)
+
+## External Tool Dependencies
+
+**Required CLI Tools:**
+| Tool | Purpose | Verification |
+|------|---------|--------------|
+| `claude` | AI coding assistance | `src/backend/services/cli-health.service.ts` |
+| `gh` | GitHub operations | `githubCLIService.checkHealth()` |
+| `git` | Version control, worktrees | Used throughout for branch/worktree management |
+
+**Optional CLI Tools:**
+| Tool | Purpose |
+|------|---------|
+| `bash` | Script execution (startup/run scripts) |
+| Shell (`zsh`/`bash`) | Terminal sessions |
 
 ---
 
-*Integration audit: 2026-01-29*
+*Integration audit: 2026-01-31*

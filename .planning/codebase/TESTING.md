@@ -1,419 +1,462 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-01-29
+**Analysis Date:** 2026-01-31
 
 ## Test Framework
 
-**Runner:**
-- Vitest v4.0.18
-- Config: `vitest.config.ts` in project root
-- Environment: Node.js (configured via `environment: 'node'`)
-- Globals: Enabled (no need to import test functions)
+**Runner:** Vitest (v4.0.18)
+**Config:** `vitest.config.ts`
 
-**Assertion Library:**
-- Vitest built-in matchers (expect)
-- Supports full Jest-compatible assertion API
+**Assertion Library:** Vitest built-in (Jest-compatible)
+**Coverage Provider:** V8
 
 **Run Commands:**
 ```bash
-pnpm test                 # Run all tests once
-pnpm test:watch          # Watch mode for development
-pnpm test:coverage       # Generate coverage report
+pnpm test              # Run all tests once
+pnpm test:watch        # Run tests in watch mode
+pnpm test:coverage     # Run tests with coverage report
 ```
 
 ## Test File Organization
 
-**Location:**
-- Co-located with source files
-- Pattern: `{module}.test.ts` placed next to `{module}.ts`
-- Examples:
-  - `src/backend/services/scheduler.service.test.ts` → `src/backend/services/scheduler.service.ts`
-  - `src/backend/claude/session.test.ts` → `src/backend/claude/session.ts`
-  - `src/lib/queue-storage.test.ts` → `src/lib/queue-storage.ts`
+**Location:** Co-located with source files using `.test.ts` suffix
 
-**Naming:**
-- All test files use `.test.ts` suffix (not `.spec.ts`)
-- Test file names mirror source file names exactly
-
-**Vitest config includes:**
+**Pattern:**
 ```
-include: ['src/**/*.test.ts'],
-exclude: ['node_modules', 'dist', '.next'],
+src/
+├── backend/
+│   ├── claude/
+│   │   ├── protocol.ts
+│   │   ├── protocol.test.ts
+│   │   ├── types.ts
+│   │   └── types.test.ts
+│   ├── services/
+│   │   ├── scheduler.service.ts
+│   │   └── scheduler.service.test.ts
+│   └── trpc/
+│       ├── workspace.trpc.ts
+│       └── workspace.trpc.test.ts
+├── components/
+│   └── chat/
+│       ├── chat-reducer.ts
+│       └── chat-reducer.test.ts
+└── hooks/
+    ├── use-websocket-transport.ts
+    └── use-websocket-transport.test.ts
 ```
 
 ## Test Structure
 
 **Suite Organization:**
-
 ```typescript
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { ServiceToTest } from './service';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('ServiceName', () => {
-  let service: ServiceToTest;
+// =============================================================================
+// Test Setup
+// =============================================================================
+
+describe('ComponentName', () => {
+  let dependency: MockType;
 
   beforeEach(() => {
-    // Setup before each test
-    service = new ServiceToTest();
     vi.clearAllMocks();
+    dependency = createMock();
   });
 
   afterEach(() => {
-    // Cleanup after each test
     vi.restoreAllMocks();
   });
 
-  describe('methodName', () => {
-    it('should do something specific', () => {
-      // Test implementation
-      expect(result).toBe(expectedValue);
+  // -------------------------------------------------------------------------
+  // Feature A Tests
+  // -------------------------------------------------------------------------
+
+  describe('featureA', () => {
+    it('should do X when Y', () => {
+      // Arrange
+      const input = createTestInput();
+
+      // Act
+      const result = featureA(input);
+
+      // Assert
+      expect(result).toBe(expected);
     });
 
-    it('should handle edge case', () => {
-      // Another test
-    });
+    it('should handle edge case Z', () => { ... });
   });
 
-  describe('anotherMethod', () => {
-    it('should behave differently', () => {
-      // More tests
-    });
-  });
+  // -------------------------------------------------------------------------
+  // Feature B Tests
+  // -------------------------------------------------------------------------
+
+  describe('featureB', () => { ... });
 });
 ```
 
-**Patterns from codebase:**
+**Section Dividers:** Use commented lines for visual organization
+```typescript
+// =============================================================================
+// Test Helpers
+// =============================================================================
 
-1. **Global setup/teardown in `src/backend/testing/setup.ts`:**
-   ```typescript
-   import { afterEach, beforeEach, vi } from 'vitest';
+// -------------------------------------------------------------------------
+// sendUserMessage Tests
+// -------------------------------------------------------------------------
+```
 
-   beforeEach(() => {
-     vi.clearAllMocks();
-   });
+## Test Setup
 
-   afterEach(() => {
-     vi.restoreAllMocks();
-   });
-   ```
+**Global Setup:** `src/backend/testing/setup.ts`
+```typescript
+import { afterEach, beforeEach, vi } from 'vitest';
 
-2. **Nested describe blocks for logical grouping:**
-   ```typescript
-   describe('SessionManager', () => {
-     describe('getProjectPath', () => {
-       it('should escape forward slashes', () => { ... });
-       it('should return correct path format', () => { ... });
-     });
+// Reset all mocks between tests
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
-     describe('getSessionPath', () => {
-       it('should combine project path with session ID', () => { ... });
-     });
-   });
-   ```
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+```
 
-3. **Section headers with comment blocks:**
-   ```typescript
-   // =============================================================================
-   // sendUserMessage Tests
-   // =============================================================================
-
-   describe('sendUserMessage', () => {
-     // Tests here
-   });
-   ```
+**Config (vitest.config.ts):**
+```typescript
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    exclude: ['node_modules', 'dist', '.next'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'json-summary', 'html'],
+      include: ['src/backend/**/*.ts'],
+      exclude: ['src/backend/**/*.test.ts', 'src/backend/index.ts', 'src/backend/testing/**'],
+    },
+    setupFiles: ['./src/backend/testing/setup.ts'],
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@prisma-gen': path.resolve(__dirname, './prisma/generated'),
+    },
+  },
+});
+```
 
 ## Mocking
 
-**Framework:** Vitest's `vi` module
+**Framework:** Vitest built-in (`vi`)
 
-**Mock setup patterns:**
-
-1. **Module mocks (set up before imports):**
-   ```typescript
-   const mockFindNeedingPRSync = vi.fn();
-   const mockUpdate = vi.fn();
-
-   vi.mock('../resource_accessors/workspace.accessor', () => ({
-     workspaceAccessor: {
-       findNeedingPRSync: () => mockFindNeedingPRSync(),
-       update: (...args: unknown[]) => mockUpdate(...args),
-     },
-   }));
-
-   // Import AFTER mocks are set up
-   import { schedulerService } from './scheduler.service';
-   ```
-
-2. **Function mocks for specific behavior:**
-   ```typescript
-   mockFetchAndComputePRState.mockResolvedValue({
-     prNumber: 1,
-     prState: 'OPEN',
-     prReviewState: 'APPROVED',
-     prCiStatus: 'SUCCESS',
-   });
-   ```
-
-3. **Conditional mock responses:**
-   ```typescript
-   mockFetchAndComputePRState
-     .mockResolvedValueOnce({
-       prNumber: 1,
-       prState: 'OPEN',
-       prReviewState: 'APPROVED',
-       prCiStatus: 'SUCCESS',
-     })
-     .mockResolvedValueOnce(null); // Second call returns null
-   ```
-
-4. **Mock rejection for error cases:**
-   ```typescript
-   mockFindNeedingPRSync.mockRejectedValue(new Error('Database error'));
-   ```
-
-5. **Mock implementation for custom behavior:**
-   ```typescript
-   mockFetchAndComputePRState.mockImplementation(async () => {
-     currentConcurrent++;
-     maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
-     await new Promise((resolve) => setTimeout(resolve, 10));
-     currentConcurrent--;
-     return { prNumber: 1, prState: 'OPEN', ... };
-   });
-   ```
-
-**Naming Convention:**
-- Mock functions: `mock{FunctionName}` (e.g., `mockFindNeedingPRSync`)
-- Import real modules AFTER setting up mocks
-- Use `vi.fn()` for function spies/mocks
-- Use `vi.mock()` for module mocks
-
-**What to Mock:**
-- External service calls (database, API, file system)
-- Third-party library functions
-- Functions from other modules in dependency chain
-
-**What NOT to Mock:**
-- The function under test itself
-- Pure utility functions
-- Core JavaScript APIs (test real behavior instead)
-- Built-in modules unless testing error handling
-
-## Fixtures and Factories
-
-**Test Data:**
-- Inline object literals for simple test data
-- Factory pattern for complex/repeated data structures
-
-**Example from codebase:**
+**Module Mocking Pattern:**
 ```typescript
-it('should sync workspaces and return counts', async () => {
-  const mockWorkspaces = [
-    { id: 'ws-1', prUrl: 'https://github.com/org/repo/pull/1' },
-    { id: 'ws-2', prUrl: 'https://github.com/org/repo/pull/2' },
-  ];
+// Mock dependencies BEFORE importing the module under test
+const mockFindNeedingPRSync = vi.fn();
+const mockUpdate = vi.fn();
 
-  mockFindNeedingPRSync.mockResolvedValue(mockWorkspaces);
-  // ...test continues
+vi.mock('../resource_accessors/workspace.accessor', () => ({
+  workspaceAccessor: {
+    findNeedingPRSync: () => mockFindNeedingPRSync(),
+    update: (...args: unknown[]) => mockUpdate(...args),
+  },
+}));
+
+vi.mock('./logger.service', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+// Import AFTER mocks are set up
+import { schedulerService } from './scheduler.service';
+```
+
+**Function Spy Pattern:**
+```typescript
+const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+  // Intentionally empty - suppress console output during test
+});
+
+// After test
+consoleErrorSpy.mockRestore();
+```
+
+**Mock Implementation with Tracking:**
+```typescript
+let currentConcurrent = 0;
+let maxConcurrent = 0;
+
+mockFetchAndComputePRState.mockImplementation(async () => {
+  currentConcurrent++;
+  maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  currentConcurrent--;
+  return { prNumber: 1, prState: 'OPEN', prReviewState: null, prCiStatus: 'PENDING' };
 });
 ```
 
-**Location:**
-- Test data defined in test file itself (not extracted to separate fixtures)
-- Keeps test logic self-contained and readable
-- Complex factories can be created as helper functions within test file
+**What to Mock:**
+- External services (GitHub CLI, logger)
+- Database accessors
+- File system operations
+- Network requests
+
+**What NOT to Mock:**
+- The module under test
+- Pure utility functions
+- Type definitions
+
+## Fixtures and Factories
+
+**Test Data Factories:**
+```typescript
+function createTestToolUseMessage(toolUseId: string): ClaudeMessage {
+  return {
+    type: 'stream_event',
+    event: {
+      type: 'content_block_start',
+      index: 0,
+      content_block: {
+        type: 'tool_use',
+        id: toolUseId,
+        name: 'TestTool',
+        input: { arg: 'value' },
+      },
+    },
+  };
+}
+
+function createTestAssistantMessage(): ClaudeMessage {
+  return {
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Hello!' }],
+    },
+  };
+}
+```
+
+**State Factories:**
+```typescript
+function createInitialChatState(overrides?: Partial<ChatState>): ChatState {
+  return {
+    messages: [],
+    sessionStatus: { phase: 'idle' },
+    gitBranch: null,
+    availableSessions: [],
+    pendingRequest: { type: 'none' },
+    chatSettings: DEFAULT_CHAT_SETTINGS,
+    queuedMessages: new Map(),
+    toolUseIdToIndex: new Map(),
+    ...overrides,
+  };
+}
+```
+
+**Helper Conversion Functions:**
+```typescript
+function toQueuedMessagesMap(messages: QueuedMessage[]): Map<string, QueuedMessage> {
+  const map = new Map<string, QueuedMessage>();
+  for (const msg of messages) {
+    map.set(msg.id, msg);
+  }
+  return map;
+}
+```
 
 ## Coverage
 
-**Configuration:**
-```typescript
-coverage: {
-  provider: 'v8',
-  reporter: ['text', 'json', 'json-summary', 'html'],
-  include: ['src/backend/**/*.ts'],
-  exclude: ['src/backend/**/*.test.ts', 'src/backend/index.ts', 'src/backend/testing/**'],
-  // Thresholds disabled - enable as coverage grows
-},
-```
+**Requirements:** No enforced thresholds (disabled in config)
 
-**Requirements:** No enforced thresholds (commented in config)
-- Coverage currently measured but not enforced
-- Thresholds disabled because unit tests use heavy mocking
-- Plan to enable as integration tests are added
+**Coverage is collected for:**
+- `src/backend/**/*.ts`
+
+**Excluded from coverage:**
+- Test files (`*.test.ts`)
+- Entry points (`src/backend/index.ts`)
+- Test utilities (`src/backend/testing/**`)
 
 **View Coverage:**
 ```bash
 pnpm test:coverage
-# Generates HTML report in coverage/ directory
+# Reports output to: coverage/
+# - text (terminal)
+# - html (coverage/index.html)
+# - json-summary (coverage/coverage-summary.json)
 ```
 
 ## Test Types
 
 **Unit Tests:**
-- Test individual functions/methods in isolation
-- Use mocks for all external dependencies
-- Focus: logic, edge cases, error handling
-- Example: `src/backend/claude/session.test.ts` tests `parseHistoryEntry()` function with various input combinations
-- Example: `src/backend/clients/git.client.test.ts` tests `GitClient` methods with mocked exec
+- Test individual functions and classes in isolation
+- Mock all external dependencies
+- Location: co-located with source files
 
 **Integration Tests:**
-- Not currently emphasized (see coverage config notes)
-- Would test multiple modules working together
-- Could use real database with test transactions
-- Planned for future as unit test coverage matures
+- Test multiple components working together
+- Use real implementations where practical
+- Mock only external services (DB, network)
 
-**E2E Tests:**
-- Not currently implemented
-- Would test full user workflows end-to-end
-- Infrastructure for this exists (Electron app) but no E2E test framework configured
+**Frontend Component Tests:**
+- Not widely implemented yet
+- Storybook used for visual component testing
+- Stories location: co-located with components (`.stories.tsx`)
 
 ## Common Patterns
 
 **Async Testing:**
 ```typescript
-it('should update workspace with PR status on success', async () => {
-  mockFindNeedingPRSync.mockResolvedValue([
-    { id: 'ws-1', prUrl: 'https://github.com/org/repo/pull/123' },
-  ]);
+it('should resolve with response data when CLI responds', async () => {
+  const initPromise = protocol.sendInitialize();
 
-  mockFetchAndComputePRState.mockResolvedValue({
-    prNumber: 123,
-    prState: 'MERGED',
-    prReviewState: 'APPROVED',
-    prCiStatus: 'SUCCESS',
-  });
+  // Wait a tick for the message to be sent
+  await new Promise((resolve) => setImmediate(resolve));
 
-  await schedulerService.syncPRStatuses();
+  // Send the response
+  stdout.write(`${JSON.stringify(response)}\n`);
 
-  expect(mockUpdate).toHaveBeenCalledWith('ws-1', {
-    prNumber: 123,
-    prState: 'MERGED',
-    prReviewState: 'APPROVED',
-    prCiStatus: 'SUCCESS',
-    prUpdatedAt: expect.any(Date),
-  });
+  const result = await initPromise;
+  expect(result).toEqual(responseData);
 });
 ```
 
 **Error Testing:**
 ```typescript
-it('should handle exceptions during sync gracefully', async () => {
-  const mockWorkspaces = [{ id: 'ws-1', prUrl: 'https://github.com/org/repo/pull/1' }];
+it('should reject on timeout', async () => {
+  const shortTimeoutProtocol = new ClaudeProtocol(stdin, stdout, { requestTimeout: 50 });
+  shortTimeoutProtocol.start();
 
-  mockFindNeedingPRSync.mockResolvedValue(mockWorkspaces);
-  mockFetchAndComputePRState.mockRejectedValue(new Error('Network error'));
+  await expect(shortTimeoutProtocol.sendInitialize()).rejects.toThrow('timed out');
 
-  const result = await schedulerService.syncPRStatuses();
-
-  expect(result).toEqual({ synced: 0, failed: 1 });
+  shortTimeoutProtocol.stop();
 });
 ```
 
-**Timer Testing (Fake Timers):**
+**Timer Testing:**
 ```typescript
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.clearAllMocks();
-});
+describe('interval behavior', () => {
+  it('should run sync every 5 minutes when started', async () => {
+    vi.useFakeTimers();
+    mockFindNeedingPRSync.mockResolvedValue([]);
 
-it('should run sync every 5 minutes when started', async () => {
-  mockFindNeedingPRSync.mockResolvedValue([]);
+    schedulerService.start();
+    expect(mockFindNeedingPRSync).not.toHaveBeenCalled();
 
-  schedulerService.start();
+    // First interval tick (5 minutes)
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(1);
 
-  // First interval tick (5 minutes)
-  await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-  expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(1);
-
-  // Second interval tick
-  await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-  expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(2);
-
-  await schedulerService.stop();
-});
-
-// For tests needing real async:
-it('should respect rate limit', async () => {
-  vi.useRealTimers();
-
-  // Test with real async behavior
-
-  vi.useFakeTimers(); // Restore fake timers
+    await schedulerService.stop();
+    vi.useRealTimers();
+  });
 });
 ```
 
-**Concurrent Behavior Testing:**
+**Stream/Event Testing:**
 ```typescript
-it('should respect rate limit of 5 concurrent syncs', async () => {
-  const mockWorkspaces = Array.from({ length: 10 }, (_, i) => ({
-    id: `ws-${i}`,
-    prUrl: `https://github.com/org/repo/pull/${i}`,
-  }));
-
-  mockFindNeedingPRSync.mockResolvedValue(mockWorkspaces);
-
-  let currentConcurrent = 0;
-  let maxConcurrent = 0;
-
-  mockFetchAndComputePRState.mockImplementation(async () => {
-    currentConcurrent++;
-    maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    currentConcurrent--;
-    return { /* data */ };
+it('should emit message event for valid JSON', async () => {
+  const messagePromise = new Promise<ClaudeJson>((resolve) => {
+    protocol.on('message', resolve);
   });
 
-  vi.useRealTimers();
-  const result = await schedulerService.syncPRStatuses();
-  vi.useFakeTimers();
+  const msg: AssistantMessage = {
+    type: 'assistant',
+    session_id: 'abc',
+    message: { role: 'assistant', content: [] },
+  };
+  stdout.write(`${JSON.stringify(msg)}\n`);
 
-  expect(maxConcurrent).toBeLessThanOrEqual(5);
-  expect(maxConcurrent).toBeGreaterThan(0);
+  const received = await messagePromise;
+  expect(received).toEqual(msg);
 });
 ```
 
-**Edge Cases and Boundaries:**
+**State Transition Testing (Reducer):**
 ```typescript
-describe('edge cases', () => {
-  it('should return empty array for unknown entry types', () => {
-    const entry = { type: 'unknown', timestamp, message: { role: 'user', content: 'Should be ignored' } };
-    const result = parseHistoryEntry(entry);
-    expect(result).toHaveLength(0);
-  });
+describe('WS_STATUS action', () => {
+  it('should set sessionStatus to running when payload.running is true', () => {
+    const action: ChatAction = { type: 'WS_STATUS', payload: { running: true } };
+    const newState = chatReducer(initialState, action);
 
-  it('should return empty array for entries without message field', () => {
-    const entry = { type: 'user', timestamp };
-    const result = parseHistoryEntry(entry);
-    expect(result).toHaveLength(0);
-  });
-
-  it('should handle null and undefined messages', () => {
-    expect(parseHistoryEntry({ type: 'user', timestamp, message: null })).toHaveLength(0);
-    expect(parseHistoryEntry({ type: 'user', timestamp, message: undefined })).toHaveLength(0);
-  });
-
-  it('should handle empty content array', () => {
-    const entry = { type: 'user', timestamp, message: { role: 'user', content: [] } };
-    const result = parseHistoryEntry(entry);
-    expect(result).toHaveLength(0);
+    expect(newState.sessionStatus).toEqual({ phase: 'running' });
   });
 });
 ```
 
-## Test Cleanup
+**Testing Race Conditions:**
+```typescript
+it('should preserve existing pendingPermission when session_loaded has no pending request (race condition)', () => {
+  const existingPermission: PermissionRequest = { ... };
+  const state: ChatState = {
+    ...initialState,
+    pendingRequest: { type: 'permission', request: existingPermission },
+    sessionStatus: { phase: 'loading' } as const,
+  };
 
-**Setup file (`src/backend/testing/setup.ts`):**
-- Runs for every test file automatically
-- Clears all mocks before each test
-- Restores all mocks after each test
-- Prevents mock state from leaking between tests
+  const action: ChatAction = {
+    type: 'WS_SESSION_LOADED',
+    payload: {
+      messages: [],
+      gitBranch: 'main',
+      running: true,
+      pendingInteractiveRequest: null, // No pending request from backend
+    },
+  };
+  const newState = chatReducer(state, action);
 
-**Best practices:**
-- Call `vi.clearAllMocks()` in `beforeEach` to reset mock call counts
-- Call `vi.restoreAllMocks()` in `afterEach` to remove all mocks
-- Use `vi.useRealTimers()` and `vi.useFakeTimers()` carefully (restore after use)
-- Close database connections in `afterEach` if testing with real database
+  // Should preserve the existing permission, not overwrite with null
+  expect(newState.pendingRequest).toEqual({ type: 'permission', request: existingPermission });
+});
+```
+
+## Storybook
+
+**Used for:** Visual component documentation and testing
+**Port:** 6006
+
+**Run:**
+```bash
+pnpm storybook
+```
+
+**Story Pattern:**
+```typescript
+import type { Meta, StoryObj } from '@storybook/react';
+import { Button } from './button';
+
+const meta = {
+  title: 'UI/Button',
+  component: Button,
+  parameters: { layout: 'centered' },
+  tags: ['autodocs'],
+  argTypes: {
+    variant: { control: 'select', options: ['default', 'destructive', ...] },
+  },
+} satisfies Meta<typeof Button>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { children: 'Button' },
+};
+
+export const AllVariants: Story = {
+  render: () => (
+    <div className="flex gap-4">
+      <Button variant="default">Default</Button>
+      <Button variant="destructive">Destructive</Button>
+    </div>
+  ),
+};
+```
 
 ---
 
-*Testing analysis: 2026-01-29*
+*Testing analysis: 2026-01-31*
