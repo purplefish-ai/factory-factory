@@ -462,7 +462,10 @@ function WorkspaceChatContent() {
                     <CheckCircle2 className="h-3 w-3 text-green-500" />
                   )}
                   {workspace.prCiStatus === 'FAILURE' && (
-                    <XCircle className="h-3 w-3 text-red-500" />
+                    <>
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <span className="text-xs text-red-600 dark:text-red-400">CI Failing</span>
+                    </>
                   )}
                   {workspace.prCiStatus === 'PENDING' && (
                     <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />

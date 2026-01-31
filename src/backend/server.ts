@@ -34,6 +34,7 @@ import {
   handleTerminalUpgrade,
 } from './routers/websocket';
 import {
+  ciMonitorService,
   configService,
   createLogger,
   findAvailablePort,
@@ -253,6 +254,7 @@ export function createServer(requestedPort?: number): ServerInstance {
     await rateLimiter.stop();
 
     await schedulerService.stop();
+    await ciMonitorService.stop();
     await reconciliationService.stopPeriodicCleanup();
     await prisma.$disconnect();
 
@@ -302,6 +304,7 @@ export function createServer(requestedPort?: number): ServerInstance {
           reconciliationService.startPeriodicCleanup();
           rateLimiter.start();
           schedulerService.start();
+          ciMonitorService.start();
 
           logger.info('Server endpoints available', {
             server: `http://localhost:${actualPort}`,
