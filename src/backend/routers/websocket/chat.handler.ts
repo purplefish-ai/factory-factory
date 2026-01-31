@@ -45,7 +45,7 @@ export const pendingInteractiveRequests = new Map<string, PendingInteractiveRequ
 /** Guard to prevent concurrent tryDispatchNextMessage calls per session */
 const dispatchInProgress = new Map<string, boolean>();
 
-const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
+const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
 let chatWsMsgCounter = 0;
 
 // ============================================================================

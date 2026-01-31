@@ -15,6 +15,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { configService } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('session-file-logger');
@@ -28,10 +29,9 @@ export class SessionFileLogger {
   private sessionLogs = new Map<string, string>(); // sessionId -> logFilePath
 
   constructor() {
-    // Use WS_LOGS_PATH env var (set by Electron), or fall back to .context/ws-logs in cwd
+    // Get from config service (which uses WS_LOGS_PATH env var or falls back to .context/ws-logs in cwd)
     // For Electron, this will be in userData directory
-    const basePath = process.env.WS_LOGS_PATH || join(process.cwd(), '.context', 'ws-logs');
-    this.logDir = basePath;
+    this.logDir = configService.getWsLogsPath();
     // Ensure log directory exists
     if (!existsSync(this.logDir)) {
       mkdirSync(this.logDir, { recursive: true });

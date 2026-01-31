@@ -69,7 +69,7 @@ export interface ServerInstance {
  * @returns ServerInstance with start/stop methods
  */
 export function createServer(requestedPort?: number): ServerInstance {
-  const REQUESTED_PORT = requestedPort ?? Number.parseInt(process.env.BACKEND_PORT || '3001', 10);
+  const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
   let actualPort: number = REQUESTED_PORT;
 
   const app = express();
@@ -127,7 +127,7 @@ export function createServer(requestedPort?: number): ServerInstance {
   // ============================================================================
   // Static File Serving (Production Mode)
   // ============================================================================
-  const frontendStaticPath = process.env.FRONTEND_STATIC_PATH;
+  const frontendStaticPath = configService.getFrontendStaticPath();
   if (frontendStaticPath && existsSync(frontendStaticPath)) {
     logger.info('Serving static files from', { path: frontendStaticPath });
 

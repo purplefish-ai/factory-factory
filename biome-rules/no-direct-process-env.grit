@@ -1,0 +1,29 @@
+# NOTE: This rule is NOT currently enabled in biome.json because Biome
+# GritQL plugins don't yet support per-file overrides (see biomejs/biome#8522).
+#
+# Once Biome supports this, add to biome.json plugins array:
+#   "biome-rules/no-direct-process-env.grit"
+#
+# Files that legitimately need direct process.env access:
+# - src/backend/lib/env.ts (core env utilities)
+# - src/backend/services/config.service.ts (centralized config)
+# - src/backend/services/logger.service.ts (early initialization)
+# - src/backend/services/terminal.service.ts (SHELL for pty)
+# - src/backend/services/startup-script.service.ts (env spreading)
+# - src/backend/claude/process.ts (env spreading to child process)
+# - src/backend/db.ts (early bootstrap)
+# - src/backend/migrate.ts (migration scripts)
+# - src/cli/**/*.ts (CLI entry points)
+# - electron/**/*.ts (Electron main process)
+# - scripts/**/*.ts (build/dev scripts)
+# - prisma/**/*.ts (Prisma configuration)
+
+or {
+  `process.env.$_` as $access,
+  `process.env[$_]` as $access
+} where {
+  register_diagnostic(
+    span=$access,
+    message="Do not access process.env directly. Use configService from @/backend/services/config.service instead. This ensures centralized validation and consistent defaults."
+  )
+}

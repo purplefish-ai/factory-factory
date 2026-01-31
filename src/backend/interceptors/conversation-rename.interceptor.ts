@@ -12,6 +12,7 @@ import { buildBranchRenameInstruction } from '../prompts/branch-rename';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { configService } from '../services/config.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
 import { countUserMessages, extractKeyTopics } from '../utils/conversation-analyzer';
@@ -27,8 +28,8 @@ const processedSessions = new Map<string, number>();
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// Message count threshold for triggering rename (configurable via env var)
-const MESSAGE_THRESHOLD = Number.parseInt(process.env.BRANCH_RENAME_MESSAGE_THRESHOLD ?? '2', 10);
+// Message count threshold for triggering rename (configurable via config service)
+const MESSAGE_THRESHOLD = configService.getBranchRenameMessageThreshold();
 
 // Periodically clean up old entries to prevent memory leak
 setInterval(() => {

@@ -5,6 +5,7 @@
  * Implements token bucket algorithm for API rate limiting.
  */
 
+import { configService } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('rate-limiter');
@@ -54,14 +55,15 @@ export interface ApiUsageStats {
 }
 
 /**
- * Get default configuration from environment
+ * Get default configuration from centralized config service
  */
 function getDefaultConfig(): RateLimiterConfig {
+  const config = configService.getRateLimiterConfig();
   return {
-    claudeRequestsPerMinute: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_MINUTE || '60', 10),
-    claudeRequestsPerHour: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_HOUR || '1000', 10),
-    maxQueueSize: Number.parseInt(process.env.RATE_LIMIT_QUEUE_SIZE || '100', 10),
-    queueTimeoutMs: Number.parseInt(process.env.RATE_LIMIT_QUEUE_TIMEOUT_MS || '30000', 10),
+    claudeRequestsPerMinute: config.claudeRequestsPerMinute,
+    claudeRequestsPerHour: config.claudeRequestsPerHour,
+    maxQueueSize: config.maxQueueSize,
+    queueTimeoutMs: config.queueTimeoutMs,
   };
 }
 
