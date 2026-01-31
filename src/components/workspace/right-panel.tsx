@@ -1,12 +1,13 @@
 'use client';
 
-import { FileQuestion, Files, GitCompare, ListTodo } from 'lucide-react';
+import { FileQuestion, Files, GitCompare, ListTodo, ScrollText, Terminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
 
+import { DevLogsPanel } from './dev-logs-panel';
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
 import { TerminalPanel } from './terminal-panel';
@@ -18,12 +19,14 @@ import { UnstagedChangesPanel } from './unstaged-changes-panel';
 // =============================================================================
 
 const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
+const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-right-panel-bottom-tab-';
 
 // =============================================================================
 // Types
 // =============================================================================
 
 type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
+type BottomPanelTab = 'terminal' | 'dev-logs';
 
 // =============================================================================
 // Sub-Components
@@ -68,8 +71,9 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
+  const [activeBottomTab, setActiveBottomTab] = useState<BottomPanelTab>('terminal');
 
-  // Load persisted tab from localStorage on mount or workspaceId change
+  // Load persisted tabs from localStorage on mount or workspaceId change
   useEffect(() => {
     if (loadedForWorkspaceRef.current === workspaceId) {
       return;
@@ -77,14 +81,19 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     loadedForWorkspaceRef.current = workspaceId;
 
     try {
-      const stored = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
+      const storedTop = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
       if (
-        stored === 'unstaged' ||
-        stored === 'diff-vs-main' ||
-        stored === 'files' ||
-        stored === 'tasks'
+        storedTop === 'unstaged' ||
+        storedTop === 'diff-vs-main' ||
+        storedTop === 'files' ||
+        storedTop === 'tasks'
       ) {
-        setActiveTopTab(stored);
+        setActiveTopTab(storedTop);
+      }
+
+      const storedBottom = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
+      if (storedBottom === 'terminal' || storedBottom === 'dev-logs') {
+        setActiveBottomTab(storedBottom);
       }
     } catch {
       // Ignore storage errors
@@ -96,6 +105,15 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     setActiveTopTab(tab);
     try {
       localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, tab);
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
+  const handleBottomTabChange = (tab: BottomPanelTab) => {
+    setActiveBottomTab(tab);
+    try {
+      localStorage.setItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`, tab);
     } catch {
       // Ignore storage errors
     }
@@ -150,9 +168,35 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
 
       <ResizableHandle direction="vertical" />
 
-      {/* Bottom Panel: Terminal */}
+      {/* Bottom Panel: Terminal / Dev Logs */}
       <ResizablePanel defaultSize="40%" minSize="15%">
-        <TerminalPanel workspaceId={workspaceId} className="h-full" />
+        <div className="flex flex-col h-full min-h-0">
+          {/* Tab bar */}
+          <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
+            <PanelTab
+              label="Terminal"
+              icon={<Terminal className="h-3.5 w-3.5" />}
+              isActive={activeBottomTab === 'terminal'}
+              onClick={() => handleBottomTabChange('terminal')}
+            />
+            <PanelTab
+              label="Dev Logs"
+              icon={<ScrollText className="h-3.5 w-3.5" />}
+              isActive={activeBottomTab === 'dev-logs'}
+              onClick={() => handleBottomTabChange('dev-logs')}
+            />
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
+            {activeBottomTab === 'terminal' && (
+              <TerminalPanel workspaceId={workspaceId} className="h-full" />
+            )}
+            {activeBottomTab === 'dev-logs' && (
+              <DevLogsPanel workspaceId={workspaceId} className="h-full" />
+            )}
+          </div>
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );

@@ -1,9 +1,9 @@
 /**
  * WebSocket Handlers
  *
- * Exports WebSocket upgrade handlers for chat and terminal connections.
+ * Exports WebSocket upgrade handlers for chat, terminal, and dev logs connections.
  */
 
 export { chatConnections, clientEventSetup, handleChatUpgrade } from './chat.handler';
-
+export { devLogsConnections, handleDevLogsUpgrade } from './dev-logs.handler';
 export { handleTerminalUpgrade, terminalConnections } from './terminal.handler';

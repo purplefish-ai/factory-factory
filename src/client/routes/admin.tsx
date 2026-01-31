@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, Terminal } from 'lucide-react';
+import { Bot, CheckCircle2, FileJson, RefreshCw, Terminal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -368,6 +368,136 @@ function ProcessesSection({ processes }: { processes?: ProcessesData }) {
   );
 }
 
+function FactoryConfigSection({ projectId }: { projectId: string }) {
+  const { data: factoryConfig } = trpc.workspace.getFactoryConfig.useQuery({ projectId });
+
+  const refreshConfigs = trpc.workspace.refreshFactoryConfigs.useMutation({
+    onSuccess: (result) => {
+      if (result.errors.length > 0) {
+        toast.warning(
+          `Refreshed ${result.updatedCount} workspace(s), but ${result.errors.length} failed`
+        );
+      } else {
+        toast.success(`Refreshed factory-factory.json for ${result.updatedCount} workspace(s)`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Failed to refresh configurations: ${error.message}`);
+    },
+  });
+
+  const handleRefresh = () => {
+    refreshConfigs.mutate({ projectId });
+  };
+
+  if (!factoryConfig) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileJson className="w-5 h-5" />
+            Factory Configuration
+          </CardTitle>
+          <CardDescription>
+            No factory-factory.json found in this repository. Create one to configure workspace
+            setup and run scripts.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <FileJson className="w-5 h-5" />
+            Factory Configuration
+          </CardTitle>
+          <CardDescription>
+            Configuration for workspace setup and run scripts (factory-factory.json)
+          </CardDescription>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshConfigs.isPending}
+          className="gap-2"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
+          Refresh All Workspaces
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-md border bg-muted/50 p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />
+            <div className="space-y-1 flex-1">
+              <p className="font-medium text-sm">Configuration Found</p>
+              <p className="text-xs text-muted-foreground">
+                factory-factory.json is configured in this repository
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 pl-8">
+            {factoryConfig.scripts.setup && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
+                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                  {factoryConfig.scripts.setup}
+                </code>
+                <p className="text-xs text-muted-foreground">
+                  Runs automatically when a new workspace is created
+                </p>
+              </div>
+            )}
+
+            {factoryConfig.scripts.run && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Run Script</p>
+                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                  {factoryConfig.scripts.run}
+                </code>
+                <p className="text-xs text-muted-foreground">
+                  Available via the play button in each workspace
+                </p>
+              </div>
+            )}
+
+            {factoryConfig.scripts.cleanup && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Cleanup Script</p>
+                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                  {factoryConfig.scripts.cleanup}
+                </code>
+                <p className="text-xs text-muted-foreground">Runs when stopping the dev server</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p>
+            <strong>Location:</strong> factory-factory.json in repository root
+          </p>
+          <p>
+            <strong>Port Allocation:</strong> Use{' '}
+            <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for automatic
+            port allocation
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            <strong>Note:</strong> Click "Refresh All Workspaces" to update existing workspaces
+            after changing factory-factory.json
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function IdeSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
@@ -507,6 +637,9 @@ export default function AdminDashboardPage() {
     }
   );
 
+  // Get first project for factory config refresh
+  const { data: projects } = trpc.project.list.useQuery();
+
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
       refetch();
@@ -519,34 +652,39 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <PageHeader title="Admin Dashboard" description="System monitoring and management" />
+    <div className="h-full overflow-y-auto">
+      <div className="space-y-6 p-6">
+        <PageHeader title="Admin Dashboard" description="System monitoring and management" />
 
-      <ApiUsageSection
-        apiUsage={stats?.apiUsage}
-        onReset={() => resetApiStats.mutate()}
-        isResetting={resetApiStats.isPending}
-      />
+        <ApiUsageSection
+          apiUsage={stats?.apiUsage}
+          onReset={() => resetApiStats.mutate()}
+          isResetting={resetApiStats.isPending}
+        />
 
-      {isLoadingProcesses ? (
-        <ProcessesSectionSkeleton />
-      ) : (
-        <ProcessesSection processes={processes} />
-      )}
+        {isLoadingProcesses ? (
+          <ProcessesSectionSkeleton />
+        ) : (
+          <ProcessesSection processes={processes} />
+        )}
 
-      {/* Environment Info */}
-      <Card className="bg-muted/50">
-        <CardContent className="py-4">
-          <span className="font-medium">Environment:</span>{' '}
-          <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
-          <span className="mx-2">|</span>
-          <span className="font-medium">Features:</span>{' '}
-          <span className="text-muted-foreground">{getEnabledFeatures(stats?.features)}</span>
-        </CardContent>
-      </Card>
+        {/* Environment Info */}
+        <Card className="bg-muted/50">
+          <CardContent className="py-4">
+            <span className="font-medium">Environment:</span>{' '}
+            <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
+            <span className="mx-2">|</span>
+            <span className="font-medium">Features:</span>{' '}
+            <span className="text-muted-foreground">{getEnabledFeatures(stats?.features)}</span>
+          </CardContent>
+        </Card>
 
-      {/* IDE Settings */}
-      <IdeSettingsSection />
+        {/* Factory Configuration */}
+        {projects && projects.length > 0 && <FactoryConfigSection projectId={projects[0].id} />}
+
+        {/* IDE Settings */}
+        <IdeSettingsSection />
+      </div>
     </div>
   );
 }

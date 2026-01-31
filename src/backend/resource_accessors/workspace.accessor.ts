@@ -3,6 +3,7 @@ import type {
   KanbanColumn,
   PRState,
   Prisma,
+  SessionStatus,
   Workspace,
   WorkspaceInitStatus,
   WorkspaceStatus,
@@ -42,6 +43,13 @@ interface UpdateWorkspaceInput {
   initStartedAt?: Date | null;
   initCompletedAt?: Date | null;
   initRetryCount?: number;
+  // Run script tracking
+  runScriptCommand?: string | null;
+  runScriptCleanupCommand?: string | null;
+  runScriptPid?: number | null;
+  runScriptPort?: number | null;
+  runScriptStartedAt?: Date | null;
+  runScriptStatus?: SessionStatus;
 }
 
 interface FindByProjectIdFilters {
