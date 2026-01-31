@@ -155,14 +155,16 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find NEW or FAILED workspaces that need provisioning.
-   * Used for reconciliation to ensure all workspaces get provisioned.
+   * Find workspaces that need worktree provisioning.
+   * - NEW workspaces always need provisioning
+   * - FAILED workspaces only if they don't have a worktree yet
+   *   (failure during startup script means worktree exists)
    * Includes project for worktree creation.
    */
   findNeedingWorktree(): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
-        status: { in: ['NEW', 'FAILED'] },
+        OR: [{ status: 'NEW' }, { status: 'FAILED', worktreePath: null }],
       },
       include: {
         project: true,

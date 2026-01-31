@@ -233,10 +233,10 @@ function WorkspaceChatContent() {
   const { data: workspaceStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
     {
-      // Poll while not ready
+      // Poll while provisioning (stop for READY, FAILED, or ARCHIVED)
       refetchInterval: (query) => {
         const status = query.state.data?.status;
-        return status === 'READY' || status === 'FAILED' ? false : 1000;
+        return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
       },
     }
   );
@@ -346,12 +346,15 @@ function WorkspaceChatContent() {
   // The running session is always the currently selected session
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
-  // Check if workspace is still initializing
-  // A workspace is considered fully ready when:
-  // 1. status is READY, AND
-  // 2. worktreePath is populated (required for sessions)
+  // Check if workspace is still provisioning
+  // Show overlay for NEW, PROVISIONING, or FAILED states
+  // READY and ARCHIVED workspaces don't need the overlay
   const isProvisioning =
-    (workspaceStatus && workspaceStatus.status !== 'READY') || !workspace?.worktreePath;
+    (workspaceStatus &&
+      (workspaceStatus.status === 'NEW' ||
+        workspaceStatus.status === 'PROVISIONING' ||
+        workspaceStatus.status === 'FAILED')) ||
+    !workspace?.worktreePath;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">

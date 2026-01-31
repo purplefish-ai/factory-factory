@@ -32,6 +32,16 @@ const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'F
 
 type ViewMode = 'list' | 'board';
 
+function WorkspaceStatusCell({ workspace }: { workspace: WorkspaceWithSessions }) {
+  if (workspace.status === 'READY') {
+    return <Badge variant="default">Ready</Badge>;
+  }
+  if (workspace.status === 'ARCHIVED') {
+    return <Badge variant="secondary">Archived</Badge>;
+  }
+  return <StatusBadge status={workspace.status} errorMessage={workspace.errorMessage} />;
+}
+
 type WorkspaceWithSessions = Workspace & {
   claudeSessions?: unknown[];
 };
@@ -172,14 +182,7 @@ export default function WorkspacesListPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {workspace.status === 'READY' ? (
-                      <Badge variant="default">Ready</Badge>
-                    ) : (
-                      <StatusBadge
-                        status={workspace.status}
-                        errorMessage={workspace.errorMessage}
-                      />
-                    )}
+                    <WorkspaceStatusCell workspace={workspace} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {workspace.claudeSessions?.length ?? 0} sessions
