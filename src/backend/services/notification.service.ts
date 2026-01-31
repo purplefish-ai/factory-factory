@@ -6,21 +6,10 @@
  */
 
 import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/shell';
-import { configService } from './config.service';
+import { configService, type NotificationConfig } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('notification');
-
-/**
- * Notification configuration
- */
-interface NotificationConfig {
-  soundEnabled: boolean;
-  pushEnabled: boolean;
-  soundFile?: string;
-  quietHoursStart?: number; // Hour in 24h format (e.g., 22 for 10 PM)
-  quietHoursEnd?: number; // Hour in 24h format (e.g., 8 for 8 AM)
-}
 
 /**
  * Get notification configuration from centralized config service

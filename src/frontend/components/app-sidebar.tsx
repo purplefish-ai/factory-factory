@@ -322,15 +322,22 @@ export function AppSidebar() {
 
                             {/* Diff stats - tight paired columns */}
                             <span className="w-[4.5rem] flex text-xs tabular-nums shrink-0">
-                              {stats && (stats.additions > 0 || stats.deletions > 0) ? (
-                                <>
-                                  <span className="w-1/2 text-right text-green-600 dark:text-green-400">
-                                    +{stats.additions}
+                              {stats &&
+                              (stats.additions > 0 || stats.deletions > 0 || stats.total > 0) ? (
+                                stats.additions > 0 || stats.deletions > 0 ? (
+                                  <>
+                                    <span className="w-1/2 text-right text-green-600 dark:text-green-400">
+                                      +{stats.additions}
+                                    </span>
+                                    <span className="w-1/2 text-left pl-1 text-red-600 dark:text-red-400">
+                                      -{stats.deletions}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="w-full text-center text-muted-foreground">
+                                    {stats.total} files
                                   </span>
-                                  <span className="w-1/2 text-left pl-1 text-red-600 dark:text-red-400">
-                                    -{stats.deletions}
-                                  </span>
-                                </>
+                                )
                               ) : null}
                             </span>
 

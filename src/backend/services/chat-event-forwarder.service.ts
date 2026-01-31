@@ -50,14 +50,6 @@ class ChatEventForwarderService {
   }
 
   /**
-   * Clean up session state when session is destroyed.
-   */
-  cleanupSession(dbSessionId: string): void {
-    this.clientEventSetup.delete(dbSessionId);
-    this.pendingInteractiveRequests.delete(dbSessionId);
-  }
-
-  /**
    * Get pending interactive request for a session.
    */
   getPendingRequest(dbSessionId: string): PendingInteractiveRequest | undefined {
