@@ -42,6 +42,9 @@ export const clientEventSetup = new Set<string>();
 /** Pending interactive requests by session ID (for restore on reconnect) */
 export const pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
 
+/** Guard to prevent concurrent tryDispatchNextMessage calls per session */
+const dispatchInProgress = new Map<string, boolean>();
+
 const DEBUG_CHAT_WS = process.env.DEBUG_CHAT_WS === 'true';
 let chatWsMsgCounter = 0;
 
@@ -49,7 +52,11 @@ let chatWsMsgCounter = 0;
 // Helper Functions
 // ============================================================================
 
-function forwardToConnections(dbSessionId: string | null, data: unknown): void {
+function forwardToConnections(
+  dbSessionId: string | null,
+  data: unknown,
+  exclude?: WebSocket
+): void {
   // Skip if no session (connection exists but no session selected yet)
   if (!dbSessionId) {
     return;
@@ -59,7 +66,11 @@ function forwardToConnections(dbSessionId: string | null, data: unknown): void {
 
   let connectionCount = 0;
   for (const info of chatConnections.values()) {
-    if (info.dbSessionId === dbSessionId && info.ws.readyState === WS_READY_STATE.OPEN) {
+    if (
+      info.dbSessionId === dbSessionId &&
+      info.ws.readyState === WS_READY_STATE.OPEN &&
+      info.ws !== exclude
+    ) {
       connectionCount++;
     }
   }
@@ -85,7 +96,11 @@ function forwardToConnections(dbSessionId: string | null, data: unknown): void {
 
   const json = JSON.stringify(data);
   for (const info of chatConnections.values()) {
-    if (info.dbSessionId === dbSessionId && info.ws.readyState === WS_READY_STATE.OPEN) {
+    if (
+      info.dbSessionId === dbSessionId &&
+      info.ws.readyState === WS_READY_STATE.OPEN &&
+      info.ws !== exclude
+    ) {
       info.ws.send(json);
     }
   }
@@ -311,40 +326,55 @@ function dispatchQueuedMessage(dbSessionId: string, client: ClaudeClient): void 
 /**
  * Try to dispatch the next queued message to Claude.
  * Auto-starts the client if needed.
+ * Uses a guard to prevent concurrent dispatch calls for the same session.
  */
 async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
-  if (!messageQueueService.hasMessages(dbSessionId)) {
+  // Guard against concurrent dispatch calls for the same session
+  if (dispatchInProgress.get(dbSessionId)) {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Dispatch already in progress, skipping', { dbSessionId });
+    }
     return;
   }
 
-  let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
+  dispatchInProgress.set(dbSessionId, true);
 
-  // Auto-start: create client if needed
-  if (!client) {
-    const newClient = await autoStartClientForQueue(dbSessionId);
-    if (!newClient) {
+  try {
+    if (!messageQueueService.hasMessages(dbSessionId)) {
       return;
     }
-    client = newClient;
-  }
 
-  // Check if Claude is busy
-  if (client.isWorking()) {
-    if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Claude is working, skipping queue dispatch', { dbSessionId });
+    let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
+
+    // Auto-start: create client if needed
+    if (!client) {
+      const newClient = await autoStartClientForQueue(dbSessionId);
+      if (!newClient) {
+        return;
+      }
+      client = newClient;
     }
-    return;
-  }
 
-  // Check if Claude process is still alive (isWorking() returns false for both idle AND exited clients)
-  if (!client.isRunning()) {
-    logger.warn('[Chat WS] Claude process has exited, cannot dispatch queued message', {
-      dbSessionId,
-    });
-    return;
-  }
+    // Check if Claude is busy
+    if (client.isWorking()) {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Claude is working, skipping queue dispatch', { dbSessionId });
+      }
+      return;
+    }
 
-  dispatchQueuedMessage(dbSessionId, client);
+    // Check if Claude process is still alive (isWorking() returns false for both idle AND exited clients)
+    if (!client.isRunning()) {
+      logger.warn('[Chat WS] Claude process has exited, cannot dispatch queued message', {
+        dbSessionId,
+      });
+      return;
+    }
+
+    dispatchQueuedMessage(dbSessionId, client);
+  } finally {
+    dispatchInProgress.set(dbSessionId, false);
+  }
 }
 
 function setupChatClientEvents(
@@ -705,13 +735,17 @@ async function handleQueueMessage(
     JSON.stringify({ type: 'message_accepted', id: message.id, position, queuedMessage: queuedMsg })
   );
 
-  // Broadcast to all other connections viewing this session
-  forwardToConnections(sessionId, {
-    type: 'message_accepted',
-    id: message.id,
-    position,
-    queuedMessage: queuedMsg,
-  });
+  // Broadcast to all other connections viewing this session (exclude sender to avoid duplicate)
+  forwardToConnections(
+    sessionId,
+    {
+      type: 'message_accepted',
+      id: message.id,
+      position,
+      queuedMessage: queuedMsg,
+    },
+    ws
+  );
 
   if (DEBUG_CHAT_WS) {
     logger.info('[Chat WS] Message queued', {

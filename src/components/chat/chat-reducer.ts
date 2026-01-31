@@ -15,6 +15,7 @@ import type {
   ChatSettings,
   ClaudeMessage,
   HistoryMessage,
+  MessageAttachment,
   PendingInteractiveRequest,
   PermissionRequest,
   QueuedMessage,
@@ -27,6 +28,13 @@ import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types
 // =============================================================================
 // State Types
 // =============================================================================
+
+/** Information about a rejected message for recovery */
+export interface RejectedMessageInfo {
+  text: string;
+  attachments?: MessageAttachment[];
+  error: string;
+}
 
 export interface ChatState {
   /** Chat messages in the conversation */
@@ -57,6 +65,10 @@ export interface ChatState {
   latestThinking: string | null;
   /** Message IDs that are pending backend confirmation (shown with "sending..." indicator) */
   pendingMessageIds: Set<string>;
+  /** Content of pending messages by ID (for recovery on rejection) */
+  pendingMessageContent: Map<string, { text: string; attachments?: MessageAttachment[] }>;
+  /** Last rejected message for recovery (allows restoring to input) */
+  lastRejectedMessage: RejectedMessageInfo | null;
 }
 
 // =============================================================================
@@ -107,7 +119,11 @@ export type ChatAction =
   | { type: 'SET_QUEUE'; payload: QueuedMessage[] }
   | { type: 'MESSAGE_ACCEPTED'; payload: { id: string; position: number; message: QueuedMessage } }
   | { type: 'MESSAGE_REJECTED'; payload: { id: string; error: string } }
-  | { type: 'MESSAGE_SENDING'; payload: { id: string } }
+  | {
+      type: 'MESSAGE_SENDING';
+      payload: { id: string; text: string; attachments?: MessageAttachment[] };
+    }
+  | { type: 'CLEAR_REJECTED_MESSAGE' }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -237,6 +253,8 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     toolUseIdToIndex: new Map(),
     latestThinking: null,
     pendingMessageIds: new Set(),
+    pendingMessageContent: new Map(),
+    lastRejectedMessage: null,
     ...overrides,
   };
 }
@@ -435,6 +453,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         pendingQuestion,
         // Restore queued messages from backend
         queuedMessages: action.payload.queuedMessages ?? [],
+        // Clear pending message IDs to remove stale "Sending..." indicators after reconnect
+        pendingMessageIds: new Set(),
       };
     }
 
@@ -475,6 +495,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         toolUseIdToIndex: new Map(),
         latestThinking: null,
         pendingMessageIds: new Set(),
+        pendingMessageContent: new Map(),
+        lastRejectedMessage: null,
       };
     case 'SESSION_LOADING_START':
       return { ...state, loadingSession: true };
@@ -531,6 +553,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'MESSAGE_ACCEPTED': {
       const newPendingIds = new Set(state.pendingMessageIds);
       newPendingIds.delete(action.payload.id);
+      const newPendingContent = new Map(state.pendingMessageContent);
+      newPendingContent.delete(action.payload.id);
       const queuedMsg = action.payload.message;
       // Create user message from queued message
       const userMessage: ChatMessage = {
@@ -545,29 +569,56 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...state.messages, userMessage],
         queuedMessages: [...state.queuedMessages, queuedMsg],
         pendingMessageIds: newPendingIds,
+        pendingMessageContent: newPendingContent,
       };
     }
 
     // MESSAGE_REJECTED: Backend rejected message (queue full, etc.)
-    // Remove from pending, show error (handled by UI via pendingMessageIds change)
+    // Remove from pending and store for recovery so user can retry
     case 'MESSAGE_REJECTED': {
       const newPendingIds = new Set(state.pendingMessageIds);
       newPendingIds.delete(action.payload.id);
+      // Retrieve pending content for recovery
+      const pendingContent = state.pendingMessageContent.get(action.payload.id);
+      const newPendingContent = new Map(state.pendingMessageContent);
+      newPendingContent.delete(action.payload.id);
       return {
         ...state,
         pendingMessageIds: newPendingIds,
+        pendingMessageContent: newPendingContent,
+        // Store rejected message info for recovery (restore to input)
+        lastRejectedMessage: pendingContent
+          ? {
+              text: pendingContent.text,
+              attachments: pendingContent.attachments,
+              error: action.payload.error,
+            }
+          : null,
       };
     }
 
-    // MESSAGE_SENDING: Mark a message as pending backend confirmation
+    // MESSAGE_SENDING: Mark a message as pending backend confirmation and store content for recovery
     case 'MESSAGE_SENDING': {
       const newPendingIds = new Set(state.pendingMessageIds);
       newPendingIds.add(action.payload.id);
+      const newPendingContent = new Map(state.pendingMessageContent);
+      newPendingContent.set(action.payload.id, {
+        text: action.payload.text,
+        attachments: action.payload.attachments,
+      });
       return {
         ...state,
         pendingMessageIds: newPendingIds,
+        pendingMessageContent: newPendingContent,
       };
     }
+
+    // CLEAR_REJECTED_MESSAGE: Clear the rejected message after user has seen it
+    case 'CLEAR_REJECTED_MESSAGE':
+      return {
+        ...state,
+        lastRejectedMessage: null,
+      };
 
     // SET_QUEUE: Restore queue state from backend (on reconnect/session load)
     case 'SET_QUEUE':
@@ -601,6 +652,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         chatSettings: DEFAULT_CHAT_SETTINGS,
         toolUseIdToIndex: new Map(),
         latestThinking: null,
+        pendingMessageContent: new Map(),
+        lastRejectedMessage: null,
       };
     case 'RESET_FOR_SESSION_SWITCH':
       return {
@@ -616,6 +669,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         toolUseIdToIndex: new Map(),
         latestThinking: null,
         pendingMessageIds: new Set(),
+        pendingMessageContent: new Map(),
+        lastRejectedMessage: null,
       };
 
     default:

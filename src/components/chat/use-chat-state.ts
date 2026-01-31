@@ -392,6 +392,23 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   }, [dbSessionId]);
 
   // =============================================================================
+  // Rejected Message Recovery Effect
+  // =============================================================================
+
+  // When a message is rejected, restore the text to the input draft for retry
+  useEffect(() => {
+    if (state.lastRejectedMessage) {
+      const { text, error } = state.lastRejectedMessage;
+      // Restore the message text to the input so user can retry
+      setInputDraftState(text);
+      // Log the error for debugging
+      debug.log('Message rejected, restored to draft:', { text, error });
+      // Clear the rejected message state after processing
+      dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
+    }
+  }, [state.lastRejectedMessage]);
+
+  // =============================================================================
   // WebSocket Message Handler
   // =============================================================================
 
@@ -434,7 +451,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       const id = generateMessageId();
 
       // Mark message as pending backend confirmation (shows "sending..." indicator)
-      dispatch({ type: 'MESSAGE_SENDING', payload: { id } });
+      // Store text and attachments for recovery if message is rejected
+      dispatch({ type: 'MESSAGE_SENDING', payload: { id, text: trimmedText, attachments } });
 
       // Clear draft when sending a message
       setInputDraftState('');
