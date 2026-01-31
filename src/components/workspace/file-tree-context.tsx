@@ -18,8 +18,6 @@ interface FileTreeContextValue {
   expandedPaths: Set<string>;
   isExpanded: (path: string) => boolean;
   toggleExpanded: (path: string) => void;
-  setExpanded: (path: string, expanded: boolean) => void;
-  collapseAll: () => void;
 }
 
 // =============================================================================
@@ -80,6 +78,8 @@ interface FileTreeProviderProps {
 export function FileTreeProvider({ workspaceId, children }: FileTreeProviderProps) {
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
+  // Track the previous workspaceId to detect workspace switches
+  const prevWorkspaceIdRef = useRef<string | null>(null);
 
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
@@ -97,10 +97,17 @@ export function FileTreeProvider({ workspaceId, children }: FileTreeProviderProp
   }, [workspaceId]);
 
   // Persist expanded paths when they change (skip until load is complete)
+  // Also skip on workspace switch to avoid saving stale state from previous workspace
   useEffect(() => {
     if (loadedForWorkspaceRef.current !== workspaceId) {
       return;
     }
+    // Skip saving if workspace just changed (expandedPaths still contains old workspace's data)
+    if (prevWorkspaceIdRef.current !== null && prevWorkspaceIdRef.current !== workspaceId) {
+      prevWorkspaceIdRef.current = workspaceId;
+      return;
+    }
+    prevWorkspaceIdRef.current = workspaceId;
     saveExpandedPathsToStorage(workspaceId, expandedPaths);
   }, [workspaceId, expandedPaths]);
 
@@ -118,31 +125,13 @@ export function FileTreeProvider({ workspaceId, children }: FileTreeProviderProp
     });
   }, []);
 
-  const setExpanded = useCallback((path: string, expanded: boolean) => {
-    setExpandedPaths((prev) => {
-      const next = new Set(prev);
-      if (expanded) {
-        next.add(path);
-      } else {
-        next.delete(path);
-      }
-      return next;
-    });
-  }, []);
-
-  const collapseAll = useCallback(() => {
-    setExpandedPaths(new Set());
-  }, []);
-
   const value = useMemo<FileTreeContextValue>(
     () => ({
       expandedPaths,
       isExpanded,
       toggleExpanded,
-      setExpanded,
-      collapseAll,
     }),
-    [expandedPaths, isExpanded, toggleExpanded, setExpanded, collapseAll]
+    [expandedPaths, isExpanded, toggleExpanded]
   );
 
   return <FileTreeContext.Provider value={value}>{children}</FileTreeContext.Provider>;
