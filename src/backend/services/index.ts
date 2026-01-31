@@ -4,6 +4,12 @@
  * Central export point for all backend services.
  */
 
+// Chat connection service
+export { type ConnectionInfo, chatConnectionService } from './chat-connection.service';
+// Chat event forwarder service
+export { chatEventForwarderService } from './chat-event-forwarder.service';
+// Chat message handlers service
+export { type ChatMessage, chatMessageHandlerService } from './chat-message-handlers.service';
 // CLI health service
 export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
