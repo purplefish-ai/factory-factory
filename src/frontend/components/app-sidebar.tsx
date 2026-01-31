@@ -277,7 +277,7 @@ export function AppSidebar() {
                   if (isCreatingItem) {
                     return (
                       <SidebarMenuItem key={workspace.id}>
-                        <SidebarMenuButton className="h-7 px-2 cursor-default">
+                        <SidebarMenuButton className="h-8 px-2 cursor-default">
                           <div className="flex items-center gap-2 w-full min-w-0">
                             <Loader2 className="h-2 w-2 shrink-0 text-muted-foreground animate-spin" />
                             <span className="truncate text-sm text-muted-foreground">
@@ -295,7 +295,7 @@ export function AppSidebar() {
                         asChild
                         isActive={isActive}
                         className={cn(
-                          'h-7 px-2',
+                          'h-8 px-2',
                           isArchivingItem && 'opacity-50 pointer-events-none'
                         )}
                       >
