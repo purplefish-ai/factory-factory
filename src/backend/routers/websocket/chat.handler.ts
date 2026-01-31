@@ -77,6 +77,22 @@ function clearPendingMessages(sessionId: string): void {
   pendingMessagesQueue.delete(sessionId);
 }
 
+function removeMessageFromQueue(sessionId: string, messageId: string): boolean {
+  const queue = pendingMessagesQueue.get(sessionId);
+  if (!queue) {
+    return false;
+  }
+  const index = queue.findIndex((msg) => msg.id === messageId);
+  if (index === -1) {
+    return false;
+  }
+  queue.splice(index, 1);
+  if (queue.length === 0) {
+    pendingMessagesQueue.delete(sessionId);
+  }
+  return true;
+}
+
 /**
  * Drain the next queued message for a session.
  * Called when Claude becomes ready (idle).
@@ -491,6 +507,7 @@ async function getOrCreateChatClient(
 
 interface ChatMessage {
   type: string;
+  id?: string;
   text?: string;
   content?: string | ClaudeContentItem[];
   workingDir?: string;
@@ -861,6 +878,17 @@ async function handleChatMessage(
       break;
     case 'permission_response':
       handlePermissionResponseMessage(ws, dbSessionId, message);
+      break;
+    case 'remove_queued_message':
+      if (message.id) {
+        const removed = removeMessageFromQueue(dbSessionId, message.id);
+        if (removed) {
+          logger.info('[Chat WS] Removed queued message', {
+            sessionId: dbSessionId,
+            messageId: message.id,
+          });
+        }
+      }
       break;
   }
 }

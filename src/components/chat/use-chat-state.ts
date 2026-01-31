@@ -527,11 +527,15 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     persistSettings(dbSessionIdRef.current, newSettings);
   }, []);
 
-  const removeQueuedMessage = useCallback((id: string) => {
-    // Remove from frontend display (backend queue management not yet implemented)
-    // TODO: Send message to backend to remove from database queue
-    dispatch({ type: 'REMOVE_QUEUED_MESSAGE', payload: { id } });
-  }, []);
+  const removeQueuedMessage = useCallback(
+    (id: string) => {
+      // Remove from frontend display
+      dispatch({ type: 'REMOVE_QUEUED_MESSAGE', payload: { id } });
+      // Notify backend to remove from queue
+      send({ type: 'remove_queued_message', id } as unknown as ChatMessage);
+    },
+    [send]
+  );
 
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
   const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
