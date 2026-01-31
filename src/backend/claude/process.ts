@@ -725,6 +725,15 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   /**
+   * Mark the process as working/running.
+   * Call this immediately before sending a user message to prevent race conditions
+   * where isWorking() returns false between message dispatch and Claude's response.
+   */
+  markAsWorking(): void {
+    this.setStatus('running');
+  }
+
+  /**
    * Update status and emit status event.
    */
   private setStatus(status: ProcessStatus): void {
