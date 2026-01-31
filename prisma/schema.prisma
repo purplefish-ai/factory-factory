@@ -156,7 +156,6 @@ model ClaudeSession {
   status           SessionStatus @default(IDLE)
   claudeSessionId  String?       // For resume
   claudeProcessPid Int?
-  pendingMessages  String?       // JSON array of queued messages waiting to be sent
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
