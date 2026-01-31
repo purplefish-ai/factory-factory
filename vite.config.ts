@@ -31,6 +31,10 @@ export default defineConfig({
         target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },
+      '/dev-logs': {
+        target: backendUrl.replace(/^http/, 'ws'),
+        ws: true,
+      },
     },
   },
 });

@@ -7,6 +7,8 @@ export * from './main-view-content';
 export * from './main-view-tab-bar';
 export * from './quick-actions-menu';
 export * from './right-panel';
+export * from './run-script-button';
+export * from './run-script-port-badge';
 export * from './terminal-instance';
 export * from './terminal-panel';
 export * from './terminal-tab-bar';

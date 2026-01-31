@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { GitClientFactory } from '../../clients/git.client';
 import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
+import { FactoryConfigService } from '../../services/factory-config.service';
 import { githubCLIService } from '../../services/github-cli.service';
 import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
@@ -21,6 +22,7 @@ let cachedGitHubUsername: string | null | undefined;
  * This function is called after the workspace record is created and allows
  * the API to return immediately while the worktree is being set up.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex initialization logic with factory-factory.json support
 export async function initializeWorkspaceWorktree(
   workspaceId: string,
   requestedBranchName?: string
@@ -66,13 +68,61 @@ export async function initializeWorkspaceWorktree(
     });
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
-    // Update workspace with worktree info
+    // Read factory-factory.json configuration from the worktree
+    let factoryConfig = null;
+    try {
+      factoryConfig = await FactoryConfigService.readConfig(worktreePath);
+      if (factoryConfig) {
+        logger.info('Found factory-factory.json config', {
+          workspaceId,
+          hasSetup: !!factoryConfig.scripts.setup,
+          hasRun: !!factoryConfig.scripts.run,
+          hasCleanup: !!factoryConfig.scripts.cleanup,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to parse factory-factory.json', error as Error, {
+        workspaceId,
+      });
+      // Continue without factory config if parsing fails
+    }
+
+    // Update workspace with worktree info and run script from factory-factory.json
     await workspaceAccessor.update(workspaceId, {
       worktreePath,
       branchName: worktreeInfo.branchName,
+      runScriptCommand: factoryConfig?.scripts.run ?? null,
+      runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
     });
 
-    // Run startup script if configured
+    // Run setup script from factory-factory.json if configured
+    if (factoryConfig?.scripts.setup) {
+      logger.info('Running setup script from factory-factory.json', {
+        workspaceId,
+      });
+
+      const scriptResult = await startupScriptService.runStartupScript(
+        { ...workspaceWithProject, worktreePath },
+        {
+          ...project,
+          startupScriptCommand: factoryConfig.scripts.setup,
+          startupScriptPath: null,
+        }
+      );
+
+      // If script failed, log but don't throw (workspace is still usable)
+      if (!scriptResult.success) {
+        const finalWorkspace = await workspaceAccessor.findById(workspaceId);
+        logger.warn('Setup script from factory-factory.json failed but workspace created', {
+          workspaceId,
+          error: finalWorkspace?.initErrorMessage,
+        });
+      }
+      // startup script service already updates init status
+      return;
+    }
+
+    // Fallback to project-level startup script if configured
     if (startupScriptService.hasStartupScript(project)) {
       logger.info('Running startup script for workspace', {
         workspaceId,
