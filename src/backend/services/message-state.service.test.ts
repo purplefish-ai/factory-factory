@@ -147,45 +147,6 @@ describe('MessageStateService', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // createClaudeMessage
-  // ---------------------------------------------------------------------------
-
-  describe('createClaudeMessage', () => {
-    it('should create a Claude message in STREAMING state', () => {
-      const result = messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
-
-      expect(result.id).toBe('claude-msg-1');
-      expect(result.type).toBe('claude');
-      expect(result.state).toBe(MessageState.STREAMING);
-    });
-
-    it('should store content if provided', () => {
-      const content = {
-        type: 'assistant' as const,
-        message: { role: 'assistant' as const, content: 'Hello' },
-      };
-      const result = messageStateService.createClaudeMessage('session-1', 'claude-msg-1', content);
-
-      // Now stores as chatMessages (ChatMessage[]) instead of contentBlocks
-      expect(result.chatMessages).toHaveLength(1);
-      expect(result.chatMessages[0].source).toBe('claude');
-      expect(result.chatMessages[0].message).toEqual(content);
-    });
-
-    it('should emit state change event', () => {
-      messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
-
-      expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
-        type: 'message_state_changed',
-        id: 'claude-msg-1',
-        newState: MessageState.STREAMING,
-        queuePosition: undefined,
-        errorMessage: undefined,
-      });
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // updateState
   // ---------------------------------------------------------------------------
 
@@ -253,35 +214,6 @@ describe('MessageStateService', () => {
       );
     });
 
-    it('should allow Claude message STREAMING -> COMPLETE transition', () => {
-      messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
-
-      const result = messageStateService.updateState(
-        'session-1',
-        'claude-msg-1',
-        MessageState.COMPLETE
-      );
-      expect(result).toBe(true);
-      expect(messageStateService.getMessage('session-1', 'claude-msg-1')?.state).toBe(
-        MessageState.COMPLETE
-      );
-    });
-
-    it('should reject user state transitions for Claude messages', () => {
-      messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
-
-      // STREAMING -> DISPATCHED is invalid for Claude messages
-      const result = messageStateService.updateState(
-        'session-1',
-        'claude-msg-1',
-        MessageState.DISPATCHED
-      );
-      expect(result).toBe(false);
-      expect(messageStateService.getMessage('session-1', 'claude-msg-1')?.state).toBe(
-        MessageState.STREAMING
-      );
-    });
-
     it('should return false for non-existent message', () => {
       const result = messageStateService.updateState(
         'session-1',
@@ -305,75 +237,6 @@ describe('MessageStateService', () => {
         queuePosition: 0,
         errorMessage: undefined,
       });
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // updateClaudeContent
-  // ---------------------------------------------------------------------------
-
-  describe('updateClaudeContent', () => {
-    it('should update Claude message content', () => {
-      messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
-
-      const newContent = {
-        type: 'assistant' as const,
-        message: { role: 'assistant' as const, content: 'Updated' },
-      };
-      const result = messageStateService.updateClaudeContent(
-        'session-1',
-        'claude-msg-1',
-        newContent
-      );
-
-      expect(result).toBe(true);
-      const updatedMsg = messageStateService.getMessage('session-1', 'claude-msg-1');
-      // chatMessages should contain the new content (as ChatMessage)
-      if (updatedMsg && isClaudeMessage(updatedMsg)) {
-        expect(updatedMsg.chatMessages.some((cm) => cm.message === newContent)).toBe(true);
-      } else {
-        expect.fail('Expected Claude message');
-      }
-    });
-
-    it('should return false for non-existent message', () => {
-      const newContent = {
-        type: 'assistant' as const,
-        message: { role: 'assistant' as const, content: 'Updated' },
-      };
-      const result = messageStateService.updateClaudeContent(
-        'session-1',
-        'non-existent',
-        newContent
-      );
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false for user message', () => {
-      const msg = createTestQueuedMessage('msg-1');
-      messageStateService.createUserMessage('session-1', msg);
-
-      const newContent = {
-        type: 'assistant' as const,
-        message: { role: 'assistant' as const, content: 'Updated' },
-      };
-      const result = messageStateService.updateClaudeContent('session-1', 'msg-1', newContent);
-
-      expect(result).toBe(false);
-    });
-
-    it('should not emit state change event (too noisy)', () => {
-      messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
-      vi.clearAllMocks();
-
-      const newContent = {
-        type: 'assistant' as const,
-        message: { role: 'assistant' as const, content: 'Updated' },
-      };
-      messageStateService.updateClaudeContent('session-1', 'claude-msg-1', newContent);
-
-      expect(chatConnectionService.forwardToSession).not.toHaveBeenCalled();
     });
   });
 
@@ -477,7 +340,7 @@ describe('MessageStateService', () => {
     it('should remove all messages for a session', () => {
       messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
       messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-2'));
-      messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
+      messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-3'));
 
       messageStateService.clearSession('session-1');
 
@@ -734,7 +597,7 @@ describe('MessageStateService', () => {
       messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
       expect(messageStateService.getMessageCount('session-1')).toBe(1);
 
-      messageStateService.createClaudeMessage('session-1', 'claude-msg-1');
+      messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-2'));
       expect(messageStateService.getMessageCount('session-1')).toBe(2);
 
       messageStateService.removeMessage('session-1', 'msg-1');
