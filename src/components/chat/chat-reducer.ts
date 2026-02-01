@@ -349,6 +349,41 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
 // =============================================================================
 
 /**
+ * Convert a PendingInteractiveRequest from the backend to a PendingRequest for UI state.
+ * Handles null input and maps tool names to the appropriate request type.
+ */
+function convertPendingRequest(
+  pendingReq: PendingInteractiveRequest | null | undefined
+): PendingRequest {
+  if (!pendingReq) {
+    return { type: 'none' };
+  }
+
+  if (pendingReq.toolName === 'AskUserQuestion') {
+    const input = pendingReq.input as { questions?: unknown[] };
+    return {
+      type: 'question',
+      request: {
+        requestId: pendingReq.requestId,
+        questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+        timestamp: pendingReq.timestamp,
+      },
+    };
+  }
+
+  return {
+    type: 'permission',
+    request: {
+      requestId: pendingReq.requestId,
+      toolName: pendingReq.toolName,
+      toolInput: pendingReq.input,
+      timestamp: pendingReq.timestamp,
+      planContent: pendingReq.planContent,
+    },
+  };
+}
+
+/**
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
 function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage): ChatState {
@@ -670,33 +705,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Convert session status from shared type to local type
       const sessionStatus: SessionStatus = action.payload.sessionStatus;
 
-      // Handle pending interactive request
-      const pendingReq = action.payload.pendingInteractiveRequest;
-      let pendingRequest: PendingRequest = { type: 'none' };
-      if (pendingReq) {
-        if (pendingReq.toolName === 'AskUserQuestion') {
-          const input = pendingReq.input as { questions?: unknown[] };
-          pendingRequest = {
-            type: 'question',
-            request: {
-              requestId: pendingReq.requestId,
-              questions: (input.questions ?? []) as UserQuestionRequest['questions'],
-              timestamp: pendingReq.timestamp,
-            },
-          };
-        } else {
-          pendingRequest = {
-            type: 'permission',
-            request: {
-              requestId: pendingReq.requestId,
-              toolName: pendingReq.toolName,
-              toolInput: pendingReq.input,
-              timestamp: pendingReq.timestamp,
-              planContent: pendingReq.planContent,
-            },
-          };
-        }
-      }
+      // Convert pending interactive request to UI state format
+      const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
 
       return {
         ...state,

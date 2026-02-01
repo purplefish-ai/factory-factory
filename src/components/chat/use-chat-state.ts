@@ -318,6 +318,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Track input attachments in a ref for stable sendMessage callback
+  const inputAttachmentsRef = useRef(inputAttachments);
+  inputAttachmentsRef.current = inputAttachments;
 
   // =============================================================================
   // Session Switching Effect
@@ -414,9 +417,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // =============================================================================
 
   const sendMessage = useCallback(
-    (text: string, attachments?: MessageAttachment[]) => {
+    (text: string) => {
       const trimmedText = text.trim();
-      if (!trimmedText && (!attachments || attachments.length === 0)) {
+      const attachments = inputAttachmentsRef.current;
+      if (!trimmedText && attachments.length === 0) {
         return;
       }
 
@@ -425,7 +429,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
       // Mark message as pending backend confirmation (shows "sending..." indicator)
       // Store text and attachments for recovery if message is rejected
-      dispatch({ type: 'MESSAGE_SENDING', payload: { id, text: trimmedText, attachments } });
+      dispatch({
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id,
+          text: trimmedText,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        },
+      });
 
       // Clear draft and attachments when sending a message
       setInputDraftState('');
@@ -438,7 +449,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         type: 'queue_message',
         id,
         text: trimmedText,
-        attachments,
+        attachments: attachments.length > 0 ? attachments : undefined,
         settings: stateRef.current.chatSettings,
       };
       send(msg);

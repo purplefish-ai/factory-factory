@@ -60,6 +60,9 @@ export interface ClientCreator {
 const VALID_MODELS = ['sonnet', 'opus'];
 const THINKING_SUFFIX = ' ultrathink';
 
+/** Tool names that support using a message as an interactive response */
+const INTERACTIVE_RESPONSE_TOOLS = ['AskUserQuestion', 'ExitPlanMode'] as const;
+
 // ============================================================================
 // Service
 // ============================================================================
@@ -482,10 +485,11 @@ class ChatMessageHandlerService {
       return false;
     }
 
-    // Unknown interactive request type, don't handle
+    // Only handle known interactive request types
     if (
-      pendingRequest.toolName !== 'AskUserQuestion' &&
-      pendingRequest.toolName !== 'ExitPlanMode'
+      !INTERACTIVE_RESPONSE_TOOLS.includes(
+        pendingRequest.toolName as (typeof INTERACTIVE_RESPONSE_TOOLS)[number]
+      )
     ) {
       return false;
     }

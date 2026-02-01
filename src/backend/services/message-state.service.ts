@@ -421,53 +421,58 @@ class MessageStateService {
    * Convert a HistoryMessage to a ClaudeMessage for storage.
    */
   private historyToClaudeMessage(msg: HistoryMessage): ClaudeMessage {
-    if (msg.type === 'tool_use' && msg.toolName && msg.toolId) {
-      return {
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool_use',
-              id: msg.toolId,
-              name: msg.toolName,
-              input: msg.toolInput ?? {},
+    switch (msg.type) {
+      case 'tool_use':
+        if (msg.toolName && msg.toolId) {
+          return {
+            type: 'assistant',
+            message: {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'tool_use',
+                  id: msg.toolId,
+                  name: msg.toolName,
+                  input: msg.toolInput ?? {},
+                },
+              ],
             },
-          ],
-        },
-      };
-    }
+          };
+        }
+        break;
 
-    if (msg.type === 'tool_result' && msg.toolId) {
-      return {
-        type: 'user',
-        message: {
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: msg.toolId,
-              content: msg.content,
-              is_error: msg.isError,
+      case 'tool_result':
+        if (msg.toolId) {
+          return {
+            type: 'user',
+            message: {
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: msg.toolId,
+                  content: msg.content,
+                  is_error: msg.isError,
+                },
+              ],
             },
-          ],
-        },
-      };
-    }
+          };
+        }
+        break;
 
-    if (msg.type === 'thinking') {
-      return {
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [
-            {
-              type: 'thinking',
-              thinking: msg.content,
-            },
-          ],
-        },
-      };
+      case 'thinking':
+        return {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [
+              {
+                type: 'thinking',
+                thinking: msg.content,
+              },
+            ],
+          },
+        };
     }
 
     // Default: assistant text message
