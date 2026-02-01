@@ -16,7 +16,7 @@ jobs:
     name: Build and Publish
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     env:
       DATABASE_URL: "file:./test.db"
@@ -56,3 +56,12 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create and push tag
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
