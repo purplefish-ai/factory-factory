@@ -80,8 +80,9 @@ export async function openCustomIde(customCommand: string, targetPath: string): 
 
   // Parse command and arguments - split on whitespace but preserve quoted strings
   const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-  const cmd = parts[0]?.replace(/"/g, '');
-  const args = parts.slice(1).map((arg) => arg.replace(/"/g, ''));
+  // Strip quotes then unescape backslashes that were escaped for parsing
+  const cmd = parts[0]?.replace(/"/g, '').replace(/\\\\/g, '\\');
+  const args = parts.slice(1).map((arg) => arg.replace(/"/g, '').replace(/\\\\/g, '\\'));
 
   if (!cmd) {
     return false;

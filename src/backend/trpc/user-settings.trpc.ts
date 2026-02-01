@@ -32,7 +32,7 @@ export const userSettingsRouter = router({
             'Command must include {workspace} placeholder'
           )
           .refine(
-            (cmd) => !/[;&|`$()[\]{}]/.test(cmd),
+            (cmd) => !/[;&|`$()[\]]/.test(cmd),
             'Command contains invalid shell metacharacters'
           )
           .nullable()
@@ -62,7 +62,7 @@ export const userSettingsRouter = router({
         throw new Error('Command must include {workspace} placeholder');
       }
 
-      if (/[;&|`$()[\]{}]/.test(input.customCommand)) {
+      if (/[;&|`$()[\]]/.test(input.customCommand)) {
         throw new Error('Command contains invalid shell metacharacters');
       }
 
@@ -74,8 +74,9 @@ export const userSettingsRouter = router({
       const command = input.customCommand.replace(/\{workspace\}/g, quotedPath);
 
       const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-      const cmd = parts[0]?.replace(/"/g, '');
-      const args = parts.slice(1).map((arg) => arg.replace(/"/g, ''));
+      // Strip quotes then unescape backslashes that were escaped for parsing
+      const cmd = parts[0]?.replace(/"/g, '').replace(/\\\\/g, '\\');
+      const args = parts.slice(1).map((arg) => arg.replace(/"/g, '').replace(/\\\\/g, '\\'));
 
       if (!cmd) {
         throw new Error('Invalid command format');
