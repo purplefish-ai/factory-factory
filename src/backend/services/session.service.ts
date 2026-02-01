@@ -1,5 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
-import { ClaudeClient, type ClaudeClientOptions, SessionManager } from '../claude/index';
+import { ClaudeClient, type ClaudeClientOptions } from '../claude/index';
 import type { ResourceUsage } from '../claude/process';
 import {
   getAllProcesses,
@@ -17,7 +17,6 @@ import {
   workspaceAccessor,
 } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
-import { messageStateService } from './message-state.service';
 
 const logger = createLogger('session');
 
@@ -210,23 +209,6 @@ class SessionService {
     // Create client
     const client = await ClaudeClient.create(clientOptions);
     this.clients.set(sessionId, client);
-
-    // Load JSONL history BEFORE subscribing to events
-    if (sessionOpts.resumeClaudeSessionId) {
-      const history = await SessionManager.getHistory(
-        sessionOpts.resumeClaudeSessionId,
-        sessionOpts.workingDir
-      );
-      messageStateService.loadFromHistory(sessionId, history);
-      logger.info('Loaded JSONL history into message state', {
-        sessionId,
-        claudeSessionId: sessionOpts.resumeClaudeSessionId,
-        historyCount: history.length,
-      });
-    }
-
-    // Subscribe to client events for message storage (independent of frontend)
-    messageStateService.subscribeToClient(sessionId, client);
 
     // Set up DB update handlers
     this.setupClientDbHandlers(sessionId, client);

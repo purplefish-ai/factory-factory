@@ -597,21 +597,100 @@ class ChatMessageHandlerService {
     }
 
     const existingClient = sessionService.getClient(sessionId);
-    const isClientRunning = existingClient?.isRunning() ?? false;
 
-    // Load history from JSONL file if we have a Claude session ID and Claude is NOT running.
-    // When running, in-memory state is kept up-to-date by streaming handlers.
-    // loadFromHistory() has race protection - skips if messages already exist.
-    if (dbSession.claudeSessionId && !isClientRunning) {
-      const history = await SessionManager.getHistory(dbSession.claudeSessionId, workingDir);
-      messageStateService.loadFromHistory(sessionId, history);
+    if (existingClient?.isRunning()) {
+      this.replayEventsForRunningClient(ws, sessionId, existingClient);
+    } else {
+      await this.loadHistoryFromJSONL(sessionId, workingDir, dbSession.claudeSessionId);
+    }
+  }
+
+  /**
+   * Replay stored events to a reconnecting client when Claude is still running.
+   */
+  private replayEventsForRunningClient(
+    ws: WebSocket,
+    sessionId: string,
+    client: ClaudeClient
+  ): void {
+    // Replay all stored events to this specific WebSocket
+    const events = messageStateService.getStoredEvents(sessionId);
+    for (const event of events) {
+      ws.send(JSON.stringify(event));
     }
 
-    const isClientWorking = existingClient?.isWorking() ?? false;
-    const pendingInteractiveRequest =
-      chatEventForwarderService.getPendingRequest(sessionId) ?? null;
-    const sessionStatus = messageStateService.computeSessionStatus(sessionId, isClientWorking);
-    messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
+    // Send current status
+    const isClientWorking = client.isWorking();
+    ws.send(JSON.stringify({ type: 'status', running: isClientWorking }));
+
+    // Send pending interactive request if any
+    const pendingRequest = chatEventForwarderService.getPendingRequest(sessionId);
+    if (pendingRequest) {
+      this.sendPendingInteractiveRequest(ws, pendingRequest);
+    }
+  }
+
+  /**
+   * Send a pending interactive request to the WebSocket in the appropriate format.
+   */
+  private sendPendingInteractiveRequest(
+    ws: WebSocket,
+    pendingRequest: NonNullable<ReturnType<typeof chatEventForwarderService.getPendingRequest>>
+  ): void {
+    if (pendingRequest.toolName === 'AskUserQuestion') {
+      const input = pendingRequest.input as { questions?: unknown[] };
+      ws.send(
+        JSON.stringify({
+          type: 'user_question',
+          requestId: pendingRequest.requestId,
+          questions: input.questions ?? [],
+        })
+      );
+      return;
+    }
+
+    if (pendingRequest.toolName === 'ExitPlanMode') {
+      ws.send(
+        JSON.stringify({
+          type: 'permission_request',
+          requestId: pendingRequest.requestId,
+          toolName: pendingRequest.toolName,
+          input: pendingRequest.input,
+          planContent: pendingRequest.planContent,
+        })
+      );
+      return;
+    }
+
+    // Generic interactive request fallback
+    ws.send(
+      JSON.stringify({
+        type: 'interactive_request',
+        requestId: pendingRequest.requestId,
+        toolName: pendingRequest.toolName,
+        toolUseId: pendingRequest.toolUseId,
+        input: pendingRequest.input,
+      })
+    );
+  }
+
+  /**
+   * Load history from JSONL file and send as a messages_snapshot.
+   * Used when reconnecting to a session that is not currently running.
+   * Uses the existing messageStateService.loadFromHistory and sendSnapshot
+   * to properly handle user messages and Claude messages.
+   */
+  private async loadHistoryFromJSONL(
+    sessionId: string,
+    workingDir: string,
+    claudeSessionId: string | null
+  ): Promise<void> {
+    if (claudeSessionId) {
+      const history = await SessionManager.getHistory(claudeSessionId, workingDir);
+      messageStateService.loadFromHistory(sessionId, history);
+    }
+    const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
+    messageStateService.sendSnapshot(sessionId, sessionStatus, null);
   }
 
   /**

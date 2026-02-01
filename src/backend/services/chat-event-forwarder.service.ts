@@ -140,10 +140,10 @@ class ChatEventForwarderService {
         });
       }
 
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'status',
-        running: true,
-      });
+      // Store-then-forward: store event for replay before forwarding
+      const statusMsg = { type: 'status', running: true };
+      messageStateService.storeEvent(dbSessionId, statusMsg);
+      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
 
     // Hook into idle event to dispatch next queued message
@@ -169,7 +169,10 @@ class ChatEventForwarderService {
         });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
-      chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: event });
+      // Store-then-forward: store event for replay before forwarding
+      const msg = { type: 'claude_message', data: event };
+      messageStateService.storeEvent(dbSessionId, msg);
+      chatConnectionService.forwardToSession(dbSessionId, msg);
     });
 
     client.on('message', (msg) => {
@@ -219,7 +222,10 @@ class ChatEventForwarderService {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'forwarding_user_message_with_tool_result',
       });
-      chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: msg });
+      // Store-then-forward: store event for replay before forwarding
+      const wsMsg = { type: 'claude_message', data: msg };
+      messageStateService.storeEvent(dbSessionId, wsMsg);
+      chatConnectionService.forwardToSession(dbSessionId, wsMsg);
     });
 
     client.on('result', (result) => {
@@ -228,11 +234,14 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
-      chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: result });
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'status',
-        running: false,
-      });
+      // Store-then-forward: store events for replay before forwarding
+      const resultMsg = { type: 'claude_message', data: result };
+      messageStateService.storeEvent(dbSessionId, resultMsg);
+      chatConnectionService.forwardToSession(dbSessionId, resultMsg);
+
+      const statusMsg = { type: 'status', running: false };
+      messageStateService.storeEvent(dbSessionId, statusMsg);
+      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend

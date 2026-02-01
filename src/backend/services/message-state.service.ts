@@ -15,7 +15,6 @@
  *   STREAMING → COMPLETE
  */
 
-import { randomUUID } from 'node:crypto';
 import {
   type ChatMessage,
   type ClaudeMessage,
@@ -32,7 +31,6 @@ import {
   type UserMessageState,
   type UserMessageWithState,
 } from '@/lib/claude-types';
-import type { ClaudeClient } from '../claude/index';
 import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
 
@@ -125,6 +123,13 @@ class MessageStateService {
    * Map<sessionId, Map<messageId, MessageWithState>>
    */
   private sessionMessages = new Map<string, Map<string, MessageWithState>>();
+
+  /**
+   * Raw WebSocket events for replay - stores EVERYTHING sent to WebSocket.
+   * Used to replay events when frontend reconnects to a running session.
+   * Map<sessionId, Array<{ type: string; data?: unknown }>>
+   */
+  private sessionEvents = new Map<string, Array<{ type: string; data?: unknown }>>();
 
   /**
    * Get or create the message map for a session.
@@ -456,6 +461,38 @@ class MessageStateService {
       });
     }
     this.sessionMessages.delete(sessionId);
+    this.sessionEvents.delete(sessionId);
+  }
+
+  // =============================================================================
+  // Event Storage for Replay
+  // =============================================================================
+
+  /**
+   * Store a raw WebSocket event for replay on reconnect.
+   * Called by chatEventForwarderService for every event sent to WebSocket.
+   */
+  storeEvent(sessionId: string, event: { type: string; data?: unknown }): void {
+    let events = this.sessionEvents.get(sessionId);
+    if (!events) {
+      events = [];
+      this.sessionEvents.set(sessionId, events);
+    }
+    events.push(event);
+  }
+
+  /**
+   * Get all stored events for a session (for replay on reconnect).
+   */
+  getStoredEvents(sessionId: string): Array<{ type: string; data?: unknown }> {
+    return this.sessionEvents.get(sessionId) ?? [];
+  }
+
+  /**
+   * Clear stored events for a session (called when session is loaded from JSONL).
+   */
+  clearStoredEvents(sessionId: string): void {
+    this.sessionEvents.delete(sessionId);
   }
 
   /**
@@ -464,48 +501,10 @@ class MessageStateService {
   clearAllSessions(): void {
     const sessionCount = this.sessionMessages.size;
     this.sessionMessages.clear();
+    this.sessionEvents.clear();
     if (sessionCount > 0) {
       logger.info('All sessions cleared', { clearedCount: sessionCount });
     }
-  }
-
-  /**
-   * Subscribe to ClaudeClient events for message storage.
-   * Called at client creation time to ensure ALL messages are stored
-   * regardless of frontend connection status.
-   */
-  subscribeToClient(sessionId: string, client: ClaudeClient): void {
-    let currentClaudeMessageId: string | null = null;
-
-    client.on('stream', (event) => {
-      const streamEvent = event as { type?: string };
-      if (streamEvent.type === 'message_start') {
-        currentClaudeMessageId = `claude-${randomUUID()}`;
-        this.createClaudeMessage(sessionId, currentClaudeMessageId, event);
-      } else if (currentClaudeMessageId) {
-        this.updateClaudeContent(sessionId, currentClaudeMessageId, event);
-      }
-    });
-
-    client.on('result', () => {
-      if (currentClaudeMessageId) {
-        this.updateState(sessionId, currentClaudeMessageId, MessageState.COMPLETE);
-        currentClaudeMessageId = null;
-      }
-      // Mark DISPATCHED user messages as COMMITTED
-      for (const msg of this.getAllMessages(sessionId)) {
-        if (msg.type === 'user' && msg.state === MessageState.DISPATCHED) {
-          this.updateState(sessionId, msg.id, MessageState.COMMITTED);
-        }
-      }
-    });
-
-    client.on('exit', () => {
-      currentClaudeMessageId = null;
-      // Note: clearSession() called by chatEventForwarderService
-    });
-
-    logger.info('Subscribed to client events for message storage', { sessionId });
   }
 
   /**
