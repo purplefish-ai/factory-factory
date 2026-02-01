@@ -4,7 +4,9 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -34,6 +36,19 @@ interface TerminalTab {
 interface TerminalPanelProps {
   workspaceId: string;
   className?: string;
+  /** When true, hides the header (tabs are rendered by parent) */
+  hideHeader?: boolean;
+  /** Callback to notify parent of tab state changes for inline rendering */
+  onStateChange?: (state: TerminalTabState) => void;
+}
+
+/** State interface for controlling terminal tabs from parent */
+export interface TerminalTabState {
+  tabs: Array<{ id: string; label: string }>;
+  activeTabId: string | null;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onNewTab: () => void;
 }
 
 export interface TerminalPanelRef {
@@ -45,7 +60,7 @@ export interface TerminalPanelRef {
 // =============================================================================
 
 export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
-  function TerminalPanel({ workspaceId, className }, ref) {
+  function TerminalPanel({ workspaceId, className, hideHeader = false, onStateChange }, ref) {
     const [tabs, setTabs] = useState<TerminalTab[]>([]);
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
@@ -274,6 +289,22 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       [tabs, setActive]
     );
 
+    // Notify parent of state changes for inline tab rendering
+    const stateForParent = useMemo(
+      () => ({
+        tabs: tabs.map((t) => ({ id: t.id, label: t.label })),
+        activeTabId,
+        onSelectTab: handleSelectTab,
+        onCloseTab: handleCloseTab,
+        onNewTab: handleNewTab,
+      }),
+      [tabs, activeTabId, handleSelectTab, handleCloseTab, handleNewTab]
+    );
+
+    useEffect(() => {
+      onStateChange?.(stateForParent);
+    }, [stateForParent, onStateChange]);
+
     const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
     // Empty state
@@ -296,16 +327,18 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
     return (
       <div className={cn('h-full flex flex-col', className)}>
-        {/* Terminal tabs row - no header border, just inline tabs */}
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border-b border-zinc-800">
-          <TerminalTabBar
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={handleSelectTab}
-            onCloseTab={handleCloseTab}
-            showNewButton={false}
-          />
-        </div>
+        {/* Terminal tabs row - only show if not hidden */}
+        {!hideHeader && (
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border-b border-zinc-800">
+            <TerminalTabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={handleSelectTab}
+              onCloseTab={handleCloseTab}
+              showNewButton={false}
+            />
+          </div>
+        )}
 
         {/* Terminal content */}
         <div className="flex-1 overflow-hidden bg-zinc-900">

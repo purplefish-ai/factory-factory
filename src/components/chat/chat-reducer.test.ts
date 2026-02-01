@@ -9,14 +9,14 @@ import type {
   ChatMessage,
   ChatSettings,
   ClaudeMessage,
-  HistoryMessage,
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
+  SessionStatus,
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { DEFAULT_CHAT_SETTINGS, MessageState } from '@/lib/claude-types';
 import {
   type ChatAction,
   type ChatState,
@@ -386,408 +386,6 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
-  // WS_SESSION_LOADED Action
-  // -------------------------------------------------------------------------
-
-  describe('WS_SESSION_LOADED action', () => {
-    it('should load session history and update state', () => {
-      const historyMessages: HistoryMessage[] = [
-        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
-        { type: 'assistant', content: 'Hi there!', timestamp: '2024-01-01T00:00:01.000Z' },
-      ];
-
-      const state = { ...initialState, loadingSession: true };
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: historyMessages,
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.messages).toHaveLength(2);
-      expect(newState.gitBranch).toBe('main');
-      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
-      expect(newState.toolUseIdToIndex.size).toBe(0);
-    });
-
-    it('should handle empty history', () => {
-      const state = { ...initialState, sessionStatus: { phase: 'loading' } as const };
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: [],
-          gitBranch: null,
-          running: true,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.messages).toEqual([]);
-      expect(newState.gitBranch).toBeNull();
-      expect(newState.sessionStatus).toEqual({ phase: 'running' });
-    });
-
-    it('should preserve optimistic user messages when loading session', () => {
-      // Scenario: User sends a message, navigates away before session starts,
-      // then navigates back. The optimistic message should be preserved.
-      const optimisticMessage: ChatMessage = {
-        id: 'msg-123',
-        source: 'user',
-        text: 'Help me debug this',
-        timestamp: '2024-01-01T00:00:02.000Z',
-      };
-
-      const historyMessages: HistoryMessage[] = [
-        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
-        { type: 'assistant', content: 'Hi there!', timestamp: '2024-01-01T00:00:01.000Z' },
-      ];
-
-      const state = {
-        ...initialState,
-        messages: [optimisticMessage],
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: historyMessages,
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should have 2 history messages + 1 optimistic message
-      expect(newState.messages).toHaveLength(3);
-      expect(newState.messages[0].source).toBe('user');
-      expect(newState.messages[1].source).toBe('claude');
-      expect(newState.messages[2]).toEqual(optimisticMessage);
-    });
-
-    it('should not preserve non-user messages when loading session', () => {
-      // Claude messages in state should be replaced by history
-      const claudeMessage: ChatMessage = {
-        id: 'msg-456',
-        source: 'claude',
-        message: { type: 'assistant', role: 'assistant', content: 'Thinking...' } as ClaudeMessage,
-        timestamp: '2024-01-01T00:00:02.000Z',
-      };
-
-      const historyMessages: HistoryMessage[] = [
-        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
-      ];
-
-      const state = {
-        ...initialState,
-        messages: [claudeMessage],
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: historyMessages,
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should only have the history message, not the Claude message
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].source).toBe('user');
-    });
-
-    it('should not preserve messages that are older than last history message', () => {
-      // Scenario: WebSocket reconnect where message in state was already processed into history
-      const optimisticMessage: ChatMessage = {
-        id: 'msg-123',
-        source: 'user',
-        text: 'Help me debug this',
-        timestamp: '2024-01-01T00:00:02.000Z',
-      };
-
-      const historyMessages: HistoryMessage[] = [
-        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
-        { type: 'assistant', content: 'Hi there!', timestamp: '2024-01-01T00:00:01.000Z' },
-        // Same message as optimisticMessage - already in history with same timestamp
-        {
-          type: 'user',
-          content: 'Help me debug this',
-          timestamp: '2024-01-01T00:00:02.000Z',
-          uuid: 'history-123',
-        },
-      ];
-
-      const state = {
-        ...initialState,
-        messages: [optimisticMessage],
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: historyMessages,
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should only have 3 messages from history, optimistic message not added since it's not newer
-      expect(newState.messages).toHaveLength(3);
-      expect(newState.messages[0].source).toBe('user');
-      expect(newState.messages[0].text).toBe('Hello');
-      expect(newState.messages[1].source).toBe('claude');
-      expect(newState.messages[2].source).toBe('user');
-      expect(newState.messages[2].text).toBe('Help me debug this');
-    });
-
-    it('should preserve messages that are newer than last history message', () => {
-      // Optimistic message sent AFTER the last history message
-      const optimisticMessage: ChatMessage = {
-        id: 'msg-456',
-        source: 'user',
-        text: 'Another question',
-        timestamp: '2024-01-01T00:00:10.000Z', // 8 seconds after last history
-      };
-
-      const historyMessages: HistoryMessage[] = [
-        { type: 'user', content: 'Help me debug this', timestamp: '2024-01-01T00:00:02.000Z' },
-      ];
-
-      const state = {
-        ...initialState,
-        messages: [optimisticMessage],
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: historyMessages,
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should have history message + optimistic message
-      expect(newState.messages).toHaveLength(2);
-      expect(newState.messages[0].text).toBe('Help me debug this');
-      expect(newState.messages[1].text).toBe('Another question');
-    });
-
-    it('should handle duplicate text messages sent at different times', () => {
-      // User sends "ok" twice within 5 seconds - both should be preserved if second is truly newer
-      const firstOkMessage: ChatMessage = {
-        id: 'msg-1',
-        source: 'user',
-        text: 'ok',
-        timestamp: '2024-01-01T00:00:02.000Z',
-      };
-
-      const secondOkMessage: ChatMessage = {
-        id: 'msg-2',
-        source: 'user',
-        text: 'ok',
-        timestamp: '2024-01-01T00:00:05.000Z',
-      };
-
-      const historyMessages: HistoryMessage[] = [
-        // Only the first "ok" is in history
-        { type: 'user', content: 'ok', timestamp: '2024-01-01T00:00:02.000Z' },
-      ];
-
-      const state = {
-        ...initialState,
-        messages: [firstOkMessage, secondOkMessage],
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: historyMessages,
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should have history message + second "ok" (which is newer)
-      expect(newState.messages).toHaveLength(2);
-      expect(newState.messages[0].text).toBe('ok');
-      expect(newState.messages[0].timestamp).toBe('2024-01-01T00:00:02.000Z');
-      expect(newState.messages[1].text).toBe('ok');
-      expect(newState.messages[1].timestamp).toBe('2024-01-01T00:00:05.000Z');
-    });
-
-    it('should preserve existing pendingPermission when session_loaded has no pending request (race condition)', () => {
-      // Scenario: Permission request arrives during session loading, then session_loaded arrives
-      // without a pending request. The existing permission should be preserved.
-      const existingPermission: PermissionRequest = {
-        requestId: 'req-1',
-        toolName: 'ExitPlanMode',
-        toolInput: {},
-        timestamp: '2024-01-01T00:00:00.000Z',
-        planContent: '# My Plan',
-      };
-      const state: ChatState = {
-        ...initialState,
-        pendingRequest: { type: 'permission', request: existingPermission },
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: [],
-          gitBranch: 'main',
-          running: true,
-          pendingInteractiveRequest: null, // No pending request from backend
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should preserve the existing permission, not overwrite with null
-      expect(newState.pendingRequest).toEqual({ type: 'permission', request: existingPermission });
-    });
-
-    it('should preserve existing pendingQuestion when session_loaded has no pending request (race condition)', () => {
-      // Scenario: Question request arrives during session loading, then session_loaded arrives
-      // without a pending request. The existing question should be preserved.
-      const existingQuestion: UserQuestionRequest = {
-        requestId: 'req-2',
-        questions: [
-          { question: 'Which option?', header: 'Choice', options: [], multiSelect: false },
-        ],
-        timestamp: '2024-01-01T00:00:00.000Z',
-      };
-      const state: ChatState = {
-        ...initialState,
-        pendingRequest: { type: 'question', request: existingQuestion },
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: [],
-          gitBranch: 'main',
-          running: true,
-          pendingInteractiveRequest: null,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      // Should preserve the existing question, not overwrite with null
-      expect(newState.pendingRequest).toEqual({ type: 'question', request: existingQuestion });
-    });
-
-    it('should restore pendingRequest as permission from backend when present', () => {
-      const state: ChatState = {
-        ...initialState,
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: [],
-          gitBranch: 'main',
-          running: true,
-          pendingInteractiveRequest: {
-            requestId: 'req-3',
-            toolName: 'ExitPlanMode',
-            toolUseId: 'tool-1',
-            input: { planFile: '/tmp/plan.md' },
-            planContent: '# Restored Plan',
-            timestamp: '2024-01-01T00:00:00.000Z',
-          },
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.pendingRequest).toEqual({
-        type: 'permission',
-        request: {
-          requestId: 'req-3',
-          toolName: 'ExitPlanMode',
-          toolInput: { planFile: '/tmp/plan.md' },
-          timestamp: '2024-01-01T00:00:00.000Z',
-          planContent: '# Restored Plan',
-        },
-      });
-    });
-
-    it('should restore pendingRequest as question from backend when present', () => {
-      const state: ChatState = {
-        ...initialState,
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: [],
-          gitBranch: 'main',
-          running: true,
-          pendingInteractiveRequest: {
-            requestId: 'req-4',
-            toolName: 'AskUserQuestion',
-            toolUseId: 'tool-2',
-            input: {
-              questions: [
-                { question: 'Pick one', header: 'Test', options: [], multiSelect: false },
-              ],
-            },
-            planContent: null,
-            timestamp: '2024-01-01T00:00:00.000Z',
-          },
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.pendingRequest).toEqual({
-        type: 'question',
-        request: {
-          requestId: 'req-4',
-          questions: [{ question: 'Pick one', header: 'Test', options: [], multiSelect: false }],
-          timestamp: '2024-01-01T00:00:00.000Z',
-        },
-      });
-    });
-
-    it('should clear startingSession flag when session is loaded', () => {
-      // Scenario: WS_STARTING sets sessionStatus to starting, then WS_SESSION_LOADED arrives
-      // The sessionStatus should transition to ready to allow queue draining
-      const state: ChatState = {
-        ...initialState,
-        sessionStatus: { phase: 'loading' } as const,
-      };
-
-      const action: ChatAction = {
-        type: 'WS_SESSION_LOADED',
-        payload: {
-          messages: [],
-          gitBranch: 'main',
-          running: false,
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.sessionStatus.phase).not.toBe('starting');
-      expect(newState.sessionStatus.phase).not.toBe('loading');
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // WS_PERMISSION_REQUEST Action
   // -------------------------------------------------------------------------
 
@@ -926,135 +524,6 @@ describe('chatReducer', () => {
 
       // Discriminated union naturally replaces the permission with question
       expect(newState.pendingRequest).toEqual({ type: 'question', request: questionRequest });
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // WS_QUEUE_LOADED Action
-  // -------------------------------------------------------------------------
-
-  describe('WS_QUEUE_LOADED action', () => {
-    it('should add queued messages to messages array', () => {
-      const queuedMessages: QueuedMessage[] = [
-        {
-          id: 'q1',
-          text: 'Queued message',
-          timestamp: '2024-01-01T00:00:00.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-      ];
-      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
-      const newState = chatReducer(initialState, action);
-
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]).toEqual({
-        id: 'q1',
-        source: 'user',
-        text: 'Queued message',
-        timestamp: '2024-01-01T00:00:00.000Z',
-        attachments: undefined,
-      });
-    });
-
-    it('should set queuedMessages map from payload', () => {
-      const queuedMessages: QueuedMessage[] = [
-        {
-          id: 'q1',
-          text: 'Message 1',
-          timestamp: '2024-01-01T00:00:00.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-        {
-          id: 'q2',
-          text: 'Message 2',
-          timestamp: '2024-01-01T00:00:01.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-      ];
-      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
-      const newState = chatReducer(initialState, action);
-
-      expect(newState.queuedMessages.size).toBe(2);
-      expect(newState.queuedMessages.get('q1')?.text).toBe('Message 1');
-      expect(newState.queuedMessages.get('q2')?.text).toBe('Message 2');
-    });
-
-    it('should transition from loading to ready', () => {
-      const state: ChatState = {
-        ...initialState,
-        sessionStatus: { phase: 'loading' },
-      };
-      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages: [] } };
-      const newState = chatReducer(state, action);
-
-      expect(newState.sessionStatus.phase).toBe('ready');
-    });
-
-    it('should be ignored if session is not in loading state (race condition protection)', () => {
-      const queuedMessages: QueuedMessage[] = [
-        {
-          id: 'stale-q1',
-          text: 'Stale queued message',
-          timestamp: '2024-01-01T00:00:00.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-      ];
-      const state: ChatState = {
-        ...initialState,
-        sessionStatus: { phase: 'running' },
-        messages: [
-          {
-            id: 'existing',
-            source: 'user',
-            text: 'Already loaded',
-            timestamp: '2024-01-01T00:00:00.000Z',
-          },
-        ],
-      };
-      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
-      const newState = chatReducer(state, action);
-
-      // Should return unchanged state - no stale data added
-      expect(newState).toBe(state);
-      expect(newState.sessionStatus.phase).toBe('running');
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.queuedMessages.size).toBe(0);
-    });
-
-    it('should deduplicate messages that already exist', () => {
-      const existingMessage: ChatMessage = {
-        id: 'q1',
-        source: 'user',
-        text: 'Already exists',
-        timestamp: '2024-01-01T00:00:00.000Z',
-      };
-      const state: ChatState = {
-        ...initialState,
-        sessionStatus: { phase: 'loading' },
-        messages: [existingMessage],
-      };
-      const queuedMessages: QueuedMessage[] = [
-        {
-          id: 'q1', // Same ID - should be deduplicated
-          text: 'Queued version',
-          timestamp: '2024-01-01T00:00:00.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-        {
-          id: 'q2', // New ID - should be added
-          text: 'New message',
-          timestamp: '2024-01-01T00:00:01.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-      ];
-      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
-      const newState = chatReducer(state, action);
-
-      // Should have original message + only the new queued message (q2)
-      expect(newState.messages).toHaveLength(2);
-      expect(newState.messages[0].id).toBe('q1');
-      expect(newState.messages[0].text).toBe('Already exists'); // Original preserved
-      expect(newState.messages[1].id).toBe('q2');
     });
   });
 
@@ -1524,149 +993,6 @@ describe('chatReducer', () => {
     });
   });
 
-  describe('MESSAGE_QUEUED action', () => {
-    it('should be a no-op (optimistic UI already shows message)', () => {
-      const action: ChatAction = { type: 'MESSAGE_QUEUED', payload: { id: 'q-1', position: 0 } };
-      const newState = chatReducer(initialState, action);
-
-      // State should be unchanged
-      expect(newState).toEqual(initialState);
-    });
-  });
-
-  describe('MESSAGE_DISPATCHED action', () => {
-    it('should remove message from queuedMessages', () => {
-      const state: ChatState = {
-        ...initialState,
-        queuedMessages: toQueuedMessagesMap([
-          {
-            id: 'q-1',
-            text: 'First',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-          },
-          {
-            id: 'q-2',
-            text: 'Second',
-            timestamp: '2024-01-01T00:00:01.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-          },
-        ]),
-      };
-      const action: ChatAction = { type: 'MESSAGE_DISPATCHED', payload: { id: 'q-1' } };
-      const newState = chatReducer(state, action);
-
-      expect(newState.queuedMessages.size).toBe(1);
-      expect(newState.queuedMessages.has('q-2')).toBe(true);
-    });
-
-    it('should handle dispatching message not in queue gracefully', () => {
-      const state: ChatState = {
-        ...initialState,
-        queuedMessages: toQueuedMessagesMap([
-          {
-            id: 'q-1',
-            text: 'First',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-          },
-        ]),
-      };
-      const action: ChatAction = { type: 'MESSAGE_DISPATCHED', payload: { id: 'nonexistent' } };
-      const newState = chatReducer(state, action);
-
-      // Queue should be unchanged
-      expect(newState.queuedMessages.size).toBe(1);
-      expect(newState.queuedMessages.has('q-1')).toBe(true);
-    });
-  });
-
-  describe('MESSAGE_REMOVED action', () => {
-    it('should remove message from chat (undo optimistic update)', () => {
-      const state: ChatState = {
-        ...initialState,
-        messages: [
-          { id: 'msg-1', source: 'user', text: 'First', timestamp: '2024-01-01T00:00:00.000Z' },
-          { id: 'msg-2', source: 'user', text: 'Second', timestamp: '2024-01-01T00:00:01.000Z' },
-        ],
-      };
-      const action: ChatAction = { type: 'MESSAGE_REMOVED', payload: { id: 'msg-1' } };
-      const newState = chatReducer(state, action);
-
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].id).toBe('msg-2');
-    });
-
-    it('should remove message from both messages and queuedMessages', () => {
-      const state: ChatState = {
-        ...initialState,
-        messages: [
-          { id: 'msg-1', source: 'user', text: 'First', timestamp: '2024-01-01T00:00:00.000Z' },
-          { id: 'msg-2', source: 'user', text: 'Second', timestamp: '2024-01-01T00:00:01.000Z' },
-        ],
-        queuedMessages: toQueuedMessagesMap([
-          {
-            id: 'msg-1',
-            text: 'First',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-          },
-          {
-            id: 'msg-2',
-            text: 'Second',
-            timestamp: '2024-01-01T00:00:01.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-          },
-        ]),
-      };
-      const action: ChatAction = { type: 'MESSAGE_REMOVED', payload: { id: 'msg-1' } };
-      const newState = chatReducer(state, action);
-
-      // Should remove from both messages and queuedMessages
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].id).toBe('msg-2');
-      expect(newState.queuedMessages.size).toBe(1);
-      expect(newState.queuedMessages.has('msg-2')).toBe(true);
-    });
-  });
-
-  describe('SET_QUEUE action', () => {
-    it('should replace entire queue', () => {
-      const state: ChatState = {
-        ...initialState,
-        queuedMessages: toQueuedMessagesMap([
-          {
-            id: 'old-1',
-            text: 'Old',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-          },
-        ]),
-      };
-      const newQueue: QueuedMessage[] = [
-        {
-          id: 'new-1',
-          text: 'New 1',
-          timestamp: '2024-01-02T00:00:00.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-        {
-          id: 'new-2',
-          text: 'New 2',
-          timestamp: '2024-01-02T00:00:01.000Z',
-          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-        },
-      ];
-      const action: ChatAction = { type: 'SET_QUEUE', payload: newQueue };
-      const newState = chatReducer(state, action);
-
-      // SET_QUEUE converts array to Map
-      expect(newState.queuedMessages.size).toBe(2);
-      expect(newState.queuedMessages.get('new-1')?.text).toBe('New 1');
-      expect(newState.queuedMessages.get('new-2')?.text).toBe('New 2');
-    });
-  });
-
   // -------------------------------------------------------------------------
   // Settings Actions
   // -------------------------------------------------------------------------
@@ -1860,6 +1186,330 @@ describe('chatReducer', () => {
       expect(newState).toBe(initialState);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // MESSAGES_SNAPSHOT Action (Message State Machine)
+  // -------------------------------------------------------------------------
+
+  describe('MESSAGES_SNAPSHOT action', () => {
+    it('should replace messages with snapshot data', () => {
+      const state: ChatState = {
+        ...initialState,
+        messages: [
+          {
+            id: 'old-msg',
+            source: 'user',
+            text: 'Old message',
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+      };
+
+      // Snapshot now contains pre-built ChatMessage[] (same format frontend uses)
+      const snapshotMessages: ChatMessage[] = [
+        {
+          id: 'msg-1',
+          source: 'user',
+          text: 'New message',
+          timestamp: '2024-01-02T00:00:00.000Z',
+        },
+        {
+          id: 'msg-2-0',
+          source: 'claude',
+          message: { type: 'assistant', message: { role: 'assistant', content: 'Response' } },
+          timestamp: '2024-01-02T00:00:01.000Z',
+        },
+      ];
+
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: snapshotMessages,
+          sessionStatus: { phase: 'ready' },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.messages).toHaveLength(2);
+      expect(newState.messages[0].id).toBe('msg-1');
+      expect(newState.messages[0].source).toBe('user');
+      expect(newState.messages[1].id).toBe('msg-2-0');
+      expect(newState.messages[1].source).toBe('claude');
+    });
+
+    it('should clear queuedMessages on snapshot (queued state tracked via MESSAGE_STATE_CHANGED)', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'queued-1',
+            text: 'Queued message',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: [],
+          sessionStatus: { phase: 'ready' },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Snapshot clears queuedMessages - queued state is managed via MESSAGE_STATE_CHANGED events
+      expect(newState.queuedMessages.size).toBe(0);
+    });
+
+    it('should update session status from snapshot', () => {
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: [],
+          sessionStatus: { phase: 'running' },
+        },
+      };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
+    });
+
+    it('should restore pending permission request from snapshot', () => {
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: [],
+          sessionStatus: { phase: 'running' },
+          pendingInteractiveRequest: {
+            requestId: 'req-1',
+            toolName: 'ExitPlanMode',
+            toolUseId: 'tool-1',
+            input: { planFile: '/tmp/plan.md' },
+            planContent: '# Test Plan',
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+      };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.pendingRequest.type).toBe('permission');
+      if (newState.pendingRequest.type === 'permission') {
+        expect(newState.pendingRequest.request.toolName).toBe('ExitPlanMode');
+        expect(newState.pendingRequest.request.planContent).toBe('# Test Plan');
+      }
+    });
+
+    it('should restore pending question request from snapshot', () => {
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: [],
+          sessionStatus: { phase: 'running' },
+          pendingInteractiveRequest: {
+            requestId: 'req-2',
+            toolName: 'AskUserQuestion',
+            toolUseId: 'tool-2',
+            input: {
+              questions: [
+                { question: 'Pick one', header: 'Test', options: [], multiSelect: false },
+              ],
+            },
+            planContent: null,
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+      };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.pendingRequest.type).toBe('question');
+      if (newState.pendingRequest.type === 'question') {
+        expect(newState.pendingRequest.request.questions[0].question).toBe('Pick one');
+      }
+    });
+
+    it('should preserve unacknowledged pending messages and reset other state', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([['msg-1', { text: 'Pending' }]]),
+        lastRejectedMessage: { text: 'Rejected', error: 'Test error' },
+        toolUseIdToIndex: new Map([['tool-1', 0]]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: [], // msg-1 not in snapshot, so it's still pending
+          sessionStatus: { phase: 'ready' },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Pending messages NOT in snapshot are preserved (for optimistic UI)
+      expect(newState.pendingMessages.size).toBe(1);
+      expect(newState.pendingMessages.get('msg-1')).toEqual({ text: 'Pending' });
+      // Other state is cleared
+      expect(newState.lastRejectedMessage).toBeNull();
+      expect(newState.toolUseIdToIndex.size).toBe(0);
+    });
+
+    it('should clear pending messages when they appear in snapshot (acknowledged by backend)', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([
+          ['msg-1', { text: 'Pending 1' }],
+          ['msg-2', { text: 'Pending 2' }],
+        ]),
+      };
+
+      // Snapshot now contains pre-built ChatMessage[] format
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: [
+            {
+              id: 'msg-1',
+              source: 'user',
+              text: 'Pending 1',
+              timestamp: '2024-01-01T00:00:00.000Z',
+            },
+          ] as ChatMessage[],
+          sessionStatus: { phase: 'ready' },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // msg-1 is in snapshot, so it's removed from pendingMessages
+      // msg-2 is not in snapshot, so it's preserved
+      expect(newState.pendingMessages.size).toBe(1);
+      expect(newState.pendingMessages.has('msg-1')).toBe(false);
+      expect(newState.pendingMessages.get('msg-2')).toEqual({ text: 'Pending 2' });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // MESSAGE_STATE_CHANGED Action (Message State Machine)
+  // -------------------------------------------------------------------------
+
+  describe('MESSAGE_STATE_CHANGED action', () => {
+    it('should remove message from queuedMessages when dispatched', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'msg-1',
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.DISPATCHED,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.queuedMessages.size).toBe(0);
+    });
+
+    it('should remove message from queuedMessages when committed', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'msg-1',
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.COMMITTED,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.queuedMessages.size).toBe(0);
+    });
+
+    it('should remove message from queuedMessages when complete', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'msg-1',
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.COMPLETE,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.queuedMessages.size).toBe(0);
+    });
+
+    it('should handle state change for non-existent message gracefully', () => {
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'nonexistent',
+          newState: MessageState.DISPATCHED,
+        },
+      };
+      const newState = chatReducer(initialState, action);
+
+      // Should return equivalent state without errors (may not be same reference)
+      expect(newState).toStrictEqual(initialState);
+    });
+
+    it('should handle ACCEPTED state with queue position', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'msg-1',
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.ACCEPTED,
+          queuePosition: 2,
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Message should still be in queue
+      expect(newState.queuedMessages.size).toBe(1);
+      expect(newState.queuedMessages.has('msg-1')).toBe(true);
+    });
+  });
 });
 
 // =============================================================================
@@ -1963,54 +1613,6 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toBeNull();
   });
 
-  it('should convert session_loaded message to WS_SESSION_LOADED action', () => {
-    const messages: HistoryMessage[] = [
-      { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
-    ];
-    const settings: ChatSettings = {
-      selectedModel: 'opus',
-      thinkingEnabled: false,
-      planModeEnabled: false,
-    };
-    const wsMessage: WebSocketMessage = {
-      type: 'session_loaded',
-      messages,
-      gitBranch: 'main',
-      running: false,
-      settings,
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({
-      type: 'WS_SESSION_LOADED',
-      payload: {
-        messages,
-        gitBranch: 'main',
-        running: false,
-        settings,
-        pendingInteractiveRequest: null,
-        queuedMessages: [],
-      },
-    });
-  });
-
-  it('should handle session_loaded with missing optional fields', () => {
-    const wsMessage: WebSocketMessage = { type: 'session_loaded' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({
-      type: 'WS_SESSION_LOADED',
-      payload: {
-        messages: [],
-        gitBranch: null,
-        running: false,
-        settings: undefined,
-        pendingInteractiveRequest: null,
-        queuedMessages: [],
-      },
-    });
-  });
-
   it('should convert permission_request to WS_PERMISSION_REQUEST action', () => {
     const wsMessage: WebSocketMessage = {
       type: 'permission_request',
@@ -2087,63 +1689,6 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toBeNull();
   });
 
-  it('should return null for message_queued without id', () => {
-    const wsMessage: WebSocketMessage = { type: 'message_queued' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should convert message_queued to MESSAGE_QUEUED action', () => {
-    const wsMessage: WebSocketMessage = { type: 'message_queued', id: 'msg-1', position: 2 };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'MESSAGE_QUEUED', payload: { id: 'msg-1', position: 2 } });
-  });
-
-  it('should convert message_dispatched to MESSAGE_DISPATCHED action', () => {
-    const wsMessage: WebSocketMessage = { type: 'message_dispatched', id: 'msg-1' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'MESSAGE_DISPATCHED', payload: { id: 'msg-1' } });
-  });
-
-  it('should return null for message_dispatched without id', () => {
-    const wsMessage: WebSocketMessage = { type: 'message_dispatched' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should convert message_removed to MESSAGE_REMOVED action', () => {
-    const wsMessage: WebSocketMessage = { type: 'message_removed', id: 'msg-1' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'MESSAGE_REMOVED', payload: { id: 'msg-1' } });
-  });
-
-  it('should convert queue to WS_QUEUE_LOADED action', () => {
-    const queuedMessages: QueuedMessage[] = [
-      {
-        id: 'q1',
-        text: 'Queued',
-        timestamp: '2024-01-01T00:00:00.000Z',
-        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
-      },
-    ];
-    const wsMessage: WebSocketMessage = { type: 'queue', queuedMessages };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'WS_QUEUE_LOADED', payload: { queuedMessages } });
-  });
-
-  it('should convert queue to WS_QUEUE_LOADED with empty array when queuedMessages missing', () => {
-    const wsMessage: WebSocketMessage = { type: 'queue' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'WS_QUEUE_LOADED', payload: { queuedMessages: [] } });
-  });
-
   it('should return null for unknown message type', () => {
     const wsMessage = { type: 'unknown_type' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
@@ -2177,6 +1722,108 @@ describe('createActionFromWebSocketMessage', () => {
 
   it('should return null for message_used_as_response without text', () => {
     const wsMessage: WebSocketMessage = { type: 'message_used_as_response', id: 'msg-1' };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Message State Machine Events
+  // -------------------------------------------------------------------------
+
+  it('should convert messages_snapshot to MESSAGES_SNAPSHOT action', () => {
+    // Snapshot now contains pre-built ChatMessage[] (same format frontend uses)
+    const snapshotMessages: ChatMessage[] = [
+      {
+        id: 'msg-1',
+        source: 'user',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        text: 'Hello',
+      },
+    ];
+    const sessionStatus: SessionStatus = { phase: 'ready' };
+    const wsMessage: WebSocketMessage = {
+      type: 'messages_snapshot',
+      messages: snapshotMessages,
+      sessionStatus,
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({
+      type: 'MESSAGES_SNAPSHOT',
+      payload: {
+        messages: snapshotMessages,
+        sessionStatus,
+        pendingInteractiveRequest: null,
+      },
+    });
+  });
+
+  it('should return null for messages_snapshot without messages', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'messages_snapshot',
+      sessionStatus: { phase: 'ready' },
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toBeNull();
+  });
+
+  it('should convert message_state_changed to MESSAGE_STATE_CHANGED action', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'message_state_changed',
+      id: 'msg-1',
+      newState: MessageState.DISPATCHED,
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({
+      type: 'MESSAGE_STATE_CHANGED',
+      payload: {
+        id: 'msg-1',
+        newState: MessageState.DISPATCHED,
+        queuePosition: undefined,
+        errorMessage: undefined,
+      },
+    });
+  });
+
+  it('should include queuePosition and errorMessage in MESSAGE_STATE_CHANGED', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'message_state_changed',
+      id: 'msg-1',
+      newState: MessageState.REJECTED,
+      queuePosition: 3,
+      errorMessage: 'Queue full',
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({
+      type: 'MESSAGE_STATE_CHANGED',
+      payload: {
+        id: 'msg-1',
+        newState: MessageState.REJECTED,
+        queuePosition: 3,
+        errorMessage: 'Queue full',
+      },
+    });
+  });
+
+  it('should return null for message_state_changed without id', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'message_state_changed',
+      newState: MessageState.DISPATCHED,
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toBeNull();
+  });
+
+  it('should return null for message_state_changed without newState', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'message_state_changed',
+      id: 'msg-1',
+    };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();

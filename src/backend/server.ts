@@ -132,13 +132,34 @@ export function createServer(requestedPort?: number): ServerInstance {
   if (frontendStaticPath && existsSync(frontendStaticPath)) {
     logger.info('Serving static files from', { path: frontendStaticPath });
 
+    // Serve hashed assets (JS, CSS in /assets/) with long cache - they have content hashes
+    app.use(
+      '/assets',
+      express.static(join(frontendStaticPath, 'assets'), {
+        maxAge: '1y',
+        immutable: true,
+        etag: false, // Not needed with immutable content-hashed files
+      })
+    );
+
+    // Serve other static files (favicon, images, etc.) with moderate cache
     app.use(
       express.static(frontendStaticPath, {
         maxAge: '1d',
         etag: true,
+        index: false, // Don't serve index.html from here - handle it separately below
+        setHeaders: (res, filePath) => {
+          // Override cache for index.html if accessed directly via /index.html
+          if (filePath.endsWith('index.html')) {
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+          }
+        },
       })
     );
 
+    // SPA fallback - serve index.html with no-cache so browsers always get fresh version
     app.get('/{*splat}', (req, res, next) => {
       if (
         req.path.startsWith('/api') ||
@@ -151,6 +172,10 @@ export function createServer(requestedPort?: number): ServerInstance {
         return next();
       }
       const indexPath = join(frontendStaticPath, 'index.html');
+      // Set no-cache headers for index.html so browsers always check for updates
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
       res.sendFile(indexPath, (err) => {
         if (err) {
           // File not found or read error - log at debug level since this can happen

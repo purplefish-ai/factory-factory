@@ -16,6 +16,7 @@ import { interceptorRegistry } from '../interceptors';
 import { chatConnectionService } from './chat-connection.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
+import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
 
 const logger = createLogger('chat-event-forwarder');
@@ -29,6 +30,11 @@ const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
 export interface EventForwarderContext {
   workspaceId: string;
   workingDir: string;
+}
+
+/** Narrow interface for safely accessing event type in logs */
+interface EventForLogging {
+  type?: string;
 }
 
 // ============================================================================
@@ -125,10 +131,10 @@ class ChatEventForwarderService {
         });
       }
 
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'status',
-        running: true,
-      });
+      // Store-then-forward: store event for replay before forwarding
+      const statusMsg = { type: 'status', running: true };
+      messageStateService.storeEvent(dbSessionId, statusMsg);
+      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
 
     // Hook into idle event to dispatch next queued message
@@ -146,15 +152,18 @@ class ChatEventForwarderService {
     });
 
     client.on('stream', (event) => {
+      const streamEvent = event as EventForLogging;
       if (DEBUG_CHAT_WS) {
-        const evt = event as { type?: string };
         logger.info('[Chat WS] Received stream event from client', {
           dbSessionId,
-          eventType: evt.type,
+          eventType: streamEvent.type,
         });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
-      chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: event });
+      // Store-then-forward: store event for replay before forwarding
+      const msg = { type: 'claude_message', data: event };
+      messageStateService.storeEvent(dbSessionId, msg);
+      chatConnectionService.forwardToSession(dbSessionId, msg);
     });
 
     client.on('message', (msg) => {
@@ -204,7 +213,10 @@ class ChatEventForwarderService {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'forwarding_user_message_with_tool_result',
       });
-      chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: msg });
+      // Store-then-forward: store event for replay before forwarding
+      const wsMsg = { type: 'claude_message', data: msg };
+      messageStateService.storeEvent(dbSessionId, wsMsg);
+      chatConnectionService.forwardToSession(dbSessionId, wsMsg);
     });
 
     client.on('result', (result) => {
@@ -213,12 +225,14 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
-      chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: result });
+      // Store-then-forward: store events for replay before forwarding
+      const resultMsg = { type: 'claude_message', data: result };
+      messageStateService.storeEvent(dbSessionId, resultMsg);
+      chatConnectionService.forwardToSession(dbSessionId, resultMsg);
 
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'status',
-        running: false,
-      });
+      const statusMsg = { type: 'status', running: false };
+      messageStateService.storeEvent(dbSessionId, statusMsg);
+      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
@@ -249,6 +263,8 @@ class ChatEventForwarderService {
       // Queue is preserved so messages can be sent when user starts next interaction
       // Clear any pending interactive requests when process exits
       this.pendingInteractiveRequests.delete(dbSessionId);
+      // Clear message state to prevent memory leak
+      messageStateService.clearSession(dbSessionId);
     });
 
     client.on('error', (error) => {
@@ -322,15 +338,24 @@ class ChatEventForwarderService {
 
   /**
    * Read plan file content for ExitPlanMode requests.
+   * Returns null if file doesn't exist (normal case) or on read error.
    */
   private readPlanFileContent(planFile: string | undefined): string | null {
-    if (!(planFile && existsSync(planFile))) {
+    if (!planFile) {
       return null;
     }
+
+    if (!existsSync(planFile)) {
+      // File not existing is normal - plan may not have been written yet
+      logger.debug('[Chat WS] Plan file does not exist', { planFile });
+      return null;
+    }
+
     try {
       return readFileSync(planFile, 'utf-8');
     } catch (error) {
-      logger.warn('[Chat WS] Failed to read plan file', {
+      // File exists but can't be read - this is an error condition
+      logger.error('[Chat WS] Failed to read plan file - user will see empty plan content', {
         planFile,
         error: error instanceof Error ? error.message : String(error),
       });

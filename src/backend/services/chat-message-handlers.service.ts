@@ -9,6 +9,8 @@
  */
 
 import type { WebSocket } from 'ws';
+import { MessageState } from '@/lib/claude-types';
+import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
@@ -27,6 +29,7 @@ import { chatEventForwarderService } from './chat-event-forwarder.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
+import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
 
 const logger = createLogger('chat-message-handlers');
@@ -190,7 +193,7 @@ class ChatMessageHandlerService {
         await this.handleLoadSessionMessage(ws, dbSessionId, workingDir);
         break;
       case 'get_queue':
-        this.handleGetQueueMessage(ws, dbSessionId);
+        this.handleSnapshotRequest(dbSessionId);
         break;
       case 'question_response':
         this.handleQuestionResponseMessage(ws, dbSessionId, message);
@@ -240,8 +243,8 @@ class ChatMessageHandlerService {
    * Dispatch a message to the client.
    */
   private dispatchMessage(dbSessionId: string, client: ClaudeClient, msg: QueuedMessage): void {
-    // Notify all connections that message is being dispatched
-    chatConnectionService.forwardToSession(dbSessionId, { type: 'message_dispatched', id: msg.id });
+    // Update state to DISPATCHED - emits message_state_changed event
+    messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
@@ -295,19 +298,6 @@ class ChatMessageHandlerService {
   private getValidModel(message: StartMessageInput): string | undefined {
     const requestedModel = message.selectedModel || message.model;
     return requestedModel && VALID_MODELS.includes(requestedModel) ? requestedModel : undefined;
-  }
-
-  private parseModelType(model: string | null | undefined): string | null {
-    if (!model) {
-      return null;
-    }
-    if (model.includes('opus')) {
-      return 'opus';
-    }
-    if (model.includes('haiku')) {
-      return 'haiku';
-    }
-    return null;
   }
 
   // ============================================================================
@@ -401,11 +391,12 @@ class ChatMessageHandlerService {
     const result = messageQueueService.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
-      ws.send(JSON.stringify({ type: 'message_rejected', id: messageId, message: result.error }));
+      // Create rejected message in state service - emits message_state_changed event
+      messageStateService.createRejectedMessage(sessionId, messageId, result.error, text);
       return;
     }
 
-    this.notifyMessageAccepted(ws, sessionId, messageId, result.position, queuedMsg);
+    this.notifyMessageAccepted(sessionId, queuedMsg);
     await this.tryDispatchNextMessage(sessionId);
   }
 
@@ -429,58 +420,30 @@ class ChatMessageHandlerService {
   /**
    * Build a QueuedMessage from a queue_message input.
    */
-  private buildQueuedMessage(
-    messageId: string,
-    message: QueueMessageInput,
-    text: string
-  ): QueuedMessage {
+  private buildQueuedMessage(id: string, message: QueueMessageInput, text: string): QueuedMessage {
     const rawModel = message.settings?.selectedModel ?? null;
     const validModel = rawModel && VALID_MODELS.includes(rawModel) ? rawModel : null;
 
-    const settings = message.settings
-      ? { ...message.settings, selectedModel: validModel }
-      : {
-          selectedModel: validModel,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        };
-
     return {
-      id: messageId,
+      id,
       text,
       attachments: message.attachments,
-      settings,
+      settings: message.settings
+        ? { ...message.settings, selectedModel: validModel }
+        : { selectedModel: validModel, thinkingEnabled: false, planModeEnabled: false },
       timestamp: new Date().toISOString(),
     };
   }
 
   /**
-   * Notify frontend and all connections that a message was accepted.
+   * Notify frontend that a message was accepted.
+   * Creates the message in state service which emits message_state_changed event.
    */
-  private notifyMessageAccepted(
-    ws: WebSocket,
-    sessionId: string,
-    messageId: string,
-    position: number,
-    queuedMsg: QueuedMessage
-  ): void {
-    ws.send(
-      JSON.stringify({
-        type: 'message_accepted',
-        id: messageId,
-        position,
-        queuedMessage: queuedMsg,
-      })
-    );
-
-    chatConnectionService.forwardToSession(
-      sessionId,
-      { type: 'message_accepted', id: messageId, position, queuedMessage: queuedMsg },
-      ws
-    );
+  private notifyMessageAccepted(sessionId: string, queuedMsg: QueuedMessage): void {
+    messageStateService.createUserMessage(sessionId, queuedMsg);
 
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Message queued', { sessionId, messageId, position });
+      logger.info('[Chat WS] Message queued', { sessionId, messageId: queuedMsg.id });
     }
   }
 
@@ -504,10 +467,11 @@ class ChatMessageHandlerService {
       return false;
     }
 
-    // Unknown interactive request type, don't handle
+    // Only handle known interactive request types
     if (
-      pendingRequest.toolName !== 'AskUserQuestion' &&
-      pendingRequest.toolName !== 'ExitPlanMode'
+      !INTERACTIVE_RESPONSE_TOOLS.includes(
+        pendingRequest.toolName as (typeof INTERACTIVE_RESPONSE_TOOLS)[number]
+      )
     ) {
       return false;
     }
@@ -583,9 +547,10 @@ class ChatMessageHandlerService {
     const removed = messageQueueService.remove(sessionId, messageId);
 
     if (removed) {
-      chatConnectionService.forwardToSession(sessionId, { type: 'message_removed', id: messageId });
+      // Transition to CANCELLED state - emits message_state_changed event to all connections
+      messageStateService.updateState(sessionId, messageId, MessageState.CANCELLED);
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Queued message removed', { sessionId, messageId });
+        logger.info('[Chat WS] Queued message cancelled', { sessionId, messageId });
       }
     } else {
       ws.send(JSON.stringify({ type: 'error', message: 'Message not found in queue' }));
@@ -631,55 +596,114 @@ class ChatMessageHandlerService {
       return;
     }
 
-    const targetSessionId = dbSession.claudeSessionId ?? null;
     const existingClient = sessionService.getClient(sessionId);
-    const running = existingClient?.isWorking() ?? false;
-    const pendingInteractiveRequest =
-      chatEventForwarderService.getPendingRequest(sessionId) ?? null;
-    const queuedMessages = messageQueueService.getQueue(sessionId);
 
-    let messages: Awaited<ReturnType<typeof SessionManager.getHistory>> = [];
-    let gitBranch: string | null = null;
-    let selectedModel: string | null = null;
-    let thinkingEnabled = false;
+    if (existingClient?.isRunning()) {
+      this.replayEventsForRunningClient(ws, sessionId, existingClient);
+    } else {
+      await this.loadHistoryFromJSONL(sessionId, workingDir, dbSession.claudeSessionId);
+    }
+  }
 
-    if (targetSessionId) {
-      const [history, model, thinking, branch] = await Promise.all([
-        SessionManager.getHistory(targetSessionId, workingDir),
-        SessionManager.getSessionModel(targetSessionId, workingDir),
-        SessionManager.getSessionThinkingEnabled(targetSessionId, workingDir),
-        SessionManager.getSessionGitBranch(targetSessionId, workingDir),
-      ]);
-      messages = history;
-      gitBranch = branch;
-      selectedModel = this.parseModelType(model);
-      thinkingEnabled = thinking;
+  /**
+   * Replay stored events to a reconnecting client when Claude is still running.
+   */
+  private replayEventsForRunningClient(
+    ws: WebSocket,
+    sessionId: string,
+    client: ClaudeClient
+  ): void {
+    // Replay all stored events to this specific WebSocket
+    const events = messageStateService.getStoredEvents(sessionId);
+    for (const event of events) {
+      ws.send(JSON.stringify(event));
     }
 
+    // Send current status
+    const isClientWorking = client.isWorking();
+    ws.send(JSON.stringify({ type: 'status', running: isClientWorking }));
+
+    // Send pending interactive request if any
+    const pendingRequest = chatEventForwarderService.getPendingRequest(sessionId);
+    if (pendingRequest) {
+      this.sendPendingInteractiveRequest(ws, pendingRequest);
+    }
+  }
+
+  /**
+   * Send a pending interactive request to the WebSocket in the appropriate format.
+   */
+  private sendPendingInteractiveRequest(
+    ws: WebSocket,
+    pendingRequest: NonNullable<ReturnType<typeof chatEventForwarderService.getPendingRequest>>
+  ): void {
+    if (pendingRequest.toolName === 'AskUserQuestion') {
+      const input = pendingRequest.input as { questions?: unknown[] };
+      ws.send(
+        JSON.stringify({
+          type: 'user_question',
+          requestId: pendingRequest.requestId,
+          questions: input.questions ?? [],
+        })
+      );
+      return;
+    }
+
+    if (pendingRequest.toolName === 'ExitPlanMode') {
+      ws.send(
+        JSON.stringify({
+          type: 'permission_request',
+          requestId: pendingRequest.requestId,
+          toolName: pendingRequest.toolName,
+          input: pendingRequest.input,
+          planContent: pendingRequest.planContent,
+        })
+      );
+      return;
+    }
+
+    // Generic interactive request fallback
     ws.send(
       JSON.stringify({
-        type: 'session_loaded',
-        messages,
-        gitBranch,
-        running,
-        settings: {
-          selectedModel,
-          thinkingEnabled,
-          planModeEnabled: false,
-        },
-        pendingInteractiveRequest,
-        queuedMessages,
+        type: 'interactive_request',
+        requestId: pendingRequest.requestId,
+        toolName: pendingRequest.toolName,
+        toolUseId: pendingRequest.toolUseId,
+        input: pendingRequest.input,
       })
     );
   }
 
   /**
-   * Handle get_queue message - returns just the queued messages for fast initial display.
-   * This is a lightweight alternative to load_session that doesn't fetch chat history.
+   * Load history from JSONL file and send as a messages_snapshot.
+   * Used when reconnecting to a session that is not currently running.
+   * Uses the existing messageStateService.loadFromHistory and sendSnapshot
+   * to properly handle user messages and Claude messages.
    */
-  private handleGetQueueMessage(ws: WebSocket, sessionId: string): void {
-    const queuedMessages = messageQueueService.getQueue(sessionId);
-    ws.send(JSON.stringify({ type: 'queue', queuedMessages }));
+  private async loadHistoryFromJSONL(
+    sessionId: string,
+    workingDir: string,
+    claudeSessionId: string | null
+  ): Promise<void> {
+    if (claudeSessionId) {
+      const history = await SessionManager.getHistory(claudeSessionId, workingDir);
+      messageStateService.loadFromHistory(sessionId, history);
+    }
+    const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
+    messageStateService.sendSnapshot(sessionId, sessionStatus, null);
+  }
+
+  /**
+   * Handle snapshot request (get_queue message type) - sends a messages_snapshot with current state.
+   * This is now equivalent to load_session but faster since it doesn't load from JSONL.
+   */
+  private handleSnapshotRequest(sessionId: string): void {
+    const existingClient = sessionService.getClient(sessionId);
+    const isRunning = existingClient?.isWorking() ?? false;
+    const pendingInteractiveRequest =
+      chatEventForwarderService.getPendingRequest(sessionId) ?? null;
+    const sessionStatus = messageStateService.computeSessionStatus(sessionId, isRunning);
+    messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
   }
 
   private handleQuestionResponseMessage(

@@ -11,7 +11,8 @@
  * - Session switching effects
  *
  * Message queue is managed on the backend - frontend sends queue_message and
- * receives queue events (message_queued, message_dispatched, message_removed).
+ * receives message_state_changed events for state transitions. On connect,
+ * messages_snapshot restores full state.
  *
  * Usage:
  * ```ts
@@ -41,13 +42,7 @@ import {
   isWsClaudeMessage,
 } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
-import {
-  clearDraft,
-  loadAllSessionData,
-  loadSettings,
-  persistDraft,
-  persistSettings,
-} from './chat-persistence';
+import { clearDraft, loadAllSessionData, persistDraft, persistSettings } from './chat-persistence';
 import {
   type ChatAction,
   type ChatState,
@@ -271,42 +266,6 @@ function handleThinkingStreaming(claudeMsg: ClaudeMessage): ChatAction | null {
 }
 
 /**
- * Handle session_loaded message with settings override logic.
- * Prefers locally stored settings over backend-inferred settings.
- */
-function handleSessionLoaded(
-  wsMessage: WebSocketMessage,
-  dbSessionIdRef: React.MutableRefObject<string | null>,
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>,
-  dispatch: React.Dispatch<ChatAction>
-): void {
-  // Dispatch the main session loaded action
-  const action = createActionFromWebSocketMessage(wsMessage);
-  if (action) {
-    dispatch(action);
-  }
-
-  // Handle settings: prefer locally stored settings over backend-inferred
-  if (wsMessage.settings) {
-    const sessionId = dbSessionIdRef.current;
-    const storedSettings = sessionId ? loadSettings(sessionId) : null;
-    if (storedSettings) {
-      // User has explicit settings stored - use those
-      dispatch({ type: 'SET_SETTINGS', payload: storedSettings });
-    } else {
-      // No stored settings - use backend settings and persist them
-      dispatch({ type: 'SET_SETTINGS', payload: wsMessage.settings });
-      if (sessionId) {
-        persistSettings(sessionId, wsMessage.settings);
-      }
-    }
-  }
-
-  // Clear tool input accumulator when loading a new session
-  toolInputAccumulatorRef.current.clear();
-}
-
-/**
  * Handle Claude message with tool input streaming.
  * Expects a validated claude_message WebSocket message.
  */
@@ -359,11 +318,25 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Track input attachments in a ref for stable sendMessage callback
+  const inputAttachmentsRef = useRef(inputAttachments);
+  inputAttachmentsRef.current = inputAttachments;
 
   // =============================================================================
   // Session Switching Effect
   // =============================================================================
 
+  /**
+   * Session switching and settings loading.
+   *
+   * Settings precedence (highest to lowest):
+   * 1. User-modified settings during the session
+   * 2. Stored session settings from sessionStorage
+   * 3. Application defaults (DEFAULT_CHAT_SETTINGS)
+   *
+   * Note: Backend does not broadcast session-level settings.
+   * Settings are persisted locally per session.
+   */
   useEffect(() => {
     const prevDbSessionId = prevDbSessionIdRef.current;
     const newDbSessionId = dbSessionId ?? null;
@@ -383,12 +356,12 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       toolInputAccumulatorRef.current.clear();
     }
 
-    // Load persisted data for the new session (queue comes from backend via session_loaded)
+    // Load persisted data for the new session (queue comes from backend via messages_snapshot)
     if (newDbSessionId) {
       const persistedData = loadAllSessionData(newDbSessionId);
       setInputDraftState(persistedData.draft);
       dispatch({ type: 'SET_SETTINGS', payload: persistedData.settings });
-      // Queue is loaded from backend via session_loaded message, not from frontend persistence
+      // Queue is loaded from backend via messages_snapshot event, not from frontend persistence
 
       // Set loading state for initial load (when prevDbSessionId was null)
       // This prevents "No messages yet" flash while WebSocket connects and loads session
@@ -441,12 +414,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
       }
 
-      // Handle session_loaded specially for settings override
-      if (wsMessage.type === 'session_loaded') {
-        handleSessionLoaded(wsMessage, dbSessionIdRef, toolInputAccumulatorRef, dispatch);
-        return;
-      }
-
       // Convert WebSocket message to action and dispatch
       const action = createActionFromWebSocketMessage(wsMessage);
       if (action) {
@@ -461,9 +428,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // =============================================================================
 
   const sendMessage = useCallback(
-    (text: string, attachments?: MessageAttachment[]) => {
+    (text: string) => {
       const trimmedText = text.trim();
-      if (!trimmedText && (!attachments || attachments.length === 0)) {
+      const attachments = inputAttachmentsRef.current;
+      if (!trimmedText && attachments.length === 0) {
         return;
       }
 
@@ -472,7 +440,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
       // Mark message as pending backend confirmation (shows "sending..." indicator)
       // Store text and attachments for recovery if message is rejected
-      dispatch({ type: 'MESSAGE_SENDING', payload: { id, text: trimmedText, attachments } });
+      dispatch({
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id,
+          text: trimmedText,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        },
+      });
 
       // Clear draft and attachments when sending a message
       setInputDraftState('');
@@ -485,7 +460,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         type: 'queue_message',
         id,
         text: trimmedText,
-        attachments,
+        attachments: attachments.length > 0 ? attachments : undefined,
         settings: stateRef.current.chatSettings,
       };
       send(msg);
