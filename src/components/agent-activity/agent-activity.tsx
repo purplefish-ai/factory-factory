@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { Copy, X } from 'lucide-react';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
@@ -56,38 +56,69 @@ export const MessageItem = memo(function MessageItem({
             isQueued && 'opacity-50'
           )}
         >
-          {/* Cancel button for queued messages - at message level so it works for text and attachment-only messages */}
-          {isQueued && onRemove && (
-            <button
-              onClick={onRemove}
-              className={cn(
-                'absolute -top-1 -right-1 p-1.5 rounded-md',
-                'bg-background/90 hover:bg-destructive/10',
-                'border border-border hover:border-destructive/50',
-                'shadow-sm',
-                'opacity-0 group-hover:opacity-100',
-                'transition-all',
-                'z-10',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-              )}
-              title="Cancel queued message"
-              type="button"
-              aria-label="Cancel queued message"
-            >
-              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-            </button>
-          )}
+          {/* Action buttons group - positioned at top-right */}
+          <div
+            className={cn(
+              'absolute -top-1 -right-1 flex items-center gap-1',
+              'opacity-0 group-hover:opacity-100',
+              'transition-all',
+              'z-10'
+            )}
+          >
+            {/* Copy button */}
+            {userText && (
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(userText);
+                  } catch {
+                    // Silently fail
+                  }
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                className={cn(
+                  'p-1.5 rounded-md',
+                  'bg-background/90 hover:bg-background',
+                  'border border-border',
+                  'shadow-sm',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                title="Copy to clipboard"
+                type="button"
+                aria-label="Copy message to clipboard"
+              >
+                <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+            {/* Cancel button for queued messages */}
+            {isQueued && onRemove && (
+              <button
+                onClick={onRemove}
+                className={cn(
+                  'p-1.5 rounded-md',
+                  'bg-background/90 hover:bg-destructive/10',
+                  'border border-border hover:border-destructive/50',
+                  'shadow-sm',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                title="Cancel queued message"
+                type="button"
+                aria-label="Cancel queued message"
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+              </button>
+            )}
+          </div>
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
             <AttachmentPreview attachments={message.attachments} readOnly />
           )}
           {/* Text */}
           {message.text && (
-            <div className="group relative inline-block max-w-full">
+            <div className="relative inline-block max-w-full">
               <div className="rounded bg-background border border-border px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
                 {userText}
               </div>
-              {userText && <CopyMessageButton textContent={userText} />}
             </div>
           )}
         </div>
