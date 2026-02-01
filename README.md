@@ -12,8 +12,8 @@
 
 <p align="center">
   <a href="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml"><img src="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish/factory-factory" alt="License"></a>
-  <a href="https://github.com/purplefish-ai/factory-factory/releases"><img src="https://img.shields.io/github/v/release/purplefish/factory-factory" alt="Release"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish-ai/factory-factory" alt="License"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/releases"><img src="https://img.shields.io/github/v/release/purplefish-ai/factory-factory" alt="Release"></a>
 </p>
 
 ---
@@ -32,8 +32,11 @@ git clone https://github.com/purplefish-ai/factory-factory.git
 cd factory-factory
 pnpm install
 
-# Optional: Install CLI globally
+# Option A: Install CLI globally from source
 pnpm link --global
+
+# Option B: Install from npm (when published)
+npm install -g factory-factory
 ```
 
 ## Running

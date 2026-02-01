@@ -43,7 +43,7 @@ Factory Factory runs locally on your machine and interacts with:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 0.1.x   | Yes |
 
 ## Security Updates
 
