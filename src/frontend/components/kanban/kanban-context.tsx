@@ -14,7 +14,9 @@ function getHiddenColumnsFromStorage(projectId: string): KanbanColumnType[] {
   try {
     const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${projectId}`);
     return stored ? JSON.parse(stored) : [];
-  } catch {
+  } catch (error) {
+    // biome-ignore lint/suspicious/noConsole: Intentional error logging for debugging localStorage issues
+    console.warn('Failed to parse hidden columns from localStorage:', error);
     return [];
   }
 }
@@ -25,8 +27,9 @@ function saveHiddenColumnsToStorage(projectId: string, columns: KanbanColumnType
   }
   try {
     localStorage.setItem(`${STORAGE_KEY_PREFIX}${projectId}`, JSON.stringify(columns));
-  } catch {
-    // Ignore errors
+  } catch (error) {
+    // biome-ignore lint/suspicious/noConsole: Intentional error logging for debugging localStorage issues
+    console.warn('Failed to save hidden columns to localStorage:', error);
   }
 }
 
