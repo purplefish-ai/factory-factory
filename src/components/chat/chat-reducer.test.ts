@@ -990,15 +990,35 @@ describe('chatReducer', () => {
       expect(newState.sessionStatus.phase).toBe('ready');
     });
 
-    it('should not change sessionStatus if not loading', () => {
+    it('should be ignored if session is not in loading state (race condition protection)', () => {
+      const queuedMessages: QueuedMessage[] = [
+        {
+          id: 'stale-q1',
+          text: 'Stale queued message',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+      ];
       const state: ChatState = {
         ...initialState,
         sessionStatus: { phase: 'running' },
+        messages: [
+          {
+            id: 'existing',
+            source: 'user',
+            text: 'Already loaded',
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        ],
       };
-      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages: [] } };
+      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
       const newState = chatReducer(state, action);
 
+      // Should return unchanged state - no stale data added
+      expect(newState).toBe(state);
       expect(newState.sessionStatus.phase).toBe('running');
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.queuedMessages.size).toBe(0);
     });
 
     it('should deduplicate messages that already exist', () => {
@@ -1010,6 +1030,7 @@ describe('chatReducer', () => {
       };
       const state: ChatState = {
         ...initialState,
+        sessionStatus: { phase: 'loading' },
         messages: [existingMessage],
       };
       const queuedMessages: QueuedMessage[] = [

@@ -603,7 +603,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, pendingRequest: { type: 'question', request: action.payload } };
 
     // Queue loaded - fast path for showing queued messages before full session loads
+    // Only process if still loading - ignore if session_loaded already arrived (race condition)
     case 'WS_QUEUE_LOADED': {
+      if (state.sessionStatus.phase !== 'loading') {
+        return state;
+      }
+
       const queuedMessagesArray = action.payload.queuedMessages;
       const queuedMessagesMap = convertQueuedMessagesToMap(queuedMessagesArray);
       const existingMessageIds = new Set(state.messages.map((m) => m.id));
@@ -617,9 +622,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...state.messages, ...queuedAsChatMessages],
         queuedMessages: queuedMessagesMap,
         // Transition to ready so UI shows queued messages instead of loading spinner
-        // (will be overwritten by session_loaded if it arrives with running: true)
-        sessionStatus:
-          state.sessionStatus.phase === 'loading' ? { phase: 'ready' } : state.sessionStatus,
+        sessionStatus: { phase: 'ready' },
       };
     }
 
