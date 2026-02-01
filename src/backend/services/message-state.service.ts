@@ -351,6 +351,8 @@ class MessageStateService {
 
   /**
    * Get all messages for a session, ordered by timestamp.
+   * Filters out terminal error states (REJECTED, FAILED, CANCELLED) since these
+   * messages were never successfully processed and shouldn't appear in snapshots.
    */
   getAllMessages(sessionId: string): MessageWithState[] {
     const messages = this.sessionMessages.get(sessionId);
@@ -358,9 +360,13 @@ class MessageStateService {
       return [];
     }
 
-    return Array.from(messages.values()).sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+    // Terminal error states - messages that should not appear in conversation
+    // These are user message states where the message was never successfully processed
+    const terminalErrorStates: Set<string> = new Set(['REJECTED', 'FAILED', 'CANCELLED']);
+
+    return Array.from(messages.values())
+      .filter((msg) => !terminalErrorStates.has(msg.state))
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   }
 
   /**
