@@ -222,16 +222,35 @@ class MessageQueueService {
   /**
    * Clear the in-flight message for a session.
    * Called when dispatch is complete (message sent to Claude) or on re-queue.
+   *
+   * @param sessionId - The session ID
+   * @param messageId - Optional message ID to match. If provided, only clears if the
+   *                    in-flight message matches this ID (prevents stale dispatch attempts
+   *                    from clearing a newer in-flight message).
+   * @returns true if the in-flight message was cleared, false otherwise
    */
-  clearInFlight(sessionId: string): void {
+  clearInFlight(sessionId: string, messageId?: string): boolean {
     const msg = this.inFlight.get(sessionId);
-    if (msg) {
-      this.inFlight.delete(sessionId);
-      logger.info('In-flight cleared', {
-        sessionId,
-        messageId: msg.id,
-      });
+    if (!msg) {
+      return false;
     }
+
+    // If messageId provided, only clear if it matches (compare-and-delete)
+    if (messageId !== undefined && msg.id !== messageId) {
+      logger.warn('In-flight clear skipped - message ID mismatch', {
+        sessionId,
+        expectedMessageId: messageId,
+        actualMessageId: msg.id,
+      });
+      return false;
+    }
+
+    this.inFlight.delete(sessionId);
+    logger.info('In-flight cleared', {
+      sessionId,
+      messageId: msg.id,
+    });
+    return true;
   }
 
   /**
@@ -244,14 +263,54 @@ class MessageQueueService {
   /**
    * Get the queue including any in-flight message at the front.
    * The in-flight message appears first since it's actively being dispatched.
+   * De-duplicates by ID to prevent the same message appearing twice.
    */
   getQueueWithInFlight(sessionId: string): QueuedMessage[] {
     const queue = this.getQueue(sessionId);
     const inFlightMsg = this.inFlight.get(sessionId);
     if (inFlightMsg) {
-      return [inFlightMsg, ...queue];
+      // Filter out any queued message with the same ID to prevent duplicates
+      const filteredQueue = queue.filter((msg) => msg.id !== inFlightMsg.id);
+      return [inFlightMsg, ...filteredQueue];
     }
     return queue;
+  }
+
+  /**
+   * Remove the in-flight message if it matches the given message ID.
+   * Used when user explicitly removes a message that's currently in-flight.
+   * @returns true if the in-flight message was removed, false otherwise
+   */
+  removeInFlight(sessionId: string, messageId: string): boolean {
+    const msg = this.inFlight.get(sessionId);
+    if (msg && msg.id === messageId) {
+      this.inFlight.delete(sessionId);
+      logger.info('In-flight message removed', {
+        sessionId,
+        messageId,
+      });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Requeue the current in-flight message back to the front of the queue.
+   * Used when session is stopped while a message is in-flight.
+   * @returns true if a message was requeued, false if no in-flight message
+   */
+  requeueInFlight(sessionId: string): boolean {
+    const msg = this.inFlight.get(sessionId);
+    if (msg) {
+      this.inFlight.delete(sessionId);
+      this.requeue(sessionId, msg);
+      logger.info('In-flight message requeued due to session stop', {
+        sessionId,
+        messageId: msg.id,
+      });
+      return true;
+    }
+    return false;
   }
 }
 

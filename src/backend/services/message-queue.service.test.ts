@@ -411,15 +411,41 @@ describe('MessageQueueService', () => {
       const msg = createTestMessage('msg-1');
 
       messageQueueService.markInFlight('session-1', msg);
-      messageQueueService.clearInFlight('session-1');
+      const cleared = messageQueueService.clearInFlight('session-1');
 
+      expect(cleared).toBe(true);
       const inFlight = messageQueueService.getInFlight('session-1');
       expect(inFlight).toBeUndefined();
     });
 
-    it('should handle clearing non-existent in-flight gracefully', () => {
-      // Should not throw
-      expect(() => messageQueueService.clearInFlight('non-existent')).not.toThrow();
+    it('should return false when clearing non-existent in-flight', () => {
+      const cleared = messageQueueService.clearInFlight('non-existent');
+      expect(cleared).toBe(false);
+    });
+
+    it('should clear in-flight only if messageId matches (compare-and-delete)', () => {
+      const msg = createTestMessage('msg-1');
+      messageQueueService.markInFlight('session-1', msg);
+
+      // Try to clear with wrong messageId - should fail
+      const clearedWrong = messageQueueService.clearInFlight('session-1', 'wrong-id');
+      expect(clearedWrong).toBe(false);
+      expect(messageQueueService.getInFlight('session-1')?.id).toBe('msg-1');
+
+      // Clear with correct messageId - should succeed
+      const clearedCorrect = messageQueueService.clearInFlight('session-1', 'msg-1');
+      expect(clearedCorrect).toBe(true);
+      expect(messageQueueService.getInFlight('session-1')).toBeUndefined();
+    });
+
+    it('should clear in-flight without messageId check when not provided', () => {
+      const msg = createTestMessage('msg-1');
+      messageQueueService.markInFlight('session-1', msg);
+
+      // Clear without messageId - should always clear
+      const cleared = messageQueueService.clearInFlight('session-1');
+      expect(cleared).toBe(true);
+      expect(messageQueueService.getInFlight('session-1')).toBeUndefined();
     });
 
     it('should replace previous in-flight message when marking new one', () => {
@@ -447,6 +473,77 @@ describe('MessageQueueService', () => {
       messageQueueService.clearInFlight('session-1');
       expect(messageQueueService.getInFlight('session-1')).toBeUndefined();
       expect(messageQueueService.getInFlight('session-2')?.id).toBe('msg-2');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // removeInFlight
+  // ---------------------------------------------------------------------------
+
+  describe('removeInFlight', () => {
+    it('should remove in-flight message when ID matches', () => {
+      const msg = createTestMessage('msg-1');
+      messageQueueService.markInFlight('session-1', msg);
+
+      const removed = messageQueueService.removeInFlight('session-1', 'msg-1');
+
+      expect(removed).toBe(true);
+      expect(messageQueueService.getInFlight('session-1')).toBeUndefined();
+    });
+
+    it('should return false when in-flight message ID does not match', () => {
+      const msg = createTestMessage('msg-1');
+      messageQueueService.markInFlight('session-1', msg);
+
+      const removed = messageQueueService.removeInFlight('session-1', 'wrong-id');
+
+      expect(removed).toBe(false);
+      expect(messageQueueService.getInFlight('session-1')?.id).toBe('msg-1');
+    });
+
+    it('should return false when no in-flight message exists', () => {
+      const removed = messageQueueService.removeInFlight('session-1', 'msg-1');
+      expect(removed).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // requeueInFlight
+  // ---------------------------------------------------------------------------
+
+  describe('requeueInFlight', () => {
+    it('should requeue in-flight message to front of queue', () => {
+      const inFlightMsg = createTestMessage('msg-in-flight');
+      const queuedMsg = createTestMessage('msg-queued');
+
+      messageQueueService.enqueue('session-1', queuedMsg);
+      messageQueueService.markInFlight('session-1', inFlightMsg);
+
+      const requeued = messageQueueService.requeueInFlight('session-1');
+
+      expect(requeued).toBe(true);
+      expect(messageQueueService.getInFlight('session-1')).toBeUndefined();
+
+      const queue = messageQueueService.getQueue('session-1');
+      expect(queue).toHaveLength(2);
+      expect(queue[0].id).toBe('msg-in-flight');
+      expect(queue[1].id).toBe('msg-queued');
+    });
+
+    it('should return false when no in-flight message exists', () => {
+      const requeued = messageQueueService.requeueInFlight('session-1');
+      expect(requeued).toBe(false);
+    });
+
+    it('should create queue if it does not exist when requeuing', () => {
+      const msg = createTestMessage('msg-1');
+      messageQueueService.markInFlight('session-1', msg);
+
+      const requeued = messageQueueService.requeueInFlight('session-1');
+
+      expect(requeued).toBe(true);
+      expect(messageQueueService.getQueue('session-1')).toHaveLength(1);
+      expect(messageQueueService.getQueue('session-1')[0].id).toBe('msg-1');
     });
   });
 
@@ -507,6 +604,23 @@ describe('MessageQueueService', () => {
       // Internal state should be unchanged
       const result2 = messageQueueService.getQueueWithInFlight('session-1');
       expect(result2).toHaveLength(1);
+    });
+
+    it('should de-duplicate when in-flight message ID exists in queue', () => {
+      const msg = createTestMessage('msg-1');
+      const queuedMsg = createTestMessage('msg-2');
+
+      // Simulate edge case: same message in both in-flight and queue
+      messageQueueService.enqueue('session-1', msg);
+      messageQueueService.enqueue('session-1', queuedMsg);
+      messageQueueService.markInFlight('session-1', msg);
+
+      const result = messageQueueService.getQueueWithInFlight('session-1');
+
+      // Should have 2 messages (in-flight + msg-2), not 3
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('msg-1'); // in-flight
+      expect(result[1].id).toBe('msg-2'); // from queue (msg-1 filtered out)
     });
   });
 

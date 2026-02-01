@@ -114,8 +114,8 @@ class ChatMessageHandlerService {
 
         const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
         if (!newClient) {
-          // Clear in-flight and re-queue the message at the front so it's not lost
-          messageQueueService.clearInFlight(dbSessionId);
+          // Clear in-flight (with message ID check) and re-queue so it's not lost
+          messageQueueService.clearInFlight(dbSessionId, msg.id);
           messageQueueService.requeue(dbSessionId, msg);
           // Notify frontend that starting failed so UI doesn't get stuck
           chatConnectionService.forwardToSession(dbSessionId, { type: 'stopped', dbSessionId });
@@ -129,7 +129,7 @@ class ChatMessageHandlerService {
         if (DEBUG_CHAT_WS) {
           logger.info('[Chat WS] Claude is working, re-queueing message', { dbSessionId });
         }
-        messageQueueService.clearInFlight(dbSessionId);
+        messageQueueService.clearInFlight(dbSessionId, msg.id);
         messageQueueService.requeue(dbSessionId, msg);
         return;
       }
@@ -137,12 +137,21 @@ class ChatMessageHandlerService {
       // Check if Claude process is still alive
       if (!client.isRunning()) {
         logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
-        messageQueueService.clearInFlight(dbSessionId);
+        messageQueueService.clearInFlight(dbSessionId, msg.id);
         messageQueueService.requeue(dbSessionId, msg);
         return;
       }
 
       this.dispatchMessage(dbSessionId, client, msg);
+    } catch (error) {
+      // On any unexpected exception, clear in-flight and requeue to prevent message loss
+      logger.error('[Chat WS] Exception during dispatch, re-queueing message', {
+        dbSessionId,
+        messageId: msg.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      messageQueueService.clearInFlight(dbSessionId, msg.id);
+      messageQueueService.requeue(dbSessionId, msg);
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
     }
@@ -254,8 +263,8 @@ class ChatMessageHandlerService {
     const content = this.buildMessageContent(msg);
     client.sendMessage(content);
 
-    // Clear in-flight now that message has been sent to Claude
-    messageQueueService.clearInFlight(dbSessionId);
+    // Clear in-flight now that message has been sent to Claude (with message ID check)
+    messageQueueService.clearInFlight(dbSessionId, msg.id);
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
@@ -590,7 +599,14 @@ class ChatMessageHandlerService {
     message: RemoveQueuedMessageInput
   ): void {
     const { messageId } = message;
-    const removed = messageQueueService.remove(sessionId, messageId);
+
+    // Try to remove from queue first
+    let removed = messageQueueService.remove(sessionId, messageId);
+
+    // If not in queue, check if it's the in-flight message
+    if (!removed) {
+      removed = messageQueueService.removeInFlight(sessionId, messageId);
+    }
 
     if (removed) {
       chatConnectionService.forwardToSession(sessionId, { type: 'message_removed', id: messageId });
@@ -603,6 +619,9 @@ class ChatMessageHandlerService {
   }
 
   private async handleStopMessage(ws: WebSocket, sessionId: string): Promise<void> {
+    // Requeue any in-flight message before stopping so it's not lost
+    messageQueueService.requeueInFlight(sessionId);
+
     await sessionService.stopClaudeSession(sessionId);
     // Only clear pending requests here - clientEventSetup cleanup happens in the exit handler
     // to avoid race conditions where a new client is created before the old one exits
