@@ -117,7 +117,7 @@ describe('createInitialChatState', () => {
     const state = createInitialChatState();
 
     expect(state.messages).toEqual([]);
-    expect(state.sessionStatus).toEqual({ phase: 'idle' });
+    expect(state.sessionStatus).toEqual({ phase: 'loading' });
     expect(state.gitBranch).toBeNull();
     expect(state.availableSessions).toEqual([]);
     expect(state.pendingRequest).toEqual({ type: 'none' });
@@ -926,6 +926,135 @@ describe('chatReducer', () => {
 
       // Discriminated union naturally replaces the permission with question
       expect(newState.pendingRequest).toEqual({ type: 'question', request: questionRequest });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // WS_QUEUE_LOADED Action
+  // -------------------------------------------------------------------------
+
+  describe('WS_QUEUE_LOADED action', () => {
+    it('should add queued messages to messages array', () => {
+      const queuedMessages: QueuedMessage[] = [
+        {
+          id: 'q1',
+          text: 'Queued message',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+      ];
+      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]).toEqual({
+        id: 'q1',
+        source: 'user',
+        text: 'Queued message',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        attachments: undefined,
+      });
+    });
+
+    it('should set queuedMessages map from payload', () => {
+      const queuedMessages: QueuedMessage[] = [
+        {
+          id: 'q1',
+          text: 'Message 1',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+        {
+          id: 'q2',
+          text: 'Message 2',
+          timestamp: '2024-01-01T00:00:01.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+      ];
+      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.queuedMessages.size).toBe(2);
+      expect(newState.queuedMessages.get('q1')?.text).toBe('Message 1');
+      expect(newState.queuedMessages.get('q2')?.text).toBe('Message 2');
+    });
+
+    it('should transition from loading to ready', () => {
+      const state: ChatState = {
+        ...initialState,
+        sessionStatus: { phase: 'loading' },
+      };
+      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages: [] } };
+      const newState = chatReducer(state, action);
+
+      expect(newState.sessionStatus.phase).toBe('ready');
+    });
+
+    it('should be ignored if session is not in loading state (race condition protection)', () => {
+      const queuedMessages: QueuedMessage[] = [
+        {
+          id: 'stale-q1',
+          text: 'Stale queued message',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+      ];
+      const state: ChatState = {
+        ...initialState,
+        sessionStatus: { phase: 'running' },
+        messages: [
+          {
+            id: 'existing',
+            source: 'user',
+            text: 'Already loaded',
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+      };
+      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
+      const newState = chatReducer(state, action);
+
+      // Should return unchanged state - no stale data added
+      expect(newState).toBe(state);
+      expect(newState.sessionStatus.phase).toBe('running');
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.queuedMessages.size).toBe(0);
+    });
+
+    it('should deduplicate messages that already exist', () => {
+      const existingMessage: ChatMessage = {
+        id: 'q1',
+        source: 'user',
+        text: 'Already exists',
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        sessionStatus: { phase: 'loading' },
+        messages: [existingMessage],
+      };
+      const queuedMessages: QueuedMessage[] = [
+        {
+          id: 'q1', // Same ID - should be deduplicated
+          text: 'Queued version',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+        {
+          id: 'q2', // New ID - should be added
+          text: 'New message',
+          timestamp: '2024-01-01T00:00:01.000Z',
+          settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        },
+      ];
+      const action: ChatAction = { type: 'WS_QUEUE_LOADED', payload: { queuedMessages } };
+      const newState = chatReducer(state, action);
+
+      // Should have original message + only the new queued message (q2)
+      expect(newState.messages).toHaveLength(2);
+      expect(newState.messages[0].id).toBe('q1');
+      expect(newState.messages[0].text).toBe('Already exists'); // Original preserved
+      expect(newState.messages[1].id).toBe('q2');
     });
   });
 
@@ -1863,6 +1992,28 @@ describe('createActionFromWebSocketMessage', () => {
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toEqual({ type: 'MESSAGE_REMOVED', payload: { id: 'msg-1' } });
+  });
+
+  it('should convert queue to WS_QUEUE_LOADED action', () => {
+    const queuedMessages: QueuedMessage[] = [
+      {
+        id: 'q1',
+        text: 'Queued',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+      },
+    ];
+    const wsMessage: WebSocketMessage = { type: 'queue', queuedMessages };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({ type: 'WS_QUEUE_LOADED', payload: { queuedMessages } });
+  });
+
+  it('should convert queue to WS_QUEUE_LOADED with empty array when queuedMessages missing', () => {
+    const wsMessage: WebSocketMessage = { type: 'queue' };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({ type: 'WS_QUEUE_LOADED', payload: { queuedMessages: [] } });
   });
 
   it('should return null for unknown message type', () => {
