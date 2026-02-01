@@ -23,6 +23,17 @@ export interface TodoState {
 }
 
 /**
+ * Type guard to validate TodoWrite input structure.
+ */
+function isTodoWriteInput(input: unknown): input is { todos: Todo[] } {
+  if (typeof input !== 'object' || input === null) {
+    return false;
+  }
+  const obj = input as { todos?: unknown };
+  return Array.isArray(obj.todos);
+}
+
+/**
  * Helper to calculate todo state from a todo list
  */
 function calculateTodoState(todos: Todo[], timestamp: string): TodoState {
@@ -54,9 +65,10 @@ function extractTodosFromStreamEvent(
 
   const block = claudeMessage.event.content_block;
   if (block.type === 'tool_use' && block.name === 'TodoWrite') {
-    const input = block.input as { todos?: Todo[] };
-    const todos = input.todos || [];
-    return calculateTodoState(todos, timestamp);
+    if (isTodoWriteInput(block.input)) {
+      return calculateTodoState(block.input.todos, timestamp);
+    }
+    return calculateTodoState([], timestamp);
   }
 
   return null;
@@ -75,9 +87,10 @@ function extractTodosFromAssistantMessage(
 
   for (const item of claudeMessage.message.content) {
     if (item.type === 'tool_use' && item.name === 'TodoWrite') {
-      const input = item.input as { todos?: Todo[] };
-      const todos = input.todos || [];
-      return calculateTodoState(todos, timestamp);
+      if (isTodoWriteInput(item.input)) {
+        return calculateTodoState(item.input.todos, timestamp);
+      }
+      return calculateTodoState([], timestamp);
     }
   }
 

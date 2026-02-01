@@ -20,10 +20,18 @@ import type {
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
+  ToolUseContent,
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
-import { convertHistoryMessage, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import {
+  convertHistoryMessage,
+  DEFAULT_CHAT_SETTINGS,
+  getToolUseIdFromEvent,
+  isStreamEventMessage,
+  isWsClaudeMessage,
+  isWsSessionLoadedMessage,
+} from '@/lib/claude-types';
 
 // =============================================================================
 // State Types
@@ -221,18 +229,14 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
   }
 
   // For stream events, only store meaningful ones
-  if (claudeMsg.type !== 'stream_event') {
+  if (!isStreamEventMessage(claudeMsg)) {
     return true;
   }
 
-  const event = (claudeMsg as { event?: { type?: string; content_block?: { type?: string } } })
-    .event;
-  if (!event) {
-    return false;
-  }
+  const event = claudeMsg.event;
 
   // Only store content_block_start for tool_use, tool_result, and thinking
-  if (event.type === 'content_block_start' && event.content_block) {
+  if (event.type === 'content_block_start') {
     const blockType = event.content_block.type;
     return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
   }
@@ -249,26 +253,25 @@ function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
     return false;
   }
   const claudeMsg = msg.message;
-  return (
-    claudeMsg.type === 'stream_event' &&
-    claudeMsg.event?.type === 'content_block_start' &&
-    claudeMsg.event.content_block?.type === 'tool_use' &&
-    (claudeMsg.event.content_block as { id?: string }).id === toolUseId
-  );
+  if (!isStreamEventMessage(claudeMsg)) {
+    return false;
+  }
+  const event = claudeMsg.event;
+  if (event.type !== 'content_block_start' || event.content_block.type !== 'tool_use') {
+    return false;
+  }
+  const block = event.content_block as ToolUseContent;
+  return block.id === toolUseId;
 }
 
 /**
  * Gets the tool use ID from a Claude message if it's a tool_use start event.
  */
 function getToolUseIdFromMessage(claudeMsg: ClaudeMessage): string | null {
-  if (
-    claudeMsg.type === 'stream_event' &&
-    claudeMsg.event?.type === 'content_block_start' &&
-    claudeMsg.event.content_block?.type === 'tool_use'
-  ) {
-    return (claudeMsg.event.content_block as { id?: string }).id ?? null;
+  if (!isStreamEventMessage(claudeMsg)) {
+    return null;
   }
-  return null;
+  return getToolUseIdFromEvent(claudeMsg.event);
 }
 
 // =============================================================================
@@ -885,8 +888,8 @@ function handleStatusMessage(data: WebSocketMessage): ChatAction {
 }
 
 function handleClaudeMessageAction(data: WebSocketMessage): ChatAction | null {
-  if (data.data) {
-    return { type: 'WS_CLAUDE_MESSAGE', payload: data.data as ClaudeMessage };
+  if (isWsClaudeMessage(data)) {
+    return { type: 'WS_CLAUDE_MESSAGE', payload: data.data };
   }
   return null;
 }
@@ -906,10 +909,12 @@ function handleSessionsMessage(data: WebSocketMessage): ChatAction | null {
 }
 
 function handleSessionLoadedMessage(data: WebSocketMessage): ChatAction {
+  // Use type guard to ensure messages is an array of HistoryMessage
+  const messages = isWsSessionLoadedMessage(data) ? data.messages : [];
   return {
     type: 'WS_SESSION_LOADED',
     payload: {
-      messages: (data.messages as HistoryMessage[]) ?? [],
+      messages,
       gitBranch: data.gitBranch ?? null,
       running: data.running ?? false,
       settings: data.settings,

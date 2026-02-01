@@ -29,11 +29,17 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type {
   ChatSettings,
   ClaudeMessage,
+  ClaudeStreamEvent,
   MessageAttachment,
   QueuedMessage,
   WebSocketMessage,
 } from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import {
+  DEFAULT_CHAT_SETTINGS,
+  isStreamEventMessage,
+  isWebSocketMessage,
+  isWsClaudeMessage,
+} from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import {
   clearDraft,
@@ -141,42 +147,41 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// Type for stream event structure
-interface StreamEventData {
-  type?: string;
-  content_block?: {
-    type?: string;
-    id?: string;
-    name?: string;
-  };
-  delta?: { type?: string; partial_json?: string; thinking?: string };
+/**
+ * Extended delta type that includes input_json_delta (not in the main types).
+ * This is used during tool input streaming when Claude sends partial JSON.
+ */
+interface InputJsonDelta {
+  type: 'input_json_delta';
+  partial_json: string;
 }
 
 /**
  * Get stream event data from a Claude message.
+ * Returns the event if the message is a stream_event type, null otherwise.
  */
-function getStreamEvent(claudeMsg: ClaudeMessage): StreamEventData | null {
-  if (claudeMsg.type !== 'stream_event') {
+function getStreamEvent(claudeMsg: ClaudeMessage): ClaudeStreamEvent | null {
+  if (!isStreamEventMessage(claudeMsg)) {
     return null;
   }
-  return (claudeMsg as { event?: StreamEventData }).event ?? null;
+  return claudeMsg.event;
 }
 
 /**
  * Handle tool_use block start - initialize accumulator.
  */
 function handleToolUseStart(
-  event: StreamEventData,
+  event: ClaudeStreamEvent,
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>
 ): void {
-  if (
-    event.type === 'content_block_start' &&
-    event.content_block?.type === 'tool_use' &&
-    event.content_block.id
-  ) {
-    const toolUseId = event.content_block.id;
+  if (event.type !== 'content_block_start') {
+    return;
+  }
+  const block = event.content_block;
+  if (block.type === 'tool_use' && block.id) {
+    const toolUseId = block.id;
     toolInputAccumulatorRef.current.set(toolUseId, '');
-    debug.log('Tool use started:', toolUseId, event.content_block.name);
+    debug.log('Tool use started:', toolUseId, block.name);
   }
 }
 
@@ -185,14 +190,16 @@ function handleToolUseStart(
  * Returns a TOOL_INPUT_UPDATE action if valid JSON was accumulated, null otherwise.
  */
 function handleToolInputDelta(
-  event: StreamEventData,
+  event: ClaudeStreamEvent,
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>
 ): ChatAction | null {
-  if (
-    event.type !== 'content_block_delta' ||
-    event.delta?.type !== 'input_json_delta' ||
-    event.delta.partial_json === undefined
-  ) {
+  if (event.type !== 'content_block_delta') {
+    return null;
+  }
+
+  // Cast delta to check for input_json_delta (not in standard types)
+  const delta = event.delta as InputJsonDelta | typeof event.delta;
+  if (delta.type !== 'input_json_delta' || !('partial_json' in delta)) {
     return null;
   }
 
@@ -203,7 +210,7 @@ function handleToolInputDelta(
 
   // Get the last (most recent) tool_use_id
   const [toolUseId, currentJson] = accumulatorEntries[accumulatorEntries.length - 1];
-  const newJson = currentJson + event.delta.partial_json;
+  const newJson = currentJson + delta.partial_json;
   toolInputAccumulatorRef.current.set(toolUseId, newJson);
 
   // Try to parse the accumulated JSON and create update action
@@ -253,12 +260,11 @@ function handleThinkingStreaming(claudeMsg: ClaudeMessage): ChatAction | null {
   }
 
   // Accumulate thinking delta
-  if (
-    event.type === 'content_block_delta' &&
-    event.delta?.type === 'thinking_delta' &&
-    event.delta.thinking
-  ) {
-    return { type: 'THINKING_DELTA', payload: { thinking: event.delta.thinking } };
+  if (event.type === 'content_block_delta') {
+    const delta = event.delta;
+    if (delta.type === 'thinking_delta') {
+      return { type: 'THINKING_DELTA', payload: { thinking: delta.thinking } };
+    }
   }
 
   return null;
@@ -302,17 +308,14 @@ function handleSessionLoaded(
 
 /**
  * Handle Claude message with tool input streaming.
+ * Expects a validated claude_message WebSocket message.
  */
 function handleClaudeMessageWithStreaming(
-  wsMessage: WebSocketMessage,
+  wsMessage: WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage },
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>,
   dispatch: React.Dispatch<ChatAction>
 ): void {
-  if (!wsMessage.data) {
-    return;
-  }
-
-  const claudeMsg = wsMessage.data as ClaudeMessage;
+  const claudeMsg = wsMessage.data;
 
   // Handle tool input streaming before the main action
   const toolInputAction = handleToolInputStreaming(claudeMsg, toolInputAccumulatorRef);
@@ -426,10 +429,15 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   const handleMessage = useCallback(
     (data: unknown) => {
-      const wsMessage = data as WebSocketMessage;
+      // Validate incoming data is a WebSocket message
+      if (!isWebSocketMessage(data)) {
+        debug.log('Received invalid WebSocket message:', data);
+        return;
+      }
+      const wsMessage = data;
 
       // Handle Claude messages specially for tool input streaming
-      if (wsMessage.type === 'claude_message') {
+      if (isWsClaudeMessage(wsMessage)) {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
       }
 

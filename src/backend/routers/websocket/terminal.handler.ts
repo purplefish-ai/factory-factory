@@ -11,6 +11,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import { WS_READY_STATE } from '../../constants';
 import { terminalSessionAccessor } from '../../resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
+import { type TerminalMessageInput, TerminalMessageSchema } from '../../schemas/websocket';
 import { createLogger } from '../../services/index';
 import { terminalService } from '../../services/terminal.service';
 
@@ -152,11 +153,25 @@ export function handleTerminalUpgrade(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket handler needs to handle multiple message types
     ws.on('message', async (data) => {
       try {
-        const message = JSON.parse(data.toString());
+        const rawMessage: unknown = JSON.parse(data.toString());
+        const parseResult = TerminalMessageSchema.safeParse(rawMessage);
+
+        if (!parseResult.success) {
+          logger.warn('Invalid terminal message format', {
+            workspaceId,
+            errors: parseResult.error.issues,
+          });
+          if (ws.readyState === WS_READY_STATE.OPEN) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+          }
+          return;
+        }
+
+        const message: TerminalMessageInput = parseResult.data;
         logger.debug('Received terminal message', {
           workspaceId,
           type: message.type,
-          terminalId: message.terminalId,
+          terminalId: 'terminalId' in message ? message.terminalId : undefined,
         });
 
         switch (message.type) {
@@ -307,8 +322,12 @@ export function handleTerminalUpgrade(
             break;
           }
 
-          default:
-            logger.warn('Unknown message type', { type: message.type });
+          case 'ping':
+            // Keepalive ping - respond with pong
+            if (ws.readyState === WS_READY_STATE.OPEN) {
+              ws.send(JSON.stringify({ type: 'pong' }));
+            }
+            break;
         }
       } catch (error) {
         const err = error as Error;

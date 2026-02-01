@@ -595,6 +595,70 @@ export function isContentBlockDeltaEvent(
 }
 
 // =============================================================================
+// WebSocket Message Type Guards
+// =============================================================================
+
+/**
+ * Type guard to validate unknown data is a WebSocketMessage.
+ * Used for type-safe parsing of incoming WebSocket data.
+ */
+export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
+  const obj = data as { type?: unknown };
+  return typeof obj.type === 'string';
+}
+
+/**
+ * Type guard for claude_message WebSocket messages.
+ */
+export function isWsClaudeMessage(
+  msg: WebSocketMessage
+): msg is WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage } {
+  return msg.type === 'claude_message' && 'data' in msg && msg.data != null;
+}
+
+/**
+ * Type guard for session_loaded WebSocket messages.
+ */
+export function isWsSessionLoadedMessage(
+  msg: WebSocketMessage
+): msg is WebSocketMessage & { type: 'session_loaded'; messages: HistoryMessage[] } {
+  return msg.type === 'session_loaded' && 'messages' in msg && Array.isArray(msg.messages);
+}
+
+/**
+ * Type guard for ClaudeMessage with stream_event type.
+ */
+export function isStreamEventMessage(
+  msg: ClaudeMessage
+): msg is ClaudeMessage & { type: 'stream_event'; event: ClaudeStreamEvent } {
+  return msg.type === 'stream_event' && msg.event != null;
+}
+
+/**
+ * Type guard for tool_use start events within a stream event.
+ * Internal helper for getToolUseIdFromEvent.
+ */
+function isToolUseStartEvent(
+  event: ClaudeStreamEvent
+): event is { type: 'content_block_start'; index: number; content_block: ToolUseContent } {
+  return event.type === 'content_block_start' && event.content_block?.type === 'tool_use';
+}
+
+/**
+ * Extracts tool_use ID from a stream event if it's a tool_use start event.
+ * Returns null if not a tool_use start event.
+ */
+export function getToolUseIdFromEvent(event: ClaudeStreamEvent): string | null {
+  if (!isToolUseStartEvent(event)) {
+    return null;
+  }
+  return event.content_block.id;
+}
+
+// =============================================================================
 // Helper Functions
 // =============================================================================
 
