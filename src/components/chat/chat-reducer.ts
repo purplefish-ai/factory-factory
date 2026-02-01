@@ -344,6 +344,35 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
 // =============================================================================
 
 /**
+ * Convert QueuedMessage array to Map for O(1) lookups.
+ */
+function convertQueuedMessagesToMap(queuedMessages: QueuedMessage[]): Map<string, QueuedMessage> {
+  const map = new Map<string, QueuedMessage>();
+  for (const msg of queuedMessages) {
+    map.set(msg.id, msg);
+  }
+  return map;
+}
+
+/**
+ * Convert QueuedMessages to ChatMessages for inline display, filtering out duplicates.
+ */
+function convertQueuedToChatMessages(
+  queuedMessages: QueuedMessage[],
+  existingMessageIds: Set<string>
+): ChatMessage[] {
+  return queuedMessages
+    .filter((qm) => !existingMessageIds.has(qm.id))
+    .map((qm) => ({
+      id: qm.id,
+      source: 'user' as const,
+      text: qm.text,
+      timestamp: qm.timestamp,
+      attachments: qm.attachments,
+    }));
+}
+
+/**
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
 function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage): ChatState {
@@ -533,25 +562,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
       // Convert incoming array to Map for O(1) lookups and automatic de-duplication
       const queuedMessagesArray = action.payload.queuedMessages ?? [];
-      const queuedMessagesMap = new Map<string, QueuedMessage>();
-      for (const msg of queuedMessagesArray) {
-        queuedMessagesMap.set(msg.id, msg);
-      }
+      const queuedMessagesMap = convertQueuedMessagesToMap(queuedMessagesArray);
 
       // Convert queued messages to ChatMessages for inline display
       // These will appear grayed out at the end of the messages list
       // Filter out any that are already in messages to prevent duplicates
       // (can happen if optimistic messages overlap with backend queued messages)
       const existingMessageIds = new Set(messages.map((m) => m.id));
-      const queuedAsChatMessages: ChatMessage[] = queuedMessagesArray
-        .filter((qm) => !existingMessageIds.has(qm.id))
-        .map((qm) => ({
-          id: qm.id,
-          source: 'user' as const,
-          text: qm.text,
-          timestamp: qm.timestamp,
-          attachments: qm.attachments,
-        }));
+      const queuedAsChatMessages = convertQueuedToChatMessages(
+        queuedMessagesArray,
+        existingMessageIds
+      );
 
       // Combine history + optimistic + queued messages (deduplicated)
       const allMessages = [...messages, ...queuedAsChatMessages];
@@ -584,25 +605,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     // Queue loaded - fast path for showing queued messages before full session loads
     case 'WS_QUEUE_LOADED': {
       const queuedMessagesArray = action.payload.queuedMessages;
-
-      // Convert to Map for efficient lookups
-      const queuedMessagesMap = new Map<string, QueuedMessage>();
-      for (const msg of queuedMessagesArray) {
-        queuedMessagesMap.set(msg.id, msg);
-      }
-
-      // Convert queued messages to ChatMessages for inline display
-      // Filter out any that are already in messages to prevent duplicates
+      const queuedMessagesMap = convertQueuedMessagesToMap(queuedMessagesArray);
       const existingMessageIds = new Set(state.messages.map((m) => m.id));
-      const queuedAsChatMessages: ChatMessage[] = queuedMessagesArray
-        .filter((qm) => !existingMessageIds.has(qm.id))
-        .map((qm) => ({
-          id: qm.id,
-          source: 'user' as const,
-          text: qm.text,
-          timestamp: qm.timestamp,
-          attachments: qm.attachments,
-        }));
+      const queuedAsChatMessages = convertQueuedToChatMessages(
+        queuedMessagesArray,
+        existingMessageIds
+      );
 
       return {
         ...state,
