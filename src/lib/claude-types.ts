@@ -417,6 +417,7 @@ export interface WebSocketMessage {
     | 'message_removed'
     | 'message_accepted'
     | 'message_rejected'
+    | 'message_used_as_response'
     | 'queue';
   sessionId?: string;
   dbSessionId?: string;

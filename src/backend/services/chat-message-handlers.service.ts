@@ -387,7 +387,9 @@ class ChatMessageHandlerService {
     message: ChatMessage
   ): Promise<void> {
     const text = message.text?.trim();
-    if (!text && (!message.attachments || message.attachments.length === 0)) {
+    const hasContent = text || (message.attachments && message.attachments.length > 0);
+
+    if (!hasContent) {
       ws.send(JSON.stringify({ type: 'error', message: 'Empty message' }));
       return;
     }
@@ -397,6 +399,45 @@ class ChatMessageHandlerService {
       return;
     }
 
+    // Check if there's a pending interactive request - if so, treat this message as a response
+    const messageId = message.id;
+    if (text && this.tryHandleAsInteractiveResponse(ws, sessionId, messageId, text)) {
+      return;
+    }
+
+    const queuedMsg = this.buildQueuedMessage(messageId, message, text ?? '');
+    const result = messageQueueService.enqueue(sessionId, queuedMsg);
+
+    if ('error' in result) {
+      ws.send(JSON.stringify({ type: 'message_rejected', id: messageId, message: result.error }));
+      return;
+    }
+
+    this.notifyMessageAccepted(ws, sessionId, messageId, result.position, queuedMsg);
+    await this.tryDispatchNextMessage(sessionId);
+  }
+
+  /**
+   * Try to handle the message as a response to a pending interactive request.
+   * @returns true if handled, false otherwise
+   */
+  private tryHandleAsInteractiveResponse(
+    ws: WebSocket,
+    sessionId: string,
+    messageId: string,
+    text: string
+  ): boolean {
+    const pendingRequest = chatEventForwarderService.getPendingRequest(sessionId);
+    if (!pendingRequest) {
+      return false;
+    }
+    return this.handleMessageAsInteractiveResponse(ws, sessionId, messageId, text, pendingRequest);
+  }
+
+  /**
+   * Build a QueuedMessage from a ChatMessage.
+   */
+  private buildQueuedMessage(messageId: string, message: ChatMessage, text: string): QueuedMessage {
     const rawModel = message.settings?.selectedModel ?? message.selectedModel ?? null;
     const validModel = rawModel && VALID_MODELS.includes(rawModel) ? rawModel : null;
 
@@ -408,27 +449,29 @@ class ChatMessageHandlerService {
           planModeEnabled: message.planModeEnabled ?? false,
         };
 
-    const queuedMsg: QueuedMessage = {
-      id: message.id,
-      text: text ?? '',
+    return {
+      id: messageId,
+      text,
       attachments: message.attachments,
       settings,
       timestamp: new Date().toISOString(),
     };
+  }
 
-    const result = messageQueueService.enqueue(sessionId, queuedMsg);
-
-    if ('error' in result) {
-      ws.send(JSON.stringify({ type: 'message_rejected', id: message.id, message: result.error }));
-      return;
-    }
-
-    const { position } = result;
-
+  /**
+   * Notify frontend and all connections that a message was accepted.
+   */
+  private notifyMessageAccepted(
+    ws: WebSocket,
+    sessionId: string,
+    messageId: string,
+    position: number,
+    queuedMsg: QueuedMessage
+  ): void {
     ws.send(
       JSON.stringify({
         type: 'message_accepted',
-        id: message.id,
+        id: messageId,
         position,
         queuedMessage: queuedMsg,
       })
@@ -436,15 +479,103 @@ class ChatMessageHandlerService {
 
     chatConnectionService.forwardToSession(
       sessionId,
-      { type: 'message_accepted', id: message.id, position, queuedMessage: queuedMsg },
+      { type: 'message_accepted', id: messageId, position, queuedMessage: queuedMsg },
       ws
     );
 
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Message queued', { sessionId, messageId: message.id, position });
+      logger.info('[Chat WS] Message queued', { sessionId, messageId, position });
+    }
+  }
+
+  /**
+   * Handle an incoming message as a response to a pending interactive request.
+   * For AskUserQuestion: Answer with "Other" option using the message text.
+   * For ExitPlanMode: Deny with the message text as the reason.
+   *
+   * @returns true if the message was handled as an interactive response, false otherwise
+   */
+  private handleMessageAsInteractiveResponse(
+    ws: WebSocket,
+    sessionId: string,
+    messageId: string,
+    text: string,
+    pendingRequest: { requestId: string; toolName: string; input: Record<string, unknown> }
+  ): boolean {
+    const client = sessionService.getClient(sessionId);
+    if (!client) {
+      // No active client, can't respond to interactive request
+      return false;
     }
 
-    await this.tryDispatchNextMessage(sessionId);
+    // Unknown interactive request type, don't handle
+    if (
+      pendingRequest.toolName !== 'AskUserQuestion' &&
+      pendingRequest.toolName !== 'ExitPlanMode'
+    ) {
+      return false;
+    }
+
+    // Always clear the pending request to prevent stale state, regardless of success/failure
+    // This must happen before any operation that could fail
+    chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
+
+    // Prepare the response event - we'll send it even on error to clear frontend state
+    const responseEvent = { type: 'message_used_as_response', id: messageId, text };
+
+    try {
+      if (pendingRequest.toolName === 'AskUserQuestion') {
+        // For AskUserQuestion, answer each question with "Other" + the message text
+        const input = pendingRequest.input as { questions?: Array<{ question: string }> };
+        const questions = input.questions ?? [];
+        const answers: Record<string, string> = {};
+
+        for (const q of questions) {
+          // Use the message text as the "Other" response for all questions
+          answers[q.question] = text;
+        }
+
+        client.answerQuestion(pendingRequest.requestId, answers);
+      } else {
+        // ExitPlanMode: deny with the message text as feedback
+        client.denyInteractiveRequest(pendingRequest.requestId, text);
+      }
+
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Message used as interactive response', {
+          sessionId,
+          messageId,
+          toolName: pendingRequest.toolName,
+          requestId: pendingRequest.requestId,
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[Chat WS] Failed to handle message as interactive response', {
+        sessionId,
+        messageId,
+        toolName: pendingRequest.toolName,
+        error: errorMessage,
+      });
+      // Continue to send the response event to clear frontend state
+      // The message will be displayed in chat even though sending to Claude failed
+    }
+
+    // Always notify frontend - clears pending state and displays the message
+    // This happens outside try/catch to ensure frontend state is always updated
+    try {
+      ws.send(JSON.stringify(responseEvent));
+      chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
+    } catch (sendError) {
+      // WebSocket send failed - frontend will recover on reconnect
+      logger.warn('[Chat WS] Failed to send message_used_as_response event', {
+        sessionId,
+        messageId,
+        error: sendError instanceof Error ? sendError.message : String(sendError),
+      });
+    }
+
+    return true;
   }
 
   private handleRemoveQueuedMessage(ws: WebSocket, sessionId: string, message: ChatMessage): void {
