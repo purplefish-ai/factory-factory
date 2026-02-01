@@ -224,7 +224,7 @@ function createErrorMessage(error: string): ChatMessage {
  * Inserts a message into the messages array at the correct position based on order.
  * Uses binary search to find the insertion point for O(log n) performance.
  * Messages are ordered by their backend-assigned order (oldest first).
- * Falls back to timestamp ordering for messages without order (legacy/local messages).
+ * Messages without order are appended to the end.
  */
 function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
   // If new message has no order, append to end (local messages without backend confirmation)
@@ -242,8 +242,9 @@ function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage):
     const mid = Math.floor((low + high) / 2);
     const midOrder = messages[mid].order;
 
-    // Messages without order go to the end, so treat undefined as Infinity
-    if (midOrder === undefined || midOrder <= newOrder) {
+    // Messages without order are treated as having Infinity order (should stay at end)
+    // So when midOrder is undefined, we should NOT move right - the new message goes before it
+    if (midOrder !== undefined && midOrder <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;

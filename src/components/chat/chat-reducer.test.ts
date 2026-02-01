@@ -1666,6 +1666,41 @@ describe('chatReducer', () => {
       expect(newState.messages[1].id).toBe('msg-2'); // order: 1
       expect(newState.messages[2].id).toBe('msg-3'); // order: 2
     });
+
+    it('should insert ordered messages before unordered messages', () => {
+      // Start with a message that has no order (e.g., from MESSAGE_USED_AS_RESPONSE)
+      const unorderedMessage: ChatMessage = {
+        id: 'unordered-msg',
+        source: 'user',
+        text: 'Unordered message',
+        timestamp: '2024-01-01T10:00:00.000Z',
+        // no order field
+      };
+      const state: ChatState = {
+        ...initialState,
+        messages: [unorderedMessage],
+      };
+
+      // Add an ordered message via MESSAGE_STATE_CHANGED ACCEPTED
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'ordered-msg',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Ordered message',
+            timestamp: '2024-01-01T12:00:00.000Z',
+            order: 0,
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Ordered message should be inserted BEFORE the unordered one
+      expect(newState.messages.length).toBe(2);
+      expect(newState.messages[0].id).toBe('ordered-msg');
+      expect(newState.messages[1].id).toBe('unordered-msg');
+    });
   });
 });
 
