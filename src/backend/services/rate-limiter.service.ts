@@ -73,6 +73,7 @@ class RateLimiter {
   private isShuttingDown = false;
   private pendingTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private queueProcessingTimeout: NodeJS.Timeout | null = null;
+  private queueProcessingResolve: (() => void) | null = null;
 
   // Request ID counter for unique IDs
   private requestIdCounter = 0;
@@ -82,22 +83,23 @@ class RateLimiter {
       ...getDefaultConfig(),
       ...config,
     };
-    this.start();
   }
 
   /**
-   * Start periodic cleanup interval
+   * Start the rate limiter service
    */
   start(): void {
     if (this.cleanupInterval) {
       return;
     }
     this.isShuttingDown = false;
+    this.isProcessingQueue = false;
     this.cleanupInterval = setInterval(() => {
       if (!this.isShuttingDown) {
         this.cleanupOldTimestamps();
       }
     }, 60_000);
+    logger.info('Rate limiter started');
   }
 
   /**
@@ -232,8 +234,10 @@ class RateLimiter {
       if (this.isRateLimited()) {
         // Wait until we can make another request, tracking the timeout for cleanup
         await new Promise<void>((resolve) => {
+          this.queueProcessingResolve = resolve;
           this.queueProcessingTimeout = setTimeout(() => {
             this.queueProcessingTimeout = null;
+            this.queueProcessingResolve = null;
             resolve();
           }, 1000);
         });
@@ -300,10 +304,14 @@ class RateLimiter {
       this.cleanupInterval = null;
     }
 
-    // Clear queue processing timeout
+    // Clear queue processing timeout and resolve its Promise to unblock processQueue
     if (this.queueProcessingTimeout) {
       clearTimeout(this.queueProcessingTimeout);
       this.queueProcessingTimeout = null;
+    }
+    if (this.queueProcessingResolve) {
+      this.queueProcessingResolve();
+      this.queueProcessingResolve = null;
     }
 
     // Clear all pending timeouts

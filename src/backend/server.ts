@@ -261,6 +261,7 @@ export function createServer(requestedPort?: number): ServerInstance {
 
           sessionFileLogger.cleanupOldLogs();
           reconciliationService.startPeriodicCleanup();
+          rateLimiter.start();
           schedulerService.start();
 
           logger.info('Server endpoints available', {
