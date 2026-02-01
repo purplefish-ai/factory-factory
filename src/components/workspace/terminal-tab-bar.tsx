@@ -18,7 +18,8 @@ interface TerminalTabBarProps {
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
-  onNewTab: () => void;
+  onNewTab?: () => void;
+  showNewButton?: boolean;
   className?: string;
 }
 
@@ -32,6 +33,7 @@ export function TerminalTabBar({
   onSelectTab,
   onCloseTab,
   onNewTab,
+  showNewButton = true,
   className,
 }: TerminalTabBarProps) {
   return (
@@ -71,14 +73,16 @@ export function TerminalTabBar({
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={onNewTab}
-        className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-        title="New terminal"
-      >
-        <Plus className="h-3 w-3" />
-      </button>
+      {showNewButton && onNewTab && (
+        <button
+          type="button"
+          onClick={onNewTab}
+          className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          title="New terminal"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
