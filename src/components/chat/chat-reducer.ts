@@ -33,6 +33,11 @@ import {
   isWsClaudeMessage,
   MessageState,
 } from '@/lib/claude-types';
+import { createDebugLogger } from '@/lib/debug';
+
+// Debug logger for chat reducer - set to true during development to see ignored state transitions
+const DEBUG_CHAT_REDUCER = false;
+const debug = createDebugLogger(DEBUG_CHAT_REDUCER);
 
 // =============================================================================
 // State Types
@@ -765,10 +770,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
       // Intentionally ignore other state transitions (SENT, PENDING, ACCEPTED, STREAMING)
       // These states are tracked by the backend; frontend only acts on terminal transitions
-      if (process.env.NODE_ENV === 'development') {
-        // biome-ignore lint/suspicious/noConsole: Intentional debug logging for development
-        console.debug(`[chat-reducer] Ignoring state transition to ${newState} for message ${id}`);
-      }
+      debug.log(`[chat-reducer] Ignoring state transition to ${newState} for message ${id}`);
       return state;
     }
 

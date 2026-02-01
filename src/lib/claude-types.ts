@@ -499,8 +499,9 @@ export interface QueuedMessage {
  * Claude message flow:
  *   STREAMING → COMPLETE
  *
- * @deprecated Use `UserMessageState` or `ClaudeMessageState` for type-safe state handling.
- * The enum is retained for backward compatibility but new code should use the typed state literals.
+ * Note: For type-safe state handling in discriminated unions, prefer using
+ * `UserMessageState` or `ClaudeMessageState` type aliases. This enum provides
+ * runtime values and is used throughout the codebase for state comparisons.
  */
 export enum MessageState {
   // User message states

@@ -10,6 +10,7 @@
 
 import type { WebSocket } from 'ws';
 import { MessageState } from '@/lib/claude-types';
+import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
@@ -59,9 +60,6 @@ export interface ClientCreator {
 
 const VALID_MODELS = ['sonnet', 'opus'];
 const THINKING_SUFFIX = ' ultrathink';
-
-/** Tool names that support using a message as an interactive response */
-const INTERACTIVE_RESPONSE_TOOLS = ['AskUserQuestion', 'ExitPlanMode'] as const;
 
 // ============================================================================
 // Service

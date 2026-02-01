@@ -62,6 +62,16 @@ const CLAUDE_STATE_TRANSITIONS: Record<ClaudeMessageState, ClaudeMessageState[]>
 };
 
 /**
+ * Set of valid user message states for runtime validation.
+ */
+const USER_STATES = new Set<string>(Object.keys(USER_STATE_TRANSITIONS));
+
+/**
+ * Set of valid Claude message states for runtime validation.
+ */
+const CLAUDE_STATES = new Set<string>(Object.keys(CLAUDE_STATE_TRANSITIONS));
+
+/**
  * Check if a user message state transition is valid.
  */
 function isValidUserTransition(
@@ -84,6 +94,7 @@ function isValidClaudeTransition(
 /**
  * Check if a state transition is valid.
  * Uses the appropriate type-safe transition check based on message type.
+ * Validates that states are appropriate for the message type before checking transitions.
  */
 function isValidTransition(
   messageType: 'user' | 'claude',
@@ -91,7 +102,18 @@ function isValidTransition(
   newState: MessageState
 ): boolean {
   if (messageType === 'user') {
+    // Validate states are valid user states before casting
+    if (!(USER_STATES.has(currentState) && USER_STATES.has(newState))) {
+      logger.error('Invalid user message state', { currentState, newState });
+      return false;
+    }
     return isValidUserTransition(currentState as UserMessageState, newState as UserMessageState);
+  }
+
+  // Validate states are valid Claude states before casting
+  if (!(CLAUDE_STATES.has(currentState) && CLAUDE_STATES.has(newState))) {
+    logger.error('Invalid Claude message state', { currentState, newState });
+    return false;
   }
   return isValidClaudeTransition(
     currentState as ClaudeMessageState,
@@ -135,7 +157,7 @@ class MessageStateService {
     const messageWithState: UserMessageWithState = {
       id: msg.id,
       type: 'user',
-      state: 'ACCEPTED',
+      state: MessageState.ACCEPTED,
       timestamp: msg.timestamp,
       text: msg.text,
       attachments: msg.attachments,
@@ -172,7 +194,7 @@ class MessageStateService {
     const messageWithState: UserMessageWithState = {
       id: messageId,
       type: 'user',
-      state: 'REJECTED',
+      state: MessageState.REJECTED,
       timestamp: new Date().toISOString(),
       text: text ?? '',
       errorMessage,
@@ -222,7 +244,7 @@ class MessageStateService {
     const messageWithState: ClaudeMessageWithState = {
       id: messageId,
       type: 'claude',
-      state: 'STREAMING',
+      state: MessageState.STREAMING,
       timestamp: new Date().toISOString(),
       content,
     };
@@ -416,7 +438,7 @@ class MessageStateService {
         const messageWithState: UserMessageWithState = {
           id: messageId,
           type: 'user',
-          state: 'COMMITTED',
+          state: MessageState.COMMITTED,
           timestamp: historyMsg.timestamp,
           text: historyMsg.content,
         };
@@ -431,7 +453,7 @@ class MessageStateService {
         const messageWithState: ClaudeMessageWithState = {
           id: messageId,
           type: 'claude',
-          state: 'COMPLETE',
+          state: MessageState.COMPLETE,
           timestamp: historyMsg.timestamp,
           // Store minimal content representation for history messages
           content: this.historyToClaudeMessage(historyMsg),
@@ -530,7 +552,18 @@ class MessageStateService {
 
   /**
    * Send a full messages snapshot to all connections for a session.
-   * Used on initial connect and reconnect.
+   * Used on initial connect and reconnect to synchronize client state.
+   *
+   * @param sessionId - The database session ID
+   * @param sessionStatus - Current session lifecycle status (idle, loading, starting, ready, running, stopping)
+   * @param pendingInteractiveRequest - Optional pending interactive request awaiting user response.
+   *   If present, the frontend will display the appropriate UI (permission dialog or question form).
+   *   Structure includes:
+   *   - requestId: Unique identifier for the request
+   *   - toolName: The tool requesting interaction (e.g., 'AskUserQuestion', 'ExitPlanMode')
+   *   - input: Tool-specific input parameters
+   *   - planContent: Optional markdown content for ExitPlanMode requests
+   *   - timestamp: When the request was created
    */
   sendSnapshot(
     sessionId: string,
