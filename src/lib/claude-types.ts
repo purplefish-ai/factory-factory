@@ -530,6 +530,7 @@ export interface MessageWithState {
   // User message fields
   text?: string;
   attachments?: MessageAttachment[];
+  settings?: QueuedMessage['settings']; // User message settings (model, thinking, plan mode)
 
   // Claude message fields
   content?: ClaudeMessage;

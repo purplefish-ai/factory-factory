@@ -289,6 +289,8 @@ class ChatEventForwarderService {
       this.pendingInteractiveRequests.delete(dbSessionId);
       // Clear current Claude message tracking
       this.currentClaudeMessageId.delete(dbSessionId);
+      // Clear message state to prevent memory leak
+      messageStateService.clearSession(dbSessionId);
     });
 
     client.on('error', (error) => {

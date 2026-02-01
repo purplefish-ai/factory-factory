@@ -672,8 +672,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             text: msg.text ?? '',
             timestamp: msg.timestamp,
             attachments: msg.attachments,
-            // Settings are not tracked in MessageWithState, use defaults
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+            // Use settings from message if available, otherwise defaults
+            settings: msg.settings ?? {
+              selectedModel: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
           });
         }
       }
@@ -748,16 +752,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           messages: state.messages.filter((m) => m.id !== id),
           queuedMessages: newQueuedMessages,
         };
-      }
-
-      // For other state changes, we mostly just update queue position if provided
-      if (action.payload.queuePosition !== undefined && state.queuedMessages.has(id)) {
-        const qm = state.queuedMessages.get(id);
-        if (qm) {
-          const newQueuedMessages = new Map(state.queuedMessages);
-          // QueuedMessage doesn't have queuePosition field, so we just keep track via state
-          return { ...state, queuedMessages: newQueuedMessages };
-        }
       }
 
       return state;

@@ -192,7 +192,7 @@ class ChatMessageHandlerService {
         await this.handleLoadSessionMessage(ws, dbSessionId, workingDir);
         break;
       case 'get_queue':
-        this.handleGetQueueMessage(ws, dbSessionId);
+        this.handleSnapshotRequest(ws, dbSessionId);
         break;
       case 'question_response':
         this.handleQuestionResponseMessage(ws, dbSessionId, message);
@@ -627,10 +627,10 @@ class ChatMessageHandlerService {
   }
 
   /**
-   * Handle get_queue message - sends a messages_snapshot with current state.
+   * Handle snapshot request (get_queue message type) - sends a messages_snapshot with current state.
    * This is now equivalent to load_session but faster since it doesn't load from JSONL.
    */
-  private handleGetQueueMessage(_ws: WebSocket, sessionId: string): void {
+  private handleSnapshotRequest(_ws: WebSocket, sessionId: string): void {
     const existingClient = sessionService.getClient(sessionId);
     const isRunning = existingClient?.isWorking() ?? false;
     const pendingInteractiveRequest =

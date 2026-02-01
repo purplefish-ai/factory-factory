@@ -118,6 +118,7 @@ class MessageStateService {
       text: msg.text,
       attachments: msg.attachments,
       queuePosition,
+      settings: msg.settings,
     };
 
     messages.set(msg.id, messageWithState);
@@ -307,7 +308,19 @@ class MessageStateService {
    * Does not emit state change events - this is for restoring existing state.
    */
   loadFromHistory(sessionId: string, history: HistoryMessage[]): void {
-    // Clear any existing messages for this session
+    // Skip if session already has messages (race condition protection)
+    // This prevents overwriting fresh state with stale history when multiple
+    // requests race to populate an empty session
+    const existingMessages = this.sessionMessages.get(sessionId);
+    if (existingMessages && existingMessages.size > 0) {
+      logger.info('Skipping history load - session already has messages', {
+        sessionId,
+        existingCount: existingMessages.size,
+      });
+      return;
+    }
+
+    // Clear any existing messages for this session (handles empty map case)
     this.sessionMessages.delete(sessionId);
     const messages = this.getOrCreateSessionMap(sessionId);
 

@@ -582,17 +582,34 @@ describe('MessageStateService', () => {
       ]);
     });
 
-    it('should clear existing messages before loading', () => {
+    it('should skip loading if session already has messages (race condition protection)', () => {
       // Create some existing messages
-      messageStateService.createUserMessage('session-1', createTestQueuedMessage('existing-msg'));
+      messageStateService.createUserMessage(
+        'session-1',
+        createTestQueuedMessage('msg-1', 'Existing message')
+      );
 
-      // Load history
+      // Try to load history - should be skipped due to race condition protection
       const history: HistoryMessage[] = [
         createTestHistoryMessage('user', 'From history', 'uuid-1'),
       ];
       messageStateService.loadFromHistory('session-1', history);
 
-      // Should only have history messages, not existing ones
+      // Should still have the original message, NOT the history
+      // This protects against race conditions where messages are added after the empty check
+      // but before history load completes
+      const messages = messageStateService.getAllMessages('session-1');
+      expect(messages).toHaveLength(1);
+      expect(messages[0].text).toBe('Existing message');
+    });
+
+    it('should load history when session is empty', () => {
+      // Session is empty - history should load
+      const history: HistoryMessage[] = [
+        createTestHistoryMessage('user', 'From history', 'uuid-1'),
+      ];
+      messageStateService.loadFromHistory('session-1', history);
+
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
       expect(messages[0].text).toBe('From history');
@@ -728,6 +745,25 @@ describe('MessageStateService', () => {
       const payload = call[1] as { allMessages: Array<{ id: string }> };
       expect(payload.allMessages[0].id).toBe('msg-1');
       expect(payload.allMessages[1].id).toBe('msg-2');
+    });
+
+    it('should include planContent in pendingInteractiveRequest', () => {
+      const pendingRequest = {
+        requestId: 'req-plan-123',
+        toolName: 'EnterPlanMode',
+        input: { someKey: 'someValue' },
+        planContent: '# My Plan\n\nStep 1: Do something',
+        timestamp: new Date().toISOString(),
+      };
+
+      messageStateService.sendSnapshot('session-1', { phase: 'running' }, pendingRequest);
+
+      expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
+        type: 'messages_snapshot',
+        allMessages: [],
+        sessionStatus: { phase: 'running' },
+        pendingInteractiveRequest: pendingRequest,
+      });
     });
   });
 
