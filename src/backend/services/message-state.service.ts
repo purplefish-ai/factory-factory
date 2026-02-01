@@ -15,6 +15,7 @@
  *   STREAMING → COMPLETE
  */
 
+import { randomUUID } from 'node:crypto';
 import {
   type ChatMessage,
   type ClaudeMessage,
@@ -31,6 +32,7 @@ import {
   type UserMessageState,
   type UserMessageWithState,
 } from '@/lib/claude-types';
+import type { ClaudeClient } from '../claude/index';
 import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
 
@@ -465,6 +467,45 @@ class MessageStateService {
     if (sessionCount > 0) {
       logger.info('All sessions cleared', { clearedCount: sessionCount });
     }
+  }
+
+  /**
+   * Subscribe to ClaudeClient events for message storage.
+   * Called at client creation time to ensure ALL messages are stored
+   * regardless of frontend connection status.
+   */
+  subscribeToClient(sessionId: string, client: ClaudeClient): void {
+    let currentClaudeMessageId: string | null = null;
+
+    client.on('stream', (event) => {
+      const streamEvent = event as { type?: string };
+      if (streamEvent.type === 'message_start') {
+        currentClaudeMessageId = `claude-${randomUUID()}`;
+        this.createClaudeMessage(sessionId, currentClaudeMessageId, event);
+      } else if (currentClaudeMessageId) {
+        this.updateClaudeContent(sessionId, currentClaudeMessageId, event);
+      }
+    });
+
+    client.on('result', () => {
+      if (currentClaudeMessageId) {
+        this.updateState(sessionId, currentClaudeMessageId, MessageState.COMPLETE);
+        currentClaudeMessageId = null;
+      }
+      // Mark DISPATCHED user messages as COMMITTED
+      for (const msg of this.getAllMessages(sessionId)) {
+        if (msg.type === 'user' && msg.state === MessageState.DISPATCHED) {
+          this.updateState(sessionId, msg.id, MessageState.COMMITTED);
+        }
+      }
+    });
+
+    client.on('exit', () => {
+      currentClaudeMessageId = null;
+      // Note: clearSession() called by chatEventForwarderService
+    });
+
+    logger.info('Subscribed to client events for message storage', { sessionId });
   }
 
   /**

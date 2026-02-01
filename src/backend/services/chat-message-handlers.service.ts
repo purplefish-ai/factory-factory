@@ -107,10 +107,6 @@ class ChatMessageHandlerService {
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
-        // Load JSONL history as starting state BEFORE spawning Claude
-        // This ensures history is available when resuming a session
-        await this.loadHistoryIfNeeded(dbSessionId);
-
         // Notify frontend that agent is starting BEFORE creating the client
         // This provides immediate feedback when the first message is sent
         chatConnectionService.forwardToSession(dbSessionId, { type: 'starting', dbSessionId });
@@ -211,35 +207,6 @@ class ChatMessageHandlerService {
   // ============================================================================
   // Private: Dispatch Helpers
   // ============================================================================
-
-  /**
-   * Load JSONL history into memory if needed.
-   * Called before auto-starting Claude to ensure history is available when resuming.
-   * Has race protection via messageStateService.loadFromHistory() which skips if messages exist.
-   */
-  private async loadHistoryIfNeeded(dbSessionId: string): Promise<void> {
-    const dbSession = await claudeSessionAccessor.findById(dbSessionId);
-    const claudeSessionId = dbSession?.claudeSessionId;
-    if (!claudeSessionId) {
-      return;
-    }
-
-    const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
-    if (!sessionOpts) {
-      return;
-    }
-
-    const history = await SessionManager.getHistory(claudeSessionId, sessionOpts.workingDir);
-    messageStateService.loadFromHistory(dbSessionId, history);
-
-    if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Loaded history before starting Claude', {
-        dbSessionId,
-        claudeSessionId,
-        historyCount: history.length,
-      });
-    }
-  }
 
   /**
    * Auto-start a client for queue dispatch using settings from the provided message.
