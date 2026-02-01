@@ -37,6 +37,7 @@ import {
   configService,
   createLogger,
   findAvailablePort,
+  rateLimiter,
   reconciliationService,
   schedulerService,
   sessionFileLogger,
@@ -149,7 +150,21 @@ export function createServer(requestedPort?: number): ServerInstance {
       ) {
         return next();
       }
-      res.sendFile(join(frontendStaticPath, 'index.html'));
+      const indexPath = join(frontendStaticPath, 'index.html');
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          // File not found or read error - log at debug level since this can happen
+          // during page refresh timing issues and is usually transient
+          logger.debug('Failed to serve index.html for SPA fallback', {
+            path: req.path,
+            error: err.message,
+          });
+          // Return 503 to indicate temporary unavailability (browser may retry)
+          if (!res.headersSent) {
+            res.status(503).send('Service temporarily unavailable. Please refresh the page.');
+          }
+        }
+      });
     });
   }
 
@@ -210,6 +225,7 @@ export function createServer(requestedPort?: number): ServerInstance {
     terminalService.cleanup();
     agentProcessAdapter.cleanup();
     sessionFileLogger.cleanup();
+    await rateLimiter.stop();
 
     await schedulerService.stop();
     await reconciliationService.stopPeriodicCleanup();
@@ -259,6 +275,7 @@ export function createServer(requestedPort?: number): ServerInstance {
 
           sessionFileLogger.cleanupOldLogs();
           reconciliationService.startPeriodicCleanup();
+          rateLimiter.start();
           schedulerService.start();
 
           logger.info('Server endpoints available', {

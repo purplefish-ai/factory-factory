@@ -1,260 +1,271 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-01-31
+**Analysis Date:** 2026-02-01
 
 ## Directory Layout
 
 ```
-factory-factory/
-├── src/
-│   ├── backend/              # Express + tRPC backend
-│   │   ├── agents/           # Agent process adapter
-│   │   ├── claude/           # Claude CLI integration
-│   │   ├── clients/          # External system clients (git)
-│   │   ├── constants/        # HTTP/WebSocket constants
-│   │   ├── interceptors/     # Tool event interceptors
-│   │   ├── lib/              # Utility libraries
-│   │   ├── middleware/       # Express middleware
-│   │   ├── prompts/          # Prompt template utilities
-│   │   ├── resource_accessors/ # Prisma query layer
-│   │   ├── routers/          # Route handlers
-│   │   │   ├── api/          # REST endpoints
-│   │   │   ├── mcp/          # MCP tool handlers
-│   │   │   └── websocket/    # WebSocket handlers
-│   │   ├── services/         # Business logic services
-│   │   ├── trpc/             # tRPC routers
-│   │   │   ├── procedures/   # Custom tRPC procedures
-│   │   │   └── workspace/    # Workspace sub-routers
-│   │   └── utils/            # Utility functions
-│   ├── client/               # React SPA entry & routes
-│   │   ├── layouts/          # Page layout components
-│   │   └── routes/           # Route page components
-│   │       └── projects/
-│   │           └── workspaces/
-│   ├── components/           # Shared React components
-│   │   ├── agent-activity/   # Claude activity display
-│   │   ├── chat/             # Chat UI components
-│   │   ├── layout/           # Layout primitives
-│   │   ├── project/          # Project management UI
-│   │   ├── shared/           # Cross-feature components
-│   │   ├── ui/               # Base UI components (shadcn)
-│   │   └── workspace/        # Workspace UI components
-│   ├── frontend/             # App-specific frontend code
-│   │   ├── components/       # App shell components
-│   │   └── lib/              # tRPC client, providers
-│   ├── hooks/                # Shared React hooks
-│   ├── lib/                  # Shared utilities
-│   ├── shared/               # Shared types (frontend + backend)
-│   └── cli/                  # CLI entry point
-├── electron/                 # Electron desktop wrapper
-│   ├── main/                 # Main process
-│   └── preload/              # Preload scripts
-├── prisma/                   # Database schema & migrations
-│   ├── generated/            # Prisma client output
-│   └── migrations/           # Migration files
-├── prompts/                  # Markdown prompt templates
-│   ├── quick-actions/        # Quick action prompts
-│   └── workflows/            # Workflow prompts
-├── bin/                      # Build output binaries
-└── dist/                     # Build output
-    ├── client/               # Frontend build
-    └── src/                  # Backend build
+factory-factory-2/
+├── src/                           # Shared source code
+│   ├── backend/                   # Backend server (Express + tRPC)
+│   │   ├── agents/                # Agent adapters and orchestration
+│   │   ├── claude/                # Claude Code protocol and session management
+│   │   ├── clients/               # External service clients (git, etc.)
+│   │   ├── constants/             # Shared constants and enums
+│   │   ├── interceptors/          # Claude protocol interceptors
+│   │   ├── lib/                   # Helper utilities (git, files, shell, IDE)
+│   │   ├── middleware/            # Express middleware (cors, security, logging)
+│   │   ├── prompts/               # Markdown prompt templates
+│   │   ├── resource_accessors/    # Data access layer (Prisma queries)
+│   │   ├── routers/               # HTTP and WebSocket route handlers
+│   │   │   ├── api/               # REST API endpoints
+│   │   │   ├── mcp/               # MCP protocol server
+│   │   │   └── websocket/         # WebSocket upgrade handlers
+│   │   ├── services/              # Business logic services (~34 services)
+│   │   ├── testing/               # Test utilities and fixtures
+│   │   ├── trpc/                  # tRPC router definitions
+│   │   │   ├── procedures/        # Reusable procedure helpers
+│   │   │   └── workspace/         # Workspace-scoped procedures
+│   │   ├── utils/                 # Backend utilities
+│   │   ├── db.ts                  # Prisma client singleton
+│   │   ├── index.ts               # Server entry point (CLI mode)
+│   │   ├── migrate.ts             # Database migration runner
+│   │   └── server.ts              # Server factory and configuration
+│   │
+│   ├── client/                    # Frontend (React Router)
+│   │   ├── routes/                # Page-level route components
+│   │   │   ├── projects/          # Project routes (list, create)
+│   │   │   │   └── workspaces/    # Workspace routes (list, create, detail)
+│   │   │   ├── admin.tsx          # Admin console
+│   │   │   ├── home.tsx           # Home page
+│   │   │   └── reviews.tsx        # Reviews page
+│   │   ├── layouts/               # Layout wrappers (ProjectLayout, etc.)
+│   │   ├── error-boundary.tsx     # React error boundary
+│   │   ├── main.tsx               # React DOM mount point
+│   │   ├── root.tsx               # Root layout component
+│   │   └── router.tsx             # Explicit React Router v7 config
+│   │
+│   ├── components/                # Feature components
+│   │   ├── chat/                  # Chat UI and state management
+│   │   │   ├── chat-reducer.ts    # Chat message reducer (69KB)
+│   │   │   ├── chat-input.tsx     # Message input component
+│   │   │   ├── chat-persistence.ts # IndexedDB persistence
+│   │   │   ├── permission-prompt.tsx
+│   │   │   └── ...
+│   │   ├── workspace/             # Workspace UI components
+│   │   │   ├── main-view-content.tsx
+│   │   │   └── ...
+│   │   ├── agent-activity/        # Agent status visualization
+│   │   ├── project/               # Project-level components
+│   │   ├── shared/                # Shared UI pieces
+│   │   └── ui/                    # Radix UI component wrappers
+│   │       ├── button.tsx
+│   │       ├── dialog.tsx
+│   │       ├── dropdown-menu.tsx
+│   │       └── ... (59 UI components)
+│   │
+│   ├── hooks/                     # Custom React hooks
+│   │   ├── use-websocket-transport.ts   # WebSocket connection logic
+│   │   └── ... (other hooks)
+│   │
+│   ├── lib/                       # Frontend utilities
+│   │   ├── claude-fixtures.ts     # Test fixtures for Claude protocol
+│   │   ├── claude-types.ts        # Claude message/block types
+│   │   ├── websocket-config.ts    # WebSocket reconnection config
+│   │   ├── debug.ts               # Debug utilities
+│   │   ├── image-utils.ts         # Image handling
+│   │   └── ...
+│   │
+│   ├── shared/                    # Shared types and utilities
+│   │   ├── github-types.ts        # GitHub API types
+│   │   ├── pending-request-types.ts
+│   │   └── workspace-words.ts     # Workspace word generation utility
+│   │
+│   ├── types/                     # Shared type definitions
+│   ├── components/                # (Legacy - moved to src/components/)
+│   ├── frontend/                  # (Legacy - moved to src/client/)
+│   └── cli/                       # CLI entry point
+│       └── index.ts               # Commander.js CLI implementation
+│
+├── prisma/                        # Database schema and migrations
+│   ├── schema.prisma              # Data model definitions
+│   ├── migrations/                # Prisma migrations (auto-generated)
+│   └── generated/                 # Prisma client (generated)
+│
+├── electron/                      # Electron main process
+│   └── main.ts                    # (inferred from config)
+│
+├── .storybook/                    # Storybook configuration
+├── prompts/                       # LLM prompt templates (markdown)
+├── build-resources/               # Electron build assets
+├── bin/                           # Executable scripts
+├── biome-rules/                   # Custom Biome linting rules
+├── .github/                       # GitHub Actions workflows
+├── dist/                          # Build output (generated)
+│   ├── src/backend/               # Compiled backend
+│   └── client/                    # Built frontend
+│
+├── vite.config.ts                 # Frontend build config
+├── vitest.config.ts               # Test runner config
+├── tsconfig.json                  # TypeScript config
+├── tsconfig.backend.json          # Backend-specific TS config
+├── tsconfig.electron.json         # Electron-specific TS config
+├── biome.json                     # Code style and lint config
+├── package.json                   # Dependencies and scripts
+└── CLAUDE.md                      # Claude Code guidance
 ```
 
 ## Directory Purposes
 
-**`src/backend/`:**
-- Purpose: All server-side code
-- Contains: API routes, services, database access, Claude integration
-- Key files: `server.ts` (main), `index.ts` (entry), `db.ts` (Prisma client)
+**src/backend/:**
+Home of all server-side logic. Entry point is `index.ts` for CLI or `server.ts` for library usage.
 
-**`src/backend/trpc/`:**
-- Purpose: tRPC API definitions
-- Contains: Router definitions, procedures, context creation
-- Key files: `index.ts` (appRouter), `workspace.trpc.ts`, `project.trpc.ts`, `session.trpc.ts`
+**src/backend/trpc/:**
+tRPC router definitions. Each `*.trpc.ts` file defines a domain router (project, workspace, session, admin, etc.). Import routers into `index.ts` to compose the app router.
 
-**`src/backend/routers/websocket/`:**
-- Purpose: WebSocket connection handlers
-- Contains: Chat (Claude), terminal (PTY), dev-logs handlers
-- Key files: `chat.handler.ts`, `terminal.handler.ts`, `dev-logs.handler.ts`
+**src/backend/resource_accessors/:**
+All database queries. Import Prisma client from `db.ts`, add queries here. Routers import from this directory.
 
-**`src/backend/resource_accessors/`:**
-- Purpose: Database query abstraction
-- Contains: Type-safe Prisma wrappers for each model
-- Key files: `workspace.accessor.ts`, `project.accessor.ts`, `claude-session.accessor.ts`
+**src/backend/services/:**
+Business logic. Stateful services manage tasks like terminal sessions, chat connections, scheduling, file locking. Singleton instances registered in `index.ts`.
 
-**`src/backend/services/`:**
-- Purpose: Business logic and cross-cutting concerns
-- Contains: Session management, terminal service, scheduling, reconciliation
-- Key files: `session.service.ts`, `terminal.service.ts`, `scheduler.service.ts`, `config.service.ts`
+**src/backend/claude/:**
+Claude Code protocol implementation. Protocol parser, session manager, permissions check. Used by WebSocket chat handler.
 
-**`src/backend/claude/`:**
-- Purpose: Claude Code CLI integration
-- Contains: Client wrapper, protocol parsing, session file reading
-- Key files: `session.ts` (SessionManager), `types.ts`, `protocol.test.ts`
+**src/client/routes/:**
+Page components. Each file is a top-level route. Nested routes (like workspaces) live in subdirectories. Imported by `router.tsx`.
 
-**`src/backend/interceptors/`:**
-- Purpose: Tool event side effects
-- Contains: Interceptors triggered on Claude tool use
-- Key files: `pr-detection.interceptor.ts`, `branch-rename.interceptor.ts`, `registry.ts`
+**src/components/chat/:**
+Chat feature: message reducer (Redux-style state machine), input handling, persistence to IndexedDB. Large reducer file (69KB) contains all message handling logic.
 
-**`src/client/`:**
-- Purpose: SPA routes and entry point
-- Contains: Page components, layouts, router config
-- Key files: `main.tsx`, `router.tsx`, `root.tsx`
+**src/components/ui/:**
+Radix UI component library wrappers. 59 components including buttons, dialogs, forms, etc. Use these in any feature component.
 
-**`src/client/routes/`:**
-- Purpose: Route page components
-- Contains: Home, projects, workspaces, admin pages
-- Key files: `home.tsx`, `projects/list.tsx`, `projects/workspaces/detail.tsx`
+**prisma/schema.prisma:**
+Data model: Project, Workspace, ClaudeSession, TerminalSession, DecisionLog, UserSettings, etc. Run `pnpm db:generate` after changes.
 
-**`src/components/`:**
-- Purpose: Shared React components
-- Contains: UI primitives, feature components, storybook stories
-- Key files: `ui/*.tsx` (shadcn), `chat/*.tsx`, `workspace/*.tsx`
-
-**`src/components/chat/`:**
-- Purpose: Chat interface components
-- Contains: Input, message list, session picker, prompts
-- Key files: `chat-input.tsx`, `virtualized-message-list.tsx`, `permission-prompt.tsx`
-
-**`src/components/workspace/`:**
-- Purpose: Workspace detail UI
-- Contains: Panels, file browser, terminal, git views
-- Key files: `terminal-panel.tsx`, `file-browser-panel.tsx`, `right-panel.tsx`
-
-**`src/frontend/`:**
-- Purpose: App shell and providers
-- Contains: tRPC setup, theme, sidebar, header
-- Key files: `lib/trpc.ts`, `lib/providers.tsx`, `components/app-sidebar.tsx`
-
-**`src/shared/`:**
-- Purpose: Types shared between frontend and backend
-- Contains: Shared type definitions
-- Key files: `github-types.ts`, `pending-request-types.ts`, `workspace-words.ts`
-
-**`electron/`:**
-- Purpose: Desktop app wrapper
-- Contains: Main process, preload, server manager
-- Key files: `main/index.ts`, `main/server-manager.ts`
-
-**`prompts/`:**
-- Purpose: System prompt templates
-- Contains: Markdown files for workflows and quick actions
-- Key files: `workflows/*.md`, `quick-actions/*.md`
+**prompts/:**
+Markdown prompt templates used by backend to construct Claude requests. Referenced as file paths at runtime.
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/cli/index.ts`: CLI entry point (`ff` command)
-- `src/backend/index.ts`: Backend server entry (standalone)
-- `src/backend/server.ts`: Server creation and configuration
-- `src/client/main.tsx`: Frontend SPA entry
-- `electron/main/index.ts`: Electron main process entry
+- `src/cli/index.ts`: CLI commands (serve, build, db:migrate, db:studio)
+- `src/backend/index.ts`: Server bootstrap (CLI/standalone mode)
+- `src/backend/server.ts`: Server factory, used by Electron
+- `src/client/main.tsx`: React app mount point
+- `src/client/router.tsx`: React Router v7 configuration
 
 **Configuration:**
-- `package.json`: Dependencies, scripts, CLI bin
-- `prisma/schema.prisma`: Database schema
-- `vite.config.ts`: Vite build configuration
-- `tsconfig.json`: TypeScript base config
-- `tsconfig.backend.json`: Backend TypeScript config
-- `tsconfig.electron.json`: Electron TypeScript config
-- `biome.json`: Linting/formatting config
+- `prisma/schema.prisma`: Data model and relations
+- `src/backend/lib/env.ts`: Environment variable parsing
+- `src/backend/services/config.service.ts`: Server configuration (ports, paths, env)
+- `vite.config.ts`: Frontend build (Vite + React plugin + Tailwind)
+- `vitest.config.ts`: Test runner (Node environment, Vitest)
+- `tsconfig.json`: TypeScript compiler options
 
 **Core Logic:**
-- `src/backend/server.ts`: Server setup, middleware, WebSocket upgrade
-- `src/backend/trpc/index.ts`: tRPC router composition
-- `src/backend/routers/websocket/chat.handler.ts`: Claude chat handling
-- `src/backend/services/session.service.ts`: Claude session lifecycle
-- `src/client/router.tsx`: Frontend route definitions
+- `src/backend/trpc/workspace.trpc.ts`: Workspace CRUD and operations
+- `src/backend/trpc/session.trpc.ts`: Session lifecycle (create, resume, close)
+- `src/backend/resource_accessors/workspace.accessor.ts`: Workspace queries
+- `src/components/chat/chat-reducer.ts`: Chat state machine (all message types)
+- `src/backend/services/terminal.service.ts`: PTY terminal management
+- `src/backend/services/session.service.ts`: Session lifecycle management
 
 **Testing:**
-- `src/backend/**/*.test.ts`: Backend unit tests
-- `src/**/*.stories.tsx`: Storybook component stories
-- `vitest.config.ts`: Vitest configuration
+- `vitest.config.ts`: Includes src/**/*.test.ts, coverage config
+- `src/backend/testing/setup.ts`: Test environment setup
+- Example tests: `src/backend/services/workspace-state-machine.service.test.ts`
 
 ## Naming Conventions
 
 **Files:**
-- `.tsx`: React components
-- `.ts`: TypeScript modules
-- `.test.ts`: Test files (co-located)
-- `.stories.tsx`: Storybook stories (co-located)
-- `.accessor.ts`: Resource accessor (database layer)
-- `.service.ts`: Service (business logic)
-- `.trpc.ts`: tRPC router
-- `.handler.ts`: WebSocket handler
-- `.router.ts`: Express router
-- `.interceptor.ts`: Tool interceptor
-- `.mcp.ts`: MCP tool handler
+- Feature components: `feature-name.tsx`
+- Services: `service-name.service.ts`
+- Accessors: `entity-name.accessor.ts`
+- tRPC routers: `domain.trpc.ts`
+- Utilities: `name-utils.ts` or `name-helpers.ts`
+- Tests: `name.test.ts` (co-located with source)
 
 **Directories:**
-- Lowercase with hyphens for multi-word
-- Feature-based grouping in `components/`
-- Layer-based grouping in `backend/`
+- Feature folders: lowercase with hyphens (chat, workspace, agent-activity)
+- Backend domains: lowercase (services, routers, resource_accessors)
+- Frontend pages: camelCase files in routes/ directory
+
+**Variables & Functions:**
+- camelCase for functions, variables, properties
+- PascalCase for components, types, interfaces
+- UPPER_CASE for constants and enums
 
 ## Where to Add New Code
 
-**New tRPC Endpoint:**
-- Create router in `src/backend/trpc/{feature}.trpc.ts`
-- Add to appRouter in `src/backend/trpc/index.ts`
-- Add accessor in `src/backend/resource_accessors/` if new queries needed
+**New Feature (e.g., new workspace operation):**
+1. Add tRPC procedure to `src/backend/trpc/workspace.trpc.ts`
+2. Add or update query in `src/backend/resource_accessors/workspace.accessor.ts`
+3. Add UI component in `src/components/workspace/` or route in `src/client/routes/`
+4. Add tests co-located: `workspace.trpc.test.ts`, `workspace-component.test.tsx`
 
-**New React Page:**
-- Create route component in `src/client/routes/{path}.tsx`
-- Add route to `src/client/router.tsx`
+**New Service (e.g., new background job):**
+1. Create `src/backend/services/my-service.service.ts`
+2. Register singleton in `src/backend/services/index.ts` export
+3. Inject into tRPC procedures or WebSocket handlers as needed
+4. Add tests: `src/backend/services/my-service.service.test.ts`
 
 **New UI Component:**
-- Shared: `src/components/{feature}/{component}.tsx`
-- App-specific: `src/frontend/components/{component}.tsx`
-- Add story: `{component}.stories.tsx` alongside
+- Single component: `src/components/feature/my-component.tsx`
+- Part of a library: `src/components/ui/my-component.tsx`
+- With Storybook: add `.stories.tsx` alongside
 
-**New Service:**
-- Create in `src/backend/services/{name}.service.ts`
-- Export from `src/backend/services/index.ts`
+**New Route:**
+- Page route: Create file in `src/client/routes/` matching desired path
+- Layout wrapper: Create in `src/client/layouts/` and import in route
+- Nested route: Create subdirectory in `src/client/routes/`
 
-**New WebSocket Handler:**
-- Create in `src/backend/routers/websocket/{name}.handler.ts`
-- Export from `src/backend/routers/websocket/index.ts`
-- Add upgrade handler in `src/backend/server.ts`
+**New Utility:**
+- Backend: `src/backend/lib/` for git/file/IDE helpers or `src/backend/utils/` for general utils
+- Frontend: `src/lib/` for frontend-specific helpers
+- Shared: `src/shared/` for types or utilities used by both
 
-**New Database Model:**
-- Add to `prisma/schema.prisma`
-- Run `pnpm db:migrate` to create migration
-- Run `pnpm db:generate` to update Prisma client
-- Create accessor in `src/backend/resource_accessors/`
-
-**New Tool Interceptor:**
-- Create in `src/backend/interceptors/{name}.interceptor.ts`
-- Register in `src/backend/interceptors/index.ts`
+**New Test:**
+- Co-locate with source: `src/backend/services/name.service.test.ts`
+- Use setup file: `src/backend/testing/setup.ts` for common fixtures
+- Pattern: Test files import from source, not vice versa
 
 ## Special Directories
 
-**`prisma/generated/`:**
-- Purpose: Generated Prisma client
-- Generated: Yes (by `prisma generate`)
-- Committed: No (.gitignore)
+**dist/:**
+- Purpose: Compiled output
+- Generated: Yes (by TypeScript compiler and Vite)
+- Committed: No (in .gitignore)
+- Contents: src/backend compiled to dist/src/backend/, frontend build to dist/client/
 
-**`dist/`:**
-- Purpose: Build output
-- Generated: Yes (by `pnpm build`)
-- Committed: No (.gitignore)
-
-**`release/`:**
-- Purpose: Electron distributables
-- Generated: Yes (by `pnpm build:electron`)
-- Committed: No (.gitignore)
-
-**`node_modules/`:**
+**node_modules/:**
 - Purpose: Dependencies
-- Generated: Yes (by `pnpm install`)
-- Committed: No (.gitignore)
+- Generated: Yes (by pnpm install)
+- Committed: No (in .gitignore)
 
-**`.planning/`:**
-- Purpose: Project planning documents
-- Generated: No (manual or by GSD commands)
-- Committed: Varies by project
+**prisma/migrations/:**
+- Purpose: Versioned database schema changes
+- Generated: Auto-created by `pnpm db:migrate` (Prisma CLI)
+- Committed: Yes - track with git for reproducible deployments
+
+**prisma/generated/:**
+- Purpose: Prisma client code (type-safe database client)
+- Generated: Yes (by `pnpm db:generate`)
+- Committed: No (in .gitignore)
+
+**prompts/:**
+- Purpose: LLM prompt templates (markdown files)
+- Generated: No (checked in)
+- Committed: Yes
+- Copied to dist during build (see CLAUDE.md build script)
+
+**build-resources/:**
+- Purpose: Electron build icons, installer assets
+- Generated: No
+- Committed: Yes
+- Used by: electron-builder during package step
 
 ---
 
-*Structure analysis: 2026-01-31*
+*Structure analysis: 2026-02-01*

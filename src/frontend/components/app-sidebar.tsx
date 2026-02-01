@@ -1,6 +1,7 @@
 import { Archive, Check, GitPullRequest, Kanban, Loader2, Plus, Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -141,9 +142,11 @@ export function AppSidebar() {
 
       // Navigate to workspace (workflow selection will be shown)
       navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
-    } catch {
+    } catch (error) {
       // Clear the creating state on error so the UI doesn't get stuck
       cancelCreating();
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to create workspace: ${message}`);
     }
   };
 
@@ -482,7 +485,14 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <ServerPortInfo />
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">Phase 7: Production Ready</p>
+          <a
+            href="https://github.com/purplefish-ai/factory-factory"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            GitHub
+          </a>
           <ThemeToggle />
         </div>
       </SidebarFooter>

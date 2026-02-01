@@ -68,14 +68,39 @@ class RateLimiter {
   private usageByAgent: Map<string, number> = new Map();
   private usageByTopLevelTask: Map<string, number> = new Map();
 
+  // Lifecycle management
+  private cleanupInterval: NodeJS.Timeout | null = null;
+  private isShuttingDown = false;
+  private pendingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private queueProcessingTimeout: NodeJS.Timeout | null = null;
+  private queueProcessingResolve: (() => void) | null = null;
+  private queueProcessingPromise: Promise<void> | null = null;
+
+  // Request ID counter for unique IDs
+  private requestIdCounter = 0;
+
   constructor(config?: Partial<RateLimiterConfig>) {
     this.config = {
       ...getDefaultConfig(),
       ...config,
     };
+  }
 
-    // Clean up old timestamps periodically
-    setInterval(() => this.cleanupOldTimestamps(), 60_000);
+  /**
+   * Start the rate limiter service
+   */
+  start(): void {
+    if (this.cleanupInterval) {
+      return;
+    }
+    this.isShuttingDown = false;
+    this.isProcessingQueue = false;
+    this.cleanupInterval = setInterval(() => {
+      if (!this.isShuttingDown) {
+        this.cleanupOldTimestamps();
+      }
+    }, 60_000);
+    logger.info('Rate limiter started');
   }
 
   /**
@@ -128,11 +153,18 @@ class RateLimiter {
     }
 
     return new Promise<void>((resolve, reject) => {
+      const requestId = `${agentId}-${++this.requestIdCounter}`;
       const request: QueuedRequest = {
-        id: `${agentId}-${Date.now()}`,
+        id: requestId,
         priority,
         timestamp: Date.now(),
         resolve: () => {
+          // Clear the timeout when request resolves
+          const timeout = this.pendingTimeouts.get(requestId);
+          if (timeout) {
+            clearTimeout(timeout);
+            this.pendingTimeouts.delete(requestId);
+          }
           this.recordRequest(agentId, topLevelTaskId);
           resolve();
         },
@@ -154,16 +186,22 @@ class RateLimiter {
       });
 
       // Start queue processing if not already running
-      this.processQueue();
+      if (!this.queueProcessingPromise) {
+        this.queueProcessingPromise = this.processQueue().finally(() => {
+          this.queueProcessingPromise = null;
+        });
+      }
 
-      // Set timeout
-      setTimeout(() => {
+      // Set timeout and track it
+      const timeoutId = setTimeout(() => {
+        this.pendingTimeouts.delete(requestId);
         const index = this.requestQueue.findIndex((r) => r.id === request.id);
         if (index !== -1) {
           this.requestQueue.splice(index, 1);
           reject(new Error('Rate limit queue timeout'));
         }
       }, this.config.queueTimeoutMs);
+      this.pendingTimeouts.set(requestId, timeoutId);
     });
   }
 
@@ -191,16 +229,27 @@ class RateLimiter {
    * Process the request queue
    */
   private async processQueue(): Promise<void> {
-    if (this.isProcessingQueue) {
+    if (this.isProcessingQueue || this.isShuttingDown) {
       return;
     }
 
     this.isProcessingQueue = true;
 
-    while (this.requestQueue.length > 0) {
+    while (this.requestQueue.length > 0 && !this.isShuttingDown) {
       if (this.isRateLimited()) {
-        // Wait until we can make another request
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Wait until we can make another request, tracking the timeout for cleanup
+        await new Promise<void>((resolve) => {
+          this.queueProcessingResolve = resolve;
+          this.queueProcessingTimeout = setTimeout(() => {
+            this.queueProcessingTimeout = null;
+            this.queueProcessingResolve = null;
+            resolve();
+          }, 1000);
+        });
+        // Check shutdown flag after waking up
+        if (this.isShuttingDown) {
+          break;
+        }
         continue;
       }
 
@@ -247,6 +296,48 @@ class RateLimiter {
     this.usageByAgent.clear();
     this.usageByTopLevelTask.clear();
     this.totalRequests = 0;
+  }
+
+  /**
+   * Stop the rate limiter and clean up resources
+   */
+  async stop(): Promise<void> {
+    this.isShuttingDown = true;
+
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
+    // Clear queue processing timeout and resolve its Promise to unblock processQueue
+    if (this.queueProcessingTimeout) {
+      clearTimeout(this.queueProcessingTimeout);
+      this.queueProcessingTimeout = null;
+    }
+    if (this.queueProcessingResolve) {
+      this.queueProcessingResolve();
+      this.queueProcessingResolve = null;
+    }
+
+    // Wait for in-flight queue processing to complete
+    if (this.queueProcessingPromise) {
+      logger.debug('Waiting for in-flight queue processing to complete');
+      await this.queueProcessingPromise;
+    }
+
+    // Clear all pending timeouts
+    for (const timeout of this.pendingTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.pendingTimeouts.clear();
+
+    // Reject all queued requests
+    while (this.requestQueue.length > 0) {
+      const request = this.requestQueue.shift();
+      request?.reject(new Error('Rate limiter shutting down'));
+    }
+
+    logger.info('Rate limiter stopped');
   }
 
   /**

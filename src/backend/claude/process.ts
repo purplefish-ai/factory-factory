@@ -619,14 +619,13 @@ export class ClaudeProcess extends EventEmitter {
 
     // Handle protocol close (stdout EOF)
     this.protocol.on('close', () => {
-      // Process crash or unexpected close
-      logger.warn('Claude protocol closed', {
-        pid: this.process.pid,
-        status: this.status,
-        claudeSessionId: this.claudeSessionId,
-      });
-      // Only emit error if not intentionally stopping and not already exited
+      // Only log warning and emit error if not intentionally stopping and not already exited
       if (this.status !== 'exited' && !this.isIntentionallyStopping) {
+        logger.warn('Claude protocol closed unexpectedly', {
+          pid: this.process.pid,
+          status: this.status,
+          claudeSessionId: this.claudeSessionId,
+        });
         const stderr = this.stderrBuffer.join('');
         logger.error('Claude process closed unexpectedly', {
           pid: this.process.pid,

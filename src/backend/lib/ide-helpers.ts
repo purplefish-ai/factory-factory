@@ -71,17 +71,18 @@ export async function openCustomIde(customCommand: string, targetPath: string): 
     throw new Error('Custom command contains invalid characters');
   }
 
-  // Properly escape the workspace path
-  const escapedPath = targetPath.replace(/"/g, '\\"');
-  const quotedPath = targetPath.includes(' ') ? `"${escapedPath}"` : targetPath;
+  // Always escape the workspace path for consistent parsing/unescaping
+  const escapedPath = targetPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const quotedPath = targetPath.includes(' ') ? `"${escapedPath}"` : escapedPath;
 
   // Replace placeholders in custom command
   const command = customCommand.replace(/\{workspace\}/g, quotedPath);
 
   // Parse command and arguments - split on whitespace but preserve quoted strings
   const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-  const cmd = parts[0]?.replace(/"/g, '');
-  const args = parts.slice(1).map((arg) => arg.replace(/"/g, ''));
+  // Strip quotes then unescape backslashes that were escaped for parsing
+  const cmd = parts[0]?.replace(/"/g, '').replace(/\\\\/g, '\\');
+  const args = parts.slice(1).map((arg) => arg.replace(/"/g, '').replace(/\\\\/g, '\\'));
 
   if (!cmd) {
     return false;

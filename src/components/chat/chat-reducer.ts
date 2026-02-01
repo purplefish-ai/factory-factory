@@ -132,6 +132,7 @@ export type ChatAction =
     }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
+  | { type: 'WS_QUEUE_LOADED'; payload: { queuedMessages: QueuedMessage[] } }
   // Session actions
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
@@ -326,7 +327,7 @@ function createSessionSwitchResetState(): Pick<
 export function createInitialChatState(overrides?: Partial<ChatState>): ChatState {
   return {
     messages: [],
-    sessionStatus: { phase: 'idle' },
+    sessionStatus: { phase: 'loading' },
     gitBranch: null,
     availableSessions: [],
     pendingRequest: { type: 'none' },
@@ -343,6 +344,35 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
 // =============================================================================
 // Reducer Helper Functions
 // =============================================================================
+
+/**
+ * Convert QueuedMessage array to Map for O(1) lookups.
+ */
+function convertQueuedMessagesToMap(queuedMessages: QueuedMessage[]): Map<string, QueuedMessage> {
+  const map = new Map<string, QueuedMessage>();
+  for (const msg of queuedMessages) {
+    map.set(msg.id, msg);
+  }
+  return map;
+}
+
+/**
+ * Convert QueuedMessages to ChatMessages for inline display, filtering out duplicates.
+ */
+function convertQueuedToChatMessages(
+  queuedMessages: QueuedMessage[],
+  existingMessageIds: Set<string>
+): ChatMessage[] {
+  return queuedMessages
+    .filter((qm) => !existingMessageIds.has(qm.id))
+    .map((qm) => ({
+      id: qm.id,
+      source: 'user' as const,
+      text: qm.text,
+      timestamp: qm.timestamp,
+      attachments: qm.attachments,
+    }));
+}
 
 /**
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
@@ -534,25 +564,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
       // Convert incoming array to Map for O(1) lookups and automatic de-duplication
       const queuedMessagesArray = action.payload.queuedMessages ?? [];
-      const queuedMessagesMap = new Map<string, QueuedMessage>();
-      for (const msg of queuedMessagesArray) {
-        queuedMessagesMap.set(msg.id, msg);
-      }
+      const queuedMessagesMap = convertQueuedMessagesToMap(queuedMessagesArray);
 
       // Convert queued messages to ChatMessages for inline display
       // These will appear grayed out at the end of the messages list
       // Filter out any that are already in messages to prevent duplicates
       // (can happen if optimistic messages overlap with backend queued messages)
       const existingMessageIds = new Set(messages.map((m) => m.id));
-      const queuedAsChatMessages: ChatMessage[] = queuedMessagesArray
-        .filter((qm) => !existingMessageIds.has(qm.id))
-        .map((qm) => ({
-          id: qm.id,
-          source: 'user' as const,
-          text: qm.text,
-          timestamp: qm.timestamp,
-          attachments: qm.attachments,
-        }));
+      const queuedAsChatMessages = convertQueuedToChatMessages(
+        queuedMessagesArray,
+        existingMessageIds
+      );
 
       // Combine history + optimistic + queued messages (deduplicated)
       const allMessages = [...messages, ...queuedAsChatMessages];
@@ -581,6 +603,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, pendingRequest: { type: 'permission', request: action.payload } };
     case 'WS_USER_QUESTION':
       return { ...state, pendingRequest: { type: 'question', request: action.payload } };
+
+    // Queue loaded - fast path for showing queued messages before full session loads
+    // Only process if still loading - ignore if session_loaded already arrived (race condition)
+    case 'WS_QUEUE_LOADED': {
+      if (state.sessionStatus.phase !== 'loading') {
+        return state;
+      }
+
+      const queuedMessagesArray = action.payload.queuedMessages;
+      const queuedMessagesMap = convertQueuedMessagesToMap(queuedMessagesArray);
+      const existingMessageIds = new Set(state.messages.map((m) => m.id));
+      const queuedAsChatMessages = convertQueuedToChatMessages(
+        queuedMessagesArray,
+        existingMessageIds
+      );
+
+      return {
+        ...state,
+        messages: [...state.messages, ...queuedAsChatMessages],
+        queuedMessages: queuedMessagesMap,
+        // Transition to ready so UI shows queued messages instead of loading spinner
+        sessionStatus: { phase: 'ready' },
+      };
+    }
+
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings
       const shouldDisablePlanMode =
@@ -943,6 +990,13 @@ function handleMessageQueueAction(data: WebSocketMessage): ChatAction | null {
   }
 }
 
+function handleQueueMessage(data: WebSocketMessage): ChatAction {
+  return {
+    type: 'WS_QUEUE_LOADED',
+    payload: { queuedMessages: data.queuedMessages ?? [] },
+  };
+}
+
 /**
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
@@ -970,6 +1024,9 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
+    // Queue loaded - fast response with just queued messages
+    case 'queue':
+      return handleQueueMessage(data);
     // Queue and interactive response events from backend
     case 'message_queued':
     case 'message_dispatched':

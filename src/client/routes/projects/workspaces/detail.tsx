@@ -494,7 +494,14 @@ function WorkspaceChatContent() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setArchiveDialogOpen(true)}
+                onClick={() => {
+                  // Skip confirmation if PR is already merged
+                  if (workspace.prState === 'MERGED') {
+                    archiveWorkspace.mutate({ id: workspaceId });
+                  } else {
+                    setArchiveDialogOpen(true);
+                  }
+                }}
                 disabled={archiveWorkspace.isPending}
               >
                 {archiveWorkspace.isPending ? (

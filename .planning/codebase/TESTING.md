@@ -1,117 +1,113 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-01-31
+**Analysis Date:** 2026-02-01
 
 ## Test Framework
 
-**Runner:** Vitest (v4.0.18)
-**Config:** `vitest.config.ts`
+**Runner:**
+- Vitest v4.0.18
+- Config: `vitest.config.ts`
+- Environment: Node.js (not browser)
+- Globals enabled: `describe()`, `it()`, `beforeEach()`, `afterEach()`, `expect()` available without imports
 
-**Assertion Library:** Vitest built-in (Jest-compatible)
-**Coverage Provider:** V8
+**Assertion Library:**
+- Vitest built-in assertions via `expect()`
+- No external assertion library needed
+- Compatible with Chai/Vitest matchers
 
 **Run Commands:**
 ```bash
 pnpm test              # Run all tests once
-pnpm test:watch        # Run tests in watch mode
+pnpm test:watch        # Watch mode with hot reload
 pnpm test:coverage     # Run tests with coverage report
 ```
 
+**Coverage:**
+- Provider: V8
+- Include: `src/backend/**/*.ts`
+- Exclude: `src/backend/**/*.test.ts`, `src/backend/index.ts`, `src/backend/testing/**`
+- Reporters: text, json, json-summary, html
+- Thresholds: Currently disabled (unit tests use heavy mocking; enable as integration tests grow)
+- View coverage: Open `coverage/index.html` after `pnpm test:coverage`
+
 ## Test File Organization
 
-**Location:** Co-located with source files using `.test.ts` suffix
+**Location:**
+- Co-located with source: tests live next to implementation
+- Pattern: `src/backend/services/port.service.ts` has test file `src/backend/services/port.service.test.ts`
+- Test discovery: `vitest.config.ts` includes `src/**/*.test.ts`
 
-**Pattern:**
+**Naming:**
+- Format: `kebab-case.test.ts` (e.g., `session.test.ts`, `port.service.test.ts`)
+- Alternate: `kebab-case.spec.ts` (not observed in this codebase but supported)
+
+**Structure:**
 ```
 src/
 ├── backend/
-│   ├── claude/
-│   │   ├── protocol.ts
-│   │   ├── protocol.test.ts
-│   │   ├── types.ts
-│   │   └── types.test.ts
 │   ├── services/
-│   │   ├── scheduler.service.ts
-│   │   └── scheduler.service.test.ts
-│   └── trpc/
-│       ├── workspace.trpc.ts
-│       └── workspace.trpc.test.ts
-├── components/
-│   └── chat/
-│       ├── chat-reducer.ts
-│       └── chat-reducer.test.ts
-└── hooks/
-    ├── use-websocket-transport.ts
-    └── use-websocket-transport.test.ts
+│   │   ├── port.service.ts
+│   │   ├── port.service.test.ts
+│   │   ├── logger.service.ts
+│   │   └── ...
+│   ├── lib/
+│   │   ├── git-helpers.ts
+│   │   ├── git-helpers.test.ts
+│   │   └── ...
+│   ├── testing/
+│   │   └── setup.ts              # Global test setup
+│   └── ...
 ```
 
 ## Test Structure
 
 **Suite Organization:**
 ```typescript
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// src/backend/claude/session.test.ts
+import { describe, expect, it } from 'vitest';
+import { parseHistoryEntry, SessionManager } from './session';
 
-// =============================================================================
-// Test Setup
-// =============================================================================
-
-describe('ComponentName', () => {
-  let dependency: MockType;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    dependency = createMock();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  // -------------------------------------------------------------------------
-  // Feature A Tests
-  // -------------------------------------------------------------------------
-
-  describe('featureA', () => {
-    it('should do X when Y', () => {
-      // Arrange
-      const input = createTestInput();
-
-      // Act
-      const result = featureA(input);
-
-      // Assert
-      expect(result).toBe(expected);
+describe('SessionManager', () => {
+  describe('getProjectPath', () => {
+    it('should escape forward slashes with hyphens', () => {
+      const path = SessionManager.getProjectPath('/Users/test/project');
+      expect(path).toContain('-Users-test-project');
     });
 
-    it('should handle edge case Z', () => { ... });
+    it('should return correct path format under .claude/projects', () => {
+      const path = SessionManager.getProjectPath('/home/user/myproject');
+      expect(path).toBe(join(homedir(), '.claude', 'projects', '-home-user-myproject'));
+    });
   });
 
-  // -------------------------------------------------------------------------
-  // Feature B Tests
-  // -------------------------------------------------------------------------
+  describe('extractClaudeSessionId', () => {
+    // ... more tests
+  });
+});
 
-  describe('featureB', () => { ... });
+describe('parseHistoryEntry', () => {
+  // ... separate describe block for function
 });
 ```
 
-**Section Dividers:** Use commented lines for visual organization
+**Patterns:**
+- Use `describe()` to organize related tests into suites
+- Nest `describe()` blocks for hierarchical grouping
+- Each test case in own `it()` block with descriptive name
+- One assertion focus per test (or related assertions that form one concept)
+- Separate `describe()` blocks for different functions/classes
+- Test names follow pattern: "should [behavior] when [condition]"
+
+## Setup and Teardown
+
+**Global Setup:**
+- File: `src/backend/testing/setup.ts`
+- Runs once before all tests
+
 ```typescript
-// =============================================================================
-// Test Helpers
-// =============================================================================
-
-// -------------------------------------------------------------------------
-// sendUserMessage Tests
-// -------------------------------------------------------------------------
-```
-
-## Test Setup
-
-**Global Setup:** `src/backend/testing/setup.ts`
-```typescript
+// src/backend/testing/setup.ts
 import { afterEach, beforeEach, vi } from 'vitest';
 
-// Reset all mocks between tests
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -121,48 +117,115 @@ afterEach(() => {
 });
 ```
 
-**Config (vitest.config.ts):**
+**Per-Test Setup/Teardown:**
 ```typescript
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
-    exclude: ['node_modules', 'dist', '.next'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'json-summary', 'html'],
-      include: ['src/backend/**/*.ts'],
-      exclude: ['src/backend/**/*.test.ts', 'src/backend/index.ts', 'src/backend/testing/**'],
-    },
-    setupFiles: ['./src/backend/testing/setup.ts'],
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@prisma-gen': path.resolve(__dirname, './prisma/generated'),
-    },
-  },
+describe('port.service', () => {
+  const originalPlatform = process.platform;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServer.once.mockReset();
+    mockServer.listen.mockReset();
+    mockServer.close.mockReset();
+    mockExec.mockReset();
+  });
+
+  afterEach(() => {
+    // Restore original platform after each test
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform,
+    });
+  });
+
+  it('should...', () => {
+    // Test body
+  });
 });
 ```
 
+**Patterns:**
+- Clear mocks between tests in `beforeEach()`
+- Restore original state in `afterEach()`
+- Save original values before modifying: `const originalPlatform = process.platform`
+- Use `vi.clearAllMocks()` to reset all mocks at once
+- Use `vi.restoreAllMocks()` to restore original implementations
+
 ## Mocking
 
-**Framework:** Vitest built-in (`vi`)
+**Framework:** Vitest's `vi` module
 
-**Module Mocking Pattern:**
+**Mock Module Dependencies:**
 ```typescript
-// Mock dependencies BEFORE importing the module under test
-const mockFindNeedingPRSync = vi.fn();
-const mockUpdate = vi.fn();
+// Mock before importing module that uses it
+const mockServer = {
+  once: vi.fn(),
+  listen: vi.fn(),
+  close: vi.fn(),
+};
 
-vi.mock('../resource_accessors/workspace.accessor', () => ({
-  workspaceAccessor: {
-    findNeedingPRSync: () => mockFindNeedingPRSync(),
-    update: (...args: unknown[]) => mockUpdate(...args),
-  },
+const mockCreateNetServer = vi.fn(() => mockServer);
+const mockExec = vi.fn();
+
+vi.mock('node:net', () => ({
+  createServer: () => mockCreateNetServer(),
 }));
 
+vi.mock('node:child_process', () => ({
+  exec: (...args: unknown[]) => mockExec(...args),
+}));
+
+// Import after mocks are set up
+import { findAvailablePort, isPortAvailable } from './port.service';
+```
+
+**Mock Return Values:**
+```typescript
+// Simple return value
+mockExec.mockResolvedValue({ stdout: '', stderr: '' });
+
+// Conditional return based on call count
+let callCount = 0;
+mockExec.mockImplementation(() => {
+  const currentPort = 3000 + callCount;
+  callCount++;
+
+  if (currentPort < 3003) {
+    return Promise.resolve({ stdout: '12345\n', stderr: '' });
+  }
+  return Promise.resolve({ stdout: '', stderr: '' });
+});
+
+// Throw on specific calls
+mockExec.mockRejectedValue(new Error('lsof: command not found'));
+```
+
+**Mock Assertions:**
+```typescript
+// Verify mock was called with correct arguments
+expect(mockServer.listen).toHaveBeenCalledWith(3000);
+
+// Verify mock was NOT called
+expect(mockExec).not.toHaveBeenCalled();
+
+// Verify mock call count
+expect(attemptCount).toBe(3);
+```
+
+**What to Mock:**
+- External modules (`node:net`, `node:child_process`, database clients)
+- Third-party services (GitHub API, Claude client)
+- Complex dependencies that are slow or have side effects
+- Platform-specific behavior (process.platform, file system calls)
+
+**What NOT to Mock:**
+- Pure utility functions (prefer to test with real implementations)
+- Simple helper libraries
+- Types and interfaces
+- Functions from the module under test (test real implementations)
+
+**Mock Service Pattern:**
+```typescript
+// src/backend/services/port.service.test.ts
 vi.mock('./logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -171,292 +234,205 @@ vi.mock('./logger.service', () => ({
     error: vi.fn(),
   }),
 }));
-
-// Import AFTER mocks are set up
-import { schedulerService } from './scheduler.service';
 ```
-
-**Function Spy Pattern:**
-```typescript
-const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
-  // Intentionally empty - suppress console output during test
-});
-
-// After test
-consoleErrorSpy.mockRestore();
-```
-
-**Mock Implementation with Tracking:**
-```typescript
-let currentConcurrent = 0;
-let maxConcurrent = 0;
-
-mockFetchAndComputePRState.mockImplementation(async () => {
-  currentConcurrent++;
-  maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  currentConcurrent--;
-  return { prNumber: 1, prState: 'OPEN', prReviewState: null, prCiStatus: 'PENDING' };
-});
-```
-
-**What to Mock:**
-- External services (GitHub CLI, logger)
-- Database accessors
-- File system operations
-- Network requests
-
-**What NOT to Mock:**
-- The module under test
-- Pure utility functions
-- Type definitions
 
 ## Fixtures and Factories
 
-**Test Data Factories:**
-```typescript
-function createTestToolUseMessage(toolUseId: string): ClaudeMessage {
-  return {
-    type: 'stream_event',
-    event: {
-      type: 'content_block_start',
-      index: 0,
-      content_block: {
-        type: 'tool_use',
-        id: toolUseId,
-        name: 'TestTool',
-        input: { arg: 'value' },
-      },
-    },
-  };
-}
+**Test Data:**
+- Use literal objects for simple test cases
+- Create factory functions for complex test data
 
-function createTestAssistantMessage(): ClaudeMessage {
-  return {
+```typescript
+// src/backend/claude/session.test.ts
+describe('parseHistoryEntry', () => {
+  const timestamp = '2025-01-25T10:00:00Z';
+
+  it('should parse user message with string content', () => {
+    const entry = {
+      type: 'user',
+      timestamp,
+      uuid: 'uuid-123',
+      message: {
+        role: 'user',
+        content: 'Hello, Claude!',
+      },
+    };
+    const result = parseHistoryEntry(entry);
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('user');
+  });
+
+  it('should parse tool_use content', () => {
+    const entry = {
+      type: 'assistant',
+      timestamp,
+      message: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tool-123',
+            name: 'Read',
+            input: { file_path: '/test.txt' },
+          },
+        ],
+      },
+    };
+    const result = parseHistoryEntry(entry);
+    expect(result).toHaveLength(1);
+    expect(result[0].toolName).toBe('Read');
+  });
+});
+```
+
+**Location:**
+- Inline test data in test files (keep tests self-contained)
+- Shared fixtures in `src/backend/testing/fixtures/` if reused across multiple test files
+- Factory functions co-located with related tests or in `src/backend/testing/`
+
+## Common Test Patterns
+
+**Async Testing:**
+```typescript
+it('should return true when port is available', async () => {
+  Object.defineProperty(process, 'platform', { value: 'darwin' });
+  mockExec.mockResolvedValue({ stdout: '', stderr: '' });
+
+  const result = await isPortAvailable(3000);
+
+  expect(result).toBe(true);
+  expect(mockExec).toHaveBeenCalledWith('lsof -i :3000 -sTCP:LISTEN -t', {
+    timeout: 2000,
+  });
+});
+
+// Using async within beforeEach is safe
+beforeEach(async () => {
+  const data = await loadTestData();
+  // ...
+});
+```
+
+**Testing Edge Cases:**
+```typescript
+it('should return empty array for unknown entry types', () => {
+  const entry = {
+    type: 'unknown',
+    timestamp,
+    message: { role: 'user', content: 'Should be ignored' },
+  };
+  const result = parseHistoryEntry(entry);
+  expect(result).toHaveLength(0);
+});
+
+it('should handle empty content array', () => {
+  const entry = {
+    type: 'user',
+    timestamp,
+    message: { role: 'user', content: [] },
+  };
+  const result = parseHistoryEntry(entry);
+  expect(result).toHaveLength(0);
+});
+
+it('should use current timestamp if timestamp is missing', () => {
+  const beforeTest = new Date().toISOString();
+  const entry = {
+    type: 'user',
+    message: { role: 'user', content: 'No timestamp' },
+  };
+  const result = parseHistoryEntry(entry);
+  expect(new Date(result[0].timestamp).getTime()).toBeGreaterThanOrEqual(
+    new Date(beforeTest).getTime() - 1000
+  );
+});
+```
+
+**Testing Error Conditions:**
+```typescript
+it('should throw error after maxAttempts exhausted', async () => {
+  Object.defineProperty(process, 'platform', { value: 'darwin' });
+  mockExec.mockResolvedValue({ stdout: '12345\n', stderr: '' });
+
+  await expect(findAvailablePort(3000, 5)).rejects.toThrow(
+    'Could not find an available port starting from 3000'
+  );
+});
+
+it('should fall back to bind test when lsof fails', async () => {
+  mockExec.mockRejectedValue(new Error('lsof: command not found'));
+  mockServer.once.mockImplementation((event: string, callback: () => void) => {
+    if (event === 'listening') {
+      setTimeout(() => callback(), 0);
+    }
+    return mockServer;
+  });
+
+  const result = await isPortAvailable(3000);
+  expect(result).toBe(true);
+});
+```
+
+**Testing Conditional Logic:**
+```typescript
+// Test both branches
+it('should parse text content as string when no array', () => {
+  const entry = {
     type: 'assistant',
+    timestamp,
     message: {
       role: 'assistant',
-      content: [{ type: 'text', text: 'Hello!' }],
+      content: 'Direct string response',
     },
   };
-}
-```
+  const result = parseHistoryEntry(entry);
+  expect(result[0].content).toBe('Direct string response');
+});
 
-**State Factories:**
-```typescript
-function createInitialChatState(overrides?: Partial<ChatState>): ChatState {
-  return {
-    messages: [],
-    sessionStatus: { phase: 'idle' },
-    gitBranch: null,
-    availableSessions: [],
-    pendingRequest: { type: 'none' },
-    chatSettings: DEFAULT_CHAT_SETTINGS,
-    queuedMessages: new Map(),
-    toolUseIdToIndex: new Map(),
-    ...overrides,
+it('should parse text content from array items', () => {
+  const entry = {
+    type: 'user',
+    timestamp,
+    message: {
+      role: 'user',
+      content: [{ type: 'text', text: 'Hello from array!' }],
+    },
   };
-}
+  const result = parseHistoryEntry(entry);
+  expect(result[0].content).toBe('Hello from array!');
+});
 ```
 
-**Helper Conversion Functions:**
-```typescript
-function toQueuedMessagesMap(messages: QueuedMessage[]): Map<string, QueuedMessage> {
-  const map = new Map<string, QueuedMessage>();
-  for (const msg of messages) {
-    map.set(msg.id, msg);
-  }
-  return map;
-}
-```
-
-## Coverage
-
-**Requirements:** No enforced thresholds (disabled in config)
-
-**Coverage is collected for:**
-- `src/backend/**/*.ts`
-
-**Excluded from coverage:**
-- Test files (`*.test.ts`)
-- Entry points (`src/backend/index.ts`)
-- Test utilities (`src/backend/testing/**`)
-
-**View Coverage:**
-```bash
-pnpm test:coverage
-# Reports output to: coverage/
-# - text (terminal)
-# - html (coverage/index.html)
-# - json-summary (coverage/coverage-summary.json)
-```
-
-## Test Types
+## Test Types in This Codebase
 
 **Unit Tests:**
 - Test individual functions and classes in isolation
 - Mock all external dependencies
-- Location: co-located with source files
+- Fast execution (< 1ms per test typically)
+- Located in `.test.ts` files next to source
+- Examples: `port.service.test.ts`, `session.test.ts`
 
 **Integration Tests:**
-- Test multiple components working together
-- Use real implementations where practical
-- Mock only external services (DB, network)
+- Not yet heavily used (noted in `vitest.config.ts` comment)
+- Would test interactions between multiple modules
+- May use real database or external services (or mocks of them)
+- Future focus: Enable coverage thresholds as integration tests grow
 
-**Frontend Component Tests:**
-- Not widely implemented yet
-- Storybook used for visual component testing
-- Stories location: co-located with components (`.stories.tsx`)
+**E2E Tests:**
+- Not currently in use
+- Would test full user workflows end-to-end
 
-## Common Patterns
+## Best Practices Observed
 
-**Async Testing:**
-```typescript
-it('should resolve with response data when CLI responds', async () => {
-  const initPromise = protocol.sendInitialize();
-
-  // Wait a tick for the message to be sent
-  await new Promise((resolve) => setImmediate(resolve));
-
-  // Send the response
-  stdout.write(`${JSON.stringify(response)}\n`);
-
-  const result = await initPromise;
-  expect(result).toEqual(responseData);
-});
-```
-
-**Error Testing:**
-```typescript
-it('should reject on timeout', async () => {
-  const shortTimeoutProtocol = new ClaudeProtocol(stdin, stdout, { requestTimeout: 50 });
-  shortTimeoutProtocol.start();
-
-  await expect(shortTimeoutProtocol.sendInitialize()).rejects.toThrow('timed out');
-
-  shortTimeoutProtocol.stop();
-});
-```
-
-**Timer Testing:**
-```typescript
-describe('interval behavior', () => {
-  it('should run sync every 5 minutes when started', async () => {
-    vi.useFakeTimers();
-    mockFindNeedingPRSync.mockResolvedValue([]);
-
-    schedulerService.start();
-    expect(mockFindNeedingPRSync).not.toHaveBeenCalled();
-
-    // First interval tick (5 minutes)
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-    expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(1);
-
-    await schedulerService.stop();
-    vi.useRealTimers();
-  });
-});
-```
-
-**Stream/Event Testing:**
-```typescript
-it('should emit message event for valid JSON', async () => {
-  const messagePromise = new Promise<ClaudeJson>((resolve) => {
-    protocol.on('message', resolve);
-  });
-
-  const msg: AssistantMessage = {
-    type: 'assistant',
-    session_id: 'abc',
-    message: { role: 'assistant', content: [] },
-  };
-  stdout.write(`${JSON.stringify(msg)}\n`);
-
-  const received = await messagePromise;
-  expect(received).toEqual(msg);
-});
-```
-
-**State Transition Testing (Reducer):**
-```typescript
-describe('WS_STATUS action', () => {
-  it('should set sessionStatus to running when payload.running is true', () => {
-    const action: ChatAction = { type: 'WS_STATUS', payload: { running: true } };
-    const newState = chatReducer(initialState, action);
-
-    expect(newState.sessionStatus).toEqual({ phase: 'running' });
-  });
-});
-```
-
-**Testing Race Conditions:**
-```typescript
-it('should preserve existing pendingPermission when session_loaded has no pending request (race condition)', () => {
-  const existingPermission: PermissionRequest = { ... };
-  const state: ChatState = {
-    ...initialState,
-    pendingRequest: { type: 'permission', request: existingPermission },
-    sessionStatus: { phase: 'loading' } as const,
-  };
-
-  const action: ChatAction = {
-    type: 'WS_SESSION_LOADED',
-    payload: {
-      messages: [],
-      gitBranch: 'main',
-      running: true,
-      pendingInteractiveRequest: null, // No pending request from backend
-    },
-  };
-  const newState = chatReducer(state, action);
-
-  // Should preserve the existing permission, not overwrite with null
-  expect(newState.pendingRequest).toEqual({ type: 'permission', request: existingPermission });
-});
-```
-
-## Storybook
-
-**Used for:** Visual component documentation and testing
-**Port:** 6006
-
-**Run:**
-```bash
-pnpm storybook
-```
-
-**Story Pattern:**
-```typescript
-import type { Meta, StoryObj } from '@storybook/react';
-import { Button } from './button';
-
-const meta = {
-  title: 'UI/Button',
-  component: Button,
-  parameters: { layout: 'centered' },
-  tags: ['autodocs'],
-  argTypes: {
-    variant: { control: 'select', options: ['default', 'destructive', ...] },
-  },
-} satisfies Meta<typeof Button>;
-
-export default meta;
-type Story = StoryObj<typeof meta>;
-
-export const Default: Story = {
-  args: { children: 'Button' },
-};
-
-export const AllVariants: Story = {
-  render: () => (
-    <div className="flex gap-4">
-      <Button variant="default">Default</Button>
-      <Button variant="destructive">Destructive</Button>
-    </div>
-  ),
-};
-```
+1. **Test isolation:** Each test is independent; can run in any order
+2. **Clear naming:** Test names describe expected behavior and conditions
+3. **Focused assertions:** Each test verifies one main behavior
+4. **Setup/teardown discipline:** Clean state before/after each test
+5. **Mock hoisting:** Mock imports before test file imports the module
+6. **Conditional platform testing:** Override `process.platform` for cross-platform tests
+7. **Callback simulation:** Use `setTimeout` in mocks to simulate async behavior
+8. **Error classification:** Distinguish error types (SyntaxError vs operational)
 
 ---
 
-*Testing analysis: 2026-01-31*
+*Testing analysis: 2026-02-01*

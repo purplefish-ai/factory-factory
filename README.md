@@ -10,6 +10,16 @@
   Each workspace gets its own isolated git worktree, enabling true parallel development.
 </p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/factory-factory"><img src="https://img.shields.io/npm/v/factory-factory" alt="npm"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml"><img src="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish-ai/factory-factory" alt="License"></a>
+</p>
+
+<p align="center">
+  <img src="public/working.png" alt="Factory Factory Screenshot" width="800">
+</p>
+
 ---
 
 ## Installation
@@ -22,12 +32,15 @@
 
 ```bash
 # Clone and install
-git clone <repo-url>
+git clone https://github.com/purplefish-ai/factory-factory.git
 cd factory-factory
 pnpm install
 
-# Optional: Install CLI globally
+# Option A: Install CLI globally from source
 pnpm link --global
+
+# Option B: Install from npm (when published)
+npm install -g factory-factory
 ```
 
 ## Running
@@ -124,6 +137,20 @@ Project (repository configuration)
 - **Real-time chat:** WebSocket-based streaming from Claude Code CLI
 - **Terminal access:** Full PTY terminals per workspace
 - **Session persistence:** Resume previous Claude sessions
+
+## Security Considerations
+
+> **Warning:** Factory Factory runs Claude Code in **bypass permissions mode** by default. This means Claude can execute bash commands, write and modify files, and perform other operations without asking for confirmation.
+
+This design choice enables uninterrupted parallel workflows, but you should be aware that:
+- Claude has full access to your filesystem within each workspace
+- Commands are executed automatically without manual approval
+- The isolation is at the git worktree level, not the system level
+
+**Recommendations:**
+- Only use Factory Factory with repositories you trust
+- Review Claude's changes before merging branches
+- Consider running in a containerized environment for sensitive projects
 
 ## Brand
 

@@ -1,0 +1,63 @@
+# Source files (compiled versions are in dist/)
+src/
+electron/
+
+# Scripts (except postinstall.mjs which is in package.json files array)
+scripts/*
+!scripts/postinstall.mjs
+
+# Development and build configuration
+*.config.ts
+*.config.js
+*.config.cjs
+*.config.mjs
+tsconfig*.json
+biome.json
+.dependency-cruiser.cjs
+
+# Documentation and metadata
+*.md
+!README.md
+docs/
+
+# Build resources and assets
+build-resources/
+storybook/
+.storybook/
+
+# Development files
+.env*
+.github/
+.vscode/
+.husky/
+
+# Test files
+**/*.test.*
+**/*.spec.*
+coverage/
+vitest.workspace.ts
+
+# Native module cache (rebuilt on install)
+.native-cache/
+
+# Electron-specific (not needed for CLI)
+electron-builder.yml
+
+# Git
+.git/
+.gitignore
+
+# Editor and OS files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Lock files (users will use their own package manager)
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Temporary files
+*.log
+*.tmp
