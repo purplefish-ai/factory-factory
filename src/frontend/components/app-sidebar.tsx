@@ -482,7 +482,14 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <ServerPortInfo />
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">Phase 7: Production Ready</p>
+          <a
+            href="https://github.com/purplefish-ai/factory-factory"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            GitHub
+          </a>
           <ThemeToggle />
         </div>
       </SidebarFooter>
