@@ -9,16 +9,13 @@
  * - Routing interactive tool requests to appropriate message formats
  */
 
-import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { MessageState } from '@/lib/claude-types';
 import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { interceptorRegistry } from '../interceptors';
 import { chatConnectionService } from './chat-connection.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
-import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
 
 const logger = createLogger('chat-event-forwarder');
@@ -44,9 +41,6 @@ class ChatEventForwarderService {
 
   /** Pending interactive requests by session ID (for restore on reconnect) */
   private pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
-
-  /** Current Claude message ID being streamed, per session (for state machine) */
-  private currentClaudeMessageId = new Map<string, string>();
 
   /**
    * Check if event forwarding is already set up for a session.
@@ -160,22 +154,6 @@ class ChatEventForwarderService {
         });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
-
-      // Track Claude message state (new state machine)
-      // Create a new Claude message when streaming starts (message_start event)
-      const evt = event as { type?: string };
-      if (evt.type === 'message_start') {
-        const claudeMessageId = `claude-${randomUUID()}`;
-        this.currentClaudeMessageId.set(dbSessionId, claudeMessageId);
-        messageStateService.createClaudeMessage(dbSessionId, claudeMessageId, event);
-      } else {
-        // Update content for existing Claude message if we have one
-        const currentId = this.currentClaudeMessageId.get(dbSessionId);
-        if (currentId) {
-          messageStateService.updateClaudeContent(dbSessionId, currentId, event);
-        }
-      }
-
       chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: event });
     });
 
@@ -235,22 +213,6 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
-
-      // Mark Claude message as COMPLETE (new state machine)
-      const currentClaudeId = this.currentClaudeMessageId.get(dbSessionId);
-      if (currentClaudeId) {
-        messageStateService.updateState(dbSessionId, currentClaudeId, MessageState.COMPLETE);
-        this.currentClaudeMessageId.delete(dbSessionId);
-      }
-
-      // Mark all DISPATCHED user messages as COMMITTED
-      const allMessages = messageStateService.getAllMessages(dbSessionId);
-      for (const msg of allMessages) {
-        if (msg.type === 'user' && msg.state === MessageState.DISPATCHED) {
-          messageStateService.updateState(dbSessionId, msg.id, MessageState.COMMITTED);
-        }
-      }
-
       chatConnectionService.forwardToSession(dbSessionId, { type: 'claude_message', data: result });
 
       chatConnectionService.forwardToSession(dbSessionId, {
@@ -287,8 +249,6 @@ class ChatEventForwarderService {
       // Queue is preserved so messages can be sent when user starts next interaction
       // Clear any pending interactive requests when process exits
       this.pendingInteractiveRequests.delete(dbSessionId);
-      // Clear current Claude message tracking
-      this.currentClaudeMessageId.delete(dbSessionId);
     });
 
     client.on('error', (error) => {

@@ -20,8 +20,6 @@ export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.servi
 export { computeKanbanColumn, kanbanStateService } from './kanban-state.service';
 // Logger service
 export { createLogger } from './logger.service';
-// Message state service
-export { messageStateService } from './message-state.service';
 // Notification service
 export { notificationService } from './notification.service';
 // Port service

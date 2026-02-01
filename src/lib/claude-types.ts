@@ -418,10 +418,7 @@ export interface WebSocketMessage {
     | 'message_accepted'
     | 'message_rejected'
     | 'message_used_as_response'
-    | 'queue'
-    // New unified message state events
-    | 'message_state_changed'
-    | 'messages_snapshot';
+    | 'queue';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -453,17 +450,6 @@ export interface WebSocketMessage {
   queuedMessages?: QueuedMessage[];
   // Pending interactive request for session restore
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
-  // Message state machine fields (new unified protocol)
-  /** New state for message_state_changed events */
-  newState?: MessageState;
-  /** All messages for messages_snapshot events */
-  allMessages?: MessageWithState[];
-  /** Session status for messages_snapshot events */
-  sessionStatus?: SessionStatus;
-  /** Queue position for message_state_changed events */
-  queuePosition?: number;
-  /** Error message for REJECTED/FAILED states in message_state_changed events */
-  errorMessage?: string;
 }
 
 // =============================================================================
@@ -495,60 +481,6 @@ export interface QueuedMessage {
     thinkingEnabled: boolean;
     planModeEnabled: boolean;
   };
-}
-
-// =============================================================================
-// Message State Machine Types
-// =============================================================================
-
-/**
- * Message states for the unified message state machine.
- *
- * User message flow:
- *   PENDING → SENT → ACCEPTED → DISPATCHED → COMMITTED
- *                        ↘ REJECTED/FAILED/CANCELLED
- *
- * Claude message flow:
- *   STREAMING → COMPLETE
- */
-export enum MessageState {
-  // User message states
-  PENDING = 'PENDING', // User typed, not yet sent to backend
-  SENT = 'SENT', // Sent over WebSocket, awaiting ACK
-  ACCEPTED = 'ACCEPTED', // Backend queued (has queuePosition)
-  DISPATCHED = 'DISPATCHED', // Sent to Claude CLI
-  COMMITTED = 'COMMITTED', // Response complete
-
-  // Error states
-  REJECTED = 'REJECTED', // Backend rejected (queue full, etc.)
-  FAILED = 'FAILED', // Error during processing
-  CANCELLED = 'CANCELLED', // User cancelled
-
-  // Claude message states
-  STREAMING = 'STREAMING', // Claude actively generating
-  COMPLETE = 'COMPLETE', // Claude finished
-}
-
-/**
- * Unified message type with state for the new state machine.
- * Replaces the separate messages/queuedMessages/pendingMessages collections.
- */
-export interface MessageWithState {
-  id: string;
-  type: 'user' | 'claude';
-  state: MessageState;
-  timestamp: string;
-
-  // User message fields
-  text?: string;
-  attachments?: MessageAttachment[];
-
-  // Claude message fields
-  content?: ClaudeMessage;
-
-  // State metadata
-  queuePosition?: number; // For ACCEPTED state
-  errorMessage?: string; // For REJECTED/FAILED states
 }
 
 // =============================================================================
@@ -604,24 +536,6 @@ export interface TokenStats {
  * Connection state for WebSocket.
  */
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
-
-// =============================================================================
-// Session Status Types
-// =============================================================================
-
-/**
- * Session status - a discriminated union that makes invalid states unrepresentable.
- *
- * State transitions:
- *   idle → loading → starting → ready ↔ running → stopping → ready
- */
-export type SessionStatus =
-  | { phase: 'idle' }
-  | { phase: 'loading' }
-  | { phase: 'starting' }
-  | { phase: 'ready' }
-  | { phase: 'running' }
-  | { phase: 'stopping' };
 
 // =============================================================================
 // Type Guards

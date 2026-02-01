@@ -22,12 +22,7 @@ import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocke
 import { type ConnectionInfo, chatConnectionService } from '../../services/chat-connection.service';
 import { chatEventForwarderService } from '../../services/chat-event-forwarder.service';
 import { chatMessageHandlerService } from '../../services/chat-message-handlers.service';
-import {
-  configService,
-  createLogger,
-  messageStateService,
-  sessionService,
-} from '../../services/index';
+import { configService, createLogger, sessionService } from '../../services/index';
 import { sessionFileLogger } from '../../services/session-file-logger.service';
 
 const logger = createLogger('chat-handler');
@@ -218,16 +213,6 @@ export function handleChatUpgrade(
       sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
     }
     ws.send(JSON.stringify(initialStatus));
-
-    // Send messages_snapshot for reconnecting clients (new state machine)
-    if (dbSessionId) {
-      const pendingRequest = chatEventForwarderService.getPendingRequest(dbSessionId);
-      messageStateService.sendSnapshot(
-        dbSessionId,
-        { phase: isRunning ? 'running' : 'ready' },
-        pendingRequest
-      );
-    }
 
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket handler requires validation and error handling
     ws.on('message', async (data) => {
