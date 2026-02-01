@@ -87,7 +87,6 @@ interface DrainQueueResult {
   shouldDrain: boolean;
   actions: Array<{ type: string; payload?: unknown }>;
   sentMessages: Array<{ type: string; [key: string]: unknown }>;
-  persistedQueue: QueuedMessage[] | null;
   clearedDraft: boolean;
 }
 
@@ -103,17 +102,19 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
       shouldDrain: false,
       actions: [],
       sentMessages: [],
-      persistedQueue: null,
       clearedDraft: false,
     };
   }
 
-  const [nextMsg, ...remaining] = queueArray;
+  const [nextMsg] = queueArray;
   const actions: Array<{ type: string; payload?: unknown }> = [];
   const sentMessages: Array<{ type: string; [key: string]: unknown }> = [];
 
-  // Update queue in state
-  actions.push({ type: 'SET_QUEUE', payload: remaining });
+  // Message is dispatched - state machine removes from queue
+  actions.push({
+    type: 'MESSAGE_STATE_CHANGED',
+    payload: { id: nextMsg.id, newState: 'DISPATCHED' },
+  });
 
   // Add user message (optimistic UI)
   actions.push({
@@ -147,7 +148,6 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
     shouldDrain: true,
     actions,
     sentMessages,
-    persistedQueue: remaining,
     clearedDraft: true,
   };
 }
@@ -292,7 +292,7 @@ describe('queue draining idle detection', () => {
 });
 
 describe('queue draining actions', () => {
-  it('should remove first message from queue (FIFO)', () => {
+  it('should dispatch MESSAGE_STATE_CHANGED with DISPATCHED for first message (FIFO)', () => {
     const msg1 = createQueuedMessage('First');
     const msg2 = createQueuedMessage('Second');
     const msg3 = createQueuedMessage('Third');
@@ -304,9 +304,13 @@ describe('queue draining actions', () => {
 
     const result = simulateDrainQueue(state, 'session-123');
 
-    expect(result.persistedQueue).toHaveLength(2);
-    expect(result.persistedQueue?.[0].id).toBe(msg2.id);
-    expect(result.persistedQueue?.[1].id).toBe(msg3.id);
+    // Should emit MESSAGE_STATE_CHANGED with DISPATCHED state for first message
+    const stateChangedAction = result.actions.find((a) => a.type === 'MESSAGE_STATE_CHANGED');
+    expect(stateChangedAction).toBeDefined();
+    expect(stateChangedAction?.payload).toEqual({
+      id: msg1.id,
+      newState: 'DISPATCHED',
+    });
   });
 
   it('should send start message with current settings', () => {
@@ -599,42 +603,7 @@ describe('session switching queue behavior', () => {
 
 describe('queue state transitions', () => {
   // Note: Queue is now managed on the backend. Frontend receives queue state via
-  // SET_QUEUE action (from session_loaded) and MESSAGE_REMOVED (for cancelled messages).
-
-  it('should support SET_QUEUE to restore queue state from backend', () => {
-    // Start with empty state
-    let state = createInitialChatState();
-    expect(state.queuedMessages.size).toBe(0);
-
-    // Set queue from backend (e.g., on session load)
-    const msg1 = createQueuedMessage('First');
-    const msg2 = createQueuedMessage('Second');
-    state = chatReducer(state, { type: 'SET_QUEUE', payload: [msg1, msg2] });
-    expect(state.queuedMessages.size).toBe(2);
-
-    // Queue drained on backend (simulated via SET_QUEUE with remaining messages)
-    state = chatReducer(state, { type: 'SET_QUEUE', payload: [msg2] });
-    expect(state.queuedMessages.size).toBe(1);
-    expect(state.queuedMessages.get(msg2.id)?.id).toBe(msg2.id);
-
-    // Queue emptied
-    state = chatReducer(state, { type: 'SET_QUEUE', payload: [] });
-    expect(state.queuedMessages.size).toBe(0);
-  });
-
-  it('should maintain queue order with SET_QUEUE', () => {
-    let state = createInitialChatState();
-
-    const messages = ['First', 'Second', 'Third', 'Fourth', 'Fifth'].map(createQueuedMessage);
-
-    // Set full queue from backend
-    state = chatReducer(state, { type: 'SET_QUEUE', payload: messages });
-
-    expect(state.queuedMessages.size).toBe(5);
-    const queueArray = queuedMessagesAsArray(state.queuedMessages);
-    expect(queueArray[0].text).toBe('First');
-    expect(queueArray[4].text).toBe('Fifth');
-  });
+  // MESSAGES_SNAPSHOT action (on connect) and MESSAGE_STATE_CHANGED (for state updates).
 
   it('should not affect queue when receiving WS messages', () => {
     const queuedMsg = createQueuedMessage('Queued');

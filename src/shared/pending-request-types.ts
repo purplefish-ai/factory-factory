@@ -4,6 +4,18 @@
  */
 
 /**
+ * Tool names that support using a message as an interactive response.
+ * - AskUserQuestion: User can respond with free-form text (treated as "Other" option)
+ * - ExitPlanMode: User can deny with feedback text
+ */
+export const INTERACTIVE_RESPONSE_TOOLS = ['AskUserQuestion', 'ExitPlanMode'] as const;
+
+/**
+ * Type for interactive response tool names.
+ */
+export type InteractiveResponseTool = (typeof INTERACTIVE_RESPONSE_TOOLS)[number];
+
+/**
  * Pending interactive request stored for session restore.
  * When a user navigates away and returns, we need to restore the modal.
  */

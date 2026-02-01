@@ -133,7 +133,7 @@ const ChatContent = memo(function ChatContent({
   // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
 
-  // Convert queued messages array to Set of IDs for efficient lookup (memoized)
+  // Convert queued messages to Set of IDs for efficient lookup (memoized)
   const queuedMessageIds = useMemo(
     () => new Set(queuedMessages.map((msg) => msg.id)),
     [queuedMessages]

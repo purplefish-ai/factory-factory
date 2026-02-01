@@ -399,26 +399,27 @@ export interface AgentMetadata {
  * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
  */
 export interface WebSocketMessage {
-  type:
+  type: // Session lifecycle events
     | 'status'
     | 'starting'
     | 'started'
     | 'stopped'
     | 'process_exit'
+    // Message streaming
     | 'claude_message'
+    // Errors and metadata
     | 'error'
     | 'sessions'
-    | 'session_loaded'
     | 'agent_metadata'
+    // Interactive requests
     | 'permission_request'
     | 'user_question'
-    | 'message_queued'
-    | 'message_dispatched'
-    | 'message_removed'
-    | 'message_accepted'
+    // Queue error handling
     | 'message_rejected'
     | 'message_used_as_response'
-    | 'queue';
+    // Message state machine events (primary protocol)
+    | 'message_state_changed'
+    | 'messages_snapshot';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -426,30 +427,38 @@ export interface WebSocketMessage {
   code?: number;
   data?: unknown;
   sessions?: SessionInfo[];
-  messages?: HistoryMessage[];
   agentMetadata?: AgentMetadata;
-  gitBranch?: string | null;
-  // Permission request fields (Phase 9)
+  // Permission request fields
   requestId?: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   // Plan content for ExitPlanMode permission requests
   planContent?: string | null;
-  // AskUserQuestion fields (Phase 11)
+  // AskUserQuestion fields
   questions?: AskUserQuestion[];
-  // Chat settings
-  settings?: ChatSettings;
-  // Message queued acknowledgment
+  // Message fields
   text?: string;
-  // Message queue fields
   id?: string;
-  position?: number;
-  // Single queued message for message_accepted event
-  queuedMessage?: QueuedMessage;
-  // Queued messages for session restore
-  queuedMessages?: QueuedMessage[];
-  // Pending interactive request for session restore
+  // Message state machine fields (primary protocol)
+  /** New state for message_state_changed events */
+  newState?: MessageState;
+  /** Pre-built ChatMessages for messages_snapshot events (ready for frontend to use directly) */
+  messages?: ChatMessage[];
+  /** Session status for messages_snapshot events */
+  sessionStatus?: SessionStatus;
+  /** Pending interactive request for messages_snapshot events */
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
+  /** Queue position for message_state_changed events */
+  queuePosition?: number;
+  /** Error message for REJECTED/FAILED states in message_state_changed events */
+  errorMessage?: string;
+  /** Full user message content for ACCEPTED state in message_state_changed events */
+  userMessage?: {
+    text: string;
+    timestamp: string;
+    attachments?: MessageAttachment[];
+    settings?: ChatSettings;
+  };
 }
 
 // =============================================================================
@@ -482,6 +491,121 @@ export interface QueuedMessage {
     planModeEnabled: boolean;
   };
 }
+
+// =============================================================================
+// Message State Machine Types
+// =============================================================================
+
+/**
+ * Message states for the unified message state machine.
+ *
+ * User message flow:
+ *   PENDING → SENT → ACCEPTED → DISPATCHED → COMMITTED
+ *                        ↘ REJECTED/FAILED/CANCELLED
+ *
+ * Claude message flow:
+ *   STREAMING → COMPLETE
+ *
+ * Note: For type-safe state handling in discriminated unions, prefer using
+ * `UserMessageState` or `ClaudeMessageState` type aliases. This enum provides
+ * runtime values and is used throughout the codebase for state comparisons.
+ */
+export enum MessageState {
+  // User message states
+  PENDING = 'PENDING', // User typed, not yet sent to backend
+  SENT = 'SENT', // Sent over WebSocket, awaiting ACK
+  ACCEPTED = 'ACCEPTED', // Backend queued (has queuePosition)
+  DISPATCHED = 'DISPATCHED', // Sent to Claude CLI
+  COMMITTED = 'COMMITTED', // Response complete
+
+  // Error states
+  REJECTED = 'REJECTED', // Backend rejected (queue full, etc.)
+  FAILED = 'FAILED', // Error during processing
+  CANCELLED = 'CANCELLED', // User cancelled
+
+  // Claude message states
+  STREAMING = 'STREAMING', // Claude actively generating
+  COMPLETE = 'COMPLETE', // Claude finished
+}
+
+// =============================================================================
+// Type-Safe Message State Types
+// =============================================================================
+
+/**
+ * Valid states for user messages.
+ * User messages flow through: PENDING → SENT → ACCEPTED → DISPATCHED → COMMITTED
+ * Or can terminate early with: REJECTED | FAILED | CANCELLED
+ */
+export type UserMessageState =
+  | 'PENDING'
+  | 'SENT'
+  | 'ACCEPTED'
+  | 'DISPATCHED'
+  | 'COMMITTED'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+/**
+ * Valid states for Claude messages.
+ * Claude messages flow through: STREAMING → COMPLETE
+ */
+export type ClaudeMessageState = 'STREAMING' | 'COMPLETE';
+
+/**
+ * User message with state - has required user-specific fields.
+ * The `type: 'user'` discriminant enables type narrowing.
+ */
+export interface UserMessageWithState {
+  id: string;
+  type: 'user';
+  state: UserMessageState;
+  timestamp: string;
+  /** User message text - required for user messages */
+  text: string;
+  /** Optional file attachments */
+  attachments?: MessageAttachment[];
+  /** User message settings (model, thinking, plan mode) */
+  settings?: QueuedMessage['settings'];
+  /** Queue position when in ACCEPTED state */
+  queuePosition?: number;
+  /** Error message for REJECTED/FAILED states */
+  errorMessage?: string;
+}
+
+/**
+ * Claude message with state - has required Claude-specific fields.
+ * The `type: 'claude'` discriminant enables type narrowing.
+ */
+export interface ClaudeMessageWithState {
+  id: string;
+  type: 'claude';
+  state: ClaudeMessageState;
+  timestamp: string;
+  /** Pre-built ChatMessages for snapshot restoration - same format frontend uses */
+  chatMessages: ChatMessage[];
+}
+
+/**
+ * Unified message type with state for the message state machine.
+ * This is a discriminated union - use `msg.type` to narrow to the specific type.
+ *
+ * @example
+ * ```typescript
+ * function processMessage(msg: MessageWithState) {
+ *   if (msg.type === 'user') {
+ *     // TypeScript knows msg is UserMessageWithState here
+ *     console.log(msg.text); // text is required
+ *     console.log(msg.queuePosition); // queue position available
+ *   } else {
+ *     // TypeScript knows msg is ClaudeMessageWithState here
+ *     console.log(msg.content); // content available
+ *   }
+ * }
+ * ```
+ */
+export type MessageWithState = UserMessageWithState | ClaudeMessageWithState;
 
 // =============================================================================
 // UI Chat Message Types
@@ -538,6 +662,24 @@ export interface TokenStats {
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 // =============================================================================
+// Session Status Types
+// =============================================================================
+
+/**
+ * Session status - a discriminated union that makes invalid states unrepresentable.
+ *
+ * State transitions:
+ *   idle → loading → starting → ready ↔ running → stopping → ready
+ */
+export type SessionStatus =
+  | { phase: 'idle' }
+  | { phase: 'loading' }
+  | { phase: 'starting' }
+  | { phase: 'ready' }
+  | { phase: 'running' }
+  | { phase: 'stopping' };
+
+// =============================================================================
 // Type Guards
 // =============================================================================
 
@@ -574,6 +716,40 @@ export function isToolResultContent(item: ClaudeContentItem): item is ToolResult
  */
 export function isImageContent(item: ClaudeContentItem): item is ImageContent {
   return item.type === 'image' && 'source' in item;
+}
+
+/**
+ * Type guard to check if a MessageWithState is a UserMessageWithState.
+ * Use this for type-safe handling of user messages.
+ *
+ * @example
+ * ```typescript
+ * if (isUserMessage(msg)) {
+ *   // msg is UserMessageWithState here
+ *   console.log(msg.text); // text is required
+ *   console.log(msg.state); // UserMessageState type
+ * }
+ * ```
+ */
+export function isUserMessage(msg: MessageWithState): msg is UserMessageWithState {
+  return msg.type === 'user';
+}
+
+/**
+ * Type guard to check if a MessageWithState is a ClaudeMessageWithState.
+ * Use this for type-safe handling of Claude messages.
+ *
+ * @example
+ * ```typescript
+ * if (isClaudeMessage(msg)) {
+ *   // msg is ClaudeMessageWithState here
+ *   console.log(msg.contentBlocks); // contentBlocks available
+ *   console.log(msg.state); // ClaudeMessageState type
+ * }
+ * ```
+ */
+export function isClaudeMessage(msg: MessageWithState): msg is ClaudeMessageWithState {
+  return msg.type === 'claude';
 }
 
 /**
@@ -620,15 +796,6 @@ export function isWsClaudeMessage(
 }
 
 /**
- * Type guard for session_loaded WebSocket messages.
- */
-export function isWsSessionLoadedMessage(
-  msg: WebSocketMessage
-): msg is WebSocketMessage & { type: 'session_loaded'; messages: HistoryMessage[] } {
-  return msg.type === 'session_loaded' && 'messages' in msg && Array.isArray(msg.messages);
-}
-
-/**
  * Type guard for ClaudeMessage with stream_event type.
  */
 export function isStreamEventMessage(
@@ -661,100 +828,6 @@ export function getToolUseIdFromEvent(event: ClaudeStreamEvent): string | null {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Converts a history message to a chat message.
- * Properly structures tool_use and tool_result messages for rendering.
- */
-export function convertHistoryMessage(msg: HistoryMessage): ChatMessage {
-  const baseMessage = {
-    id: msg.uuid || `history-${msg.timestamp}-${Math.random().toString(36).slice(2, 9)}`,
-    timestamp: msg.timestamp,
-  };
-
-  // User text messages
-  if (msg.type === 'user') {
-    return {
-      ...baseMessage,
-      source: 'user',
-      text: msg.content,
-    };
-  }
-
-  // Thinking messages - create properly structured content block
-  if (msg.type === 'thinking') {
-    const thinkingContent: ThinkingContent = {
-      type: 'thinking',
-      thinking: msg.content,
-    };
-    return {
-      ...baseMessage,
-      source: 'claude',
-      message: {
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [thinkingContent],
-        },
-      },
-    };
-  }
-
-  // Tool use messages - create properly structured content block
-  if (msg.type === 'tool_use' && msg.toolName && msg.toolId) {
-    const toolUseContent: ToolUseContent = {
-      type: 'tool_use',
-      id: msg.toolId,
-      name: msg.toolName,
-      input: msg.toolInput ?? {},
-    };
-    return {
-      ...baseMessage,
-      source: 'claude',
-      message: {
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [toolUseContent],
-        },
-      },
-    };
-  }
-
-  // Tool result messages - create properly structured content block
-  if (msg.type === 'tool_result' && msg.toolId) {
-    const toolResultContent: ToolResultContent = {
-      type: 'tool_result',
-      tool_use_id: msg.toolId,
-      content: msg.content,
-      is_error: msg.isError,
-    };
-    return {
-      ...baseMessage,
-      source: 'claude',
-      message: {
-        type: 'user', // tool_result comes from user in API protocol
-        message: {
-          role: 'user',
-          content: [toolResultContent],
-        },
-      },
-    };
-  }
-
-  // Assistant text messages
-  return {
-    ...baseMessage,
-    source: 'claude',
-    message: {
-      type: 'assistant',
-      message: {
-        role: 'assistant',
-        content: msg.content,
-      },
-    },
-  };
-}
 
 /**
  * Groups messages by type for rendering.
