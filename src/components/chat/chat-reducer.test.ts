@@ -1253,6 +1253,33 @@ describe('chatReducer', () => {
       // Pending request should be cleared
       expect(newState.pendingRequest).toEqual({ type: 'none' });
     });
+
+    it('should preserve attachments from pending messages', () => {
+      const attachments = [
+        { id: 'att-1', name: 'test.png', type: 'image/png', size: 1024, data: 'base64data' },
+      ];
+      const state: ChatState = {
+        ...initialState,
+        pendingRequest: {
+          type: 'question',
+          request: {
+            requestId: 'req-1',
+            questions: [{ question: 'Pick one', options: [{ label: 'A', description: '' }] }],
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+        pendingMessages: new Map([['msg-1', { text: 'My response', attachments }]]),
+      };
+      const action: ChatAction = {
+        type: 'MESSAGE_USED_AS_RESPONSE',
+        payload: { id: 'msg-1', text: 'My response' },
+      };
+      const newState = chatReducer(state, action);
+
+      // Message should include attachments
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0].attachments).toEqual(attachments);
+    });
   });
 
   // -------------------------------------------------------------------------

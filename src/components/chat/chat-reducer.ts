@@ -745,16 +745,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     // MESSAGE_USED_AS_RESPONSE: Message was used as a response to pending interactive request
     // Adds message to chat and clears the pending request
     case 'MESSAGE_USED_AS_RESPONSE': {
+      // Get pending content to preserve attachments before removing
+      const pendingContent = state.pendingMessages.get(action.payload.id);
+
       // Remove from pending messages
       const newPendingMessages = new Map(state.pendingMessages);
       newPendingMessages.delete(action.payload.id);
 
-      // Create user message
+      // Create user message, preserving attachments from pending state
       const userMessage: ChatMessage = {
         id: action.payload.id,
         source: 'user',
         text: action.payload.text,
         timestamp: new Date().toISOString(),
+        attachments: pendingContent?.attachments,
       };
 
       return {

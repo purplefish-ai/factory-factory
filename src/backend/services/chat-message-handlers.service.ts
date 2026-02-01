@@ -505,6 +505,18 @@ class ChatMessageHandlerService {
       return false;
     }
 
+    // Unknown interactive request type, don't handle
+    if (
+      pendingRequest.toolName !== 'AskUserQuestion' &&
+      pendingRequest.toolName !== 'ExitPlanMode'
+    ) {
+      return false;
+    }
+
+    // Always clear the pending request to prevent stale state, regardless of success/failure
+    // This must happen before any operation that could fail
+    chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
+
     try {
       if (pendingRequest.toolName === 'AskUserQuestion') {
         // For AskUserQuestion, answer each question with "Other" + the message text
@@ -518,49 +530,25 @@ class ChatMessageHandlerService {
         }
 
         client.answerQuestion(pendingRequest.requestId, answers);
-        chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
-
-        // Notify frontend that the message was used as a response
-        const responseEvent = { type: 'message_used_as_response', id: messageId, text };
-        ws.send(JSON.stringify(responseEvent));
-        // Forward to other connections so they also see the message
-        chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
-
-        if (DEBUG_CHAT_WS) {
-          logger.info('[Chat WS] Message used as AskUserQuestion response', {
-            sessionId,
-            messageId,
-            requestId: pendingRequest.requestId,
-          });
-        }
-
-        return true;
-      }
-
-      if (pendingRequest.toolName === 'ExitPlanMode') {
-        // For ExitPlanMode, deny with the message text as feedback
+      } else {
+        // ExitPlanMode: deny with the message text as feedback
         client.denyInteractiveRequest(pendingRequest.requestId, text);
-        chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
-
-        // Notify frontend that the message was used as a response
-        const responseEvent = { type: 'message_used_as_response', id: messageId, text };
-        ws.send(JSON.stringify(responseEvent));
-        // Forward to other connections so they also see the message
-        chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
-
-        if (DEBUG_CHAT_WS) {
-          logger.info('[Chat WS] Message used as ExitPlanMode denial', {
-            sessionId,
-            messageId,
-            requestId: pendingRequest.requestId,
-          });
-        }
-
-        return true;
       }
 
-      // Unknown interactive request type, don't handle
-      return false;
+      // Notify frontend that the message was used as a response
+      const responseEvent = { type: 'message_used_as_response', id: messageId, text };
+      ws.send(JSON.stringify(responseEvent));
+      // Forward to other connections so they also see the message
+      chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
+
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Message used as interactive response', {
+          sessionId,
+          messageId,
+          toolName: pendingRequest.toolName,
+          requestId: pendingRequest.requestId,
+        });
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to handle message as interactive response', {
@@ -569,9 +557,11 @@ class ChatMessageHandlerService {
         toolName: pendingRequest.toolName,
         error: errorMessage,
       });
-      // Don't mark as handled - let it be queued normally
-      return false;
+      // Still return true - the pending request was cleared and we shouldn't queue this message
+      // to avoid sending it to Claude as a duplicate
     }
+
+    return true;
   }
 
   private handleRemoveQueuedMessage(ws: WebSocket, sessionId: string, message: ChatMessage): void {
