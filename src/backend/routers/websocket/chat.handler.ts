@@ -159,6 +159,9 @@ export function handleChatUpgrade(
       dbSessionId,
     });
 
+    // Set up workspace notification forwarding (idempotent)
+    chatEventForwarderService.setupWorkspaceNotifications();
+
     wsAliveMap.set(ws, true);
     ws.on('pong', () => wsAliveMap.set(ws, true));
 
