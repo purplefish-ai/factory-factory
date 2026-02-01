@@ -61,14 +61,26 @@ export class GitClient {
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
-    // Create new branch from baseBranch (branch shouldn't exist at this point)
+    // Fetch the latest from origin to ensure we branch from the most recent commit
+    const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', baseBranch]);
+    if (fetchResult.code !== 0) {
+      // Non-fatal: continue with local branch if fetch fails (e.g., offline)
+      // The worktree will still be created from the local branch state
+    }
+
+    // Create new branch from origin's version of the base branch to ensure we have the latest
+    // Fall back to local baseBranch if origin doesn't exist
+    const originBranch = `origin/${baseBranch}`;
+    const useOrigin = await this.branchExists(originBranch);
+    const actualBaseBranch = useOrigin ? originBranch : baseBranch;
+
     const result = await gitCommandC(this.baseRepoPath, [
       'worktree',
       'add',
       '-b',
       branchName,
       worktreePath,
-      baseBranch,
+      actualBaseBranch,
     ]);
     if (result.code !== 0) {
       throw new Error(`Failed to create worktree: ${result.stderr || result.stdout}`);
