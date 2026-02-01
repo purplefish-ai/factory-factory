@@ -97,6 +97,7 @@ interface ChatContentProps {
   inputAttachments: ReturnType<typeof useChatWebSocket>['inputAttachments'];
   setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
+  removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
 }
@@ -127,6 +128,7 @@ const ChatContent = memo(function ChatContent({
   inputAttachments,
   setInputAttachments,
   queuedMessages,
+  removeQueuedMessage,
   latestThinking,
   pendingMessages,
 }: ChatContentProps) {
@@ -172,6 +174,7 @@ const ChatContent = memo(function ChatContent({
           isNearBottom={isNearBottom}
           latestThinking={latestThinking}
           queuedMessageIds={queuedMessageIds}
+          onRemoveQueuedMessage={removeQueuedMessage}
         />
       </div>
 
@@ -304,6 +307,7 @@ function WorkspaceChatContent() {
     inputDraft,
     inputAttachments,
     queuedMessages,
+    removeQueuedMessage,
     latestThinking,
     pendingMessages,
     sendMessage,
@@ -569,6 +573,7 @@ function WorkspaceChatContent() {
                 inputAttachments={inputAttachments}
                 setInputAttachments={setInputAttachments}
                 queuedMessages={queuedMessages}
+                removeQueuedMessage={removeQueuedMessage}
                 latestThinking={latestThinking}
                 pendingMessages={pendingMessages}
               />
