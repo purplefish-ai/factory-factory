@@ -639,8 +639,9 @@ export function isStreamEventMessage(
 
 /**
  * Type guard for tool_use start events within a stream event.
+ * Internal helper for getToolUseIdFromEvent.
  */
-export function isToolUseStartEvent(
+function isToolUseStartEvent(
   event: ClaudeStreamEvent
 ): event is { type: 'content_block_start'; index: number; content_block: ToolUseContent } {
   return event.type === 'content_block_start' && event.content_block?.type === 'tool_use';

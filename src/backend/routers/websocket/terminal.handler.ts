@@ -322,8 +322,12 @@ export function handleTerminalUpgrade(
             break;
           }
 
-          default:
-            logger.warn('Unknown message type', { type: message.type });
+          case 'ping':
+            // Keepalive ping - respond with pong
+            if (ws.readyState === WS_READY_STATE.OPEN) {
+              ws.send(JSON.stringify({ type: 'pong' }));
+            }
+            break;
         }
       } catch (error) {
         const err = error as Error;

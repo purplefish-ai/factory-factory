@@ -16,11 +16,6 @@ export {
 } from './chat-message.schema';
 
 export {
-  type CreateTerminalMessage,
-  type DestroyTerminalMessage,
-  type InputTerminalMessage,
-  type ResizeTerminalMessage,
-  type SetActiveTerminalMessage,
   type TerminalMessageInput,
   TerminalMessageSchema,
 } from './terminal-message.schema';
