@@ -16,10 +16,12 @@ import type {
   ClaudeMessage,
   HistoryMessage,
   MessageAttachment,
+  MessageWithState,
   PendingInteractiveRequest,
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
+  SessionStatus as SharedSessionStatus,
   ToolUseContent,
   UserQuestionRequest,
   WebSocketMessage,
@@ -31,6 +33,7 @@ import {
   isStreamEventMessage,
   isWsClaudeMessage,
   isWsSessionLoadedMessage,
+  MessageState,
 } from '@/lib/claude-types';
 
 // =============================================================================
@@ -178,7 +181,25 @@ export type ChatAction =
   | { type: 'THINKING_CLEAR' }
   // Clear/reset actions
   | { type: 'CLEAR_CHAT' }
-  | { type: 'RESET_FOR_SESSION_SWITCH' };
+  | { type: 'RESET_FOR_SESSION_SWITCH' }
+  // New message state machine actions
+  | {
+      type: 'MESSAGES_SNAPSHOT';
+      payload: {
+        messages: MessageWithState[];
+        sessionStatus: SharedSessionStatus;
+        pendingInteractiveRequest?: PendingInteractiveRequest | null;
+      };
+    }
+  | {
+      type: 'MESSAGE_STATE_CHANGED';
+      payload: {
+        id: string;
+        newState: MessageState;
+        queuePosition?: number;
+        errorMessage?: string;
+      };
+    };
 
 // =============================================================================
 // Helper Functions
@@ -872,6 +893,107 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...createSessionSwitchResetState(),
       };
 
+    // New message state machine actions
+    case 'MESSAGES_SNAPSHOT': {
+      // Convert MessageWithState[] to ChatMessage[] for rendering
+      const messages: ChatMessage[] = action.payload.messages.map((msg) => ({
+        id: msg.id,
+        source: msg.type === 'user' ? 'user' : 'claude',
+        text: msg.text,
+        message: msg.content,
+        timestamp: msg.timestamp,
+        attachments: msg.attachments,
+      }));
+
+      // Build queuedMessages map from messages that are in ACCEPTED state
+      const queuedMessages = new Map<string, QueuedMessage>();
+      for (const msg of action.payload.messages) {
+        if (msg.type === 'user' && msg.state === MessageState.ACCEPTED) {
+          queuedMessages.set(msg.id, {
+            id: msg.id,
+            text: msg.text ?? '',
+            timestamp: msg.timestamp,
+            attachments: msg.attachments,
+            // Settings are not tracked in MessageWithState, use defaults
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          });
+        }
+      }
+
+      // Convert session status from shared type to local type
+      const sessionStatus: SessionStatus = action.payload.sessionStatus;
+
+      // Handle pending interactive request
+      const pendingReq = action.payload.pendingInteractiveRequest;
+      let pendingRequest: PendingRequest = { type: 'none' };
+      if (pendingReq) {
+        if (pendingReq.toolName === 'AskUserQuestion') {
+          const input = pendingReq.input as { questions?: unknown[] };
+          pendingRequest = {
+            type: 'question',
+            request: {
+              requestId: pendingReq.requestId,
+              questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+              timestamp: pendingReq.timestamp,
+            },
+          };
+        } else {
+          pendingRequest = {
+            type: 'permission',
+            request: {
+              requestId: pendingReq.requestId,
+              toolName: pendingReq.toolName,
+              toolInput: pendingReq.input,
+              timestamp: pendingReq.timestamp,
+              planContent: pendingReq.planContent,
+            },
+          };
+        }
+      }
+
+      return {
+        ...state,
+        messages,
+        queuedMessages,
+        sessionStatus,
+        pendingRequest,
+        toolUseIdToIndex: new Map(),
+        pendingMessages: new Map(),
+        lastRejectedMessage: null,
+      };
+    }
+
+    case 'MESSAGE_STATE_CHANGED': {
+      const { id, newState } = action.payload;
+
+      // Handle queue state updates
+      if (newState === MessageState.DISPATCHED) {
+        // Remove from queued messages when dispatched
+        const newQueuedMessages = new Map(state.queuedMessages);
+        newQueuedMessages.delete(id);
+        return { ...state, queuedMessages: newQueuedMessages };
+      }
+
+      if (newState === MessageState.COMMITTED || newState === MessageState.COMPLETE) {
+        // Remove from queued messages when complete
+        const newQueuedMessages = new Map(state.queuedMessages);
+        newQueuedMessages.delete(id);
+        return { ...state, queuedMessages: newQueuedMessages };
+      }
+
+      // For other state changes, we mostly just update queue position if provided
+      if (action.payload.queuePosition !== undefined && state.queuedMessages.has(id)) {
+        const qm = state.queuedMessages.get(id);
+        if (qm) {
+          const newQueuedMessages = new Map(state.queuedMessages);
+          // QueuedMessage doesn't have queuePosition field, so we just keep track via state
+          return { ...state, queuedMessages: newQueuedMessages };
+        }
+      }
+
+      return state;
+    }
+
     default:
       return state;
   }
@@ -1002,6 +1124,35 @@ function handleQueueMessage(data: WebSocketMessage): ChatAction {
   };
 }
 
+function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
+  if (!data.allMessages) {
+    return null;
+  }
+  return {
+    type: 'MESSAGES_SNAPSHOT',
+    payload: {
+      messages: data.allMessages,
+      sessionStatus: data.sessionStatus ?? { phase: 'ready' },
+      pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+    },
+  };
+}
+
+function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
+  if (!(data.id && data.newState)) {
+    return null;
+  }
+  return {
+    type: 'MESSAGE_STATE_CHANGED',
+    payload: {
+      id: data.id,
+      newState: data.newState,
+      queuePosition: data.queuePosition,
+      errorMessage: data.errorMessage,
+    },
+  };
+}
+
 /**
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
@@ -1040,6 +1191,11 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'message_rejected':
     case 'message_used_as_response':
       return handleMessageQueueAction(data);
+    // New message state machine events
+    case 'messages_snapshot':
+      return handleMessagesSnapshot(data);
+    case 'message_state_changed':
+      return handleMessageStateChanged(data);
     default:
       return null;
   }
