@@ -355,8 +355,13 @@ class MessageStateService {
    * Race condition protection:
    * If the session already has messages, we skip loading to avoid overwriting
    * fresh state (user messages, streaming responses) with stale history.
-   * This is safe because JavaScript's event loop ensures synchronous operations
-   * within this method cannot be interleaved with other calls.
+   *
+   * Why this is safe: The check (existingMessages.size > 0) and the subsequent
+   * return happen synchronously with no await points in between. Since JavaScript
+   * is single-threaded and only yields at await/callback boundaries, no other
+   * code can modify the session's messages between the check and the return.
+   * Therefore, if another caller adds messages after our check, we've already
+   * returned and won't overwrite their state.
    */
   loadFromHistory(sessionId: string, history: HistoryMessage[]): void {
     const existingMessages = this.sessionMessages.get(sessionId);

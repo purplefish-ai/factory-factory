@@ -34,6 +34,11 @@ export interface EventForwarderContext {
   workingDir: string;
 }
 
+/** Type guard for stream events with a type field */
+interface StreamEventWithType {
+  type?: string;
+}
+
 // ============================================================================
 // Service
 // ============================================================================
@@ -45,7 +50,12 @@ class ChatEventForwarderService {
   /** Pending interactive requests by session ID (for restore on reconnect) */
   private pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
 
-  /** Current Claude message ID being streamed, per session (for state machine) */
+  /**
+   * Current Claude message ID being streamed, per session (for state machine).
+   * Cleaned up on process exit via the 'exit' event handler.
+   * If cleanup is needed outside of process exit (e.g., session reset),
+   * call clearSessionState() explicitly.
+   */
   private currentClaudeMessageId = new Map<string, string>();
 
   /**
@@ -79,6 +89,16 @@ class ChatEventForwarderService {
     if (pending?.requestId === requestId) {
       this.pendingInteractiveRequests.delete(dbSessionId);
     }
+  }
+
+  /**
+   * Clear all session-specific state (pending requests and current Claude message).
+   * Call this for explicit cleanup outside of process exit, such as when
+   * a WebSocket connection closes or a session is reset.
+   */
+  clearSessionState(dbSessionId: string): void {
+    this.pendingInteractiveRequests.delete(dbSessionId);
+    this.currentClaudeMessageId.delete(dbSessionId);
   }
 
   /**
@@ -152,19 +172,18 @@ class ChatEventForwarderService {
     });
 
     client.on('stream', (event) => {
+      const streamEvent = event as StreamEventWithType;
       if (DEBUG_CHAT_WS) {
-        const evt = event as { type?: string };
         logger.info('[Chat WS] Received stream event from client', {
           dbSessionId,
-          eventType: evt.type,
+          eventType: streamEvent.type,
         });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
 
       // Track Claude message state (new state machine)
       // Create a new Claude message when streaming starts (message_start event)
-      const evt = event as { type?: string };
-      if (evt.type === 'message_start') {
+      if (streamEvent.type === 'message_start') {
         const claudeMessageId = `claude-${randomUUID()}`;
         this.currentClaudeMessageId.set(dbSessionId, claudeMessageId);
         messageStateService.createClaudeMessage(dbSessionId, claudeMessageId, event);

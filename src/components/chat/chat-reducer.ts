@@ -649,7 +649,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (!msg.text) {
             // biome-ignore lint/suspicious/noConsole: Intentional warning for debugging state corruption
             console.warn(
-              `[chat-reducer] User message ${msg.id} in ACCEPTED state has no text - possible state corruption`
+              `[chat-reducer] User message ${msg.id} (timestamp: ${msg.timestamp}) in ACCEPTED state has no text - possible state corruption. Cross-reference with backend logs using message ID.`
             );
           }
           queuedMessages.set(msg.id, {
