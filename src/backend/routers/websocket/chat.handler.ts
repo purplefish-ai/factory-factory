@@ -18,12 +18,10 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { ClaudeClient } from '../../claude/index';
 import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
+import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import { type ConnectionInfo, chatConnectionService } from '../../services/chat-connection.service';
 import { chatEventForwarderService } from '../../services/chat-event-forwarder.service';
-import {
-  type ChatMessage,
-  chatMessageHandlerService,
-} from '../../services/chat-message-handlers.service';
+import { chatMessageHandlerService } from '../../services/chat-message-handlers.service';
 import { configService, createLogger, sessionService } from '../../services/index';
 import { sessionFileLogger } from '../../services/session-file-logger.service';
 
@@ -216,9 +214,26 @@ export function handleChatUpgrade(
     }
     ws.send(JSON.stringify(initialStatus));
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket handler requires validation and error handling
     ws.on('message', async (data) => {
       try {
-        const message = JSON.parse(data.toString()) as ChatMessage;
+        const rawMessage: unknown = JSON.parse(data.toString());
+        const parseResult = ChatMessageSchema.safeParse(rawMessage);
+
+        if (!parseResult.success) {
+          logger.warn('Invalid chat message format', {
+            errors: parseResult.error.issues,
+            connectionId,
+          });
+          const errorResponse = { type: 'error', message: 'Invalid message format' };
+          if (dbSessionId) {
+            sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
+          }
+          ws.send(JSON.stringify(errorResponse));
+          return;
+        }
+
+        const message: ChatMessageInput = parseResult.data;
         if (dbSessionId) {
           sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
         }
@@ -260,5 +275,5 @@ export function handleChatUpgrade(
 // Re-exports for external usage
 // ============================================================================
 
+export type { ChatMessageInput } from '../../schemas/websocket';
 export type { ConnectionInfo } from '../../services/chat-connection.service';
-export type { ChatMessage } from '../../services/chat-message-handlers.service';

@@ -13,6 +13,15 @@ import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import type {
+  ChatMessageInput,
+  PermissionResponseMessage,
+  QuestionResponseMessage,
+  QueueMessageInput,
+  RemoveQueuedMessageInput,
+  StartMessageInput,
+  UserInputMessage,
+} from '../schemas/websocket';
 import { chatConnectionService } from './chat-connection.service';
 import { chatEventForwarderService } from './chat-event-forwarder.service';
 import { configService } from './config.service';
@@ -28,33 +37,8 @@ const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
 // Types
 // ============================================================================
 
-export interface ChatMessage {
-  type: string;
-  text?: string;
-  content?: string | ClaudeContentItem[];
-  workingDir?: string;
-  systemPrompt?: string;
-  model?: string;
-  thinkingEnabled?: boolean;
-  planModeEnabled?: boolean;
-  selectedModel?: string | null;
-  // Queue message fields
-  id?: string;
-  attachments?: Array<{
-    id: string;
-    name: string;
-    type: string;
-    size: number;
-    data: string;
-  }>;
-  settings?: {
-    selectedModel: string | null;
-    thinkingEnabled: boolean;
-    planModeEnabled: boolean;
-  };
-  // Remove queued message fields
-  messageId?: string;
-}
+/** Re-export ChatMessageInput as ChatMessage for backward compatibility */
+export type ChatMessage = ChatMessageInput;
 
 export interface ClientCreator {
   getOrCreate(
@@ -308,7 +292,7 @@ class ChatMessageHandlerService {
   // Private: Model Validation
   // ============================================================================
 
-  private getValidModel(message: ChatMessage): string | undefined {
+  private getValidModel(message: StartMessageInput): string | undefined {
     const requestedModel = message.selectedModel || message.model;
     return requestedModel && VALID_MODELS.includes(requestedModel) ? requestedModel : undefined;
   }
@@ -333,7 +317,7 @@ class ChatMessageHandlerService {
   private async handleStartMessage(
     ws: WebSocket,
     sessionId: string,
-    message: ChatMessage
+    message: StartMessageInput
   ): Promise<void> {
     if (!this.clientCreator) {
       ws.send(JSON.stringify({ type: 'error', message: 'Client creator not configured' }));
@@ -357,15 +341,23 @@ class ChatMessageHandlerService {
     ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
   }
 
-  private handleUserInputMessage(ws: WebSocket, sessionId: string, message: ChatMessage): void {
-    const messageContent = message.content || message.text;
-    if (!messageContent) {
+  private handleUserInputMessage(
+    ws: WebSocket,
+    sessionId: string,
+    message: UserInputMessage
+  ): void {
+    const rawContent = message.content || message.text;
+    if (!rawContent) {
       return;
     }
 
-    if (typeof messageContent === 'string' && !messageContent.trim()) {
+    if (typeof rawContent === 'string' && !rawContent.trim()) {
       return;
     }
+
+    // Cast content array to ClaudeContentItem[] - validation is done at WebSocket handler level
+    const messageContent =
+      typeof rawContent === 'string' ? rawContent : (rawContent as ClaudeContentItem[]);
 
     const existingClient = sessionService.getClient(sessionId);
     if (existingClient?.isRunning()) {
@@ -384,7 +376,7 @@ class ChatMessageHandlerService {
   private async handleQueueMessage(
     ws: WebSocket,
     sessionId: string,
-    message: ChatMessage
+    message: QueueMessageInput
   ): Promise<void> {
     const text = message.text?.trim();
     const hasContent = text || (message.attachments && message.attachments.length > 0);
@@ -438,15 +430,15 @@ class ChatMessageHandlerService {
    * Build a QueuedMessage from a ChatMessage.
    */
   private buildQueuedMessage(messageId: string, message: ChatMessage, text: string): QueuedMessage {
-    const rawModel = message.settings?.selectedModel ?? message.selectedModel ?? null;
+    const rawModel = message.settings?.selectedModel ?? null;
     const validModel = rawModel && VALID_MODELS.includes(rawModel) ? rawModel : null;
 
     const settings = message.settings
       ? { ...message.settings, selectedModel: validModel }
       : {
           selectedModel: validModel,
-          thinkingEnabled: message.thinkingEnabled ?? false,
-          planModeEnabled: message.planModeEnabled ?? false,
+          thinkingEnabled: false,
+          planModeEnabled: false,
         };
 
     return {
@@ -578,7 +570,11 @@ class ChatMessageHandlerService {
     return true;
   }
 
-  private handleRemoveQueuedMessage(ws: WebSocket, sessionId: string, message: ChatMessage): void {
+  private handleRemoveQueuedMessage(
+    ws: WebSocket,
+    sessionId: string,
+    message: RemoveQueuedMessageInput
+  ): void {
     const messageId = message.messageId;
     if (!messageId) {
       ws.send(JSON.stringify({ type: 'error', message: 'Missing messageId' }));
@@ -690,17 +686,9 @@ class ChatMessageHandlerService {
   private handleQuestionResponseMessage(
     ws: WebSocket,
     sessionId: string,
-    message: ChatMessage
+    message: QuestionResponseMessage
   ): void {
-    const { requestId, answers } = message as unknown as {
-      requestId: string;
-      answers: Record<string, string | string[]>;
-    };
-
-    if (!(requestId && answers)) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Missing requestId or answers' }));
-      return;
-    }
+    const { requestId, answers } = message;
 
     const client = sessionService.getClient(sessionId);
     if (!client) {
@@ -732,17 +720,9 @@ class ChatMessageHandlerService {
   private handlePermissionResponseMessage(
     ws: WebSocket,
     sessionId: string,
-    message: ChatMessage
+    message: PermissionResponseMessage
   ): void {
-    const { requestId, allow } = message as unknown as {
-      requestId: string;
-      allow: boolean;
-    };
-
-    if (!requestId || allow === undefined) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Missing requestId or allow' }));
-      return;
-    }
+    const { requestId, allow } = message;
 
     const client = sessionService.getClient(sessionId);
     if (!client) {
