@@ -132,6 +132,7 @@ export type ChatAction =
     }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
+  | { type: 'WS_QUEUE_LOADED'; payload: { queuedMessages: QueuedMessage[] } }
   // Session actions
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
@@ -324,7 +325,7 @@ function createSessionSwitchResetState(): Pick<
 export function createInitialChatState(overrides?: Partial<ChatState>): ChatState {
   return {
     messages: [],
-    sessionStatus: { phase: 'idle' },
+    sessionStatus: { phase: 'loading' },
     gitBranch: null,
     availableSessions: [],
     pendingRequest: { type: 'none' },
@@ -579,6 +580,41 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, pendingRequest: { type: 'permission', request: action.payload } };
     case 'WS_USER_QUESTION':
       return { ...state, pendingRequest: { type: 'question', request: action.payload } };
+
+    // Queue loaded - fast path for showing queued messages before full session loads
+    case 'WS_QUEUE_LOADED': {
+      const queuedMessagesArray = action.payload.queuedMessages;
+
+      // Convert to Map for efficient lookups
+      const queuedMessagesMap = new Map<string, QueuedMessage>();
+      for (const msg of queuedMessagesArray) {
+        queuedMessagesMap.set(msg.id, msg);
+      }
+
+      // Convert queued messages to ChatMessages for inline display
+      // Filter out any that are already in messages to prevent duplicates
+      const existingMessageIds = new Set(state.messages.map((m) => m.id));
+      const queuedAsChatMessages: ChatMessage[] = queuedMessagesArray
+        .filter((qm) => !existingMessageIds.has(qm.id))
+        .map((qm) => ({
+          id: qm.id,
+          source: 'user' as const,
+          text: qm.text,
+          timestamp: qm.timestamp,
+          attachments: qm.attachments,
+        }));
+
+      return {
+        ...state,
+        messages: [...state.messages, ...queuedAsChatMessages],
+        queuedMessages: queuedMessagesMap,
+        // Transition to ready so UI shows queued messages instead of loading spinner
+        // (will be overwritten by session_loaded if it arrives with running: true)
+        sessionStatus:
+          state.sessionStatus.phase === 'loading' ? { phase: 'ready' } : state.sessionStatus,
+      };
+    }
+
     case 'PERMISSION_RESPONSE': {
       // If ExitPlanMode was approved, disable plan mode in settings
       const shouldDisablePlanMode =
@@ -863,6 +899,13 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
   return null;
 }
 
+function handleQueueMessage(data: WebSocketMessage): ChatAction {
+  return {
+    type: 'WS_QUEUE_LOADED',
+    payload: { queuedMessages: data.queuedMessages ?? [] },
+  };
+}
+
 /**
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
@@ -890,6 +933,9 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
+    // Queue loaded - fast response with just queued messages
+    case 'queue':
+      return handleQueueMessage(data);
     // Queue events from backend
     case 'message_queued':
       return data.id

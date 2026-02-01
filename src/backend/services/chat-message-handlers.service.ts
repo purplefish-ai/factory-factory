@@ -205,6 +205,9 @@ class ChatMessageHandlerService {
       case 'load_session':
         await this.handleLoadSessionMessage(ws, dbSessionId, workingDir);
         break;
+      case 'get_queue':
+        this.handleGetQueueMessage(ws, dbSessionId);
+        break;
       case 'question_response':
         this.handleQuestionResponseMessage(ws, dbSessionId, message);
         break;
@@ -542,6 +545,15 @@ class ChatMessageHandlerService {
         queuedMessages,
       })
     );
+  }
+
+  /**
+   * Handle get_queue message - returns just the queued messages for fast initial display.
+   * This is a lightweight alternative to load_session that doesn't fetch chat history.
+   */
+  private handleGetQueueMessage(ws: WebSocket, sessionId: string): void {
+    const queuedMessages = messageQueueService.getQueue(sessionId);
+    ws.send(JSON.stringify({ type: 'queue', queuedMessages }));
   }
 
   private handleQuestionResponseMessage(

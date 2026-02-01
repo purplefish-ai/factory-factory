@@ -117,7 +117,7 @@ describe('createInitialChatState', () => {
     const state = createInitialChatState();
 
     expect(state.messages).toEqual([]);
-    expect(state.sessionStatus).toEqual({ phase: 'idle' });
+    expect(state.sessionStatus).toEqual({ phase: 'loading' });
     expect(state.gitBranch).toBeNull();
     expect(state.availableSessions).toEqual([]);
     expect(state.pendingRequest).toEqual({ type: 'none' });
