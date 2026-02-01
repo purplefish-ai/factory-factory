@@ -219,6 +219,35 @@ function createErrorMessage(error: string): ChatMessage {
 }
 
 /**
+ * Inserts a message into the messages array at the correct position based on timestamp.
+ * Uses binary search to find the insertion point for O(log n) performance.
+ * Messages are ordered chronologically (oldest first).
+ */
+function insertMessageByTimestamp(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
+  const newTimestamp = new Date(newMessage.timestamp).getTime();
+
+  // Binary search to find insertion point
+  let low = 0;
+  let high = messages.length;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const midTimestamp = new Date(messages[mid].timestamp).getTime();
+
+    if (midTimestamp <= newTimestamp) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  // Insert at the found position
+  const result = [...messages];
+  result.splice(low, 0, newMessage);
+  return result;
+}
+
+/**
  * Determines if a Claude message should be stored in state.
  * We filter out structural/delta events and only keep meaningful ones.
  */
@@ -439,23 +468,36 @@ function handleToolInputUpdate(
   // Try O(1) lookup first
   let messageIndex = state.toolUseIdToIndex.get(toolUseId);
   let currentState = state;
+  let needsIndexUpdate = false;
 
-  // Fallback to linear scan if not found
+  // If cached index exists, verify it points to the correct message
+  // (index may be stale if messages were inserted in the middle of the array)
+  if (messageIndex !== undefined) {
+    const cachedMsg = state.messages[messageIndex];
+    if (!isToolUseMessageWithId(cachedMsg, toolUseId)) {
+      // Cached index is stale, need to do linear scan
+      messageIndex = undefined;
+      needsIndexUpdate = true;
+    }
+  }
+
+  // Fallback to linear scan if not found or stale
   if (messageIndex === undefined) {
     messageIndex = state.messages.findIndex((msg) => isToolUseMessageWithId(msg, toolUseId));
     if (messageIndex === -1) {
       return state; // Tool use not found
     }
-    // Update index for future lookups - create new state with updated index
+    needsIndexUpdate = true;
+  }
+
+  // Update index for future lookups if needed
+  if (needsIndexUpdate) {
     const newToolUseIdToIndex = new Map(state.toolUseIdToIndex);
     newToolUseIdToIndex.set(toolUseId, messageIndex);
     currentState = { ...state, toolUseIdToIndex: newToolUseIdToIndex };
   }
 
   const msg = currentState.messages[messageIndex];
-  if (!isToolUseMessageWithId(msg, toolUseId)) {
-    return currentState;
-  }
 
   // Update the message with new input
   const claudeMsg = msg.message;
@@ -766,7 +808,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
         return {
           ...state,
-          messages: [...state.messages, newMessage],
+          messages: insertMessageByTimestamp(state.messages, newMessage),
           queuedMessages: newQueuedMessages,
           pendingMessages: newPendingMessages,
         };

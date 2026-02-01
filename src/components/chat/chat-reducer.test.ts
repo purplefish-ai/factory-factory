@@ -645,6 +645,49 @@ describe('chatReducer', () => {
 
       expect(newState).toBe(initialState);
     });
+
+    it('should recover from stale index when message inserted in middle of array', () => {
+      const toolUseId = 'tool-use-xyz';
+      const toolUseMsg = createTestToolUseMessage(toolUseId);
+
+      // Add tool use message at index 0
+      let state = chatReducer(initialState, { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg });
+      expect(state.toolUseIdToIndex.get(toolUseId)).toBe(0);
+      expect(state.messages.length).toBe(1);
+
+      // Simulate a message being inserted at the beginning (e.g., by insertMessageByTimestamp)
+      // This shifts our tool use message to index 1, but the cache still says index 0
+      const earlierUserMessage: ChatMessage = {
+        id: 'earlier-msg',
+        source: 'user',
+        text: 'Earlier message',
+        timestamp: '2020-01-01T00:00:00.000Z', // Very early timestamp
+      };
+      state = {
+        ...state,
+        messages: [earlierUserMessage, ...state.messages],
+        // toolUseIdToIndex still points to 0 (stale!)
+      };
+      expect(state.messages.length).toBe(2);
+      expect(state.messages[0].id).toBe('earlier-msg');
+      expect(state.messages[1].source).toBe('claude'); // Tool use is now at index 1
+
+      // Update should still work - it should detect stale index and do linear scan
+      const updatedInput = { recovered: 'input' };
+      const updateAction: ChatAction = {
+        type: 'TOOL_INPUT_UPDATE',
+        payload: { toolUseId, input: updatedInput },
+      };
+      const newState = chatReducer(state, updateAction);
+
+      // Verify update worked
+      const toolUseMessage = newState.messages[1];
+      const event = toolUseMessage.message?.event as { content_block?: { input?: unknown } };
+      expect(event?.content_block?.input).toEqual(updatedInput);
+
+      // Verify index was corrected
+      expect(newState.toolUseIdToIndex.get(toolUseId)).toBe(1);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1508,6 +1551,116 @@ describe('chatReducer', () => {
       // Message should still be in queue
       expect(newState.queuedMessages.size).toBe(1);
       expect(newState.queuedMessages.has('msg-1')).toBe(true);
+    });
+
+    it('should insert ACCEPTED messages in chronological order by timestamp', () => {
+      // Start with a message that has a later timestamp
+      const laterMessage: ChatMessage = {
+        id: 'later-msg',
+        source: 'user',
+        text: 'Later message',
+        timestamp: '2024-01-01T12:00:00.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        messages: [laterMessage],
+      };
+
+      // Add an earlier message via MESSAGE_STATE_CHANGED ACCEPTED
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'earlier-msg',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Earlier message',
+            timestamp: '2024-01-01T06:00:00.000Z', // 6 hours before later message
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Earlier message should be inserted before the later one
+      expect(newState.messages.length).toBe(2);
+      expect(newState.messages[0].id).toBe('earlier-msg');
+      expect(newState.messages[1].id).toBe('later-msg');
+    });
+
+    it('should insert ACCEPTED messages at end when they have latest timestamp', () => {
+      // Start with an earlier message
+      const earlierMessage: ChatMessage = {
+        id: 'earlier-msg',
+        source: 'user',
+        text: 'Earlier message',
+        timestamp: '2024-01-01T06:00:00.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        messages: [earlierMessage],
+      };
+
+      // Add a later message via MESSAGE_STATE_CHANGED ACCEPTED
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'later-msg',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Later message',
+            timestamp: '2024-01-01T12:00:00.000Z', // 6 hours after earlier message
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Later message should be at the end
+      expect(newState.messages.length).toBe(2);
+      expect(newState.messages[0].id).toBe('earlier-msg');
+      expect(newState.messages[1].id).toBe('later-msg');
+    });
+
+    it('should maintain correct order when multiple messages arrive out of order', () => {
+      const state: ChatState = {
+        ...initialState,
+        messages: [],
+      };
+
+      // Simulate messages arriving out of order (e.g., due to network timing)
+      // Message 3 arrives first (timestamp: 15:00)
+      let newState = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-3',
+          newState: MessageState.ACCEPTED,
+          userMessage: { text: 'Third', timestamp: '2024-01-01T15:00:00.000Z' },
+        },
+      });
+
+      // Message 1 arrives second (timestamp: 09:00)
+      newState = chatReducer(newState, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.ACCEPTED,
+          userMessage: { text: 'First', timestamp: '2024-01-01T09:00:00.000Z' },
+        },
+      });
+
+      // Message 2 arrives third (timestamp: 12:00)
+      newState = chatReducer(newState, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-2',
+          newState: MessageState.ACCEPTED,
+          userMessage: { text: 'Second', timestamp: '2024-01-01T12:00:00.000Z' },
+        },
+      });
+
+      // All messages should be in chronological order
+      expect(newState.messages.length).toBe(3);
+      expect(newState.messages[0].id).toBe('msg-1'); // 09:00
+      expect(newState.messages[1].id).toBe('msg-2'); // 12:00
+      expect(newState.messages[2].id).toBe('msg-3'); // 15:00
     });
   });
 });
