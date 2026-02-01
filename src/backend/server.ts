@@ -148,6 +148,14 @@ export function createServer(requestedPort?: number): ServerInstance {
         maxAge: '1d',
         etag: true,
         index: false, // Don't serve index.html from here - handle it separately below
+        setHeaders: (res, filePath) => {
+          // Override cache for index.html if accessed directly via /index.html
+          if (filePath.endsWith('index.html')) {
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+          }
+        },
       })
     );
 
