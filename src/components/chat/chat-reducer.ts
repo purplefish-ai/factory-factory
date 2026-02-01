@@ -159,6 +159,8 @@ export type ChatAction =
       payload: { id: string; text: string; attachments?: MessageAttachment[] };
     }
   | { type: 'CLEAR_REJECTED_MESSAGE' }
+  // Message used as interactive response (clears pending request and adds message)
+  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string } }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -740,6 +742,29 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         lastRejectedMessage: null,
       };
 
+    // MESSAGE_USED_AS_RESPONSE: Message was used as a response to pending interactive request
+    // Adds message to chat and clears the pending request
+    case 'MESSAGE_USED_AS_RESPONSE': {
+      // Remove from pending messages
+      const newPendingMessages = new Map(state.pendingMessages);
+      newPendingMessages.delete(action.payload.id);
+
+      // Create user message
+      const userMessage: ChatMessage = {
+        id: action.payload.id,
+        source: 'user',
+        text: action.payload.text,
+        timestamp: new Date().toISOString(),
+      };
+
+      return {
+        ...state,
+        messages: [...state.messages, userMessage],
+        pendingMessages: newPendingMessages,
+        pendingRequest: { type: 'none' },
+      };
+    }
+
     // SET_QUEUE: Restore queue state from backend (on reconnect/session load)
     case 'SET_QUEUE': {
       const queuedMessagesMap = new Map<string, QueuedMessage>();
@@ -863,6 +888,48 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
   return null;
 }
 
+function handleMessageQueuedAction(data: WebSocketMessage): ChatAction | null {
+  if (!data.id) {
+    return null;
+  }
+  return { type: 'MESSAGE_QUEUED', payload: { id: data.id, position: data.position ?? 0 } };
+}
+
+function handleMessageAcceptedAction(data: WebSocketMessage): ChatAction | null {
+  if (!(data.id && data.queuedMessage)) {
+    return null;
+  }
+  return {
+    type: 'MESSAGE_ACCEPTED',
+    payload: { id: data.id, position: data.position ?? 0, message: data.queuedMessage },
+  };
+}
+
+function handleMessageQueueAction(data: WebSocketMessage): ChatAction | null {
+  switch (data.type) {
+    case 'message_queued':
+      return handleMessageQueuedAction(data);
+    case 'message_dispatched':
+      return data.id ? { type: 'MESSAGE_DISPATCHED', payload: { id: data.id } } : null;
+    case 'message_removed':
+      return data.id ? { type: 'MESSAGE_REMOVED', payload: { id: data.id } } : null;
+    case 'message_accepted':
+      return handleMessageAcceptedAction(data);
+    case 'message_rejected':
+      return data.id
+        ? { type: 'MESSAGE_REJECTED', payload: { id: data.id, error: data.message ?? '' } }
+        : null;
+    case 'message_used_as_response':
+      return data.id && data.text
+        ? { type: 'MESSAGE_USED_AS_RESPONSE', payload: { id: data.id, text: data.text } }
+        : null;
+    case 'interactive_response_cleared':
+      return { type: 'QUESTION_RESPONSE' };
+    default:
+      return null;
+  }
+}
+
 /**
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
@@ -890,30 +957,15 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
-    // Queue events from backend
+    // Queue and interactive response events from backend
     case 'message_queued':
-      return data.id
-        ? { type: 'MESSAGE_QUEUED', payload: { id: data.id, position: data.position ?? 0 } }
-        : null;
     case 'message_dispatched':
-      return data.id ? { type: 'MESSAGE_DISPATCHED', payload: { id: data.id } } : null;
     case 'message_removed':
-      return data.id ? { type: 'MESSAGE_REMOVED', payload: { id: data.id } } : null;
     case 'message_accepted':
-      return data.id && data.queuedMessage
-        ? {
-            type: 'MESSAGE_ACCEPTED',
-            payload: {
-              id: data.id,
-              position: data.position ?? 0,
-              message: data.queuedMessage,
-            },
-          }
-        : null;
     case 'message_rejected':
-      return data.id
-        ? { type: 'MESSAGE_REJECTED', payload: { id: data.id, error: data.message ?? '' } }
-        : null;
+    case 'message_used_as_response':
+    case 'interactive_response_cleared':
+      return handleMessageQueueAction(data);
     default:
       return null;
   }

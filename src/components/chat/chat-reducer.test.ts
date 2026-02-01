@@ -1190,6 +1190,72 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
+  // MESSAGE_USED_AS_RESPONSE Action
+  // -------------------------------------------------------------------------
+
+  describe('MESSAGE_USED_AS_RESPONSE action', () => {
+    it('should add message to chat and clear pending request', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingRequest: {
+          type: 'question',
+          request: {
+            requestId: 'req-1',
+            questions: [{ question: 'Pick one', options: [{ label: 'A', description: '' }] }],
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+        pendingMessages: new Map([['msg-1', { text: 'My response' }]]),
+      };
+      const action: ChatAction = {
+        type: 'MESSAGE_USED_AS_RESPONSE',
+        payload: { id: 'msg-1', text: 'My response' },
+      };
+      const newState = chatReducer(state, action);
+
+      // Message should be added to chat
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0].id).toBe('msg-1');
+      expect(newState.messages[0].source).toBe('user');
+      expect(newState.messages[0].text).toBe('My response');
+
+      // Pending request should be cleared
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
+
+      // Pending message should be removed
+      expect(newState.pendingMessages.has('msg-1')).toBe(false);
+    });
+
+    it('should work with permission pending request', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingRequest: {
+          type: 'permission',
+          request: {
+            requestId: 'req-1',
+            toolName: 'ExitPlanMode',
+            toolInput: {},
+            timestamp: '2024-01-01T00:00:00.000Z',
+            planContent: 'Plan content here',
+          },
+        },
+      };
+      const action: ChatAction = {
+        type: 'MESSAGE_USED_AS_RESPONSE',
+        payload: { id: 'msg-1', text: 'Please revise the plan' },
+      };
+      const newState = chatReducer(state, action);
+
+      // Message should be added
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0].text).toBe('Please revise the plan');
+
+      // Pending request should be cleared
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // STOP_REQUESTED Action
   // -------------------------------------------------------------------------
 
@@ -1870,6 +1936,47 @@ describe('createActionFromWebSocketMessage', () => {
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
+  });
+
+  it('should convert message_used_as_response to MESSAGE_USED_AS_RESPONSE action', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'message_used_as_response',
+      id: 'msg-1',
+      text: 'My custom response',
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({
+      type: 'MESSAGE_USED_AS_RESPONSE',
+      payload: { id: 'msg-1', text: 'My custom response' },
+    });
+  });
+
+  it('should return null for message_used_as_response without id', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'message_used_as_response',
+      text: 'My custom response',
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toBeNull();
+  });
+
+  it('should return null for message_used_as_response without text', () => {
+    const wsMessage: WebSocketMessage = { type: 'message_used_as_response', id: 'msg-1' };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toBeNull();
+  });
+
+  it('should convert interactive_response_cleared to QUESTION_RESPONSE action', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'interactive_response_cleared',
+      requestId: 'req-1',
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({ type: 'QUESTION_RESPONSE' });
   });
 });
 
