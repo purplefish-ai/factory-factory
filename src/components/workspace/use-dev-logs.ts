@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 interface UseDevLogsResult {
   connected: boolean;
   output: string;
-  scrollToBottom: () => void;
   outputEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -11,6 +10,11 @@ interface UseDevLogsResult {
  * Hook to manage the dev logs WebSocket connection.
  * Returns connection status and output data for use in both
  * the tab indicator and the DevLogsPanel content.
+ *
+ * Note: The WebSocket connection remains active even when the Dev Logs tab
+ * is not visible. This is intentional to:
+ * 1. Show the connection status indicator in the tab bar
+ * 2. Buffer log output so users don't miss messages while viewing Terminal
  */
 export function useDevLogs(workspaceId: string): UseDevLogsResult {
   const [connected, setConnected] = useState(false);
@@ -70,5 +74,5 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
     };
   }, [workspaceId, scrollToBottom]);
 
-  return { connected, output, scrollToBottom, outputEndRef };
+  return { connected, output, outputEndRef };
 }
