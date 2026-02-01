@@ -37,6 +37,7 @@ import {
   configService,
   createLogger,
   findAvailablePort,
+  rateLimiter,
   reconciliationService,
   schedulerService,
   sessionFileLogger,
@@ -224,6 +225,7 @@ export function createServer(requestedPort?: number): ServerInstance {
     terminalService.cleanup();
     agentProcessAdapter.cleanup();
     sessionFileLogger.cleanup();
+    await rateLimiter.stop();
 
     await schedulerService.stop();
     await reconciliationService.stopPeriodicCleanup();
@@ -273,6 +275,7 @@ export function createServer(requestedPort?: number): ServerInstance {
 
           sessionFileLogger.cleanupOldLogs();
           reconciliationService.startPeriodicCleanup();
+          rateLimiter.start();
           schedulerService.start();
 
           logger.info('Server endpoints available', {
