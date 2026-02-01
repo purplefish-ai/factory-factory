@@ -134,6 +134,20 @@ Project (repository configuration)
 - **Terminal access:** Full PTY terminals per workspace
 - **Session persistence:** Resume previous Claude sessions
 
+## Security Considerations
+
+> **Warning:** Factory Factory runs Claude Code in **bypass permissions mode** by default. This means Claude can execute bash commands, write and modify files, and perform other operations without asking for confirmation.
+
+This design choice enables uninterrupted parallel workflows, but you should be aware that:
+- Claude has full access to your filesystem within each workspace
+- Commands are executed automatically without manual approval
+- The isolation is at the git worktree level, not the system level
+
+**Recommendations:**
+- Only use Factory Factory with repositories you trust
+- Review Claude's changes before merging branches
+- Consider running in a containerized environment for sensitive projects
+
 ## Brand
 
 | Color | Hex | Usage |
