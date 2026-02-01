@@ -1,4 +1,13 @@
-import { Archive, Check, GitPullRequest, Kanban, Loader2, Plus, Settings } from 'lucide-react';
+import {
+  Archive,
+  Check,
+  ExternalLink,
+  GitPullRequest,
+  Kanban,
+  Loader2,
+  Plus,
+  Settings,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -480,16 +489,17 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4">
+      <SidebarFooter className="border-t border-sidebar-border px-4 py-2">
         <ServerPortInfo />
         <div className="flex items-center justify-between">
           <a
             href="https://github.com/purplefish-ai/factory-factory"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
           >
             GitHub
+            <ExternalLink className="h-3 w-3" />
           </a>
           <ThemeToggle />
         </div>
