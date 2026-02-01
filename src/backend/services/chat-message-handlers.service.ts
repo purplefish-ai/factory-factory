@@ -517,6 +517,9 @@ class ChatMessageHandlerService {
     // This must happen before any operation that could fail
     chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
 
+    // Prepare the response event - we'll send it even on error to clear frontend state
+    const responseEvent = { type: 'message_used_as_response', id: messageId, text };
+
     try {
       if (pendingRequest.toolName === 'AskUserQuestion') {
         // For AskUserQuestion, answer each question with "Other" + the message text
@@ -535,12 +538,6 @@ class ChatMessageHandlerService {
         client.denyInteractiveRequest(pendingRequest.requestId, text);
       }
 
-      // Notify frontend that the message was used as a response
-      const responseEvent = { type: 'message_used_as_response', id: messageId, text };
-      ws.send(JSON.stringify(responseEvent));
-      // Forward to other connections so they also see the message
-      chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
-
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Message used as interactive response', {
           sessionId,
@@ -557,8 +554,22 @@ class ChatMessageHandlerService {
         toolName: pendingRequest.toolName,
         error: errorMessage,
       });
-      // Still return true - the pending request was cleared and we shouldn't queue this message
-      // to avoid sending it to Claude as a duplicate
+      // Continue to send the response event to clear frontend state
+      // The message will be displayed in chat even though sending to Claude failed
+    }
+
+    // Always notify frontend - clears pending state and displays the message
+    // This happens outside try/catch to ensure frontend state is always updated
+    try {
+      ws.send(JSON.stringify(responseEvent));
+      chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
+    } catch (sendError) {
+      // WebSocket send failed - frontend will recover on reconnect
+      logger.warn('[Chat WS] Failed to send message_used_as_response event', {
+        sessionId,
+        messageId,
+        error: sendError instanceof Error ? sendError.message : String(sendError),
+      });
     }
 
     return true;
