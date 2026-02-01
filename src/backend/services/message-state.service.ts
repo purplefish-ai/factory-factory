@@ -106,6 +106,12 @@ class MessageStateService {
   private sessionEvents = new Map<string, Array<{ type: string; data?: unknown }>>();
 
   /**
+   * Next order number for each session. Monotonically increasing.
+   * Map<sessionId, nextOrder>
+   */
+  private sessionOrderCounters = new Map<string, number>();
+
+  /**
    * Get or create the message map for a session.
    */
   private getOrCreateSessionMap(sessionId: string): Map<string, MessageWithState> {
@@ -118,6 +124,15 @@ class MessageStateService {
   }
 
   /**
+   * Get the next order number for a session and increment the counter.
+   */
+  private getNextOrder(sessionId: string): number {
+    const current = this.sessionOrderCounters.get(sessionId) ?? 0;
+    this.sessionOrderCounters.set(sessionId, current + 1);
+    return current;
+  }
+
+  /**
    * Create a new user message from a QueuedMessage.
    * Starts in ACCEPTED state (backend has received it).
    */
@@ -126,6 +141,9 @@ class MessageStateService {
 
     // Queue position = count of ACCEPTED user messages (messages waiting in queue)
     const queuePosition = this.getQueuedMessageCount(sessionId);
+
+    // Assign monotonically increasing order for reliable frontend sorting
+    const order = this.getNextOrder(sessionId);
 
     const messageWithState: UserMessageWithState = {
       id: msg.id,
@@ -136,6 +154,7 @@ class MessageStateService {
       attachments: msg.attachments,
       queuePosition,
       settings: msg.settings,
+      order,
     };
 
     messages.set(msg.id, messageWithState);
@@ -145,6 +164,7 @@ class MessageStateService {
       messageId: msg.id,
       state: messageWithState.state,
       queuePosition,
+      order,
     });
 
     this.emitStateChange(sessionId, messageWithState);
@@ -164,6 +184,9 @@ class MessageStateService {
   ): UserMessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
 
+    // Assign order even for rejected messages to maintain consistency
+    const order = this.getNextOrder(sessionId);
+
     const messageWithState: UserMessageWithState = {
       id: messageId,
       type: 'user',
@@ -171,6 +194,7 @@ class MessageStateService {
       timestamp: new Date().toISOString(),
       text: text ?? '',
       errorMessage,
+      order,
     };
 
     messages.set(messageId, messageWithState);
@@ -275,7 +299,7 @@ class MessageStateService {
   }
 
   /**
-   * Get all messages for a session, ordered by timestamp.
+   * Get all messages for a session, ordered by their assigned order.
    * Filters out terminal error states (REJECTED, FAILED, CANCELLED) since these
    * messages were never successfully processed and shouldn't appear in snapshots.
    */
@@ -291,7 +315,7 @@ class MessageStateService {
 
     return Array.from(messages.values())
       .filter((msg) => !terminalErrorStates.has(msg.state))
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      .sort((a, b) => a.order - b.order);
   }
 
   /**
@@ -323,6 +347,7 @@ class MessageStateService {
     }
     this.sessionMessages.delete(sessionId);
     this.sessionEvents.delete(sessionId);
+    this.sessionOrderCounters.delete(sessionId);
   }
 
   // =============================================================================
@@ -363,6 +388,7 @@ class MessageStateService {
     const sessionCount = this.sessionMessages.size;
     this.sessionMessages.clear();
     this.sessionEvents.clear();
+    this.sessionOrderCounters.clear();
     if (sessionCount > 0) {
       logger.info('All sessions cleared', { clearedCount: sessionCount });
     }
@@ -396,12 +422,17 @@ class MessageStateService {
 
     // Clear any existing messages for this session (handles empty map case)
     this.sessionMessages.delete(sessionId);
+    // Reset order counter for fresh history load
+    this.sessionOrderCounters.delete(sessionId);
     const messages = this.getOrCreateSessionMap(sessionId);
 
     for (const historyMsg of history) {
       const messageId =
         historyMsg.uuid ||
         `history-${historyMsg.timestamp}-${Math.random().toString(36).slice(2, 9)}`;
+
+      // Assign order to each message for reliable sorting
+      const order = this.getNextOrder(sessionId);
 
       if (historyMsg.type === 'user') {
         // User text message - already committed
@@ -411,6 +442,7 @@ class MessageStateService {
           state: MessageState.COMMITTED,
           timestamp: historyMsg.timestamp,
           text: historyMsg.content,
+          order,
         };
         messages.set(messageId, messageWithState);
       } else if (
@@ -433,8 +465,10 @@ class MessageStateService {
               source: 'claude',
               message: claudeMessage,
               timestamp: historyMsg.timestamp,
+              order,
             },
           ],
+          order,
         };
         messages.set(messageId, messageWithState);
       }
@@ -570,9 +604,10 @@ class MessageStateService {
           text: msg.text,
           timestamp: msg.timestamp,
           attachments: msg.attachments,
+          order: msg.order,
         });
       } else {
-        // Claude message - add all its chatMessages
+        // Claude message - add all its chatMessages (they already have order from history load)
         chatMessages.push(...msg.chatMessages);
       }
     }
@@ -641,6 +676,7 @@ class MessageStateService {
             timestamp: message.timestamp,
             attachments: message.attachments,
             settings: message.settings,
+            order: message.order,
           }
         : undefined;
 

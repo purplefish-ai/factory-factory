@@ -141,6 +141,7 @@ describe('MessageStateService', () => {
           timestamp: msg.timestamp,
           attachments: msg.attachments,
           settings: msg.settings,
+          order: 0,
         },
       });
     });
@@ -276,33 +277,26 @@ describe('MessageStateService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should return messages sorted by timestamp', () => {
-      // Create messages with specific timestamps
-      const now = Date.now();
-      const msg1: QueuedMessage = {
-        ...createTestQueuedMessage('msg-1'),
-        timestamp: new Date(now - 2000).toISOString(),
-      };
-      const msg2: QueuedMessage = {
-        ...createTestQueuedMessage('msg-2'),
-        timestamp: new Date(now - 1000).toISOString(),
-      };
-      const msg3: QueuedMessage = {
-        ...createTestQueuedMessage('msg-3'),
-        timestamp: new Date(now).toISOString(),
-      };
+    it('should return messages sorted by order (creation order)', () => {
+      // Create messages - order is determined by when createUserMessage is called
+      const msg1 = createTestQueuedMessage('msg-1');
+      const msg2 = createTestQueuedMessage('msg-2');
+      const msg3 = createTestQueuedMessage('msg-3');
 
-      // Add in non-chronological order
+      // Add in specific order - this is the order they will appear
+      messageStateService.createUserMessage('session-1', msg1);
       messageStateService.createUserMessage('session-1', msg2);
       messageStateService.createUserMessage('session-1', msg3);
-      messageStateService.createUserMessage('session-1', msg1);
 
       const result = messageStateService.getAllMessages('session-1');
 
       expect(result).toHaveLength(3);
       expect(result[0].id).toBe('msg-1');
+      expect(result[0].order).toBe(0);
       expect(result[1].id).toBe('msg-2');
+      expect(result[1].order).toBe(1);
       expect(result[2].id).toBe('msg-3');
+      expect(result[2].order).toBe(2);
     });
   });
 
@@ -642,28 +636,23 @@ describe('MessageStateService', () => {
       });
     });
 
-    it('should return sorted messages in snapshot', () => {
-      const now = Date.now();
-      const msg1: QueuedMessage = {
-        ...createTestQueuedMessage('msg-1'),
-        timestamp: new Date(now - 1000).toISOString(),
-      };
-      const msg2: QueuedMessage = {
-        ...createTestQueuedMessage('msg-2'),
-        timestamp: new Date(now).toISOString(),
-      };
+    it('should return messages sorted by order in snapshot', () => {
+      const msg1 = createTestQueuedMessage('msg-1');
+      const msg2 = createTestQueuedMessage('msg-2');
 
-      // Add in reverse order
-      messageStateService.createUserMessage('session-1', msg2);
+      // Add in specific order - messages will be sorted by order (creation order)
       messageStateService.createUserMessage('session-1', msg1);
+      messageStateService.createUserMessage('session-1', msg2);
       vi.clearAllMocks();
 
       messageStateService.sendSnapshot('session-1', { phase: 'ready' });
 
       const call = vi.mocked(chatConnectionService.forwardToSession).mock.calls[0];
-      const payload = call[1] as { messages: Array<{ id: string }> };
+      const payload = call[1] as { messages: Array<{ id: string; order?: number }> };
       expect(payload.messages[0].id).toBe('msg-1');
+      expect(payload.messages[0].order).toBe(0);
       expect(payload.messages[1].id).toBe('msg-2');
+      expect(payload.messages[1].order).toBe(1);
     });
 
     it('should include planContent in pendingInteractiveRequest', () => {

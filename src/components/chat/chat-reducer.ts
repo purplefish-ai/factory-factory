@@ -188,6 +188,8 @@ export type ChatAction =
           timestamp: string;
           attachments?: MessageAttachment[];
           settings?: ChatSettings;
+          /** Backend-assigned order for reliable sorting */
+          order?: number;
         };
       };
     };
@@ -219,22 +221,29 @@ function createErrorMessage(error: string): ChatMessage {
 }
 
 /**
- * Inserts a message into the messages array at the correct position based on timestamp.
+ * Inserts a message into the messages array at the correct position based on order.
  * Uses binary search to find the insertion point for O(log n) performance.
- * Messages are ordered chronologically (oldest first).
+ * Messages are ordered by their backend-assigned order (oldest first).
+ * Falls back to timestamp ordering for messages without order (legacy/local messages).
  */
-function insertMessageByTimestamp(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
-  const newTimestamp = new Date(newMessage.timestamp).getTime();
+function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
+  // If new message has no order, append to end (local messages without backend confirmation)
+  if (newMessage.order === undefined) {
+    return [...messages, newMessage];
+  }
 
-  // Binary search to find insertion point
+  const newOrder = newMessage.order;
+
+  // Binary search to find insertion point based on order
   let low = 0;
   let high = messages.length;
 
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    const midTimestamp = new Date(messages[mid].timestamp).getTime();
+    const midOrder = messages[mid].order;
 
-    if (midTimestamp <= newTimestamp) {
+    // Messages without order go to the end, so treat undefined as Infinity
+    if (midOrder === undefined || midOrder <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;
@@ -791,6 +800,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           text: userMessage.text,
           timestamp: userMessage.timestamp,
           attachments: userMessage.attachments,
+          order: userMessage.order,
         };
 
         const newQueuedMessages = new Map(state.queuedMessages);
@@ -808,7 +818,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
         return {
           ...state,
-          messages: insertMessageByTimestamp(state.messages, newMessage),
+          messages: insertMessageByOrder(state.messages, newMessage),
           queuedMessages: newQueuedMessages,
           pendingMessages: newPendingMessages,
         };
