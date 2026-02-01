@@ -168,12 +168,15 @@ function DiffLineComponent({ line, lineNumberWidth }: DiffLineProps) {
       {/* Line numbers */}
       <div className="flex-shrink-0 flex text-muted-foreground border-r border-border select-none">
         <span
-          className="px-1 text-right border-r border-border tabular-nums"
+          className="box-content px-1 text-right border-r border-border tabular-nums"
           style={{ width: `${lineNumberWidth}ch` }}
         >
           {line.lineNumber?.old ?? ''}
         </span>
-        <span className="px-1 text-right tabular-nums" style={{ width: `${lineNumberWidth}ch` }}>
+        <span
+          className="box-content px-1 text-right tabular-nums"
+          style={{ width: `${lineNumberWidth}ch` }}
+        >
           {line.lineNumber?.new ?? ''}
         </span>
       </div>
