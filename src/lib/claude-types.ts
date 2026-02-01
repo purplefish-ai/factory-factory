@@ -399,27 +399,25 @@ export interface AgentMetadata {
  * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
  */
 export interface WebSocketMessage {
-  type:
+  type: // Session lifecycle events
     | 'status'
     | 'starting'
     | 'started'
     | 'stopped'
     | 'process_exit'
+    // Message streaming
     | 'claude_message'
+    // Errors and metadata
     | 'error'
     | 'sessions'
-    | 'session_loaded'
     | 'agent_metadata'
+    // Interactive requests
     | 'permission_request'
     | 'user_question'
-    | 'message_queued'
-    | 'message_dispatched'
-    | 'message_removed'
-    | 'message_accepted'
+    // Queue error handling
     | 'message_rejected'
     | 'message_used_as_response'
-    | 'queue'
-    // New unified message state events
+    // Message state machine events (primary protocol)
     | 'message_state_changed'
     | 'messages_snapshot';
   sessionId?: string;
@@ -429,37 +427,27 @@ export interface WebSocketMessage {
   code?: number;
   data?: unknown;
   sessions?: SessionInfo[];
-  messages?: HistoryMessage[];
   agentMetadata?: AgentMetadata;
-  gitBranch?: string | null;
-  // Permission request fields (Phase 9)
+  // Permission request fields
   requestId?: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   // Plan content for ExitPlanMode permission requests
   planContent?: string | null;
-  // AskUserQuestion fields (Phase 11)
+  // AskUserQuestion fields
   questions?: AskUserQuestion[];
-  // Chat settings
-  settings?: ChatSettings;
-  // Message queued acknowledgment
+  // Message fields
   text?: string;
-  // Message queue fields
   id?: string;
-  position?: number;
-  // Single queued message for message_accepted event
-  queuedMessage?: QueuedMessage;
-  // Queued messages for session restore
-  queuedMessages?: QueuedMessage[];
-  // Pending interactive request for session restore
-  pendingInteractiveRequest?: PendingInteractiveRequest | null;
-  // Message state machine fields (new unified protocol)
+  // Message state machine fields (primary protocol)
   /** New state for message_state_changed events */
   newState?: MessageState;
   /** All messages for messages_snapshot events */
   allMessages?: MessageWithState[];
   /** Session status for messages_snapshot events */
   sessionStatus?: SessionStatus;
+  /** Pending interactive request for messages_snapshot events */
+  pendingInteractiveRequest?: PendingInteractiveRequest | null;
   /** Queue position for message_state_changed events */
   queuePosition?: number;
   /** Error message for REJECTED/FAILED states in message_state_changed events */
@@ -703,15 +691,6 @@ export function isWsClaudeMessage(
   msg: WebSocketMessage
 ): msg is WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage } {
   return msg.type === 'claude_message' && 'data' in msg && msg.data != null;
-}
-
-/**
- * Type guard for session_loaded WebSocket messages.
- */
-export function isWsSessionLoadedMessage(
-  msg: WebSocketMessage
-): msg is WebSocketMessage & { type: 'session_loaded'; messages: HistoryMessage[] } {
-  return msg.type === 'session_loaded' && 'messages' in msg && Array.isArray(msg.messages);
 }
 
 /**

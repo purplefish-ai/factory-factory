@@ -242,11 +242,8 @@ class ChatMessageHandlerService {
    * Dispatch a message to the client.
    */
   private dispatchMessage(dbSessionId: string, client: ClaudeClient, msg: QueuedMessage): void {
-    // Update state to DISPATCHED (new state machine)
+    // Update state to DISPATCHED - emits message_state_changed event
     messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
-
-    // Notify all connections that message is being dispatched (legacy event)
-    chatConnectionService.forwardToSession(dbSessionId, { type: 'message_dispatched', id: msg.id });
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
@@ -410,7 +407,7 @@ class ChatMessageHandlerService {
       return;
     }
 
-    this.notifyMessageAccepted(ws, sessionId, messageId, result.position, queuedMsg);
+    this.notifyMessageAccepted(sessionId, messageId, result.position, queuedMsg);
     await this.tryDispatchNextMessage(sessionId);
   }
 
@@ -461,32 +458,16 @@ class ChatMessageHandlerService {
 
   /**
    * Notify frontend and all connections that a message was accepted.
+   * Creates the message in state service which emits message_state_changed event.
    */
   private notifyMessageAccepted(
-    ws: WebSocket,
     sessionId: string,
     messageId: string,
     position: number,
     queuedMsg: QueuedMessage
   ): void {
-    // Create message in state service with ACCEPTED state (new state machine)
+    // Create message in state service with ACCEPTED state - emits message_state_changed event
     messageStateService.createUserMessage(sessionId, queuedMsg);
-
-    // Send legacy message_accepted event
-    ws.send(
-      JSON.stringify({
-        type: 'message_accepted',
-        id: messageId,
-        position,
-        queuedMessage: queuedMsg,
-      })
-    );
-
-    chatConnectionService.forwardToSession(
-      sessionId,
-      { type: 'message_accepted', id: messageId, position, queuedMessage: queuedMsg },
-      ws
-    );
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Message queued', { sessionId, messageId, position });
@@ -592,13 +573,10 @@ class ChatMessageHandlerService {
     const removed = messageQueueService.remove(sessionId, messageId);
 
     if (removed) {
-      // Remove from state service (message was cancelled)
-      messageStateService.removeMessage(sessionId, messageId);
-
-      // Send legacy message_removed event
-      chatConnectionService.forwardToSession(sessionId, { type: 'message_removed', id: messageId });
+      // Transition to CANCELLED state - emits message_state_changed event to all connections
+      messageStateService.updateState(sessionId, messageId, MessageState.CANCELLED);
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Queued message removed', { sessionId, messageId });
+        logger.info('[Chat WS] Queued message cancelled', { sessionId, messageId });
       }
     } else {
       ws.send(JSON.stringify({ type: 'error', message: 'Message not found in queue' }));

@@ -11,7 +11,8 @@
  * - Session switching effects
  *
  * Message queue is managed on the backend - frontend sends queue_message and
- * receives queue events (message_queued, message_dispatched, message_removed).
+ * receives message_state_changed events for state transitions. On connect,
+ * messages_snapshot restores full state.
  *
  * Usage:
  * ```ts
@@ -41,13 +42,7 @@ import {
   isWsClaudeMessage,
 } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
-import {
-  clearDraft,
-  loadAllSessionData,
-  loadSettings,
-  persistDraft,
-  persistSettings,
-} from './chat-persistence';
+import { clearDraft, loadAllSessionData, persistDraft, persistSettings } from './chat-persistence';
 import {
   type ChatAction,
   type ChatState,
@@ -271,42 +266,6 @@ function handleThinkingStreaming(claudeMsg: ClaudeMessage): ChatAction | null {
 }
 
 /**
- * Handle session_loaded message with settings override logic.
- * Prefers locally stored settings over backend-inferred settings.
- */
-function handleSessionLoaded(
-  wsMessage: WebSocketMessage,
-  dbSessionIdRef: React.MutableRefObject<string | null>,
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>,
-  dispatch: React.Dispatch<ChatAction>
-): void {
-  // Dispatch the main session loaded action
-  const action = createActionFromWebSocketMessage(wsMessage);
-  if (action) {
-    dispatch(action);
-  }
-
-  // Handle settings: prefer locally stored settings over backend-inferred
-  if (wsMessage.settings) {
-    const sessionId = dbSessionIdRef.current;
-    const storedSettings = sessionId ? loadSettings(sessionId) : null;
-    if (storedSettings) {
-      // User has explicit settings stored - use those
-      dispatch({ type: 'SET_SETTINGS', payload: storedSettings });
-    } else {
-      // No stored settings - use backend settings and persist them
-      dispatch({ type: 'SET_SETTINGS', payload: wsMessage.settings });
-      if (sessionId) {
-        persistSettings(sessionId, wsMessage.settings);
-      }
-    }
-  }
-
-  // Clear tool input accumulator when loading a new session
-  toolInputAccumulatorRef.current.clear();
-}
-
-/**
  * Handle Claude message with tool input streaming.
  * Expects a validated claude_message WebSocket message.
  */
@@ -439,12 +398,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Handle Claude messages specially for tool input streaming
       if (isWsClaudeMessage(wsMessage)) {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
-      }
-
-      // Handle session_loaded specially for settings override
-      if (wsMessage.type === 'session_loaded') {
-        handleSessionLoaded(wsMessage, dbSessionIdRef, toolInputAccumulatorRef, dispatch);
-        return;
       }
 
       // Convert WebSocket message to action and dispatch
