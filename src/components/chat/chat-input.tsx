@@ -3,6 +3,7 @@
 import { Brain, ChevronDown, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { Button } from '@/components/ui/button';
@@ -241,6 +242,7 @@ export const ChatInput = memo(function ChatInput({
 
   // Handle file selection
   const handleFileSelect = useCallback(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: File handling requires multiple checks
     async (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) {
@@ -253,9 +255,9 @@ export const ChatInput = memo(function ChatInput({
         try {
           const attachment = await fileToAttachment(file);
           newAttachments.push(attachment);
-        } catch {
-          // Silently ignore errors for now
-          // TODO: Show error toast/notification for failed uploads
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          toast.error(`Failed to upload ${file.name}: ${message}`);
         }
       }
 
