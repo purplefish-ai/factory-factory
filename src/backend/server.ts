@@ -171,12 +171,12 @@ export function createServer(requestedPort?: number): ServerInstance {
       ) {
         return next();
       }
-      const indexPath = join(frontendStaticPath, 'index.html');
       // Set no-cache headers for index.html so browsers always check for updates
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.set('Pragma', 'no-cache');
       res.set('Expires', '0');
-      res.sendFile(indexPath, (err) => {
+      // Express 5 requires the root option for sendFile to work correctly
+      res.sendFile('index.html', { root: frontendStaticPath }, (err) => {
         if (err) {
           // File not found or read error - log at debug level since this can happen
           // during page refresh timing issues and is usually transient
