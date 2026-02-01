@@ -107,6 +107,10 @@ class ChatMessageHandlerService {
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
+        // Load JSONL history as starting state BEFORE spawning Claude
+        // This ensures history is available when resuming a session
+        await this.loadHistoryIfNeeded(dbSessionId);
+
         // Notify frontend that agent is starting BEFORE creating the client
         // This provides immediate feedback when the first message is sent
         chatConnectionService.forwardToSession(dbSessionId, { type: 'starting', dbSessionId });
@@ -207,6 +211,40 @@ class ChatMessageHandlerService {
   // ============================================================================
   // Private: Dispatch Helpers
   // ============================================================================
+
+  /**
+   * Load JSONL history into memory if needed.
+   * Called before auto-starting Claude to ensure history is available when resuming.
+   * Has race protection via messageStateService.loadFromHistory() which skips if messages exist.
+   */
+  private async loadHistoryIfNeeded(dbSessionId: string): Promise<void> {
+    // Get session info to find claudeSessionId and workingDir
+    const dbSession = await claudeSessionAccessor.findById(dbSessionId);
+    if (!dbSession?.claudeSessionId) {
+      // No Claude session ID means no history to load
+      return;
+    }
+
+    const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
+    if (!sessionOpts) {
+      return;
+    }
+
+    // loadFromHistory has built-in race protection - skips if messages already exist
+    const history = await SessionManager.getHistory(
+      dbSession.claudeSessionId,
+      sessionOpts.workingDir
+    );
+    messageStateService.loadFromHistory(dbSessionId, history);
+
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Loaded history before starting Claude', {
+        dbSessionId,
+        claudeSessionId: dbSession.claudeSessionId,
+        historyCount: history.length,
+      });
+    }
+  }
 
   /**
    * Auto-start a client for queue dispatch using settings from the provided message.
@@ -596,26 +634,25 @@ class ChatMessageHandlerService {
       return;
     }
 
-    const targetSessionId = dbSession.claudeSessionId ?? null;
+    const claudeSessionId = dbSession.claudeSessionId ?? null;
     const existingClient = sessionService.getClient(sessionId);
     const isClientRunning = existingClient?.isRunning() ?? false;
     const isClientWorking = existingClient?.isWorking() ?? false;
     const pendingInteractiveRequest =
       chatEventForwarderService.getPendingRequest(sessionId) ?? null;
 
-    // Load history from JSONL file only if:
+    // Load history from JSONL file if:
     // 1. We have a Claude session ID to load from, AND
-    // 2. We don't have any in-memory messages, AND
-    // 3. Claude is NOT currently running (the process is not alive)
+    // 2. Claude is NOT currently running (the process is not alive)
     //
     // When Claude IS running, we use the in-memory state which is kept
     // up-to-date by streaming event handlers. The JSONL file may be stale
     // because Claude CLI only writes to it periodically, not on every chunk.
-    const hasInMemoryMessages = messageStateService.getMessageCount(sessionId) > 0;
-    const shouldLoadFromHistory = targetSessionId && !hasInMemoryMessages && !isClientRunning;
-
-    if (shouldLoadFromHistory) {
-      const history = await SessionManager.getHistory(targetSessionId, workingDir);
+    //
+    // Race protection: loadFromHistory() skips loading if messages already exist
+    // in memory, preventing overwrite of fresh state.
+    if (claudeSessionId && !isClientRunning) {
+      const history = await SessionManager.getHistory(claudeSessionId, workingDir);
       messageStateService.loadFromHistory(sessionId, history);
     }
 
