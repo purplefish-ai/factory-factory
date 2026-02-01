@@ -274,7 +274,7 @@ program
     const databasePath = options.databasePath || process.env.DATABASE_PATH || defaultDbPath;
 
     // Show startup banner
-    console.log(chalk.cyan(`\n  🔲 FACTORY ${chalk.bold('FACTORY')}\n`));
+    console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
 
     // Ensure data directory exists
     if (verbose) {
