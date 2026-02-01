@@ -218,10 +218,9 @@ class ChatMessageHandlerService {
    * Has race protection via messageStateService.loadFromHistory() which skips if messages exist.
    */
   private async loadHistoryIfNeeded(dbSessionId: string): Promise<void> {
-    // Get session info to find claudeSessionId and workingDir
     const dbSession = await claudeSessionAccessor.findById(dbSessionId);
-    if (!dbSession?.claudeSessionId) {
-      // No Claude session ID means no history to load
+    const claudeSessionId = dbSession?.claudeSessionId;
+    if (!claudeSessionId) {
       return;
     }
 
@@ -230,17 +229,13 @@ class ChatMessageHandlerService {
       return;
     }
 
-    // loadFromHistory has built-in race protection - skips if messages already exist
-    const history = await SessionManager.getHistory(
-      dbSession.claudeSessionId,
-      sessionOpts.workingDir
-    );
+    const history = await SessionManager.getHistory(claudeSessionId, sessionOpts.workingDir);
     messageStateService.loadFromHistory(dbSessionId, history);
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Loaded history before starting Claude', {
         dbSessionId,
-        claudeSessionId: dbSession.claudeSessionId,
+        claudeSessionId,
         historyCount: history.length,
       });
     }
@@ -634,29 +629,20 @@ class ChatMessageHandlerService {
       return;
     }
 
-    const claudeSessionId = dbSession.claudeSessionId ?? null;
     const existingClient = sessionService.getClient(sessionId);
     const isClientRunning = existingClient?.isRunning() ?? false;
-    const isClientWorking = existingClient?.isWorking() ?? false;
-    const pendingInteractiveRequest =
-      chatEventForwarderService.getPendingRequest(sessionId) ?? null;
 
-    // Load history from JSONL file if:
-    // 1. We have a Claude session ID to load from, AND
-    // 2. Claude is NOT currently running (the process is not alive)
-    //
-    // When Claude IS running, we use the in-memory state which is kept
-    // up-to-date by streaming event handlers. The JSONL file may be stale
-    // because Claude CLI only writes to it periodically, not on every chunk.
-    //
-    // Race protection: loadFromHistory() skips loading if messages already exist
-    // in memory, preventing overwrite of fresh state.
-    if (claudeSessionId && !isClientRunning) {
-      const history = await SessionManager.getHistory(claudeSessionId, workingDir);
+    // Load history from JSONL file if we have a Claude session ID and Claude is NOT running.
+    // When running, in-memory state is kept up-to-date by streaming handlers.
+    // loadFromHistory() has race protection - skips if messages already exist.
+    if (dbSession.claudeSessionId && !isClientRunning) {
+      const history = await SessionManager.getHistory(dbSession.claudeSessionId, workingDir);
       messageStateService.loadFromHistory(sessionId, history);
     }
 
-    // Send messages_snapshot to the requesting client
+    const isClientWorking = existingClient?.isWorking() ?? false;
+    const pendingInteractiveRequest =
+      chatEventForwarderService.getPendingRequest(sessionId) ?? null;
     const sessionStatus = messageStateService.computeSessionStatus(sessionId, isClientWorking);
     messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
   }
