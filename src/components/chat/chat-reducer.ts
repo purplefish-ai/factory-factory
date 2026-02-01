@@ -579,15 +579,27 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    // MESSAGE_SENDING: Mark a message as pending backend confirmation and store content for recovery
+    // MESSAGE_SENDING: Mark a message as pending backend confirmation, store content for recovery,
+    // and add to messages array for immediate display
     case 'MESSAGE_SENDING': {
+      const { id, text, attachments } = action.payload;
+
+      // Store content in pendingMessages for recovery if rejected
       const newPendingMessages = new Map(state.pendingMessages);
-      newPendingMessages.set(action.payload.id, {
-        text: action.payload.text,
-        attachments: action.payload.attachments,
-      });
+      newPendingMessages.set(id, { text, attachments });
+
+      // Add to messages array for immediate display
+      const newMessage: ChatMessage = {
+        id,
+        source: 'user',
+        text,
+        timestamp: new Date().toISOString(),
+        attachments,
+      };
+
       return {
         ...state,
+        messages: [...state.messages, newMessage],
         pendingMessages: newPendingMessages,
       };
     }
@@ -672,12 +684,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // New message state machine actions
     case 'MESSAGES_SNAPSHOT': {
+      // Build set of message IDs from backend snapshot for deduplication
+      const snapshotIds = new Set(action.payload.messages.map((m) => m.id));
+
+      // Keep optimistic user messages that haven't reached backend yet
+      const optimisticMessages = state.messages.filter(
+        (m) => m.source === 'user' && state.pendingMessages.has(m.id) && !snapshotIds.has(m.id)
+      );
+
       // Convert MessageWithState[] to ChatMessage[] for rendering
       // Expand Claude contentBlocks into multiple ChatMessage items
-      const messages: ChatMessage[] = [];
+      const snapshotMessages: ChatMessage[] = [];
       for (const msg of action.payload.messages) {
         if (isUserMessage(msg)) {
-          messages.push({
+          snapshotMessages.push({
             id: msg.id,
             source: 'user',
             text: msg.text,
@@ -688,7 +708,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           // Claude message - expand contentBlocks into multiple ChatMessages
           const blocks = msg.contentBlocks ?? [];
           for (let i = 0; i < blocks.length; i++) {
-            messages.push({
+            snapshotMessages.push({
               id: `${msg.id}-${i}`,
               source: 'claude',
               message: blocks[i],
@@ -697,6 +717,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           }
         }
       }
+
+      // Merge: snapshot messages first, then optimistic messages not yet in snapshot
+      const messages = [...snapshotMessages, ...optimisticMessages];
 
       // Build queuedMessages map from user messages in ACCEPTED state
       const queuedMessages = new Map<string, QueuedMessage>();
@@ -717,8 +740,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
 
+      // Keep pending messages that haven't been acknowledged by backend yet
+      const newPendingMessages = new Map<string, PendingMessageContent>();
+      for (const [id, content] of state.pendingMessages) {
+        if (!snapshotIds.has(id)) {
+          newPendingMessages.set(id, content);
+        }
+      }
+
       // Convert session status from shared type to local type
-      const sessionStatus: SessionStatus = action.payload.sessionStatus;
+      // Preserve 'starting' if backend reports 'ready' - 'starting' is a frontend-only
+      // optimistic state for when a message has been sent but the client hasn't started yet
+      const sessionStatus: SessionStatus =
+        state.sessionStatus.phase === 'starting' && action.payload.sessionStatus.phase === 'ready'
+          ? state.sessionStatus
+          : action.payload.sessionStatus;
 
       // Convert pending interactive request to UI state format
       const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
@@ -730,7 +766,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         sessionStatus,
         pendingRequest,
         toolUseIdToIndex: new Map(),
-        pendingMessages: new Map(),
+        pendingMessages: newPendingMessages,
         lastRejectedMessage: null,
       };
     }
@@ -765,18 +801,29 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
 
       if (newState === MessageState.REJECTED || newState === MessageState.FAILED) {
-        // Retrieve queued content for recovery before deleting
+        // Retrieve content for recovery - check both queuedMessages and pendingMessages
         const queuedMessage = state.queuedMessages.get(id);
+        const pendingContent = state.pendingMessages.get(id);
+
         const newQueuedMessages = new Map(state.queuedMessages);
         newQueuedMessages.delete(id);
+
+        const newPendingMessages = new Map(state.pendingMessages);
+        newPendingMessages.delete(id);
+
+        // Prefer queuedMessage (has full structure), fall back to pendingContent
+        const recoveryContent = queuedMessage ?? pendingContent;
+
         return {
           ...state,
+          messages: state.messages.filter((m) => m.id !== id),
           queuedMessages: newQueuedMessages,
+          pendingMessages: newPendingMessages,
           // Store rejected message info for recovery (restore to input)
-          lastRejectedMessage: queuedMessage
+          lastRejectedMessage: recoveryContent
             ? {
-                text: queuedMessage.text,
-                attachments: queuedMessage.attachments,
+                text: queuedMessage?.text ?? pendingContent?.text ?? '',
+                attachments: recoveryContent.attachments,
                 error: action.payload.errorMessage ?? 'Message failed',
               }
             : null,

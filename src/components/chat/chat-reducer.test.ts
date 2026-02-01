@@ -1340,7 +1340,7 @@ describe('chatReducer', () => {
       }
     });
 
-    it('should clear pending messages and reset state', () => {
+    it('should preserve unacknowledged pending messages and reset other state', () => {
       const state: ChatState = {
         ...initialState,
         pendingMessages: new Map([['msg-1', { text: 'Pending' }]]),
@@ -1351,15 +1351,51 @@ describe('chatReducer', () => {
       const action: ChatAction = {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
-          messages: [],
+          messages: [], // msg-1 not in snapshot, so it's still pending
           sessionStatus: { phase: 'ready' },
         },
       };
       const newState = chatReducer(state, action);
 
-      expect(newState.pendingMessages.size).toBe(0);
+      // Pending messages NOT in snapshot are preserved (for optimistic UI)
+      expect(newState.pendingMessages.size).toBe(1);
+      expect(newState.pendingMessages.get('msg-1')).toEqual({ text: 'Pending' });
+      // Other state is cleared
       expect(newState.lastRejectedMessage).toBeNull();
       expect(newState.toolUseIdToIndex.size).toBe(0);
+    });
+
+    it('should clear pending messages when they appear in snapshot (acknowledged by backend)', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([
+          ['msg-1', { text: 'Pending 1' }],
+          ['msg-2', { text: 'Pending 2' }],
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGES_SNAPSHOT',
+        payload: {
+          messages: [
+            {
+              type: 'user',
+              id: 'msg-1',
+              text: 'Pending 1',
+              timestamp: '2024-01-01T00:00:00.000Z',
+              state: MessageState.COMMITTED,
+            },
+          ] as MessageWithState[],
+          sessionStatus: { phase: 'ready' },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // msg-1 is in snapshot, so it's removed from pendingMessages
+      // msg-2 is not in snapshot, so it's preserved
+      expect(newState.pendingMessages.size).toBe(1);
+      expect(newState.pendingMessages.has('msg-1')).toBe(false);
+      expect(newState.pendingMessages.get('msg-2')).toEqual({ text: 'Pending 2' });
     });
   });
 
