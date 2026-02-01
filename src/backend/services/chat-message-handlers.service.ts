@@ -246,6 +246,10 @@ class ChatMessageHandlerService {
     // Update state to DISPATCHED - emits message_state_changed event
     messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
 
+    // Notify frontend that agent is working - this ensures the spinner shows
+    // for subsequent messages when client is already running
+    chatConnectionService.forwardToSession(dbSessionId, { type: 'status', running: true });
+
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
     client.sendMessage(content);
