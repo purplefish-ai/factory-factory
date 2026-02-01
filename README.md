@@ -10,6 +10,12 @@
   Each workspace gets its own isolated git worktree, enabling true parallel development.
 </p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/factory-factory"><img src="https://img.shields.io/npm/v/factory-factory" alt="npm"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml"><img src="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish-ai/factory-factory" alt="License"></a>
+</p>
+
 ---
 
 ## Installation
@@ -22,12 +28,15 @@
 
 ```bash
 # Clone and install
-git clone <repo-url>
+git clone https://github.com/purplefish-ai/factory-factory.git
 cd factory-factory
 pnpm install
 
-# Optional: Install CLI globally
+# Option A: Install CLI globally from source
 pnpm link --global
+
+# Option B: Install from npm (when published)
+npm install -g factory-factory
 ```
 
 ## Running
