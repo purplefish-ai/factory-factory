@@ -16,6 +16,10 @@
   <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish-ai/factory-factory" alt="License"></a>
 </p>
 
+<p align="center">
+  <img src="public/working.png" alt="Factory Factory Screenshot" width="800">
+</p>
+
 ---
 
 ## Installation
