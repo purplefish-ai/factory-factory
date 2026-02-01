@@ -28,6 +28,8 @@ interface VirtualizedMessageListProps {
   latestThinking?: string | null;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;
+  /** Callback to remove/cancel a queued message */
+  onRemoveQueuedMessage?: (id: string) => void;
 }
 
 // =============================================================================
@@ -54,6 +56,7 @@ interface VirtualRowProps {
   index: number;
   measureElement: (node: HTMLElement | null) => void;
   isQueued?: boolean;
+  onRemove?: () => void;
 }
 
 const VirtualRow = memo(function VirtualRow({
@@ -61,10 +64,11 @@ const VirtualRow = memo(function VirtualRow({
   index,
   measureElement,
   isQueued,
+  onRemove,
 }: VirtualRowProps) {
   return (
     <div ref={measureElement} data-index={index} className="pb-2">
-      <GroupedMessageItemRenderer item={item} isQueued={isQueued} />
+      <GroupedMessageItemRenderer item={item} isQueued={isQueued} onRemove={onRemove} />
     </div>
   );
 });
@@ -84,6 +88,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   isNearBottom = true,
   latestThinking,
   queuedMessageIds,
+  onRemoveQueuedMessage,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
   const isAutoScrollingRef = useRef(false);
@@ -192,6 +197,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
                 index={virtualRow.index}
                 measureElement={virtualizer.measureElement}
                 isQueued={isQueued}
+                onRemove={
+                  isQueued && onRemoveQueuedMessage
+                    ? () => onRemoveQueuedMessage(item.id)
+                    : undefined
+                }
               />
             </div>
           );
