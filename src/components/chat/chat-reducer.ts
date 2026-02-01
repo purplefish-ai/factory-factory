@@ -645,6 +645,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const queuedMessages = new Map<string, QueuedMessage>();
       for (const msg of action.payload.messages) {
         if (msg.type === 'user' && msg.state === MessageState.ACCEPTED) {
+          // Warn if user message in ACCEPTED state lacks text - indicates state corruption
+          if (!msg.text) {
+            // biome-ignore lint/suspicious/noConsole: Intentional warning for debugging state corruption
+            console.warn(
+              `[chat-reducer] User message ${msg.id} in ACCEPTED state has no text - possible state corruption`
+            );
+          }
           queuedMessages.set(msg.id, {
             id: msg.id,
             text: msg.text ?? '',
@@ -751,6 +758,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         };
       }
 
+      // Intentionally ignore other state transitions (SENT, PENDING, ACCEPTED, STREAMING)
+      // These states are tracked by the backend; frontend only acts on terminal transitions
+      if (process.env.NODE_ENV === 'development') {
+        // biome-ignore lint/suspicious/noConsole: Intentional debug logging for development
+        console.debug(`[chat-reducer] Ignoring state transition to ${newState} for message ${id}`);
+      }
       return state;
     }
 

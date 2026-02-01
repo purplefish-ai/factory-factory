@@ -364,15 +364,24 @@ class ChatEventForwarderService {
 
   /**
    * Read plan file content for ExitPlanMode requests.
+   * Returns null if file doesn't exist (normal case) or on read error.
    */
   private readPlanFileContent(planFile: string | undefined): string | null {
-    if (!(planFile && existsSync(planFile))) {
+    if (!planFile) {
       return null;
     }
+
+    if (!existsSync(planFile)) {
+      // File not existing is normal - plan may not have been written yet
+      logger.debug('[Chat WS] Plan file does not exist', { planFile });
+      return null;
+    }
+
     try {
       return readFileSync(planFile, 'utf-8');
     } catch (error) {
-      logger.warn('[Chat WS] Failed to read plan file', {
+      // File exists but can't be read - this is an error condition
+      logger.error('[Chat WS] Failed to read plan file - user will see empty plan content', {
         planFile,
         error: error instanceof Error ? error.message : String(error),
       });

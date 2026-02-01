@@ -53,11 +53,9 @@ function createTestHistoryMessage(
 // =============================================================================
 
 describe('MessageStateService', () => {
-  // Clear sessions between tests to ensure isolation
+  // Clear ALL sessions between tests to ensure isolation
   beforeEach(() => {
-    messageStateService.clearSession('session-1');
-    messageStateService.clearSession('session-2');
-    messageStateService.clearSession('session-3');
+    messageStateService.clearAllSessions();
     vi.clearAllMocks();
   });
 
@@ -639,6 +637,25 @@ describe('MessageStateService', () => {
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toMatch(/^history-/);
+    });
+
+    it('should handle concurrent loadFromHistory calls safely', async () => {
+      // Simulate 10 concurrent calls - only the first should succeed
+      const history: HistoryMessage[] = [
+        createTestHistoryMessage('user', 'From history', 'uuid-1'),
+      ];
+
+      // Launch 10 concurrent loads
+      const promises = Array.from({ length: 10 }, () =>
+        Promise.resolve().then(() => messageStateService.loadFromHistory('session-1', history))
+      );
+
+      await Promise.all(promises);
+
+      // Only one history should have loaded (not 10 duplicates)
+      const messages = messageStateService.getAllMessages('session-1');
+      expect(messages).toHaveLength(1);
+      expect(messages[0].text).toBe('From history');
     });
   });
 
