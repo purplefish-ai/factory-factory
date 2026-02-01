@@ -77,6 +77,25 @@ class ChatMessageHandlerService {
   }
 
   /**
+   * Helper: Clear in-flight state and requeue message atomically.
+   * Only requeues if clearInFlight succeeds (returns true) to avoid duplicates
+   * when handleStopMessage calls requeueInFlight during an await.
+   */
+  private clearInFlightAndRequeue(sessionId: string, msg: QueuedMessage): void {
+    if (messageQueueService.clearInFlight(sessionId, msg.id)) {
+      messageQueueService.requeue(sessionId, msg);
+    }
+  }
+
+  /**
+   * Helper: Check if the message is still in-flight (not requeued by stop handler).
+   */
+  private isMessageStillInFlight(sessionId: string, messageId: string): boolean {
+    const inFlightMsg = messageQueueService.getInFlight(sessionId);
+    return inFlightMsg !== undefined && inFlightMsg.id === messageId;
+  }
+
+  /**
    * Try to dispatch the next queued message to Claude.
    * Auto-starts the client if needed.
    * Uses a guard to prevent concurrent dispatch calls for the same session.
@@ -100,45 +119,24 @@ class ChatMessageHandlerService {
     }
 
     // Mark message as in-flight immediately after dequeue.
-    // This tracks the message during the gap before it's sent to Claude.
     messageQueueService.markInFlight(dbSessionId, msg);
 
     try {
-      let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
-
-      // Auto-start: create client if needed, using the dequeued message's settings
+      const client = await this.ensureClientReady(dbSessionId, msg);
       if (!client) {
-        // Notify frontend that agent is starting BEFORE creating the client
-        // This provides immediate feedback when the first message is sent
-        chatConnectionService.forwardToSession(dbSessionId, { type: 'starting', dbSessionId });
-
-        const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
-        if (!newClient) {
-          // Clear in-flight (with message ID check) and re-queue so it's not lost
-          messageQueueService.clearInFlight(dbSessionId, msg.id);
-          messageQueueService.requeue(dbSessionId, msg);
-          // Notify frontend that starting failed so UI doesn't get stuck
-          chatConnectionService.forwardToSession(dbSessionId, { type: 'stopped', dbSessionId });
-          return;
-        }
-        client = newClient;
-      }
-
-      // Check if Claude is busy
-      if (client.isWorking()) {
-        if (DEBUG_CHAT_WS) {
-          logger.info('[Chat WS] Claude is working, re-queueing message', { dbSessionId });
-        }
-        messageQueueService.clearInFlight(dbSessionId, msg.id);
-        messageQueueService.requeue(dbSessionId, msg);
         return;
       }
 
-      // Check if Claude process is still alive
-      if (!client.isRunning()) {
-        logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
-        messageQueueService.clearInFlight(dbSessionId, msg.id);
-        messageQueueService.requeue(dbSessionId, msg);
+      // Verify message is still in-flight before dispatching.
+      // If handleStopMessage was called during an await, it would have called
+      // requeueInFlight which moves the message back to the queue.
+      if (!this.isMessageStillInFlight(dbSessionId, msg.id)) {
+        if (DEBUG_CHAT_WS) {
+          logger.info('[Chat WS] Message no longer in-flight, skipping dispatch', {
+            dbSessionId,
+            messageId: msg.id,
+          });
+        }
         return;
       }
 
@@ -150,11 +148,52 @@ class ChatMessageHandlerService {
         messageId: msg.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      messageQueueService.clearInFlight(dbSessionId, msg.id);
-      messageQueueService.requeue(dbSessionId, msg);
+      this.clearInFlightAndRequeue(dbSessionId, msg);
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
     }
+  }
+
+  /**
+   * Ensure we have a ready Claude client for dispatch.
+   * Returns undefined and requeues the message if client is not ready.
+   */
+  private async ensureClientReady(
+    dbSessionId: string,
+    msg: QueuedMessage
+  ): Promise<ClaudeClient | undefined> {
+    let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
+
+    // Auto-start: create client if needed, using the dequeued message's settings
+    if (!client) {
+      chatConnectionService.forwardToSession(dbSessionId, { type: 'starting', dbSessionId });
+
+      const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
+      if (!newClient) {
+        this.clearInFlightAndRequeue(dbSessionId, msg);
+        chatConnectionService.forwardToSession(dbSessionId, { type: 'stopped', dbSessionId });
+        return undefined;
+      }
+      client = newClient;
+    }
+
+    // Check if Claude is busy
+    if (client.isWorking()) {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Claude is working, re-queueing message', { dbSessionId });
+      }
+      this.clearInFlightAndRequeue(dbSessionId, msg);
+      return undefined;
+    }
+
+    // Check if Claude process is still alive
+    if (!client.isRunning()) {
+      logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
+      this.clearInFlightAndRequeue(dbSessionId, msg);
+      return undefined;
+    }
+
+    return client;
   }
 
   /**

@@ -174,17 +174,20 @@ class MessageQueueService {
   }
 
   /**
-   * Clear all queued messages for a session.
+   * Clear all queued messages and in-flight state for a session.
    */
   clear(sessionId: string): void {
     const queue = this.queues.get(sessionId);
-    if (queue && queue.length > 0) {
+    const inFlightMsg = this.inFlight.get(sessionId);
+    if ((queue && queue.length > 0) || inFlightMsg) {
       logger.info('Queue cleared', {
         sessionId,
-        clearedCount: queue.length,
+        clearedCount: queue?.length ?? 0,
+        hadInFlight: !!inFlightMsg,
       });
     }
     this.queues.delete(sessionId);
+    this.inFlight.delete(sessionId);
   }
 
   /**
