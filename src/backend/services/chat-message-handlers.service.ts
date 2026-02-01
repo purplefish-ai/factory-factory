@@ -27,6 +27,7 @@ import type {
 import { chatConnectionService } from './chat-connection.service';
 import { chatEventForwarderService } from './chat-event-forwarder.service';
 import { configService } from './config.service';
+import { eventCompressionService } from './event-compression.service';
 import { createLogger } from './logger.service';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
 import { messageStateService } from './message-state.service';
@@ -611,15 +612,24 @@ class ChatMessageHandlerService {
 
   /**
    * Replay stored events to a reconnecting client when Claude is still running.
+   * Uses event compression to reduce the number of messages sent on reconnect.
    */
   private replayEventsForRunningClient(
     ws: WebSocket,
     sessionId: string,
     client: ClaudeClient
   ): void {
-    // Replay all stored events to this specific WebSocket
+    // Get stored events and compress for efficient replay
     const events = messageStateService.getStoredEvents(sessionId);
-    for (const event of events) {
+    const { compressed, stats } = eventCompressionService.compressWithStats(events);
+
+    // Log compression stats if significant compression occurred
+    if (stats.originalCount > stats.compressedCount) {
+      eventCompressionService.logCompressionStats(sessionId, stats);
+    }
+
+    // Replay compressed events to this specific WebSocket
+    for (const event of compressed) {
       ws.send(JSON.stringify(event));
     }
 
