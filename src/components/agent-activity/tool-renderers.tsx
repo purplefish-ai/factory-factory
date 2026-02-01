@@ -563,7 +563,7 @@ const ToolInputRenderer = memo(function ToolInputRenderer({ name, input }: ToolI
           <FilePathDisplay path={input.file_path as string} />
           <div className="rounded bg-muted px-1.5 py-1">
             <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto">
-              {truncateContent(input.content as string, 500)}
+              {truncateContent((input.content as string) ?? '', 500)}
             </pre>
           </div>
         </div>
@@ -577,13 +577,13 @@ const ToolInputRenderer = memo(function ToolInputRenderer({ name, input }: ToolI
             <div className="rounded bg-destructive/10 px-1.5 py-1 min-w-0">
               <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
               <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                {truncateContent(input.old_string as string, 200)}
+                {truncateContent((input.old_string as string) ?? '', 200)}
               </pre>
             </div>
             <div className="rounded bg-success/10 px-1.5 py-1 min-w-0">
               <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
               <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                {truncateContent(input.new_string as string, 200)}
+                {truncateContent((input.new_string as string) ?? '', 200)}
               </pre>
             </div>
           </div>
