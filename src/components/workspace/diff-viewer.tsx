@@ -135,9 +135,10 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
 
 interface DiffLineProps {
   line: DiffLine;
+  lineNumberWidth: number;
 }
 
-function DiffLineComponent({ line }: DiffLineProps) {
+function DiffLineComponent({ line, lineNumberWidth }: DiffLineProps) {
   const bgColor = {
     header: 'bg-muted/50',
     hunk: 'bg-blue-500/10',
@@ -165,15 +166,23 @@ function DiffLineComponent({ line }: DiffLineProps) {
   return (
     <div className={cn('flex font-mono text-xs', bgColor)}>
       {/* Line numbers */}
-      <div className="flex-shrink-0 w-20 flex text-muted-foreground border-r border-border">
-        <span className="w-10 px-1 text-right border-r border-border">
+      <div className="flex-shrink-0 flex text-muted-foreground border-r border-border select-none">
+        <span
+          className="box-content px-1 text-right border-r border-border tabular-nums"
+          style={{ width: `${lineNumberWidth}ch` }}
+        >
           {line.lineNumber?.old ?? ''}
         </span>
-        <span className="w-10 px-1 text-right">{line.lineNumber?.new ?? ''}</span>
+        <span
+          className="box-content px-1 text-right tabular-nums"
+          style={{ width: `${lineNumberWidth}ch` }}
+        >
+          {line.lineNumber?.new ?? ''}
+        </span>
       </div>
 
       {/* Prefix */}
-      <span className={cn('flex-shrink-0 w-4 text-center', textColor)}>{prefix}</span>
+      <span className={cn('flex-shrink-0 w-4 text-center select-none', textColor)}>{prefix}</span>
 
       {/* Content */}
       <pre className={cn('flex-1 whitespace-pre-wrap break-all px-2', textColor)}>
@@ -204,6 +213,20 @@ export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
     }
     return parseDiff(data.diff);
   }, [data?.diff]);
+
+  // Calculate the width needed for line numbers (minimum 3 characters)
+  const lineNumberWidth = useMemo(() => {
+    let maxLineNumber = 0;
+    for (const line of parsedDiff) {
+      if (line.lineNumber?.old && line.lineNumber.old > maxLineNumber) {
+        maxLineNumber = line.lineNumber.old;
+      }
+      if (line.lineNumber?.new && line.lineNumber.new > maxLineNumber) {
+        maxLineNumber = line.lineNumber.new;
+      }
+    }
+    return Math.max(3, String(maxLineNumber).length);
+  }, [parsedDiff]);
 
   if (isLoading) {
     return (
@@ -266,6 +289,7 @@ export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
               <DiffLineComponent
                 key={`${line.type}-${line.lineNumber?.old ?? ''}-${line.lineNumber?.new ?? ''}-${index}`}
                 line={line}
+                lineNumberWidth={lineNumberWidth}
               />
             ))}
           </div>
