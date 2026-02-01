@@ -29,6 +29,7 @@ import {
   DEFAULT_CHAT_SETTINGS,
   getToolUseIdFromEvent,
   isStreamEventMessage,
+  isUserMessage,
   isWsClaudeMessage,
   MessageState,
 } from '@/lib/claude-types';
@@ -667,29 +668,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     // New message state machine actions
     case 'MESSAGES_SNAPSHOT': {
       // Convert MessageWithState[] to ChatMessage[] for rendering
+      // Using type-safe check with isUserMessage type guard
       const messages: ChatMessage[] = action.payload.messages.map((msg) => ({
         id: msg.id,
-        source: msg.type === 'user' ? 'user' : 'claude',
-        text: msg.text,
-        message: msg.content,
+        source: isUserMessage(msg) ? 'user' : 'claude',
+        text: isUserMessage(msg) ? msg.text : undefined,
+        message: isUserMessage(msg) ? undefined : msg.content,
         timestamp: msg.timestamp,
-        attachments: msg.attachments,
+        attachments: isUserMessage(msg) ? msg.attachments : undefined,
       }));
 
-      // Build queuedMessages map from messages that are in ACCEPTED state
+      // Build queuedMessages map from user messages in ACCEPTED state
       const queuedMessages = new Map<string, QueuedMessage>();
       for (const msg of action.payload.messages) {
-        if (msg.type === 'user' && msg.state === MessageState.ACCEPTED) {
-          // Warn if user message in ACCEPTED state lacks text - indicates state corruption
-          if (!msg.text) {
-            // biome-ignore lint/suspicious/noConsole: Intentional warning for debugging state corruption
-            console.warn(
-              `[chat-reducer] User message ${msg.id} (timestamp: ${msg.timestamp}) in ACCEPTED state has no text - possible state corruption. Cross-reference with backend logs using message ID.`
-            );
-          }
+        if (isUserMessage(msg) && msg.state === MessageState.ACCEPTED) {
           queuedMessages.set(msg.id, {
             id: msg.id,
-            text: msg.text ?? '',
+            text: msg.text,
             timestamp: msg.timestamp,
             attachments: msg.attachments,
             // Use settings from message if available, otherwise defaults

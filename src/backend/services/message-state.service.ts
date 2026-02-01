@@ -17,11 +17,16 @@
 
 import {
   type ClaudeMessage,
+  type ClaudeMessageState,
+  type ClaudeMessageWithState,
   type HistoryMessage,
+  isUserMessage,
   MessageState,
   type MessageWithState,
   type QueuedMessage,
   type SessionStatus,
+  type UserMessageState,
+  type UserMessageWithState,
 } from '@/lib/claude-types';
 import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
@@ -34,47 +39,64 @@ const logger = createLogger('message-state-service');
 
 /**
  * Valid state transitions for user messages.
+ * Maps each UserMessageState to the states it can transition to.
  */
-const USER_STATE_TRANSITIONS: Record<MessageState, MessageState[]> = {
-  [MessageState.PENDING]: [MessageState.SENT],
-  [MessageState.SENT]: [MessageState.ACCEPTED, MessageState.REJECTED],
-  [MessageState.ACCEPTED]: [MessageState.DISPATCHED, MessageState.CANCELLED],
-  [MessageState.DISPATCHED]: [MessageState.COMMITTED, MessageState.FAILED],
-  [MessageState.COMMITTED]: [],
-  [MessageState.REJECTED]: [],
-  [MessageState.FAILED]: [],
-  [MessageState.CANCELLED]: [],
-  [MessageState.STREAMING]: [],
-  [MessageState.COMPLETE]: [],
+const USER_STATE_TRANSITIONS: Record<UserMessageState, UserMessageState[]> = {
+  PENDING: ['SENT'],
+  SENT: ['ACCEPTED', 'REJECTED'],
+  ACCEPTED: ['DISPATCHED', 'CANCELLED'],
+  DISPATCHED: ['COMMITTED', 'FAILED'],
+  COMMITTED: [],
+  REJECTED: [],
+  FAILED: [],
+  CANCELLED: [],
 };
 
 /**
  * Valid state transitions for Claude messages.
+ * Maps each ClaudeMessageState to the states it can transition to.
  */
-const CLAUDE_STATE_TRANSITIONS: Record<MessageState, MessageState[]> = {
-  [MessageState.STREAMING]: [MessageState.COMPLETE],
-  [MessageState.COMPLETE]: [],
-  // User states not applicable to Claude messages
-  [MessageState.PENDING]: [],
-  [MessageState.SENT]: [],
-  [MessageState.ACCEPTED]: [],
-  [MessageState.DISPATCHED]: [],
-  [MessageState.COMMITTED]: [],
-  [MessageState.REJECTED]: [],
-  [MessageState.FAILED]: [],
-  [MessageState.CANCELLED]: [],
+const CLAUDE_STATE_TRANSITIONS: Record<ClaudeMessageState, ClaudeMessageState[]> = {
+  STREAMING: ['COMPLETE'],
+  COMPLETE: [],
 };
 
 /**
+ * Check if a user message state transition is valid.
+ */
+function isValidUserTransition(
+  currentState: UserMessageState,
+  newState: UserMessageState
+): boolean {
+  return USER_STATE_TRANSITIONS[currentState]?.includes(newState) ?? false;
+}
+
+/**
+ * Check if a Claude message state transition is valid.
+ */
+function isValidClaudeTransition(
+  currentState: ClaudeMessageState,
+  newState: ClaudeMessageState
+): boolean {
+  return CLAUDE_STATE_TRANSITIONS[currentState]?.includes(newState) ?? false;
+}
+
+/**
  * Check if a state transition is valid.
+ * Uses the appropriate type-safe transition check based on message type.
  */
 function isValidTransition(
   messageType: 'user' | 'claude',
   currentState: MessageState,
   newState: MessageState
 ): boolean {
-  const transitions = messageType === 'user' ? USER_STATE_TRANSITIONS : CLAUDE_STATE_TRANSITIONS;
-  return transitions[currentState]?.includes(newState) ?? false;
+  if (messageType === 'user') {
+    return isValidUserTransition(currentState as UserMessageState, newState as UserMessageState);
+  }
+  return isValidClaudeTransition(
+    currentState as ClaudeMessageState,
+    newState as ClaudeMessageState
+  );
 }
 
 // =============================================================================
@@ -104,16 +126,16 @@ class MessageStateService {
    * Create a new user message from a QueuedMessage.
    * Starts in ACCEPTED state (backend has received it).
    */
-  createUserMessage(sessionId: string, msg: QueuedMessage): MessageWithState {
+  createUserMessage(sessionId: string, msg: QueuedMessage): UserMessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
 
     // Queue position = count of ACCEPTED user messages (messages waiting in queue)
     const queuePosition = this.getQueuedMessageCount(sessionId);
 
-    const messageWithState: MessageWithState = {
+    const messageWithState: UserMessageWithState = {
       id: msg.id,
       type: 'user',
-      state: MessageState.ACCEPTED,
+      state: 'ACCEPTED',
       timestamp: msg.timestamp,
       text: msg.text,
       attachments: msg.attachments,
@@ -144,15 +166,15 @@ class MessageStateService {
     messageId: string,
     errorMessage: string,
     text?: string
-  ): MessageWithState {
+  ): UserMessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
 
-    const messageWithState: MessageWithState = {
+    const messageWithState: UserMessageWithState = {
       id: messageId,
       type: 'user',
-      state: MessageState.REJECTED,
+      state: 'REJECTED',
       timestamp: new Date().toISOString(),
-      text,
+      text: text ?? '',
       errorMessage,
     };
 
@@ -194,13 +216,13 @@ class MessageStateService {
     sessionId: string,
     messageId: string,
     content?: ClaudeMessage
-  ): MessageWithState {
+  ): ClaudeMessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
 
-    const messageWithState: MessageWithState = {
+    const messageWithState: ClaudeMessageWithState = {
       id: messageId,
       type: 'claude',
-      state: MessageState.STREAMING,
+      state: 'STREAMING',
       timestamp: new Date().toISOString(),
       content,
     };
@@ -235,8 +257,8 @@ class MessageStateService {
       return false;
     }
 
-    // Validate state transition
-    if (!isValidTransition(message.type, message.state, newState)) {
+    // Validate state transition using the string value
+    if (!isValidTransition(message.type, message.state as MessageState, newState)) {
       logger.warn('Invalid state transition', {
         sessionId,
         messageId,
@@ -248,14 +270,21 @@ class MessageStateService {
     }
 
     const oldState = message.state;
-    message.state = newState;
 
-    // Update metadata if provided
-    if (metadata?.queuePosition !== undefined) {
-      message.queuePosition = metadata.queuePosition;
-    }
-    if (metadata?.errorMessage !== undefined) {
-      message.errorMessage = metadata.errorMessage;
+    // Update state based on message type
+    if (isUserMessage(message)) {
+      // Type-safe assignment for user messages
+      message.state = newState as UserMessageState;
+      // Update user-specific metadata if provided
+      if (metadata?.queuePosition !== undefined) {
+        message.queuePosition = metadata.queuePosition;
+      }
+      if (metadata?.errorMessage !== undefined) {
+        message.errorMessage = metadata.errorMessage;
+      }
+    } else {
+      // Type-safe assignment for Claude messages
+      message.state = newState as ClaudeMessageState;
     }
 
     logger.info('Message state updated', {
@@ -384,10 +413,10 @@ class MessageStateService {
 
       if (historyMsg.type === 'user') {
         // User text message - already committed
-        const messageWithState: MessageWithState = {
+        const messageWithState: UserMessageWithState = {
           id: messageId,
           type: 'user',
-          state: MessageState.COMMITTED,
+          state: 'COMMITTED',
           timestamp: historyMsg.timestamp,
           text: historyMsg.content,
         };
@@ -399,10 +428,10 @@ class MessageStateService {
         historyMsg.type === 'thinking'
       ) {
         // Claude messages - already complete
-        const messageWithState: MessageWithState = {
+        const messageWithState: ClaudeMessageWithState = {
           id: messageId,
           type: 'claude',
-          state: MessageState.COMPLETE,
+          state: 'COMPLETE',
           timestamp: historyMsg.timestamp,
           // Store minimal content representation for history messages
           content: this.historyToClaudeMessage(historyMsg),
@@ -533,12 +562,16 @@ class MessageStateService {
    * Emit a state change event to all connections for a session.
    */
   private emitStateChange(sessionId: string, message: MessageWithState): void {
+    // Extract user-specific fields only if this is a user message
+    const queuePosition = isUserMessage(message) ? message.queuePosition : undefined;
+    const errorMessage = isUserMessage(message) ? message.errorMessage : undefined;
+
     chatConnectionService.forwardToSession(sessionId, {
       type: 'message_state_changed',
       id: message.id,
-      newState: message.state,
-      queuePosition: message.queuePosition,
-      errorMessage: message.errorMessage,
+      newState: message.state as MessageState,
+      queuePosition,
+      errorMessage,
     });
   }
 }

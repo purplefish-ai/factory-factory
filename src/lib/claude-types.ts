@@ -498,6 +498,9 @@ export interface QueuedMessage {
  *
  * Claude message flow:
  *   STREAMING → COMPLETE
+ *
+ * @deprecated Use `UserMessageState` or `ClaudeMessageState` for type-safe state handling.
+ * The enum is retained for backward compatibility but new code should use the typed state literals.
  */
 export enum MessageState {
   // User message states
@@ -517,28 +520,84 @@ export enum MessageState {
   COMPLETE = 'COMPLETE', // Claude finished
 }
 
+// =============================================================================
+// Type-Safe Message State Types
+// =============================================================================
+
 /**
- * Unified message type with state for the new state machine.
- * Replaces the separate messages/queuedMessages/pendingMessages collections.
+ * Valid states for user messages.
+ * User messages flow through: PENDING → SENT → ACCEPTED → DISPATCHED → COMMITTED
+ * Or can terminate early with: REJECTED | FAILED | CANCELLED
  */
-export interface MessageWithState {
+export type UserMessageState =
+  | 'PENDING'
+  | 'SENT'
+  | 'ACCEPTED'
+  | 'DISPATCHED'
+  | 'COMMITTED'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+/**
+ * Valid states for Claude messages.
+ * Claude messages flow through: STREAMING → COMPLETE
+ */
+export type ClaudeMessageState = 'STREAMING' | 'COMPLETE';
+
+/**
+ * User message with state - has required user-specific fields.
+ * The `type: 'user'` discriminant enables type narrowing.
+ */
+export interface UserMessageWithState {
   id: string;
-  type: 'user' | 'claude';
-  state: MessageState;
+  type: 'user';
+  state: UserMessageState;
   timestamp: string;
-
-  // User message fields
-  text?: string;
+  /** User message text - required for user messages */
+  text: string;
+  /** Optional file attachments */
   attachments?: MessageAttachment[];
-  settings?: QueuedMessage['settings']; // User message settings (model, thinking, plan mode)
-
-  // Claude message fields
-  content?: ClaudeMessage;
-
-  // State metadata
-  queuePosition?: number; // For ACCEPTED state
-  errorMessage?: string; // For REJECTED/FAILED states
+  /** User message settings (model, thinking, plan mode) */
+  settings?: QueuedMessage['settings'];
+  /** Queue position when in ACCEPTED state */
+  queuePosition?: number;
+  /** Error message for REJECTED/FAILED states */
+  errorMessage?: string;
 }
+
+/**
+ * Claude message with state - has required Claude-specific fields.
+ * The `type: 'claude'` discriminant enables type narrowing.
+ */
+export interface ClaudeMessageWithState {
+  id: string;
+  type: 'claude';
+  state: ClaudeMessageState;
+  timestamp: string;
+  /** Claude message content */
+  content?: ClaudeMessage;
+}
+
+/**
+ * Unified message type with state for the message state machine.
+ * This is a discriminated union - use `msg.type` to narrow to the specific type.
+ *
+ * @example
+ * ```typescript
+ * function processMessage(msg: MessageWithState) {
+ *   if (msg.type === 'user') {
+ *     // TypeScript knows msg is UserMessageWithState here
+ *     console.log(msg.text); // text is required
+ *     console.log(msg.queuePosition); // queue position available
+ *   } else {
+ *     // TypeScript knows msg is ClaudeMessageWithState here
+ *     console.log(msg.content); // content available
+ *   }
+ * }
+ * ```
+ */
+export type MessageWithState = UserMessageWithState | ClaudeMessageWithState;
 
 // =============================================================================
 // UI Chat Message Types
@@ -649,6 +708,40 @@ export function isToolResultContent(item: ClaudeContentItem): item is ToolResult
  */
 export function isImageContent(item: ClaudeContentItem): item is ImageContent {
   return item.type === 'image' && 'source' in item;
+}
+
+/**
+ * Type guard to check if a MessageWithState is a UserMessageWithState.
+ * Use this for type-safe handling of user messages.
+ *
+ * @example
+ * ```typescript
+ * if (isUserMessage(msg)) {
+ *   // msg is UserMessageWithState here
+ *   console.log(msg.text); // text is required
+ *   console.log(msg.state); // UserMessageState type
+ * }
+ * ```
+ */
+export function isUserMessage(msg: MessageWithState): msg is UserMessageWithState {
+  return msg.type === 'user';
+}
+
+/**
+ * Type guard to check if a MessageWithState is a ClaudeMessageWithState.
+ * Use this for type-safe handling of Claude messages.
+ *
+ * @example
+ * ```typescript
+ * if (isClaudeMessage(msg)) {
+ *   // msg is ClaudeMessageWithState here
+ *   console.log(msg.content); // content available
+ *   console.log(msg.state); // ClaudeMessageState type
+ * }
+ * ```
+ */
+export function isClaudeMessage(msg: MessageWithState): msg is ClaudeMessageWithState {
+  return msg.type === 'claude';
 }
 
 /**
