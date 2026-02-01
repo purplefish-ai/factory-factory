@@ -744,6 +744,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // MESSAGE_USED_AS_RESPONSE: Message was used as a response to pending interactive request
     // Adds message to chat and clears the pending request
+    // De-duplication: Skip adding if message ID already exists (handles reconnect/multi-tab scenarios)
     case 'MESSAGE_USED_AS_RESPONSE': {
       // Get pending content to preserve attachments before removing
       const pendingContent = state.pendingMessages.get(action.payload.id);
@@ -751,6 +752,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Remove from pending messages
       const newPendingMessages = new Map(state.pendingMessages);
       newPendingMessages.delete(action.payload.id);
+
+      // De-dupe check: Skip if message already exists in messages array
+      if (state.messages.some((m) => m.id === action.payload.id)) {
+        // Still clear pending state since this was handled
+        return {
+          ...state,
+          pendingMessages: newPendingMessages,
+          pendingRequest: { type: 'none' },
+        };
+      }
 
       // Create user message, preserving attachments from pending state
       const userMessage: ChatMessage = {

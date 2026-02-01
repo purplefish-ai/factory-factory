@@ -1280,6 +1280,41 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(1);
       expect(newState.messages[0].attachments).toEqual(attachments);
     });
+
+    it('should de-dupe if message already exists (reconnect scenario)', () => {
+      const existingMessage: ChatMessage = {
+        id: 'msg-1',
+        source: 'user',
+        text: 'Already in chat',
+        timestamp: '2024-01-01T00:00:00.000Z',
+      };
+      const state: ChatState = {
+        ...initialState,
+        messages: [existingMessage],
+        pendingRequest: {
+          type: 'question',
+          request: {
+            requestId: 'req-1',
+            questions: [{ question: 'Pick one', options: [{ label: 'A', description: '' }] }],
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+        pendingMessages: new Map([['msg-1', { text: 'Duplicate' }]]),
+      };
+      const action: ChatAction = {
+        type: 'MESSAGE_USED_AS_RESPONSE',
+        payload: { id: 'msg-1', text: 'Duplicate' },
+      };
+      const newState = chatReducer(state, action);
+
+      // Message should NOT be duplicated
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0].text).toBe('Already in chat');
+
+      // But pending state should still be cleared
+      expect(newState.pendingMessages.has('msg-1')).toBe(false);
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
+    });
   });
 
   // -------------------------------------------------------------------------
