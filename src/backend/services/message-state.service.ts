@@ -623,11 +623,24 @@ class MessageStateService {
 
   /**
    * Emit a state change event to all connections for a session.
+   * For user messages in ACCEPTED state, includes full message content so
+   * clients can add the message without needing optimistic updates.
    */
   private emitStateChange(sessionId: string, message: MessageWithState): void {
     // Extract user-specific fields only if this is a user message
     const queuePosition = isUserMessage(message) ? message.queuePosition : undefined;
     const errorMessage = isUserMessage(message) ? message.errorMessage : undefined;
+
+    // For ACCEPTED user messages, include full content so frontend can add the message
+    const userMessage =
+      isUserMessage(message) && message.state === MessageState.ACCEPTED
+        ? {
+            text: message.text,
+            timestamp: message.timestamp,
+            attachments: message.attachments,
+            settings: message.settings,
+          }
+        : undefined;
 
     chatConnectionService.forwardToSession(sessionId, {
       type: 'message_state_changed',
@@ -635,6 +648,7 @@ class MessageStateService {
       newState: message.state as MessageState,
       queuePosition,
       errorMessage,
+      userMessage,
     });
   }
 }

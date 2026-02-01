@@ -125,7 +125,7 @@ describe('MessageStateService', () => {
       expect(result.attachments?.[0].name).toBe('image.png');
     });
 
-    it('should emit state change event', () => {
+    it('should emit state change event with full message content', () => {
       const msg = createTestQueuedMessage('msg-1');
       messageStateService.createUserMessage('session-1', msg);
 
@@ -135,6 +135,13 @@ describe('MessageStateService', () => {
         newState: MessageState.ACCEPTED,
         queuePosition: 0,
         errorMessage: undefined,
+        // For ACCEPTED state, includes full user message content
+        userMessage: {
+          text: msg.text,
+          timestamp: msg.timestamp,
+          attachments: msg.attachments,
+          settings: msg.settings,
+        },
       });
     });
   });

@@ -183,6 +183,13 @@ export type ChatAction =
         newState: MessageState;
         queuePosition?: number;
         errorMessage?: string;
+        // For ACCEPTED state, includes full message content so we can add it to the list
+        userMessage?: {
+          text: string;
+          timestamp: string;
+          attachments?: MessageAttachment[];
+          settings?: ChatSettings;
+        };
       };
     };
 
@@ -579,8 +586,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    // MESSAGE_SENDING: Mark a message as pending backend confirmation, store content for recovery,
-    // and add to messages array for immediate display
+    // MESSAGE_SENDING: Store content for recovery if rejected.
+    // Message will be added to messages array when backend confirms with ACCEPTED state.
     case 'MESSAGE_SENDING': {
       const { id, text, attachments } = action.payload;
 
@@ -588,18 +595,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const newPendingMessages = new Map(state.pendingMessages);
       newPendingMessages.set(id, { text, attachments });
 
-      // Add to messages array for immediate display
-      const newMessage: ChatMessage = {
-        id,
-        source: 'user',
-        text,
-        timestamp: new Date().toISOString(),
-        attachments,
-      };
-
       return {
         ...state,
-        messages: [...state.messages, newMessage],
         pendingMessages: newPendingMessages,
       };
     }
@@ -684,20 +681,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // New message state machine actions
     case 'MESSAGES_SNAPSHOT': {
-      // Build set of message IDs from backend snapshot for deduplication
+      // Build set of message IDs from backend snapshot
       const snapshotIds = new Set(action.payload.messages.map((m) => m.id));
-
-      // Keep optimistic user messages that haven't reached backend yet
-      const optimisticMessages = state.messages.filter(
-        (m) => m.source === 'user' && state.pendingMessages.has(m.id) && !snapshotIds.has(m.id)
-      );
 
       // Convert MessageWithState[] to ChatMessage[] for rendering
       // Expand Claude contentBlocks into multiple ChatMessage items
-      const snapshotMessages: ChatMessage[] = [];
+      const messages: ChatMessage[] = [];
       for (const msg of action.payload.messages) {
         if (isUserMessage(msg)) {
-          snapshotMessages.push({
+          messages.push({
             id: msg.id,
             source: 'user',
             text: msg.text,
@@ -708,7 +700,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           // Claude message - expand contentBlocks into multiple ChatMessages
           const blocks = msg.contentBlocks ?? [];
           for (let i = 0; i < blocks.length; i++) {
-            snapshotMessages.push({
+            messages.push({
               id: `${msg.id}-${i}`,
               source: 'claude',
               message: blocks[i],
@@ -717,9 +709,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           }
         }
       }
-
-      // Merge: snapshot messages first, then optimistic messages not yet in snapshot
-      const messages = [...snapshotMessages, ...optimisticMessages];
 
       // Build queuedMessages map from user messages in ACCEPTED state
       const queuedMessages = new Map<string, QueuedMessage>();
@@ -767,7 +756,43 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'MESSAGE_STATE_CHANGED': {
-      const { id, newState } = action.payload;
+      const { id, newState, userMessage } = action.payload;
+
+      // Handle ACCEPTED - add the message to the list and queue
+      if (newState === MessageState.ACCEPTED && userMessage) {
+        // Message confirmed by backend - add to messages and queuedMessages
+        const newMessage: ChatMessage = {
+          id,
+          source: 'user',
+          text: userMessage.text,
+          timestamp: userMessage.timestamp,
+          attachments: userMessage.attachments,
+        };
+
+        const newQueuedMessages = new Map(state.queuedMessages);
+        newQueuedMessages.set(id, {
+          id,
+          text: userMessage.text,
+          timestamp: userMessage.timestamp,
+          attachments: userMessage.attachments,
+          settings: userMessage.settings ?? {
+            selectedModel: null,
+            thinkingEnabled: false,
+            planModeEnabled: false,
+          },
+        });
+
+        // Clear from pendingMessages since backend confirmed
+        const newPendingMessages = new Map(state.pendingMessages);
+        newPendingMessages.delete(id);
+
+        return {
+          ...state,
+          messages: [...state.messages, newMessage],
+          queuedMessages: newQueuedMessages,
+          pendingMessages: newPendingMessages,
+        };
+      }
 
       // Handle queue state updates
       if (newState === MessageState.DISPATCHED) {
@@ -923,6 +948,7 @@ function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
       newState: data.newState,
       queuePosition: data.queuePosition,
       errorMessage: data.errorMessage,
+      userMessage: data.userMessage,
     },
   };
 }

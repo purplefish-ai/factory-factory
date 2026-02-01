@@ -452,6 +452,13 @@ export interface WebSocketMessage {
   queuePosition?: number;
   /** Error message for REJECTED/FAILED states in message_state_changed events */
   errorMessage?: string;
+  /** Full user message content for ACCEPTED state in message_state_changed events */
+  userMessage?: {
+    text: string;
+    timestamp: string;
+    attachments?: MessageAttachment[];
+    settings?: ChatSettings;
+  };
 }
 
 // =============================================================================
