@@ -61,14 +61,45 @@ export class GitClient {
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
-    // Create new branch from baseBranch (branch shouldn't exist at this point)
+    // Normalize baseBranch: strip 'origin/' prefix if present since we'll add it back
+    // This handles cases where callers pass 'origin/main' instead of 'main'
+    const localBranchName = baseBranch.startsWith('origin/')
+      ? baseBranch.slice('origin/'.length)
+      : baseBranch;
+
+    // Fetch the latest from origin to ensure we branch from the most recent commit
+    // Non-fatal: if fetch fails (e.g., offline), we fall back to available refs
+    const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
+    const fetchSucceeded = fetchResult.code === 0;
+
+    // Determine which base branch to use, preferring fresh origin refs
+    const originBranch = `origin/${localBranchName}`;
+    const originExists = await this.branchExists(originBranch);
+    const localExists = await this.branchExists(localBranchName);
+
+    // Priority: fresh origin (fetch succeeded) > local > stale origin (fetch failed)
+    let actualBaseBranch: string;
+    if (fetchSucceeded && originExists) {
+      // Best case: use freshly fetched origin
+      actualBaseBranch = originBranch;
+    } else if (localExists) {
+      // Fallback to local branch
+      actualBaseBranch = localBranchName;
+    } else if (originExists) {
+      // Last resort: use stale origin ref (fetch failed but ref exists from previous fetch)
+      actualBaseBranch = originBranch;
+    } else {
+      // Neither exists - let git worktree fail with a clear error
+      actualBaseBranch = localBranchName;
+    }
+
     const result = await gitCommandC(this.baseRepoPath, [
       'worktree',
       'add',
       '-b',
       branchName,
       worktreePath,
-      baseBranch,
+      actualBaseBranch,
     ]);
     if (result.code !== 0) {
       throw new Error(`Failed to create worktree: ${result.stderr || result.stdout}`);
