@@ -61,18 +61,22 @@ export class GitClient {
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
+    // Normalize baseBranch: strip 'origin/' prefix if present since we'll add it back
+    // This handles cases where callers pass 'origin/main' instead of 'main'
+    const localBranchName = baseBranch.startsWith('origin/')
+      ? baseBranch.slice('origin/'.length)
+      : baseBranch;
+
     // Fetch the latest from origin to ensure we branch from the most recent commit
-    const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', baseBranch]);
-    if (fetchResult.code !== 0) {
-      // Non-fatal: continue with local branch if fetch fails (e.g., offline)
-      // The worktree will still be created from the local branch state
-    }
+    // Non-fatal: if fetch fails (e.g., offline), we fall back to the local branch
+    const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
+    const fetchSucceeded = fetchResult.code === 0;
 
     // Create new branch from origin's version of the base branch to ensure we have the latest
-    // Fall back to local baseBranch if origin doesn't exist
-    const originBranch = `origin/${baseBranch}`;
-    const useOrigin = await this.branchExists(originBranch);
-    const actualBaseBranch = useOrigin ? originBranch : baseBranch;
+    // Only use origin if fetch succeeded, to avoid using stale remote-tracking refs
+    const originBranch = `origin/${localBranchName}`;
+    const useOrigin = fetchSucceeded && (await this.branchExists(originBranch));
+    const actualBaseBranch = useOrigin ? originBranch : localBranchName;
 
     const result = await gitCommandC(this.baseRepoPath, [
       'worktree',
