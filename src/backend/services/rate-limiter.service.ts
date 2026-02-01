@@ -72,6 +72,10 @@ class RateLimiter {
   private cleanupInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
   private pendingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private queueProcessingTimeout: NodeJS.Timeout | null = null;
+
+  // Request ID counter for unique IDs
+  private requestIdCounter = 0;
 
   constructor(config?: Partial<RateLimiterConfig>) {
     this.config = {
@@ -146,7 +150,7 @@ class RateLimiter {
     }
 
     return new Promise<void>((resolve, reject) => {
-      const requestId = `${agentId}-${Date.now()}`;
+      const requestId = `${agentId}-${++this.requestIdCounter}`;
       const request: QueuedRequest = {
         id: requestId,
         priority,
@@ -226,8 +230,17 @@ class RateLimiter {
 
     while (this.requestQueue.length > 0 && !this.isShuttingDown) {
       if (this.isRateLimited()) {
-        // Wait until we can make another request
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Wait until we can make another request, tracking the timeout for cleanup
+        await new Promise<void>((resolve) => {
+          this.queueProcessingTimeout = setTimeout(() => {
+            this.queueProcessingTimeout = null;
+            resolve();
+          }, 1000);
+        });
+        // Check shutdown flag after waking up
+        if (this.isShuttingDown) {
+          break;
+        }
         continue;
       }
 
@@ -285,6 +298,12 @@ class RateLimiter {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
+    }
+
+    // Clear queue processing timeout
+    if (this.queueProcessingTimeout) {
+      clearTimeout(this.queueProcessingTimeout);
+      this.queueProcessingTimeout = null;
     }
 
     // Clear all pending timeouts
