@@ -84,6 +84,13 @@ export interface DebugConfig {
 }
 
 /**
+ * Event compression configuration for replay optimization
+ */
+export interface CompressionConfig {
+  enabled: boolean;
+}
+
+/**
  * System configuration
  */
 interface SystemConfig {
@@ -561,6 +568,15 @@ class ConfigService {
    */
   getAppVersion(): string {
     return this.config.appVersion;
+  }
+
+  /**
+   * Get event compression configuration for replay optimization
+   */
+  getCompressionConfig(): CompressionConfig {
+    return {
+      enabled: process.env.EVENT_COMPRESSION_ENABLED !== 'false',
+    };
   }
 
   /**
