@@ -1,6 +1,18 @@
 'use client';
 
-import { Brain, ChevronDown, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
+import {
+  Brain,
+  ChevronDown,
+  GitPullRequest,
+  ImagePlus,
+  Loader2,
+  Map as MapIcon,
+  MessageSquareText,
+  Send,
+  Sparkles,
+  Square,
+  Zap,
+} from 'lucide-react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
@@ -9,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -176,6 +189,81 @@ function PlanModeToggle({
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Predefined quick actions that send messages to Claude.
+ */
+const QUICK_ACTIONS = [
+  {
+    id: 'create-pr',
+    label: 'Create Pull Request',
+    icon: GitPullRequest,
+    message:
+      'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.',
+  },
+  {
+    id: 'address-pr-comments',
+    label: 'Address PR Comments',
+    icon: MessageSquareText,
+    message:
+      'Fetch the comments on the current pull request using the GitHub CLI (gh) and address any feedback or requested changes.',
+  },
+  {
+    id: 'simplify-code',
+    label: 'Simplify Code',
+    icon: Sparkles,
+    message:
+      'Use the code-simplifier agent to review and simplify the recent changes. Focus on improving clarity, consistency, and maintainability while preserving all functionality.',
+  },
+] as const;
+
+/**
+ * Quick actions dropdown for sending predefined messages.
+ */
+function QuickActionsDropdown({
+  onAction,
+  disabled,
+}: {
+  onAction: (message: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={disabled}
+                className="h-6 w-6 p-0"
+                aria-label="Quick actions"
+              >
+                <Zap className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p>Quick actions</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <DropdownMenuContent align="start" className="w-56">
+        {QUICK_ACTIONS.map((action) => (
+          <DropdownMenuItem
+            key={action.id}
+            onClick={() => onAction(action.message)}
+            className="gap-2"
+          >
+            <action.icon className="h-4 w-4" />
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -372,6 +460,16 @@ export const ChatInput = memo(function ChatInput({
     [onSettingsChange]
   );
 
+  // Handle quick action - sends the predefined message
+  const handleQuickAction = useCallback(
+    (message: string) => {
+      if (!disabled) {
+        onSend(message);
+      }
+    },
+    [onSend, disabled]
+  );
+
   return (
     <div className={cn('px-4 py-3', className)}>
       <InputGroup className="flex-col">
@@ -440,6 +538,7 @@ export const ChatInput = memo(function ChatInput({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            <QuickActionsDropdown onAction={handleQuickAction} disabled={isDisabled} />
             {/* Hidden file input */}
             <input
               ref={fileInputRef}
