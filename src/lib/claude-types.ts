@@ -616,7 +616,7 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
 export function isWsClaudeMessage(
   msg: WebSocketMessage
 ): msg is WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage } {
-  return msg.type === 'claude_message' && 'data' in msg && msg.data !== undefined;
+  return msg.type === 'claude_message' && 'data' in msg && msg.data != null;
 }
 
 /**
@@ -634,7 +634,7 @@ export function isWsSessionLoadedMessage(
 export function isStreamEventMessage(
   msg: ClaudeMessage
 ): msg is ClaudeMessage & { type: 'stream_event'; event: ClaudeStreamEvent } {
-  return msg.type === 'stream_event' && msg.event !== undefined;
+  return msg.type === 'stream_event' && msg.event != null;
 }
 
 /**
