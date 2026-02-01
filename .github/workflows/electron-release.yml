@@ -26,6 +26,8 @@ jobs:
   build-mac:
     name: Build macOS
     runs-on: macos-latest
+    permissions:
+      contents: read
     env:
       DATABASE_URL: "file:./test.db"
     steps:
@@ -64,6 +66,8 @@ jobs:
     name: Build Windows
     if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.platforms == 'mac-windows-linux')
     runs-on: windows-latest
+    permissions:
+      contents: read
     env:
       DATABASE_URL: "file:./test.db"
     steps:
@@ -98,6 +102,8 @@ jobs:
     name: Build Linux
     if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.platforms == 'mac-windows-linux')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       DATABASE_URL: "file:./test.db"
     steps:
@@ -175,6 +181,7 @@ jobs:
       github.event.inputs.platforms == 'mac' &&
       github.event.inputs.create_release != 'true'
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Build complete
         run: echo "macOS build complete. Download artifacts from the workflow run."
