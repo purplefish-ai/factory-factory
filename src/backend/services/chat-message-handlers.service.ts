@@ -9,6 +9,7 @@
  */
 
 import type { WebSocket } from 'ws';
+import { MessageState } from '@/lib/claude-types';
 import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
@@ -27,6 +28,7 @@ import { chatEventForwarderService } from './chat-event-forwarder.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
+import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
 
 const logger = createLogger('chat-message-handlers');
@@ -240,7 +242,10 @@ class ChatMessageHandlerService {
    * Dispatch a message to the client.
    */
   private dispatchMessage(dbSessionId: string, client: ClaudeClient, msg: QueuedMessage): void {
-    // Notify all connections that message is being dispatched
+    // Update state to DISPATCHED (new state machine)
+    messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
+
+    // Notify all connections that message is being dispatched (legacy event)
     chatConnectionService.forwardToSession(dbSessionId, { type: 'message_dispatched', id: msg.id });
 
     // Build content and send to Claude
@@ -464,6 +469,10 @@ class ChatMessageHandlerService {
     position: number,
     queuedMsg: QueuedMessage
   ): void {
+    // Create message in state service with ACCEPTED state (new state machine)
+    messageStateService.createUserMessage(sessionId, queuedMsg);
+
+    // Send legacy message_accepted event
     ws.send(
       JSON.stringify({
         type: 'message_accepted',
@@ -583,6 +592,10 @@ class ChatMessageHandlerService {
     const removed = messageQueueService.remove(sessionId, messageId);
 
     if (removed) {
+      // Remove from state service (message was cancelled)
+      messageStateService.removeMessage(sessionId, messageId);
+
+      // Send legacy message_removed event
       chatConnectionService.forwardToSession(sessionId, { type: 'message_removed', id: messageId });
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Queued message removed', { sessionId, messageId });
