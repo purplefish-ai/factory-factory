@@ -246,7 +246,8 @@ class MessageStateService {
       type: 'claude',
       state: MessageState.STREAMING,
       timestamp: new Date().toISOString(),
-      content,
+      // Initialize contentBlocks array for accumulating streaming events
+      contentBlocks: content ? [content] : [],
     };
 
     messages.set(messageId, messageWithState);
@@ -322,6 +323,7 @@ class MessageStateService {
 
   /**
    * Update Claude message content (for streaming updates).
+   * Appends to contentBlocks array to accumulate all streaming events.
    */
   updateClaudeContent(sessionId: string, messageId: string, content: ClaudeMessage): boolean {
     const messages = this.sessionMessages.get(sessionId);
@@ -331,7 +333,11 @@ class MessageStateService {
       return false;
     }
 
-    message.content = content;
+    // Append to contentBlocks array for accumulation
+    if (!message.contentBlocks) {
+      message.contentBlocks = [];
+    }
+    message.contentBlocks.push(content);
     // Don't emit state change for content updates - this would be too noisy
     return true;
   }
@@ -455,8 +461,8 @@ class MessageStateService {
           type: 'claude',
           state: MessageState.COMPLETE,
           timestamp: historyMsg.timestamp,
-          // Store minimal content representation for history messages
-          content: this.historyToClaudeMessage(historyMsg),
+          // Store as single-element contentBlocks array for consistency
+          contentBlocks: [this.historyToClaudeMessage(historyMsg)],
         };
         messages.set(messageId, messageWithState);
       }

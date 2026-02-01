@@ -673,15 +673,30 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     // New message state machine actions
     case 'MESSAGES_SNAPSHOT': {
       // Convert MessageWithState[] to ChatMessage[] for rendering
-      // Using type-safe check with isUserMessage type guard
-      const messages: ChatMessage[] = action.payload.messages.map((msg) => ({
-        id: msg.id,
-        source: isUserMessage(msg) ? 'user' : 'claude',
-        text: isUserMessage(msg) ? msg.text : undefined,
-        message: isUserMessage(msg) ? undefined : msg.content,
-        timestamp: msg.timestamp,
-        attachments: isUserMessage(msg) ? msg.attachments : undefined,
-      }));
+      // Expand Claude contentBlocks into multiple ChatMessage items
+      const messages: ChatMessage[] = [];
+      for (const msg of action.payload.messages) {
+        if (isUserMessage(msg)) {
+          messages.push({
+            id: msg.id,
+            source: 'user',
+            text: msg.text,
+            timestamp: msg.timestamp,
+            attachments: msg.attachments,
+          });
+        } else {
+          // Claude message - expand contentBlocks into multiple ChatMessages
+          const blocks = msg.contentBlocks ?? [];
+          for (let i = 0; i < blocks.length; i++) {
+            messages.push({
+              id: `${msg.id}-${i}`,
+              source: 'claude',
+              message: blocks[i],
+              timestamp: msg.timestamp,
+            });
+          }
+        }
+      }
 
       // Build queuedMessages map from user messages in ACCEPTED state
       const queuedMessages = new Map<string, QueuedMessage>();

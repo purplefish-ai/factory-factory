@@ -159,7 +159,7 @@ describe('MessageStateService', () => {
       };
       const result = messageStateService.createClaudeMessage('session-1', 'claude-msg-1', content);
 
-      expect(result.content).toEqual(content);
+      expect(result.contentBlocks).toEqual([content]);
     });
 
     it('should emit state change event', () => {
@@ -318,9 +318,10 @@ describe('MessageStateService', () => {
 
       expect(result).toBe(true);
       const updatedMsg = messageStateService.getMessage('session-1', 'claude-msg-1');
-      expect(updatedMsg && isClaudeMessage(updatedMsg) ? updatedMsg.content : undefined).toEqual(
-        newContent
-      );
+      // contentBlocks should contain both the original and new content (appended)
+      expect(
+        updatedMsg && isClaudeMessage(updatedMsg) ? updatedMsg.contentBlocks : undefined
+      )?.toContainEqual(newContent);
     });
 
     it('should return false for non-existent message', () => {
@@ -536,7 +537,9 @@ describe('MessageStateService', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].type).toBe('claude');
       const claudeMsg = messages[0];
-      expect(isClaudeMessage(claudeMsg) ? claudeMsg.content?.message?.content : undefined).toEqual([
+      expect(
+        isClaudeMessage(claudeMsg) ? claudeMsg.contentBlocks?.[0]?.message?.content : undefined
+      ).toEqual([
         { type: 'tool_use', id: 'tool-123', name: 'Read', input: { file_path: '/test.txt' } },
       ]);
     });
@@ -559,7 +562,9 @@ describe('MessageStateService', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].type).toBe('claude');
       const claudeMsg = messages[0];
-      expect(isClaudeMessage(claudeMsg) ? claudeMsg.content?.message?.content : undefined).toEqual([
+      expect(
+        isClaudeMessage(claudeMsg) ? claudeMsg.contentBlocks?.[0]?.message?.content : undefined
+      ).toEqual([
         {
           type: 'tool_result',
           tool_use_id: 'tool-123',
@@ -580,9 +585,9 @@ describe('MessageStateService', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].type).toBe('claude');
       const claudeMsg = messages[0];
-      expect(isClaudeMessage(claudeMsg) ? claudeMsg.content?.message?.content : undefined).toEqual([
-        { type: 'thinking', thinking: 'Let me think about this...' },
-      ]);
+      expect(
+        isClaudeMessage(claudeMsg) ? claudeMsg.contentBlocks?.[0]?.message?.content : undefined
+      ).toEqual([{ type: 'thinking', thinking: 'Let me think about this...' }]);
     });
 
     it('should skip loading if session already has messages (race condition protection)', () => {

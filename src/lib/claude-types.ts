@@ -576,8 +576,8 @@ export interface ClaudeMessageWithState {
   type: 'claude';
   state: ClaudeMessageState;
   timestamp: string;
-  /** Claude message content */
-  content?: ClaudeMessage;
+  /** Accumulated Claude message content blocks (for snapshot restoration) */
+  contentBlocks?: ClaudeMessage[];
 }
 
 /**
@@ -736,7 +736,7 @@ export function isUserMessage(msg: MessageWithState): msg is UserMessageWithStat
  * ```typescript
  * if (isClaudeMessage(msg)) {
  *   // msg is ClaudeMessageWithState here
- *   console.log(msg.content); // content available
+ *   console.log(msg.contentBlocks); // contentBlocks available
  *   console.log(msg.state); // ClaudeMessageState type
  * }
  * ```

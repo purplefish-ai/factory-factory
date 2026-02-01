@@ -1219,7 +1219,9 @@ describe('chatReducer', () => {
           type: 'claude',
           state: MessageState.COMPLETE,
           timestamp: '2024-01-02T00:00:01.000Z',
-          content: { type: 'assistant', message: { role: 'assistant', content: 'Response' } },
+          contentBlocks: [
+            { type: 'assistant', message: { role: 'assistant', content: 'Response' } },
+          ],
         },
       ];
 
@@ -1235,7 +1237,8 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(2);
       expect(newState.messages[0].id).toBe('msg-1');
       expect(newState.messages[0].source).toBe('user');
-      expect(newState.messages[1].id).toBe('msg-2');
+      // Claude messages get indexed IDs when contentBlocks are expanded
+      expect(newState.messages[1].id).toBe('msg-2-0');
       expect(newState.messages[1].source).toBe('claude');
     });
 
