@@ -614,18 +614,29 @@ class ChatMessageHandlerService {
 
     const targetSessionId = dbSession.claudeSessionId ?? null;
     const existingClient = sessionService.getClient(sessionId);
-    const isRunning = existingClient?.isWorking() ?? false;
+    const isClientRunning = existingClient?.isRunning() ?? false;
+    const isClientWorking = existingClient?.isWorking() ?? false;
     const pendingInteractiveRequest =
       chatEventForwarderService.getPendingRequest(sessionId) ?? null;
 
-    // Load history from JSONL and populate MessageStateService if needed
-    if (targetSessionId && messageStateService.getMessageCount(sessionId) === 0) {
+    // Load history from JSONL file only if:
+    // 1. We have a Claude session ID to load from, AND
+    // 2. We don't have any in-memory messages, AND
+    // 3. Claude is NOT currently running (the process is not alive)
+    //
+    // When Claude IS running, we use the in-memory state which is kept
+    // up-to-date by streaming event handlers. The JSONL file may be stale
+    // because Claude CLI only writes to it periodically, not on every chunk.
+    const hasInMemoryMessages = messageStateService.getMessageCount(sessionId) > 0;
+    const shouldLoadFromHistory = targetSessionId && !hasInMemoryMessages && !isClientRunning;
+
+    if (shouldLoadFromHistory) {
       const history = await SessionManager.getHistory(targetSessionId, workingDir);
       messageStateService.loadFromHistory(sessionId, history);
     }
 
     // Send messages_snapshot to the requesting client
-    const sessionStatus = messageStateService.computeSessionStatus(sessionId, isRunning);
+    const sessionStatus = messageStateService.computeSessionStatus(sessionId, isClientWorking);
     messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
   }
 
