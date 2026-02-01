@@ -1,9 +1,29 @@
 {
   "name": "factory-factory",
   "version": "0.1.0",
-  "description": "Workspace-based coding environment for Claude Code",
+  "description": "Workspace-based coding environment for running multiple Claude Code sessions in parallel",
   "private": false,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/purplefish-ai/factory-factory.git"
+  },
+  "bugs": {
+    "url": "https://github.com/purplefish-ai/factory-factory/issues"
+  },
+  "homepage": "https://github.com/purplefish-ai/factory-factory#readme",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai",
+    "coding",
+    "workspace",
+    "git",
+    "worktree",
+    "electron",
+    "development"
+  ],
+  "author": "Purplefish",
   "type": "module",
   "main": "dist/src/cli/index.js",
   "packageManager": "pnpm@10.28.1",

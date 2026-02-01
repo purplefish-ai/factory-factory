@@ -10,6 +10,12 @@
   Each workspace gets its own isolated git worktree, enabling true parallel development.
 </p>
 
+<p align="center">
+  <a href="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml"><img src="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish/factory-factory" alt="License"></a>
+  <a href="https://github.com/purplefish-ai/factory-factory/releases"><img src="https://img.shields.io/github/v/release/purplefish/factory-factory" alt="Release"></a>
+</p>
+
 ---
 
 ## Installation
@@ -22,7 +28,7 @@
 
 ```bash
 # Clone and install
-git clone <repo-url>
+git clone https://github.com/purplefish-ai/factory-factory.git
 cd factory-factory
 pnpm install
 
