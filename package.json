@@ -107,7 +107,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "commander": "^14.0.2",
+    "commander": "^14.0.3",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "embla-carousel-react": "^8.6.0",
@@ -126,7 +126,7 @@
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.1",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^4.5.3",
+    "react-resizable-panels": "^4.5.7",
     "react-router": "^7.13.0",
     "react-syntax-highlighter": "^16.1.0",
     "recharts": "3.7.0",
@@ -154,16 +154,21 @@
       "prisma",
       "protobufjs",
       "sharp"
-    ]
+    ],
+    "overrides": {
+      "braces": ">=3.0.3",
+      "micromatch": ">=4.0.8",
+      "tar": ">=7.5.0"
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.13",
     "@electron/rebuild": "^4.0.2",
-    "@storybook/addon-a11y": "10.2.1",
+    "@storybook/addon-a11y": "10.2.3",
     "@storybook/addon-mcp": "^0.2.2",
-    "@storybook/addon-themes": "10.2.1",
-    "@storybook/react": "10.2.1",
-    "@storybook/react-vite": "10.2.1",
+    "@storybook/addon-themes": "10.2.3",
+    "@storybook/react": "10.2.3",
+    "@storybook/react-vite": "10.2.3",
     "@tailwindcss/vite": "^4.1.18",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
@@ -176,18 +181,18 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.18",
-    "autoprefixer": "^10.4.23",
+    "autoprefixer": "^10.4.24",
     "concurrently": "^9.1.0",
     "dependency-cruiser": "^17.3.7",
     "electron": "^40.1.0",
-    "electron-builder": "^26.4.0",
+    "electron-builder": "^26.7.0",
     "husky": "^9.1.7",
     "knip": "^5.82.1",
     "lint-staged": "^16.2.7",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.6",
     "prisma": "^7.3.0",
-    "storybook": "10.2.1",
+    "storybook": "10.2.3",
     "supertest": "^7.2.2",
     "tailwindcss": "^4.1.18",
     "tsc-alias": "^1.8.16",
@@ -195,6 +200,6 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",
-    "wait-on": "^8.0.3"
+    "wait-on": "^9.0.3"
   }
 }
