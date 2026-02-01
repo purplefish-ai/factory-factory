@@ -145,7 +145,6 @@ export type ChatAction =
   | { type: 'USER_MESSAGE_SENT'; payload: ChatMessage }
   // Queue actions (optimistic local state)
   | { type: 'ADD_TO_QUEUE'; payload: QueuedMessage }
-  | { type: 'MESSAGE_REJECTED'; payload: { id: string; error: string } }
   | {
       type: 'MESSAGE_SENDING';
       payload: { id: string; text: string; attachments?: MessageAttachment[] };
@@ -539,27 +538,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    // MESSAGE_REJECTED: Backend rejected message (queue full, etc.)
-    // Remove from pending and store for recovery so user can retry
-    case 'MESSAGE_REJECTED': {
-      // Retrieve pending content for recovery before deleting
-      const pendingContent = state.pendingMessages.get(action.payload.id);
-      const newPendingMessages = new Map(state.pendingMessages);
-      newPendingMessages.delete(action.payload.id);
-      return {
-        ...state,
-        pendingMessages: newPendingMessages,
-        // Store rejected message info for recovery (restore to input)
-        lastRejectedMessage: pendingContent
-          ? {
-              text: pendingContent.text,
-              attachments: pendingContent.attachments,
-              error: action.payload.error,
-            }
-          : null,
-      };
-    }
-
     // MESSAGE_SENDING: Mark a message as pending backend confirmation and store content for recovery
     case 'MESSAGE_SENDING': {
       const newPendingMessages = new Map(state.pendingMessages);
@@ -754,6 +732,25 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         };
       }
 
+      if (newState === MessageState.REJECTED || newState === MessageState.FAILED) {
+        // Retrieve queued content for recovery before deleting
+        const queuedMessage = state.queuedMessages.get(id);
+        const newQueuedMessages = new Map(state.queuedMessages);
+        newQueuedMessages.delete(id);
+        return {
+          ...state,
+          queuedMessages: newQueuedMessages,
+          // Store rejected message info for recovery (restore to input)
+          lastRejectedMessage: queuedMessage
+            ? {
+                text: queuedMessage.text,
+                attachments: queuedMessage.attachments,
+                error: action.payload.errorMessage ?? 'Message failed',
+              }
+            : null,
+        };
+      }
+
       return state;
     }
 
@@ -878,11 +875,6 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
-    // Queue error response
-    case 'message_rejected':
-      return data.id
-        ? { type: 'MESSAGE_REJECTED', payload: { id: data.id, error: data.message ?? '' } }
-        : null;
     // Interactive response handling
     case 'message_used_as_response':
       return data.id && data.text

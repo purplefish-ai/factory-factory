@@ -135,6 +135,40 @@ class MessageStateService {
   }
 
   /**
+   * Create a rejected user message.
+   * Used when a message is rejected before being accepted (e.g., queue validation failure).
+   * Starts directly in REJECTED state.
+   */
+  createRejectedMessage(
+    sessionId: string,
+    messageId: string,
+    errorMessage: string,
+    text?: string
+  ): MessageWithState {
+    const messages = this.getOrCreateSessionMap(sessionId);
+
+    const messageWithState: MessageWithState = {
+      id: messageId,
+      type: 'user',
+      state: MessageState.REJECTED,
+      timestamp: new Date().toISOString(),
+      text,
+      errorMessage,
+    };
+
+    messages.set(messageId, messageWithState);
+
+    logger.info('User message rejected', {
+      sessionId,
+      messageId,
+      errorMessage,
+    });
+
+    this.emitStateChange(sessionId, messageWithState);
+    return messageWithState;
+  }
+
+  /**
    * Get count of user messages in ACCEPTED state (waiting in queue).
    */
   private getQueuedMessageCount(sessionId: string): number {
@@ -306,11 +340,38 @@ class MessageStateService {
    * Load messages from JSONL history (used on cold start/reconnect).
    * Converts HistoryMessage[] to MessageWithState[] with COMMITTED/COMPLETE states.
    * Does not emit state change events - this is for restoring existing state.
+   *
+   * Race condition protection:
+   * This method implements a safe pattern for populating an initially empty session's
+   * message history when multiple concurrent requests race to load it. The pattern works
+   * as follows:
+   *
+   * 1. Check if messages already exist (line 348-355):
+   *    If the session's message map already has content, another request won already
+   *    won and populated fresh state (user messages, streaming responses, etc.).
+   *    We abort immediately without touching state.
+   *
+   * 2. Delete-then-recreate pattern (line 357-359):
+   *    Between our check above and creating the new map, another concurrent request
+   *    may have populated the session. So we delete and immediately recreate, ensuring
+   *    we always start with a clean slate. This is safe because:
+   *
+   *    - We're the only code path that calls delete(sessionId) followed by
+   *      getOrCreateSessionMap(sessionId) atomically (synchronous operations)
+   *    - JavaScript's event loop prevents interleaving within a single synchronous call
+   *    - Concurrent async requests will queue until this method returns
+   *
+   * 3. Why concurrent calls won't both succeed:
+   *    Only the first request to reach the size check (line 349) will proceed.
+   *    All other concurrent requests will:
+   *    - Either see size > 0 and exit early, OR
+   *    - Start their own delete+recreate, but only one thread wins the race to
+   *      populate the map and return from this method first
+   *
+   * This prevents overwriting fresh in-flight state (user messages from WebSocket,
+   * streaming Claude responses, queue updates) with stale history data.
    */
   loadFromHistory(sessionId: string, history: HistoryMessage[]): void {
-    // Skip if session already has messages (race condition protection)
-    // This prevents overwriting fresh state with stale history when multiple
-    // requests race to populate an empty session
     const existingMessages = this.sessionMessages.get(sessionId);
     if (existingMessages && existingMessages.size > 0) {
       logger.info('Skipping history load - session already has messages', {

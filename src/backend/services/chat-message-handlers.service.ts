@@ -390,7 +390,8 @@ class ChatMessageHandlerService {
     const result = messageQueueService.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
-      ws.send(JSON.stringify({ type: 'message_rejected', id: messageId, message: result.error }));
+      // Create rejected message in state service - emits message_state_changed event
+      messageStateService.createRejectedMessage(sessionId, messageId, result.error, text);
       return;
     }
 
