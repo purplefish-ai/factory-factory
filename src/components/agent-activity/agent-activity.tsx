@@ -50,7 +50,33 @@ export const MessageItem = memo(function MessageItem({
     const userText = stripThinkingSuffix(message.text);
     return (
       <MessageWrapper>
-        <div className={`inline-block max-w-full space-y-2 ${isQueued ? 'opacity-50' : ''}`}>
+        <div
+          className={cn(
+            'group relative inline-block max-w-full space-y-2',
+            isQueued && 'opacity-50'
+          )}
+        >
+          {/* Cancel button for queued messages - at message level so it works for text and attachment-only messages */}
+          {isQueued && onRemove && (
+            <button
+              onClick={onRemove}
+              className={cn(
+                'absolute -top-1 -right-1 p-1.5 rounded-md',
+                'bg-background/90 hover:bg-destructive/10',
+                'border border-border hover:border-destructive/50',
+                'shadow-sm',
+                'opacity-0 group-hover:opacity-100',
+                'transition-all',
+                'z-10',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              )}
+              title="Cancel queued message"
+              type="button"
+              aria-label="Cancel queued message"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+            </button>
+          )}
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
             <AttachmentPreview attachments={message.attachments} readOnly />
@@ -61,27 +87,6 @@ export const MessageItem = memo(function MessageItem({
               <div className="rounded bg-background border border-border px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
                 {userText}
               </div>
-              {/* Cancel button for queued messages - positioned to the left of copy button */}
-              {isQueued && onRemove && (
-                <button
-                  onClick={onRemove}
-                  className={cn(
-                    'absolute top-1 right-8 p-1.5 rounded-md',
-                    'bg-background/90 hover:bg-destructive/10',
-                    'border border-border hover:border-destructive/50',
-                    'shadow-sm',
-                    'opacity-0 group-hover:opacity-100',
-                    'transition-all',
-                    'z-10',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                  )}
-                  title="Cancel queued message"
-                  type="button"
-                  aria-label="Cancel queued message"
-                >
-                  <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-                </button>
-              )}
               {userText && <CopyMessageButton textContent={userText} />}
             </div>
           )}
