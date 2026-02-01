@@ -427,9 +427,13 @@ class ChatMessageHandlerService {
   }
 
   /**
-   * Build a QueuedMessage from a ChatMessage.
+   * Build a QueuedMessage from a queue_message input.
    */
-  private buildQueuedMessage(messageId: string, message: ChatMessage, text: string): QueuedMessage {
+  private buildQueuedMessage(
+    messageId: string,
+    message: QueueMessageInput,
+    text: string
+  ): QueuedMessage {
     const rawModel = message.settings?.selectedModel ?? null;
     const validModel = rawModel && VALID_MODELS.includes(rawModel) ? rawModel : null;
 
@@ -575,12 +579,7 @@ class ChatMessageHandlerService {
     sessionId: string,
     message: RemoveQueuedMessageInput
   ): void {
-    const messageId = message.messageId;
-    if (!messageId) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Missing messageId' }));
-      return;
-    }
-
+    const { messageId } = message;
     const removed = messageQueueService.remove(sessionId, messageId);
 
     if (removed) {

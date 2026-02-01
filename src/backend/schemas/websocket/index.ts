@@ -5,8 +5,6 @@
 export {
   type ChatMessageInput,
   ChatMessageSchema,
-  type ChatSettings,
-  type MessageAttachment,
   type PermissionResponseMessage,
   type QuestionResponseMessage,
   type QueueMessageInput,

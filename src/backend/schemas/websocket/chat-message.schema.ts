@@ -17,8 +17,6 @@ const AttachmentSchema = z.object({
   data: z.string(),
 });
 
-export type MessageAttachment = z.infer<typeof AttachmentSchema>;
-
 // ============================================================================
 // Chat Settings Schema
 // ============================================================================
@@ -28,8 +26,6 @@ const ChatSettingsSchema = z.object({
   thinkingEnabled: z.boolean(),
   planModeEnabled: z.boolean(),
 });
-
-export type ChatSettings = z.infer<typeof ChatSettingsSchema>;
 
 // ============================================================================
 // Chat Message Schema (Discriminated Union)
@@ -58,7 +54,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Queue a message for sending
   z.object({
     type: z.literal('queue_message'),
-    id: z.string(),
+    id: z.string().min(1),
     text: z.string().optional(),
     attachments: z.array(AttachmentSchema).optional(),
     settings: ChatSettingsSchema.optional(),
@@ -67,7 +63,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Remove a queued message
   z.object({
     type: z.literal('remove_queued_message'),
-    messageId: z.string(),
+    messageId: z.string().min(1),
   }),
 
   // Stop the session
@@ -79,17 +75,20 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Load session data
   z.object({ type: z.literal('load_session') }),
 
+  // Get queued messages (lightweight alternative to load_session)
+  z.object({ type: z.literal('get_queue') }),
+
   // Answer a question from AskUserQuestion tool
   z.object({
     type: z.literal('question_response'),
-    requestId: z.string(),
+    requestId: z.string().min(1),
     answers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
   }),
 
   // Respond to a permission request
   z.object({
     type: z.literal('permission_response'),
-    requestId: z.string(),
+    requestId: z.string().min(1),
     allow: z.boolean(),
   }),
 ]);
