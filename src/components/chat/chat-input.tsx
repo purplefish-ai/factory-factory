@@ -45,7 +45,7 @@ import { cn } from '@/lib/utils';
 // =============================================================================
 
 interface ChatInputProps {
-  onSend: (text: string, attachments?: MessageAttachment[]) => void;
+  onSend: (text: string) => void;
   onStop?: () => void;
   disabled?: boolean;
   running?: boolean;
@@ -377,14 +377,14 @@ export const ChatInput = memo(function ChatInput({
         event.preventDefault();
         const text = event.currentTarget.value.trim();
         if ((text || attachments.length > 0) && !disabled) {
-          onSend(text, attachments.length > 0 ? attachments : undefined);
+          onSend(text);
           event.currentTarget.value = '';
           onChange?.('');
           setAttachments([]);
         }
       }
     },
-    [onSend, disabled, onChange, attachments, setAttachments]
+    [onSend, disabled, onChange, setAttachments, attachments.length]
   );
 
   // Handle send button click
@@ -392,13 +392,13 @@ export const ChatInput = memo(function ChatInput({
     if (inputRef?.current) {
       const text = inputRef.current.value.trim();
       if ((text || attachments.length > 0) && !disabled) {
-        onSend(text, attachments.length > 0 ? attachments : undefined);
+        onSend(text);
         inputRef.current.value = '';
         onChange?.('');
         setAttachments([]);
       }
     }
-  }, [onSend, inputRef, disabled, onChange, attachments, setAttachments]);
+  }, [onSend, inputRef, disabled, onChange, setAttachments, attachments.length]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
   // Debounce to avoid excessive scroll calculations during rapid typing

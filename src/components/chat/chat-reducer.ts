@@ -362,23 +362,20 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
 
 /**
  * Convert a PendingInteractiveRequest from the backend to a PendingRequest for UI state.
- * Handles null input and maps tool names to the appropriate request type.
  */
-function convertPendingRequest(
-  pendingReq: PendingInteractiveRequest | null | undefined
-): PendingRequest {
-  if (!pendingReq) {
+function convertPendingRequest(req: PendingInteractiveRequest | null | undefined): PendingRequest {
+  if (!req) {
     return { type: 'none' };
   }
 
-  if (pendingReq.toolName === 'AskUserQuestion') {
-    const input = pendingReq.input as { questions?: unknown[] };
+  if (req.toolName === 'AskUserQuestion') {
+    const input = req.input as { questions?: unknown[] };
     return {
       type: 'question',
       request: {
-        requestId: pendingReq.requestId,
+        requestId: req.requestId,
         questions: (input.questions ?? []) as UserQuestionRequest['questions'],
-        timestamp: pendingReq.timestamp,
+        timestamp: req.timestamp,
       },
     };
   }
@@ -386,11 +383,11 @@ function convertPendingRequest(
   return {
     type: 'permission',
     request: {
-      requestId: pendingReq.requestId,
-      toolName: pendingReq.toolName,
-      toolInput: pendingReq.input,
-      timestamp: pendingReq.timestamp,
-      planContent: pendingReq.planContent,
+      requestId: req.requestId,
+      toolName: req.toolName,
+      toolInput: req.input,
+      timestamp: req.timestamp,
+      planContent: req.planContent,
     },
   };
 }
@@ -716,11 +713,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'MESSAGE_STATE_CHANGED': {
-      const { id, newState, userMessage } = action.payload;
+      const { id, newState, userMessage, errorMessage } = action.payload;
 
-      // Handle ACCEPTED - add the message to the list and queue
+      // ACCEPTED: Add message to list and queue
       if (newState === MessageState.ACCEPTED && userMessage) {
-        // Message confirmed by backend - add to messages and queuedMessages
         const newMessage: ChatMessage = {
           id,
           source: 'user',
@@ -742,7 +738,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           },
         });
 
-        // Clear from pendingMessages since backend confirmed
         const newPendingMessages = new Map(state.pendingMessages);
         newPendingMessages.delete(id);
 
@@ -754,23 +749,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         };
       }
 
-      // Handle queue state updates
-      if (newState === MessageState.DISPATCHED) {
-        // Remove from queued messages when dispatched
+      // DISPATCHED, COMMITTED, COMPLETE: Remove from queue
+      if (
+        newState === MessageState.DISPATCHED ||
+        newState === MessageState.COMMITTED ||
+        newState === MessageState.COMPLETE
+      ) {
         const newQueuedMessages = new Map(state.queuedMessages);
         newQueuedMessages.delete(id);
         return { ...state, queuedMessages: newQueuedMessages };
       }
 
-      if (newState === MessageState.COMMITTED || newState === MessageState.COMPLETE) {
-        // Remove from queued messages when complete
-        const newQueuedMessages = new Map(state.queuedMessages);
-        newQueuedMessages.delete(id);
-        return { ...state, queuedMessages: newQueuedMessages };
-      }
-
+      // CANCELLED: Remove from queue and messages
       if (newState === MessageState.CANCELLED) {
-        // Remove from both queued messages and messages list when cancelled
         const newQueuedMessages = new Map(state.queuedMessages);
         newQueuedMessages.delete(id);
         return {
@@ -780,10 +771,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         };
       }
 
+      // REJECTED, FAILED: Remove from queue/messages, save for recovery
       if (newState === MessageState.REJECTED || newState === MessageState.FAILED) {
-        // Retrieve content for recovery - check both queuedMessages and pendingMessages
         const queuedMessage = state.queuedMessages.get(id);
         const pendingContent = state.pendingMessages.get(id);
+        const recoveryContent = queuedMessage ?? pendingContent;
 
         const newQueuedMessages = new Map(state.queuedMessages);
         newQueuedMessages.delete(id);
@@ -791,27 +783,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         const newPendingMessages = new Map(state.pendingMessages);
         newPendingMessages.delete(id);
 
-        // Prefer queuedMessage (has full structure), fall back to pendingContent
-        const recoveryContent = queuedMessage ?? pendingContent;
-
         return {
           ...state,
           messages: state.messages.filter((m) => m.id !== id),
           queuedMessages: newQueuedMessages,
           pendingMessages: newPendingMessages,
-          // Store rejected message info for recovery (restore to input)
           lastRejectedMessage: recoveryContent
             ? {
                 text: queuedMessage?.text ?? pendingContent?.text ?? '',
                 attachments: recoveryContent.attachments,
-                error: action.payload.errorMessage ?? 'Message failed',
+                error: errorMessage ?? 'Message failed',
               }
             : null,
         };
       }
 
-      // Intentionally ignore other state transitions (SENT, PENDING, ACCEPTED, STREAMING)
-      // These states are tracked by the backend; frontend only acts on terminal transitions
+      // Ignore other state transitions (SENT, PENDING, STREAMING) - tracked by backend
       debug.log(`[chat-reducer] Ignoring state transition to ${newState} for message ${id}`);
       return state;
     }

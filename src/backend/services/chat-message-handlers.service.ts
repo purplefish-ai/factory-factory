@@ -396,7 +396,7 @@ class ChatMessageHandlerService {
       return;
     }
 
-    this.notifyMessageAccepted(sessionId, messageId, result.position, queuedMsg);
+    this.notifyMessageAccepted(sessionId, queuedMsg);
     await this.tryDispatchNextMessage(sessionId);
   }
 
@@ -420,46 +420,30 @@ class ChatMessageHandlerService {
   /**
    * Build a QueuedMessage from a queue_message input.
    */
-  private buildQueuedMessage(
-    messageId: string,
-    message: QueueMessageInput,
-    text: string
-  ): QueuedMessage {
+  private buildQueuedMessage(id: string, message: QueueMessageInput, text: string): QueuedMessage {
     const rawModel = message.settings?.selectedModel ?? null;
     const validModel = rawModel && VALID_MODELS.includes(rawModel) ? rawModel : null;
 
-    const settings = message.settings
-      ? { ...message.settings, selectedModel: validModel }
-      : {
-          selectedModel: validModel,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        };
-
     return {
-      id: messageId,
+      id,
       text,
       attachments: message.attachments,
-      settings,
+      settings: message.settings
+        ? { ...message.settings, selectedModel: validModel }
+        : { selectedModel: validModel, thinkingEnabled: false, planModeEnabled: false },
       timestamp: new Date().toISOString(),
     };
   }
 
   /**
-   * Notify frontend and all connections that a message was accepted.
+   * Notify frontend that a message was accepted.
    * Creates the message in state service which emits message_state_changed event.
    */
-  private notifyMessageAccepted(
-    sessionId: string,
-    messageId: string,
-    position: number,
-    queuedMsg: QueuedMessage
-  ): void {
-    // Create message in state service with ACCEPTED state - emits message_state_changed event
+  private notifyMessageAccepted(sessionId: string, queuedMsg: QueuedMessage): void {
     messageStateService.createUserMessage(sessionId, queuedMsg);
 
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Message queued', { sessionId, messageId, position });
+      logger.info('[Chat WS] Message queued', { sessionId, messageId: queuedMsg.id });
     }
   }
 

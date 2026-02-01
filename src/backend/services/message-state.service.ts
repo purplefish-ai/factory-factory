@@ -77,21 +77,15 @@ const CLAUDE_STATES = new Set<string>(Object.keys(CLAUDE_STATE_TRANSITIONS));
 /**
  * Check if a user message state transition is valid.
  */
-function isValidUserTransition(
-  currentState: UserMessageState,
-  newState: UserMessageState
-): boolean {
-  return USER_STATE_TRANSITIONS[currentState]?.includes(newState) ?? false;
+function isValidUserTransition(from: UserMessageState, to: UserMessageState): boolean {
+  return USER_STATE_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
 /**
  * Check if a Claude message state transition is valid.
  */
-function isValidClaudeTransition(
-  currentState: ClaudeMessageState,
-  newState: ClaudeMessageState
-): boolean {
-  return CLAUDE_STATE_TRANSITIONS[currentState]?.includes(newState) ?? false;
+function isValidClaudeTransition(from: ClaudeMessageState, to: ClaudeMessageState): boolean {
+  return CLAUDE_STATE_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
 /**
@@ -101,27 +95,22 @@ function isValidClaudeTransition(
  */
 function isValidTransition(
   messageType: 'user' | 'claude',
-  currentState: MessageState,
-  newState: MessageState
+  from: MessageState,
+  to: MessageState
 ): boolean {
   if (messageType === 'user') {
-    // Validate states are valid user states before casting
-    if (!(USER_STATES.has(currentState) && USER_STATES.has(newState))) {
-      logger.error('Invalid user message state', { currentState, newState });
+    if (!(USER_STATES.has(from) && USER_STATES.has(to))) {
+      logger.error('Invalid user message state', { from, to });
       return false;
     }
-    return isValidUserTransition(currentState as UserMessageState, newState as UserMessageState);
+    return isValidUserTransition(from as UserMessageState, to as UserMessageState);
   }
 
-  // Validate states are valid Claude states before casting
-  if (!(CLAUDE_STATES.has(currentState) && CLAUDE_STATES.has(newState))) {
-    logger.error('Invalid Claude message state', { currentState, newState });
+  if (!(CLAUDE_STATES.has(from) && CLAUDE_STATES.has(to))) {
+    logger.error('Invalid Claude message state', { from, to });
     return false;
   }
-  return isValidClaudeTransition(
-    currentState as ClaudeMessageState,
-    newState as ClaudeMessageState
-  );
+  return isValidClaudeTransition(from as ClaudeMessageState, to as ClaudeMessageState);
 }
 
 // =============================================================================
