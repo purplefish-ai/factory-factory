@@ -68,15 +68,30 @@ export class GitClient {
       : baseBranch;
 
     // Fetch the latest from origin to ensure we branch from the most recent commit
-    // Non-fatal: if fetch fails (e.g., offline), we fall back to the local branch
+    // Non-fatal: if fetch fails (e.g., offline), we fall back to available refs
     const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
     const fetchSucceeded = fetchResult.code === 0;
 
-    // Create new branch from origin's version of the base branch to ensure we have the latest
-    // Only use origin if fetch succeeded, to avoid using stale remote-tracking refs
+    // Determine which base branch to use, preferring fresh origin refs
     const originBranch = `origin/${localBranchName}`;
-    const useOrigin = fetchSucceeded && (await this.branchExists(originBranch));
-    const actualBaseBranch = useOrigin ? originBranch : localBranchName;
+    const originExists = await this.branchExists(originBranch);
+    const localExists = await this.branchExists(localBranchName);
+
+    // Priority: fresh origin (fetch succeeded) > local > stale origin (fetch failed)
+    let actualBaseBranch: string;
+    if (fetchSucceeded && originExists) {
+      // Best case: use freshly fetched origin
+      actualBaseBranch = originBranch;
+    } else if (localExists) {
+      // Fallback to local branch
+      actualBaseBranch = localBranchName;
+    } else if (originExists) {
+      // Last resort: use stale origin ref (fetch failed but ref exists from previous fetch)
+      actualBaseBranch = originBranch;
+    } else {
+      // Neither exists - let git worktree fail with a clear error
+      actualBaseBranch = localBranchName;
+    }
 
     const result = await gitCommandC(this.baseRepoPath, [
       'worktree',
