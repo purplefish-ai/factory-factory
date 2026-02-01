@@ -32,8 +32,8 @@ export interface EventForwarderContext {
   workingDir: string;
 }
 
-/** Type guard for stream events with a type field */
-interface StreamEventWithType {
+/** Narrow interface for safely accessing event type in logs */
+interface EventForLogging {
   type?: string;
 }
 
@@ -79,15 +79,6 @@ class ChatEventForwarderService {
     if (pending?.requestId === requestId) {
       this.pendingInteractiveRequests.delete(dbSessionId);
     }
-  }
-
-  /**
-   * Clear all session-specific state (pending requests).
-   * Call this for explicit cleanup outside of process exit, such as when
-   * a WebSocket connection closes or a session is reset.
-   */
-  clearSessionState(dbSessionId: string): void {
-    this.pendingInteractiveRequests.delete(dbSessionId);
   }
 
   /**
@@ -161,7 +152,7 @@ class ChatEventForwarderService {
     });
 
     client.on('stream', (event) => {
-      const streamEvent = event as StreamEventWithType;
+      const streamEvent = event as EventForLogging;
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received stream event from client', {
           dbSessionId,

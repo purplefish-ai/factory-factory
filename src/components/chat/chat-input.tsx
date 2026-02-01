@@ -384,7 +384,7 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     },
-    [onSend, disabled, onChange, setAttachments, attachments.length]
+    [onSend, disabled, onChange, setAttachments, attachments]
   );
 
   // Handle send button click
@@ -398,7 +398,7 @@ export const ChatInput = memo(function ChatInput({
         setAttachments([]);
       }
     }
-  }, [onSend, inputRef, disabled, onChange, setAttachments, attachments.length]);
+  }, [onSend, inputRef, disabled, onChange, setAttachments, attachments]);
 
   // Watch for textarea height changes (from field-sizing: content) to notify parent
   // Debounce to avoid excessive scroll calculations during rapid typing

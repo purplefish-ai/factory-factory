@@ -326,6 +326,17 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Session Switching Effect
   // =============================================================================
 
+  /**
+   * Session switching and settings loading.
+   *
+   * Settings precedence (highest to lowest):
+   * 1. User-modified settings during the session
+   * 2. Stored session settings from sessionStorage
+   * 3. Application defaults (DEFAULT_CHAT_SETTINGS)
+   *
+   * Note: Backend does not broadcast session-level settings.
+   * Settings are persisted locally per session.
+   */
   useEffect(() => {
     const prevDbSessionId = prevDbSessionIdRef.current;
     const newDbSessionId = dbSessionId ?? null;

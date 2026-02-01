@@ -716,7 +716,33 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const { id, newState, userMessage, errorMessage } = action.payload;
 
       // ACCEPTED: Add message to list and queue
+      // De-duplication: Skip adding if message ID already exists (handles reconnect/multi-tab scenarios)
       if (newState === MessageState.ACCEPTED && userMessage) {
+        const newPendingMessages = new Map(state.pendingMessages);
+        newPendingMessages.delete(id);
+
+        // Check if message already exists (e.g., from reconnect or multi-tab)
+        if (state.messages.some((m) => m.id === id)) {
+          // Still need to update queue and clear pending state
+          const newQueuedMessages = new Map(state.queuedMessages);
+          newQueuedMessages.set(id, {
+            id,
+            text: userMessage.text,
+            timestamp: userMessage.timestamp,
+            attachments: userMessage.attachments,
+            settings: userMessage.settings ?? {
+              selectedModel: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
+          });
+          return {
+            ...state,
+            queuedMessages: newQueuedMessages,
+            pendingMessages: newPendingMessages,
+          };
+        }
+
         const newMessage: ChatMessage = {
           id,
           source: 'user',
@@ -737,9 +763,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             planModeEnabled: false,
           },
         });
-
-        const newPendingMessages = new Map(state.pendingMessages);
-        newPendingMessages.delete(id);
 
         return {
           ...state,
