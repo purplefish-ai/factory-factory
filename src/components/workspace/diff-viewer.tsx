@@ -165,15 +165,17 @@ function DiffLineComponent({ line }: DiffLineProps) {
   return (
     <div className={cn('flex font-mono text-xs', bgColor)}>
       {/* Line numbers */}
-      <div className="flex-shrink-0 w-20 flex text-muted-foreground border-r border-border">
-        <span className="w-10 px-1 text-right border-r border-border">
+      <div className="flex-shrink-0 flex text-muted-foreground border-r border-border select-none">
+        <span className="min-w-[3ch] px-1 text-right border-r border-border tabular-nums">
           {line.lineNumber?.old ?? ''}
         </span>
-        <span className="w-10 px-1 text-right">{line.lineNumber?.new ?? ''}</span>
+        <span className="min-w-[3ch] px-1 text-right tabular-nums">
+          {line.lineNumber?.new ?? ''}
+        </span>
       </div>
 
       {/* Prefix */}
-      <span className={cn('flex-shrink-0 w-4 text-center', textColor)}>{prefix}</span>
+      <span className={cn('flex-shrink-0 w-4 text-center select-none', textColor)}>{prefix}</span>
 
       {/* Content */}
       <pre className={cn('flex-1 whitespace-pre-wrap break-all px-2', textColor)}>
