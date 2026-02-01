@@ -1968,16 +1968,6 @@ describe('createActionFromWebSocketMessage', () => {
 
     expect(action).toBeNull();
   });
-
-  it('should convert interactive_response_cleared to QUESTION_RESPONSE action', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'interactive_response_cleared',
-      requestId: 'req-1',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'QUESTION_RESPONSE' });
-  });
 });
 
 // =============================================================================

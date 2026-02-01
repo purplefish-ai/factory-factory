@@ -923,8 +923,6 @@ function handleMessageQueueAction(data: WebSocketMessage): ChatAction | null {
       return data.id && data.text
         ? { type: 'MESSAGE_USED_AS_RESPONSE', payload: { id: data.id, text: data.text } }
         : null;
-    case 'interactive_response_cleared':
-      return { type: 'QUESTION_RESPONSE' };
     default:
       return null;
   }
@@ -964,7 +962,6 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'message_accepted':
     case 'message_rejected':
     case 'message_used_as_response':
-    case 'interactive_response_cleared':
       return handleMessageQueueAction(data);
     default:
       return null;

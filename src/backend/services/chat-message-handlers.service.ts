@@ -521,12 +521,10 @@ class ChatMessageHandlerService {
         chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
 
         // Notify frontend that the message was used as a response
-        ws.send(JSON.stringify({ type: 'message_used_as_response', id: messageId }));
-        chatConnectionService.forwardToSession(
-          sessionId,
-          { type: 'interactive_response_cleared', requestId: pendingRequest.requestId },
-          ws
-        );
+        const responseEvent = { type: 'message_used_as_response', id: messageId, text };
+        ws.send(JSON.stringify(responseEvent));
+        // Forward to other connections so they also see the message
+        chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
 
         if (DEBUG_CHAT_WS) {
           logger.info('[Chat WS] Message used as AskUserQuestion response', {
@@ -545,12 +543,10 @@ class ChatMessageHandlerService {
         chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
 
         // Notify frontend that the message was used as a response
-        ws.send(JSON.stringify({ type: 'message_used_as_response', id: messageId }));
-        chatConnectionService.forwardToSession(
-          sessionId,
-          { type: 'interactive_response_cleared', requestId: pendingRequest.requestId },
-          ws
-        );
+        const responseEvent = { type: 'message_used_as_response', id: messageId, text };
+        ws.send(JSON.stringify(responseEvent));
+        // Forward to other connections so they also see the message
+        chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
 
         if (DEBUG_CHAT_WS) {
           logger.info('[Chat WS] Message used as ExitPlanMode denial', {
