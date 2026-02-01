@@ -43,6 +43,13 @@ class MessageQueueService {
   private queues = new Map<string, QueuedMessage[]>();
 
   /**
+   * Track messages that have been dequeued but not yet confirmed as processed.
+   * This covers the "in-flight" gap where a message has been dequeued but
+   * Claude hasn't yet received/acknowledged it (e.g., during client startup).
+   */
+  private inFlight = new Map<string, QueuedMessage>();
+
+  /**
    * Get or create a queue for a session.
    */
   private getOrCreateQueue(sessionId: string): QueuedMessage[] {
@@ -194,6 +201,57 @@ class MessageQueueService {
   getQueueLength(sessionId: string): number {
     const queue = this.queues.get(sessionId);
     return queue?.length ?? 0;
+  }
+
+  // =============================================================================
+  // In-Flight Message Tracking
+  // =============================================================================
+
+  /**
+   * Mark a message as in-flight (dequeued but not yet confirmed as dispatched to Claude).
+   * Only one message can be in-flight per session at a time.
+   */
+  markInFlight(sessionId: string, msg: QueuedMessage): void {
+    this.inFlight.set(sessionId, msg);
+    logger.info('Message marked in-flight', {
+      sessionId,
+      messageId: msg.id,
+    });
+  }
+
+  /**
+   * Clear the in-flight message for a session.
+   * Called when dispatch is complete (message sent to Claude) or on re-queue.
+   */
+  clearInFlight(sessionId: string): void {
+    const msg = this.inFlight.get(sessionId);
+    if (msg) {
+      this.inFlight.delete(sessionId);
+      logger.info('In-flight cleared', {
+        sessionId,
+        messageId: msg.id,
+      });
+    }
+  }
+
+  /**
+   * Get the current in-flight message for a session.
+   */
+  getInFlight(sessionId: string): QueuedMessage | undefined {
+    return this.inFlight.get(sessionId);
+  }
+
+  /**
+   * Get the queue including any in-flight message at the front.
+   * The in-flight message appears first since it's actively being dispatched.
+   */
+  getQueueWithInFlight(sessionId: string): QueuedMessage[] {
+    const queue = this.getQueue(sessionId);
+    const inFlightMsg = this.inFlight.get(sessionId);
+    if (inFlightMsg) {
+      return [inFlightMsg, ...queue];
+    }
+    return queue;
   }
 }
 

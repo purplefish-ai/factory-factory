@@ -99,6 +99,10 @@ class ChatMessageHandlerService {
       return;
     }
 
+    // Mark message as in-flight immediately after dequeue.
+    // This tracks the message during the gap before it's sent to Claude.
+    messageQueueService.markInFlight(dbSessionId, msg);
+
     try {
       let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
 
@@ -110,7 +114,8 @@ class ChatMessageHandlerService {
 
         const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
         if (!newClient) {
-          // Re-queue the message at the front so it's not lost
+          // Clear in-flight and re-queue the message at the front so it's not lost
+          messageQueueService.clearInFlight(dbSessionId);
           messageQueueService.requeue(dbSessionId, msg);
           // Notify frontend that starting failed so UI doesn't get stuck
           chatConnectionService.forwardToSession(dbSessionId, { type: 'stopped', dbSessionId });
@@ -124,6 +129,7 @@ class ChatMessageHandlerService {
         if (DEBUG_CHAT_WS) {
           logger.info('[Chat WS] Claude is working, re-queueing message', { dbSessionId });
         }
+        messageQueueService.clearInFlight(dbSessionId);
         messageQueueService.requeue(dbSessionId, msg);
         return;
       }
@@ -131,6 +137,7 @@ class ChatMessageHandlerService {
       // Check if Claude process is still alive
       if (!client.isRunning()) {
         logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
+        messageQueueService.clearInFlight(dbSessionId);
         messageQueueService.requeue(dbSessionId, msg);
         return;
       }
@@ -246,6 +253,9 @@ class ChatMessageHandlerService {
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
     client.sendMessage(content);
+
+    // Clear in-flight now that message has been sent to Claude
+    messageQueueService.clearInFlight(dbSessionId);
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
@@ -636,7 +646,8 @@ class ChatMessageHandlerService {
     const running = existingClient?.isWorking() ?? false;
     const pendingInteractiveRequest =
       chatEventForwarderService.getPendingRequest(sessionId) ?? null;
-    const queuedMessages = messageQueueService.getQueue(sessionId);
+    // Include in-flight messages so they appear in the UI during startup
+    const queuedMessages = messageQueueService.getQueueWithInFlight(sessionId);
 
     let messages: Awaited<ReturnType<typeof SessionManager.getHistory>> = [];
     let gitBranch: string | null = null;
@@ -676,9 +687,10 @@ class ChatMessageHandlerService {
   /**
    * Handle get_queue message - returns just the queued messages for fast initial display.
    * This is a lightweight alternative to load_session that doesn't fetch chat history.
+   * Includes in-flight messages so they appear in the UI during startup.
    */
   private handleGetQueueMessage(ws: WebSocket, sessionId: string): void {
-    const queuedMessages = messageQueueService.getQueue(sessionId);
+    const queuedMessages = messageQueueService.getQueueWithInFlight(sessionId);
     ws.send(JSON.stringify({ type: 'queue', queuedMessages }));
   }
 

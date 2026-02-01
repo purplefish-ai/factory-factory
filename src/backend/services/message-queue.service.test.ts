@@ -28,12 +28,16 @@ function createTestMessage(id: string, text = 'Test message'): QueuedMessage {
 // =============================================================================
 
 describe('MessageQueueService', () => {
-  // Clear queues between tests to ensure isolation
+  // Clear queues and in-flight state between tests to ensure isolation
   beforeEach(() => {
     // Clear any existing queues by clearing known test sessions
     messageQueueService.clear('session-1');
     messageQueueService.clear('session-2');
     messageQueueService.clear('session-3');
+    // Also clear in-flight state
+    messageQueueService.clearInFlight('session-1');
+    messageQueueService.clearInFlight('session-2');
+    messageQueueService.clearInFlight('session-3');
   });
 
   // ---------------------------------------------------------------------------
@@ -380,6 +384,129 @@ describe('MessageQueueService', () => {
 
       messageQueueService.remove('session-1', 'msg-2');
       expect(messageQueueService.getQueueLength('session-1')).toBe(0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // In-Flight Tracking
+  // ---------------------------------------------------------------------------
+
+  describe('in-flight tracking', () => {
+    it('should track in-flight message with markInFlight', () => {
+      const msg = createTestMessage('msg-1');
+
+      messageQueueService.markInFlight('session-1', msg);
+
+      const inFlight = messageQueueService.getInFlight('session-1');
+      expect(inFlight).toBeDefined();
+      expect(inFlight?.id).toBe('msg-1');
+    });
+
+    it('should return undefined for session with no in-flight message', () => {
+      const inFlight = messageQueueService.getInFlight('non-existent');
+      expect(inFlight).toBeUndefined();
+    });
+
+    it('should clear in-flight message with clearInFlight', () => {
+      const msg = createTestMessage('msg-1');
+
+      messageQueueService.markInFlight('session-1', msg);
+      messageQueueService.clearInFlight('session-1');
+
+      const inFlight = messageQueueService.getInFlight('session-1');
+      expect(inFlight).toBeUndefined();
+    });
+
+    it('should handle clearing non-existent in-flight gracefully', () => {
+      // Should not throw
+      expect(() => messageQueueService.clearInFlight('non-existent')).not.toThrow();
+    });
+
+    it('should replace previous in-flight message when marking new one', () => {
+      const msg1 = createTestMessage('msg-1');
+      const msg2 = createTestMessage('msg-2');
+
+      messageQueueService.markInFlight('session-1', msg1);
+      messageQueueService.markInFlight('session-1', msg2);
+
+      const inFlight = messageQueueService.getInFlight('session-1');
+      expect(inFlight?.id).toBe('msg-2');
+    });
+
+    it('should maintain separate in-flight tracking per session', () => {
+      const msg1 = createTestMessage('msg-1');
+      const msg2 = createTestMessage('msg-2');
+
+      messageQueueService.markInFlight('session-1', msg1);
+      messageQueueService.markInFlight('session-2', msg2);
+
+      expect(messageQueueService.getInFlight('session-1')?.id).toBe('msg-1');
+      expect(messageQueueService.getInFlight('session-2')?.id).toBe('msg-2');
+
+      // Clear one shouldn't affect other
+      messageQueueService.clearInFlight('session-1');
+      expect(messageQueueService.getInFlight('session-1')).toBeUndefined();
+      expect(messageQueueService.getInFlight('session-2')?.id).toBe('msg-2');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getQueueWithInFlight
+  // ---------------------------------------------------------------------------
+
+  describe('getQueueWithInFlight', () => {
+    it('should return only queue when no in-flight message', () => {
+      const msg = createTestMessage('msg-1');
+      messageQueueService.enqueue('session-1', msg);
+
+      const result = messageQueueService.getQueueWithInFlight('session-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('msg-1');
+    });
+
+    it('should return only in-flight message when queue is empty', () => {
+      const msg = createTestMessage('msg-in-flight');
+      messageQueueService.markInFlight('session-1', msg);
+
+      const result = messageQueueService.getQueueWithInFlight('session-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('msg-in-flight');
+    });
+
+    it('should return in-flight message at front followed by queued messages', () => {
+      const inFlightMsg = createTestMessage('msg-in-flight');
+      const queuedMsg1 = createTestMessage('msg-queued-1');
+      const queuedMsg2 = createTestMessage('msg-queued-2');
+
+      messageQueueService.markInFlight('session-1', inFlightMsg);
+      messageQueueService.enqueue('session-1', queuedMsg1);
+      messageQueueService.enqueue('session-1', queuedMsg2);
+
+      const result = messageQueueService.getQueueWithInFlight('session-1');
+
+      expect(result).toHaveLength(3);
+      expect(result[0].id).toBe('msg-in-flight');
+      expect(result[1].id).toBe('msg-queued-1');
+      expect(result[2].id).toBe('msg-queued-2');
+    });
+
+    it('should return empty array when no in-flight and no queue', () => {
+      const result = messageQueueService.getQueueWithInFlight('non-existent');
+      expect(result).toEqual([]);
+    });
+
+    it('should return copy that does not affect internal state', () => {
+      const msg = createTestMessage('msg-in-flight');
+      messageQueueService.markInFlight('session-1', msg);
+
+      const result = messageQueueService.getQueueWithInFlight('session-1');
+      result.push(createTestMessage('msg-mutated'));
+
+      // Internal state should be unchanged
+      const result2 = messageQueueService.getQueueWithInFlight('session-1');
+      expect(result2).toHaveLength(1);
     });
   });
 
