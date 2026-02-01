@@ -9,7 +9,6 @@ import type {
   ChatMessage,
   ChatSettings,
   ClaudeMessage,
-  MessageWithState,
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
@@ -1206,22 +1205,19 @@ describe('chatReducer', () => {
         ],
       };
 
-      const snapshotMessages: MessageWithState[] = [
+      // Snapshot now contains pre-built ChatMessage[] (same format frontend uses)
+      const snapshotMessages: ChatMessage[] = [
         {
           id: 'msg-1',
-          type: 'user',
-          state: MessageState.COMMITTED,
-          timestamp: '2024-01-02T00:00:00.000Z',
+          source: 'user',
           text: 'New message',
+          timestamp: '2024-01-02T00:00:00.000Z',
         },
         {
-          id: 'msg-2',
-          type: 'claude',
-          state: MessageState.COMPLETE,
+          id: 'msg-2-0',
+          source: 'claude',
+          message: { type: 'assistant', message: { role: 'assistant', content: 'Response' } },
           timestamp: '2024-01-02T00:00:01.000Z',
-          contentBlocks: [
-            { type: 'assistant', message: { role: 'assistant', content: 'Response' } },
-          ],
         },
       ];
 
@@ -1237,41 +1233,34 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(2);
       expect(newState.messages[0].id).toBe('msg-1');
       expect(newState.messages[0].source).toBe('user');
-      // Claude messages get indexed IDs when contentBlocks are expanded
       expect(newState.messages[1].id).toBe('msg-2-0');
       expect(newState.messages[1].source).toBe('claude');
     });
 
-    it('should build queuedMessages map from ACCEPTED messages', () => {
-      const snapshotMessages: MessageWithState[] = [
-        {
-          id: 'msg-1',
-          type: 'user',
-          state: MessageState.COMMITTED,
-          timestamp: '2024-01-01T00:00:00.000Z',
-          text: 'Committed message',
-        },
-        {
-          id: 'msg-2',
-          type: 'user',
-          state: MessageState.ACCEPTED,
-          timestamp: '2024-01-01T00:00:01.000Z',
-          text: 'Queued message',
-        },
-      ];
+    it('should clear queuedMessages on snapshot (queued state tracked via MESSAGE_STATE_CHANGED)', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'queued-1',
+            text: 'Queued message',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+          },
+        ]),
+      };
 
       const action: ChatAction = {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
-          messages: snapshotMessages,
+          messages: [],
           sessionStatus: { phase: 'ready' },
         },
       };
-      const newState = chatReducer(initialState, action);
+      const newState = chatReducer(state, action);
 
-      expect(newState.queuedMessages.size).toBe(1);
-      expect(newState.queuedMessages.has('msg-2')).toBe(true);
-      expect(newState.queuedMessages.get('msg-2')?.text).toBe('Queued message');
+      // Snapshot clears queuedMessages - queued state is managed via MESSAGE_STATE_CHANGED events
+      expect(newState.queuedMessages.size).toBe(0);
     });
 
     it('should update session status from snapshot', () => {
@@ -1374,18 +1363,18 @@ describe('chatReducer', () => {
         ]),
       };
 
+      // Snapshot now contains pre-built ChatMessage[] format
       const action: ChatAction = {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
           messages: [
             {
-              type: 'user',
               id: 'msg-1',
+              source: 'user',
               text: 'Pending 1',
               timestamp: '2024-01-01T00:00:00.000Z',
-              state: MessageState.COMMITTED,
             },
-          ] as MessageWithState[],
+          ] as ChatMessage[],
           sessionStatus: { phase: 'ready' },
         },
       };
@@ -1743,11 +1732,11 @@ describe('createActionFromWebSocketMessage', () => {
   // -------------------------------------------------------------------------
 
   it('should convert messages_snapshot to MESSAGES_SNAPSHOT action', () => {
-    const allMessages: MessageWithState[] = [
+    // Snapshot now contains pre-built ChatMessage[] (same format frontend uses)
+    const snapshotMessages: ChatMessage[] = [
       {
         id: 'msg-1',
-        type: 'user',
-        state: MessageState.COMMITTED,
+        source: 'user',
         timestamp: '2024-01-01T00:00:00.000Z',
         text: 'Hello',
       },
@@ -1755,7 +1744,7 @@ describe('createActionFromWebSocketMessage', () => {
     const sessionStatus: SessionStatus = { phase: 'ready' };
     const wsMessage: WebSocketMessage = {
       type: 'messages_snapshot',
-      allMessages,
+      messages: snapshotMessages,
       sessionStatus,
     };
     const action = createActionFromWebSocketMessage(wsMessage);
@@ -1763,14 +1752,14 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toEqual({
       type: 'MESSAGES_SNAPSHOT',
       payload: {
-        messages: allMessages,
+        messages: snapshotMessages,
         sessionStatus,
         pendingInteractiveRequest: null,
       },
     });
   });
 
-  it('should return null for messages_snapshot without allMessages', () => {
+  it('should return null for messages_snapshot without messages', () => {
     const wsMessage: WebSocketMessage = {
       type: 'messages_snapshot',
       sessionStatus: { phase: 'ready' },

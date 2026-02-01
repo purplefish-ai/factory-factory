@@ -16,10 +16,13 @@
  */
 
 import {
+  type ChatMessage,
   type ClaudeMessage,
   type ClaudeMessageState,
   type ClaudeMessageWithState,
+  type ClaudeStreamEvent,
   type HistoryMessage,
+  isStreamEventMessage,
   isUserMessage,
   MessageState,
   type MessageWithState,
@@ -231,6 +234,49 @@ class MessageStateService {
   }
 
   /**
+   * Determines if a Claude message should be stored.
+   * Ported from frontend chat-reducer.ts shouldStoreMessage().
+   * We filter out structural/delta events and only keep meaningful ones.
+   */
+  private shouldStoreClaudeEvent(claudeMsg: ClaudeMessage): boolean {
+    // User messages with tool_result content should be stored
+    if (claudeMsg.type === 'user') {
+      const content = claudeMsg.message?.content;
+      if (Array.isArray(content)) {
+        return content.some(
+          (item) =>
+            typeof item === 'object' &&
+            item !== null &&
+            'type' in item &&
+            item.type === 'tool_result'
+        );
+      }
+      return false;
+    }
+
+    // Result messages are always stored
+    if (claudeMsg.type === 'result') {
+      return true;
+    }
+
+    // For stream events, only store meaningful ones
+    if (!isStreamEventMessage(claudeMsg)) {
+      return true;
+    }
+
+    const event: ClaudeStreamEvent = claudeMsg.event;
+
+    // Only store content_block_start for tool_use, tool_result, and thinking
+    if (event.type === 'content_block_start') {
+      const blockType = event.content_block.type;
+      return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
+    }
+
+    // Skip all other stream events
+    return false;
+  }
+
+  /**
    * Create a new Claude message.
    * Starts in STREAMING state.
    */
@@ -241,13 +287,25 @@ class MessageStateService {
   ): ClaudeMessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
 
+    const timestamp = new Date().toISOString();
+    const chatMessages: ChatMessage[] = [];
+
+    // If initial content should be stored, add it as ChatMessage
+    if (content && this.shouldStoreClaudeEvent(content)) {
+      chatMessages.push({
+        id: `${messageId}-0`,
+        source: 'claude',
+        message: content,
+        timestamp,
+      });
+    }
+
     const messageWithState: ClaudeMessageWithState = {
       id: messageId,
       type: 'claude',
       state: MessageState.STREAMING,
-      timestamp: new Date().toISOString(),
-      // Initialize contentBlocks array for accumulating streaming events
-      contentBlocks: content ? [content] : [],
+      timestamp,
+      chatMessages,
     };
 
     messages.set(messageId, messageWithState);
@@ -323,7 +381,8 @@ class MessageStateService {
 
   /**
    * Update Claude message content (for streaming updates).
-   * Appends to contentBlocks array to accumulate all streaming events.
+   * Only stores events that pass shouldStoreClaudeEvent filter.
+   * Converts to ChatMessage format for consistent frontend handling.
    */
   updateClaudeContent(sessionId: string, messageId: string, content: ClaudeMessage): boolean {
     const messages = this.sessionMessages.get(sessionId);
@@ -333,11 +392,20 @@ class MessageStateService {
       return false;
     }
 
-    // Append to contentBlocks array for accumulation
-    if (!message.contentBlocks) {
-      message.contentBlocks = [];
+    // Only store if it passes the filter
+    if (!this.shouldStoreClaudeEvent(content)) {
+      return true; // Processed but not stored (not an error)
     }
-    message.contentBlocks.push(content);
+
+    // Convert to ChatMessage format
+    const chatMessage: ChatMessage = {
+      id: `${messageId}-${message.chatMessages.length}`,
+      source: 'claude',
+      message: content,
+      timestamp: new Date().toISOString(),
+    };
+
+    message.chatMessages.push(chatMessage);
     // Don't emit state change for content updates - this would be too noisy
     return true;
   }
@@ -462,13 +530,21 @@ class MessageStateService {
         historyMsg.type === 'thinking'
       ) {
         // Claude messages - already complete
+        // Convert to ChatMessage format for consistent frontend handling
+        const claudeMessage = this.historyToClaudeMessage(historyMsg);
         const messageWithState: ClaudeMessageWithState = {
           id: messageId,
           type: 'claude',
           state: MessageState.COMPLETE,
           timestamp: historyMsg.timestamp,
-          // Store as single-element contentBlocks array for consistency
-          contentBlocks: [this.historyToClaudeMessage(historyMsg)],
+          chatMessages: [
+            {
+              id: `${messageId}-0`,
+              source: 'claude',
+              message: claudeMessage,
+              timestamp: historyMsg.timestamp,
+            },
+          ],
         };
         messages.set(messageId, messageWithState);
       }
@@ -566,6 +642,9 @@ class MessageStateService {
    * Send a full messages snapshot to all connections for a session.
    * Used on initial connect and reconnect to synchronize client state.
    *
+   * Flattens user messages and Claude chatMessages into a single ChatMessage[]
+   * array, so frontend receives messages in the exact format it uses.
+   *
    * @param sessionId - The database session ID
    * @param sessionStatus - Current session lifecycle status (idle, loading, starting, ready, running, stopping)
    * @param pendingInteractiveRequest - Optional pending interactive request awaiting user response.
@@ -588,18 +667,36 @@ class MessageStateService {
       timestamp: string;
     } | null
   ): void {
-    const messages = this.getAllMessages(sessionId);
+    const allMessages = this.getAllMessages(sessionId);
+
+    // Flatten to ChatMessage[] - user messages become ChatMessages,
+    // Claude messages expand their chatMessages array
+    const chatMessages: ChatMessage[] = [];
+    for (const msg of allMessages) {
+      if (isUserMessage(msg)) {
+        chatMessages.push({
+          id: msg.id,
+          source: 'user',
+          text: msg.text,
+          timestamp: msg.timestamp,
+          attachments: msg.attachments,
+        });
+      } else {
+        // Claude message - add all its chatMessages
+        chatMessages.push(...msg.chatMessages);
+      }
+    }
 
     chatConnectionService.forwardToSession(sessionId, {
       type: 'messages_snapshot',
-      allMessages: messages,
+      messages: chatMessages,
       sessionStatus,
       pendingInteractiveRequest,
     });
 
     logger.info('Messages snapshot sent', {
       sessionId,
-      messageCount: messages.length,
+      messageCount: chatMessages.length,
     });
   }
 

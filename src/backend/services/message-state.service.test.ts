@@ -166,7 +166,10 @@ describe('MessageStateService', () => {
       };
       const result = messageStateService.createClaudeMessage('session-1', 'claude-msg-1', content);
 
-      expect(result.contentBlocks).toEqual([content]);
+      // Now stores as chatMessages (ChatMessage[]) instead of contentBlocks
+      expect(result.chatMessages).toHaveLength(1);
+      expect(result.chatMessages[0].source).toBe('claude');
+      expect(result.chatMessages[0].message).toEqual(content);
     });
 
     it('should emit state change event', () => {
@@ -325,10 +328,12 @@ describe('MessageStateService', () => {
 
       expect(result).toBe(true);
       const updatedMsg = messageStateService.getMessage('session-1', 'claude-msg-1');
-      // contentBlocks should contain both the original and new content (appended)
-      expect(
-        updatedMsg && isClaudeMessage(updatedMsg) ? updatedMsg.contentBlocks : undefined
-      )?.toContainEqual(newContent);
+      // chatMessages should contain the new content (as ChatMessage)
+      if (updatedMsg && isClaudeMessage(updatedMsg)) {
+        expect(updatedMsg.chatMessages.some((cm) => cm.message === newContent)).toBe(true);
+      } else {
+        expect.fail('Expected Claude message');
+      }
     });
 
     it('should return false for non-existent message', () => {
@@ -544,11 +549,16 @@ describe('MessageStateService', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].type).toBe('claude');
       const claudeMsg = messages[0];
-      expect(
-        isClaudeMessage(claudeMsg) ? claudeMsg.contentBlocks?.[0]?.message?.content : undefined
-      ).toEqual([
-        { type: 'tool_use', id: 'tool-123', name: 'Read', input: { file_path: '/test.txt' } },
-      ]);
+      // Now stored as chatMessages (ChatMessage[])
+      if (isClaudeMessage(claudeMsg)) {
+        expect(claudeMsg.chatMessages).toHaveLength(1);
+        const innerMessage = claudeMsg.chatMessages[0].message?.message;
+        expect(innerMessage?.content).toEqual([
+          { type: 'tool_use', id: 'tool-123', name: 'Read', input: { file_path: '/test.txt' } },
+        ]);
+      } else {
+        expect.fail('Expected Claude message');
+      }
     });
 
     it('should handle tool_result messages', () => {
@@ -569,16 +579,21 @@ describe('MessageStateService', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].type).toBe('claude');
       const claudeMsg = messages[0];
-      expect(
-        isClaudeMessage(claudeMsg) ? claudeMsg.contentBlocks?.[0]?.message?.content : undefined
-      ).toEqual([
-        {
-          type: 'tool_result',
-          tool_use_id: 'tool-123',
-          content: 'File contents here',
-          is_error: false,
-        },
-      ]);
+      // Now stored as chatMessages (ChatMessage[])
+      if (isClaudeMessage(claudeMsg)) {
+        expect(claudeMsg.chatMessages).toHaveLength(1);
+        const innerMessage = claudeMsg.chatMessages[0].message?.message;
+        expect(innerMessage?.content).toEqual([
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-123',
+            content: 'File contents here',
+            is_error: false,
+          },
+        ]);
+      } else {
+        expect.fail('Expected Claude message');
+      }
     });
 
     it('should handle thinking messages', () => {
@@ -592,9 +607,16 @@ describe('MessageStateService', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].type).toBe('claude');
       const claudeMsg = messages[0];
-      expect(
-        isClaudeMessage(claudeMsg) ? claudeMsg.contentBlocks?.[0]?.message?.content : undefined
-      ).toEqual([{ type: 'thinking', thinking: 'Let me think about this...' }]);
+      // Now stored as chatMessages (ChatMessage[])
+      if (isClaudeMessage(claudeMsg)) {
+        expect(claudeMsg.chatMessages).toHaveLength(1);
+        const innerMessage = claudeMsg.chatMessages[0].message?.message;
+        expect(innerMessage?.content).toEqual([
+          { type: 'thinking', thinking: 'Let me think about this...' },
+        ]);
+      } else {
+        expect.fail('Expected Claude message');
+      }
     });
 
     it('should skip loading if session already has messages (race condition protection)', () => {
@@ -733,7 +755,7 @@ describe('MessageStateService', () => {
 
       expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
         type: 'messages_snapshot',
-        allMessages: expect.any(Array),
+        messages: expect.any(Array),
         sessionStatus: { phase: 'ready' },
         pendingInteractiveRequest: undefined,
       });
@@ -751,7 +773,7 @@ describe('MessageStateService', () => {
 
       expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
         type: 'messages_snapshot',
-        allMessages: expect.any(Array),
+        messages: expect.any(Array),
         sessionStatus: { phase: 'running' },
         pendingInteractiveRequest: pendingRequest,
       });
@@ -776,9 +798,9 @@ describe('MessageStateService', () => {
       messageStateService.sendSnapshot('session-1', { phase: 'ready' });
 
       const call = vi.mocked(chatConnectionService.forwardToSession).mock.calls[0];
-      const payload = call[1] as { allMessages: Array<{ id: string }> };
-      expect(payload.allMessages[0].id).toBe('msg-1');
-      expect(payload.allMessages[1].id).toBe('msg-2');
+      const payload = call[1] as { messages: Array<{ id: string }> };
+      expect(payload.messages[0].id).toBe('msg-1');
+      expect(payload.messages[1].id).toBe('msg-2');
     });
 
     it('should include planContent in pendingInteractiveRequest', () => {
@@ -794,7 +816,7 @@ describe('MessageStateService', () => {
 
       expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
         type: 'messages_snapshot',
-        allMessages: [],
+        messages: [],
         sessionStatus: { phase: 'running' },
         pendingInteractiveRequest: pendingRequest,
       });

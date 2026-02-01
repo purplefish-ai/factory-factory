@@ -15,7 +15,6 @@ import type {
   ChatSettings,
   ClaudeMessage,
   MessageAttachment,
-  MessageWithState,
   PendingInteractiveRequest,
   PermissionRequest,
   QueuedMessage,
@@ -29,7 +28,6 @@ import {
   DEFAULT_CHAT_SETTINGS,
   getToolUseIdFromEvent,
   isStreamEventMessage,
-  isUserMessage,
   isWsClaudeMessage,
   MessageState,
 } from '@/lib/claude-types';
@@ -171,7 +169,8 @@ export type ChatAction =
   | {
       type: 'MESSAGES_SNAPSHOT';
       payload: {
-        messages: MessageWithState[];
+        /** Pre-built ChatMessages from backend - ready to use directly */
+        messages: ChatMessage[];
         sessionStatus: SharedSessionStatus;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
       };
@@ -681,53 +680,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // New message state machine actions
     case 'MESSAGES_SNAPSHOT': {
-      // Build set of message IDs from backend snapshot
-      const snapshotIds = new Set(action.payload.messages.map((m) => m.id));
+      // Messages come pre-built from backend - just use them directly
+      const snapshotMessages = action.payload.messages;
 
-      // Convert MessageWithState[] to ChatMessage[] for rendering
-      // Expand Claude contentBlocks into multiple ChatMessage items
-      const messages: ChatMessage[] = [];
-      for (const msg of action.payload.messages) {
-        if (isUserMessage(msg)) {
-          messages.push({
-            id: msg.id,
-            source: 'user',
-            text: msg.text,
-            timestamp: msg.timestamp,
-            attachments: msg.attachments,
-          });
-        } else {
-          // Claude message - expand contentBlocks into multiple ChatMessages
-          const blocks = msg.contentBlocks ?? [];
-          for (let i = 0; i < blocks.length; i++) {
-            messages.push({
-              id: `${msg.id}-${i}`,
-              source: 'claude',
-              message: blocks[i],
-              timestamp: msg.timestamp,
-            });
-          }
-        }
-      }
-
-      // Build queuedMessages map from user messages in ACCEPTED state
-      const queuedMessages = new Map<string, QueuedMessage>();
-      for (const msg of action.payload.messages) {
-        if (isUserMessage(msg) && msg.state === MessageState.ACCEPTED) {
-          queuedMessages.set(msg.id, {
-            id: msg.id,
-            text: msg.text,
-            timestamp: msg.timestamp,
-            attachments: msg.attachments,
-            // Use settings from message if available, otherwise defaults
-            settings: msg.settings ?? {
-              selectedModel: null,
-              thinkingEnabled: false,
-              planModeEnabled: false,
-            },
-          });
-        }
-      }
+      // Build set of message IDs from backend snapshot for pending message cleanup
+      const snapshotIds = new Set(snapshotMessages.map((m) => m.id));
 
       // Keep pending messages that haven't been acknowledged by backend yet
       const newPendingMessages = new Map<string, PendingMessageContent>();
@@ -743,10 +700,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Convert pending interactive request to UI state format
       const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
 
+      // Note: queuedMessages are now managed via MESSAGE_STATE_CHANGED events.
+      // The snapshot contains final ChatMessages, not intermediate states.
+      // Clear queuedMessages since snapshot represents fully processed state.
       return {
         ...state,
-        messages,
-        queuedMessages,
+        messages: snapshotMessages,
+        queuedMessages: new Map(),
         sessionStatus,
         pendingRequest,
         toolUseIdToIndex: new Map(),
@@ -924,13 +884,13 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
 }
 
 function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
-  if (!data.allMessages) {
+  if (!data.messages) {
     return null;
   }
   return {
     type: 'MESSAGES_SNAPSHOT',
     payload: {
-      messages: data.allMessages,
+      messages: data.messages,
       sessionStatus: data.sessionStatus ?? { phase: 'ready' },
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
     },

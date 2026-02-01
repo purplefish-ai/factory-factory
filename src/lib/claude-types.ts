@@ -442,8 +442,8 @@ export interface WebSocketMessage {
   // Message state machine fields (primary protocol)
   /** New state for message_state_changed events */
   newState?: MessageState;
-  /** All messages for messages_snapshot events */
-  allMessages?: MessageWithState[];
+  /** Pre-built ChatMessages for messages_snapshot events (ready for frontend to use directly) */
+  messages?: ChatMessage[];
   /** Session status for messages_snapshot events */
   sessionStatus?: SessionStatus;
   /** Pending interactive request for messages_snapshot events */
@@ -583,8 +583,8 @@ export interface ClaudeMessageWithState {
   type: 'claude';
   state: ClaudeMessageState;
   timestamp: string;
-  /** Accumulated Claude message content blocks (for snapshot restoration) */
-  contentBlocks?: ClaudeMessage[];
+  /** Pre-built ChatMessages for snapshot restoration - same format frontend uses */
+  chatMessages: ChatMessage[];
 }
 
 /**
