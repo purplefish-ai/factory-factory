@@ -468,23 +468,36 @@ function handleToolInputUpdate(
   // Try O(1) lookup first
   let messageIndex = state.toolUseIdToIndex.get(toolUseId);
   let currentState = state;
+  let needsIndexUpdate = false;
 
-  // Fallback to linear scan if not found
+  // If cached index exists, verify it points to the correct message
+  // (index may be stale if messages were inserted in the middle of the array)
+  if (messageIndex !== undefined) {
+    const cachedMsg = state.messages[messageIndex];
+    if (!isToolUseMessageWithId(cachedMsg, toolUseId)) {
+      // Cached index is stale, need to do linear scan
+      messageIndex = undefined;
+      needsIndexUpdate = true;
+    }
+  }
+
+  // Fallback to linear scan if not found or stale
   if (messageIndex === undefined) {
     messageIndex = state.messages.findIndex((msg) => isToolUseMessageWithId(msg, toolUseId));
     if (messageIndex === -1) {
       return state; // Tool use not found
     }
-    // Update index for future lookups - create new state with updated index
+    needsIndexUpdate = true;
+  }
+
+  // Update index for future lookups if needed
+  if (needsIndexUpdate) {
     const newToolUseIdToIndex = new Map(state.toolUseIdToIndex);
     newToolUseIdToIndex.set(toolUseId, messageIndex);
     currentState = { ...state, toolUseIdToIndex: newToolUseIdToIndex };
   }
 
   const msg = currentState.messages[messageIndex];
-  if (!isToolUseMessageWithId(msg, toolUseId)) {
-    return currentState;
-  }
 
   // Update the message with new input
   const claudeMsg = msg.message;
