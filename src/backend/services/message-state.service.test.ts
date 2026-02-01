@@ -795,6 +795,38 @@ describe('MessageStateService', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // computeSessionStatus
+  // ---------------------------------------------------------------------------
+
+  describe('computeSessionStatus', () => {
+    it('should return running when client is running', () => {
+      const status = messageStateService.computeSessionStatus('session-1', true);
+      expect(status).toEqual({ phase: 'running' });
+    });
+
+    it('should return ready when client is not running and no queued messages', () => {
+      const status = messageStateService.computeSessionStatus('session-1', false);
+      expect(status).toEqual({ phase: 'ready' });
+    });
+
+    it('should return starting when client is not running but has queued messages', () => {
+      // Create a message in ACCEPTED state (queued)
+      messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
+
+      const status = messageStateService.computeSessionStatus('session-1', false);
+      expect(status).toEqual({ phase: 'starting' });
+    });
+
+    it('should return ready when queued message is dispatched', () => {
+      messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
+      messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
+
+      const status = messageStateService.computeSessionStatus('session-1', false);
+      expect(status).toEqual({ phase: 'ready' });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Session Isolation
   // ---------------------------------------------------------------------------
 

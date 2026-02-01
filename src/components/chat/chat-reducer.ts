@@ -748,13 +748,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
 
-      // Convert session status from shared type to local type
-      // Preserve 'starting' if backend reports 'ready' - 'starting' is a frontend-only
-      // optimistic state for when a message has been sent but the client hasn't started yet
-      const sessionStatus: SessionStatus =
-        state.sessionStatus.phase === 'starting' && action.payload.sessionStatus.phase === 'ready'
-          ? state.sessionStatus
-          : action.payload.sessionStatus;
+      // Session status comes from backend, which knows about queued messages
+      const sessionStatus: SessionStatus = action.payload.sessionStatus;
 
       // Convert pending interactive request to UI state format
       const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);

@@ -625,7 +625,7 @@ class ChatMessageHandlerService {
     }
 
     // Send messages_snapshot to the requesting client
-    const sessionStatus = { phase: isRunning ? ('running' as const) : ('ready' as const) };
+    const sessionStatus = messageStateService.computeSessionStatus(sessionId, isRunning);
     messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
   }
 
@@ -638,7 +638,7 @@ class ChatMessageHandlerService {
     const isRunning = existingClient?.isWorking() ?? false;
     const pendingInteractiveRequest =
       chatEventForwarderService.getPendingRequest(sessionId) ?? null;
-    const sessionStatus = { phase: isRunning ? ('running' as const) : ('ready' as const) };
+    const sessionStatus = messageStateService.computeSessionStatus(sessionId, isRunning);
     messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
   }
 

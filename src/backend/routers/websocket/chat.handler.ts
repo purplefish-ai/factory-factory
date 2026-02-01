@@ -222,11 +222,8 @@ export function handleChatUpgrade(
     // Send messages_snapshot for reconnecting clients (new state machine)
     if (dbSessionId) {
       const pendingRequest = chatEventForwarderService.getPendingRequest(dbSessionId);
-      messageStateService.sendSnapshot(
-        dbSessionId,
-        { phase: isRunning ? 'running' : 'ready' },
-        pendingRequest
-      );
+      const sessionStatus = messageStateService.computeSessionStatus(dbSessionId, isRunning);
+      messageStateService.sendSnapshot(dbSessionId, sessionStatus, pendingRequest);
     }
 
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket handler requires validation and error handling

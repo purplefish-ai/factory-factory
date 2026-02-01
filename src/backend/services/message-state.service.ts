@@ -598,6 +598,30 @@ class MessageStateService {
   }
 
   /**
+   * Compute the session status based on client state and queued messages.
+   *
+   * @param sessionId - The database session ID
+   * @param isClientRunning - Whether the Claude client is currently running
+   * @returns SessionStatus with appropriate phase:
+   *   - 'running' if client is running
+   *   - 'starting' if client is NOT running but there are queued messages waiting
+   *   - 'ready' otherwise
+   */
+  computeSessionStatus(sessionId: string, isClientRunning: boolean): SessionStatus {
+    if (isClientRunning) {
+      return { phase: 'running' };
+    }
+
+    // Check if there are messages waiting to be dispatched
+    const queuedCount = this.getQueuedMessageCount(sessionId);
+    if (queuedCount > 0) {
+      return { phase: 'starting' };
+    }
+
+    return { phase: 'ready' };
+  }
+
+  /**
    * Emit a state change event to all connections for a session.
    */
   private emitStateChange(sessionId: string, message: MessageWithState): void {
