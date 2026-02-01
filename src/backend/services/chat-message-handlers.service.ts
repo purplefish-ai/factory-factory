@@ -299,19 +299,6 @@ class ChatMessageHandlerService {
     return requestedModel && VALID_MODELS.includes(requestedModel) ? requestedModel : undefined;
   }
 
-  private parseModelType(model: string | null | undefined): string | null {
-    if (!model) {
-      return null;
-    }
-    if (model.includes('opus')) {
-      return 'opus';
-    }
-    if (model.includes('haiku')) {
-      return 'haiku';
-    }
-    return null;
-  }
-
   // ============================================================================
   // Private: Message Handlers
   // ============================================================================
@@ -624,53 +611,32 @@ class ChatMessageHandlerService {
 
     const targetSessionId = dbSession.claudeSessionId ?? null;
     const existingClient = sessionService.getClient(sessionId);
-    const running = existingClient?.isWorking() ?? false;
+    const isRunning = existingClient?.isWorking() ?? false;
     const pendingInteractiveRequest =
       chatEventForwarderService.getPendingRequest(sessionId) ?? null;
-    const queuedMessages = messageQueueService.getQueue(sessionId);
 
-    let messages: Awaited<ReturnType<typeof SessionManager.getHistory>> = [];
-    let gitBranch: string | null = null;
-    let selectedModel: string | null = null;
-    let thinkingEnabled = false;
-
-    if (targetSessionId) {
-      const [history, model, thinking, branch] = await Promise.all([
-        SessionManager.getHistory(targetSessionId, workingDir),
-        SessionManager.getSessionModel(targetSessionId, workingDir),
-        SessionManager.getSessionThinkingEnabled(targetSessionId, workingDir),
-        SessionManager.getSessionGitBranch(targetSessionId, workingDir),
-      ]);
-      messages = history;
-      gitBranch = branch;
-      selectedModel = this.parseModelType(model);
-      thinkingEnabled = thinking;
+    // Load history from JSONL and populate MessageStateService if needed
+    if (targetSessionId && messageStateService.getMessageCount(sessionId) === 0) {
+      const history = await SessionManager.getHistory(targetSessionId, workingDir);
+      messageStateService.loadFromHistory(sessionId, history);
     }
 
-    ws.send(
-      JSON.stringify({
-        type: 'session_loaded',
-        messages,
-        gitBranch,
-        running,
-        settings: {
-          selectedModel,
-          thinkingEnabled,
-          planModeEnabled: false,
-        },
-        pendingInteractiveRequest,
-        queuedMessages,
-      })
-    );
+    // Send messages_snapshot to the requesting client
+    const sessionStatus = { phase: isRunning ? ('running' as const) : ('ready' as const) };
+    messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
   }
 
   /**
-   * Handle get_queue message - returns just the queued messages for fast initial display.
-   * This is a lightweight alternative to load_session that doesn't fetch chat history.
+   * Handle get_queue message - sends a messages_snapshot with current state.
+   * This is now equivalent to load_session but faster since it doesn't load from JSONL.
    */
-  private handleGetQueueMessage(ws: WebSocket, sessionId: string): void {
-    const queuedMessages = messageQueueService.getQueue(sessionId);
-    ws.send(JSON.stringify({ type: 'queue', queuedMessages }));
+  private handleGetQueueMessage(_ws: WebSocket, sessionId: string): void {
+    const existingClient = sessionService.getClient(sessionId);
+    const isRunning = existingClient?.isWorking() ?? false;
+    const pendingInteractiveRequest =
+      chatEventForwarderService.getPendingRequest(sessionId) ?? null;
+    const sessionStatus = { phase: isRunning ? ('running' as const) : ('ready' as const) };
+    messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
   }
 
   private handleQuestionResponseMessage(

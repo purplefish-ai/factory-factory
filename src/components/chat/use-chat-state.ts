@@ -342,12 +342,12 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       toolInputAccumulatorRef.current.clear();
     }
 
-    // Load persisted data for the new session (queue comes from backend via session_loaded)
+    // Load persisted data for the new session (queue comes from backend via messages_snapshot)
     if (newDbSessionId) {
       const persistedData = loadAllSessionData(newDbSessionId);
       setInputDraftState(persistedData.draft);
       dispatch({ type: 'SET_SETTINGS', payload: persistedData.settings });
-      // Queue is loaded from backend via session_loaded message, not from frontend persistence
+      // Queue is loaded from backend via messages_snapshot event, not from frontend persistence
 
       // Set loading state for initial load (when prevDbSessionId was null)
       // This prevents "No messages yet" flash while WebSocket connects and loads session

@@ -17,6 +17,7 @@
 
 import {
   type ClaudeMessage,
+  type HistoryMessage,
   MessageState,
   type MessageWithState,
   type QueuedMessage,
@@ -106,6 +107,9 @@ class MessageStateService {
   createUserMessage(sessionId: string, msg: QueuedMessage): MessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
 
+    // Queue position = count of ACCEPTED user messages (messages waiting in queue)
+    const queuePosition = this.getQueuedMessageCount(sessionId);
+
     const messageWithState: MessageWithState = {
       id: msg.id,
       type: 'user',
@@ -113,7 +117,7 @@ class MessageStateService {
       timestamp: msg.timestamp,
       text: msg.text,
       attachments: msg.attachments,
-      queuePosition: messages.size, // Position based on current message count
+      queuePosition,
     };
 
     messages.set(msg.id, messageWithState);
@@ -122,10 +126,29 @@ class MessageStateService {
       sessionId,
       messageId: msg.id,
       state: messageWithState.state,
+      queuePosition,
     });
 
     this.emitStateChange(sessionId, messageWithState);
     return messageWithState;
+  }
+
+  /**
+   * Get count of user messages in ACCEPTED state (waiting in queue).
+   */
+  private getQueuedMessageCount(sessionId: string): number {
+    const messages = this.sessionMessages.get(sessionId);
+    if (!messages) {
+      return 0;
+    }
+
+    let count = 0;
+    for (const msg of messages.values()) {
+      if (msg.type === 'user' && msg.state === MessageState.ACCEPTED) {
+        count++;
+      }
+    }
+    return count;
   }
 
   /**
@@ -276,6 +299,119 @@ class MessageStateService {
       });
     }
     this.sessionMessages.delete(sessionId);
+  }
+
+  /**
+   * Load messages from JSONL history (used on cold start/reconnect).
+   * Converts HistoryMessage[] to MessageWithState[] with COMMITTED/COMPLETE states.
+   * Does not emit state change events - this is for restoring existing state.
+   */
+  loadFromHistory(sessionId: string, history: HistoryMessage[]): void {
+    // Clear any existing messages for this session
+    this.sessionMessages.delete(sessionId);
+    const messages = this.getOrCreateSessionMap(sessionId);
+
+    for (const historyMsg of history) {
+      const messageId =
+        historyMsg.uuid ||
+        `history-${historyMsg.timestamp}-${Math.random().toString(36).slice(2, 9)}`;
+
+      if (historyMsg.type === 'user') {
+        // User text message - already committed
+        const messageWithState: MessageWithState = {
+          id: messageId,
+          type: 'user',
+          state: MessageState.COMMITTED,
+          timestamp: historyMsg.timestamp,
+          text: historyMsg.content,
+        };
+        messages.set(messageId, messageWithState);
+      } else if (
+        historyMsg.type === 'assistant' ||
+        historyMsg.type === 'tool_use' ||
+        historyMsg.type === 'tool_result' ||
+        historyMsg.type === 'thinking'
+      ) {
+        // Claude messages - already complete
+        const messageWithState: MessageWithState = {
+          id: messageId,
+          type: 'claude',
+          state: MessageState.COMPLETE,
+          timestamp: historyMsg.timestamp,
+          // Store minimal content representation for history messages
+          content: this.historyToClaudeMessage(historyMsg),
+        };
+        messages.set(messageId, messageWithState);
+      }
+    }
+
+    logger.info('Loaded messages from history', {
+      sessionId,
+      messageCount: messages.size,
+    });
+  }
+
+  /**
+   * Convert a HistoryMessage to a ClaudeMessage for storage.
+   */
+  private historyToClaudeMessage(msg: HistoryMessage): ClaudeMessage {
+    if (msg.type === 'tool_use' && msg.toolName && msg.toolId) {
+      return {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: msg.toolId,
+              name: msg.toolName,
+              input: msg.toolInput ?? {},
+            },
+          ],
+        },
+      };
+    }
+
+    if (msg.type === 'tool_result' && msg.toolId) {
+      return {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: msg.toolId,
+              content: msg.content,
+              is_error: msg.isError,
+            },
+          ],
+        },
+      };
+    }
+
+    if (msg.type === 'thinking') {
+      return {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'thinking',
+              thinking: msg.content,
+            },
+          ],
+        },
+      };
+    }
+
+    // Default: assistant text message
+    return {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: msg.content,
+      },
+    };
   }
 
   /**

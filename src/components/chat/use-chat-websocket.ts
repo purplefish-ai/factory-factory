@@ -119,11 +119,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [chat.handleMessage]
   );
 
-  // Handle connection established - request queue first (fast), then full session
+  // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
     sendRef.current({ type: 'list_sessions' });
-    sendRef.current({ type: 'get_queue' }); // Fast: just queued messages
-    sendRef.current({ type: 'load_session' }); // Slow: full history
+    sendRef.current({ type: 'load_session' }); // Loads history and sends messages_snapshot
   }, []);
 
   // Set up transport with callbacks
