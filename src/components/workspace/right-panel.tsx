@@ -1,6 +1,14 @@
 'use client';
 
-import { FileQuestion, Files, GitCompare, ListTodo, ScrollText, Terminal } from 'lucide-react';
+import {
+  FileQuestion,
+  Files,
+  GitCompare,
+  ListTodo,
+  Plus,
+  ScrollText,
+  Terminal,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
@@ -10,9 +18,10 @@ import { cn } from '@/lib/utils';
 import { DevLogsPanel } from './dev-logs-panel';
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
-import { TerminalPanel } from './terminal-panel';
+import { TerminalPanel, type TerminalPanelRef } from './terminal-panel';
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
+import { useDevLogsConnection } from './use-dev-logs-connection';
 
 // =============================================================================
 // Constants
@@ -72,6 +81,10 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
   const [activeBottomTab, setActiveBottomTab] = useState<BottomPanelTab>('terminal');
+  const terminalPanelRef = useRef<TerminalPanelRef>(null);
+
+  // Track dev logs connection status for the tab indicator
+  const devLogsConnected = useDevLogsConnection(workspaceId);
 
   // Load persisted tabs from localStorage on mount or workspaceId change
   useEffect(() => {
@@ -171,7 +184,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
       {/* Bottom Panel: Terminal / Dev Logs */}
       <ResizablePanel defaultSize="40%" minSize="15%">
         <div className="flex flex-col h-full min-h-0">
-          {/* Tab bar */}
+          {/* Unified tab bar with terminal tabs inline */}
           <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
             <PanelTab
               label="Terminal"
@@ -181,16 +194,39 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
             />
             <PanelTab
               label="Dev Logs"
-              icon={<ScrollText className="h-3.5 w-3.5" />}
+              icon={
+                <span className="flex items-center gap-1.5">
+                  <ScrollText className="h-3.5 w-3.5" />
+                  <span
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      devLogsConnected ? 'bg-green-500' : 'bg-red-500'
+                    )}
+                  />
+                </span>
+              }
               isActive={activeBottomTab === 'dev-logs'}
               onClick={() => handleBottomTabChange('dev-logs')}
             />
+            {/* Spacer to push + button to the right */}
+            <div className="flex-1" />
+            {/* New terminal button - always visible */}
+            {activeBottomTab === 'terminal' && (
+              <button
+                type="button"
+                onClick={() => terminalPanelRef.current?.createNewTerminal()}
+                className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="New terminal"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-hidden">
             {activeBottomTab === 'terminal' && (
-              <TerminalPanel workspaceId={workspaceId} className="h-full" />
+              <TerminalPanel ref={terminalPanelRef} workspaceId={workspaceId} className="h-full" />
             )}
             {activeBottomTab === 'dev-logs' && (
               <DevLogsPanel workspaceId={workspaceId} className="h-full" />

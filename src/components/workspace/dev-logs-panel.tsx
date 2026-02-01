@@ -8,7 +8,6 @@ interface DevLogsPanelProps {
 
 export function DevLogsPanel({ workspaceId, className }: DevLogsPanelProps) {
   const [output, setOutput] = useState<string>('');
-  const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const outputEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,7 +30,6 @@ export function DevLogsPanel({ workspaceId, className }: DevLogsPanelProps) {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setConnected(true);
       setOutput((prev) => `${prev}Connected!\n\n`);
     };
 
@@ -56,7 +54,6 @@ export function DevLogsPanel({ workspaceId, className }: DevLogsPanelProps) {
     };
 
     ws.onclose = (event) => {
-      setConnected(false);
       setOutput((prev) => `${prev}Disconnected (code: ${event.code})\n`);
     };
 
@@ -66,26 +63,11 @@ export function DevLogsPanel({ workspaceId, className }: DevLogsPanelProps) {
   }, [workspaceId, scrollToBottom]);
 
   return (
-    <div className={cn('flex flex-col h-full bg-background', className)}>
-      {/* Header */}
-      <div className="border-b px-4 py-2 bg-muted/50">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">Dev Server Logs</h3>
-          <div className="flex items-center gap-2">
-            <div
-              className={cn('w-2 h-2 rounded-full', connected ? 'bg-green-500' : 'bg-red-500')}
-            />
-            <span className="text-xs text-muted-foreground">
-              {connected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Output */}
+    <div className={cn('h-full bg-background', className)}>
+      {/* Output - no header, connection status is shown in the tab bar */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto overflow-x-auto font-mono text-xs p-4 bg-black text-white"
+        className="h-full overflow-y-auto overflow-x-auto font-mono text-xs p-4 bg-black text-white"
       >
         <pre className="whitespace-pre-wrap break-words">
           {output || 'Waiting for dev server output...'}
