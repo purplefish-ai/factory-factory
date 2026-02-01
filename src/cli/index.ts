@@ -11,6 +11,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
+import { runMigrations as runDbMigrations } from '@/backend/migrate';
 
 const execPromise = promisify(exec);
 
@@ -205,27 +206,17 @@ function ensureDataDir(databasePath: string): void {
   }
 }
 
-// Run database migrations
+// Run database migrations using better-sqlite3 directly (no Prisma CLI needed)
 function runMigrations(databasePath: string, verbose: boolean): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const migrate = spawn('npx', ['prisma', 'migrate', 'deploy'], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        DATABASE_URL: `file:${databasePath}`,
-      },
-      stdio: verbose ? 'inherit' : 'pipe',
-    });
+  const migrationsPath = join(PROJECT_ROOT, 'prisma', 'migrations');
+  const log = verbose
+    ? (msg: string) => console.log(chalk.gray(`  ${msg}`))
+    : () => {
+        /* no-op for non-verbose mode */
+      };
 
-    migrate.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Migration failed with exit code ${code}`));
-      }
-    });
-
-    migrate.on('error', reject);
+  return Promise.resolve().then(() => {
+    runDbMigrations({ databasePath, migrationsPath, log });
   });
 }
 
@@ -560,7 +551,7 @@ program
   .command('db:migrate')
   .description('Run database migrations')
   .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
-  .action(async (options: MigrateOptions) => {
+  .action((options: MigrateOptions) => {
     // Database path is optional - defaults to ~/factory-factory/data.db
     const databasePath = options.databasePath || process.env.DATABASE_PATH;
     const defaultPath = join(homedir(), 'factory-factory', 'data.db');
@@ -568,24 +559,17 @@ program
 
     console.log(chalk.blue(`Running database migrations on ${effectivePath}...`));
 
-    const migrate = spawn('npx', ['prisma', 'migrate', 'deploy'], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        DATABASE_URL: `file:${effectivePath}`,
-      },
-      stdio: 'inherit',
-    });
-
-    const exitCode = await new Promise<number>((resolve) => {
-      migrate.on('exit', (code) => resolve(code ?? 1));
-    });
-
-    if (exitCode === 0) {
+    try {
+      const migrationsPath = join(PROJECT_ROOT, 'prisma', 'migrations');
+      runDbMigrations({
+        databasePath: effectivePath,
+        migrationsPath,
+        log: (msg) => console.log(chalk.gray(msg)),
+      });
       console.log(chalk.green('Migrations completed successfully'));
-    } else {
-      console.error(chalk.red('Migration failed'));
-      process.exit(exitCode);
+    } catch (error) {
+      console.error(chalk.red('Migration failed:'), error);
+      process.exit(1);
     }
   });
 
