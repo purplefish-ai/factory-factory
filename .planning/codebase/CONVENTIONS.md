@@ -1,305 +1,203 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-01-31
+**Analysis Date:** 2026-02-01
 
-## Style & Formatting
-
-**Tool:** Biome (v2.3.13)
-**Configuration:** `biome.json`
-
-**Key Style Rules:**
-- Indent: 2 spaces
-- Line width: 100 characters
-- Semicolons: Always
-- Quote style: Single quotes for JavaScript/TypeScript
-- Trailing commas: ES5 compatible
-
-**Linting:**
-- Biome handles both linting and formatting
-- No ESLint/Prettier (replaced by Biome)
-- Custom Grit plugins: `biome-rules/no-await-import.grit`, `biome-rules/no-native-dialogs.grit`
-
-**Run commands:**
-```bash
-pnpm check:fix    # Lint + format with Biome
-pnpm typecheck    # TypeScript checking only
-```
-
-## Naming Conventions
+## Naming Patterns
 
 **Files:**
-- Components: `kebab-case.tsx` (e.g., `button.tsx`, `chat-input.tsx`)
-- Services: `kebab-case.service.ts` (e.g., `scheduler.service.ts`, `logger.service.ts`)
-- Accessors: `kebab-case.accessor.ts` (e.g., `workspace.accessor.ts`)
-- Tests: `*.test.ts` co-located with source (e.g., `protocol.test.ts`)
-- Stories: `*.stories.tsx` co-located with component (e.g., `button.stories.tsx`)
-- tRPC routers: `kebab-case.trpc.ts` (e.g., `workspace.trpc.ts`)
-- Types: `kebab-case.ts` or `types.ts` (e.g., `claude-types.ts`)
+- Backend services: `kebab-case.service.ts` (e.g., `logger.service.ts`, `port.service.ts`, `github-cli.service.ts`)
+- Resource accessors: `kebab-case.accessor.ts` (e.g., `claude-session.accessor.ts`, `workspace.accessor.ts`)
+- Router files: `kebab-case.router.ts` or `kebab-case.trpc.ts` (e.g., `project.router.ts`, `workspace.trpc.ts`)
+- MCP handlers: `kebab-case.mcp.ts` (e.g., `terminal.mcp.ts`, `system.mcp.ts`)
+- WebSocket handlers: `kebab-case.handler.ts` (e.g., `chat.handler.ts`, `terminal.handler.ts`)
+- Test files: `kebab-case.test.ts` or `kebab-case.spec.ts` (co-located with source)
+- React components: `PascalCase.tsx` (e.g., `AppSidebar.tsx`, `ThemeToggle.tsx`)
+- React hooks: `use-kebab-case.ts` (e.g., `use-workspace-list-state.ts`, `use-terminal-websocket.ts`)
+- Utilities/helpers: `kebab-case.ts` (e.g., `git-helpers.ts`, `file-helpers.ts`)
+- Types: `kebab-case.ts` or inline (e.g., `process-types.ts` contains type definitions)
 
 **Functions:**
-- camelCase for functions and methods
-- Use verb prefixes: `create`, `get`, `find`, `update`, `delete`, `is`, `has`
-```typescript
-function createLogger(component: string): Logger {}
-async function findById(id: string): Promise<Workspace | null> {}
-function isPortAvailable(port: number): Promise<boolean> {}
-```
+- camelCase for all function names
+- PascalCase for React components and class constructors
+- Lowercase with hyphens for file names, never camelCase or snake_case
 
 **Variables:**
-- camelCase for variables and parameters
-- UPPER_SNAKE_CASE for constants
-```typescript
-const STALE_THRESHOLD_MINUTES = 5;
-const MAX_CONCURRENT_PR_SYNCS = 5;
-```
+- camelCase for all variables and constants at module scope
+- Const-first: use `const` by default, only `let` when reassignment needed
+- Example: `const mockCreateNetServer`, `const selectedProjectId`, `const logEntry`
 
-**Types/Interfaces:**
-- PascalCase for types, interfaces, and classes
-- Suffix with purpose: `Input`, `Output`, `Options`, `Config`, `State`, `Action`
-```typescript
-interface CreateWorkspaceInput {}
-interface LoggerConfig {}
-type ChatAction = { type: 'WS_STATUS'; payload: { running: boolean } } | ...
-```
+**Types:**
+- PascalCase for interface and type names: `interface LogEntry`, `type LogLevel`
+- PascalCase for class names: `class Logger`, `class SessionManager`
+- Suffix types descriptively: `GitStatusFile`, `WorkspaceListItem`, `LoggerConfig`
 
-**React Components:**
-- PascalCase for component names
-- Use `forwardRef` for components that need refs
-```typescript
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(...)
-Button.displayName = 'Button';
-```
+**Classes and Services:**
+- Service classes exported via factory function: `createLogger()` returns `Logger`
+- Accessor classes follow pattern: class `ProjectAccessor` in `project.accessor.ts`
+- Methods use camelCase and should be descriptive: `parseGitStatusOutput()`, `findAvailablePort()`
 
-## Code Patterns
+## Code Style
 
-**Service Pattern:**
-- Class-based singletons with factory function or direct instance export
-- Location: `src/backend/services/`
-```typescript
-class SchedulerService {
-  private syncInterval: NodeJS.Timeout | null = null;
-  start(): void { ... }
-  async stop(): Promise<void> { ... }
-}
-export const schedulerService = new SchedulerService();
-```
+**Formatting:**
+- Tool: Biome v2.3.13
+- Indentation: 2 spaces
+- Line width: 100 characters
+- Quotes: Single quotes (`'`) for JavaScript/TypeScript, single quotes for CSS
+- Semicolons: Always required
+- Trailing commas: ES5 style
 
-**Logger Factory:**
-- Use `createLogger(component)` to get a logger instance
-```typescript
-import { createLogger } from './logger.service';
-const logger = createLogger('scheduler');
-logger.info('Starting sync', { count: 5 });
-logger.error('Sync failed', error as Error, { workspaceId });
-```
+**Linting:**
+- Tool: Biome with strict rules enabled
+- Key rules:
+  - `noUnusedVariables`: error
+  - `noUnusedImports`: error
+  - `noUnusedFunctionParameters`: error
+  - `noExplicitAny`: error
+  - `noDoubleEquals`: error
+  - `noConsole`: error (except in logger, debug, CLI, and scripts - see overrides)
+  - `useConst`: error (prefer const over let)
+  - `useImportType`: error (use `import type` for types)
+  - `noNonNullAssertion`: error (don't use `!` operator)
+  - `useFragmentSyntax`: error (use `<>` not `<Fragment>`)
+  - `noDelete`: error (avoid delete operator)
 
-**Accessor Pattern:**
-- Database access via accessor classes
-- Location: `src/backend/resource_accessors/`
-```typescript
-class WorkspaceAccessor {
-  create(data: CreateWorkspaceInput): Promise<Workspace> { ... }
-  findById(id: string): Promise<Workspace | null> { ... }
-  update(id: string, data: UpdateWorkspaceInput): Promise<Workspace> { ... }
-}
-export const workspaceAccessor = new WorkspaceAccessor();
-```
-
-**tRPC Router Pattern:**
-- Use Zod for input validation
-- Location: `src/backend/trpc/`
-```typescript
-export const projectRouter = router({
-  getById: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const project = await projectAccessor.findById(input.id);
-      if (!project) {
-        throw new Error(`Project not found: ${input.id}`);
-      }
-      return project;
-    }),
-});
-```
-
-**React Component Pattern:**
-- Use CVA (class-variance-authority) for variant-based styling
-- Location: `src/components/ui/`
-```typescript
-const buttonVariants = cva(
-  'inline-flex items-center justify-center...',
-  {
-    variants: {
-      variant: { default: '...', destructive: '...' },
-      size: { default: '...', sm: '...', lg: '...' },
-    },
-    defaultVariants: { variant: 'default', size: 'default' },
-  }
-);
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean;
-}
-```
-
-**State Management (Frontend):**
-- Reducer pattern for complex state
-- Location: `src/components/chat/chat-reducer.ts`
-```typescript
-type ChatAction =
-  | { type: 'WS_STATUS'; payload: { running: boolean } }
-  | { type: 'WS_CLAUDE_MESSAGE'; payload: ClaudeMessage }
-  | ...;
-
-function chatReducer(state: ChatState, action: ChatAction): ChatState {
-  switch (action.type) {
-    case 'WS_STATUS':
-      return { ...state, sessionStatus: ... };
-    ...
-  }
-}
-```
+**Console logging:**
+- Disabled globally except in specific files allowed by biome overrides:
+  - `src/backend/services/logger.service.ts`
+  - `src/lib/debug.ts`
+  - `src/cli/**/*.ts`
+  - `scripts/**/*.ts`
+  - `electron/**/*.ts`
 
 ## Import Organization
 
-**Order (enforced by Biome organizeImports):**
-1. Node.js built-in modules (with `node:` protocol)
-2. External packages
-3. Internal modules using path aliases
+**Order:**
+1. Node.js built-in modules (`import { homedir } from 'node:os'`)
+2. Third-party dependencies (`import { z } from 'zod'`)
+3. Relative imports from workspace (`import { trpc } from '../lib/trpc'`)
+4. Path aliases (`import { createLogger } from '@/backend/services/logger.service'`)
+5. Type-only imports at end (`import type { ClaudeJson } from './types'`)
 
 **Path Aliases:**
-- `@/*` → `src/*`
-- `@prisma-gen/*` → `prisma/generated/*`
+- `@/*` → `src/`
+- `@prisma-gen/*` → `prisma/generated/`
+- Use path aliases for cross-module imports to avoid relative path chains
+- Import statement organization is automatically handled by Biome's `organizeImports` assist
 
-**Examples:**
-```typescript
-// Node built-ins first
-import { randomUUID } from 'node:crypto';
-import { EventEmitter } from 'node:events';
-import * as readline from 'node:readline';
-
-// External packages
-import { z } from 'zod';
-import pLimit from 'p-limit';
-
-// Internal via aliases
-import type { Workspace } from '@prisma-gen/client';
-import { prisma } from '@/backend/db';
-import { createLogger } from '@/backend/services/logger.service';
-```
-
-**Import Type:**
-- Use `import type` for type-only imports (enforced by Biome `useImportType`)
-```typescript
-import type { Workspace, WorkspaceStatus } from '@prisma-gen/client';
-```
+**Module Resolution:**
+- Biome enforces `useNodejsImportProtocol`: use `import ... from 'node:module'` not `import ... from 'module'`
+- No `.js` extensions needed in imports (TypeScript/bundler handles resolution)
+- Barrel files (`index.ts`) export public API for directories
 
 ## Error Handling
 
-**Throw descriptive errors:**
-```typescript
-if (!project) {
-  throw new Error(`Project not found: ${input.id}`);
-}
-if (finalCommand && finalPath) {
-  throw new Error(
-    'Cannot have both startupScriptCommand and startupScriptPath set. Please clear one by setting it to null.'
-  );
-}
-```
+**Patterns:**
+- Throw `Error` or custom error classes: `throw new Error('message')`
+- Catch as typed: `catch (error) { const err = error as Error; }`
+- Use try-catch for synchronous operations that may fail
+- Use `.catch()` chains for Promise rejection: `promise.catch((err) => { ... })`
+- Always log errors with context when catching: `logger.error('Error doing X', error as Error, { context })`
+- Return null/undefined for graceful failures in utilities: `return null` instead of throwing when safe
 
-**Logger for non-throwing errors:**
-```typescript
-try {
-  await this.syncSinglePR(workspace.id, workspace.prUrl);
-} catch (error) {
-  logger.error('PR sync failed for workspace', error as Error, { workspaceId, prUrl });
-  return { success: false, reason: 'error' };
-}
-```
+**Error Messages:**
+- Start with capital letter, be descriptive
+- Include context: `Invalid repository path: ${repoValidation.error}`
+- Example: `throw new Error('Could not find an available port starting from 3000')`
 
-**Graceful degradation:**
-```typescript
-const result = await githubCLIService.fetchAndComputePRState(prUrl);
-if (!result) {
-  logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
-  return { success: false, reason: 'fetch_failed' };
-}
-```
+**WebSocket/Stream Errors:**
+- Classify errors (e.g., `SyntaxError` for JSON parse, other for operational)
+- Send structured error responses to client: `{ type: 'error', message: 'description' }`
+- Log with full context including request ID or session ID
 
-## Comments & Documentation
+## Logging
 
-**File headers:** Use JSDoc-style block comments for file purpose
-```typescript
-/**
- * Scheduler Service
- *
- * Local background job scheduler for periodic tasks.
- * Replaces Inngest for PR status sync.
- */
-```
+**Framework:** Custom `Logger` class (see `src/backend/services/logger.service.ts`)
 
-**Section dividers:** Use commented lines for visual organization
-```typescript
-// =============================================================================
-// Test Setup
-// =============================================================================
+**Patterns:**
+- Import: `import { createLogger } from '@/backend/services/logger.service'`
+- Create instance per module: `const logger = createLogger('ModuleName')`
+- Create child loggers for sub-components: `logger.child('SubComponent')`
+- Log levels: `error()`, `warn()`, `info()`, `debug()`
+- Include context object: `logger.info('message', { key: value })`
+- For errors: `logger.error('message', error as Error, { context })`
+- Special methods for domain events: `logger.agentEvent()`, `logger.taskEvent()`, `logger.apiCall()`
 
-// -------------------------------------------------------------------------
-// WS_STATUS Action
-// -------------------------------------------------------------------------
-```
+**When to Log:**
+- Errors: Always log with full error object
+- External API calls: Log with timing and success/failure
+- State transitions: Log lifecycle events (created, started, completed)
+- User actions: Log significant operations
+- Avoid: Internal function calls, loop iterations (spam)
 
-**Interface/Type documentation:**
-```typescript
-/**
- * Threshold for considering a PROVISIONING workspace as stale.
- * Workspaces in PROVISIONING state for longer than this are considered
- * stuck (e.g., due to server crash) and will be recovered by reconciliation.
- */
-const STALE_PROVISIONING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
-```
+## Comments
 
-**Function documentation:** Use JSDoc for public API functions
-```typescript
-/**
- * Batch sync PR status for all workspaces with stale PR data.
- * Can also be called manually to trigger an immediate sync.
- */
-async syncPRStatuses(): Promise<{ synced: number; failed: number }> { ... }
-```
+**When to Comment:**
+- Complex algorithms: Explain the "why" not the "what"
+- Business logic: Explain non-obvious requirements
+- Workarounds: Document why a hack exists and when to fix it
+- Section dividers: Use `// =============================================================================` for major sections
 
-## TypeScript Specifics
+**JSDoc/TSDoc:**
+- Use for public API functions and classes
+- Include `@param`, `@returns`, `@throws` tags
+- Example:
+  ```typescript
+  /**
+   * Parse git status --porcelain output into structured data.
+   * Exported for testing.
+   */
+  export function parseGitStatusOutput(output: string): GitStatusFile[] {
+  ```
+- Document service methods and public utilities
+- Keep brief - reference code/comments for complexity
 
-**Strict mode:** Enabled with all strict flags in `tsconfig.json`
+## Function Design
 
-**No explicit any:** Use `unknown` and narrow types instead
+**Size:**
+- Prefer small, focused functions (< 50 lines)
+- Extract helper functions for clarity
+- Use descriptive names that explain intent
 
-**Use const assertions:**
-```typescript
-const AVAILABLE_MODELS: ModelInfo[] = [
-  { value: 'opus', displayName: 'Opus' },
-  { value: 'sonnet', displayName: 'Sonnet' },
-];
-```
+**Parameters:**
+- Maximum 3-4 parameters; use object param for more
+- Name parameters descriptively: `workspaceId`, `sessionId`, not `id`
+- Use typed objects instead of multiple boolean flags
+- Example: `config: { prettyPrint: boolean; serviceName: string }`
 
-**Discriminated unions for state:**
-```typescript
-type PendingRequest =
-  | { type: 'none' }
-  | { type: 'permission'; request: PermissionRequest }
-  | { type: 'question'; request: UserQuestionRequest };
-```
+**Return Values:**
+- Be consistent: return null or undefined, don't mix
+- Return typed objects or unions: `Promise<User | null>`, `{ additions: number; deletions: number }`
+- For async: Always return a Promise, even if immediately resolved
 
-**Prisma types for database relations:**
-```typescript
-type WorkspaceWithSessions = Prisma.WorkspaceGetPayload<{
-  include: { claudeSessions: true; terminalSessions: true };
-}>;
-```
+## Module Design
+
+**Exports:**
+- Named exports preferred: `export function helper()`, `export class Service`
+- Default exports only for main entry points
+- Export types and interfaces that are part of public API: `export type GitFileStatus = 'M' | 'A' | 'D' | '?'`
+- Internal helpers: Keep private or prefix with underscore if exposed
+
+**Barrel Files:**
+- Use `index.ts` to export public API from a directory
+- Don't re-export everything - be selective
+- Example: `src/backend/resource_accessors/index.ts` exports main accessors
+- Helps with tree-shaking and clear dependency boundaries
+
+**Service Pattern:**
+- Services are singletons or factory-created instances
+- Use private constructor when singleton pattern applied
+- Export factory function: `export function createLogger() { return new Logger(...) }`
+- Services should be stateful and maintain context across calls
+
+## Async/Await
+
+**Patterns:**
+- Prefer async/await over `.then()` chains
+- Use try-catch for async error handling
+- Always await Promises to avoid race conditions
+- Return Promises from async functions without await wrapper
+- Use `Promise.all()` for parallel operations: `await Promise.all([...promises])`
 
 ---
 
-*Convention analysis: 2026-01-31*
+*Convention analysis: 2026-02-01*
