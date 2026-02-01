@@ -219,6 +219,35 @@ function createErrorMessage(error: string): ChatMessage {
 }
 
 /**
+ * Inserts a message into the messages array at the correct position based on timestamp.
+ * Uses binary search to find the insertion point for O(log n) performance.
+ * Messages are ordered chronologically (oldest first).
+ */
+function insertMessageByTimestamp(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
+  const newTimestamp = new Date(newMessage.timestamp).getTime();
+
+  // Binary search to find insertion point
+  let low = 0;
+  let high = messages.length;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const midTimestamp = new Date(messages[mid].timestamp).getTime();
+
+    if (midTimestamp <= newTimestamp) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  // Insert at the found position
+  const result = [...messages];
+  result.splice(low, 0, newMessage);
+  return result;
+}
+
+/**
  * Determines if a Claude message should be stored in state.
  * We filter out structural/delta events and only keep meaningful ones.
  */
@@ -766,7 +795,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
         return {
           ...state,
-          messages: [...state.messages, newMessage],
+          messages: insertMessageByTimestamp(state.messages, newMessage),
           queuedMessages: newQueuedMessages,
           pendingMessages: newPendingMessages,
         };
