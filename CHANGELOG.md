@@ -5,6 +5,47 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-02-01
+
+### Added
+- Message state machine for unified chat message tracking (#426)
+- Terminal tabs inline in bottom panel tab bar (#420)
+- Quick actions dropdown to chat bar (#414)
+- Cancel button for inline queued messages (#433)
+
+### Fixed
+- Spinner not showing for subsequent messages in chat session (#434)
+- Queued messages losing styling after workspace navigation (#431)
+- Fetch latest from origin when creating git worktrees (#428)
+- Caching issues requiring hard refresh after deployments (#421)
+- Diff viewer line numbers overlapping for large files (#418)
+- Message handling during AskUserQuestion and ExitPlanMode prompts (#405)
+- Queued messages disappearing on page refresh (#411)
+- Memory leaks from uncleared intervals/timeouts in RateLimiterService (#410)
+- Spurious warning when archiving workspace (#417)
+- Empty catch blocks with proper error handling (#413)
+- Unhandled NotFoundError when refreshing during session startup (#408)
+- Security vulnerabilities via pnpm overrides (#404)
+- Code scanning security alerts (#401)
+
+### Changed
+- External link icon added to GitHub link with reduced footer padding (#419)
+- Type safety improvements for WebSocket handlers and chat state management (#415)
+- Consolidated terminal/devlog panel into single row (#409)
+- Replaced phase label with GitHub repo link in sidebar footer (#416)
+- Skip archive confirmation for workspaces with merged PRs (#406)
+- Removed padding from PR link button in sidebar (#432)
+- Removed unused Claude message state machine methods (#430)
+
+### Infrastructure
+- Automatic tag creation added to npm publish workflow (#422)
+- Screenshot added to README (#403)
+
+## [0.1.1] - 2025-01-31
+
+- Initial npm release
+- NPX distribution support (#400)
+
 ## [0.1.0] - 2025-01-31
 
 ### Added
