@@ -18,11 +18,8 @@
 import {
   type ChatMessage,
   type ClaudeMessage,
-  type ClaudeMessageState,
   type ClaudeMessageWithState,
-  type ClaudeStreamEvent,
   type HistoryMessage,
-  isStreamEventMessage,
   isUserMessage,
   MessageState,
   type MessageWithState,
@@ -56,23 +53,9 @@ const USER_STATE_TRANSITIONS: Record<UserMessageState, UserMessageState[]> = {
 };
 
 /**
- * Valid state transitions for Claude messages.
- * Maps each ClaudeMessageState to the states it can transition to.
- */
-const CLAUDE_STATE_TRANSITIONS: Record<ClaudeMessageState, ClaudeMessageState[]> = {
-  STREAMING: ['COMPLETE'],
-  COMPLETE: [],
-};
-
-/**
  * Set of valid user message states for runtime validation.
  */
 const USER_STATES = new Set<string>(Object.keys(USER_STATE_TRANSITIONS));
-
-/**
- * Set of valid Claude message states for runtime validation.
- */
-const CLAUDE_STATES = new Set<string>(Object.keys(CLAUDE_STATE_TRANSITIONS));
 
 /**
  * Check if a user message state transition is valid.
@@ -82,35 +65,26 @@ function isValidUserTransition(from: UserMessageState, to: UserMessageState): bo
 }
 
 /**
- * Check if a Claude message state transition is valid.
- */
-function isValidClaudeTransition(from: ClaudeMessageState, to: ClaudeMessageState): boolean {
-  return CLAUDE_STATE_TRANSITIONS[from]?.includes(to) ?? false;
-}
-
-/**
  * Check if a state transition is valid.
- * Uses the appropriate type-safe transition check based on message type.
- * Validates that states are appropriate for the message type before checking transitions.
+ * Only user messages support state transitions - Claude messages are created in COMPLETE state
+ * via loadFromHistory and are never transitioned.
  */
 function isValidTransition(
   messageType: 'user' | 'claude',
   from: MessageState,
   to: MessageState
 ): boolean {
-  if (messageType === 'user') {
-    if (!(USER_STATES.has(from) && USER_STATES.has(to))) {
-      logger.error('Invalid user message state', { from, to });
-      return false;
-    }
-    return isValidUserTransition(from as UserMessageState, to as UserMessageState);
-  }
-
-  if (!(CLAUDE_STATES.has(from) && CLAUDE_STATES.has(to))) {
-    logger.error('Invalid Claude message state', { from, to });
+  if (messageType === 'claude') {
+    // Claude messages don't support state transitions - they're created in COMPLETE state
+    logger.error('Claude messages do not support state transitions', { from, to });
     return false;
   }
-  return isValidClaudeTransition(from as ClaudeMessageState, to as ClaudeMessageState);
+
+  if (!(USER_STATES.has(from) && USER_STATES.has(to))) {
+    logger.error('Invalid user message state', { from, to });
+    return false;
+  }
+  return isValidUserTransition(from as UserMessageState, to as UserMessageState);
 }
 
 // =============================================================================
@@ -230,93 +204,6 @@ class MessageStateService {
   }
 
   /**
-   * Determines if a Claude message should be stored.
-   * Ported from frontend chat-reducer.ts shouldStoreMessage().
-   * We filter out structural/delta events and only keep meaningful ones.
-   */
-  private shouldStoreClaudeEvent(claudeMsg: ClaudeMessage): boolean {
-    // User messages with tool_result content should be stored
-    if (claudeMsg.type === 'user') {
-      const content = claudeMsg.message?.content;
-      if (Array.isArray(content)) {
-        return content.some(
-          (item) =>
-            typeof item === 'object' &&
-            item !== null &&
-            'type' in item &&
-            item.type === 'tool_result'
-        );
-      }
-      return false;
-    }
-
-    // Result messages are always stored
-    if (claudeMsg.type === 'result') {
-      return true;
-    }
-
-    // For stream events, only store meaningful ones
-    if (!isStreamEventMessage(claudeMsg)) {
-      return true;
-    }
-
-    const event: ClaudeStreamEvent = claudeMsg.event;
-
-    // Only store content_block_start for tool_use, tool_result, and thinking
-    if (event.type === 'content_block_start') {
-      const blockType = event.content_block.type;
-      return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
-    }
-
-    // Skip all other stream events
-    return false;
-  }
-
-  /**
-   * Create a new Claude message.
-   * Starts in STREAMING state.
-   */
-  createClaudeMessage(
-    sessionId: string,
-    messageId: string,
-    content?: ClaudeMessage
-  ): ClaudeMessageWithState {
-    const messages = this.getOrCreateSessionMap(sessionId);
-
-    const timestamp = new Date().toISOString();
-    const chatMessages: ChatMessage[] = [];
-
-    // If initial content should be stored, add it as ChatMessage
-    if (content && this.shouldStoreClaudeEvent(content)) {
-      chatMessages.push({
-        id: `${messageId}-0`,
-        source: 'claude',
-        message: content,
-        timestamp,
-      });
-    }
-
-    const messageWithState: ClaudeMessageWithState = {
-      id: messageId,
-      type: 'claude',
-      state: MessageState.STREAMING,
-      timestamp,
-      chatMessages,
-    };
-
-    messages.set(messageId, messageWithState);
-
-    logger.info('Claude message created', {
-      sessionId,
-      messageId,
-      state: messageWithState.state,
-    });
-
-    this.emitStateChange(sessionId, messageWithState);
-    return messageWithState;
-  }
-
-  /**
    * Update the state of an existing message.
    * Validates state transitions and emits state change events.
    */
@@ -348,20 +235,25 @@ class MessageStateService {
 
     const oldState = message.state;
 
-    // Update state based on message type
-    if (isUserMessage(message)) {
-      // Type-safe assignment for user messages
-      message.state = newState as UserMessageState;
-      // Update user-specific metadata if provided
-      if (metadata?.queuePosition !== undefined) {
-        message.queuePosition = metadata.queuePosition;
-      }
-      if (metadata?.errorMessage !== undefined) {
-        message.errorMessage = metadata.errorMessage;
-      }
-    } else {
-      // Type-safe assignment for Claude messages
-      message.state = newState as ClaudeMessageState;
+    // Update state - only user messages support state transitions
+    // (Claude messages are created in COMPLETE state and never transitioned)
+    if (!isUserMessage(message)) {
+      // This should never happen due to isValidTransition check above
+      logger.error('Unexpected state update for non-user message', {
+        sessionId,
+        messageId,
+        messageType: message.type,
+      });
+      return false;
+    }
+
+    message.state = newState as UserMessageState;
+    // Update user-specific metadata if provided
+    if (metadata?.queuePosition !== undefined) {
+      message.queuePosition = metadata.queuePosition;
+    }
+    if (metadata?.errorMessage !== undefined) {
+      message.errorMessage = metadata.errorMessage;
     }
 
     logger.info('Message state updated', {
@@ -372,37 +264,6 @@ class MessageStateService {
     });
 
     this.emitStateChange(sessionId, message);
-    return true;
-  }
-
-  /**
-   * Update Claude message content (for streaming updates).
-   * Only stores events that pass shouldStoreClaudeEvent filter.
-   * Converts to ChatMessage format for consistent frontend handling.
-   */
-  updateClaudeContent(sessionId: string, messageId: string, content: ClaudeMessage): boolean {
-    const messages = this.sessionMessages.get(sessionId);
-    const message = messages?.get(messageId);
-
-    if (!message || message.type !== 'claude') {
-      return false;
-    }
-
-    // Only store if it passes the filter
-    if (!this.shouldStoreClaudeEvent(content)) {
-      return true; // Processed but not stored (not an error)
-    }
-
-    // Convert to ChatMessage format
-    const chatMessage: ChatMessage = {
-      id: `${messageId}-${message.chatMessages.length}`,
-      source: 'claude',
-      message: content,
-      timestamp: new Date().toISOString(),
-    };
-
-    message.chatMessages.push(chatMessage);
-    // Don't emit state change for content updates - this would be too noisy
     return true;
   }
 

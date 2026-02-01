@@ -372,7 +372,7 @@ export function AppSidebar() {
                                           }
                                         }}
                                         className={cn(
-                                          'text-xs hover:opacity-80 transition-opacity',
+                                          'text-xs hover:opacity-80 transition-opacity p-0',
                                           workspace.prState === 'MERGED'
                                             ? 'text-purple-500'
                                             : 'text-muted-foreground hover:text-foreground'
