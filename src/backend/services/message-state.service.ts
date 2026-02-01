@@ -728,18 +728,7 @@ class MessageStateService {
     // Map so queued messages are styled correctly (e.g., opacity-50).
     for (const msg of allMessages) {
       if (isUserMessage(msg) && msg.state === MessageState.ACCEPTED) {
-        chatConnectionService.forwardToSession(sessionId, {
-          type: 'message_state_changed',
-          id: msg.id,
-          newState: msg.state,
-          queuePosition: msg.queuePosition,
-          userMessage: {
-            text: msg.text,
-            timestamp: msg.timestamp,
-            attachments: msg.attachments,
-            settings: msg.settings,
-          },
-        });
+        this.emitStateChange(sessionId, msg);
       }
     }
 
