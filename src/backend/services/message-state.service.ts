@@ -584,6 +584,15 @@ class MessageStateService {
       pendingInteractiveRequest,
     });
 
+    // After sending snapshot, send MESSAGE_STATE_CHANGED events for any queued messages
+    // (messages in ACCEPTED state). This allows the frontend to repopulate its queuedMessages
+    // Map so queued messages are styled correctly (e.g., opacity-50).
+    for (const msg of allMessages) {
+      if (isUserMessage(msg) && msg.state === MessageState.ACCEPTED) {
+        this.emitStateChange(sessionId, msg);
+      }
+    }
+
     logger.info('Messages snapshot sent', {
       sessionId,
       messageCount: chatMessages.length,
