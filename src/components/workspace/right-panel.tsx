@@ -21,7 +21,7 @@ import { FileBrowserPanel } from './file-browser-panel';
 import { TerminalPanel, type TerminalPanelRef } from './terminal-panel';
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
-import { useDevLogsConnection } from './use-dev-logs-connection';
+import { useDevLogs } from './use-dev-logs';
 
 // =============================================================================
 // Constants
@@ -83,8 +83,8 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
   const [activeBottomTab, setActiveBottomTab] = useState<BottomPanelTab>('terminal');
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
-  // Track dev logs connection status for the tab indicator
-  const devLogsConnected = useDevLogsConnection(workspaceId);
+  // Single shared dev logs connection for both tab indicator and panel content
+  const devLogs = useDevLogs(workspaceId);
 
   // Load persisted tabs from localStorage on mount or workspaceId change
   useEffect(() => {
@@ -200,7 +200,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                   <span
                     className={cn(
                       'w-1.5 h-1.5 rounded-full',
-                      devLogsConnected ? 'bg-green-500' : 'bg-red-500'
+                      devLogs.connected ? 'bg-green-500' : 'bg-red-500'
                     )}
                   />
                 </span>
@@ -229,7 +229,11 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
               <TerminalPanel ref={terminalPanelRef} workspaceId={workspaceId} className="h-full" />
             )}
             {activeBottomTab === 'dev-logs' && (
-              <DevLogsPanel workspaceId={workspaceId} className="h-full" />
+              <DevLogsPanel
+                output={devLogs.output}
+                outputEndRef={devLogs.outputEndRef}
+                className="h-full"
+              />
             )}
           </div>
         </div>
