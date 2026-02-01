@@ -68,7 +68,8 @@ export const userSettingsRouter = router({
 
       // Test with a safe test path (current directory)
       const testPath = process.cwd();
-      const escapedPath = testPath.replace(/"/g, '\\"');
+      // Escape backslashes first, then quotes to avoid injection
+      const escapedPath = testPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const quotedPath = testPath.includes(' ') ? `"${escapedPath}"` : testPath;
       const command = input.customCommand.replace(/\{workspace\}/g, quotedPath);
 
