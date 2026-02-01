@@ -211,7 +211,7 @@ export function createServer(requestedPort?: number): ServerInstance {
     terminalService.cleanup();
     agentProcessAdapter.cleanup();
     sessionFileLogger.cleanup();
-    rateLimiter.stop();
+    await rateLimiter.stop();
 
     await schedulerService.stop();
     await reconciliationService.stopPeriodicCleanup();

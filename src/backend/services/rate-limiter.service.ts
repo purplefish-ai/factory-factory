@@ -74,6 +74,7 @@ class RateLimiter {
   private pendingTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private queueProcessingTimeout: NodeJS.Timeout | null = null;
   private queueProcessingResolve: (() => void) | null = null;
+  private queueProcessingPromise: Promise<void> | null = null;
 
   // Request ID counter for unique IDs
   private requestIdCounter = 0;
@@ -185,7 +186,11 @@ class RateLimiter {
       });
 
       // Start queue processing if not already running
-      this.processQueue();
+      if (!this.queueProcessingPromise) {
+        this.queueProcessingPromise = this.processQueue().finally(() => {
+          this.queueProcessingPromise = null;
+        });
+      }
 
       // Set timeout and track it
       const timeoutId = setTimeout(() => {
@@ -296,7 +301,7 @@ class RateLimiter {
   /**
    * Stop the rate limiter and clean up resources
    */
-  stop(): void {
+  async stop(): Promise<void> {
     this.isShuttingDown = true;
 
     if (this.cleanupInterval) {
@@ -312,6 +317,12 @@ class RateLimiter {
     if (this.queueProcessingResolve) {
       this.queueProcessingResolve();
       this.queueProcessingResolve = null;
+    }
+
+    // Wait for in-flight queue processing to complete
+    if (this.queueProcessingPromise) {
+      logger.debug('Waiting for in-flight queue processing to complete');
+      await this.queueProcessingPromise;
     }
 
     // Clear all pending timeouts
