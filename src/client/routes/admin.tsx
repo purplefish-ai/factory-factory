@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, CheckCircle2, FileJson, RefreshCw, Terminal } from 'lucide-react';
+import { Bot, CheckCircle2, FileJson, RefreshCw, Terminal, Wrench } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -663,6 +663,68 @@ function IdeSettingsSection() {
   );
 }
 
+function CiSettingsSection() {
+  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const utils = trpc.useUtils();
+  const updateSettings = trpc.userSettings.update.useMutation({
+    onSuccess: () => {
+      toast.success('CI settings updated');
+      utils.userSettings.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to update settings: ${error.message}`);
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="w-5 h-5" />
+            CI Settings
+          </CardTitle>
+          <CardDescription>Configure automatic CI failure handling</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wrench className="w-5 h-5" />
+          CI Settings
+        </CardTitle>
+        <CardDescription>Configure automatic CI failure handling</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="auto-fix-ci">Automatically fix CI issues</Label>
+            <p className="text-sm text-muted-foreground">
+              When enabled, creates dedicated Claude sessions to investigate and fix CI failures
+              automatically
+            </p>
+          </div>
+          <Switch
+            id="auto-fix-ci"
+            checked={settings?.autoFixCiIssues ?? false}
+            onCheckedChange={(checked) => {
+              updateSettings.mutate({ autoFixCiIssues: checked });
+            }}
+            disabled={updateSettings.isPending}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboardPage() {
   const {
     data: stats,
@@ -727,6 +789,9 @@ export default function AdminDashboardPage() {
         {/* User Settings */}
         <NotificationSettingsSection />
         <IdeSettingsSection />
+
+        {/* CI Settings */}
+        <CiSettingsSection />
       </div>
     </div>
   );

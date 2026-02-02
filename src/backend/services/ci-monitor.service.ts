@@ -8,7 +8,9 @@
 import { CIStatus, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { ciFixerService } from './ci-fixer.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
@@ -173,6 +175,9 @@ class CIMonitorService {
           prUrl: workspace.prUrl,
           prNumber: prResult.prNumber,
         });
+
+        // Notify CI fixing session that CI passed
+        await ciFixerService.notifyCIPassed(workspace.id);
       }
 
       await workspaceAccessor.update(workspace.id, updates);
@@ -196,6 +201,11 @@ class CIMonitorService {
               prCiLastNotifiedAt: new Date(),
             });
           }
+        }
+
+        // Trigger CI auto-fix if setting is enabled
+        if (justFailed) {
+          await this.triggerCIAutoFix(workspace.id, workspace.prUrl, prResult.prNumber);
         }
       }
 
@@ -226,6 +236,56 @@ class CIMonitorService {
     // Check if enough time has passed since last notification
     const timeSinceLastNotification = Date.now() - lastNotifiedAt.getTime();
     return timeSinceLastNotification >= MIN_NOTIFICATION_INTERVAL_MS;
+  }
+
+  /**
+   * Trigger CI auto-fix if the setting is enabled
+   */
+  private async triggerCIAutoFix(
+    workspaceId: string,
+    prUrl: string,
+    prNumber: number | undefined
+  ): Promise<void> {
+    try {
+      // Check if auto-fix is enabled
+      const settings = await userSettingsAccessor.get();
+      if (!settings.autoFixCiIssues) {
+        logger.debug('CI auto-fix is disabled', { workspaceId });
+        return;
+      }
+
+      if (!prNumber) {
+        logger.debug('Cannot trigger CI fix without PR number', { workspaceId });
+        return;
+      }
+
+      // Trigger the CI fixer
+      const result = await ciFixerService.triggerCIFix({
+        workspaceId,
+        prUrl,
+        prNumber,
+      });
+
+      if (result.status === 'started') {
+        logger.info('CI auto-fix session started', {
+          workspaceId,
+          sessionId: result.sessionId,
+          prNumber,
+        });
+      } else if (result.status === 'already_fixing') {
+        logger.debug('CI auto-fix already in progress', {
+          workspaceId,
+          sessionId: result.sessionId,
+        });
+      } else if (result.status === 'error') {
+        logger.error('Failed to start CI auto-fix', new Error(result.error), {
+          workspaceId,
+          prUrl,
+        });
+      }
+    } catch (error) {
+      logger.error('Error triggering CI auto-fix', error as Error, { workspaceId });
+    }
   }
 
   /**

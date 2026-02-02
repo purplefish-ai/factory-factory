@@ -38,6 +38,8 @@ export const userSettingsRouter = router({
           .nullable()
           .optional(),
         playSoundOnComplete: z.boolean().optional(),
+        notificationSoundPath: z.string().nullable().optional(),
+        autoFixCiIssues: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {

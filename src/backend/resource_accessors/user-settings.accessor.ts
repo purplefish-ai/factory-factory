@@ -5,7 +5,9 @@ interface UpdateUserSettingsInput {
   preferredIde?: string;
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
+  notificationSoundPath?: string | null;
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
+  autoFixCiIssues?: boolean;
 }
 
 class UserSettingsAccessor {
