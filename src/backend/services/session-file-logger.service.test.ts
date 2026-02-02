@@ -1,13 +1,17 @@
+import type { WriteStream } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Hoist the mock function so it's available before the mock is evaluated
+// Hoist the mock functions so they're available before the mock is evaluated
 const mockGetWsLogsPath = vi.hoisted(() => vi.fn());
+const mockIsDevelopment = vi.hoisted(() => vi.fn());
+const mockCreateWriteStream = vi.hoisted(() => vi.fn());
 
 // Mock config service before importing the service
 vi.mock('./config.service', () => ({
   configService: {
     getWsLogsPath: mockGetWsLogsPath,
+    isDevelopment: mockIsDevelopment,
   },
 }));
 
@@ -25,39 +29,55 @@ vi.mock('./logger.service', () => ({
 vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  appendFileSync: vi.fn(),
   readdirSync: vi.fn(),
   statSync: vi.fn(),
   unlinkSync: vi.fn(),
+  createWriteStream: mockCreateWriteStream,
 }));
 
 // Import after mocks are set up
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { SessionFileLogger } from './session-file-logger.service';
+
+// Helper to create a mock WriteStream
+function createMockStream() {
+  const writtenData: string[] = [];
+  const mockStream = {
+    write: vi.fn((data: string) => {
+      writtenData.push(data);
+      return true; // Always return true to indicate buffer not full
+    }),
+    end: vi.fn((callback?: () => void) => {
+      if (callback) {
+        // Call callback asynchronously to match real behavior
+        setImmediate(callback);
+      }
+    }),
+    once: vi.fn(),
+    writtenData,
+  } as unknown as WriteStream & { writtenData: string[] };
+  return mockStream;
+}
 
 describe('SessionFileLogger', () => {
   const defaultWsLogsPath = join(process.cwd(), '.context', 'ws-logs');
+  let mockStream: ReturnType<typeof createMockStream>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
 
-    // Default config mock - use default path
+    // Default config mock - enable in tests (dev mode)
+    mockIsDevelopment.mockReturnValue(true);
     mockGetWsLogsPath.mockReturnValue(defaultWsLogsPath);
+
+    // Create fresh mock stream
+    mockStream = createMockStream();
+    mockCreateWriteStream.mockReturnValue(mockStream);
 
     // Default fs mocks
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(mkdirSync).mockReturnValue(undefined);
-    vi.mocked(writeFileSync).mockReturnValue(undefined);
-    vi.mocked(appendFileSync).mockReturnValue(undefined);
     vi.mocked(readdirSync).mockReturnValue([]);
     vi.mocked(statSync).mockReturnValue({ mtimeMs: Date.now() } as ReturnType<typeof statSync>);
     vi.mocked(unlinkSync).mockReturnValue(undefined);
@@ -65,6 +85,7 @@ describe('SessionFileLogger', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   describe('constructor', () => {
@@ -105,6 +126,15 @@ describe('SessionFileLogger', () => {
         recursive: true,
       });
     });
+
+    it('should not create directory when disabled (non-dev mode)', () => {
+      mockIsDevelopment.mockReturnValue(false);
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      new SessionFileLogger();
+
+      expect(mkdirSync).not.toHaveBeenCalled();
+    });
   });
 
   describe('initSession', () => {
@@ -113,13 +143,15 @@ describe('SessionFileLogger', () => {
 
       logger.initSession('test-session-123');
 
-      expect(writeFileSync).toHaveBeenCalledTimes(1);
-      const [filePath, content] = vi.mocked(writeFileSync).mock.calls[0];
+      expect(mockCreateWriteStream).toHaveBeenCalledTimes(1);
+      const [filePath] = mockCreateWriteStream.mock.calls[0];
 
       expect(filePath).toMatch(/test-session-123_.*\.log$/);
-      expect(content).toContain('WebSocket Session Log');
-      expect(content).toContain('Session ID: test-session-123');
-      expect(content).toContain('Started:');
+      expect(mockStream.write).toHaveBeenCalledTimes(1);
+      const headerContent = mockStream.writtenData[0];
+      expect(headerContent).toContain('WebSocket Session Log');
+      expect(headerContent).toContain('Session ID: test-session-123');
+      expect(headerContent).toContain('Started:');
     });
 
     it('should be idempotent - calling twice does not create duplicate files', () => {
@@ -128,7 +160,7 @@ describe('SessionFileLogger', () => {
       logger.initSession('test-session-123');
       logger.initSession('test-session-123');
 
-      expect(writeFileSync).toHaveBeenCalledTimes(1);
+      expect(mockCreateWriteStream).toHaveBeenCalledTimes(1);
     });
 
     it('should sanitize session ID in filename', () => {
@@ -136,7 +168,7 @@ describe('SessionFileLogger', () => {
 
       logger.initSession('session/with:special*chars');
 
-      const [filePath] = vi.mocked(writeFileSync).mock.calls[0];
+      const [filePath] = mockCreateWriteStream.mock.calls[0];
       expect(filePath).not.toContain('/with:');
       expect(filePath).not.toContain('*');
       expect(filePath).toMatch(/session_with_special_chars_.*\.log$/);
@@ -148,75 +180,97 @@ describe('SessionFileLogger', () => {
       logger.initSession('session-1');
       logger.initSession('session-2');
 
-      expect(writeFileSync).toHaveBeenCalledTimes(2);
+      expect(mockCreateWriteStream).toHaveBeenCalledTimes(2);
+    });
+
+    it('should do nothing when disabled', () => {
+      mockIsDevelopment.mockReturnValue(false);
+      const logger = new SessionFileLogger();
+
+      logger.initSession('test-session');
+
+      expect(mockCreateWriteStream).not.toHaveBeenCalled();
     });
   });
 
   describe('log', () => {
-    it('should write formatted log entry to file', () => {
+    it('should write formatted log entry to file', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.log('test-session', 'OUT_TO_CLIENT', { type: 'test', data: 'hello' });
 
-      expect(appendFileSync).toHaveBeenCalledTimes(1);
-      const [filePath, content] = vi.mocked(appendFileSync).mock.calls[0];
+      // Run pending setImmediate callbacks
+      await vi.runAllTimersAsync();
 
-      expect(filePath).toMatch(/test-session.*\.log$/);
-      expect(content).toContain('>>> OUT->CLIENT');
-      expect(content).toContain('type=test');
-      expect(content).toContain('"data": "hello"');
+      // Header + log entry
+      expect(mockStream.write).toHaveBeenCalledTimes(2);
+      const logContent = mockStream.writtenData[1];
+      expect(logContent).toContain('>>> OUT->CLIENT');
+      expect(logContent).toContain('type=test');
+      expect(logContent).toContain('"data": "hello"');
     });
 
-    it('should handle OUT_TO_CLIENT direction', () => {
+    it('should handle OUT_TO_CLIENT direction', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.log('test-session', 'OUT_TO_CLIENT', { type: 'message' });
 
-      const [, content] = vi.mocked(appendFileSync).mock.calls[0];
-      expect(content).toContain('>>> OUT->CLIENT');
+      await vi.runAllTimersAsync();
+
+      const logContent = mockStream.writtenData[1];
+      expect(logContent).toContain('>>> OUT->CLIENT');
     });
 
-    it('should handle IN_FROM_CLIENT direction', () => {
+    it('should handle IN_FROM_CLIENT direction', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.log('test-session', 'IN_FROM_CLIENT', { type: 'message' });
 
-      const [, content] = vi.mocked(appendFileSync).mock.calls[0];
-      expect(content).toContain('<<< IN<-CLIENT');
+      await vi.runAllTimersAsync();
+
+      const logContent = mockStream.writtenData[1];
+      expect(logContent).toContain('<<< IN<-CLIENT');
     });
 
-    it('should handle FROM_CLAUDE_CLI direction', () => {
+    it('should handle FROM_CLAUDE_CLI direction', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.log('test-session', 'FROM_CLAUDE_CLI', { type: 'message' });
 
-      const [, content] = vi.mocked(appendFileSync).mock.calls[0];
-      expect(content).toContain('### FROM_CLI');
+      await vi.runAllTimersAsync();
+
+      const logContent = mockStream.writtenData[1];
+      expect(logContent).toContain('### FROM_CLI');
     });
 
-    it('should handle INFO direction', () => {
+    it('should handle INFO direction', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.log('test-session', 'INFO', { type: 'message' });
 
-      const [, content] = vi.mocked(appendFileSync).mock.calls[0];
-      expect(content).toContain('*** INFO');
+      await vi.runAllTimersAsync();
+
+      const logContent = mockStream.writtenData[1];
+      expect(logContent).toContain('*** INFO');
     });
 
-    it('should do nothing if session is not initialized', () => {
+    it('should do nothing if session is not initialized', async () => {
       const logger = new SessionFileLogger();
 
       logger.log('non-existent-session', 'OUT_TO_CLIENT', { type: 'test' });
 
-      expect(appendFileSync).not.toHaveBeenCalled();
+      await vi.runAllTimersAsync();
+
+      // No writes should have happened
+      expect(mockStream.write).not.toHaveBeenCalled();
     });
 
-    it('should extract summary info for claude_message type', () => {
+    it('should extract summary info for claude_message type', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
@@ -234,80 +288,92 @@ describe('SessionFileLogger', () => {
         },
       });
 
-      const [, content] = vi.mocked(appendFileSync).mock.calls[0];
-      expect(content).toContain('type=claude_message');
-      expect(content).toContain('inner_type=stream_event');
-      expect(content).toContain('event_type=content_block_start');
-      expect(content).toContain('block_type=tool_use');
-      expect(content).toContain('tool=read_file');
+      await vi.runAllTimersAsync();
+
+      const logContent = mockStream.writtenData[1];
+      expect(logContent).toContain('type=claude_message');
+      expect(logContent).toContain('inner_type=stream_event');
+      expect(logContent).toContain('event_type=content_block_start');
+      expect(logContent).toContain('block_type=tool_use');
+      expect(logContent).toContain('tool=read_file');
     });
 
-    it('should handle appendFileSync errors gracefully', () => {
+    it('should do nothing when disabled', async () => {
+      mockIsDevelopment.mockReturnValue(false);
       const logger = new SessionFileLogger();
-      logger.initSession('test-session');
 
-      vi.mocked(appendFileSync).mockImplementation(() => {
-        throw new Error('Disk full');
-      });
+      logger.log('test-session', 'OUT_TO_CLIENT', { type: 'test' });
 
-      // Should not throw
-      expect(() => {
-        logger.log('test-session', 'OUT_TO_CLIENT', { type: 'test' });
-      }).not.toThrow();
+      await vi.runAllTimersAsync();
+
+      expect(mockStream.write).not.toHaveBeenCalled();
     });
   });
 
   describe('closeSession', () => {
-    it('should write footer to log file', () => {
+    it('should write footer to log file', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.closeSession('test-session');
 
-      expect(appendFileSync).toHaveBeenCalledTimes(1);
-      const [, content] = vi.mocked(appendFileSync).mock.calls[0];
-      expect(content).toContain('Session ended:');
-      expect(content).toContain('='.repeat(80));
+      await vi.runAllTimersAsync();
+
+      // Header + footer
+      expect(mockStream.write).toHaveBeenCalledTimes(2);
+      const footerContent = mockStream.writtenData[1];
+      expect(footerContent).toContain('Session ended:');
+      expect(footerContent).toContain('='.repeat(80));
     });
 
-    it('should remove session from tracking', () => {
+    it('should mark session as closed to prevent further logging', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.closeSession('test-session');
 
-      // Try to log after closing - should do nothing
+      // Try to log after closing - should do nothing (session marked as closed)
       logger.log('test-session', 'OUT_TO_CLIENT', { type: 'test' });
 
-      // Only the footer append should have happened, not the log
-      expect(appendFileSync).toHaveBeenCalledTimes(1);
+      await vi.runAllTimersAsync();
+
+      // Only header + footer should be written
+      expect(mockStream.write).toHaveBeenCalledTimes(2);
     });
 
-    it('should do nothing if session does not exist', () => {
+    it('should do nothing if session does not exist', async () => {
       const logger = new SessionFileLogger();
 
       logger.closeSession('non-existent-session');
 
-      expect(appendFileSync).not.toHaveBeenCalled();
+      await vi.runAllTimersAsync();
+
+      // No writes should have happened
+      expect(mockStream.write).not.toHaveBeenCalled();
     });
 
-    it('should handle appendFileSync errors gracefully on close', () => {
+    it('should call stream.end() after flushing', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
-      vi.mocked(appendFileSync).mockImplementation(() => {
-        throw new Error('Disk full');
-      });
+      logger.closeSession('test-session');
 
-      // Should not throw
-      expect(() => {
-        logger.closeSession('test-session');
-      }).not.toThrow();
+      await vi.runAllTimersAsync();
+
+      expect(mockStream.end).toHaveBeenCalled();
     });
   });
 
   describe('cleanup', () => {
-    it('should close all active sessions', () => {
+    it('should close all active sessions', async () => {
+      // Create a fresh mock stream for each session
+      const mockStreams: ReturnType<typeof createMockStream>[] = [];
+      mockCreateWriteStream.mockImplementation(() => {
+        const stream = createMockStream();
+        mockStreams.push(stream);
+        return stream;
+      });
+
       const logger = new SessionFileLogger();
       logger.initSession('session-1');
       logger.initSession('session-2');
@@ -315,8 +381,13 @@ describe('SessionFileLogger', () => {
 
       logger.cleanup();
 
-      // All three sessions should have footers written
-      expect(appendFileSync).toHaveBeenCalledTimes(3);
+      await vi.runAllTimersAsync();
+
+      // All three sessions should have end called
+      expect(mockStreams).toHaveLength(3);
+      for (const stream of mockStreams) {
+        expect(stream.end).toHaveBeenCalled();
+      }
     });
 
     it('should handle empty session list', () => {
@@ -326,8 +397,6 @@ describe('SessionFileLogger', () => {
       expect(() => {
         logger.cleanup();
       }).not.toThrow();
-
-      expect(appendFileSync).not.toHaveBeenCalled();
     });
   });
 
@@ -439,6 +508,17 @@ describe('SessionFileLogger', () => {
       expect(() => {
         logger.cleanupOldLogs(7);
       }).not.toThrow();
+    });
+
+    it('should do nothing when disabled', () => {
+      mockIsDevelopment.mockReturnValue(false);
+      const logger = new SessionFileLogger();
+
+      vi.mocked(readdirSync).mockReturnValue(['old-session.log'] as never[]);
+
+      logger.cleanupOldLogs(7);
+
+      expect(readdirSync).not.toHaveBeenCalled();
     });
   });
 });
