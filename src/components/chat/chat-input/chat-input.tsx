@@ -13,8 +13,9 @@ import {
   InputGroupTextarea,
 } from '@/components/ui/input-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { ChatSettings, CommandInfo, MessageAttachment } from '@/lib/claude-types';
+import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
+import { ContextWindowIndicator } from '../usage-stats';
 
 import { ModelSelector } from './components/model-selector';
 import { QuickActionsDropdown } from './components/quick-actions-dropdown';
@@ -53,6 +54,8 @@ export interface ChatInputProps {
   onAttachmentsChange?: (attachments: MessageAttachment[]) => void;
   // Slash commands for autocomplete
   slashCommands?: CommandInfo[];
+  // Token usage stats for context window indicator
+  tokenStats?: TokenStats;
 }
 
 // =============================================================================
@@ -84,6 +87,7 @@ export const ChatInput = memo(function ChatInput({
   attachments: controlledAttachments,
   onAttachmentsChange,
   slashCommands = [],
+  tokenStats,
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
@@ -245,6 +249,13 @@ export const ChatInput = memo(function ChatInput({
               className="hidden"
               aria-label="File upload input"
             />
+            {/* Context window indicator */}
+            {tokenStats && (
+              <>
+                <div className="h-4 w-px bg-border" />
+                <ContextWindowIndicator tokenStats={tokenStats} />
+              </>
+            )}
           </div>
 
           {/* Right side: Sending indicator + Stop button (when running) + Send button */}

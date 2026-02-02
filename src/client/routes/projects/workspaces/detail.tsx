@@ -35,7 +35,7 @@ import {
 } from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
 import { trpc } from '@/frontend/lib/trpc';
-import type { CommandInfo } from '@/lib/claude-types';
+import type { CommandInfo, TokenStats } from '@/lib/claude-types';
 import { groupAdjacentToolCalls } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 
@@ -103,6 +103,7 @@ interface ChatContentProps {
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
   slashCommands: CommandInfo[];
+  tokenStats: TokenStats;
 }
 
 /**
@@ -136,6 +137,7 @@ const ChatContent = memo(function ChatContent({
   pendingMessages,
   isCompacting,
   slashCommands,
+  tokenStats,
 }: ChatContentProps) {
   // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
@@ -229,6 +231,7 @@ const ChatContent = memo(function ChatContent({
           onHeightChange={handleHeightChange}
           pendingMessageCount={pendingMessages.size}
           slashCommands={slashCommands}
+          tokenStats={tokenStats}
         />
       </div>
     </div>
@@ -319,6 +322,7 @@ function WorkspaceChatContent() {
     pendingMessages,
     isCompacting,
     slashCommands,
+    tokenStats,
     sendMessage,
     stopChat,
     approvePermission,
@@ -590,6 +594,7 @@ function WorkspaceChatContent() {
                 pendingMessages={pendingMessages}
                 isCompacting={isCompacting}
                 slashCommands={slashCommands}
+                tokenStats={tokenStats}
               />
             </WorkspaceContentView>
           </div>

@@ -2310,3 +2310,225 @@ describe('createActionFromWebSocketMessage - SDK Events', () => {
     expect(action).toBeNull();
   });
 });
+
+// =============================================================================
+// Token Stats Accumulation Tests
+// =============================================================================
+
+describe('Token Stats Accumulation', () => {
+  let initialState: ChatState;
+
+  beforeEach(() => {
+    initialState = createInitialChatState();
+  });
+
+  it('should initialize with empty token stats', () => {
+    expect(initialState.tokenStats).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      totalCostUsd: 0,
+      totalDurationMs: 0,
+      totalDurationApiMs: 0,
+      turnCount: 0,
+      webSearchRequests: 0,
+      contextWindow: null,
+      maxOutputTokens: null,
+      serviceTier: null,
+    });
+  });
+
+  it('should accumulate token stats from result messages', () => {
+    const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
+
+    const resultMsg: ClaudeMessage = {
+      type: 'result',
+      usage: {
+        input_tokens: 1000,
+        output_tokens: 500,
+        cache_read_input_tokens: 200,
+        cache_creation_input_tokens: 100,
+        service_tier: 'scale',
+      },
+      duration_ms: 2000,
+      duration_api_ms: 1500,
+      total_cost_usd: 0.05,
+      num_turns: 1,
+    };
+
+    const action: ChatAction = {
+      type: 'WS_CLAUDE_MESSAGE',
+      payload: { message: resultMsg, order: 0 },
+    };
+    const newState = chatReducer(state, action);
+
+    expect(newState.tokenStats.inputTokens).toBe(1000);
+    expect(newState.tokenStats.outputTokens).toBe(500);
+    expect(newState.tokenStats.cacheReadInputTokens).toBe(200);
+    expect(newState.tokenStats.cacheCreationInputTokens).toBe(100);
+    expect(newState.tokenStats.totalDurationMs).toBe(2000);
+    expect(newState.tokenStats.totalDurationApiMs).toBe(1500);
+    expect(newState.tokenStats.totalCostUsd).toBe(0.05);
+    expect(newState.tokenStats.turnCount).toBe(1);
+    expect(newState.tokenStats.serviceTier).toBe('scale');
+  });
+
+  it('should accumulate stats across multiple result messages', () => {
+    let state: ChatState = { ...initialState, sessionStatus: { phase: 'running' } as const };
+
+    // First result
+    const resultMsg1: ClaudeMessage = {
+      type: 'result',
+      usage: { input_tokens: 1000, output_tokens: 500 },
+      duration_ms: 2000,
+      total_cost_usd: 0.05,
+      num_turns: 1,
+    };
+    state = chatReducer(state, {
+      type: 'WS_CLAUDE_MESSAGE',
+      payload: { message: resultMsg1, order: 0 },
+    });
+
+    // Second result
+    const resultMsg2: ClaudeMessage = {
+      type: 'result',
+      usage: { input_tokens: 2000, output_tokens: 1000 },
+      duration_ms: 3000,
+      total_cost_usd: 0.12,
+      num_turns: 2,
+    };
+    state = chatReducer(state, {
+      type: 'WS_CLAUDE_MESSAGE',
+      payload: { message: resultMsg2, order: 1 },
+    });
+
+    // Tokens should accumulate
+    expect(state.tokenStats.inputTokens).toBe(3000);
+    expect(state.tokenStats.outputTokens).toBe(1500);
+    expect(state.tokenStats.totalDurationMs).toBe(5000);
+    // Cost and turn count take latest value
+    expect(state.tokenStats.totalCostUsd).toBe(0.12);
+    expect(state.tokenStats.turnCount).toBe(2);
+  });
+
+  it('should extract context window from model_usage', () => {
+    const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
+
+    const resultMsg: ClaudeMessage = {
+      type: 'result',
+      usage: { input_tokens: 1000, output_tokens: 500 },
+      duration_ms: 2000,
+      total_cost_usd: 0.05,
+      num_turns: 1,
+      model_usage: {
+        'claude-3-opus': {
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          webSearchRequests: 0,
+          costUSD: 0.05,
+          contextWindow: 200_000,
+          maxOutputTokens: 16_384,
+        },
+      },
+    };
+
+    const action: ChatAction = {
+      type: 'WS_CLAUDE_MESSAGE',
+      payload: { message: resultMsg, order: 0 },
+    };
+    const newState = chatReducer(state, action);
+
+    expect(newState.tokenStats.contextWindow).toBe(200_000);
+    expect(newState.tokenStats.maxOutputTokens).toBe(16_384);
+  });
+
+  it('should not update token stats for non-result messages', () => {
+    const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
+
+    const assistantMsg: ClaudeMessage = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello!' }],
+      },
+    };
+
+    const action: ChatAction = {
+      type: 'WS_CLAUDE_MESSAGE',
+      payload: { message: assistantMsg, order: 0 },
+    };
+    const newState = chatReducer(state, action);
+
+    expect(newState.tokenStats.inputTokens).toBe(0);
+    expect(newState.tokenStats.outputTokens).toBe(0);
+  });
+
+  it('should reset token stats on session switch', () => {
+    // Set up state with existing stats
+    const state: ChatState = {
+      ...initialState,
+      tokenStats: {
+        inputTokens: 5000,
+        outputTokens: 2000,
+        cacheReadInputTokens: 1000,
+        cacheCreationInputTokens: 500,
+        totalCostUsd: 0.25,
+        totalDurationMs: 10_000,
+        totalDurationApiMs: 8000,
+        turnCount: 5,
+        webSearchRequests: 2,
+        contextWindow: 200_000,
+        maxOutputTokens: 16_384,
+        serviceTier: 'scale',
+      },
+    };
+
+    const action: ChatAction = { type: 'SESSION_SWITCH_START' };
+    const newState = chatReducer(state, action);
+
+    expect(newState.tokenStats).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      totalCostUsd: 0,
+      totalDurationMs: 0,
+      totalDurationApiMs: 0,
+      turnCount: 0,
+      webSearchRequests: 0,
+      contextWindow: null,
+      maxOutputTokens: null,
+      serviceTier: null,
+    });
+  });
+
+  it('should reset token stats on clear chat', () => {
+    const state: ChatState = {
+      ...initialState,
+      tokenStats: {
+        inputTokens: 5000,
+        outputTokens: 2000,
+        cacheReadInputTokens: 1000,
+        cacheCreationInputTokens: 500,
+        totalCostUsd: 0.25,
+        totalDurationMs: 10_000,
+        totalDurationApiMs: 8000,
+        turnCount: 5,
+        webSearchRequests: 2,
+        contextWindow: 200_000,
+        maxOutputTokens: 16_384,
+        serviceTier: 'scale',
+      },
+    };
+
+    const action: ChatAction = { type: 'CLEAR_CHAT' };
+    const newState = chatReducer(state, action);
+
+    expect(newState.tokenStats.inputTokens).toBe(0);
+    expect(newState.tokenStats.outputTokens).toBe(0);
+    expect(newState.tokenStats.contextWindow).toBeNull();
+  });
+});

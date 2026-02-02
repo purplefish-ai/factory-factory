@@ -212,6 +212,21 @@ export interface ClaudeUsage {
 }
 
 /**
+ * Model-specific usage statistics from the SDK.
+ * This matches the modelUsage/model_usage field in ResultMessage.
+ */
+export interface ModelUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  webSearchRequests: number;
+  costUSD: number;
+  contextWindow: number;
+  maxOutputTokens: number;
+}
+
+/**
  * Claude message within a stream event.
  */
 export interface ClaudeMessagePayload {
@@ -303,11 +318,14 @@ export interface ClaudeMessage {
   // Result fields
   usage?: ClaudeUsage;
   duration_ms?: number;
+  duration_api_ms?: number;
   total_cost_usd?: number;
   num_turns?: number;
   is_error?: boolean;
   error?: string;
   result?: unknown;
+  /** Model-specific usage stats including context window (keyed by model name) */
+  model_usage?: Record<string, ModelUsage>;
   // System fields
   subtype?: string;
   tools?: ToolDefinition[];
@@ -754,14 +772,37 @@ export interface MessageGroup {
 
 /**
  * Token usage stats for display.
+ * Extended to include cache stats, context window, and API timing.
  */
 export interface TokenStats {
   inputTokens: number;
   outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
   totalCostUsd: number;
   totalDurationMs: number;
+  totalDurationApiMs: number;
   turnCount: number;
+  webSearchRequests: number;
+  /** Context window size from the latest result (null if not yet received) */
+  contextWindow: number | null;
+  /** Max output tokens from the latest result (null if not yet received) */
+  maxOutputTokens: number | null;
+  /** Service tier from the latest usage (null if not yet received) */
+  serviceTier: string | null;
 }
+
+/**
+ * Threshold for warning when approaching context window limit.
+ * At 80% usage, show yellow warning.
+ */
+export const CONTEXT_WARNING_THRESHOLD = 0.8;
+
+/**
+ * Threshold for critical context window usage.
+ * At 95% usage, show red critical warning.
+ */
+export const CONTEXT_CRITICAL_THRESHOLD = 0.95;
 
 // =============================================================================
 // Connection State Types
@@ -1334,25 +1375,64 @@ export function createEmptyTokenStats(): TokenStats {
   return {
     inputTokens: 0,
     outputTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
     totalCostUsd: 0,
     totalDurationMs: 0,
+    totalDurationApiMs: 0,
     turnCount: 0,
+    webSearchRequests: 0,
+    contextWindow: null,
+    maxOutputTokens: null,
+    serviceTier: null,
   };
 }
 
 /**
+ * Extracts model usage from the first model entry (typically there's only one).
+ * Returns null if no model usage data is available.
+ */
+function extractFirstModelUsage(
+  modelUsage: Record<string, ModelUsage> | undefined
+): ModelUsage | null {
+  if (!modelUsage) {
+    return null;
+  }
+  const models = Object.values(modelUsage);
+  return models.length > 0 ? models[0] : null;
+}
+
+/**
  * Updates token stats from a result message.
+ * Accumulates tokens, duration, and cost while taking the latest context window info.
  */
 export function updateTokenStatsFromResult(stats: TokenStats, msg: ClaudeMessage): TokenStats {
   if (msg.type !== 'result') {
     return stats;
   }
 
+  const modelUsage = extractFirstModelUsage(msg.model_usage);
+
   return {
+    // Accumulate token counts
     inputTokens: stats.inputTokens + (msg.usage?.input_tokens ?? 0),
     outputTokens: stats.outputTokens + (msg.usage?.output_tokens ?? 0),
-    totalCostUsd: msg.total_cost_usd ?? stats.totalCostUsd,
+    cacheReadInputTokens: stats.cacheReadInputTokens + (msg.usage?.cache_read_input_tokens ?? 0),
+    cacheCreationInputTokens:
+      stats.cacheCreationInputTokens + (msg.usage?.cache_creation_input_tokens ?? 0),
+    // Accumulate durations
     totalDurationMs: stats.totalDurationMs + (msg.duration_ms ?? 0),
+    totalDurationApiMs: stats.totalDurationApiMs + (msg.duration_api_ms ?? 0),
+    // Take latest cost (SDK provides cumulative cost)
+    totalCostUsd: msg.total_cost_usd ?? stats.totalCostUsd,
+    // Take latest turn count
     turnCount: msg.num_turns ?? stats.turnCount,
+    // Accumulate web search requests from model usage
+    webSearchRequests: stats.webSearchRequests + (modelUsage?.webSearchRequests ?? 0),
+    // Take latest context window info
+    contextWindow: modelUsage?.contextWindow ?? stats.contextWindow,
+    maxOutputTokens: modelUsage?.maxOutputTokens ?? stats.maxOutputTokens,
+    // Take latest service tier
+    serviceTier: msg.usage?.service_tier ?? stats.serviceTier,
   };
 }
