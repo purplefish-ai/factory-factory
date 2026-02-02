@@ -2,10 +2,10 @@ import {
   AppWindow,
   Archive,
   ArrowDown,
-  Check,
   CheckCircle2,
   Circle,
   GitBranch,
+  GitPullRequest,
   Loader2,
   PanelRight,
   XCircle,
@@ -445,7 +445,7 @@ function WorkspaceChatContent() {
           )}
           {/* Run Script Port Badge */}
           <RunScriptPortBadge workspaceId={workspaceId} />
-          {/* PR Link with CI Status */}
+          {/* PR Link */}
           {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
             <a
               href={workspace.prUrl}
@@ -453,27 +453,66 @@ function WorkspaceChatContent() {
               rel="noopener noreferrer"
               className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
                 workspace.prState === 'MERGED'
-                  ? 'text-purple-500'
+                  ? 'text-green-500'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              #{workspace.prNumber}
-              {workspace.prState === 'MERGED' ? (
-                <Check className="h-3 w-3" />
-              ) : (
-                <>
-                  {workspace.prCiStatus === 'SUCCESS' && (
-                    <CheckCircle2 className="h-3 w-3 text-green-500" />
-                  )}
-                  {workspace.prCiStatus === 'FAILURE' && (
-                    <XCircle className="h-3 w-3 text-red-500" />
-                  )}
-                  {workspace.prCiStatus === 'PENDING' && (
-                    <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
-                  )}
-                </>
+              <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
+              {workspace.prState === 'MERGED' && (
+                <CheckCircle2 className="h-3 w-3 text-green-500" />
               )}
             </a>
+          )}
+          {/* CI Status Badge - shown for all open PRs */}
+          {workspace.prUrl && workspace.prState === 'OPEN' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
+                    workspace.prCiStatus === 'SUCCESS' &&
+                      'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
+                    workspace.prCiStatus === 'FAILURE' &&
+                      'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
+                    workspace.prCiStatus === 'PENDING' &&
+                      'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
+                    workspace.prCiStatus === 'UNKNOWN' &&
+                      'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  )}
+                >
+                  {workspace.prCiStatus === 'SUCCESS' && (
+                    <>
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>CI Passing</span>
+                    </>
+                  )}
+                  {workspace.prCiStatus === 'FAILURE' && (
+                    <>
+                      <XCircle className="h-3 w-3" />
+                      <span>CI Failing</span>
+                    </>
+                  )}
+                  {workspace.prCiStatus === 'PENDING' && (
+                    <>
+                      <Circle className="h-3 w-3 animate-pulse" />
+                      <span>CI Running</span>
+                    </>
+                  )}
+                  {workspace.prCiStatus === 'UNKNOWN' && (
+                    <>
+                      <Circle className="h-3 w-3" />
+                      <span>CI Unknown</span>
+                    </>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {workspace.prCiStatus === 'SUCCESS' && 'All CI checks are passing'}
+                {workspace.prCiStatus === 'FAILURE' && 'Some CI checks are failing'}
+                {workspace.prCiStatus === 'PENDING' && 'CI checks are currently running'}
+                {workspace.prCiStatus === 'UNKNOWN' && 'CI status not yet determined'}
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -511,9 +550,14 @@ function WorkspaceChatContent() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant="ghost"
+                variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
                 size="icon"
-                className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                className={cn(
+                  'h-8 w-8',
+                  workspace.prState === 'MERGED'
+                    ? ''
+                    : 'hover:bg-destructive/10 hover:text-destructive'
+                )}
                 onClick={() => {
                   // Skip confirmation if PR is already merged
                   if (workspace.prState === 'MERGED') {

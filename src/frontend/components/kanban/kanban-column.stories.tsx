@@ -30,6 +30,8 @@ const baseWorkspace: WorkspaceWithKanban = {
   prReviewState: null,
   prCiStatus: 'UNKNOWN',
   prUpdatedAt: null,
+  prCiFailedAt: null,
+  prCiLastNotifiedAt: null,
   status: 'READY',
   createdAt: new Date(),
   updatedAt: new Date(),

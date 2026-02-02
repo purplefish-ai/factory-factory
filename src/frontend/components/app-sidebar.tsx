@@ -1,6 +1,6 @@
 import {
   Archive,
-  Check,
+  CheckCircle2,
   ExternalLink,
   GitPullRequest,
   Kanban,
@@ -73,6 +73,32 @@ function getStatusDotClass(workspace: WorkspaceListItem): string {
     return 'bg-orange-500';
   }
   return 'bg-gray-400';
+}
+
+/**
+ * Get tooltip text explaining the status dot color.
+ * Uses same priority as getStatusDotClass.
+ */
+function getStatusTooltip(workspace: WorkspaceListItem): string {
+  if (workspace.isWorking) {
+    return 'Claude is working';
+  }
+  if (workspace.prState === 'MERGED') {
+    return 'PR merged';
+  }
+  if (workspace.prCiStatus === 'FAILURE') {
+    return 'CI checks failing';
+  }
+  if (workspace.prCiStatus === 'PENDING') {
+    return 'CI checks running';
+  }
+  if (workspace.prCiStatus === 'SUCCESS') {
+    return 'CI checks passing';
+  }
+  if (workspace.gitStats?.hasUncommitted) {
+    return 'Uncommitted changes';
+  }
+  return 'Ready';
 }
 
 export function AppSidebar() {
@@ -318,12 +344,19 @@ export function AppSidebar() {
                               {isArchivingItem ? (
                                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
                               ) : (
-                                <span
-                                  className={cn(
-                                    'h-2 w-2 rounded-full',
-                                    getStatusDotClass(workspace)
-                                  )}
-                                />
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className={cn(
+                                        'h-2 w-2 rounded-full',
+                                        getStatusDotClass(workspace)
+                                      )}
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right">
+                                    {getStatusTooltip(workspace)}
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
                             </span>
 
@@ -374,16 +407,16 @@ export function AppSidebar() {
                                           }
                                         }}
                                         className={cn(
-                                          'text-xs hover:opacity-80 transition-opacity p-0',
+                                          'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity p-0',
                                           workspace.prState === 'MERGED'
-                                            ? 'text-purple-500'
+                                            ? 'text-green-500'
                                             : 'text-muted-foreground hover:text-foreground'
                                         )}
                                       >
-                                        #{workspace.prNumber}
+                                        <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
                                         <span className="inline-block w-3.5 ml-0.5">
                                           {workspace.prState === 'MERGED' && (
-                                            <Check className="h-3 w-3 inline" />
+                                            <CheckCircle2 className="h-3 w-3 inline text-green-500" />
                                           )}
                                         </span>
                                       </button>
@@ -417,7 +450,7 @@ export function AppSidebar() {
                                 formatRelativeTime(workspace.lastActivityAt)}
                             </span>
 
-                            {/* Archive button (hover, or always visible in yellow for closed/merged PRs) */}
+                            {/* Archive button (hover for non-merged, always visible for merged PRs) */}
                             {!isArchivingItem && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -431,10 +464,11 @@ export function AppSidebar() {
                                     }}
                                     className={cn(
                                       'shrink-0 ml-1 p-0.5 rounded transition-opacity',
-                                      workspace.prState === 'MERGED' ||
-                                        workspace.prState === 'CLOSED'
-                                        ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
-                                        : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                      workspace.prState === 'MERGED'
+                                        ? 'opacity-100 text-foreground bg-primary hover:bg-primary/90'
+                                        : workspace.prState === 'CLOSED'
+                                          ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
+                                          : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-muted'
                                     )}
                                   >
                                     <Archive className="h-3 w-3" />

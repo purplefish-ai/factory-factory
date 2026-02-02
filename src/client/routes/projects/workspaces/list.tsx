@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
 import { Kanban, List, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
+import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
@@ -156,12 +157,19 @@ export default function WorkspacesListPage() {
               {workspaces.map((workspace: WorkspaceWithSessions) => (
                 <TableRow key={workspace.id}>
                   <TableCell>
-                    <Link
-                      to={`/projects/${slug}/workspaces/${workspace.id}`}
-                      className="font-medium hover:underline"
-                    >
-                      {workspace.name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/projects/${slug}/workspaces/${workspace.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {workspace.name}
+                      </Link>
+                      <CIFailureWarning
+                        ciStatus={workspace.prCiStatus as CIStatus}
+                        prUrl={workspace.prUrl}
+                        size="sm"
+                      />
+                    </div>
                     {workspace.description && (
                       <p className="text-sm text-muted-foreground truncate max-w-md">
                         {workspace.description.length > 100
