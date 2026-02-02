@@ -14,6 +14,7 @@ interface UseSlashCommandsOptions {
 interface UseSlashCommandsReturn {
   slashMenuOpen: boolean;
   slashFilter: string;
+  commandsReady: boolean;
   paletteRef: React.RefObject<SlashCommandPaletteHandle | null>;
   handleInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   handleSlashCommandSelect: (command: CommandInfo) => void;
@@ -32,11 +33,20 @@ export function useSlashCommands({
 }: UseSlashCommandsOptions): UseSlashCommandsReturn {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
+  const [commandsReady, setCommandsReady] = useState(slashCommands.length > 0);
   const paletteRef = useRef<SlashCommandPaletteHandle>(null);
+  const hasMountedRef = useRef(false);
 
-  // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
   useEffect(() => {
-    if (slashCommands.length > 0 && inputRef?.current) {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      if (slashCommands.length === 0) {
+        return;
+      }
+    }
+    setCommandsReady(true);
+    // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
+    if (inputRef?.current) {
       const currentValue = inputRef.current.value;
       if (currentValue.startsWith('/')) {
         const afterSlash = currentValue.slice(1);
@@ -56,7 +66,7 @@ export function useSlashCommands({
       onChange?.(newValue);
 
       // Detect slash command at start of input
-      if (newValue.startsWith('/') && slashCommands.length > 0) {
+      if (newValue.startsWith('/')) {
         // Extract the text after / (before any space)
         const afterSlash = newValue.slice(1);
         const spaceIndex = afterSlash.indexOf(' ');
@@ -74,7 +84,7 @@ export function useSlashCommands({
         setSlashFilter('');
       }
     },
-    [onChange, slashCommands]
+    [onChange]
   );
 
   const handleSlashCommandSelect = useCallback(
@@ -116,6 +126,7 @@ export function useSlashCommands({
   return {
     slashMenuOpen,
     slashFilter,
+    commandsReady,
     paletteRef,
     handleInputChange,
     handleSlashCommandSelect,

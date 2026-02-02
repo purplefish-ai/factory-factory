@@ -200,6 +200,7 @@ export const ChatInput = memo(function ChatInput({
       <SlashCommandPalette
         commands={slashCommands}
         isOpen={slash.slashMenuOpen}
+        isLoading={!slash.commandsReady}
         onClose={slash.handleSlashMenuClose}
         onSelect={slash.handleSlashCommandSelect}
         filter={slash.slashFilter}
