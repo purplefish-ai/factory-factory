@@ -35,10 +35,11 @@ import {
 } from '@/components/ui/input-group';
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
+import type { ChatSettings, CommandInfo, MessageAttachment } from '@/lib/claude-types';
 import { AVAILABLE_MODELS } from '@/lib/claude-types';
 import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
+import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
 
 // =============================================================================
 // Types
@@ -68,6 +69,8 @@ interface ChatInputProps {
   attachments?: MessageAttachment[];
   // Called when attachments change
   onAttachmentsChange?: (attachments: MessageAttachment[]) => void;
+  // Slash commands for autocomplete
+  slashCommands?: CommandInfo[];
 }
 
 // =============================================================================
@@ -295,6 +298,7 @@ export const ChatInput = memo(function ChatInput({
   pendingMessageCount = 0,
   attachments: controlledAttachments,
   onAttachmentsChange,
+  slashCommands = [],
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
@@ -320,12 +324,54 @@ export const ChatInput = memo(function ChatInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle input changes to preserve draft across tab switches
+  // Slash command palette state and ref for imperative keyboard handling
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashFilter, setSlashFilter] = useState('');
+  const paletteRef = useRef<SlashCommandPaletteHandle>(null);
+
+  // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
+  // Use slashCommands array as dependency (not just length) to handle updates properly
+  useEffect(() => {
+    if (slashCommands.length > 0 && inputRef?.current) {
+      const currentValue = inputRef.current.value;
+      if (currentValue.startsWith('/')) {
+        const afterSlash = currentValue.slice(1);
+        const spaceIndex = afterSlash.indexOf(' ');
+        // Only open if still completing command name (no space yet)
+        if (spaceIndex === -1) {
+          setSlashFilter(afterSlash);
+          setSlashMenuOpen(true);
+        }
+      }
+    }
+  }, [slashCommands, inputRef]);
+
+  // Handle input changes to preserve draft across tab switches and detect slash commands
   const handleInputChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
-      onChange?.(event.target.value);
+      const newValue = event.target.value;
+      onChange?.(newValue);
+
+      // Detect slash command at start of input
+      if (newValue.startsWith('/') && slashCommands.length > 0) {
+        // Extract the text after / (before any space)
+        const afterSlash = newValue.slice(1);
+        const spaceIndex = afterSlash.indexOf(' ');
+        const filter = spaceIndex === -1 ? afterSlash : afterSlash.slice(0, spaceIndex);
+
+        // Only show menu if no space yet (still completing command name)
+        if (spaceIndex === -1) {
+          setSlashFilter(filter);
+          setSlashMenuOpen(true);
+        } else {
+          setSlashMenuOpen(false);
+        }
+      } else {
+        setSlashMenuOpen(false);
+        setSlashFilter('');
+      }
     },
-    [onChange]
+    [onChange, slashCommands]
   );
 
   // Handle file selection
@@ -371,12 +417,27 @@ export const ChatInput = memo(function ChatInput({
 
   // Handle key press for Enter to send and Shift+Tab for plan mode toggle
   const handleKeyDown = useCallback(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles slash menu + send logic
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Shift+Tab toggles plan mode (only when not running, matching the button's disabled state)
+      // Shift+Tab toggles plan mode (check BEFORE slash menu to ensure it always works)
+      // Only toggle when not running, matching the button's disabled state
       if (event.key === 'Tab' && event.shiftKey && !running) {
         event.preventDefault();
         onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
         return;
+      }
+
+      // If slash menu is open, delegate to palette for key handling
+      if (slashMenuOpen && paletteRef.current) {
+        const result = paletteRef.current.handleKeyDown(event.key);
+        if (result === 'handled') {
+          event.preventDefault();
+          return;
+        }
+        if (result === 'close-and-passthrough') {
+          setSlashMenuOpen(false);
+          // Fall through to normal handling
+        }
       }
 
       // Enter without Shift sends the message (queues if agent is running)
@@ -391,7 +452,17 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     },
-    [onSend, disabled, running, onChange, setAttachments, attachments, settings, onSettingsChange]
+    [
+      onSend,
+      disabled,
+      running,
+      onChange,
+      setAttachments,
+      attachments,
+      slashMenuOpen,
+      settings,
+      onSettingsChange,
+    ]
   );
 
   // Handle send button click
@@ -479,8 +550,43 @@ export const ChatInput = memo(function ChatInput({
     [onSend, disabled]
   );
 
+  // Handle slash command selection
+  const handleSlashCommandSelect = useCallback(
+    (command: CommandInfo) => {
+      // Replace input with /<command-name> followed by a space
+      const newValue = `/${command.name} `;
+      if (inputRef?.current) {
+        inputRef.current.value = newValue;
+        inputRef.current.focus();
+        // Move cursor to end
+        inputRef.current.setSelectionRange(newValue.length, newValue.length);
+      }
+      onChange?.(newValue);
+      setSlashMenuOpen(false);
+      setSlashFilter('');
+    },
+    [inputRef, onChange]
+  );
+
+  // Handle closing the slash command palette
+  const handleSlashMenuClose = useCallback(() => {
+    setSlashMenuOpen(false);
+    setSlashFilter('');
+  }, []);
+
   return (
-    <div className={cn('px-4 py-3', className)}>
+    <div className={cn('px-4 py-3 relative', className)}>
+      {/* Slash command palette */}
+      <SlashCommandPalette
+        commands={slashCommands}
+        isOpen={slashMenuOpen}
+        onClose={handleSlashMenuClose}
+        onSelect={handleSlashCommandSelect}
+        filter={slashFilter}
+        anchorRef={inputRef as React.RefObject<HTMLElement | null>}
+        paletteRef={paletteRef}
+      />
+
       <InputGroup className="flex-col">
         {/* Attachment preview (above text input) */}
         {attachments.length > 0 && (

@@ -5,6 +5,7 @@ import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import type {
   ChatMessage,
   ChatSettings,
+  CommandInfo,
   MessageAttachment,
   QueuedMessage,
   SessionInfo,
@@ -56,6 +57,8 @@ export interface UseChatWebSocketReturn {
   taskNotifications: { id: string; message: string; timestamp: string }[];
   // Current permission mode from SDK status updates
   permissionMode: string | null;
+  // Slash commands from CLI initialize response
+  slashCommands: CommandInfo[];
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -161,6 +164,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     isCompacting: chat.isCompacting,
     taskNotifications: chat.taskNotifications,
     permissionMode: chat.permissionMode,
+    slashCommands: chat.slashCommands,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,

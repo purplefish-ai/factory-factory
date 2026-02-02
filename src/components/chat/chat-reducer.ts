@@ -15,6 +15,7 @@ import type {
   ChatMessage,
   ChatSettings,
   ClaudeMessage,
+  CommandInfo,
   MessageAttachment,
   PendingInteractiveRequest,
   PermissionRequest,
@@ -145,6 +146,8 @@ export interface ChatState {
   activeHooks: Map<string, ActiveHookInfo>;
   /** Task notifications from SDK (e.g., subagent updates) */
   taskNotifications: TaskNotification[];
+  /** Slash commands from CLI initialize response */
+  slashCommands: CommandInfo[];
 }
 
 // =============================================================================
@@ -242,7 +245,9 @@ export type ChatAction =
   | { type: 'HOOK_RESPONSE'; payload: { hookId: string } }
   // Task notification management
   | { type: 'DISMISS_TASK_NOTIFICATION'; payload: { id: string } }
-  | { type: 'CLEAR_TASK_NOTIFICATIONS' };
+  | { type: 'CLEAR_TASK_NOTIFICATIONS' }
+  // Slash commands discovery
+  | { type: 'WS_SLASH_COMMANDS'; payload: { commands: CommandInfo[] } };
 
 // =============================================================================
 // Helper Functions
@@ -401,6 +406,10 @@ function createBaseResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
 > {
+  // Note: slashCommands is intentionally NOT reset here.
+  // - For CLEAR_CHAT: Commands persist because we're clearing messages in the same session.
+  // - For session switches: MESSAGES_SNAPSHOT handles clearing slashCommands separately,
+  //   and the backend will replay the stored slash_commands event for the new session.
   return {
     messages: [],
     gitBranch: null,
@@ -421,7 +430,7 @@ function createBaseResetState(): Pick<
 
 /**
  * Creates extended reset state for session switches, which also clears
- * queue and session status.
+ * queue, session status, and slashCommands (since different sessions may have different commands).
  */
 function createSessionSwitchResetState(): Pick<
   ChatState,
@@ -441,11 +450,13 @@ function createSessionSwitchResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
+  | 'slashCommands'
 > {
   return {
     ...createBaseResetState(),
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
+    slashCommands: [], // Clear for new session - will be sent when Claude starts
   };
 }
 
@@ -469,6 +480,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     hasCompactBoundary: false,
     activeHooks: new Map(),
     taskNotifications: [],
+    slashCommands: [],
     ...overrides,
   };
 }
@@ -838,6 +850,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Note: queuedMessages are now managed via MESSAGE_STATE_CHANGED events.
       // The snapshot contains final ChatMessages, not intermediate states.
       // Clear queuedMessages since snapshot represents fully processed state.
+      // Preserve slashCommands - they are session metadata that may not be immediately
+      // re-sent if Claude has exited (stored events are cleared on exit). Commands will
+      // be re-sent when the user sends a message and Claude restarts.
       return {
         ...state,
         messages: snapshotMessages,
@@ -1050,6 +1065,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       newActiveHooks.delete(action.payload.hookId);
       return { ...state, activeHooks: newActiveHooks };
     }
+
+    // Slash commands discovery
+    case 'WS_SLASH_COMMANDS':
+      return { ...state, slashCommands: action.payload.commands };
 
     case 'DISMISS_TASK_NOTIFICATION':
       return {
@@ -1313,6 +1332,11 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return { type: 'SDK_COMPACTING_START' };
     case 'compacting_end':
       return { type: 'SDK_COMPACTING_END' };
+    // Slash commands discovery
+    case 'slash_commands':
+      return data.slashCommands
+        ? { type: 'WS_SLASH_COMMANDS', payload: { commands: data.slashCommands } }
+        : null;
     default:
       return null;
   }
