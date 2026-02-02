@@ -10,6 +10,7 @@ import type { SlashKeyResult } from '../../slash-command-palette';
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
   onStop?: () => void;
+  onOpenQuickActions?: () => void;
   onChange?: (value: string) => void;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   disabled: boolean;
@@ -103,6 +104,7 @@ function runShortcuts(
 export function useChatInputActions({
   onSend,
   onStop,
+  onOpenQuickActions,
   onChange,
   onSettingsChange,
   disabled,
@@ -185,6 +187,17 @@ export function useChatInputActions({
         },
       },
       {
+        key: 'a',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!disabled) {
+            onOpenQuickActions?.();
+          }
+        },
+      },
+      {
         key: '.',
         mod: true,
         shift: false,
@@ -198,6 +211,7 @@ export function useChatInputActions({
     ],
     [
       disabled,
+      onOpenQuickActions,
       onSettingsChange,
       onStop,
       running,

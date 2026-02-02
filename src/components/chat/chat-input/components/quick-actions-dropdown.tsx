@@ -14,14 +14,21 @@ import { QUICK_ACTIONS } from '../constants';
 interface QuickActionsDropdownProps {
   onAction: (message: string) => void;
   disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
  * Quick actions dropdown for sending predefined messages.
  */
-export function QuickActionsDropdown({ onAction, disabled }: QuickActionsDropdownProps) {
+export function QuickActionsDropdown({
+  onAction,
+  disabled,
+  open,
+  onOpenChange,
+}: QuickActionsDropdownProps) {
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>

@@ -92,6 +92,7 @@ export const ChatInput = memo(function ChatInput({
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
 
   // Use controlled or uncontrolled attachments based on props
   // Controlled mode requires the setter (onAttachmentsChange) - the setter is what makes it controlled
@@ -123,6 +124,7 @@ export const ChatInput = memo(function ChatInput({
   const actions = useChatInputActions({
     onSend,
     onStop,
+    onOpenQuickActions: () => setQuickActionsOpen(true),
     onChange,
     onSettingsChange,
     disabled,
@@ -252,7 +254,12 @@ export const ChatInput = memo(function ChatInput({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <QuickActionsDropdown onAction={actions.handleQuickAction} disabled={isDisabled} />
+            <QuickActionsDropdown
+              onAction={actions.handleQuickAction}
+              disabled={isDisabled}
+              open={quickActionsOpen}
+              onOpenChange={setQuickActionsOpen}
+            />
             {/* Hidden file input */}
             <input
               ref={actions.fileInputRef}
