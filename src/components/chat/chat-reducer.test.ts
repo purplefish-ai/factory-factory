@@ -242,7 +242,10 @@ describe('chatReducer', () => {
   describe('WS_CLAUDE_MESSAGE action', () => {
     it('should add assistant message to messages array', () => {
       const claudeMsg = createTestAssistantMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: claudeMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: claudeMsg, order: 0 },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -253,7 +256,10 @@ describe('chatReducer', () => {
     it('should transition from starting to running when receiving a Claude message', () => {
       const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: claudeMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: claudeMsg, order: 0 },
+      };
       const newState = chatReducer(state, action);
 
       expect(newState.sessionStatus).toEqual({ phase: 'running' });
@@ -262,7 +268,10 @@ describe('chatReducer', () => {
     it('should set sessionStatus to ready when receiving a result message', () => {
       const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
       const resultMsg = createTestResultMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: resultMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: resultMsg, order: 0 },
+      };
       const newState = chatReducer(state, action);
 
       expect(newState.sessionStatus).toEqual({ phase: 'ready' });
@@ -272,7 +281,10 @@ describe('chatReducer', () => {
     it('should store tool_use messages and track index for O(1) updates', () => {
       const toolUseId = 'tool-use-123';
       const toolUseMsg = createTestToolUseMessage(toolUseId);
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolUseMsg, order: 0 },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -281,7 +293,10 @@ describe('chatReducer', () => {
 
     it('should store thinking messages', () => {
       const thinkingMsg = createTestThinkingMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: thinkingMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: thinkingMsg, order: 0 },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -289,7 +304,10 @@ describe('chatReducer', () => {
 
     it('should store tool_result messages from user type', () => {
       const toolResultMsg = createTestToolResultMessage('tool-123');
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: toolResultMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolResultMsg, order: 0 },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -304,7 +322,10 @@ describe('chatReducer', () => {
           delta: { type: 'text_delta', text: 'Hello' },
         },
       };
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: deltaMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: deltaMsg, order: 0 },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(0);
@@ -318,7 +339,10 @@ describe('chatReducer', () => {
           message: { role: 'assistant', content: [] },
         },
       };
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: msgStartEvent };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: msgStartEvent, order: 0 },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(0);
@@ -332,7 +356,10 @@ describe('chatReducer', () => {
           content: 'Hello',
         },
       };
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: userMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: userMsg, order: 0 },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(0);
@@ -536,7 +563,13 @@ describe('chatReducer', () => {
       const state: ChatState = {
         ...initialState,
         messages: [
-          { id: 'msg-1', source: 'user', text: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
+          {
+            id: 'msg-1',
+            source: 'user',
+            text: 'Hello',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 0,
+          },
         ],
         sessionStatus: { phase: 'running' } as const,
         gitBranch: 'old-branch',
@@ -597,7 +630,10 @@ describe('chatReducer', () => {
       const toolUseMsg = createTestToolUseMessage(toolUseId);
 
       // First add the tool use message
-      let state = chatReducer(initialState, { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg });
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolUseMsg, order: 0 },
+      });
       expect(state.toolUseIdToIndex.get(toolUseId)).toBe(0);
 
       // Now update the input
@@ -619,7 +655,10 @@ describe('chatReducer', () => {
       const toolUseMsg = createTestToolUseMessage(toolUseId);
 
       // Add tool use message but clear the index
-      let state = chatReducer(initialState, { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg });
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolUseMsg, order: 0 },
+      });
       state = { ...state, toolUseIdToIndex: new Map() }; // Clear the index
 
       // Update should still work via linear scan
@@ -651,7 +690,10 @@ describe('chatReducer', () => {
       const toolUseMsg = createTestToolUseMessage(toolUseId);
 
       // Add tool use message at index 0
-      let state = chatReducer(initialState, { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg });
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolUseMsg, order: 0 },
+      });
       expect(state.toolUseIdToIndex.get(toolUseId)).toBe(0);
       expect(state.messages.length).toBe(1);
 
@@ -662,6 +704,7 @@ describe('chatReducer', () => {
         source: 'user',
         text: 'Earlier message',
         timestamp: '2020-01-01T00:00:00.000Z', // Very early timestamp
+        order: -1, // Earlier order
       };
       state = {
         ...state,
@@ -850,7 +893,7 @@ describe('chatReducer', () => {
       };
       const action: ChatAction = {
         type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'My response' },
+        payload: { id: 'msg-1', text: 'My response', order: 0 },
       };
       const newState = chatReducer(state, action);
 
@@ -883,7 +926,7 @@ describe('chatReducer', () => {
       };
       const action: ChatAction = {
         type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'Please revise the plan' },
+        payload: { id: 'msg-1', text: 'Please revise the plan', order: 0 },
       };
       const newState = chatReducer(state, action);
 
@@ -913,7 +956,7 @@ describe('chatReducer', () => {
       };
       const action: ChatAction = {
         type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'My response' },
+        payload: { id: 'msg-1', text: 'My response', order: 0 },
       };
       const newState = chatReducer(state, action);
 
@@ -928,6 +971,7 @@ describe('chatReducer', () => {
         source: 'user',
         text: 'Already in chat',
         timestamp: '2024-01-01T00:00:00.000Z',
+        order: 0,
       };
       const state: ChatState = {
         ...initialState,
@@ -944,7 +988,7 @@ describe('chatReducer', () => {
       };
       const action: ChatAction = {
         type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'Duplicate' },
+        payload: { id: 'msg-1', text: 'Duplicate', order: 0 },
       };
       const newState = chatReducer(state, action);
 
@@ -982,6 +1026,7 @@ describe('chatReducer', () => {
         source: 'user',
         text: 'Hello, Claude!',
         timestamp: '2024-01-01T00:00:00.000Z',
+        order: 0,
       };
       const action: ChatAction = { type: 'USER_MESSAGE_SENT', payload: userMessage };
       const newState = chatReducer(initialState, action);
@@ -1149,7 +1194,13 @@ describe('chatReducer', () => {
       const state: ChatState = {
         ...initialState,
         messages: [
-          { id: 'msg-1', source: 'user', text: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
+          {
+            id: 'msg-1',
+            source: 'user',
+            text: 'Hello',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 0,
+          },
         ],
         sessionStatus: { phase: 'running' } as const,
         gitBranch: 'feature/test',
@@ -1190,7 +1241,13 @@ describe('chatReducer', () => {
       const state: ChatState = {
         ...initialState,
         messages: [
-          { id: 'msg-1', source: 'user', text: 'Hello', timestamp: '2024-01-01T00:00:00.000Z' },
+          {
+            id: 'msg-1',
+            source: 'user',
+            text: 'Hello',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 0,
+          },
         ],
         sessionStatus: { phase: 'running' } as const,
         gitBranch: 'feature/test',
@@ -1244,6 +1301,7 @@ describe('chatReducer', () => {
             source: 'user',
             text: 'Old message',
             timestamp: '2024-01-01T00:00:00.000Z',
+            order: 0,
           },
         ],
       };
@@ -1255,12 +1313,14 @@ describe('chatReducer', () => {
           source: 'user',
           text: 'New message',
           timestamp: '2024-01-02T00:00:00.000Z',
+          order: 0,
         },
         {
           id: 'msg-2-0',
           source: 'claude',
           message: { type: 'assistant', message: { role: 'assistant', content: 'Response' } },
           timestamp: '2024-01-02T00:00:01.000Z',
+          order: 1,
         },
       ];
 
@@ -1667,39 +1727,39 @@ describe('chatReducer', () => {
       expect(newState.messages[2].id).toBe('msg-3'); // order: 2
     });
 
-    it('should insert ordered messages before unordered messages', () => {
-      // Start with a message that has no order (e.g., from MESSAGE_USED_AS_RESPONSE)
-      const unorderedMessage: ChatMessage = {
-        id: 'unordered-msg',
+    it('should insert messages in order even when arriving out of sequence', () => {
+      // Start with a message at order 1
+      const existingMessage: ChatMessage = {
+        id: 'msg-1',
         source: 'user',
-        text: 'Unordered message',
+        text: 'First message',
         timestamp: '2024-01-01T10:00:00.000Z',
-        // no order field
+        order: 1,
       };
       const state: ChatState = {
         ...initialState,
-        messages: [unorderedMessage],
+        messages: [existingMessage],
       };
 
-      // Add an ordered message via MESSAGE_STATE_CHANGED ACCEPTED
+      // Add an earlier message (order: 0) that arrives later
       const action: ChatAction = {
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
-          id: 'ordered-msg',
+          id: 'msg-0',
           newState: MessageState.ACCEPTED,
           userMessage: {
-            text: 'Ordered message',
-            timestamp: '2024-01-01T12:00:00.000Z',
+            text: 'Earlier message',
+            timestamp: '2024-01-01T09:00:00.000Z',
             order: 0,
           },
         },
       };
       const newState = chatReducer(state, action);
 
-      // Ordered message should be inserted BEFORE the unordered one
+      // Messages should be sorted by order
       expect(newState.messages.length).toBe(2);
-      expect(newState.messages[0].id).toBe('ordered-msg');
-      expect(newState.messages[1].id).toBe('unordered-msg');
+      expect(newState.messages[0].id).toBe('msg-0'); // order: 0
+      expect(newState.messages[1].id).toBe('msg-1'); // order: 1
     });
   });
 });
@@ -1756,10 +1816,13 @@ describe('createActionFromWebSocketMessage', () => {
       type: 'assistant',
       message: { role: 'assistant', content: 'Hello!' },
     };
-    const wsMessage: WebSocketMessage = { type: 'claude_message', data: claudeMsg };
+    const wsMessage: WebSocketMessage = { type: 'claude_message', data: claudeMsg, order: 5 };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_CLAUDE_MESSAGE', payload: claudeMsg });
+    expect(action).toEqual({
+      type: 'WS_CLAUDE_MESSAGE',
+      payload: { message: claudeMsg, order: 5 },
+    });
   });
 
   it('should return null for claude_message without data', () => {
@@ -1893,12 +1956,13 @@ describe('createActionFromWebSocketMessage', () => {
       type: 'message_used_as_response',
       id: 'msg-1',
       text: 'My custom response',
+      order: 5,
     };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toEqual({
       type: 'MESSAGE_USED_AS_RESPONSE',
-      payload: { id: 'msg-1', text: 'My custom response' },
+      payload: { id: 'msg-1', text: 'My custom response', order: 5 },
     });
   });
 
@@ -1931,6 +1995,7 @@ describe('createActionFromWebSocketMessage', () => {
         source: 'user',
         timestamp: '2024-01-01T00:00:00.000Z',
         text: 'Hello',
+        order: 0,
       },
     ];
     const sessionStatus: SessionStatus = { phase: 'ready' };
@@ -2028,7 +2093,7 @@ describe('createActionFromWebSocketMessage', () => {
 
 describe('createUserMessageAction', () => {
   it('should create USER_MESSAGE_SENT action with generated id', () => {
-    const action = createUserMessageAction('Hello, Claude!');
+    const action = createUserMessageAction('Hello, Claude!', 0);
 
     expect(action.type).toBe('USER_MESSAGE_SENT');
     // Type guard: action is USER_MESSAGE_SENT type with ChatMessage payload
@@ -2037,12 +2102,13 @@ describe('createUserMessageAction', () => {
       expect(action.payload.text).toBe('Hello, Claude!');
       expect(action.payload.id).toMatch(/^msg-\d+-\w+$/);
       expect(action.payload.timestamp).toBeDefined();
+      expect(action.payload.order).toBe(0);
     }
   });
 
   it('should create unique ids for different calls', () => {
-    const action1 = createUserMessageAction('First');
-    const action2 = createUserMessageAction('Second');
+    const action1 = createUserMessageAction('First', 0);
+    const action2 = createUserMessageAction('Second', 1);
 
     // Type guard: action is USER_MESSAGE_SENT type with ChatMessage payload
     if (action1.type === 'USER_MESSAGE_SENT' && action2.type === 'USER_MESSAGE_SENT') {
