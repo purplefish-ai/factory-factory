@@ -2,6 +2,8 @@ import type { MessageAttachment } from './claude-types';
 
 /**
  * Supported image MIME types for upload.
+ * Note: 'image/jpg' is included for compatibility with some non-standard sources,
+ * though the standard MIME type is 'image/jpeg'.
  */
 export const SUPPORTED_IMAGE_TYPES = [
   'image/png',
@@ -67,6 +69,8 @@ export function isSupportedTextFile(filename: string): boolean {
 
 /**
  * Convert a File to a base64 encoded string.
+ * Reads the file as a data URL and strips the prefix (e.g., "data:image/png;base64,"),
+ * returning only the base64-encoded payload.
  */
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -77,13 +81,18 @@ export function fileToBase64(file: File): Promise<string> {
       const base64 = result.split(',')[1];
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onerror = () => {
+      const errorMessage = reader.error?.message || 'Unknown file read error';
+      reject(new Error(`Failed to read file: ${errorMessage}`));
+    };
     reader.readAsDataURL(file);
   });
 }
 
 /**
  * Convert a File to a MessageAttachment.
+ *
+ * @throws Error if file type is not supported or file exceeds MAX_IMAGE_SIZE
  */
 export async function fileToAttachment(file: File): Promise<MessageAttachment> {
   if (!isSupportedImageType(file.type)) {
@@ -91,7 +100,9 @@ export async function fileToAttachment(file: File): Promise<MessageAttachment> {
   }
 
   if (file.size > MAX_IMAGE_SIZE) {
-    throw new Error(`File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB (max 10MB)`);
+    const actualSize = formatFileSize(file.size);
+    const maxSize = formatFileSize(MAX_IMAGE_SIZE);
+    throw new Error(`File too large: ${actualSize} (max ${maxSize})`);
   }
 
   const base64 = await fileToBase64(file);
@@ -126,13 +137,18 @@ export function readTextFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onerror = () => {
+      const errorMessage = reader.error?.message || 'Unknown file read error';
+      reject(new Error(`Failed to read file: ${errorMessage}`));
+    };
     reader.readAsText(file);
   });
 }
 
 /**
  * Convert a text File to a MessageAttachment.
+ *
+ * @throws Error if file extension is not supported or file exceeds MAX_TEXT_FILE_SIZE
  */
 export async function textFileToAttachment(file: File): Promise<MessageAttachment> {
   if (!isSupportedTextFile(file.name)) {
@@ -140,17 +156,25 @@ export async function textFileToAttachment(file: File): Promise<MessageAttachmen
   }
 
   if (file.size > MAX_TEXT_FILE_SIZE) {
-    throw new Error(`File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB (max 1MB)`);
+    const actualSize = formatFileSize(file.size);
+    const maxSize = formatFileSize(MAX_TEXT_FILE_SIZE);
+    throw new Error(`File too large: ${actualSize} (max ${maxSize})`);
   }
 
-  const content = await readTextFile(file);
+  let content: string;
+  try {
+    content = await readTextFile(file);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to read ${file.name}: ${message}`);
+  }
 
   return {
     id: generateAttachmentId(),
     name: file.name,
     type: file.type || 'text/plain',
     size: file.size,
-    data: content, // raw text, not base64
+    data: content,
     contentType: 'text',
   };
 }

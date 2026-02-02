@@ -59,7 +59,7 @@ export function usePasteDropHandler({
    * - Small text falls through to default behavior
    */
   const handlePaste = useCallback(
-    async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    (event: ClipboardEvent<HTMLTextAreaElement>) => {
       if (disabled) {
         return;
       }
@@ -67,18 +67,26 @@ export function usePasteDropHandler({
       // Check for images first
       if (hasClipboardImages(event.nativeEvent)) {
         event.preventDefault();
-        try {
-          const imageAttachments = await getClipboardImages(event.nativeEvent);
-          if (imageAttachments.length > 0) {
-            setAttachments((prev) => [...prev, ...imageAttachments]);
-          } else {
-            // hasClipboardImages returned true but no images could be extracted
-            toast.error('Could not paste image from clipboard');
+        // Wrap async logic to prevent unhandled promise rejections
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: error handling requires multiple conditional paths
+        (async () => {
+          try {
+            const { attachments: imageAttachments, errors } = await getClipboardImages(
+              event.nativeEvent
+            );
+            if (imageAttachments.length > 0) {
+              setAttachments((prev) => [...prev, ...imageAttachments]);
+            }
+            if (errors.length > 0) {
+              toast.error(errors.join('; '));
+            } else if (imageAttachments.length === 0) {
+              toast.error('Could not paste image from clipboard');
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to paste image';
+            toast.error(message);
           }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to paste image';
-          toast.error(message);
-        }
+        })();
         return;
       }
 
@@ -86,8 +94,14 @@ export function usePasteDropHandler({
       const text = getClipboardText(event.nativeEvent);
       if (text && isLargeText(text)) {
         event.preventDefault();
-        const attachment = textToAttachment(text);
-        setAttachments((prev) => [...prev, attachment]);
+        try {
+          const attachment = textToAttachment(text);
+          setAttachments((prev) => [...prev, attachment]);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Failed to create text attachment';
+          toast.error(message);
+        }
         return;
       }
 
@@ -103,8 +117,7 @@ export function usePasteDropHandler({
    * - Show error for unsupported file types
    */
   const handleDrop = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: drop handling requires multiple conditional paths
-    async (event: DragEvent<HTMLTextAreaElement>) => {
+    (event: DragEvent<HTMLTextAreaElement>) => {
       event.preventDefault();
       setIsDragging(false);
 
@@ -117,43 +130,40 @@ export function usePasteDropHandler({
         return;
       }
 
-      const newAttachments: MessageAttachment[] = [];
-      const errors: string[] = [];
+      // Wrap async logic to prevent unhandled promise rejections
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: drop handling requires multiple conditional paths
+      (async () => {
+        const newAttachments: MessageAttachment[] = [];
+        const errors: string[] = [];
 
-      for (const file of Array.from(files)) {
-        try {
-          // Check if it's an image
-          if (isSupportedImageType(file.type)) {
-            const attachment = await fileToAttachment(file);
-            newAttachments.push(attachment);
+        for (const file of Array.from(files)) {
+          try {
+            if (isSupportedImageType(file.type)) {
+              const attachment = await fileToAttachment(file);
+              newAttachments.push(attachment);
+            } else if (isSupportedTextFile(file.name)) {
+              const attachment = await textFileToAttachment(file);
+              newAttachments.push(attachment);
+            } else {
+              errors.push(`${file.name}: unsupported file type`);
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            errors.push(`${file.name}: ${message}`);
           }
-          // Check if it's a supported text file
-          else if (isSupportedTextFile(file.name)) {
-            const attachment = await textFileToAttachment(file);
-            newAttachments.push(attachment);
-          }
-          // Unsupported file type
-          else {
-            errors.push(`${file.name}: unsupported file type`);
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          errors.push(`${file.name}: ${message}`);
         }
-      }
 
-      // Add successful attachments
-      if (newAttachments.length > 0) {
-        setAttachments((prev) => [...prev, ...newAttachments]);
-      }
+        if (newAttachments.length > 0) {
+          setAttachments((prev) => [...prev, ...newAttachments]);
+        }
 
-      // Show errors
-      if (errors.length > 0) {
-        const supportedExts = SUPPORTED_TEXT_EXTENSIONS.join(', ');
-        toast.error(
-          `Could not add ${errors.length} file(s): ${errors.join('; ')}\n\nSupported text files: ${supportedExts}`
-        );
-      }
+        if (errors.length > 0) {
+          const supportedExts = SUPPORTED_TEXT_EXTENSIONS.join(', ');
+          toast.error(
+            `Could not add ${errors.length} file(s): ${errors.join('; ')}\n\nSupported text files: ${supportedExts}`
+          );
+        }
+      })();
     },
     [disabled, setAttachments]
   );

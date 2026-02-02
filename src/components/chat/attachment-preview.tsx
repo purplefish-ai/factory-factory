@@ -31,8 +31,8 @@ interface AttachmentPreviewProps {
 }
 
 /**
- * Preview component for image attachments in chat.
- * Shows thumbnails with file info and optional remove button.
+ * Preview component for attachments (images and text files) in chat.
+ * Shows thumbnails for images, file icons for text, with file info and optional remove button.
  */
 export function AttachmentPreview({
   attachments,

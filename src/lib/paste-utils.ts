@@ -1,6 +1,7 @@
 import type { MessageAttachment } from './claude-types';
 import {
   fileToBase64,
+  formatFileSize,
   generateAttachmentId,
   isSupportedImageType,
   MAX_IMAGE_SIZE,
@@ -8,11 +9,15 @@ import {
 
 /**
  * Threshold for considering text as "large" (number of lines).
+ * Text with 10+ lines is shown as an attachment to avoid cluttering the input field
+ * and to give users a clear visual indicator of the content size.
  */
 export const LARGE_TEXT_LINE_THRESHOLD = 10;
 
 /**
  * Threshold for considering text as "large" (character count).
+ * Text with 1000+ characters is shown as an attachment even if it has few lines,
+ * as long single lines can also clutter the input field.
  */
 export const LARGE_TEXT_CHAR_THRESHOLD = 1000;
 
@@ -43,25 +48,48 @@ export function hasClipboardImages(event: ClipboardEvent): boolean {
 }
 
 /**
- * Extract images from clipboard and convert to MessageAttachments.
+ * Result of extracting images from clipboard.
+ * Uses partial success pattern - returns both successful attachments and errors.
  */
-export async function getClipboardImages(event: ClipboardEvent): Promise<MessageAttachment[]> {
+export interface ClipboardImagesResult {
+  attachments: MessageAttachment[];
+  errors: string[];
+}
+
+/**
+ * Extract images from clipboard and convert to MessageAttachments.
+ * Uses partial success pattern - continues processing after individual failures,
+ * returning both successful attachments and error messages.
+ *
+ * @returns Object with `attachments` array and `errors` array
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: error collection requires multiple conditional paths
+export async function getClipboardImages(event: ClipboardEvent): Promise<ClipboardImagesResult> {
   const items = event.clipboardData?.items;
   if (!items) {
-    return [];
+    return { attachments: [], errors: [] };
   }
 
   const attachments: MessageAttachment[] = [];
+  const errors: string[] = [];
 
   for (const item of Array.from(items)) {
     if (item.type.startsWith('image/') && isSupportedImageType(item.type)) {
       const file = item.getAsFile();
-      if (file) {
-        // Check file size
-        if (file.size > MAX_IMAGE_SIZE) {
-          throw new Error(`Image too large: ${(file.size / 1024 / 1024).toFixed(2)}MB (max 10MB)`);
-        }
+      if (!file) {
+        // Browser security or corrupted clipboard data prevented file extraction
+        errors.push(`Could not extract image from clipboard (${item.type})`);
+        continue;
+      }
 
+      if (file.size > MAX_IMAGE_SIZE) {
+        const actualSize = formatFileSize(file.size);
+        const maxSize = formatFileSize(MAX_IMAGE_SIZE);
+        errors.push(`Image too large: ${actualSize} (max ${maxSize})`);
+        continue;
+      }
+
+      try {
         const base64 = await fileToBase64(file);
         attachments.push({
           id: generateAttachmentId(),
@@ -71,17 +99,26 @@ export async function getClipboardImages(event: ClipboardEvent): Promise<Message
           data: base64,
           contentType: 'image',
         });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        errors.push(`Failed to read image: ${message}`);
       }
     }
   }
 
-  return attachments;
+  return { attachments, errors };
 }
 
 /**
  * Convert raw text to a MessageAttachment.
+ *
+ * @throws Error if text is empty or contains only whitespace
  */
 export function textToAttachment(text: string, name?: string): MessageAttachment {
+  if (!text || text.trim().length === 0) {
+    throw new Error('Cannot create attachment from empty text');
+  }
+
   const lineCount = text.split('\n').length;
   const displayName = name || `Pasted text (${lineCount} ${lineCount === 1 ? 'line' : 'lines'})`;
 
@@ -90,13 +127,15 @@ export function textToAttachment(text: string, name?: string): MessageAttachment
     name: displayName,
     type: 'text/plain',
     size: text.length,
-    data: text, // raw text, not base64
+    data: text,
     contentType: 'text',
   };
 }
 
 /**
  * Get text content from clipboard.
+ *
+ * @returns The clipboard text content, or null if no text data is available
  */
 export function getClipboardText(event: ClipboardEvent): string | null {
   return event.clipboardData?.getData('text/plain') || null;
