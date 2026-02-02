@@ -1,7 +1,7 @@
 'use client';
 
 import { Brain, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { SlashCommandPalette } from '@/components/chat/slash-command-palette';
@@ -92,6 +92,8 @@ export const ChatInput = memo(function ChatInput({
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [modifierHeld, setModifierHeld] = useState(false);
 
   // Use controlled or uncontrolled attachments based on props
   // Controlled mode requires the setter (onAttachmentsChange) - the setter is what makes it controlled
@@ -122,10 +124,14 @@ export const ChatInput = memo(function ChatInput({
   // Actions hook
   const actions = useChatInputActions({
     onSend,
+    onStop,
+    onOpenQuickActions: () => setQuickActionsOpen(true),
+    onCloseSlashMenu: slash.handleSlashMenuClose,
     onChange,
     onSettingsChange,
     disabled,
     running,
+    stopping,
     settings,
     attachments,
     setAttachments,
@@ -143,6 +149,37 @@ export const ChatInput = memo(function ChatInput({
     setAttachments,
     disabled,
   });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Meta' || event.key === 'Control') {
+        setModifierHeld(true);
+      }
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Meta' || event.key === 'Control') {
+        setModifierHeld(false);
+      }
+    };
+    const handleBlur = () => setModifierHeld(false);
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
+  const modLabel = useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return 'Ctrl';
+    }
+    const platform = navigator.platform?.toLowerCase() ?? '';
+    return platform.includes('mac') ? '⌘' : 'Ctrl';
+  }, []);
 
   // Restore input value from draft when component mounts or value prop changes
   // This preserves the draft across tab switches
@@ -220,6 +257,8 @@ export const ChatInput = memo(function ChatInput({
               icon={Brain}
               label="Extended thinking mode"
               ariaLabel="Toggle thinking mode"
+              shortcut={`${modLabel}+Shift+T`}
+              showShortcut={modifierHeld}
             />
             <SettingsToggle
               pressed={settings?.planModeEnabled ?? false}
@@ -228,6 +267,8 @@ export const ChatInput = memo(function ChatInput({
               icon={MapIcon}
               label="Plan mode"
               ariaLabel="Toggle plan mode"
+              shortcut={`${modLabel}+Shift+P`}
+              showShortcut={modifierHeld}
             />
             <div className="h-4 w-px bg-border" />
             {/* File upload button */}
@@ -246,11 +287,21 @@ export const ChatInput = memo(function ChatInput({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  <p>Upload image</p>
+                  <p>
+                    Upload image
+                    {modifierHeld ? ` (${modLabel}+Shift+U)` : ''}
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <QuickActionsDropdown onAction={actions.handleQuickAction} disabled={isDisabled} />
+            <QuickActionsDropdown
+              onAction={actions.handleQuickAction}
+              disabled={isDisabled}
+              open={quickActionsOpen}
+              onOpenChange={setQuickActionsOpen}
+              shortcut={`${modLabel}+Shift+A`}
+              showShortcut={modifierHeld}
+            />
             {/* Hidden file input */}
             <input
               ref={actions.fileInputRef}

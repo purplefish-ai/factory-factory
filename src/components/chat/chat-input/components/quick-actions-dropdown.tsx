@@ -14,14 +14,26 @@ import { QUICK_ACTIONS } from '../constants';
 interface QuickActionsDropdownProps {
   onAction: (message: string) => void;
   disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  shortcut?: string;
+  showShortcut?: boolean;
 }
 
 /**
  * Quick actions dropdown for sending predefined messages.
  */
-export function QuickActionsDropdown({ onAction, disabled }: QuickActionsDropdownProps) {
+export function QuickActionsDropdown({
+  onAction,
+  disabled,
+  open,
+  onOpenChange,
+  shortcut,
+  showShortcut = false,
+}: QuickActionsDropdownProps) {
+  const shortcutText = showShortcut && shortcut ? ` (${shortcut})` : '';
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -38,7 +50,7 @@ export function QuickActionsDropdown({ onAction, disabled }: QuickActionsDropdow
             </DropdownMenuTrigger>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>Quick actions</p>
+            <p>Quick actions{shortcutText}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

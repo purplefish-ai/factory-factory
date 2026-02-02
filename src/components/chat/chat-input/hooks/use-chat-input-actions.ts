@@ -1,5 +1,5 @@
 import type { ChangeEvent, KeyboardEvent } from 'react';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
 import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
@@ -9,10 +9,14 @@ import type { SlashKeyResult } from '../../slash-command-palette';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
+  onStop?: () => void;
+  onOpenQuickActions?: () => void;
+  onCloseSlashMenu?: () => void;
   onChange?: (value: string) => void;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   disabled: boolean;
   running: boolean;
+  stopping?: boolean;
   settings?: ChatSettings;
   attachments: MessageAttachment[];
   setAttachments: (
@@ -34,15 +38,84 @@ interface UseChatInputActionsReturn {
   supportedImageTypes: readonly string[];
 }
 
+interface ShortcutDefinition {
+  key: string;
+  mod?: boolean;
+  shift?: boolean;
+  alt?: boolean;
+  ctrl?: boolean;
+  meta?: boolean;
+  action: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  shouldHandle?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  preventDefault?: boolean;
+}
+
+function normalizeKey(key: string): string {
+  return key.length === 1 ? key.toLowerCase() : key;
+}
+
+function matchesShortcut(
+  event: KeyboardEvent<HTMLTextAreaElement>,
+  shortcut: ShortcutDefinition
+): boolean {
+  if (normalizeKey(event.key) !== normalizeKey(shortcut.key)) {
+    return false;
+  }
+
+  if (shortcut.mod !== undefined) {
+    const hasMod = event.metaKey || event.ctrlKey;
+    if (shortcut.mod !== hasMod) {
+      return false;
+    }
+  }
+  if (shortcut.shift !== undefined && shortcut.shift !== event.shiftKey) {
+    return false;
+  }
+  if (shortcut.alt !== undefined && shortcut.alt !== event.altKey) {
+    return false;
+  }
+  if (shortcut.ctrl !== undefined && shortcut.ctrl !== event.ctrlKey) {
+    return false;
+  }
+  if (shortcut.meta !== undefined && shortcut.meta !== event.metaKey) {
+    return false;
+  }
+
+  return true;
+}
+
+function runShortcuts(
+  event: KeyboardEvent<HTMLTextAreaElement>,
+  shortcuts: ShortcutDefinition[]
+): boolean {
+  for (const shortcut of shortcuts) {
+    if (matchesShortcut(event, shortcut)) {
+      if (shortcut.shouldHandle && !shortcut.shouldHandle(event)) {
+        continue;
+      }
+      if (shortcut.preventDefault !== false) {
+        event.preventDefault();
+      }
+      shortcut.action(event);
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Manages chat input action handlers: keyboard, send, file upload, settings.
  */
 export function useChatInputActions({
   onSend,
+  onStop,
+  onOpenQuickActions,
+  onCloseSlashMenu,
   onChange,
   onSettingsChange,
   disabled,
   running,
+  stopping,
   settings,
   attachments,
   setAttachments,
@@ -50,14 +123,132 @@ export function useChatInputActions({
 }: UseChatInputActionsOptions): UseChatInputActionsReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const sendFromInput = useCallback(
+    (inputElement: HTMLTextAreaElement | null) => {
+      if (!inputElement) {
+        return;
+      }
+      const text = inputElement.value.trim();
+      if ((text || attachments.length > 0) && !disabled) {
+        onSend(text);
+        inputElement.value = '';
+        onChange?.('');
+        setAttachments([]);
+      }
+    },
+    [attachments.length, disabled, onChange, onSend, setAttachments]
+  );
+
+  const preSlashShortcuts = useMemo<ShortcutDefinition[]>(
+    () => [
+      {
+        key: 'Tab',
+        shift: true,
+        shouldHandle: () => !running,
+        action: () => {
+          onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+        },
+      },
+      {
+        key: 'Enter',
+        mod: true,
+        shift: false,
+        alt: false,
+        action: (event) => {
+          onCloseSlashMenu?.();
+          sendFromInput(event.currentTarget);
+        },
+      },
+      {
+        key: 'p',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!running) {
+            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+          }
+        },
+      },
+      {
+        key: 't',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!running) {
+            onSettingsChange?.({ thinkingEnabled: !settings?.thinkingEnabled });
+          }
+        },
+      },
+      {
+        key: 'u',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!(running || disabled)) {
+            fileInputRef.current?.click();
+          }
+        },
+      },
+      {
+        key: 'a',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!disabled) {
+            onOpenQuickActions?.();
+          }
+        },
+      },
+      {
+        key: '.',
+        mod: true,
+        shift: false,
+        alt: false,
+        action: () => {
+          if (running && !stopping) {
+            onStop?.();
+          }
+        },
+      },
+    ],
+    [
+      disabled,
+      onCloseSlashMenu,
+      onOpenQuickActions,
+      onSettingsChange,
+      onStop,
+      running,
+      sendFromInput,
+      settings?.planModeEnabled,
+      settings?.thinkingEnabled,
+      stopping,
+    ]
+  );
+
+  const postSlashShortcuts = useMemo<ShortcutDefinition[]>(
+    () => [
+      {
+        key: 'Enter',
+        shift: false,
+        alt: false,
+        mod: false,
+        action: (event) => {
+          sendFromInput(event.currentTarget);
+        },
+      },
+    ],
+    [sendFromInput]
+  );
+
   // Handle key press for Enter to send and Shift+Tab for plan mode toggle
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Shift+Tab toggles plan mode (check BEFORE slash menu to ensure it always works)
-      // Only toggle when not running, matching the button's disabled state
-      if (event.key === 'Tab' && event.shiftKey && !running) {
-        event.preventDefault();
-        onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+      // Run pre-slash shortcuts first (e.g., Shift+Tab)
+      if (runShortcuts(event, preSlashShortcuts)) {
         return;
       }
 
@@ -69,45 +260,18 @@ export function useChatInputActions({
       }
       // 'close-and-passthrough' falls through to normal handling
 
-      // Enter without Shift sends the message (queues if agent is running)
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        const text = event.currentTarget.value.trim();
-        if ((text || attachments.length > 0) && !disabled) {
-          onSend(text);
-          event.currentTarget.value = '';
-          onChange?.('');
-          setAttachments([]);
-        }
-      }
+      // Post-slash shortcuts (e.g., Enter send)
+      runShortcuts(event, postSlashShortcuts);
     },
-    [
-      onSend,
-      disabled,
-      running,
-      onChange,
-      setAttachments,
-      attachments,
-      delegateToSlashMenu,
-      settings,
-      onSettingsChange,
-    ]
+    [preSlashShortcuts, delegateToSlashMenu, postSlashShortcuts]
   );
 
   // Handle send button click
   const handleSendClick = useCallback(
     (inputRef: React.RefObject<HTMLTextAreaElement | null>) => {
-      if (inputRef?.current) {
-        const text = inputRef.current.value.trim();
-        if ((text || attachments.length > 0) && !disabled) {
-          onSend(text);
-          inputRef.current.value = '';
-          onChange?.('');
-          setAttachments([]);
-        }
-      }
+      sendFromInput(inputRef?.current ?? null);
     },
-    [onSend, disabled, onChange, setAttachments, attachments]
+    [sendFromInput]
   );
 
   // Handle file selection

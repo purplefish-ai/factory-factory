@@ -11,6 +11,8 @@ interface SettingsToggleProps {
   icon: LucideIcon;
   label: string;
   ariaLabel: string;
+  shortcut?: string;
+  showShortcut?: boolean;
 }
 
 /**
@@ -24,7 +26,10 @@ export function SettingsToggle({
   icon: Icon,
   label,
   ariaLabel,
+  shortcut,
+  showShortcut = false,
 }: SettingsToggleProps) {
+  const shortcutText = showShortcut && shortcut ? ` (${shortcut})` : '';
   return (
     <TooltipProvider>
       <Tooltip>
@@ -47,6 +52,7 @@ export function SettingsToggle({
         <TooltipContent side="top">
           <p>
             {label} {pressed ? '(on)' : '(off)'}
+            {shortcutText}
           </p>
         </TooltipContent>
       </Tooltip>
