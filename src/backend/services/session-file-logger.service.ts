@@ -6,13 +6,13 @@
  */
 
 import {
-  appendFileSync,
+  createWriteStream,
   existsSync,
   mkdirSync,
   readdirSync,
   statSync,
   unlinkSync,
-  writeFileSync,
+  type WriteStream,
 } from 'node:fs';
 import { join } from 'node:path';
 import { configService } from './config.service';
@@ -21,19 +21,35 @@ import { createLogger } from './logger.service';
 const logger = createLogger('session-file-logger');
 
 /**
+ * State for an active session log
+ */
+interface SessionLogState {
+  logFile: string;
+  stream: WriteStream;
+  pending: string[];
+  flushing: boolean;
+  closed: boolean; // Session closed intentionally - no more logs accepted but flush remaining
+  errored: boolean; // Stream errored - do not write
+  endWhenDone: boolean;
+}
+
+/**
  * Logs WebSocket events to a per-session file for debugging.
  * Log files are stored in .context/ws-logs/<session-id>.log
  */
 export class SessionFileLogger {
+  private enabled: boolean;
   private logDir: string;
-  private sessionLogs = new Map<string, string>(); // sessionId -> logFilePath
+  private sessionLogs = new Map<string, SessionLogState>();
 
   constructor() {
+    // Default: only enabled in development unless explicitly overridden
+    this.enabled = configService.isDevelopment() || process.env.WS_LOGS_ENABLED === 'true';
     // Get from config service (which uses WS_LOGS_PATH env var or falls back to .context/ws-logs in cwd)
     // For Electron, this will be in userData directory
     this.logDir = configService.getWsLogsPath();
-    // Ensure log directory exists
-    if (!existsSync(this.logDir)) {
+    // Ensure log directory exists only when enabled
+    if (this.enabled && !existsSync(this.logDir)) {
       mkdirSync(this.logDir, { recursive: true });
     }
   }
@@ -43,6 +59,9 @@ export class SessionFileLogger {
    * Returns early if already initialized to prevent duplicate log files.
    */
   initSession(sessionId: string): void {
+    if (!this.enabled) {
+      return;
+    }
     // Skip if already initialized (prevents duplicate log files when multiple windows connect)
     if (this.sessionLogs.has(sessionId)) {
       return;
@@ -51,7 +70,29 @@ export class SessionFileLogger {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9-]/g, '_');
     const logFile = join(this.logDir, `${safeSessionId}_${timestamp}.log`);
-    this.sessionLogs.set(sessionId, logFile);
+    const stream = createWriteStream(logFile, { flags: 'a' });
+
+    // Handle stream errors to prevent crashes - log, mark session as errored, and destroy stream
+    stream.on('error', (err) => {
+      logger.error('Write stream error', { sessionId, logFile, error: err });
+      const state = this.sessionLogs.get(sessionId);
+      if (state) {
+        state.errored = true;
+        this.sessionLogs.delete(sessionId);
+        // Destroy stream to release file descriptor
+        stream.destroy();
+      }
+    });
+
+    this.sessionLogs.set(sessionId, {
+      logFile,
+      stream,
+      pending: [],
+      flushing: false,
+      closed: false,
+      errored: false,
+      endWhenDone: false,
+    });
 
     // Write header
     const header = [
@@ -64,7 +105,7 @@ export class SessionFileLogger {
       '',
     ].join('\n');
 
-    writeFileSync(logFile, header);
+    stream.write(header);
     logger.info('Created log file', { sessionId, logFile });
   }
 
@@ -77,8 +118,12 @@ export class SessionFileLogger {
     direction: 'OUT_TO_CLIENT' | 'IN_FROM_CLIENT' | 'FROM_CLAUDE_CLI' | 'INFO',
     data: unknown
   ): void {
-    const logFile = this.sessionLogs.get(sessionId);
-    if (!logFile) {
+    if (!this.enabled) {
+      return;
+    }
+
+    const logState = this.sessionLogs.get(sessionId);
+    if (!logState || logState.closed || logState.errored) {
       return;
     }
 
@@ -141,19 +186,20 @@ export class SessionFileLogger {
       '',
     ].join('\n');
 
-    try {
-      appendFileSync(logFile, logEntry);
-    } catch (error) {
-      logger.error('Failed to write log', { sessionId, error });
-    }
+    logState.pending.push(logEntry);
+    this.flushAsync(sessionId, logState);
   }
 
   /**
    * Close a session's log file
    */
   closeSession(sessionId: string): void {
-    const logFile = this.sessionLogs.get(sessionId);
-    if (logFile) {
+    if (!this.enabled) {
+      return;
+    }
+
+    const logState = this.sessionLogs.get(sessionId);
+    if (logState && !logState.closed) {
       const footer = [
         '',
         '='.repeat(80),
@@ -161,14 +207,11 @@ export class SessionFileLogger {
         '='.repeat(80),
       ].join('\n');
 
-      try {
-        appendFileSync(logFile, footer);
-      } catch {
-        // Ignore errors on close
-      }
-
-      this.sessionLogs.delete(sessionId);
-      logger.info('Closed log file', { sessionId, logFile });
+      logState.pending.push(footer);
+      logState.closed = true;
+      // Store endWhenDone in state to avoid race condition when flush is already in progress
+      logState.endWhenDone = true;
+      this.flushAsync(sessionId, logState);
     }
   }
 
@@ -185,6 +228,9 @@ export class SessionFileLogger {
    * Delete log files older than maxAgeDays (default 7 days)
    */
   cleanupOldLogs(maxAgeDays: number = 7): void {
+    if (!this.enabled) {
+      return;
+    }
     try {
       if (!existsSync(this.logDir)) {
         return;
@@ -213,6 +259,57 @@ export class SessionFileLogger {
     } catch (error) {
       logger.error('Failed to cleanup old logs', { error });
     }
+  }
+
+  private flushAsync(sessionId: string, logState: SessionLogState): void {
+    if (logState.flushing) {
+      return;
+    }
+    logState.flushing = true;
+
+    const flush = () => {
+      // Check if stream has errored before writing
+      if (logState.errored) {
+        logState.flushing = false;
+        return;
+      }
+
+      while (logState.pending.length > 0) {
+        const chunk = logState.pending.shift();
+        if (!chunk) {
+          continue;
+        }
+        const canContinue = logState.stream.write(chunk);
+        if (!canContinue) {
+          // Set up drain handler and error handler to avoid getting stuck
+          const onDrain = () => {
+            logState.stream.removeListener('error', onError);
+            logState.flushing = false;
+            this.flushAsync(sessionId, logState);
+          };
+          const onError = () => {
+            logState.stream.removeListener('drain', onDrain);
+            logState.flushing = false;
+            // Error handler already handles cleanup
+          };
+          logState.stream.once('drain', onDrain);
+          logState.stream.once('error', onError);
+          return;
+        }
+      }
+
+      logState.flushing = false;
+
+      // Read endWhenDone from state to avoid race condition
+      if (logState.endWhenDone && logState.pending.length === 0) {
+        logState.stream.end(() => {
+          this.sessionLogs.delete(sessionId);
+          logger.info('Closed log file', { sessionId, logFile: logState.logFile });
+        });
+      }
+    };
+
+    setImmediate(flush);
   }
 }
 
