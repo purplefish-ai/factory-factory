@@ -39,7 +39,7 @@ import type { ChatSettings, CommandInfo, MessageAttachment } from '@/lib/claude-
 import { AVAILABLE_MODELS } from '@/lib/claude-types';
 import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
-import { SlashCommandPalette } from './slash-command-palette';
+import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
 
 // =============================================================================
 // Types
@@ -272,43 +272,6 @@ function QuickActionsDropdown({
 }
 
 // =============================================================================
-// Slash Menu Key Handling
-// =============================================================================
-
-/**
- * Handles keyboard events when the slash command menu is open.
- * Returns 'handled' if the event was fully handled (no further action needed),
- * 'passthrough' if the event should be handled by normal input logic,
- * or 'close-and-passthrough' if the menu should close but event should still be processed.
- */
-function handleSlashMenuKey(
-  key: string,
-  slashCommands: CommandInfo[],
-  slashFilter: string
-): 'handled' | 'passthrough' | 'close-and-passthrough' {
-  // Check if there are any matching commands for the current filter
-  const hasMatches = slashCommands.some((cmd) =>
-    cmd.name.toLowerCase().includes(slashFilter.toLowerCase())
-  );
-
-  // For Enter/Tab: only intercept if there are matching commands to select
-  if (key === 'Enter' || key === 'Tab') {
-    if (hasMatches) {
-      return 'handled';
-    }
-    // No matches - let normal behavior handle it (close menu for Enter)
-    return key === 'Enter' ? 'close-and-passthrough' : 'passthrough';
-  }
-
-  // Always let palette handle navigation and escape
-  if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'Escape') {
-    return 'handled';
-  }
-
-  return 'passthrough';
-}
-
-// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -361,11 +324,13 @@ export const ChatInput = memo(function ChatInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Slash command palette state
+  // Slash command palette state and ref for imperative keyboard handling
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
+  const paletteRef = useRef<SlashCommandPaletteHandle>(null);
 
   // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
+  // Use slashCommands array as dependency (not just length) to handle updates properly
   useEffect(() => {
     if (slashCommands.length > 0 && inputRef?.current) {
       const currentValue = inputRef.current.value;
@@ -379,7 +344,7 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     }
-  }, [slashCommands.length, inputRef]);
+  }, [slashCommands, inputRef]);
 
   // Handle input changes to preserve draft across tab switches and detect slash commands
   const handleInputChange = useCallback(
@@ -406,7 +371,7 @@ export const ChatInput = memo(function ChatInput({
         setSlashFilter('');
       }
     },
-    [onChange, slashCommands.length]
+    [onChange, slashCommands]
   );
 
   // Handle file selection
@@ -452,11 +417,11 @@ export const ChatInput = memo(function ChatInput({
 
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles slash menu + send logic together
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles slash menu + send logic
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      // If slash menu is open, delegate to helper for key handling
-      if (slashMenuOpen) {
-        const result = handleSlashMenuKey(event.key, slashCommands, slashFilter);
+      // If slash menu is open, delegate to palette for key handling
+      if (slashMenuOpen && paletteRef.current) {
+        const result = paletteRef.current.handleKeyDown(event.key);
         if (result === 'handled') {
           event.preventDefault();
           return;
@@ -479,16 +444,7 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     },
-    [
-      onSend,
-      disabled,
-      onChange,
-      setAttachments,
-      attachments,
-      slashMenuOpen,
-      slashCommands,
-      slashFilter,
-    ]
+    [onSend, disabled, onChange, setAttachments, attachments, slashMenuOpen]
   );
 
   // Handle send button click
@@ -610,6 +566,7 @@ export const ChatInput = memo(function ChatInput({
         onSelect={handleSlashCommandSelect}
         filter={slashFilter}
         anchorRef={inputRef as React.RefObject<HTMLElement | null>}
+        paletteRef={paletteRef}
       />
 
       <InputGroup className="flex-col">

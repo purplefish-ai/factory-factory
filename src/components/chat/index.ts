@@ -11,6 +11,7 @@ export { QuestionPrompt } from './question-prompt';
 export { QueuedMessages } from './queued-messages';
 export { SessionPicker } from './session-picker';
 export { SessionTabBar } from './session-tab-bar';
+export type { SlashCommandPaletteHandle, SlashKeyResult } from './slash-command-palette';
 export { SlashCommandPalette } from './slash-command-palette';
 export { TaskNotificationsPanel } from './task-notifications-panel';
 export { TodoPanel } from './todo-panel';

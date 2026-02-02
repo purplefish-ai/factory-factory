@@ -406,8 +406,10 @@ function createBaseResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
 > {
-  // Note: slashCommands is intentionally NOT reset here - it persists across chat clears
-  // since the backend only sends commands once during session setup
+  // Note: slashCommands is intentionally NOT reset here.
+  // - For CLEAR_CHAT: Commands persist because we're clearing messages in the same session.
+  // - For session switches: MESSAGES_SNAPSHOT handles clearing slashCommands separately,
+  //   and the backend will replay the stored slash_commands event for the new session.
   return {
     messages: [],
     gitBranch: null,
@@ -428,7 +430,7 @@ function createBaseResetState(): Pick<
 
 /**
  * Creates extended reset state for session switches, which also clears
- * queue and session status.
+ * queue, session status, and slashCommands (since different sessions may have different commands).
  */
 function createSessionSwitchResetState(): Pick<
   ChatState,
@@ -448,11 +450,13 @@ function createSessionSwitchResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
+  | 'slashCommands'
 > {
   return {
     ...createBaseResetState(),
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
+    slashCommands: [], // Clear for new session - will be sent when Claude starts
   };
 }
 
@@ -846,7 +850,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Note: queuedMessages are now managed via MESSAGE_STATE_CHANGED events.
       // The snapshot contains final ChatMessages, not intermediate states.
       // Clear queuedMessages since snapshot represents fully processed state.
-      // Clear slashCommands - they will be re-sent by the backend for the new session.
+      // Preserve slashCommands - they are session metadata that may not be immediately
+      // re-sent if Claude has exited (stored events are cleared on exit). Commands will
+      // be re-sent when the user sends a message and Claude restarts.
       return {
         ...state,
         messages: snapshotMessages,
@@ -856,7 +862,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,
         lastRejectedMessage: null,
-        slashCommands: [],
       };
     }
 

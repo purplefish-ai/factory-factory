@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -15,6 +15,20 @@ import { cn } from '@/lib/utils';
 // Types
 // =============================================================================
 
+/**
+ * Result of handling a keyboard event in the slash command palette.
+ * - 'handled': Event was fully handled, caller should preventDefault
+ * - 'passthrough': Event should be handled by normal input logic
+ * - 'close-and-passthrough': Menu should close but event should still be processed
+ */
+export type SlashKeyResult = 'handled' | 'passthrough' | 'close-and-passthrough';
+
+/** Imperative handle exposed by SlashCommandPalette */
+export interface SlashCommandPaletteHandle {
+  /** Handle a keyboard event. Returns how the event should be handled. */
+  handleKeyDown: (key: string) => SlashKeyResult;
+}
+
 export interface SlashCommandPaletteProps {
   /** Available slash commands */
   commands: CommandInfo[];
@@ -26,8 +40,10 @@ export interface SlashCommandPaletteProps {
   onSelect: (command: CommandInfo) => void;
   /** Current filter text (text after the /) */
   filter: string;
-  /** Reference to the input element for positioning */
+  /** Reference to the input element for click-outside detection */
   anchorRef: React.RefObject<HTMLElement | null>;
+  /** Imperative handle ref for keyboard handling */
+  paletteRef?: React.RefObject<SlashCommandPaletteHandle | null>;
 }
 
 // =============================================================================
@@ -40,6 +56,9 @@ export interface SlashCommandPaletteProps {
  * Displays a floating dropdown above the chat input that shows available
  * slash commands from the Claude CLI. Supports keyboard navigation and
  * filtering by command name.
+ *
+ * Keyboard handling is controlled by the parent component via the paletteRef.
+ * Call paletteRef.current.handleKeyDown(key) to handle keyboard events.
  */
 export function SlashCommandPalette({
   commands,
@@ -47,72 +66,104 @@ export function SlashCommandPalette({
   onClose,
   onSelect,
   filter,
-  // anchorRef is available for future positioning enhancements
-  anchorRef: _anchorRef,
+  anchorRef,
+  paletteRef,
 }: SlashCommandPaletteProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Filter commands based on the filter text (case-insensitive)
-  const filteredCommands = commands.filter((cmd) =>
-    cmd.name.toLowerCase().includes(filter.toLowerCase())
+  const filteredCommands = useMemo(
+    () => commands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase())),
+    [commands, filter]
   );
 
   // Reset selection when filter changes or palette opens
   // biome-ignore lint/correctness/useExhaustiveDependencies: filter and isOpen are intentionally used to trigger reset
   useEffect(() => {
-    setSelectedIndex(0);
-  }, [filter, isOpen]);
+    // Only reset to 0 if there are commands to select
+    if (filteredCommands.length > 0) {
+      setSelectedIndex(0);
+    }
+  }, [filter, isOpen, filteredCommands.length]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (!isOpen) {
+  // Click outside to close
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      // Don't close if clicking inside the palette or the anchor (input)
+      if (containerRef.current?.contains(target) || anchorRef.current?.contains(target)) {
         return;
       }
+      onClose();
+    };
 
-      switch (event.key) {
+    // Use mousedown to close before focus changes
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onClose, anchorRef]);
+
+  /**
+   * Handle a keyboard event. Called by parent via paletteRef.
+   * Returns the result indicating how the event should be handled.
+   */
+  const handleKeyDown = useCallback(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: switch handles multiple key types
+    (key: string): SlashKeyResult => {
+      const hasMatches = filteredCommands.length > 0;
+
+      switch (key) {
         case 'ArrowDown':
-          event.preventDefault();
-          // Guard against empty filteredCommands (length - 1 would be -1)
-          setSelectedIndex((prev) => Math.min(prev + 1, Math.max(0, filteredCommands.length - 1)));
-          break;
+          if (hasMatches) {
+            setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
+          }
+          return 'handled';
+
         case 'ArrowUp':
-          event.preventDefault();
-          setSelectedIndex((prev) => Math.max(prev - 1, 0));
-          break;
+          if (hasMatches) {
+            setSelectedIndex((prev) => Math.max(prev - 1, 0));
+          }
+          return 'handled';
+
         case 'Enter':
-          // Only prevent default and select if there's a valid command to select
-          // This allows the message to be sent when no commands match (e.g., "/xyz")
-          if (filteredCommands[selectedIndex]) {
-            event.preventDefault();
+          if (hasMatches && filteredCommands[selectedIndex]) {
             onSelect(filteredCommands[selectedIndex]);
+            return 'handled';
           }
-          break;
-        case 'Escape':
-          event.preventDefault();
-          onClose();
-          break;
+          // No matches - close menu and let message be sent
+          return 'close-and-passthrough';
+
         case 'Tab':
-          // Tab also selects the current command
-          event.preventDefault();
-          if (filteredCommands[selectedIndex]) {
+          if (hasMatches && filteredCommands[selectedIndex]) {
             onSelect(filteredCommands[selectedIndex]);
+            return 'handled';
           }
-          break;
+          // No matches - let Tab work normally (focus next element)
+          return 'passthrough';
+
+        case 'Escape':
+          onClose();
+          return 'handled';
+
+        default:
+          return 'passthrough';
       }
     },
-    [isOpen, filteredCommands, selectedIndex, onSelect, onClose]
+    [filteredCommands, selectedIndex, onSelect, onClose]
   );
 
-  // Attach keyboard listener to window
-  useEffect(() => {
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-    return undefined;
-  }, [isOpen, handleKeyDown]);
+  // Expose handleKeyDown via imperative handle
+  useImperativeHandle(
+    paletteRef,
+    () => ({
+      handleKeyDown,
+    }),
+    [handleKeyDown]
+  );
 
   // Don't render if not open
   if (!isOpen) {
