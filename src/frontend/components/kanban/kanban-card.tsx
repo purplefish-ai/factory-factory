@@ -1,5 +1,5 @@
 import type { CIStatus, KanbanColumn, Workspace } from '@prisma-gen/browser';
-import { ExternalLink, GitBranch, GitPullRequest } from 'lucide-react';
+import { GitBranch, GitPullRequest } from 'lucide-react';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
@@ -47,33 +47,38 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {workspace.branchName && (
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
-              <GitBranch className="h-3 w-3 shrink-0" />
-              <span className="font-mono truncate">{workspace.branchName}</span>
+          {(workspace.branchName || showPR) && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+              {workspace.branchName && (
+                <>
+                  <GitBranch className="h-3 w-3 shrink-0" />
+                  <span className="font-mono truncate">{workspace.branchName}</span>
+                </>
+              )}
+              {showPR && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                >
+                  <GitPullRequest className="h-3 w-3" />
+                  <span>#{workspace.prNumber}</span>
+                </button>
+              )}
             </div>
           )}
 
           {showPR && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <GitPullRequest className="h-3 w-3" />
-              <span>#{workspace.prNumber}</span>
               <CIFailureWarning
                 ciStatus={workspace.prCiStatus as CIStatus}
                 prUrl={workspace.prUrl}
                 size="sm"
               />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-                }}
-                className="ml-auto h-6 w-6 inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
-              >
-                <ExternalLink className="h-3 w-3" />
-              </button>
             </div>
           )}
 
