@@ -11,7 +11,11 @@ import type {
   HookCallbackRequest,
   ResultMessage,
   StreamEventMessage,
-  SystemMessage,
+  SystemCompactBoundaryMessage,
+  SystemHookResponseMessage,
+  SystemHookStartedMessage,
+  SystemInitMessage,
+  SystemStatusMessage,
   TextContent,
   ThinkingContent,
   ToolResultContent,
@@ -33,7 +37,12 @@ import {
   isMessageStopEvent,
   isResultMessage,
   isStreamEventMessage,
+  isSystemCompactBoundaryMessage,
+  isSystemHookResponseMessage,
+  isSystemHookStartedMessage,
+  isSystemInitMessage,
   isSystemMessage,
+  isSystemStatusMessage,
   isTextContent,
   isThinkingContent,
   isToolResultContent,
@@ -45,28 +54,49 @@ import {
 // Sample Test Data
 // =============================================================================
 
-const systemInitMessage: SystemMessage = {
+const systemInitMessage: SystemInitMessage = {
   type: 'system',
   subtype: 'init',
   session_id: 'abc123',
   cwd: '/project',
   tools: [],
+  model: 'claude-sonnet-4-20250514',
+  apiKeySource: 'environment',
+  slash_commands: ['/help', '/clear'],
+  plugins: [],
 };
 
-const systemStatusMessage: SystemMessage = {
+const systemStatusMessage: SystemStatusMessage = {
   type: 'system',
   subtype: 'status',
   session_id: 'abc123',
   status: 'running',
+  permission_mode: 'default',
 };
 
-const systemHookStartedMessage: SystemMessage = {
+const systemCompactBoundaryMessage: SystemCompactBoundaryMessage = {
+  type: 'system',
+  subtype: 'compact_boundary',
+};
+
+const systemHookStartedMessage: SystemHookStartedMessage = {
   type: 'system',
   subtype: 'hook_started',
   session_id: 'abc123',
   hook_id: 'hook-1',
   hook_name: 'pre-tool',
   hook_event: 'PreToolUse',
+};
+
+const systemHookResponseMessage: SystemHookResponseMessage = {
+  type: 'system',
+  subtype: 'hook_response',
+  hook_id: 'hook-1',
+  output: 'Hook completed successfully',
+  stdout: 'stdout content',
+  stderr: '',
+  exit_code: 0,
+  outcome: 'success',
 };
 
 const assistantMessage: AssistantMessage = {
@@ -298,6 +328,120 @@ describe('Message Type Guards', () => {
 
     it('should return false for control requests', () => {
       expect(isSystemMessage(controlRequest)).toBe(false);
+    });
+  });
+
+  describe('isSystemInitMessage', () => {
+    it('should return true for system init messages', () => {
+      expect(isSystemInitMessage(systemInitMessage)).toBe(true);
+    });
+
+    it('should return false for system status messages', () => {
+      expect(isSystemInitMessage(systemStatusMessage)).toBe(false);
+    });
+
+    it('should return false for system compact_boundary messages', () => {
+      expect(isSystemInitMessage(systemCompactBoundaryMessage)).toBe(false);
+    });
+
+    it('should return false for system hook_started messages', () => {
+      expect(isSystemInitMessage(systemHookStartedMessage)).toBe(false);
+    });
+
+    it('should return false for system hook_response messages', () => {
+      expect(isSystemInitMessage(systemHookResponseMessage)).toBe(false);
+    });
+
+    it('should return false for assistant messages', () => {
+      expect(isSystemInitMessage(assistantMessage)).toBe(false);
+    });
+  });
+
+  describe('isSystemStatusMessage', () => {
+    it('should return true for system status messages', () => {
+      expect(isSystemStatusMessage(systemStatusMessage)).toBe(true);
+    });
+
+    it('should return false for system init messages', () => {
+      expect(isSystemStatusMessage(systemInitMessage)).toBe(false);
+    });
+
+    it('should return false for system compact_boundary messages', () => {
+      expect(isSystemStatusMessage(systemCompactBoundaryMessage)).toBe(false);
+    });
+
+    it('should return false for system hook_started messages', () => {
+      expect(isSystemStatusMessage(systemHookStartedMessage)).toBe(false);
+    });
+
+    it('should return false for assistant messages', () => {
+      expect(isSystemStatusMessage(assistantMessage)).toBe(false);
+    });
+  });
+
+  describe('isSystemCompactBoundaryMessage', () => {
+    it('should return true for system compact_boundary messages', () => {
+      expect(isSystemCompactBoundaryMessage(systemCompactBoundaryMessage)).toBe(true);
+    });
+
+    it('should return false for system init messages', () => {
+      expect(isSystemCompactBoundaryMessage(systemInitMessage)).toBe(false);
+    });
+
+    it('should return false for system status messages', () => {
+      expect(isSystemCompactBoundaryMessage(systemStatusMessage)).toBe(false);
+    });
+
+    it('should return false for system hook_started messages', () => {
+      expect(isSystemCompactBoundaryMessage(systemHookStartedMessage)).toBe(false);
+    });
+
+    it('should return false for assistant messages', () => {
+      expect(isSystemCompactBoundaryMessage(assistantMessage)).toBe(false);
+    });
+  });
+
+  describe('isSystemHookStartedMessage', () => {
+    it('should return true for system hook_started messages', () => {
+      expect(isSystemHookStartedMessage(systemHookStartedMessage)).toBe(true);
+    });
+
+    it('should return false for system init messages', () => {
+      expect(isSystemHookStartedMessage(systemInitMessage)).toBe(false);
+    });
+
+    it('should return false for system status messages', () => {
+      expect(isSystemHookStartedMessage(systemStatusMessage)).toBe(false);
+    });
+
+    it('should return false for system hook_response messages', () => {
+      expect(isSystemHookStartedMessage(systemHookResponseMessage)).toBe(false);
+    });
+
+    it('should return false for assistant messages', () => {
+      expect(isSystemHookStartedMessage(assistantMessage)).toBe(false);
+    });
+  });
+
+  describe('isSystemHookResponseMessage', () => {
+    it('should return true for system hook_response messages', () => {
+      expect(isSystemHookResponseMessage(systemHookResponseMessage)).toBe(true);
+    });
+
+    it('should return false for system init messages', () => {
+      expect(isSystemHookResponseMessage(systemInitMessage)).toBe(false);
+    });
+
+    it('should return false for system status messages', () => {
+      expect(isSystemHookResponseMessage(systemStatusMessage)).toBe(false);
+    });
+
+    it('should return false for system hook_started messages', () => {
+      expect(isSystemHookResponseMessage(systemHookStartedMessage)).toBe(false);
+    });
+
+    it('should return false for assistant messages', () => {
+      expect(isSystemHookResponseMessage(assistantMessage)).toBe(false);
     });
   });
 

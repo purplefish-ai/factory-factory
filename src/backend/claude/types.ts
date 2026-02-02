@@ -991,3 +991,106 @@ export function isKeepAliveMessage(msg: ClaudeJson): msg is KeepAliveMessage {
 export function isInputJsonDelta(delta: ContentBlockDelta): delta is InputJsonDelta {
   return delta.type === 'input_json_delta';
 }
+
+// =============================================================================
+// System Message Subtype Interfaces
+// =============================================================================
+
+/**
+ * System init message - sent at session start with session info and available tools.
+ */
+export interface SystemInitMessage extends SystemMessage {
+  type: 'system';
+  subtype: 'init';
+  session_id?: string;
+  cwd?: string;
+  tools?: ToolDefinition[];
+  model?: string;
+  apiKeySource?: string;
+  slash_commands?: string[];
+  plugins?: PluginInfo[];
+}
+
+/**
+ * System status message - sent when session status or permission mode changes.
+ */
+export interface SystemStatusMessage extends SystemMessage {
+  type: 'system';
+  subtype: 'status';
+  status?: string;
+  permission_mode?: string;
+}
+
+/**
+ * System compact boundary message - indicates context was compacted.
+ */
+export interface SystemCompactBoundaryMessage extends SystemMessage {
+  type: 'system';
+  subtype: 'compact_boundary';
+}
+
+/**
+ * System hook started message - indicates a hook is starting execution.
+ */
+export interface SystemHookStartedMessage extends SystemMessage {
+  type: 'system';
+  subtype: 'hook_started';
+  hook_id?: string;
+  hook_name?: string;
+  hook_event?: string;
+}
+
+/**
+ * System hook response message - indicates a hook has completed.
+ */
+export interface SystemHookResponseMessage extends SystemMessage {
+  type: 'system';
+  subtype: 'hook_response';
+  hook_id?: string;
+  output?: string;
+  stdout?: string;
+  stderr?: string;
+  exit_code?: number;
+  outcome?: string;
+}
+
+// =============================================================================
+// System Message Subtype Type Guards
+// =============================================================================
+
+/**
+ * Type guard to check if a ClaudeJson is a SystemInitMessage.
+ */
+export function isSystemInitMessage(msg: ClaudeJson): msg is SystemInitMessage {
+  return msg.type === 'system' && (msg as SystemMessage).subtype === 'init';
+}
+
+/**
+ * Type guard to check if a ClaudeJson is a SystemStatusMessage.
+ */
+export function isSystemStatusMessage(msg: ClaudeJson): msg is SystemStatusMessage {
+  return msg.type === 'system' && (msg as SystemMessage).subtype === 'status';
+}
+
+/**
+ * Type guard to check if a ClaudeJson is a SystemCompactBoundaryMessage.
+ */
+export function isSystemCompactBoundaryMessage(
+  msg: ClaudeJson
+): msg is SystemCompactBoundaryMessage {
+  return msg.type === 'system' && (msg as SystemMessage).subtype === 'compact_boundary';
+}
+
+/**
+ * Type guard to check if a ClaudeJson is a SystemHookStartedMessage.
+ */
+export function isSystemHookStartedMessage(msg: ClaudeJson): msg is SystemHookStartedMessage {
+  return msg.type === 'system' && (msg as SystemMessage).subtype === 'hook_started';
+}
+
+/**
+ * Type guard to check if a ClaudeJson is a SystemHookResponseMessage.
+ */
+export function isSystemHookResponseMessage(msg: ClaudeJson): msg is SystemHookResponseMessage {
+  return msg.type === 'system' && (msg as SystemMessage).subtype === 'hook_response';
+}

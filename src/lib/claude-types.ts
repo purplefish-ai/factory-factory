@@ -238,6 +238,37 @@ export interface ToolDefinition {
   input_schema?: Record<string, unknown>;
 }
 
+/**
+ * Plugin information from system init message.
+ */
+export interface PluginInfo {
+  name: string;
+  path: string;
+}
+
+/**
+ * Session initialization data from system init message.
+ * Stores information about the session's available tools, model, etc.
+ */
+export interface SessionInitData {
+  tools: ToolDefinition[];
+  model: string | null;
+  cwd: string | null;
+  apiKeySource: string | null;
+  slashCommands: string[];
+  plugins: PluginInfo[];
+}
+
+/**
+ * Information about an active hook.
+ */
+export interface ActiveHookInfo {
+  hookId: string;
+  hookName: string;
+  hookEvent: string;
+  startedAt: string;
+}
+
 // =============================================================================
 // Top-Level ClaudeMessage Type (from WebSocket)
 // =============================================================================
@@ -440,6 +471,11 @@ export interface WebSocketMessage {
     | 'tool_use_summary'
     | 'status_update'
     | 'task_notification'
+    // System subtype events
+    | 'system_init'
+    | 'compact_boundary'
+    | 'hook_started'
+    | 'hook_response'
     // Context compaction events
     | 'compacting_start'
     | 'compacting_end';

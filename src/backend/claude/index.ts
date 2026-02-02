@@ -33,6 +33,12 @@ import {
   type PermissionMode,
   type ResultMessage,
   type StreamEventMessage,
+  type SystemCompactBoundaryMessage,
+  type SystemHookResponseMessage,
+  type SystemHookStartedMessage,
+  type SystemInitMessage,
+  type SystemMessage,
+  type SystemStatusMessage,
   type ToolProgressMessage,
   type ToolUseContent,
   type ToolUseSummaryMessage,
@@ -462,6 +468,16 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'session_id', handler: (claudeSessionId: string) => void): this;
   override on(event: 'idle', handler: () => void): this;
+  // System subtype events
+  override on(event: 'system', handler: (msg: SystemMessage) => void): this;
+  override on(event: 'system_init', handler: (msg: SystemInitMessage) => void): this;
+  override on(event: 'system_status', handler: (msg: SystemStatusMessage) => void): this;
+  override on(
+    event: 'compact_boundary',
+    handler: (msg: SystemCompactBoundaryMessage) => void
+  ): this;
+  override on(event: 'hook_started', handler: (msg: SystemHookStartedMessage) => void): this;
+  override on(event: 'hook_response', handler: (msg: SystemHookResponseMessage) => void): this;
   override on(event: 'compacting_start', handler: () => void): this;
   override on(event: 'compacting_end', handler: () => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
@@ -481,6 +497,13 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'session_id', claudeSessionId: string): boolean;
   override emit(event: 'idle'): boolean;
+  // System subtype events
+  override emit(event: 'system', msg: SystemMessage): boolean;
+  override emit(event: 'system_init', msg: SystemInitMessage): boolean;
+  override emit(event: 'system_status', msg: SystemStatusMessage): boolean;
+  override emit(event: 'compact_boundary', msg: SystemCompactBoundaryMessage): boolean;
+  override emit(event: 'hook_started', msg: SystemHookStartedMessage): boolean;
+  override emit(event: 'hook_response', msg: SystemHookResponseMessage): boolean;
   override emit(event: 'compacting_start'): boolean;
   override emit(event: 'compacting_end'): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
@@ -547,20 +570,9 @@ export class ClaudeClient extends EventEmitter {
       case 'stream_event':
         this.emit('stream', msg);
         break;
-      case 'system': {
-        // Handle context compaction boundary markers (toggle-based detection)
-        const systemMsg = msg as { subtype?: string };
-        if (systemMsg.subtype === 'compact_boundary') {
-          if (!this.isCompacting) {
-            this.isCompacting = true;
-            this.emit('compacting_start');
-          } else {
-            this.isCompacting = false;
-            this.emit('compacting_end');
-          }
-        }
+      case 'system':
+        this.handleSystemMessage(msg as SystemMessage);
         break;
-      }
       // SDK message types - forward as dedicated events
       case 'tool_progress':
         this.emit('tool_progress', msg);
@@ -568,6 +580,40 @@ export class ClaudeClient extends EventEmitter {
       case 'tool_use_summary':
         this.emit('tool_use_summary', msg);
         break;
+    }
+  }
+
+  /**
+   * Handle system messages by subtype.
+   */
+  private handleSystemMessage(msg: SystemMessage): void {
+    switch (msg.subtype) {
+      case 'init':
+        this.emit('system_init', msg as SystemInitMessage);
+        break;
+      case 'status':
+        this.emit('system_status', msg as SystemStatusMessage);
+        break;
+      case 'compact_boundary':
+        this.emit('compact_boundary', msg as SystemCompactBoundaryMessage);
+        // Toggle-based compaction detection for start/end events
+        if (!this.isCompacting) {
+          this.isCompacting = true;
+          this.emit('compacting_start');
+        } else {
+          this.isCompacting = false;
+          this.emit('compacting_end');
+        }
+        break;
+      case 'hook_started':
+        this.emit('hook_started', msg as SystemHookStartedMessage);
+        break;
+      case 'hook_response':
+        this.emit('hook_response', msg as SystemHookResponseMessage);
+        break;
+      default:
+        // Forward unknown subtypes as generic system events
+        this.emit('system', msg);
     }
   }
 
