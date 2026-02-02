@@ -133,6 +133,15 @@ class MessageStateService {
   }
 
   /**
+   * Allocate and return the next order number for a session.
+   * Used for messages created outside the normal message state flow
+   * (e.g., MESSAGE_USED_AS_RESPONSE).
+   */
+  allocateOrder(sessionId: string): number {
+    return this.getNextOrder(sessionId);
+  }
+
+  /**
    * Create a new user message from a QueuedMessage.
    * Starts in ACCEPTED state (backend has received it).
    */

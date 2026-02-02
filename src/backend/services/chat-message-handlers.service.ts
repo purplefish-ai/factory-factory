@@ -484,8 +484,11 @@ class ChatMessageHandlerService {
     // This must happen before any operation that could fail
     chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
 
+    // Allocate an order for this message so it sorts correctly on the frontend
+    const order = messageStateService.allocateOrder(sessionId);
+
     // Prepare the response event - we'll send it even on error to clear frontend state
-    const responseEvent = { type: 'message_used_as_response', id: messageId, text };
+    const responseEvent = { type: 'message_used_as_response', id: messageId, text, order };
 
     try {
       if (pendingRequest.toolName === 'AskUserQuestion') {

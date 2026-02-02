@@ -439,6 +439,8 @@ export interface WebSocketMessage {
   // Message fields
   text?: string;
   id?: string;
+  /** Backend-assigned order for message_used_as_response events */
+  order?: number;
   // Message state machine fields (primary protocol)
   /** New state for message_state_changed events */
   newState?: MessageState;

@@ -155,7 +155,7 @@ export type ChatAction =
     }
   | { type: 'CLEAR_REJECTED_MESSAGE' }
   // Message used as interactive response (clears pending request and adds message)
-  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string } }
+  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string; order?: number } }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -684,11 +684,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         text: action.payload.text,
         timestamp: new Date().toISOString(),
         attachments: pendingContent?.attachments,
+        order: action.payload.order,
       };
 
       return {
         ...state,
-        messages: [...state.messages, userMessage],
+        messages: insertMessageByOrder(state.messages, userMessage),
         pendingMessages: newPendingMessages,
         pendingRequest: { type: 'none' },
       };
@@ -1004,7 +1005,10 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     // Interactive response handling
     case 'message_used_as_response':
       return data.id && data.text
-        ? { type: 'MESSAGE_USED_AS_RESPONSE', payload: { id: data.id, text: data.text } }
+        ? {
+            type: 'MESSAGE_USED_AS_RESPONSE',
+            payload: { id: data.id, text: data.text, order: data.order },
+          }
         : null;
     // Message state machine events (primary protocol)
     case 'messages_snapshot':
