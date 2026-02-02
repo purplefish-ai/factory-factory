@@ -209,7 +209,7 @@ export type ChatAction =
       type: 'SDK_TOOL_PROGRESS';
       payload: { toolUseId: string; toolName: string; elapsedSeconds: number };
     }
-  | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary: string; precedingToolUseIds: string[] } }
+  | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary?: string; precedingToolUseIds: string[] } }
   | { type: 'SDK_TASK_NOTIFICATION'; payload: { message: string } }
   | { type: 'SDK_COMPACTING_START' }
   | { type: 'SDK_COMPACTING_END' };
@@ -583,7 +583,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTED':
       return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      return { ...state, sessionStatus: { phase: 'ready' } };
+      // Clear toolProgress when session stops to prevent stale progress indicators
+      return { ...state, sessionStatus: { phase: 'ready' }, toolProgress: new Map() };
 
     // Claude message handling (delegated to helper)
     case 'WS_CLAUDE_MESSAGE':
@@ -1052,7 +1053,8 @@ function handleToolProgressMessage(data: WebSocketMessage): ChatAction | null {
 }
 
 function handleToolUseSummaryMessage(data: WebSocketMessage): ChatAction | null {
-  if (!(data.summary && data.preceding_tool_use_ids)) {
+  // Only require preceding_tool_use_ids (used for cleanup). Summary can be empty string.
+  if (!Array.isArray(data.preceding_tool_use_ids)) {
     return null;
   }
   return {
