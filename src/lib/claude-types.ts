@@ -231,6 +231,37 @@ export interface ToolDefinition {
   input_schema?: Record<string, unknown>;
 }
 
+/**
+ * Plugin information from system init message.
+ */
+export interface PluginInfo {
+  name: string;
+  path: string;
+}
+
+/**
+ * Session initialization data from system init message.
+ * Stores information about the session's available tools, model, etc.
+ */
+export interface SessionInitData {
+  tools: ToolDefinition[];
+  model: string | null;
+  cwd: string | null;
+  apiKeySource: string | null;
+  slashCommands: string[];
+  plugins: PluginInfo[];
+}
+
+/**
+ * Information about an active hook.
+ */
+export interface ActiveHookInfo {
+  hookId: string;
+  hookName: string;
+  hookEvent: string;
+  startedAt: string;
+}
+
 // =============================================================================
 // Top-Level ClaudeMessage Type (from WebSocket)
 // =============================================================================
@@ -432,7 +463,12 @@ export interface WebSocketMessage {
     | 'tool_progress'
     | 'tool_use_summary'
     | 'status_update'
-    | 'task_notification';
+    | 'task_notification'
+    // System subtype events
+    | 'system_init'
+    | 'compact_boundary'
+    | 'hook_started'
+    | 'hook_response';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -493,6 +529,26 @@ export interface WebSocketMessage {
   // Status update fields
   /** Permission mode from status updates */
   permissionMode?: string;
+  // System init fields
+  /** Session init data for system_init events */
+  systemInitData?: SessionInitData;
+  // Hook fields
+  /** Hook ID for hook_started/hook_response events */
+  hookId?: string;
+  /** Hook name for hook_started events */
+  hookName?: string;
+  /** Hook event type for hook_started events */
+  hookEvent?: string;
+  /** Hook output for hook_response events */
+  hookOutput?: string;
+  /** Hook stdout for hook_response events */
+  hookStdout?: string;
+  /** Hook stderr for hook_response events */
+  hookStderr?: string;
+  /** Hook exit code for hook_response events */
+  hookExitCode?: number;
+  /** Hook outcome for hook_response events */
+  hookOutcome?: string;
 }
 
 // =============================================================================

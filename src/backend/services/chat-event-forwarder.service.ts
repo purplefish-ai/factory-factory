@@ -201,6 +201,121 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
     });
 
+    // System subtype event handlers
+    client.on('system_init', (event) => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Received system_init event', {
+          dbSessionId,
+          tools: event.tools?.length ?? 0,
+          model: event.model,
+        });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'system_init',
+        data: event,
+      });
+      const msg = {
+        type: 'system_init',
+        data: {
+          tools: event.tools,
+          model: event.model,
+          cwd: event.cwd,
+          apiKeySource: event.apiKeySource,
+          slashCommands: event.slash_commands,
+          plugins: event.plugins,
+        },
+      };
+      messageStateService.storeEvent(dbSessionId, msg);
+      chatConnectionService.forwardToSession(dbSessionId, msg);
+    });
+
+    client.on('system_status', (event) => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Received system_status event', {
+          dbSessionId,
+          status: event.status,
+          permissionMode: event.permissionMode,
+        });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'system_status',
+        data: event,
+      });
+      const msg = {
+        type: 'status_update',
+        permissionMode: event.permissionMode,
+        status: event.status,
+      };
+      messageStateService.storeEvent(dbSessionId, msg);
+      chatConnectionService.forwardToSession(dbSessionId, msg);
+    });
+
+    client.on('compact_boundary', (event) => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Received compact_boundary event', { dbSessionId });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'compact_boundary',
+        data: event,
+      });
+      const msg = { type: 'compact_boundary' };
+      messageStateService.storeEvent(dbSessionId, msg);
+      chatConnectionService.forwardToSession(dbSessionId, msg);
+    });
+
+    client.on('hook_started', (event) => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Received hook_started event', {
+          dbSessionId,
+          hookId: event.hook_id,
+          hookName: event.hook_name,
+          hookEvent: event.hook_event,
+        });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'hook_started',
+        data: event,
+      });
+      const msg = {
+        type: 'hook_started',
+        data: {
+          hookId: event.hook_id,
+          hookName: event.hook_name,
+          hookEvent: event.hook_event,
+        },
+      };
+      messageStateService.storeEvent(dbSessionId, msg);
+      chatConnectionService.forwardToSession(dbSessionId, msg);
+    });
+
+    client.on('hook_response', (event) => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Received hook_response event', {
+          dbSessionId,
+          hookId: event.hook_id,
+          exitCode: event.exit_code,
+          outcome: event.outcome,
+        });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'hook_response',
+        data: event,
+      });
+      const msg = {
+        type: 'hook_response',
+        data: {
+          hookId: event.hook_id,
+          output: event.output,
+          stdout: event.stdout,
+          stderr: event.stderr,
+          exitCode: event.exit_code,
+          outcome: event.outcome,
+        },
+      };
+      messageStateService.storeEvent(dbSessionId, msg);
+      chatConnectionService.forwardToSession(dbSessionId, msg);
+    });
+
     client.on('message', (msg) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });
 

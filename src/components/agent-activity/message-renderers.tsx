@@ -3,6 +3,7 @@
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
+import { CompactBoundaryIndicator } from '@/components/chat/compact-boundary-indicator';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ClaudeMessage, ClaudeStreamEvent, ContentBlockDelta } from '@/lib/claude-types';
 import {
@@ -365,24 +366,43 @@ interface SystemMessageRendererProps {
 }
 
 /**
- * Renders system messages (init, status, etc.).
+ * Renders system messages (init, status, compact_boundary, hook events, etc.).
  */
 const SystemMessageRenderer = memo(function SystemMessageRenderer({
   message,
   className,
 }: SystemMessageRendererProps) {
-  // System init messages with tools
-  if (message.subtype === 'init' && message.tools) {
-    return (
-      <div className={cn('text-xs text-muted-foreground', className)}>
-        <span>Session initialized with {message.tools.length} tools</span>
-        {message.model && <span className="ml-2">Model: {message.model}</span>}
-      </div>
-    );
-  }
+  switch (message.subtype) {
+    case 'init':
+      // System init messages with tools - optional display
+      if (message.tools) {
+        return (
+          <div className={cn('text-xs text-muted-foreground', className)}>
+            <span>Session initialized with {message.tools.length} tools</span>
+            {message.model && <span className="ml-2">Model: {message.model}</span>}
+          </div>
+        );
+      }
+      return null;
 
-  // Other system messages - usually don't need to be shown
-  return null;
+    case 'status':
+      // Status messages are handled by the reducer - no visual rendering needed
+      return null;
+
+    case 'compact_boundary':
+      // Render the compact boundary indicator
+      return <CompactBoundaryIndicator className={className} />;
+
+    case 'hook_started':
+    case 'hook_response':
+      // Hook events are stored in state but don't need visual rendering here
+      // Future hook UI (#449) can use the activeHooks state from reducer
+      return null;
+
+    default:
+      // Unknown system messages - don't render
+      return null;
+  }
 });
 
 // =============================================================================

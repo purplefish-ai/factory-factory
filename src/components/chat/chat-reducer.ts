@@ -11,6 +11,7 @@
  */
 
 import type {
+  ActiveHookInfo,
   ChatMessage,
   ChatSettings,
   ClaudeMessage,
@@ -19,6 +20,7 @@ import type {
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
+  SessionInitData,
   SessionStatus as SharedSessionStatus,
   ToolUseContent,
   UserQuestionRequest,
@@ -126,6 +128,14 @@ export interface ChatState {
   isCompacting: boolean;
   /** Tool progress tracking for long-running tools - Map from tool_use_id to progress info */
   toolProgress: Map<string, ToolProgressInfo>;
+  /** Session initialization data (tools, model, etc.) from system init message */
+  sessionInitData: SessionInitData | null;
+  /** Current permission mode from status updates */
+  permissionMode: string | null;
+  /** Whether a compact boundary has been encountered in this session */
+  hasCompactBoundary: boolean;
+  /** Active hooks currently executing - Map from hook_id to hook info */
+  activeHooks: Map<string, ActiveHookInfo>;
 }
 
 // =============================================================================
@@ -204,7 +214,7 @@ export type ChatAction =
       };
     }
   // SDK message type actions
-  | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string } }
+  | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string; status?: string } }
   | {
       type: 'SDK_TOOL_PROGRESS';
       payload: { toolUseId: string; toolName: string; elapsedSeconds: number };
@@ -212,7 +222,15 @@ export type ChatAction =
   | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary?: string; precedingToolUseIds: string[] } }
   | { type: 'SDK_TASK_NOTIFICATION'; payload: { message: string } }
   | { type: 'SDK_COMPACTING_START' }
-  | { type: 'SDK_COMPACTING_END' };
+  | { type: 'SDK_COMPACTING_END' }
+  // System subtype actions
+  | { type: 'SYSTEM_INIT'; payload: SessionInitData }
+  | { type: 'COMPACT_BOUNDARY' }
+  | {
+      type: 'HOOK_STARTED';
+      payload: { hookId: string; hookName: string; hookEvent: string };
+    }
+  | { type: 'HOOK_RESPONSE'; payload: { hookId: string } };
 
 // =============================================================================
 // Helper Functions
@@ -365,6 +383,10 @@ function createBaseResetState(): Pick<
   | 'lastRejectedMessage'
   | 'isCompacting'
   | 'toolProgress'
+  | 'sessionInitData'
+  | 'permissionMode'
+  | 'hasCompactBoundary'
+  | 'activeHooks'
 > {
   return {
     messages: [],
@@ -376,6 +398,10 @@ function createBaseResetState(): Pick<
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
+    sessionInitData: null,
+    permissionMode: null,
+    hasCompactBoundary: false,
+    activeHooks: new Map(),
   };
 }
 
@@ -396,6 +422,10 @@ function createSessionSwitchResetState(): Pick<
   | 'sessionStatus'
   | 'isCompacting'
   | 'toolProgress'
+  | 'sessionInitData'
+  | 'permissionMode'
+  | 'hasCompactBoundary'
+  | 'activeHooks'
 > {
   return {
     ...createBaseResetState(),
@@ -419,6 +449,10 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
+    sessionInitData: null,
+    permissionMode: null,
+    hasCompactBoundary: false,
+    activeHooks: new Map(),
     ...overrides,
   };
 }
@@ -909,10 +943,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return state;
     }
 
-    // SDK message type actions (placeholders for future SDK support)
-    case 'SDK_STATUS_UPDATE':
-      // Placeholder: could track permissionMode changes in state when needed
+    // SDK message type actions
+    case 'SDK_STATUS_UPDATE': {
+      // Store permission mode from status updates
+      const { permissionMode } = action.payload;
+      if (permissionMode !== undefined) {
+        return { ...state, permissionMode };
+      }
       return state;
+    }
 
     case 'SDK_TOOL_PROGRESS': {
       const { toolUseId, toolName, elapsedSeconds } = action.payload;
@@ -940,6 +979,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case 'SDK_COMPACTING_END':
       return { ...state, isCompacting: false };
+
+    // System subtype actions
+    case 'SYSTEM_INIT':
+      return { ...state, sessionInitData: action.payload };
+
+    case 'COMPACT_BOUNDARY':
+      return { ...state, hasCompactBoundary: true };
+
+    case 'HOOK_STARTED': {
+      const { hookId, hookName, hookEvent } = action.payload;
+      const newActiveHooks = new Map(state.activeHooks);
+      newActiveHooks.set(hookId, {
+        hookId,
+        hookName,
+        hookEvent,
+        startedAt: new Date().toISOString(),
+      });
+      return { ...state, activeHooks: newActiveHooks };
+    }
+
+    case 'HOOK_RESPONSE': {
+      const newActiveHooks = new Map(state.activeHooks);
+      newActiveHooks.delete(action.payload.hookId);
+      return { ...state, activeHooks: newActiveHooks };
+    }
 
     default:
       return state;
@@ -1066,6 +1130,66 @@ function handleToolUseSummaryMessage(data: WebSocketMessage): ChatAction | null 
   };
 }
 
+function handleSystemInitMessage(data: WebSocketMessage): ChatAction | null {
+  const initData = data.data as
+    | {
+        tools?: Array<{
+          name: string;
+          description?: string;
+          input_schema?: Record<string, unknown>;
+        }>;
+        model?: string;
+        cwd?: string;
+        apiKeySource?: string;
+        slashCommands?: string[];
+        plugins?: Array<{ name: string; path: string }>;
+      }
+    | undefined;
+  if (!initData) {
+    return null;
+  }
+  return {
+    type: 'SYSTEM_INIT',
+    payload: {
+      tools: initData.tools ?? [],
+      model: initData.model ?? null,
+      cwd: initData.cwd ?? null,
+      apiKeySource: initData.apiKeySource ?? null,
+      slashCommands: initData.slashCommands ?? [],
+      plugins: initData.plugins ?? [],
+    },
+  };
+}
+
+function handleHookStartedMessage(data: WebSocketMessage): ChatAction | null {
+  const hookData = data.data as
+    | {
+        hookId?: string;
+        hookName?: string;
+        hookEvent?: string;
+      }
+    | undefined;
+  if (!(hookData?.hookId && hookData?.hookName && hookData?.hookEvent)) {
+    return null;
+  }
+  return {
+    type: 'HOOK_STARTED',
+    payload: {
+      hookId: hookData.hookId,
+      hookName: hookData.hookName,
+      hookEvent: hookData.hookEvent,
+    },
+  };
+}
+
+function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
+  const hookRespData = data.data as { hookId?: string } | undefined;
+  if (!hookRespData?.hookId) {
+    return null;
+  }
+  return { type: 'HOOK_RESPONSE', payload: { hookId: hookRespData.hookId } };
+}
+
 /**
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
@@ -1110,11 +1234,26 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'tool_use_summary':
       return handleToolUseSummaryMessage(data);
     case 'status_update':
-      return { type: 'SDK_STATUS_UPDATE', payload: { permissionMode: data.permissionMode } };
+      return {
+        type: 'SDK_STATUS_UPDATE',
+        payload: {
+          permissionMode: data.permissionMode,
+          status: (data as { status?: string }).status,
+        },
+      };
     case 'task_notification':
       return data.message
         ? { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } }
         : null;
+    // System subtype events
+    case 'system_init':
+      return handleSystemInitMessage(data);
+    case 'compact_boundary':
+      return { type: 'COMPACT_BOUNDARY' };
+    case 'hook_started':
+      return handleHookStartedMessage(data);
+    case 'hook_response':
+      return handleHookResponseMessage(data);
     default:
       return null;
   }
