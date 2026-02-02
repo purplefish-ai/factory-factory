@@ -4,170 +4,195 @@
 
 ## APIs & External Services
 
-**GitHub Integration:**
-- **GitHub CLI (gh)** - Local authentication for PR/repository operations
-  - Service: GitHub.com
-  - Access: Via locally authenticated `gh` CLI command (no API tokens required)
-  - Implementation: `src/backend/services/github-cli.service.ts`
-  - Functions: Fetch PR status, CI status, review decisions, PR metadata
-  - Auth: OAuth via `gh auth login` (user's local credentials)
+**Claude API:**
+- Service: Anthropic Claude AI API
+- What it's used for: Core LLM functionality for code generation and analysis in Claude Code sessions
+- SDK/Client: Custom ClaudeClient wrapper at `src/backend/claude/index.ts`
+- Auth: OAuth via `claude login` CLI command (no API key stored in app)
+- Integration type: Process-based spawning of Claude CLI (`/usr/local/bin/claude` on macOS)
+- Session management: `src/backend/claude/session.ts` - Reads session history from `~/.claude/projects/`
+- Protocol: Streaming JSON protocol for bidirectional communication
 
-**Claude AI Integration:**
-- **Claude CLI** - Local Claude Code sessions via streaming JSON protocol
-  - Service: Anthropic Claude API (via Claude CLI)
-  - Access: Via Claude CLI process spawned in workspace
-  - Implementation: `src/backend/claude/` (index.ts, process.ts, protocol.ts, session.ts)
-  - Session Management: `src/backend/claude/session.ts` (reads ~/.claude/projects/)
-  - Auth: OAuth via `claude login` (user's local credentials, no API keys needed)
-  - Protocol: Custom streaming JSON protocol with permission handlers
-  - Models: Configurable (sonnet, opus, haiku) via env var
-  - Features: Tool use, extended thinking, hooks (PreToolUse, Stop), session resume/fork
+**GitHub CLI Integration:**
+- Service: GitHub (via locally-authenticated `gh` CLI)
+- What it's used for: PR detection, PR state fetching, CI status, branch operations, code review data
+- SDK/Client: `src/backend/services/github-cli.service.ts`
+- Auth: Local authentication via `gh auth login` (leverages system git config)
+- Integration type: Shell command execution (no direct API tokens stored)
+- Capabilities:
+  - Fetch PR status and review decisions
+  - Detect pull requests from commit messages
+  - Get CI status rollup
+  - Fetch review-requested PRs
+  - Verify authentication and CLI availability
+- Error handling: Detects auth_required, cli_not_installed, network_error states
+
+**Git Operations:**
+- Service: Local git repositories and GitHub (via `git` and `gh` commands)
+- What it's used for: Worktree creation, branch management, PR operations
+- SDK/Client: `src/backend/clients/git.client.ts`
+- Auth: System git credentials (SSH keys or HTTPS tokens)
+- Integration type: Shell commands
+- Capabilities:
+  - Create git worktrees with auto-generated branch names
+  - Fetch from remote before branching
+  - List and manage worktrees
+  - Push branches and create PRs
 
 ## Data Storage
 
 **Databases:**
-- **SQLite 3**
-  - Provider: Local file-based database
-  - Location: `~/factory-factory/data.db` (or `DATABASE_PATH` env var)
-  - Electron: `~/Library/Application Support/Factory Factory/data.db` (macOS)
-  - Client: Prisma ORM with `@prisma/adapter-better-sqlite3`
-  - Driver: better-sqlite3 (synchronous, high-performance)
-  - Migrations: Prisma migrations in `prisma/migrations/`
-  - Schema: `prisma/schema.prisma` - Models for Project, Workspace, ClaudeSession, TerminalSession, DecisionLog, UserSettings
+- Type/Provider: SQLite (embedded)
+- Connection: `better-sqlite3` C++ bindings
+- Client: `@prisma/client` via ORM
+- Adapter: `@prisma/adapter-better-sqlite3`
+- Location: Environment-configurable via `DATABASE_PATH` env var
+  - Default: `~/factory-factory/data.db`
+  - Electron: `app.getPath('userData')/data.db` (OS-specific)
+- Schema: `prisma/schema.prisma` (Prisma schema)
+- Generated client: `prisma/generated/client`
+- Migrations: `prisma/migrations/` (committed to repo)
 
 **File Storage:**
-- **Local filesystem only** - No cloud storage integration
-  - Worktree directories: `WORKTREE_BASE_DIR/workspace-{id}/` (git repositories)
-  - Session logs: `BASE_DIR/worktrees/` structure
-  - Prisma migrations: `prisma/migrations/` (committed to repo)
+- Type: Local filesystem only
+- Locations:
+  - Worktrees: `WORKTREE_BASE_DIR` (default: `~/factory-factory/worktrees`)
+  - Session logs: Stored per-workspace
+  - Database: `DATABASE_PATH` or `~/factory-factory/data.db`
+  - Claude history: System location `~/.claude/projects/`
 
 **Caching:**
-- **In-memory only** - No Redis or external cache
-  - TanStack React Query client-side cache
-  - Message queue service for rate limiting: `src/backend/services/message-queue.service.ts`
+- In-memory caching of:
+  - GitHub authenticated username (cached once per server lifetime in `src/backend/trpc/workspace/init.trpc.ts`)
+  - Git branch existence checks
+  - API call rate limiting state
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- **Custom OAuth flows via CLI tools**
-  - GitHub: OAuth via `gh` CLI (user runs `gh auth login`)
-  - Claude: OAuth via Claude CLI (user runs `claude login`)
-  - No built-in authentication - delegates to local CLI tools
+- Custom/Multiple providers:
+  - Claude: OAuth via `claude login` (handled outside app, uses system auth)
+  - GitHub: Local `gh` CLI authentication (system-managed, accessed via shell)
+  - Git: System SSH keys or HTTPS credentials (OS-managed)
 
 **Implementation:**
-- `src/backend/services/github-cli.service.ts` - Validates gh CLI is installed and authenticated
-- `src/backend/claude/` - Validates Claude CLI is installed and accessible
-- Feature flag available: `FEATURE_AUTHENTICATION=false` (default, for future multi-user support)
+- No built-in authentication system for app users
+- FEATURE_AUTHENTICATION flag disabled by default (in `.env.example`)
+- Session-based access: ClaudeSession tracks individual Claude Code conversations
+- Permission model: Three levels enforced per session
+  - strict: Requires approval for each tool
+  - relaxed: Auto-approves with logging
+  - yolo: Auto-approves everything
+- Workspace isolation: Each workspace is isolated git worktree with independent session
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- None configured (feature flag: `FEATURE_ERROR_TRACKING=false`)
-- Could integrate with Sentry or similar via feature flag
+- FEATURE_ERROR_TRACKING flag disabled by default (in `.env.example`)
+- No external error tracking service configured
+- Errors logged locally via custom logger service
 
 **Logs:**
-- **File-based logging**
-  - Logger: `src/backend/services/logger.service.ts`
-  - Environment: `LOG_LEVEL=info` (configurable: error/warn/info/debug)
-  - Service name: `SERVICE_NAME=factoryfactory`
-  - Session logs: `src/backend/services/session-file-logger.service.ts` - Logs Claude session output to files
-
-**Metrics:**
-- Disabled by default: `FEATURE_METRICS=false`
-- Prometheus metrics could be enabled via feature flag
-- Process monitoring: `pidusage` 4.0.1 - Process resource usage tracking
+- Approach: Custom `createLogger` service (`src/backend/services/logger.service.ts`)
+- Log levels: error, warn, info, debug
+- Log level configured via `LOG_LEVEL` env var (default: info)
+- Service name: `SERVICE_NAME` env var (default: factoryfactory)
+- Output: Console (stdout/stderr)
+- Session file logging: Per-session logs via `src/backend/services/session-file-logger.service.ts`
+- Terminal device logs: WebSocket stream to frontend for real-time viewing
 
 **Health Checks:**
-- Internal health check router: `src/backend/routers/api/health.router.ts`
-- CLI health service: `src/backend/services/cli-health.service.ts` - Validates Claude CLI and gh CLI
-- WebSocket heartbeat: 30-second ping/pong interval
-- Reconciliation service: `src/backend/services/reconciliation.service.ts` - Workspace state sync
-- Scheduler service: `src/backend/services/scheduler.service.ts` - PR status polling, health checks
+- Health endpoint: `GET /health`
+- Metrics: Rate limiter API usage stats, request counts
+- Interval: `HEALTH_CHECK_INTERVAL_MS` env var (default: 300000ms = 5min)
+- Agent heartbeat monitoring: `AGENT_HEARTBEAT_THRESHOLD_MINUTES` (default: 7min)
+
+## Rate Limiting & Quotas
+
+**Claude API Rate Limits:**
+- Configuration: `CLAUDE_RATE_LIMIT_PER_MINUTE` (default: 60)
+- Configuration: `CLAUDE_RATE_LIMIT_PER_HOUR` (default: 1000)
+- Queue settings: `RATE_LIMIT_QUEUE_SIZE` (default: 100), `RATE_LIMIT_QUEUE_TIMEOUT_MS` (default: 30000ms)
+- Implementation: `src/backend/services/rate-limiter.service.ts`
+- Enforcement: Queues requests when limit reached
+
+**Session Limits:**
+- Max sessions per workspace: `MAX_SESSIONS_PER_WORKSPACE` (default: 5)
+- Tracked in database and enforced in `src/backend/trpc/session.trpc.ts`
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- **Electron Desktop** - macOS, Windows, Linux native apps
-- **Web/CLI Mode** - Express server + React frontend + Electron optional
-- Deployment: Manual (electron-builder) or Docker containers
+- CLI Mode: Standalone Node.js server (any platform with Node.js)
+- Electron Mode: Native desktop app (macOS, Windows, Linux)
+- Web Mode: Browser-based frontend + backend server
 
 **CI Pipeline:**
-- None configured in codebase
-- GitHub Actions available (see git history for references)
-- Pre-commit hooks via Husky: `husky` 9.1.7
+- No CI/CD integration detected (only local git operations)
+- GitHub Actions could be integrated but not currently implemented
 
-**Build Artifacts:**
-- `dist/src/backend/` - Compiled backend TypeScript
-- `dist/client/` - Compiled Vite frontend
-- `dist/prisma/generated/` - Prisma client
-- `dist/electron/` - Compiled Electron main process
-- Release packages: DMG (macOS), NSIS (Windows), AppImage/deb (Linux)
+**Deployment:**
+- CLI: Published as npm package (`factory-factory` on npm registry)
+- Electron: Built with electron-builder, generates installers/dmg/appx
+- Docker: Not configured
 
 ## Environment Configuration
 
 **Required env vars:**
-- `DATABASE_PATH` - SQLite database location
+- `DATABASE_PATH` - SQLite database file (optional, defaults to ~/factory-factory/data.db)
 - `BACKEND_PORT` - Server port (default: 4001)
-- `BACKEND_URL` - For frontend to reach backend (dev only)
-- `NODE_ENV` - development or production
-- `LOG_LEVEL` - Logging verbosity
+- `FRONTEND_PORT` - Frontend port (default: 4000)
+- `NODE_ENV` - development, production, test
+- `BASE_DIR` - Base directory for worktrees and data (default: ~/factory-factory)
+- `WORKTREE_BASE_DIR` - Git worktrees location (default: $BASE_DIR/worktrees)
 
-**Optional env vars:**
-- `ORCHESTRATOR_MODEL`, `SUPERVISOR_MODEL`, `WORKER_MODEL` - Claude model selection
-- `ORCHESTRATOR_PERMISSIONS`, `SUPERVISOR_PERMISSIONS`, `WORKER_PERMISSIONS` - Permission modes
-- `MAX_SESSIONS_PER_WORKSPACE` - Rate limiting
-- `CLAUDE_RATE_LIMIT_PER_MINUTE`, `CLAUDE_RATE_LIMIT_PER_HOUR` - API rate limits
-- `HEALTH_CHECK_INTERVAL_MS` - Health check frequency
-- `NOTIFICATION_PUSH_ENABLED`, `NOTIFICATION_SOUND_ENABLED` - Desktop notifications
-- `CORS_ALLOWED_ORIGINS` - CORS configuration
+**Model Configuration:**
+- `ORCHESTRATOR_MODEL` - LLM model (sonnet, opus, haiku)
+- `SUPERVISOR_MODEL` - LLM model (sonnet, opus, haiku)
+- `WORKER_MODEL` - LLM model (sonnet, opus, haiku)
+
+**Permission Modes:**
+- `ORCHESTRATOR_PERMISSIONS` - strict, relaxed, yolo
+- `SUPERVISOR_PERMISSIONS` - strict, relaxed, yolo
+- `WORKER_PERMISSIONS` - strict, relaxed, yolo
 
 **Secrets location:**
-- No external secrets (all in local .env file)
-- GitHub auth via `gh` CLI (no tokens in .env)
-- Claude auth via Claude CLI (no API keys in .env)
-- `.env` file should be added to `.gitignore` (not committed)
+- No app-managed secrets
+- Claude auth: System-managed via `claude login`
+- Git auth: System SSH keys or git credentials
+- GitHub auth: Stored in system `gh` CLI config
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None - No external webhooks consumed
+- None detected. No webhook endpoints for external services.
 
 **Outgoing:**
-- None currently implemented
-- GitHub PR updates are polled, not webhook-based
+- PR detection via git commit messages (detects GitHub PR URLs in output)
+- Workspace notifications sent via WebSocket to frontend (`src/backend/routers/websocket/chat.handler.ts`)
+- No outgoing webhook calls to external services
 
-**Real-time Communication:**
-- WebSocket endpoints (internal only):
-  - `/chat` - Claude Code session streaming (JSON protocol)
-  - `/terminal` - PTY terminal sessions (xterm.js protocol)
-  - `/dev-logs` - Development logs streaming
-  - All routes authenticated via tRPC context
+**Internal WebSocket Channels:**
+- `/chat` - Claude Code streaming protocol (bidirectional)
+- `/terminal` - PTY terminal session output (server → client)
+- `/dev-logs` - Development server logs (server → client)
 
-## Git Integration
+## CORS Configuration
 
-**Git Operations:**
-- Local git command execution via `src/backend/clients/git.client.ts`
-- Worktree management: Create, switch branches, push/pull
-- PR detection from branch names and remote tracking
-- Branch rename tracking via interceptor: `src/backend/interceptors/branch-rename.interceptor.ts`
-- Uses system `git` command (no git library dependencies)
+**Allowed Origins:**
+- Configured via `CORS_ALLOWED_ORIGINS` env var (default example in .env.example):
+  - `http://localhost:3000` (dev frontend)
+  - `http://localhost:3001` (dev backend)
+  - `http://localhost:4000` (prod frontend)
+  - `http://localhost:4001` (prod backend)
+- Implementation: `src/backend/middleware/middleware.ts` (corsMiddleware)
 
 ## MCP (Model Context Protocol)
 
-**MCP Server:**
-- Integrated MCP server for Claude CLI: `src/backend/routers/mcp/server.ts`
-- Tools exposed:
-  - Terminal MCP tool: `src/backend/routers/mcp/terminal.mcp.ts` - Execute commands in workspace
-  - System MCP tool: `src/backend/routers/mcp/system.mcp.ts` - System operations
-  - Lock MCP tool: `src/backend/routers/mcp/lock.mcp.ts` - Resource locking
-
-## Rate Limiting
-
-**Claude API:**
-- Rate limiter service: `src/backend/services/rate-limiter.service.ts`
-- Limits: Configurable per-minute and per-hour
-- Queue size: 100 requests (timeout: 30 seconds)
-- Max concurrent sessions: 5 per workspace
+**Integration:**
+- MCP tools initialization: `src/backend/routers/mcp/index.ts`
+- MCP router: `src/backend/routers/api/mcp.router.ts`
+- Purpose: Expose filesystem, execution, and project context to Claude CLI
 
 ---
 

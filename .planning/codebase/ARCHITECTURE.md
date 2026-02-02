@@ -4,244 +4,235 @@
 
 ## Pattern Overview
 
-**Overall:** Workspace-based client-server architecture with layered separation of concerns. Backend provides REST/tRPC APIs and WebSocket channels for real-time communication. Frontend is a React SPA with explicit routing.
+**Overall:** Multi-layered workspace-based platform with real-time Claude Code CLI integration via WebSocket protocol.
 
 **Key Characteristics:**
-- Full-stack TypeScript with shared types
-- tRPC for strongly-typed RPC between client and server
-- WebSocket channels for real-time chat, terminal, and logging
-- SQLite database with Prisma ORM
-- Express backend with middleware pipeline
-- React Router v7 frontend with explicit route configuration
+- Service-oriented architecture with tRPC RPC framework for client-server communication
+- Multi-transport layer: tRPC (REST/HTTP), WebSocket (chat/terminal streaming), Express middleware chain
+- Event-driven patterns with message queuing and deferred/permission-based task execution
+- Database-first design with git worktree isolation per workspace
+- Bridge pattern for Claude CLI process lifecycle management (ClaudeClient → AgentProcessAdapter)
 
 ## Layers
 
-**CLI Entry Point:**
-- Purpose: Bootstrap the application, manage services startup, handle database migrations
-- Location: `src/cli/index.ts`
-- Contains: Commander.js CLI commands (serve, build, db:migrate)
-- Depends on: Backend server (via src/backend/index.ts), services
-- Used by: npm scripts (dev, start, build)
+**Presentation Layer (Frontend):**
+- Purpose: React UI for project/workspace management, chat interface, terminal sessions
+- Location: `src/client/`, `src/components/`, `src/frontend/`
+- Contains: React Router v7 routes, page components, UI components (Radix primitives), hooks
+- Depends on: tRPC query client, React Query, WebSocket hooks (`useWebSocketTransport`)
+- Used by: End users in browser or Electron desktop app
 
-**Backend Server:**
-- Purpose: Core HTTP/WebSocket server, orchestrates all backend services
-- Location: `src/backend/server.ts`
-- Contains: Express app setup, middleware registration, router mounting, WebSocket handlers, graceful shutdown
-- Depends on: tRPC routers, middleware, services, database
-- Used by: CLI, Electron main process
+**Application Server Layer (Backend):**
+- Purpose: Express.js HTTP server with tRPC RPC handlers, WebSocket upgrade handlers
+- Location: `src/backend/server.ts`, `src/backend/index.ts`
+- Contains: HTTP routing, middleware chain (CORS, rate limiting, security), tRPC router mounting, static file serving
+- Depends on: Express, tRPC adapter, WebSocket server, resource accessors, services
+- Used by: Frontend clients, CLI WebSocket connections
 
-**tRPC API Layer:**
-- Purpose: Strongly-typed RPC procedures for CRUD operations on domain objects
+**API Layer (tRPC Routers):**
+- Purpose: Type-safe RPC procedures for CRUD operations on projects, workspaces, sessions
 - Location: `src/backend/trpc/`
-- Contains: Router definitions (project.trpc.ts, workspace.trpc.ts, session.trpc.ts, admin.trpc.ts, etc.)
-- Depends on: Resource accessors, services, procedures
-- Used by: Frontend via @trpc/react-query client
+- Contains: Router definitions (`project.trpc.ts`, `workspace.trpc.ts`, `session.trpc.ts`, etc.), context creation, procedure helpers
+- Depends on: Resource accessors, services, business logic
+- Used by: Frontend via tRPC client, backend via direct router calls
 
-**Resource Accessors:**
-- Purpose: Data access layer - all database queries go through these
-- Location: `src/backend/resource_accessors/`
-- Contains: Accessor classes (project.accessor.ts, workspace.accessor.ts, session.accessor.ts, etc.)
-- Depends on: Prisma client, types
-- Used by: tRPC routers, services
-
-**Services Layer:**
-- Purpose: Business logic, orchestration, stateful management
-- Location: `src/backend/services/`
-- Contains: ~34 services including chat management, terminal sessions, file locking, scheduling, reconciliation
-- Examples: `session.service.ts`, `terminal.service.ts`, `scheduler.service.ts`, `chat-message-handlers.service.ts`
-- Depends on: Resource accessors, database, utilities
-- Used by: tRPC routers, server lifecycle
-
-**WebSocket Handlers:**
-- Purpose: Real-time communication endpoints
+**WebSocket Handler Layer:**
+- Purpose: Manage real-time streaming connections for chat, terminal, dev logs
 - Location: `src/backend/routers/websocket/`
-- Contains: Chat upgrade handler, terminal upgrade handler, dev logs upgrade handler
-- Depends on: Services, WebSocket, protocols
-- Used by: Server upgrade events
+- Contains: Chat handler (`chat.handler.ts`), terminal handler, dev logs handler
+- Depends on: Message services, session management, Claude client lifecycle
+- Used by: Frontend WebSocket clients, CLI connections
 
-**API Routers:**
-- Purpose: RESTful API endpoints outside tRPC
-- Location: `src/backend/routers/api/`
-- Contains: Health check, MCP router, Project operations
-- Depends on: Services, resource accessors
-- Used by: Express middleware stack
+**Business Logic / Service Layer:**
+- Purpose: Encapsulate domain logic, state management, external integrations
+- Location: `src/backend/services/`
+- Contains: 35+ services covering: session management, chat/message handling, workspace state machine, file logging, MCP tool execution, reconciliation, scheduling
+- Key services:
+  - `session.service.ts`: ClaudeClient lifecycle, session options
+  - `chat-connection.service.ts`: WebSocket connection tracking
+  - `chat-message-handlers.service.ts`: Message dispatch by type
+  - `workspace-state-machine.service.ts`: Workspace status transitions (NEW → PROVISIONING → READY)
+  - `message-state.service.ts`: In-flight message tracking
+  - `event-compression.service.ts`: Delta compression for WebSocket replay
+- Depends on: Database accessors, Claude client, MCP server, external clients (Git, GitHub)
+- Used by: Routers, WebSocket handlers, agents
 
-**Frontend Client:**
-- Purpose: React SPA for workspace management and AI interaction
-- Location: `src/client/`
-- Contains: Router configuration, root layout, error boundary
-- Depends on: Routes, components, hooks, tRPC client
-- Used by: Browser via Vite dev server or static build
+**Data Access Layer (Resource Accessors):**
+- Purpose: Abstract database queries via Prisma ORM, single point for entity access
+- Location: `src/backend/resource_accessors/`
+- Contains: Accessors for Project, Workspace, ClaudeSession, TerminalSession, DecisionLog, UserSettings
+- Depends on: Prisma client
+- Used by: Services, tRPC procedures
 
-**Frontend Routes:**
-- Purpose: Page-level route components
-- Location: `src/client/routes/`
-- Contains: Home, Projects list/create, Workspaces list/create/detail, Reviews, Admin
-- Depends on: Components, layouts, hooks, tRPC client
-- Used by: React Router configuration in src/client/router.tsx
-
-**Components:**
-- Purpose: Reusable UI pieces for frontend
-- Location: `src/components/`
-- Organized by feature: `chat/`, `workspace/`, `agent-activity/`, `ui/` (Radix UI primitives)
-- Contains: Chat reducer, persistence, input handling, message rendering
-- Examples: `chat-reducer.ts` (69KB chat state machine), `chat-input.tsx`, `permission-prompt.tsx`
-- Used by: Routes and other components
-
-**Claude Integration:**
-- Purpose: Protocol parsing, session management, permissions for Claude Code CLI
+**Claude Integration Layer:**
+- Purpose: Bridge with Claude CLI process, handle streaming protocol, manage permissions/hooks
 - Location: `src/backend/claude/`
-- Contains: Protocol parser, session manager, permissions, types
-- Examples: `protocol.ts`, `session.ts`, `permissions.ts`, `process.ts`
-- Depends on: Services, types
-- Used by: WebSocket handlers for chat
+- Contains:
+  - `ClaudeClient`: High-level API for streaming JSON protocol
+  - `ClaudeProcess`: Process lifecycle management
+  - `SessionManager`: Session history/resumption
+  - `PermissionHandler`: Permission modes (autoApprove, deferred, plan-based)
+  - Protocol parsing, types, control messages
+- Depends on: Node child_process, WebSocket for event forwarding
+- Used by: Session service, chat message handlers, agent process adapter
 
-**Database:**
-- Purpose: Data persistence
-- Location: `prisma/` (schema) + `src/backend/db.ts` (client initialization)
-- Technology: SQLite via better-sqlite3 adapter
-- Path: `~/factory-factory/data.db` (configurable via DATABASE_PATH env)
-- Accessed by: All resource accessors via singleton Prisma client
+**MCP (Model Context Protocol) Layer:**
+- Purpose: Execute tools requested by Claude CLI (filesystem, git, terminal, system)
+- Location: `src/backend/routers/mcp/`
+- Contains: MCP server initialization, tool definitions (system, terminal, git, lock operations)
+- Depends on: Shell execution, git operations, process management
+- Used by: Claude CLI via stdio, agent process adapter for tool interception
+
+**Agent Process Adapter:**
+- Purpose: Unified interface for agent lifecycle and tool execution
+- Location: `src/backend/agents/process-adapter.ts`
+- Contains: Agent start/stop, message event forwarding, tool execution delegation
+- Depends on: ClaudeClient, MCP server, event emitter pattern
+- Used by: Future agent orchestration features
+
+**Database Layer:**
+- Purpose: SQLite persistence for projects, workspaces, sessions, logs
+- Location: `src/backend/db.ts`, `prisma/schema.prisma`
+- Contains: Prisma client singleton, schema definitions
+- Depends on: better-sqlite3 adapter, Prisma migrations
+- Used by: All resource accessors
+
+**CLI Entry Point:**
+- Purpose: Server startup, process orchestration, port management
+- Location: `src/cli/index.ts`
+- Contains: Commander.js command parsing, database migrations, process lifecycle, dev/prod mode handling
+- Depends on: Backend server creation, database setup
+- Used by: Node process, npm scripts
 
 ## Data Flow
 
-**Workspace Creation Flow:**
+**Interactive Chat Session (Web UI):**
 
-1. User submits form in `NewWorkspacePage` (`src/client/routes/projects/workspaces/new.tsx`)
-2. tRPC call via `trpc.workspace.create.useMutation()` from `@trpc/react-query`
-3. Request → Express → tRPC middleware → `workspace.trpc.ts` create procedure
-4. Procedure calls `workspaceAccessor.create()` in `src/backend/resource_accessors/workspace.accessor.ts`
-5. Accessor queries database via Prisma
-6. Response returned to client, React Query updates cache
-7. Frontend re-renders workspace detail page
+1. User sends message via React component → tRPC call (or WebSocket to chat handler)
+2. Frontend passes `projectId` + `taskId` context via headers
+3. tRPC procedure or WebSocket handler validates context, creates/gets ClaudeClient
+4. ClaudeClient spawns/resumes Claude CLI process
+5. Message sent via stdin streaming JSON protocol
+6. Claude CLI responds with stream events (text chunks, tool uses, control requests)
+7. ClaudeProcess emits events → ChatEventForwarderService sets up listeners
+8. Chat handlers dispatch messages by type (text, tool_use, permission_request, etc.)
+9. Tool use requests → MCP server execution → MCP tool response → Claude via tool_result
+10. Final result/exit → SessionManager persists session to `~/.claude/projects/`
+11. WebSocket sends completion to frontend → React Query updates UI
 
-**Chat Session Flow:**
+**Workspace Provisioning (Initialization):**
 
-1. User starts chat in workspace detail view
-2. WebSocket connection established to `/chat` endpoint
-3. Server upgrade handler (`handleChatUpgrade` in `src/backend/routers/websocket/index.ts`)
-4. Chat session created, Claude protocol parser initialized
-5. User messages forwarded to Claude API
-6. Responses streamed back via WebSocket in JSON protocol format
-7. Frontend `chat-reducer.ts` processes messages, updates Redux-like state
-8. Persistence service saves chat to IndexedDB (client-side)
+1. User creates workspace via ProjectPage → tRPC procedure creates Workspace record (status: NEW)
+2. Async provisioning triggered via services
+3. WorkspaceStateMachine: NEW → PROVISIONING
+4. Git worktree created at `worktreePath`
+5. Startup script executed (if configured) with timeout + port allocation
+6. On success: READY with `runScriptPid`, `runScriptPort`
+7. On failure: FAILED with `initErrorMessage`
+8. Frontend polls workspace status or receives updates via WebSocket
 
-**State Management:**
+**Terminal Session (PTY):**
 
-**Frontend State:**
-- Chat: Reducer-based (src/components/chat/chat-reducer.ts) with persistence to IndexedDB
-- Routing: React Router URL-driven
-- Data fetching: tRPC + React Query
+1. WebSocket upgrade on `/api/terminal/:id`
+2. TerminalService spawns PTY for workspace
+3. Terminal input received → written to PTY stdin
+4. PTY output → sent back via WebSocket frames
+5. On close: PTY killed, dev log file finalized
 
-**Backend State:**
-- Session state machine: `workspace-state-machine.service.ts`
-- Terminal sessions: Tracked in `terminal.service.ts`
-- File locks: Managed by `file-lock.service.ts`
-- Scheduling: Handled by `scheduler.service.ts`
+**State Reconciliation:**
+
+1. ReconciliationService runs on schedule
+2. Compares database state vs actual filesystem/process state
+3. Updates mismatched workspace statuses (e.g., runScript exited but status still RUNNING)
+4. Recovers from crashes/orphaned processes
 
 ## Key Abstractions
 
-**Workspace:**
-- Purpose: Isolated git worktree for Claude Code CLI sessions
-- Location: `prisma/schema.prisma` (Workspace model) + `src/backend/resource_accessors/workspace.accessor.ts`
-- Stateful: ACTIVE, COMPLETED, ARCHIVED states managed by `workspace-state-machine.service.ts`
-- Accessed: tRPC `workspace.*` procedures
+**ClaudeClient:**
+- Purpose: Unified abstraction over Claude CLI process lifecycle and streaming protocol
+- Examples: `src/backend/claude/index.ts`
+- Pattern: Wraps ClaudeProcess + SessionManager + PermissionHandler, emits typed events (text, tool_use, etc.)
 
-**ClaudeSession:**
-- Purpose: Chat session with Claude Code CLI
-- Location: `prisma/schema.prisma` (ClaudeSession model) + `src/backend/resource_accessors/claude-session.accessor.ts`
-- Lifecycle: Created, resumed, closed
-- WebSocket: Session-specific channel at `/chat?sessionId=...`
+**Resource Accessor:**
+- Purpose: Single source of truth for database queries per entity type
+- Examples: `src/backend/resource_accessors/project.accessor.ts`, `workspace.accessor.ts`
+- Pattern: Static methods on class, no instance state, delegates to Prisma
 
-**TerminalSession:**
-- Purpose: PTY terminal spawned within a workspace
-- Location: `prisma/schema.prisma` (TerminalSession model) + `src/backend/services/terminal.service.ts`
-- Lifecycle: Spawned on demand, persisted across reconnects via file system
-- WebSocket: Session-specific channel at `/terminal?sessionId=...`
+**Service Singleton:**
+- Purpose: Stateful service instances with initialization, accessible globally via `src/backend/services/index.ts`
+- Examples: `sessionService`, `chatConnectionService`, `messageStateService`, `terminalService`
+- Pattern: `export const serviceInstance = new ServiceClass(); /* initialize */`
 
-**Project:**
-- Purpose: Git repository configuration, workspace container
-- Location: `prisma/schema.prisma` (Project model) + `src/backend/resource_accessors/project.accessor.ts`
-- Contains: Repo path, default branch, GitHub info
-- Accessed: tRPC `project.*` procedures
+**Message Handler/Dispatcher:**
+- Purpose: Route messages by type to appropriate handler function
+- Examples: `src/backend/services/chat-message-handlers.service.ts`
+- Pattern: Map of message type → handler function, called from WebSocket/tRPC layer
+
+**Event Compression:**
+- Purpose: Delta compression for large message histories in WebSocket replay
+- Examples: `src/backend/services/event-compression.service.ts`
+- Pattern: Compress outgoing events on send, decompress on reconnect
+
+**State Machine:**
+- Purpose: Explicit workspace status transitions with side effects
+- Examples: `src/backend/services/workspace-state-machine.service.ts`
+- Pattern: Current state + event → next state + side effects (create worktree, run script)
 
 ## Entry Points
 
-**CLI (Development/Production):**
+**CLI/Standalone Server:**
 - Location: `src/cli/index.ts`
-- Triggers: `pnpm dev`, `pnpm start`, or `ff serve` command
-- Responsibilities:
-  - Parse command-line arguments
-  - Ensure database directory exists
-  - Run Prisma migrations
-  - Spawn backend server (tsx in dev, node in prod)
-  - Spawn Vite frontend (dev mode only)
-  - Open browser
-  - Handle graceful shutdown
+- Triggers: `npm run dev` or `pnpm dev`
+- Responsibilities: Argument parsing, database migration, backend server creation, port detection, process lifecycle
 
-**Electron Main Process:**
-- Location: `electron/main.ts` (inferred from build script)
-- Triggers: `pnpm dev:electron` or app launch
-- Responsibilities:
-  - Create BrowserWindow
-  - Spawn backend server as child process
-  - Load frontend from Vite dev server or static build
-  - Manage IPC with renderer process
+**Express Server:**
+- Location: `src/backend/server.ts` exported as `createServer()`
+- Triggers: Called from `src/backend/index.ts` (CLI mode) or Electron main process
+- Responsibilities: Create HTTP server, mount Express middleware, attach WebSocket server, register routers
 
-**Server Startup:**
-- Location: `src/backend/index.ts`
-- Creates: ServerInstance via `createServer()` from `src/backend/server.ts`
-- Registers: Instance globally via `serverInstanceService`
-- Handles: SIGTERM, SIGINT, uncaught exceptions for graceful shutdown
-
-**Frontend Bootstrap:**
+**Frontend Entry Point:**
 - Location: `src/client/main.tsx`
-- Creates: React root with StrictMode
-- Loads: Router from `src/client/router.tsx`
-- Mounts: to #root element in HTML
+- Triggers: Vite build process
+- Responsibilities: DOM mounting, render Root component with providers (tRPC, React Query, Theme)
+
+**Router (Frontend):**
+- Location: `src/client/router.tsx` (React Router v7)
+- Triggers: Root component render
+- Responsibilities: Route configuration, lazy loading, layout nesting
+
+**WebSocket Upgrade Handlers:**
+- Location: `src/backend/routers/websocket/`
+- Triggers: WebSocket upgrade requests on paths `/api/chat`, `/api/terminal`, `/api/dev-logs`
+- Responsibilities: Session validation, client creation, event forwarding, connection tracking
+
+**tRPC Router:**
+- Location: `src/backend/trpc/index.ts` (aggregates all routers)
+- Triggers: Express middleware mounting
+- Responsibilities: Route tRPC calls from frontend to procedure implementations
 
 ## Error Handling
 
-**Strategy:** Layered error propagation with context-aware handling
+**Strategy:** Layered error handling with validation at each layer, error responses through tRPC/WebSocket, logging via createLogger service.
 
-**Backend Patterns:**
-- tRPC procedures throw typed errors caught by middleware
-- Services throw with descriptive messages logged via logger service
-- WebSocket errors broadcast to client as JSON messages
-- Database errors caught by resource accessors, logged with context
-- HTTP errors formatted with development/production response bodies (see server.ts error handler)
-
-**Frontend Patterns:**
-- tRPC useQuery/useMutation hooks expose error in state
-- ErrorBoundary component at root level catches React render errors
-- Chat reducer handles malformed protocol messages gracefully
-- WebSocket reconnection with exponential backoff (websocket-config.ts)
-
-**Logging:** Centralized logger service (`src/backend/services/logger.service.ts`) with namespaced logging
+**Patterns:**
+- Frontend: Error boundaries catch React errors, tRPC client errors trigger toast notifications
+- Backend: tRPC procedures return error objects, WebSocket handlers send error messages, graceful degradation on tool failures
+- Database: Prisma errors propagate up through accessors, logged by error middleware
+- Process: Uncaught exceptions trigger graceful server shutdown, unhandled rejections logged
 
 ## Cross-Cutting Concerns
 
-**Logging:**
-- Backend: `src/backend/services/logger.service.ts` with createLogger() factory
-- Namespaced by component (logger('server'), logger('workspace'), etc.)
-- Session file logger: `src/backend/services/session-file-logger.service.ts` for workspace transcripts
+**Logging:** `src/backend/services/logger.service.ts` creates scoped loggers via `createLogger(scope)` pattern. Frontend uses browser console. Session logs stored via `sessionFileLogger`.
 
-**Validation:**
-- Backend: Zod schemas in tRPC procedure inputs
-- Frontend: React Hook Form with Zod validation
+**Validation:** Zod schemas at tRPC procedure boundaries (`src/backend/schemas/`), WebSocket message schemas in `src/backend/schemas/websocket/`.
 
-**Authentication:**
-- Context: tRPC context extracts X-Project-Id and X-Top-Level-Task-Id headers
-- Permissions: Claude protocol layer checks in `src/backend/claude/permissions.ts`
-- No traditional user auth (workspace-scoped via headers)
+**Authentication:** None (assumes trusted environment, Claude CLI provides per-session authentication to Anthropic API).
 
-**Rate Limiting:**
-- Service: `src/backend/services/rate-limiter.service.ts` for API limits
-- Chat: Message queue service prevents flooding
+**Permission Control:** PermissionHandler modes (autoApprove, deferred, plan-based) in Claude integration layer control tool execution.
 
-**Database Transactions:**
-- Managed by Prisma client within resource accessors
-- Used in workspace creation, session management
+**Database Transactions:** Prisma handle implicit transactions per query, explicit `$transaction()` for multi-step operations in services.
+
+**State Synchronization:** WebSocket real-time updates for chat/terminal, tRPC polling for workspace status, event-driven message queue for decoupled tool responses.
 
 ---
 
