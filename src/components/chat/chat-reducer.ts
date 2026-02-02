@@ -122,7 +122,7 @@ export interface ChatState {
   pendingMessages: Map<string, PendingMessageContent>;
   /** Last rejected message for recovery (allows restoring to input) */
   lastRejectedMessage: RejectedMessageInfo | null;
-  /** Whether context compaction is in progress */
+  /** Whether context compaction is in progress (placeholder for future SDK support) */
   isCompacting: boolean;
   /** Tool progress tracking for long-running tools - Map from tool_use_id to progress info */
   toolProgress: Map<string, ToolProgressInfo>;
@@ -908,9 +908,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return state;
     }
 
-    // SDK message type actions
+    // SDK message type actions (placeholders for future SDK support)
     case 'SDK_STATUS_UPDATE':
-      // Status updates may include permissionMode - currently just logged, could track in state
+      // Placeholder: could track permissionMode changes in state when needed
       return state;
 
     case 'SDK_TOOL_PROGRESS': {
@@ -931,7 +931,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'SDK_TASK_NOTIFICATION':
-      // Task notifications could be displayed in UI - currently just logged
+      // Placeholder: could display task notifications in UI when needed
       return state;
 
     case 'SDK_COMPACTING_START':

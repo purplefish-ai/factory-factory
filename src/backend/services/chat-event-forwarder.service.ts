@@ -161,19 +161,37 @@ class ChatEventForwarderService {
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
 
-      // Handle new SDK message types (tool_progress, tool_use_summary)
-      if (streamEvent.type === 'tool_progress' || streamEvent.type === 'tool_use_summary') {
-        // Forward these as their own message type for specialized handling
-        const sdkEvent = event as unknown as { type: string; data?: unknown };
-        messageStateService.storeEvent(dbSessionId, sdkEvent);
-        chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
-        return;
-      }
-
       // Store-then-forward: store event for replay before forwarding
       const msg = { type: 'claude_message', data: event };
       messageStateService.storeEvent(dbSessionId, msg);
       chatConnectionService.forwardToSession(dbSessionId, msg);
+    });
+
+    // SDK message types - forwarded as dedicated event types
+    client.on('tool_progress', (event) => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Received tool_progress event', { dbSessionId });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'tool_progress',
+        data: event,
+      });
+      const sdkEvent = event as unknown as { type: string };
+      messageStateService.storeEvent(dbSessionId, sdkEvent);
+      chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
+    });
+
+    client.on('tool_use_summary', (event) => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Received tool_use_summary event', { dbSessionId });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'tool_use_summary',
+        data: event,
+      });
+      const sdkEvent = event as unknown as { type: string };
+      messageStateService.storeEvent(dbSessionId, sdkEvent);
+      chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
     });
 
     client.on('message', (msg) => {
