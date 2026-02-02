@@ -160,7 +160,7 @@ export type ChatAction =
   | { type: 'WS_STARTING' }
   | { type: 'WS_STARTED' }
   | { type: 'WS_STOPPED' }
-  | { type: 'WS_CLAUDE_MESSAGE'; payload: ClaudeMessage }
+  | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order?: number } }
   | { type: 'WS_ERROR'; payload: { message: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
@@ -258,12 +258,13 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function createClaudeMessage(message: ClaudeMessage): ChatMessage {
+function createClaudeMessage(message: ClaudeMessage, order?: number): ChatMessage {
   return {
     id: generateMessageId(),
     source: 'claude',
     message,
     timestamp: new Date().toISOString(),
+    order,
   };
 }
 
@@ -280,10 +281,13 @@ function createErrorMessage(error: string): ChatMessage {
  * Inserts a message into the messages array at the correct position based on order.
  * Uses binary search to find the insertion point for O(log n) performance.
  * Messages are ordered by their backend-assigned order (oldest first).
- * Messages without order are appended to the end.
+ *
+ * All messages (user and Claude) should have an order assigned by the backend.
+ * Messages without order are treated as having order Infinity (appended to end)
+ * for backwards compatibility with older stored events.
  */
 function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
-  // If new message has no order, append to end (local messages without backend confirmation)
+  // If new message has no order, append to end
   if (newMessage.order === undefined) {
     return [...messages, newMessage];
   }
@@ -298,9 +302,7 @@ function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage):
     const mid = Math.floor((low + high) / 2);
     const midOrder = messages[mid].order;
 
-    // Messages without order are real-time streaming messages that should stay at end.
-    // Treat undefined order as Infinity - move right past them so new ordered messages
-    // are inserted before the unordered trailing messages but after all ordered ones.
+    // Treat undefined order as Infinity (move right past them)
     if (midOrder === undefined || midOrder <= newOrder) {
       low = mid + 1;
     } else {
@@ -526,7 +528,11 @@ function convertPendingRequest(req: PendingInteractiveRequest | null | undefined
 /**
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
-function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage): ChatState {
+function handleClaudeMessage(
+  state: ChatState,
+  claudeMsg: ClaudeMessage,
+  order?: number
+): ChatState {
   // Transition from starting to running when receiving a Claude message
   let baseState: ChatState =
     state.sessionStatus.phase === 'starting'
@@ -543,10 +549,10 @@ function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage): ChatSt
     return baseState;
   }
 
-  // Create and add the message
-  const chatMessage = createClaudeMessage(claudeMsg);
-  const newMessages = [...baseState.messages, chatMessage];
-  const newIndex = newMessages.length - 1;
+  // Create and add the message using order-based insertion
+  const chatMessage = createClaudeMessage(claudeMsg, order);
+  const newMessages = insertMessageByOrder(baseState.messages, chatMessage);
+  const newIndex = newMessages.indexOf(chatMessage);
 
   // Track tool_use message index for O(1) updates
   const toolUseId = getToolUseIdFromMessage(claudeMsg);
@@ -658,7 +664,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // Claude message handling (delegated to helper)
     case 'WS_CLAUDE_MESSAGE':
-      return handleClaudeMessage(state, action.payload);
+      return handleClaudeMessage(state, action.payload.message, action.payload.order);
 
     // Error message
     case 'WS_ERROR':
@@ -1115,7 +1121,7 @@ function handleStatusMessage(data: WebSocketMessage): ChatAction {
 
 function handleClaudeMessageAction(data: WebSocketMessage): ChatAction | null {
   if (isWsClaudeMessage(data)) {
-    return { type: 'WS_CLAUDE_MESSAGE', payload: data.data };
+    return { type: 'WS_CLAUDE_MESSAGE', payload: { message: data.data, order: data.order } };
   }
   return null;
 }

@@ -236,7 +236,9 @@ class ChatEventForwarderService {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
 
       // Store-then-forward: store event for replay before forwarding
-      const msg = { type: 'claude_message', data: event };
+      // Include order for consistent frontend message sorting
+      const order = messageStateService.allocateOrder(dbSessionId);
+      const msg = { type: 'claude_message', data: event, order };
       messageStateService.storeEvent(dbSessionId, msg);
       chatConnectionService.forwardToSession(dbSessionId, msg);
     });
@@ -454,7 +456,9 @@ class ChatEventForwarderService {
         action: 'forwarding_user_message_with_tool_result',
       });
       // Store-then-forward: store event for replay before forwarding
-      const wsMsg = { type: 'claude_message', data: msg };
+      // Include order for consistent frontend message sorting
+      const order = messageStateService.allocateOrder(dbSessionId);
+      const wsMsg = { type: 'claude_message', data: msg, order };
       messageStateService.storeEvent(dbSessionId, wsMsg);
       chatConnectionService.forwardToSession(dbSessionId, wsMsg);
     });
@@ -466,7 +470,9 @@ class ChatEventForwarderService {
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
       // Store-then-forward: store events for replay before forwarding
-      const resultMsg = { type: 'claude_message', data: result };
+      // Include order for consistent frontend message sorting
+      const order = messageStateService.allocateOrder(dbSessionId);
+      const resultMsg = { type: 'claude_message', data: result, order };
       messageStateService.storeEvent(dbSessionId, resultMsg);
       chatConnectionService.forwardToSession(dbSessionId, resultMsg);
 

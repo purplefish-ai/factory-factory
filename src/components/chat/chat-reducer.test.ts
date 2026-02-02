@@ -242,7 +242,7 @@ describe('chatReducer', () => {
   describe('WS_CLAUDE_MESSAGE action', () => {
     it('should add assistant message to messages array', () => {
       const claudeMsg = createTestAssistantMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: claudeMsg };
+      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: { message: claudeMsg } };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -253,7 +253,7 @@ describe('chatReducer', () => {
     it('should transition from starting to running when receiving a Claude message', () => {
       const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: claudeMsg };
+      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: { message: claudeMsg } };
       const newState = chatReducer(state, action);
 
       expect(newState.sessionStatus).toEqual({ phase: 'running' });
@@ -262,7 +262,7 @@ describe('chatReducer', () => {
     it('should set sessionStatus to ready when receiving a result message', () => {
       const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
       const resultMsg = createTestResultMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: resultMsg };
+      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: { message: resultMsg } };
       const newState = chatReducer(state, action);
 
       expect(newState.sessionStatus).toEqual({ phase: 'ready' });
@@ -272,7 +272,7 @@ describe('chatReducer', () => {
     it('should store tool_use messages and track index for O(1) updates', () => {
       const toolUseId = 'tool-use-123';
       const toolUseMsg = createTestToolUseMessage(toolUseId);
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg };
+      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: { message: toolUseMsg } };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -281,7 +281,7 @@ describe('chatReducer', () => {
 
     it('should store thinking messages', () => {
       const thinkingMsg = createTestThinkingMessage();
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: thinkingMsg };
+      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: { message: thinkingMsg } };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -289,7 +289,7 @@ describe('chatReducer', () => {
 
     it('should store tool_result messages from user type', () => {
       const toolResultMsg = createTestToolResultMessage('tool-123');
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: toolResultMsg };
+      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: { message: toolResultMsg } };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
@@ -304,7 +304,10 @@ describe('chatReducer', () => {
           delta: { type: 'text_delta', text: 'Hello' },
         },
       };
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: deltaMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: deltaMsg },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(0);
@@ -318,7 +321,10 @@ describe('chatReducer', () => {
           message: { role: 'assistant', content: [] },
         },
       };
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: msgStartEvent };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: msgStartEvent },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(0);
@@ -332,7 +338,10 @@ describe('chatReducer', () => {
           content: 'Hello',
         },
       };
-      const action: ChatAction = { type: 'WS_CLAUDE_MESSAGE', payload: userMsg };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: userMsg },
+      };
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(0);
@@ -597,7 +606,10 @@ describe('chatReducer', () => {
       const toolUseMsg = createTestToolUseMessage(toolUseId);
 
       // First add the tool use message
-      let state = chatReducer(initialState, { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg });
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolUseMsg },
+      });
       expect(state.toolUseIdToIndex.get(toolUseId)).toBe(0);
 
       // Now update the input
@@ -619,7 +631,10 @@ describe('chatReducer', () => {
       const toolUseMsg = createTestToolUseMessage(toolUseId);
 
       // Add tool use message but clear the index
-      let state = chatReducer(initialState, { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg });
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolUseMsg },
+      });
       state = { ...state, toolUseIdToIndex: new Map() }; // Clear the index
 
       // Update should still work via linear scan
@@ -651,7 +666,10 @@ describe('chatReducer', () => {
       const toolUseMsg = createTestToolUseMessage(toolUseId);
 
       // Add tool use message at index 0
-      let state = chatReducer(initialState, { type: 'WS_CLAUDE_MESSAGE', payload: toolUseMsg });
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: toolUseMsg },
+      });
       expect(state.toolUseIdToIndex.get(toolUseId)).toBe(0);
       expect(state.messages.length).toBe(1);
 
@@ -1757,10 +1775,13 @@ describe('createActionFromWebSocketMessage', () => {
       type: 'assistant',
       message: { role: 'assistant', content: 'Hello!' },
     };
-    const wsMessage: WebSocketMessage = { type: 'claude_message', data: claudeMsg };
+    const wsMessage: WebSocketMessage = { type: 'claude_message', data: claudeMsg, order: 5 };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_CLAUDE_MESSAGE', payload: claudeMsg });
+    expect(action).toEqual({
+      type: 'WS_CLAUDE_MESSAGE',
+      payload: { message: claudeMsg, order: 5 },
+    });
   });
 
   it('should return null for claude_message without data', () => {
