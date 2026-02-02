@@ -329,7 +329,9 @@ export function AppSidebar() {
 
                             {/* Name (truncates) */}
                             <span className="truncate font-medium text-sm flex-1 min-w-0 ml-1">
-                              {isArchivingItem ? 'Archiving...' : workspace.name}
+                              {isArchivingItem
+                                ? 'Archiving...'
+                                : workspace.branchName || workspace.name}
                             </span>
 
                             {/* Diff stats */}
