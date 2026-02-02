@@ -382,7 +382,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
                           <div className="flex w-full min-w-0 items-start gap-2">
                             {/* Status dot */}
-                            <span className="mt-1 w-4 shrink-0 flex justify-center">
+                            <span className="w-4 shrink-0 flex justify-center">
                               {isArchivingItem ? (
                                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
                               ) : (
