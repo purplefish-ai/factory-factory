@@ -9,10 +9,12 @@ import type { SlashKeyResult } from '../../slash-command-palette';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
+  onStop?: () => void;
   onChange?: (value: string) => void;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   disabled: boolean;
   running: boolean;
+  stopping?: boolean;
   settings?: ChatSettings;
   attachments: MessageAttachment[];
   setAttachments: (
@@ -36,6 +38,7 @@ interface UseChatInputActionsReturn {
 
 interface ShortcutDefinition {
   key: string;
+  mod?: boolean;
   shift?: boolean;
   alt?: boolean;
   ctrl?: boolean;
@@ -56,6 +59,12 @@ function matchesShortcut(
     return false;
   }
 
+  if (shortcut.mod !== undefined) {
+    const hasMod = event.metaKey || event.ctrlKey;
+    if (shortcut.mod !== hasMod) {
+      return false;
+    }
+  }
   if (shortcut.shift !== undefined && shortcut.shift !== event.shiftKey) {
     return false;
   }
@@ -93,10 +102,12 @@ function runShortcuts(
  */
 export function useChatInputActions({
   onSend,
+  onStop,
   onChange,
   onSettingsChange,
   disabled,
   running,
+  stopping,
   settings,
   attachments,
   setAttachments,
@@ -131,8 +142,70 @@ export function useChatInputActions({
           }
         },
       },
+      {
+        key: 'Enter',
+        mod: true,
+        shift: false,
+        alt: false,
+        action: (event) => {
+          sendFromInput(event.currentTarget);
+        },
+      },
+      {
+        key: 'p',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!running) {
+            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+          }
+        },
+      },
+      {
+        key: 't',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!running) {
+            onSettingsChange?.({ thinkingEnabled: !settings?.thinkingEnabled });
+          }
+        },
+      },
+      {
+        key: 'u',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!running && !disabled) {
+            fileInputRef.current?.click();
+          }
+        },
+      },
+      {
+        key: '.',
+        mod: true,
+        shift: false,
+        alt: false,
+        action: () => {
+          if (running && !stopping) {
+            onStop?.();
+          }
+        },
+      },
     ],
-    [running, onSettingsChange, settings?.planModeEnabled]
+    [
+      disabled,
+      onSettingsChange,
+      onStop,
+      running,
+      sendFromInput,
+      settings?.planModeEnabled,
+      settings?.thinkingEnabled,
+      stopping,
+    ]
   );
 
   const postSlashShortcuts = useMemo<ShortcutDefinition[]>(

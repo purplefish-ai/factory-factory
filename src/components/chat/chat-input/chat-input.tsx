@@ -122,10 +122,12 @@ export const ChatInput = memo(function ChatInput({
   // Actions hook
   const actions = useChatInputActions({
     onSend,
+    onStop,
     onChange,
     onSettingsChange,
     disabled,
     running,
+    stopping,
     settings,
     attachments,
     setAttachments,
