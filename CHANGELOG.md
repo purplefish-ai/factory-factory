@@ -5,6 +5,37 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-02-02
+
+### Added
+
+- Slash command discovery and autocomplete (#462)
+- Workspace notification system for agent completion (#467)
+- Shift+Tab keyboard shortcut to toggle plan mode (#464)
+- Smart delta compression for WebSocket message replay (#441)
+- Handle SDK events: context compaction, task notifications, and status updates (#461)
+- Differentiate system message subtypes (#460)
+
+### Changed
+
+- Refactor chat-input.tsx into modular components and hooks (#472)
+- Show branch name in sidebar instead of workspace name (#471)
+- Align Claude Code message handling with official SDK (#446)
+- Replace ultrathink suffix with SDK set_max_thinking_tokens (#458)
+
+### Fixed
+
+- Fix New Workspace button size in Kanban view (#475)
+- Fix message ordering when mixing ordered and unordered messages (#473)
+- Handle control_cancel_request and dismiss stale permission dialogs (#468)
+- Fix diff vs main to prefer origin/main over local main (#469)
+- Fix quick action not executing when clicked (#466)
+- Fix ExitPlanMode and add comprehensive Zod schemas for tool inputs (#459)
+- Fix code review issues: config caching, division by zero, and opacity inheritance (#445)
+- Fix message ordering by using backend-assigned order instead of timestamps (#443)
+- Fix node-pty spawn-helper permissions for npx installs (#442)
+- Fix "Cannot read properties of undefined (reading 'length')" during tool streaming (#440)
+
 ## [0.1.3] - 2025-02-01
 
 ### Fixed
