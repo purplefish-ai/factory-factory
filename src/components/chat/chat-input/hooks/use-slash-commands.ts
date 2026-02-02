@@ -7,6 +7,7 @@ import type { SlashCommandPaletteHandle, SlashKeyResult } from '../../slash-comm
 
 interface UseSlashCommandsOptions {
   slashCommands: CommandInfo[];
+  commandsLoaded?: boolean;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   onChange?: (value: string) => void;
 }
@@ -28,13 +29,14 @@ interface UseSlashCommandsReturn {
  */
 export function useSlashCommands({
   slashCommands,
+  commandsLoaded = false,
   inputRef,
   onChange,
 }: UseSlashCommandsOptions): UseSlashCommandsReturn {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const paletteRef = useRef<SlashCommandPaletteHandle>(null);
-  const commandsReady = slashCommands.length > 0;
+  const commandsReady = commandsLoaded || slashCommands.length > 0;
 
   // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
   useEffect(() => {

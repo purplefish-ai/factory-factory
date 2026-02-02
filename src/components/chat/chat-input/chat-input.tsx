@@ -55,6 +55,7 @@ export interface ChatInputProps {
   onAttachmentsChange?: (attachments: MessageAttachment[]) => void;
   // Slash commands for autocomplete
   slashCommands?: CommandInfo[];
+  slashCommandsLoaded?: boolean;
   // Token usage stats for context window indicator
   tokenStats?: TokenStats;
 }
@@ -88,6 +89,7 @@ export const ChatInput = memo(function ChatInput({
   attachments: controlledAttachments,
   onAttachmentsChange,
   slashCommands = [],
+  slashCommandsLoaded = false,
   tokenStats,
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
@@ -119,6 +121,7 @@ export const ChatInput = memo(function ChatInput({
   // Slash commands hook
   const slash = useSlashCommands({
     slashCommands,
+    commandsLoaded: slashCommandsLoaded,
     inputRef: resolvedInputRef,
     onChange,
   });

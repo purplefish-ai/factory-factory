@@ -165,6 +165,8 @@ export interface ChatState {
   taskNotifications: TaskNotification[];
   /** Slash commands from CLI initialize response */
   slashCommands: CommandInfo[];
+  /** Whether slash commands have finished loading for this session */
+  slashCommandsLoaded: boolean;
   /** Accumulated token usage stats for the session */
   tokenStats: TokenStats;
   /**
@@ -492,6 +494,7 @@ function createSessionSwitchResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
   | 'slashCommands'
+  | 'slashCommandsLoaded'
   | 'tokenStats'
   | 'pendingUserMessageUuids'
   | 'messageIdToUuid'
@@ -503,6 +506,7 @@ function createSessionSwitchResetState(): Pick<
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
     slashCommands: [], // Clear for new session - will be sent when Claude starts
+    slashCommandsLoaded: false,
   };
 }
 
@@ -527,6 +531,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     activeHooks: new Map(),
     taskNotifications: [],
     slashCommands: [],
+    slashCommandsLoaded: false,
     tokenStats: createEmptyTokenStats(),
     pendingUserMessageUuids: [],
     messageIdToUuid: new Map(),
@@ -1139,7 +1144,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // System subtype actions
     case 'SYSTEM_INIT':
-      return { ...state, sessionInitData: action.payload };
+      return { ...state, sessionInitData: action.payload, slashCommandsLoaded: true };
 
     case 'COMPACT_BOUNDARY': {
       // Create a synthetic ClaudeMessage to render the compact boundary indicator
@@ -1182,7 +1187,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // Slash commands discovery
     case 'WS_SLASH_COMMANDS':
-      return { ...state, slashCommands: action.payload.commands };
+      return {
+        ...state,
+        slashCommands: action.payload.commands,
+        slashCommandsLoaded: true,
+      };
 
     case 'DISMISS_TASK_NOTIFICATION':
       return {

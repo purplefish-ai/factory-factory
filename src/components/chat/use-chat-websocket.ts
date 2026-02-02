@@ -65,6 +65,8 @@ export interface UseChatWebSocketReturn {
   permissionMode: string | null;
   // Slash commands from CLI initialize response
   slashCommands: CommandInfo[];
+  // Whether slash commands have finished loading for this session
+  slashCommandsLoaded: boolean;
   // Accumulated token usage stats for the session
   tokenStats: TokenStats;
   // Rewind preview state (for confirmation dialog)
@@ -181,6 +183,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     taskNotifications: chat.taskNotifications,
     permissionMode: chat.permissionMode,
     slashCommands: chat.slashCommands,
+    slashCommandsLoaded: chat.slashCommandsLoaded,
     tokenStats: chat.tokenStats,
     rewindPreview: chat.rewindPreview,
     // Actions from chat

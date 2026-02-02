@@ -104,6 +104,7 @@ interface ChatContentProps {
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
   slashCommands: CommandInfo[];
+  slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
   tokenStats: TokenStats;
   // Rewind files
   rewindPreview: ReturnType<typeof useChatWebSocket>['rewindPreview'];
@@ -144,6 +145,7 @@ const ChatContent = memo(function ChatContent({
   pendingMessages,
   isCompacting,
   slashCommands,
+  slashCommandsLoaded,
   tokenStats,
   rewindPreview,
   startRewindPreview,
@@ -245,6 +247,7 @@ const ChatContent = memo(function ChatContent({
           onHeightChange={handleHeightChange}
           pendingMessageCount={pendingMessages.size}
           slashCommands={slashCommands}
+          slashCommandsLoaded={slashCommandsLoaded}
           tokenStats={tokenStats}
         />
       </div>
@@ -343,6 +346,7 @@ function WorkspaceChatContent() {
     pendingMessages,
     isCompacting,
     slashCommands,
+    slashCommandsLoaded,
     tokenStats,
     rewindPreview,
     sendMessage,
@@ -664,6 +668,7 @@ function WorkspaceChatContent() {
                 pendingMessages={pendingMessages}
                 isCompacting={isCompacting}
                 slashCommands={slashCommands}
+                slashCommandsLoaded={slashCommandsLoaded}
                 tokenStats={tokenStats}
                 rewindPreview={rewindPreview}
                 startRewindPreview={startRewindPreview}
