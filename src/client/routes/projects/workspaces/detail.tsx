@@ -2,7 +2,6 @@ import {
   AppWindow,
   Archive,
   ArrowDown,
-  Check,
   CheckCircle2,
   Circle,
   GitBranch,
@@ -449,13 +448,13 @@ function WorkspaceChatContent() {
               rel="noopener noreferrer"
               className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
                 workspace.prState === 'MERGED'
-                  ? 'text-purple-500'
+                  ? 'text-green-500'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               #{workspace.prNumber}
               {workspace.prState === 'MERGED' ? (
-                <Check className="h-3 w-3" />
+                <CheckCircle2 className="h-3 w-3 text-green-500" />
               ) : (
                 <>
                   {workspace.prCiStatus === 'SUCCESS' && (
@@ -510,9 +509,14 @@ function WorkspaceChatContent() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant="ghost"
+                variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
                 size="icon"
-                className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                className={cn(
+                  'h-8 w-8',
+                  workspace.prState === 'MERGED'
+                    ? ''
+                    : 'hover:bg-destructive/10 hover:text-destructive'
+                )}
                 onClick={() => {
                   // Skip confirmation if PR is already merged
                   if (workspace.prState === 'MERGED') {
