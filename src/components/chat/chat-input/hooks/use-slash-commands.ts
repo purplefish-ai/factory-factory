@@ -33,32 +33,26 @@ export function useSlashCommands({
 }: UseSlashCommandsOptions): UseSlashCommandsReturn {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
-  const [commandsReady, setCommandsReady] = useState(slashCommands.length > 0);
   const paletteRef = useRef<SlashCommandPaletteHandle>(null);
-  const hasMountedRef = useRef(false);
+  const commandsReady = slashCommands.length > 0;
 
+  // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
   useEffect(() => {
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      if (slashCommands.length === 0) {
-        return;
-      }
+    if (slashCommands.length === 0 || !inputRef?.current) {
+      return;
     }
-    setCommandsReady(true);
-    // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
-    if (inputRef?.current) {
-      const currentValue = inputRef.current.value;
-      if (currentValue.startsWith('/')) {
-        const afterSlash = currentValue.slice(1);
-        const spaceIndex = afterSlash.indexOf(' ');
-        // Only open if still completing command name (no space yet)
-        if (spaceIndex === -1) {
-          setSlashFilter(afterSlash);
-          setSlashMenuOpen(true);
-        }
-      }
+    const currentValue = inputRef.current.value;
+    if (!currentValue.startsWith('/')) {
+      return;
     }
-  }, [slashCommands, inputRef]);
+    const afterSlash = currentValue.slice(1);
+    const spaceIndex = afterSlash.indexOf(' ');
+    // Only open if still completing command name (no space yet)
+    if (spaceIndex === -1) {
+      setSlashFilter(afterSlash);
+      setSlashMenuOpen(true);
+    }
+  }, [slashCommands.length, inputRef]);
 
   const handleInputChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {

@@ -94,6 +94,8 @@ export const ChatInput = memo(function ChatInput({
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [modifierHeld, setModifierHeld] = useState(false);
+  const fallbackInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const resolvedInputRef = inputRef ?? fallbackInputRef;
 
   // Use controlled or uncontrolled attachments based on props
   // Controlled mode requires the setter (onAttachmentsChange) - the setter is what makes it controlled
@@ -117,7 +119,7 @@ export const ChatInput = memo(function ChatInput({
   // Slash commands hook
   const slash = useSlashCommands({
     slashCommands,
-    inputRef: inputRef ?? { current: null },
+    inputRef: resolvedInputRef,
     onChange,
   });
 
@@ -140,7 +142,7 @@ export const ChatInput = memo(function ChatInput({
 
   // Textarea resize hook
   useTextareaResize({
-    textareaRef: inputRef ?? { current: null },
+    textareaRef: resolvedInputRef,
     onHeightChange,
   });
 
@@ -186,11 +188,11 @@ export const ChatInput = memo(function ChatInput({
   const prevValueRef = useRef(value);
   useEffect(() => {
     // Only restore if value has actually changed from what we last synced
-    if (inputRef?.current && value !== undefined && value !== prevValueRef.current) {
-      inputRef.current.value = value;
+    if (resolvedInputRef.current && value !== undefined && value !== prevValueRef.current) {
+      resolvedInputRef.current.value = value;
       prevValueRef.current = value;
     }
-  }, [value, inputRef]);
+  }, [value, resolvedInputRef]);
 
   const isDisabled = disabled || !inputRef;
 
@@ -204,7 +206,7 @@ export const ChatInput = memo(function ChatInput({
         onClose={slash.handleSlashMenuClose}
         onSelect={slash.handleSlashCommandSelect}
         filter={slash.slashFilter}
-        anchorRef={inputRef as React.RefObject<HTMLElement | null>}
+        anchorRef={resolvedInputRef as React.RefObject<HTMLElement | null>}
         paletteRef={slash.paletteRef}
       />
 
@@ -221,7 +223,7 @@ export const ChatInput = memo(function ChatInput({
 
         {/* Text input row */}
         <InputGroupTextarea
-          ref={inputRef}
+          ref={resolvedInputRef}
           onKeyDown={actions.handleKeyDown}
           onChange={slash.handleInputChange}
           onPaste={pasteDropHandler.handlePaste}
