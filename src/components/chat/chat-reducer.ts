@@ -298,9 +298,10 @@ function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage):
     const mid = Math.floor((low + high) / 2);
     const midOrder = messages[mid].order;
 
-    // Messages without order are treated as having Infinity order (should stay at end)
-    // So when midOrder is undefined, we should NOT move right - the new message goes before it
-    if (midOrder !== undefined && midOrder <= newOrder) {
+    // Messages without order are real-time streaming messages that should stay at end.
+    // Treat undefined order as Infinity - move right past them so new ordered messages
+    // are inserted before the unordered trailing messages but after all ordered ones.
+    if (midOrder === undefined || midOrder <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;
