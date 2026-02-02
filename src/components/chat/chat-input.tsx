@@ -372,8 +372,8 @@ export const ChatInput = memo(function ChatInput({
   // Handle key press for Enter to send and Shift+Tab for plan mode toggle
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Shift+Tab toggles plan mode
-      if (event.key === 'Tab' && event.shiftKey) {
+      // Shift+Tab toggles plan mode (only when not running, matching the button's disabled state)
+      if (event.key === 'Tab' && event.shiftKey && !running) {
         event.preventDefault();
         onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
         return;
@@ -391,7 +391,7 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     },
-    [onSend, disabled, onChange, setAttachments, attachments, settings, onSettingsChange]
+    [onSend, disabled, running, onChange, setAttachments, attachments, settings, onSettingsChange]
   );
 
   // Handle send button click
