@@ -142,6 +142,9 @@ interface SystemConfig {
   // Debug settings
   debug: DebugConfig;
 
+  // Event compression settings
+  compression: CompressionConfig;
+
   // Conversation rename settings
   branchRenameMessageThreshold: number;
 
@@ -364,6 +367,11 @@ function loadSystemConfig(): SystemConfig {
       chatWebSocket: process.env.DEBUG_CHAT_WS === 'true',
     },
 
+    // Event compression settings
+    compression: {
+      enabled: process.env.EVENT_COMPRESSION_ENABLED !== 'false',
+    },
+
     // Conversation rename settings
     branchRenameMessageThreshold: Number.parseInt(
       process.env.BRANCH_RENAME_MESSAGE_THRESHOLD || '2',
@@ -574,9 +582,7 @@ class ConfigService {
    * Get event compression configuration for replay optimization
    */
   getCompressionConfig(): CompressionConfig {
-    return {
-      enabled: process.env.EVENT_COMPRESSION_ENABLED !== 'false',
-    };
+    return { ...this.config.compression };
   }
 
   /**
