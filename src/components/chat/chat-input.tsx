@@ -419,6 +419,14 @@ export const ChatInput = memo(function ChatInput({
   const handleKeyDown = useCallback(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles slash menu + send logic
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Shift+Tab toggles plan mode (check BEFORE slash menu to ensure it always works)
+      // Only toggle when not running, matching the button's disabled state
+      if (event.key === 'Tab' && event.shiftKey && !running) {
+        event.preventDefault();
+        onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+        return;
+      }
+
       // If slash menu is open, delegate to palette for key handling
       if (slashMenuOpen && paletteRef.current) {
         const result = paletteRef.current.handleKeyDown(event.key);
@@ -430,13 +438,6 @@ export const ChatInput = memo(function ChatInput({
           setSlashMenuOpen(false);
           // Fall through to normal handling
         }
-      }
-
-      // Shift+Tab toggles plan mode (only when not running, matching the button's disabled state)
-      if (event.key === 'Tab' && event.shiftKey && !running) {
-        event.preventDefault();
-        onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
-        return;
       }
 
       // Enter without Shift sends the message (queues if agent is running)

@@ -170,6 +170,9 @@ export function SlashCommandPalette({
     return null;
   }
 
+  // Get the selected command name for cmdk's value-based highlighting
+  const selectedCommandName = filteredCommands[selectedIndex]?.name ?? '';
+
   return (
     <div
       ref={containerRef}
@@ -178,7 +181,11 @@ export function SlashCommandPalette({
         'rounded-md border bg-popover text-popover-foreground shadow-md'
       )}
     >
-      <Command shouldFilter={false} className="[&_[cmdk-list]]:max-h-[200px]">
+      <Command
+        shouldFilter={false}
+        value={selectedCommandName}
+        className="[&_[cmdk-list]]:max-h-[200px]"
+      >
         <CommandList>
           <CommandEmpty>No commands found</CommandEmpty>
           <CommandGroup>
@@ -187,10 +194,7 @@ export function SlashCommandPalette({
                 key={command.name}
                 value={command.name}
                 onSelect={() => onSelect(command)}
-                className={cn(
-                  'cursor-pointer',
-                  index === selectedIndex && 'bg-accent text-accent-foreground'
-                )}
+                className="cursor-pointer"
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 <div className="flex flex-col gap-0.5 w-full">
