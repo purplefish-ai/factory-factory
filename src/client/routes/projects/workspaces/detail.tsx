@@ -440,7 +440,7 @@ function WorkspaceChatContent() {
           )}
           {/* Run Script Port Badge */}
           <RunScriptPortBadge workspaceId={workspaceId} />
-          {/* PR Link with CI Status */}
+          {/* PR Link */}
           {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
             <a
               href={workspace.prUrl}
@@ -453,25 +453,61 @@ function WorkspaceChatContent() {
               }`}
             >
               #{workspace.prNumber}
-              {workspace.prState === 'MERGED' ? (
+              {workspace.prState === 'MERGED' && (
                 <CheckCircle2 className="h-3 w-3 text-green-500" />
-              ) : (
-                <>
+              )}
+            </a>
+          )}
+          {/* CI Status Badge - shown for all open PRs */}
+          {workspace.prUrl && workspace.prState === 'OPEN' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
+                    workspace.prCiStatus === 'SUCCESS' &&
+                      'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
+                    workspace.prCiStatus === 'FAILURE' &&
+                      'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
+                    workspace.prCiStatus === 'PENDING' &&
+                      'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
+                    workspace.prCiStatus === 'UNKNOWN' &&
+                      'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  )}
+                >
                   {workspace.prCiStatus === 'SUCCESS' && (
-                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                    <>
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>CI Passing</span>
+                    </>
                   )}
                   {workspace.prCiStatus === 'FAILURE' && (
                     <>
-                      <XCircle className="h-4 w-4 text-red-500" />
-                      <span className="text-xs text-red-600 dark:text-red-400">CI Failing</span>
+                      <XCircle className="h-3 w-3" />
+                      <span>CI Failing</span>
                     </>
                   )}
                   {workspace.prCiStatus === 'PENDING' && (
-                    <Circle className="h-3 w-3 text-yellow-500 animate-pulse" />
+                    <>
+                      <Circle className="h-3 w-3 animate-pulse" />
+                      <span>CI Running</span>
+                    </>
                   )}
-                </>
-              )}
-            </a>
+                  {workspace.prCiStatus === 'UNKNOWN' && (
+                    <>
+                      <Circle className="h-3 w-3" />
+                      <span>CI Unknown</span>
+                    </>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {workspace.prCiStatus === 'SUCCESS' && 'All CI checks are passing'}
+                {workspace.prCiStatus === 'FAILURE' && 'Some CI checks are failing'}
+                {workspace.prCiStatus === 'PENDING' && 'CI checks are currently running'}
+                {workspace.prCiStatus === 'UNKNOWN' && 'CI status not yet determined'}
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         <div className="flex items-center gap-1">
