@@ -54,6 +54,7 @@ function createMockStream() {
       }
     }),
     once: vi.fn(),
+    on: vi.fn(), // Add error handler registration
     writtenData,
   } as unknown as WriteStream & { writtenData: string[] };
   return mockStream;

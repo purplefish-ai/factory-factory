@@ -35,6 +35,7 @@ export class SessionFileLogger {
       pending: string[];
       flushing: boolean;
       closed: boolean;
+      endWhenDone: boolean;
     }
   >();
 
@@ -67,12 +68,24 @@ export class SessionFileLogger {
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9-]/g, '_');
     const logFile = join(this.logDir, `${safeSessionId}_${timestamp}.log`);
     const stream = createWriteStream(logFile, { flags: 'a' });
+
+    // Handle stream errors to prevent crashes - log and mark session as closed
+    stream.on('error', (err) => {
+      logger.error('Write stream error', { sessionId, logFile, error: err });
+      const state = this.sessionLogs.get(sessionId);
+      if (state) {
+        state.closed = true;
+        this.sessionLogs.delete(sessionId);
+      }
+    });
+
     this.sessionLogs.set(sessionId, {
       logFile,
       stream,
       pending: [],
       flushing: false,
       closed: false,
+      endWhenDone: false,
     });
 
     // Write header
@@ -190,7 +203,9 @@ export class SessionFileLogger {
 
       logState.pending.push(footer);
       logState.closed = true;
-      this.flushAsync(sessionId, logState, true);
+      // Store endWhenDone in state to avoid race condition when flush is already in progress
+      logState.endWhenDone = true;
+      this.flushAsync(sessionId, logState);
     }
   }
 
@@ -248,8 +263,8 @@ export class SessionFileLogger {
       pending: string[];
       flushing: boolean;
       closed: boolean;
-    },
-    endWhenDone: boolean = false
+      endWhenDone: boolean;
+    }
   ): void {
     if (logState.flushing) {
       return;
@@ -264,14 +279,19 @@ export class SessionFileLogger {
         }
         const canContinue = logState.stream.write(chunk);
         if (!canContinue) {
-          logState.stream.once('drain', flush);
+          // Reset flushing and re-call flushAsync on drain to handle errors/close during backpressure
+          logState.stream.once('drain', () => {
+            logState.flushing = false;
+            this.flushAsync(sessionId, logState);
+          });
           return;
         }
       }
 
       logState.flushing = false;
 
-      if (endWhenDone && logState.pending.length === 0) {
+      // Read endWhenDone from state to avoid race condition
+      if (logState.endWhenDone && logState.pending.length === 0) {
         logState.stream.end(() => {
           this.sessionLogs.delete(sessionId);
           logger.info('Closed log file', { sessionId, logFile: logState.logFile });
