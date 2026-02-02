@@ -2054,3 +2054,193 @@ describe('createUserMessageAction', () => {
 // Note: createQueueMessageAction has been removed.
 // Queue is now managed on the backend and MESSAGE_QUEUED/MESSAGE_DISPATCHED/MESSAGE_REMOVED
 // actions are received from WebSocket events.
+
+// =============================================================================
+// SDK Event Tests
+// =============================================================================
+
+describe('SDK Compaction Actions', () => {
+  it('should set isCompacting to true on SDK_COMPACTING_START', () => {
+    const state = createInitialChatState({ isCompacting: false });
+    const action: ChatAction = { type: 'SDK_COMPACTING_START' };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.isCompacting).toBe(true);
+  });
+
+  it('should set isCompacting to false on SDK_COMPACTING_END', () => {
+    const state = createInitialChatState({ isCompacting: true });
+    const action: ChatAction = { type: 'SDK_COMPACTING_END' };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.isCompacting).toBe(false);
+  });
+
+  it('should reset isCompacting on WS_STOPPED', () => {
+    const state = createInitialChatState({
+      isCompacting: true,
+      sessionStatus: { phase: 'running' },
+    });
+    const action: ChatAction = { type: 'WS_STOPPED' };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.isCompacting).toBe(false);
+    expect(newState.sessionStatus).toEqual({ phase: 'ready' });
+  });
+});
+
+describe('SDK Task Notification Actions', () => {
+  it('should append notification on SDK_TASK_NOTIFICATION', () => {
+    const state = createInitialChatState({ taskNotifications: [] });
+    const action: ChatAction = {
+      type: 'SDK_TASK_NOTIFICATION',
+      payload: { message: 'Task started' },
+    };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.taskNotifications).toHaveLength(1);
+    expect(newState.taskNotifications[0].message).toBe('Task started');
+    expect(newState.taskNotifications[0].id).toBeDefined();
+    expect(newState.taskNotifications[0].timestamp).toBeDefined();
+  });
+
+  it('should generate unique UUIDs for notifications', () => {
+    const state = createInitialChatState({ taskNotifications: [] });
+    const action1: ChatAction = {
+      type: 'SDK_TASK_NOTIFICATION',
+      payload: { message: 'Task 1' },
+    };
+    const action2: ChatAction = {
+      type: 'SDK_TASK_NOTIFICATION',
+      payload: { message: 'Task 2' },
+    };
+
+    const state1 = chatReducer(state, action1);
+    const state2 = chatReducer(state1, action2);
+
+    expect(state2.taskNotifications).toHaveLength(2);
+    expect(state2.taskNotifications[0].id).not.toBe(state2.taskNotifications[1].id);
+    // UUID format check
+    expect(state2.taskNotifications[0].id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+  });
+
+  it('should dismiss specific notification on DISMISS_TASK_NOTIFICATION', () => {
+    const existingNotifications = [
+      { id: 'notif-1', message: 'Task 1', timestamp: '2024-01-01T00:00:00Z' },
+      { id: 'notif-2', message: 'Task 2', timestamp: '2024-01-01T00:00:01Z' },
+      { id: 'notif-3', message: 'Task 3', timestamp: '2024-01-01T00:00:02Z' },
+    ];
+    const state = createInitialChatState({ taskNotifications: existingNotifications });
+    const action: ChatAction = {
+      type: 'DISMISS_TASK_NOTIFICATION',
+      payload: { id: 'notif-2' },
+    };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.taskNotifications).toHaveLength(2);
+    expect(newState.taskNotifications.map((n) => n.id)).toEqual(['notif-1', 'notif-3']);
+  });
+
+  it('should clear all notifications on CLEAR_TASK_NOTIFICATIONS', () => {
+    const existingNotifications = [
+      { id: 'notif-1', message: 'Task 1', timestamp: '2024-01-01T00:00:00Z' },
+      { id: 'notif-2', message: 'Task 2', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    const state = createInitialChatState({ taskNotifications: existingNotifications });
+    const action: ChatAction = { type: 'CLEAR_TASK_NOTIFICATIONS' };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.taskNotifications).toHaveLength(0);
+  });
+
+  it('should reset taskNotifications on session switch', () => {
+    const existingNotifications = [
+      { id: 'notif-1', message: 'Task 1', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const state = createInitialChatState({ taskNotifications: existingNotifications });
+    const action: ChatAction = { type: 'SESSION_SWITCH_START' };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.taskNotifications).toHaveLength(0);
+  });
+});
+
+describe('SDK Status Update Actions', () => {
+  it('should update permissionMode on SDK_STATUS_UPDATE', () => {
+    const state = createInitialChatState({ permissionMode: null });
+    const action: ChatAction = {
+      type: 'SDK_STATUS_UPDATE',
+      payload: { permissionMode: 'acceptEdits' },
+    };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.permissionMode).toBe('acceptEdits');
+  });
+
+  it('should preserve existing permissionMode when payload is undefined', () => {
+    const state = createInitialChatState({ permissionMode: 'plan' });
+    const action: ChatAction = {
+      type: 'SDK_STATUS_UPDATE',
+      payload: {},
+    };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.permissionMode).toBe('plan');
+  });
+
+  it('should reset permissionMode on session switch', () => {
+    const state = createInitialChatState({ permissionMode: 'acceptEdits' });
+    const action: ChatAction = { type: 'SESSION_SWITCH_START' };
+
+    const newState = chatReducer(state, action);
+
+    expect(newState.permissionMode).toBeNull();
+  });
+});
+
+describe('createActionFromWebSocketMessage - SDK Events', () => {
+  it('should create SDK_COMPACTING_START action for compacting_start message', () => {
+    const message: WebSocketMessage = { type: 'compacting_start' };
+    const action = createActionFromWebSocketMessage(message);
+
+    expect(action).toEqual({ type: 'SDK_COMPACTING_START' });
+  });
+
+  it('should create SDK_COMPACTING_END action for compacting_end message', () => {
+    const message: WebSocketMessage = { type: 'compacting_end' };
+    const action = createActionFromWebSocketMessage(message);
+
+    expect(action).toEqual({ type: 'SDK_COMPACTING_END' });
+  });
+
+  it('should create SDK_TASK_NOTIFICATION action for task_notification message', () => {
+    const message: WebSocketMessage = {
+      type: 'task_notification',
+      message: 'Agent started task',
+    };
+    const action = createActionFromWebSocketMessage(message);
+
+    expect(action).toEqual({
+      type: 'SDK_TASK_NOTIFICATION',
+      payload: { message: 'Agent started task' },
+    });
+  });
+
+  it('should return null for task_notification without message', () => {
+    const message: WebSocketMessage = { type: 'task_notification' };
+    const action = createActionFromWebSocketMessage(message);
+
+    expect(action).toBeNull();
+  });
+});

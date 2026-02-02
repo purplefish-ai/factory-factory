@@ -128,6 +128,8 @@ export class ClaudeClient extends EventEmitter {
   private interactiveHandler: DeferredHandler;
   /** Store pending interactive requests to retrieve original input when responding */
   private pendingInteractiveRequests: Map<string, CanUseToolRequest> = new Map();
+  /** Track whether context compaction is in progress (toggle-based detection) */
+  private isCompacting = false;
 
   private constructor(workingDir: string, permissionHandler: PermissionHandler) {
     super();
@@ -476,6 +478,8 @@ export class ClaudeClient extends EventEmitter {
   ): this;
   override on(event: 'hook_started', handler: (msg: SystemHookStartedMessage) => void): this;
   override on(event: 'hook_response', handler: (msg: SystemHookResponseMessage) => void): this;
+  override on(event: 'compacting_start', handler: () => void): this;
+  override on(event: 'compacting_end', handler: () => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -500,6 +504,8 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'compact_boundary', msg: SystemCompactBoundaryMessage): boolean;
   override emit(event: 'hook_started', msg: SystemHookStartedMessage): boolean;
   override emit(event: 'hook_response', msg: SystemHookResponseMessage): boolean;
+  override emit(event: 'compacting_start'): boolean;
+  override emit(event: 'compacting_end'): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -547,6 +553,11 @@ export class ClaudeClient extends EventEmitter {
   private handleProcessMessage(msg: ClaudeJson): void {
     switch (msg.type) {
       case 'assistant':
+        // End compaction if in progress (fallback for single-boundary case)
+        if (this.isCompacting) {
+          this.isCompacting = false;
+          this.emit('compacting_end');
+        }
         this.emit('message', msg);
         this.extractToolUseEvents(msg);
         break;
@@ -585,6 +596,14 @@ export class ClaudeClient extends EventEmitter {
         break;
       case 'compact_boundary':
         this.emit('compact_boundary', msg as SystemCompactBoundaryMessage);
+        // Toggle-based compaction detection for start/end events
+        if (!this.isCompacting) {
+          this.isCompacting = true;
+          this.emit('compacting_start');
+        } else {
+          this.isCompacting = false;
+          this.emit('compacting_end');
+        }
         break;
       case 'hook_started':
         this.emit('hook_started', msg as SystemHookStartedMessage);

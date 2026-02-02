@@ -87,6 +87,13 @@ export interface ToolProgressInfo {
   elapsedSeconds: number;
 }
 
+/** Task notification from SDK (e.g., Task tool subagent updates) */
+export interface TaskNotification {
+  id: string;
+  message: string;
+  timestamp: string;
+}
+
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
@@ -136,6 +143,8 @@ export interface ChatState {
   hasCompactBoundary: boolean;
   /** Active hooks currently executing - Map from hook_id to hook info */
   activeHooks: Map<string, ActiveHookInfo>;
+  /** Task notifications from SDK (e.g., subagent updates) */
+  taskNotifications: TaskNotification[];
 }
 
 // =============================================================================
@@ -230,7 +239,10 @@ export type ChatAction =
       type: 'HOOK_STARTED';
       payload: { hookId: string; hookName: string; hookEvent: string };
     }
-  | { type: 'HOOK_RESPONSE'; payload: { hookId: string } };
+  | { type: 'HOOK_RESPONSE'; payload: { hookId: string } }
+  // Task notification management
+  | { type: 'DISMISS_TASK_NOTIFICATION'; payload: { id: string } }
+  | { type: 'CLEAR_TASK_NOTIFICATIONS' };
 
 // =============================================================================
 // Helper Functions
@@ -387,6 +399,7 @@ function createBaseResetState(): Pick<
   | 'permissionMode'
   | 'hasCompactBoundary'
   | 'activeHooks'
+  | 'taskNotifications'
 > {
   return {
     messages: [],
@@ -402,6 +415,7 @@ function createBaseResetState(): Pick<
     permissionMode: null,
     hasCompactBoundary: false,
     activeHooks: new Map(),
+    taskNotifications: [],
   };
 }
 
@@ -426,6 +440,7 @@ function createSessionSwitchResetState(): Pick<
   | 'permissionMode'
   | 'hasCompactBoundary'
   | 'activeHooks'
+  | 'taskNotifications'
 > {
   return {
     ...createBaseResetState(),
@@ -453,6 +468,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     permissionMode: null,
     hasCompactBoundary: false,
     activeHooks: new Map(),
+    taskNotifications: [],
     ...overrides,
   };
 }
@@ -617,8 +633,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTED':
       return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      // Clear toolProgress when session stops to prevent stale progress indicators
-      return { ...state, sessionStatus: { phase: 'ready' }, toolProgress: new Map() };
+      // Clear toolProgress and isCompacting when session stops to prevent stale indicators
+      return {
+        ...state,
+        sessionStatus: { phase: 'ready' },
+        toolProgress: new Map(),
+        isCompacting: false,
+      };
 
     // Claude message handling (delegated to helper)
     case 'WS_CLAUDE_MESSAGE':
@@ -970,9 +991,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, toolProgress: newToolProgress };
     }
 
-    case 'SDK_TASK_NOTIFICATION':
-      // Placeholder: could display task notifications in UI when needed
-      return state;
+    case 'SDK_TASK_NOTIFICATION': {
+      // Append new task notification with UUID to avoid collisions under bursty updates
+      const newNotification: TaskNotification = {
+        id: crypto.randomUUID(),
+        message: action.payload.message,
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        ...state,
+        taskNotifications: [...state.taskNotifications, newNotification],
+      };
+    }
 
     case 'SDK_COMPACTING_START':
       return { ...state, isCompacting: true };
@@ -1019,6 +1049,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       newActiveHooks.delete(action.payload.hookId);
       return { ...state, activeHooks: newActiveHooks };
     }
+
+    case 'DISMISS_TASK_NOTIFICATION':
+      return {
+        ...state,
+        taskNotifications: state.taskNotifications.filter(
+          (notif) => notif.id !== action.payload.id
+        ),
+      };
+
+    case 'CLEAR_TASK_NOTIFICATIONS':
+      return { ...state, taskNotifications: [] };
 
     default:
       return state;
@@ -1266,6 +1307,11 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handleHookStartedMessage(data);
     case 'hook_response':
       return handleHookResponseMessage(data);
+    // Context compaction events
+    case 'compacting_start':
+      return { type: 'SDK_COMPACTING_START' };
+    case 'compacting_end':
+      return { type: 'SDK_COMPACTING_END' };
     default:
       return null;
   }

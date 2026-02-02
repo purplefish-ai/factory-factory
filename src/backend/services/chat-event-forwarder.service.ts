@@ -316,6 +316,27 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, msg);
     });
 
+    // Context compaction events
+    client.on('compacting_start', () => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Context compaction started', { dbSessionId });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_start' });
+      const event = { type: 'compacting_start' };
+      messageStateService.storeEvent(dbSessionId, event);
+      chatConnectionService.forwardToSession(dbSessionId, event);
+    });
+
+    client.on('compacting_end', () => {
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Context compaction ended', { dbSessionId });
+      }
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_end' });
+      const event = { type: 'compacting_end' };
+      messageStateService.storeEvent(dbSessionId, event);
+      chatConnectionService.forwardToSession(dbSessionId, event);
+    });
+
     client.on('message', (msg) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });
 

@@ -38,6 +38,7 @@ import type {
 } from '@/lib/claude-types';
 import {
   DEFAULT_CHAT_SETTINGS,
+  DEFAULT_THINKING_BUDGET,
   isStreamEventMessage,
   isWebSocketMessage,
   isWsClaudeMessage,
@@ -89,6 +90,9 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   inputAttachments: MessageAttachment[];
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
+  // Task notification actions
+  dismissTaskNotification: (id: string) => void;
+  clearTaskNotifications: () => void;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
   // Refs for UI
@@ -511,12 +515,21 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     [send]
   );
 
-  const updateSettings = useCallback((settings: Partial<ChatSettings>) => {
-    dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
-    // Persist updated settings
-    const newSettings = { ...stateRef.current.chatSettings, ...settings };
-    persistSettings(dbSessionIdRef.current, newSettings);
-  }, []);
+  const updateSettings = useCallback(
+    (settings: Partial<ChatSettings>) => {
+      dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
+      // Persist updated settings
+      const newSettings = { ...stateRef.current.chatSettings, ...settings };
+      persistSettings(dbSessionIdRef.current, newSettings);
+
+      // Send thinking budget update when thinkingEnabled changes
+      if ('thinkingEnabled' in settings) {
+        const maxTokens = settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+        send({ type: 'set_thinking_budget', max_tokens: maxTokens });
+      }
+    },
+    [send]
+  );
 
   const removeQueuedMessage = useCallback(
     (id: string) => {
@@ -530,6 +543,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     },
     [send]
   );
+
+  const dismissTaskNotification = useCallback((id: string) => {
+    dispatch({ type: 'DISMISS_TASK_NOTIFICATION', payload: { id } });
+  }, []);
+
+  const clearTaskNotifications = useCallback(() => {
+    dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
+  }, []);
 
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
   const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -583,6 +604,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       inputAttachments,
       setInputAttachments,
       removeQueuedMessage,
+      dismissTaskNotification,
+      clearTaskNotifications,
       // Message handler for transport (stable - no deps)
       handleMessage,
       // Refs for UI
@@ -603,6 +626,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       updateSettings,
       setInputDraft,
       removeQueuedMessage,
+      dismissTaskNotification,
+      clearTaskNotifications,
       handleMessage,
     ]
   );

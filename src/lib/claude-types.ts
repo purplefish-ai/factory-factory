@@ -49,8 +49,15 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 };
 
 /**
- * Suffix appended to user messages to enable extended thinking mode in Claude CLI.
- * This is stripped from display in the UI.
+ * Default thinking budget (tokens) for extended thinking mode.
+ * Used with the SDK's set_max_thinking_tokens control request.
+ */
+export const DEFAULT_THINKING_BUDGET = 10_000;
+
+/**
+ * @deprecated Use DEFAULT_THINKING_BUDGET with setMaxThinkingTokens instead.
+ * Suffix previously appended to user messages to enable extended thinking mode.
+ * Kept for backwards compatibility during migration.
  */
 export const THINKING_SUFFIX = ' ultrathink';
 
@@ -468,7 +475,10 @@ export interface WebSocketMessage {
     | 'system_init'
     | 'compact_boundary'
     | 'hook_started'
-    | 'hook_response';
+    | 'hook_response'
+    // Context compaction events
+    | 'compacting_start'
+    | 'compacting_end';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
