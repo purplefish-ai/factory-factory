@@ -91,7 +91,7 @@ function NewWorkspaceButton({
   children?: React.ReactNode;
 }) {
   return (
-    <Button onClick={onClick} disabled={isCreating}>
+    <Button size="sm" onClick={onClick} disabled={isCreating}>
       {isCreating ? (
         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
       ) : (
