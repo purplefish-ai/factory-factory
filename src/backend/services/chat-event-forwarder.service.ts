@@ -251,7 +251,7 @@ class ChatEventForwarderService {
         data: request,
       });
 
-      this.routeInteractiveRequest(dbSessionId, request, context.workingDir);
+      this.routeInteractiveRequest(dbSessionId, request);
     });
 
     client.on('exit', (result) => {
@@ -288,8 +288,7 @@ class ChatEventForwarderService {
       toolName: string;
       toolUseId: string;
       input: Record<string, unknown>;
-    },
-    workingDir: string
+    }
   ): void {
     // Log ExitPlanMode input for debugging plan file path discovery
     if (request.toolName === 'ExitPlanMode') {
@@ -297,14 +296,13 @@ class ChatEventForwarderService {
         dbSessionId,
         input: request.input,
         inputKeys: Object.keys(request.input),
-        workingDir,
       });
     }
 
     // Compute planContent for ExitPlanMode, null for others
     const planContent =
       request.toolName === 'ExitPlanMode'
-        ? this.readPlanFileContent(this.extractPlanFilePath(request.input, workingDir))
+        ? this.readPlanFileContent(this.extractPlanFilePath(request.input))
         : null;
 
     // Store for session restore (single location for all request types)
@@ -358,11 +356,14 @@ class ChatEventForwarderService {
    * Search order:
    * 1. Check if planFile is in the input (future-proofing)
    * 2. Find the most recently modified plan file in ~/.claude/plans/
+   *
+   * Note: The fallback to most-recently-modified file is a best-effort heuristic.
+   * In rare cases with concurrent sessions, the wrong plan could be displayed.
+   * This is acceptable since: (1) the user reviews the plan before approving,
+   * (2) concurrent plan mode sessions are uncommon, and (3) this is strictly
+   * better than showing no plan at all.
    */
-  private extractPlanFilePath(
-    input: Record<string, unknown>,
-    workingDir?: string
-  ): string | undefined {
+  private extractPlanFilePath(input: Record<string, unknown>): string | undefined {
     // Try common field names that Claude CLI might use (in case future versions add this)
     const possibleFields = ['planFile', 'plan_file', 'planFilePath', 'plan_file_path', 'file'];
     for (const field of possibleFields) {
@@ -375,7 +376,6 @@ class ChatEventForwarderService {
     // Plan file path is not in input - search for it in Claude's default location
     logger.debug('[Chat WS] No plan file path in ExitPlanMode input, searching defaults', {
       availableKeys: Object.keys(input),
-      workingDir,
     });
 
     // Try to find the most recently modified plan in ~/.claude/plans/
@@ -392,7 +392,7 @@ class ChatEventForwarderService {
 
   /**
    * Find the most recently modified .md file in the given directory.
-   * Returns undefined if no plan files are found.
+   * Returns undefined if no plan files are found or if the most recent file is too old.
    */
   private findMostRecentPlanFile(plansDir: string): string | undefined {
     if (!existsSync(plansDir)) {
@@ -410,10 +410,11 @@ class ChatEventForwarderService {
         .sort((a, b) => b.mtime - a.mtime); // Most recent first
 
       if (files.length > 0) {
-        // Only return if the file was modified within the last 5 minutes
-        // This avoids returning stale plans from old sessions
-        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-        if (files[0].mtime > fiveMinutesAgo) {
+        // Only return if the file was modified within the last 30 minutes
+        // This avoids returning stale plans from old sessions while giving
+        // users enough time to review plans before calling ExitPlanMode
+        const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
+        if (files[0].mtime > thirtyMinutesAgo) {
           return files[0].path;
         }
         logger.debug('[Chat WS] Most recent plan file is too old', {
