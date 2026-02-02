@@ -439,7 +439,10 @@ export interface WebSocketMessage {
     | 'tool_progress'
     | 'tool_use_summary'
     | 'status_update'
-    | 'task_notification';
+    | 'task_notification'
+    // Context compaction events
+    | 'compacting_start'
+    | 'compacting_end';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;

@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import type { GroupedMessageItem } from '@/lib/claude-types';
+import { CompactingIndicator } from './compacting-indicator';
 import { LatestThinking } from './latest-thinking';
 
 // =============================================================================
@@ -30,6 +31,8 @@ interface VirtualizedMessageListProps {
   queuedMessageIds?: Set<string>;
   /** Callback to remove/cancel a queued message */
   onRemoveQueuedMessage?: (id: string) => void;
+  /** Whether context compaction is in progress */
+  isCompacting?: boolean;
 }
 
 // =============================================================================
@@ -89,6 +92,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   latestThinking,
   queuedMessageIds,
   onRemoveQueuedMessage,
+  isCompacting = false,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
   const isAutoScrollingRef = useRef(false);
@@ -212,6 +216,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       {latestThinking && running && (
         <LatestThinking thinking={latestThinking} running={running} className="mb-4" />
       )}
+
+      {/* Context compaction indicator */}
+      <CompactingIndicator isCompacting={isCompacting} className="mb-4" />
 
       {/* Loading indicators after messages */}
       {running && <LoadingIndicator className="py-4" />}

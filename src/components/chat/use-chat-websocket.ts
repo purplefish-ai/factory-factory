@@ -50,6 +50,12 @@ export interface UseChatWebSocketReturn {
   latestThinking: string | null;
   // Pending messages awaiting backend confirmation (Map from ID to content for recovery)
   pendingMessages: Map<string, PendingMessageContent>;
+  // Context compaction state
+  isCompacting: boolean;
+  // Task notifications from SDK
+  taskNotifications: { id: string; message: string; timestamp: string }[];
+  // Current permission mode from SDK status updates
+  permissionMode: string | null;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -60,6 +66,9 @@ export interface UseChatWebSocketReturn {
   setInputDraft: (draft: string) => void;
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
+  // Task notification actions
+  dismissTaskNotification: (id: string) => void;
+  clearTaskNotifications: () => void;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -149,6 +158,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     queuedMessages: chat.queuedMessages,
     latestThinking: chat.latestThinking,
     pendingMessages: chat.pendingMessages,
+    isCompacting: chat.isCompacting,
+    taskNotifications: chat.taskNotifications,
+    permissionMode: chat.permissionMode,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
@@ -159,6 +171,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setInputDraft: chat.setInputDraft,
     setInputAttachments: chat.setInputAttachments,
     removeQueuedMessage: chat.removeQueuedMessage,
+    dismissTaskNotification: chat.dismissTaskNotification,
+    clearTaskNotifications: chat.clearTaskNotifications,
     // Refs from chat
     inputRef: chat.inputRef,
     messagesEndRef: chat.messagesEndRef,

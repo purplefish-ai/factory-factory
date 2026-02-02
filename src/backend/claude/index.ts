@@ -122,6 +122,8 @@ export class ClaudeClient extends EventEmitter {
   private interactiveHandler: DeferredHandler;
   /** Store pending interactive requests to retrieve original input when responding */
   private pendingInteractiveRequests: Map<string, CanUseToolRequest> = new Map();
+  /** Track whether context compaction is in progress (toggle-based detection) */
+  private isCompacting = false;
 
   private constructor(workingDir: string, permissionHandler: PermissionHandler) {
     super();
@@ -460,6 +462,8 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'session_id', handler: (claudeSessionId: string) => void): this;
   override on(event: 'idle', handler: () => void): this;
+  override on(event: 'compacting_start', handler: () => void): this;
+  override on(event: 'compacting_end', handler: () => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -477,6 +481,8 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'session_id', claudeSessionId: string): boolean;
   override emit(event: 'idle'): boolean;
+  override emit(event: 'compacting_start'): boolean;
+  override emit(event: 'compacting_end'): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -524,6 +530,11 @@ export class ClaudeClient extends EventEmitter {
   private handleProcessMessage(msg: ClaudeJson): void {
     switch (msg.type) {
       case 'assistant':
+        // End compaction if in progress (fallback for single-boundary case)
+        if (this.isCompacting) {
+          this.isCompacting = false;
+          this.emit('compacting_end');
+        }
         this.emit('message', msg);
         this.extractToolUseEvents(msg);
         break;
@@ -536,6 +547,20 @@ export class ClaudeClient extends EventEmitter {
       case 'stream_event':
         this.emit('stream', msg);
         break;
+      case 'system': {
+        // Handle context compaction boundary markers (toggle-based detection)
+        const systemMsg = msg as { subtype?: string };
+        if (systemMsg.subtype === 'compact_boundary') {
+          if (!this.isCompacting) {
+            this.isCompacting = true;
+            this.emit('compacting_start');
+          } else {
+            this.isCompacting = false;
+            this.emit('compacting_end');
+          }
+        }
+        break;
+      }
       // SDK message types - forward as dedicated events
       case 'tool_progress':
         this.emit('tool_progress', msg);

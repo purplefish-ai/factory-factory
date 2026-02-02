@@ -85,6 +85,13 @@ export interface ToolProgressInfo {
   elapsedSeconds: number;
 }
 
+/** Task notification from SDK (e.g., Task tool subagent updates) */
+export interface TaskNotification {
+  id: string;
+  message: string;
+  timestamp: string;
+}
+
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
@@ -126,6 +133,10 @@ export interface ChatState {
   isCompacting: boolean;
   /** Tool progress tracking for long-running tools - Map from tool_use_id to progress info */
   toolProgress: Map<string, ToolProgressInfo>;
+  /** Task notifications from SDK (e.g., subagent updates) */
+  taskNotifications: TaskNotification[];
+  /** Current permission mode from SDK status updates */
+  permissionMode: string | null;
 }
 
 // =============================================================================
@@ -212,7 +223,10 @@ export type ChatAction =
   | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary?: string; precedingToolUseIds: string[] } }
   | { type: 'SDK_TASK_NOTIFICATION'; payload: { message: string } }
   | { type: 'SDK_COMPACTING_START' }
-  | { type: 'SDK_COMPACTING_END' };
+  | { type: 'SDK_COMPACTING_END' }
+  // Task notification management
+  | { type: 'DISMISS_TASK_NOTIFICATION'; payload: { id: string } }
+  | { type: 'CLEAR_TASK_NOTIFICATIONS' };
 
 // =============================================================================
 // Helper Functions
@@ -365,6 +379,8 @@ function createBaseResetState(): Pick<
   | 'lastRejectedMessage'
   | 'isCompacting'
   | 'toolProgress'
+  | 'taskNotifications'
+  | 'permissionMode'
 > {
   return {
     messages: [],
@@ -376,6 +392,8 @@ function createBaseResetState(): Pick<
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
+    taskNotifications: [],
+    permissionMode: null,
   };
 }
 
@@ -396,6 +414,8 @@ function createSessionSwitchResetState(): Pick<
   | 'sessionStatus'
   | 'isCompacting'
   | 'toolProgress'
+  | 'taskNotifications'
+  | 'permissionMode'
 > {
   return {
     ...createBaseResetState(),
@@ -419,6 +439,8 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
+    taskNotifications: [],
+    permissionMode: null,
     ...overrides,
   };
 }
@@ -583,8 +605,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTED':
       return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      // Clear toolProgress when session stops to prevent stale progress indicators
-      return { ...state, sessionStatus: { phase: 'ready' }, toolProgress: new Map() };
+      // Clear toolProgress and isCompacting when session stops to prevent stale indicators
+      return {
+        ...state,
+        sessionStatus: { phase: 'ready' },
+        toolProgress: new Map(),
+        isCompacting: false,
+      };
 
     // Claude message handling (delegated to helper)
     case 'WS_CLAUDE_MESSAGE':
@@ -909,10 +936,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return state;
     }
 
-    // SDK message type actions (placeholders for future SDK support)
+    // SDK message type actions
     case 'SDK_STATUS_UPDATE':
-      // Placeholder: could track permissionMode changes in state when needed
-      return state;
+      // Track permissionMode changes from SDK status updates
+      return {
+        ...state,
+        permissionMode: action.payload.permissionMode ?? state.permissionMode,
+      };
 
     case 'SDK_TOOL_PROGRESS': {
       const { toolUseId, toolName, elapsedSeconds } = action.payload;
@@ -931,15 +961,35 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, toolProgress: newToolProgress };
     }
 
-    case 'SDK_TASK_NOTIFICATION':
-      // Placeholder: could display task notifications in UI when needed
-      return state;
+    case 'SDK_TASK_NOTIFICATION': {
+      // Append new task notification with UUID to avoid collisions under bursty updates
+      const newNotification: TaskNotification = {
+        id: crypto.randomUUID(),
+        message: action.payload.message,
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        ...state,
+        taskNotifications: [...state.taskNotifications, newNotification],
+      };
+    }
 
     case 'SDK_COMPACTING_START':
       return { ...state, isCompacting: true };
 
     case 'SDK_COMPACTING_END':
       return { ...state, isCompacting: false };
+
+    case 'DISMISS_TASK_NOTIFICATION':
+      return {
+        ...state,
+        taskNotifications: state.taskNotifications.filter(
+          (notif) => notif.id !== action.payload.id
+        ),
+      };
+
+    case 'CLEAR_TASK_NOTIFICATIONS':
+      return { ...state, taskNotifications: [] };
 
     default:
       return state;
@@ -1115,6 +1165,11 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return data.message
         ? { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } }
         : null;
+    // Context compaction events
+    case 'compacting_start':
+      return { type: 'SDK_COMPACTING_START' };
+    case 'compacting_end':
+      return { type: 'SDK_COMPACTING_END' };
     default:
       return null;
   }

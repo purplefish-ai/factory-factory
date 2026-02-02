@@ -90,6 +90,9 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   inputAttachments: MessageAttachment[];
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
+  // Task notification actions
+  dismissTaskNotification: (id: string) => void;
+  clearTaskNotifications: () => void;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
   // Refs for UI
@@ -541,6 +544,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     [send]
   );
 
+  const dismissTaskNotification = useCallback((id: string) => {
+    dispatch({ type: 'DISMISS_TASK_NOTIFICATION', payload: { id } });
+  }, []);
+
+  const clearTaskNotifications = useCallback(() => {
+    dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
+  }, []);
+
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
   const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -593,6 +604,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       inputAttachments,
       setInputAttachments,
       removeQueuedMessage,
+      dismissTaskNotification,
+      clearTaskNotifications,
       // Message handler for transport (stable - no deps)
       handleMessage,
       // Refs for UI
@@ -613,6 +626,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       updateSettings,
       setInputDraft,
       removeQueuedMessage,
+      dismissTaskNotification,
+      clearTaskNotifications,
       handleMessage,
     ]
   );
