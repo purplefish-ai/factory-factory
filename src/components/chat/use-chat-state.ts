@@ -415,6 +415,26 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // WebSocket Message Handler
   // =============================================================================
 
+  /**
+   * Clears the rewind timeout if the response matches the current rewind request.
+   * Validates userMessageId to prevent stale responses from clearing the timeout.
+   */
+  const clearRewindTimeoutIfMatching = useCallback((wsMessage: WebSocketMessage) => {
+    if (wsMessage.type !== 'rewind_files_preview' && wsMessage.type !== 'rewind_files_error') {
+      return;
+    }
+    const currentUserMessageId = stateRef.current.rewindPreview?.userMessageId;
+    const responseUserMessageId = wsMessage.userMessageId;
+    // Only clear timeout if this response is for the current rewind request
+    if (
+      rewindTimeoutRef.current &&
+      (!responseUserMessageId || responseUserMessageId === currentUserMessageId)
+    ) {
+      clearTimeout(rewindTimeoutRef.current);
+      rewindTimeoutRef.current = null;
+    }
+  }, []);
+
   const handleMessage = useCallback(
     (data: unknown) => {
       // Validate incoming data is a WebSocket message
@@ -440,13 +460,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         return;
       }
 
-      // Clear rewind timeout when we receive rewind response
-      if (wsMessage.type === 'rewind_files_preview' || wsMessage.type === 'rewind_files_error') {
-        if (rewindTimeoutRef.current) {
-          clearTimeout(rewindTimeoutRef.current);
-          rewindTimeoutRef.current = null;
-        }
-      }
+      // Clear rewind timeout when we receive rewind response for the current request
+      clearRewindTimeoutIfMatching(wsMessage);
 
       // Handle Claude messages specially for tool input streaming
       if (isWsClaudeMessage(wsMessage)) {
@@ -459,7 +474,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         dispatch(action);
       }
     },
-    [] // No dependencies - uses refs for session ID
+    [clearRewindTimeoutIfMatching]
   );
 
   // =============================================================================

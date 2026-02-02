@@ -179,6 +179,12 @@ export interface ChatState {
    * messages are inserted or removed from the array.
    */
   messageIdToUuid: Map<string, string>;
+  /**
+   * Set of user message IDs that were sent in the current session (not loaded from snapshot).
+   * Used to ensure UUIDs are only mapped to messages sent in this session,
+   * not historical messages from loaded sessions.
+   */
+  localUserMessageIds: Set<string>;
   /** Current rewind preview state (null when not showing rewind dialog) */
   rewindPreview: RewindPreviewState | null;
 }
@@ -290,7 +296,7 @@ export type ChatAction =
   | { type: 'REWIND_PREVIEW_ERROR'; payload: { error: string; userMessageId?: string } }
   | { type: 'REWIND_CANCEL' }
   | { type: 'REWIND_EXECUTING' } // Actual rewind in progress
-  | { type: 'REWIND_SUCCESS' }; // Actual rewind completed
+  | { type: 'REWIND_SUCCESS'; payload: { userMessageId?: string } }; // Actual rewind completed
 
 // =============================================================================
 // Helper Functions
@@ -433,6 +439,7 @@ function createBaseResetState(): Pick<
   | 'tokenStats'
   | 'pendingUserMessageUuids'
   | 'messageIdToUuid'
+  | 'localUserMessageIds'
   | 'rewindPreview'
 > {
   // Note: slashCommands is intentionally NOT reset here.
@@ -457,6 +464,7 @@ function createBaseResetState(): Pick<
     tokenStats: createEmptyTokenStats(),
     pendingUserMessageUuids: [],
     messageIdToUuid: new Map(),
+    localUserMessageIds: new Set(),
     rewindPreview: null,
   };
 }
@@ -487,6 +495,7 @@ function createSessionSwitchResetState(): Pick<
   | 'tokenStats'
   | 'pendingUserMessageUuids'
   | 'messageIdToUuid'
+  | 'localUserMessageIds'
   | 'rewindPreview'
 > {
   return {
@@ -521,6 +530,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     tokenStats: createEmptyTokenStats(),
     pendingUserMessageUuids: [],
     messageIdToUuid: new Map(),
+    localUserMessageIds: new Set(),
     rewindPreview: null,
     ...overrides,
   };
@@ -939,8 +949,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         pendingMessages: newPendingMessages,
         lastRejectedMessage: null,
         // Clear UUID tracking state to prevent stale mappings
+        // localUserMessageIds is cleared so UUIDs only map to messages sent after snapshot
         messageIdToUuid: new Map(),
         pendingUserMessageUuids: [],
+        localUserMessageIds: new Set(),
         rewindPreview: null,
       };
     }
@@ -998,6 +1010,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           },
         });
 
+        // Track this message ID as locally sent (not from snapshot)
+        // This ensures UUIDs are only mapped to messages sent in this session
+        const newLocalUserMessageIds = new Set(state.localUserMessageIds);
+        newLocalUserMessageIds.add(id);
+
         // Check if there are pending UUIDs to map to this new message
         let newMessageIdToUuid = state.messageIdToUuid;
         let newPendingUuids = state.pendingUserMessageUuids;
@@ -1016,6 +1033,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           pendingMessages: newPendingMessages,
           messageIdToUuid: newMessageIdToUuid,
           pendingUserMessageUuids: newPendingUuids,
+          localUserMessageIds: newLocalUserMessageIds,
         };
       }
 
@@ -1179,9 +1197,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // User message UUID tracking (for rewind functionality)
     case 'USER_MESSAGE_UUID_RECEIVED': {
-      // Find user messages that don't have UUIDs mapped yet
+      // Find user messages that:
+      // 1. Were sent in this session (in localUserMessageIds, not from snapshot)
+      // 2. Don't have UUIDs mapped yet
+      // This prevents historical messages from snapshot getting UUIDs meant for new messages
       const unmappedUserMessages = state.messages.filter(
-        (m) => m.source === 'user' && !state.messageIdToUuid.has(m.id)
+        (m) =>
+          m.source === 'user' &&
+          state.localUserMessageIds.has(m.id) &&
+          !state.messageIdToUuid.has(m.id)
       );
 
       // Map UUID to the first unmapped user message if available
@@ -1276,9 +1300,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           }
         : state;
 
-    case 'REWIND_SUCCESS':
+    case 'REWIND_SUCCESS': {
+      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
+      if (!state.rewindPreview) {
+        return state;
+      }
+      if (
+        action.payload.userMessageId &&
+        action.payload.userMessageId !== state.rewindPreview.userMessageId
+      ) {
+        // Response is for a different rewind request, ignore it
+        return state;
+      }
       // Actual rewind completed successfully, clear the preview state
       return { ...state, rewindPreview: null };
+    }
 
     default:
       return state;
@@ -1558,7 +1594,7 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'rewind_files_preview':
       // If dryRun is false, this is the actual rewind completion
       if (data.dryRun === false) {
-        return { type: 'REWIND_SUCCESS' };
+        return { type: 'REWIND_SUCCESS', payload: { userMessageId: data.userMessageId } };
       }
       // Otherwise, this is a preview (dry run) response
       return {
