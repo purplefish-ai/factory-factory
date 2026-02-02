@@ -91,6 +91,18 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     requestId: z.string().min(1),
     allow: z.boolean(),
   }),
+
+  // Set the model
+  z.object({
+    type: z.literal('set_model'),
+    model: z.string().optional(),
+  }),
+
+  // Set thinking budget (max thinking tokens)
+  z.object({
+    type: z.literal('set_thinking_budget'),
+    max_tokens: z.number().nullable(),
+  }),
 ]);
 
 // ============================================================================
@@ -106,3 +118,5 @@ export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message
 export type StartMessageInput = Extract<ChatMessageInput, { type: 'start' }>;
 export type UserInputMessage = Extract<ChatMessageInput, { type: 'user_input' }>;
 export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove_queued_message' }>;
+export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
+export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;

@@ -168,9 +168,17 @@ export interface ThinkingDelta {
 }
 
 /**
+ * Delta for tool input JSON streaming.
+ */
+export interface InputJsonDelta {
+  type: 'input_json_delta';
+  partial_json: string;
+}
+
+/**
  * Union of content block delta types.
  */
-export type ContentBlockDelta = TextDelta | ThinkingDelta;
+export type ContentBlockDelta = TextDelta | ThinkingDelta | InputJsonDelta;
 
 /**
  * Token usage statistics.
@@ -419,7 +427,12 @@ export interface WebSocketMessage {
     | 'message_used_as_response'
     // Message state machine events (primary protocol)
     | 'message_state_changed'
-    | 'messages_snapshot';
+    | 'messages_snapshot'
+    // SDK message types
+    | 'tool_progress'
+    | 'tool_use_summary'
+    | 'status_update'
+    | 'task_notification';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -459,6 +472,23 @@ export interface WebSocketMessage {
     attachments?: MessageAttachment[];
     settings?: ChatSettings;
   };
+  // Tool progress fields
+  /** Tool use ID for tool_progress events */
+  tool_use_id?: string;
+  /** Tool name for tool_progress events */
+  tool_name?: string;
+  /** Parent tool use ID for nested tool calls */
+  parent_tool_use_id?: string;
+  /** Elapsed time in seconds for tool_progress events */
+  elapsed_time_seconds?: number;
+  // Tool use summary fields
+  /** Summary text for tool_use_summary events */
+  summary?: string;
+  /** Preceding tool use IDs for tool_use_summary events */
+  preceding_tool_use_ids?: string[];
+  // Status update fields
+  /** Permission mode from status updates */
+  permissionMode?: string;
 }
 
 // =============================================================================

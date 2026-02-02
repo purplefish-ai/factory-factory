@@ -9,6 +9,8 @@ export {
   type QuestionResponseMessage,
   type QueueMessageInput,
   type RemoveQueuedMessageInput,
+  type SetModelMessage,
+  type SetThinkingBudgetMessage,
   type StartMessageInput,
   type UserInputMessage,
 } from './chat-message.schema';

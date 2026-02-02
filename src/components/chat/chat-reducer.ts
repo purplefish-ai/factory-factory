@@ -79,6 +79,12 @@ export type SessionStatus =
   | { phase: 'running' }
   | { phase: 'stopping' };
 
+/** Tool progress tracking for long-running tool executions */
+export interface ToolProgressInfo {
+  toolName: string;
+  elapsedSeconds: number;
+}
+
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
@@ -116,6 +122,10 @@ export interface ChatState {
   pendingMessages: Map<string, PendingMessageContent>;
   /** Last rejected message for recovery (allows restoring to input) */
   lastRejectedMessage: RejectedMessageInfo | null;
+  /** Whether context compaction is in progress */
+  isCompacting: boolean;
+  /** Tool progress tracking for long-running tools - Map from tool_use_id to progress info */
+  toolProgress: Map<string, ToolProgressInfo>;
 }
 
 // =============================================================================
@@ -190,7 +200,17 @@ export type ChatAction =
           settings?: ChatSettings;
         };
       };
-    };
+    }
+  // SDK message type actions
+  | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string } }
+  | {
+      type: 'SDK_TOOL_PROGRESS';
+      payload: { toolUseId: string; toolName: string; elapsedSeconds: number };
+    }
+  | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary: string; precedingToolUseIds: string[] } }
+  | { type: 'SDK_TASK_NOTIFICATION'; payload: { message: string } }
+  | { type: 'SDK_COMPACTING_START' }
+  | { type: 'SDK_COMPACTING_END' };
 
 // =============================================================================
 // Helper Functions
@@ -333,6 +353,8 @@ function createBaseResetState(): Pick<
   | 'latestThinking'
   | 'pendingMessages'
   | 'lastRejectedMessage'
+  | 'isCompacting'
+  | 'toolProgress'
 > {
   return {
     messages: [],
@@ -342,6 +364,8 @@ function createBaseResetState(): Pick<
     latestThinking: null,
     pendingMessages: new Map(),
     lastRejectedMessage: null,
+    isCompacting: false,
+    toolProgress: new Map(),
   };
 }
 
@@ -360,6 +384,8 @@ function createSessionSwitchResetState(): Pick<
   | 'lastRejectedMessage'
   | 'queuedMessages'
   | 'sessionStatus'
+  | 'isCompacting'
+  | 'toolProgress'
 > {
   return {
     ...createBaseResetState(),
@@ -381,6 +407,8 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     latestThinking: null,
     pendingMessages: new Map(),
     lastRejectedMessage: null,
+    isCompacting: false,
+    toolProgress: new Map(),
     ...overrides,
   };
 }
@@ -868,6 +896,38 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return state;
     }
 
+    // SDK message type actions
+    case 'SDK_STATUS_UPDATE':
+      // Status updates may include permissionMode - currently just logged, could track in state
+      return state;
+
+    case 'SDK_TOOL_PROGRESS': {
+      const { toolUseId, toolName, elapsedSeconds } = action.payload;
+      const newToolProgress = new Map(state.toolProgress);
+      newToolProgress.set(toolUseId, { toolName, elapsedSeconds });
+      return { ...state, toolProgress: newToolProgress };
+    }
+
+    case 'SDK_TOOL_USE_SUMMARY': {
+      // When we get a tool use summary, clear the progress for those tools
+      const { precedingToolUseIds } = action.payload;
+      const newToolProgress = new Map(state.toolProgress);
+      for (const toolUseId of precedingToolUseIds) {
+        newToolProgress.delete(toolUseId);
+      }
+      return { ...state, toolProgress: newToolProgress };
+    }
+
+    case 'SDK_TASK_NOTIFICATION':
+      // Task notifications could be displayed in UI - currently just logged
+      return state;
+
+    case 'SDK_COMPACTING_START':
+      return { ...state, isCompacting: true };
+
+    case 'SDK_COMPACTING_END':
+      return { ...state, isCompacting: false };
+
     default:
       return state;
   }
@@ -1000,6 +1060,34 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handleMessagesSnapshot(data);
     case 'message_state_changed':
       return handleMessageStateChanged(data);
+    // SDK message type events
+    case 'tool_progress':
+      return data.tool_use_id && data.tool_name && data.elapsed_time_seconds !== undefined
+        ? {
+            type: 'SDK_TOOL_PROGRESS',
+            payload: {
+              toolUseId: data.tool_use_id,
+              toolName: data.tool_name,
+              elapsedSeconds: data.elapsed_time_seconds,
+            },
+          }
+        : null;
+    case 'tool_use_summary':
+      return data.summary && data.preceding_tool_use_ids
+        ? {
+            type: 'SDK_TOOL_USE_SUMMARY',
+            payload: {
+              summary: data.summary,
+              precedingToolUseIds: data.preceding_tool_use_ids,
+            },
+          }
+        : null;
+    case 'status_update':
+      return { type: 'SDK_STATUS_UPDATE', payload: { permissionMode: data.permissionMode } };
+    case 'task_notification':
+      return data.message
+        ? { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } }
+        : null;
     default:
       return null;
   }

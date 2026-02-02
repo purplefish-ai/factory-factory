@@ -405,6 +405,34 @@ export class ClaudeClient extends EventEmitter {
   }
 
   // ===========================================================================
+  // Model and Thinking Control
+  // ===========================================================================
+
+  /**
+   * Set the model for subsequent messages.
+   *
+   * @param model - Optional model name (undefined to use default)
+   */
+  async setModel(model?: string): Promise<void> {
+    if (!this.process) {
+      throw new Error('ClaudeClient not initialized');
+    }
+    await this.process.protocol.sendSetModel(model);
+  }
+
+  /**
+   * Set the maximum thinking tokens for extended thinking mode.
+   *
+   * @param tokens - Maximum tokens for thinking (null to disable)
+   */
+  async setMaxThinkingTokens(tokens: number | null): Promise<void> {
+    if (!this.process) {
+      throw new Error('ClaudeClient not initialized');
+    }
+    await this.process.protocol.sendSetMaxThinkingTokens(tokens);
+  }
+
+  // ===========================================================================
   // Event Emitter Overloads (for TypeScript)
   // ===========================================================================
 
