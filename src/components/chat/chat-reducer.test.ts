@@ -1553,20 +1553,21 @@ describe('chatReducer', () => {
       expect(newState.queuedMessages.has('msg-1')).toBe(true);
     });
 
-    it('should insert ACCEPTED messages in chronological order by timestamp', () => {
-      // Start with a message that has a later timestamp
+    it('should insert ACCEPTED messages in order by backend-assigned order', () => {
+      // Start with a message that has a higher order
       const laterMessage: ChatMessage = {
         id: 'later-msg',
         source: 'user',
         text: 'Later message',
         timestamp: '2024-01-01T12:00:00.000Z',
+        order: 1,
       };
       const state: ChatState = {
         ...initialState,
         messages: [laterMessage],
       };
 
-      // Add an earlier message via MESSAGE_STATE_CHANGED ACCEPTED
+      // Add an earlier message (lower order) via MESSAGE_STATE_CHANGED ACCEPTED
       const action: ChatAction = {
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
@@ -1574,32 +1575,34 @@ describe('chatReducer', () => {
           newState: MessageState.ACCEPTED,
           userMessage: {
             text: 'Earlier message',
-            timestamp: '2024-01-01T06:00:00.000Z', // 6 hours before later message
+            timestamp: '2024-01-01T06:00:00.000Z',
+            order: 0, // Lower order should sort before higher order
           },
         },
       };
       const newState = chatReducer(state, action);
 
-      // Earlier message should be inserted before the later one
+      // Earlier message should be inserted before the later one due to lower order
       expect(newState.messages.length).toBe(2);
       expect(newState.messages[0].id).toBe('earlier-msg');
       expect(newState.messages[1].id).toBe('later-msg');
     });
 
-    it('should insert ACCEPTED messages at end when they have latest timestamp', () => {
-      // Start with an earlier message
+    it('should insert ACCEPTED messages at end when they have highest order', () => {
+      // Start with an earlier message (lower order)
       const earlierMessage: ChatMessage = {
         id: 'earlier-msg',
         source: 'user',
         text: 'Earlier message',
         timestamp: '2024-01-01T06:00:00.000Z',
+        order: 0,
       };
       const state: ChatState = {
         ...initialState,
         messages: [earlierMessage],
       };
 
-      // Add a later message via MESSAGE_STATE_CHANGED ACCEPTED
+      // Add a later message (higher order) via MESSAGE_STATE_CHANGED ACCEPTED
       const action: ChatAction = {
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
@@ -1607,13 +1610,14 @@ describe('chatReducer', () => {
           newState: MessageState.ACCEPTED,
           userMessage: {
             text: 'Later message',
-            timestamp: '2024-01-01T12:00:00.000Z', // 6 hours after earlier message
+            timestamp: '2024-01-01T12:00:00.000Z',
+            order: 1, // Higher order should sort after
           },
         },
       };
       const newState = chatReducer(state, action);
 
-      // Later message should be at the end
+      // Later message should be at the end due to higher order
       expect(newState.messages.length).toBe(2);
       expect(newState.messages[0].id).toBe('earlier-msg');
       expect(newState.messages[1].id).toBe('later-msg');
@@ -1626,41 +1630,76 @@ describe('chatReducer', () => {
       };
 
       // Simulate messages arriving out of order (e.g., due to network timing)
-      // Message 3 arrives first (timestamp: 15:00)
+      // Message 3 (order: 2) arrives first
       let newState = chatReducer(state, {
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
           id: 'msg-3',
           newState: MessageState.ACCEPTED,
-          userMessage: { text: 'Third', timestamp: '2024-01-01T15:00:00.000Z' },
+          userMessage: { text: 'Third', timestamp: '2024-01-01T15:00:00.000Z', order: 2 },
         },
       });
 
-      // Message 1 arrives second (timestamp: 09:00)
+      // Message 1 (order: 0) arrives second
       newState = chatReducer(newState, {
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
           id: 'msg-1',
           newState: MessageState.ACCEPTED,
-          userMessage: { text: 'First', timestamp: '2024-01-01T09:00:00.000Z' },
+          userMessage: { text: 'First', timestamp: '2024-01-01T09:00:00.000Z', order: 0 },
         },
       });
 
-      // Message 2 arrives third (timestamp: 12:00)
+      // Message 2 (order: 1) arrives third
       newState = chatReducer(newState, {
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
           id: 'msg-2',
           newState: MessageState.ACCEPTED,
-          userMessage: { text: 'Second', timestamp: '2024-01-01T12:00:00.000Z' },
+          userMessage: { text: 'Second', timestamp: '2024-01-01T12:00:00.000Z', order: 1 },
         },
       });
 
-      // All messages should be in chronological order
+      // All messages should be sorted by backend-assigned order
       expect(newState.messages.length).toBe(3);
-      expect(newState.messages[0].id).toBe('msg-1'); // 09:00
-      expect(newState.messages[1].id).toBe('msg-2'); // 12:00
-      expect(newState.messages[2].id).toBe('msg-3'); // 15:00
+      expect(newState.messages[0].id).toBe('msg-1'); // order: 0
+      expect(newState.messages[1].id).toBe('msg-2'); // order: 1
+      expect(newState.messages[2].id).toBe('msg-3'); // order: 2
+    });
+
+    it('should insert ordered messages before unordered messages', () => {
+      // Start with a message that has no order (e.g., from MESSAGE_USED_AS_RESPONSE)
+      const unorderedMessage: ChatMessage = {
+        id: 'unordered-msg',
+        source: 'user',
+        text: 'Unordered message',
+        timestamp: '2024-01-01T10:00:00.000Z',
+        // no order field
+      };
+      const state: ChatState = {
+        ...initialState,
+        messages: [unorderedMessage],
+      };
+
+      // Add an ordered message via MESSAGE_STATE_CHANGED ACCEPTED
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'ordered-msg',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Ordered message',
+            timestamp: '2024-01-01T12:00:00.000Z',
+            order: 0,
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      // Ordered message should be inserted BEFORE the unordered one
+      expect(newState.messages.length).toBe(2);
+      expect(newState.messages[0].id).toBe('ordered-msg');
+      expect(newState.messages[1].id).toBe('unordered-msg');
     });
   });
 });

@@ -439,6 +439,8 @@ export interface WebSocketMessage {
   // Message fields
   text?: string;
   id?: string;
+  /** Backend-assigned order for message_used_as_response events */
+  order?: number;
   // Message state machine fields (primary protocol)
   /** New state for message_state_changed events */
   newState?: MessageState;
@@ -458,6 +460,8 @@ export interface WebSocketMessage {
     timestamp: string;
     attachments?: MessageAttachment[];
     settings?: ChatSettings;
+    /** Backend-assigned order for reliable sorting */
+    order?: number;
   };
 }
 
@@ -572,6 +576,8 @@ export interface UserMessageWithState {
   queuePosition?: number;
   /** Error message for REJECTED/FAILED states */
   errorMessage?: string;
+  /** Backend-assigned order for reliable sorting (monotonically increasing per session) */
+  order: number;
 }
 
 /**
@@ -585,6 +591,8 @@ export interface ClaudeMessageWithState {
   timestamp: string;
   /** Pre-built ChatMessages for snapshot restoration - same format frontend uses */
   chatMessages: ChatMessage[];
+  /** Backend-assigned order for reliable sorting (monotonically increasing per session) */
+  order: number;
 }
 
 /**
@@ -621,6 +629,8 @@ export interface ChatMessage {
   message?: ClaudeMessage; // For claude messages
   timestamp: string;
   attachments?: MessageAttachment[]; // For user uploaded images/files
+  /** Backend-assigned order for reliable sorting (monotonically increasing per session) */
+  order?: number;
 }
 
 /**

@@ -155,7 +155,7 @@ export type ChatAction =
     }
   | { type: 'CLEAR_REJECTED_MESSAGE' }
   // Message used as interactive response (clears pending request and adds message)
-  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string } }
+  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string; order?: number } }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -188,6 +188,8 @@ export type ChatAction =
           timestamp: string;
           attachments?: MessageAttachment[];
           settings?: ChatSettings;
+          /** Backend-assigned order for reliable sorting */
+          order?: number;
         };
       };
     };
@@ -219,22 +221,30 @@ function createErrorMessage(error: string): ChatMessage {
 }
 
 /**
- * Inserts a message into the messages array at the correct position based on timestamp.
+ * Inserts a message into the messages array at the correct position based on order.
  * Uses binary search to find the insertion point for O(log n) performance.
- * Messages are ordered chronologically (oldest first).
+ * Messages are ordered by their backend-assigned order (oldest first).
+ * Messages without order are appended to the end.
  */
-function insertMessageByTimestamp(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
-  const newTimestamp = new Date(newMessage.timestamp).getTime();
+function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
+  // If new message has no order, append to end (local messages without backend confirmation)
+  if (newMessage.order === undefined) {
+    return [...messages, newMessage];
+  }
 
-  // Binary search to find insertion point
+  const newOrder = newMessage.order;
+
+  // Binary search to find insertion point based on order
   let low = 0;
   let high = messages.length;
 
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    const midTimestamp = new Date(messages[mid].timestamp).getTime();
+    const midOrder = messages[mid].order;
 
-    if (midTimestamp <= newTimestamp) {
+    // Messages without order are treated as having Infinity order (should stay at end)
+    // So when midOrder is undefined, we should NOT move right - the new message goes before it
+    if (midOrder !== undefined && midOrder <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;
@@ -674,11 +684,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         text: action.payload.text,
         timestamp: new Date().toISOString(),
         attachments: pendingContent?.attachments,
+        order: action.payload.order,
       };
 
       return {
         ...state,
-        messages: [...state.messages, userMessage],
+        messages: insertMessageByOrder(state.messages, userMessage),
         pendingMessages: newPendingMessages,
         pendingRequest: { type: 'none' },
       };
@@ -791,6 +802,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           text: userMessage.text,
           timestamp: userMessage.timestamp,
           attachments: userMessage.attachments,
+          order: userMessage.order,
         };
 
         const newQueuedMessages = new Map(state.queuedMessages);
@@ -808,7 +820,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
         return {
           ...state,
-          messages: insertMessageByTimestamp(state.messages, newMessage),
+          messages: insertMessageByOrder(state.messages, newMessage),
           queuedMessages: newQueuedMessages,
           pendingMessages: newPendingMessages,
         };
@@ -993,7 +1005,10 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     // Interactive response handling
     case 'message_used_as_response':
       return data.id && data.text
-        ? { type: 'MESSAGE_USED_AS_RESPONSE', payload: { id: data.id, text: data.text } }
+        ? {
+            type: 'MESSAGE_USED_AS_RESPONSE',
+            payload: { id: data.id, text: data.text, order: data.order },
+          }
         : null;
     // Message state machine events (primary protocol)
     case 'messages_snapshot':
