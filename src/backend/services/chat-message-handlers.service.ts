@@ -135,10 +135,9 @@ class ChatMessageHandlerService {
         return;
       }
 
-      // Check if Claude process is still alive
-      if (!client.isRunning()) {
-        logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
-        messageQueueService.requeue(dbSessionId, msg);
+      const shouldRequeueReason = this.getRequeueReason(client);
+      if (shouldRequeueReason) {
+        this.requeueWithReason(dbSessionId, msg, shouldRequeueReason);
         return;
       }
 
@@ -271,6 +270,10 @@ class ChatMessageHandlerService {
     client: ClaudeClient,
     msg: QueuedMessage
   ): Promise<void> {
+    if (this.isCompactCommand(msg.text)) {
+      client.startCompaction();
+    }
+
     // Set thinking budget first - this can throw and must complete before we
     // change any state. If it fails, the message remains in ACCEPTED state
     // and can be safely requeued by the caller.
@@ -295,6 +298,37 @@ class ChatMessageHandlerService {
         remainingInQueue: messageQueueService.getQueueLength(dbSessionId),
       });
     }
+  }
+
+  private getRequeueReason(client: ClaudeClient): 'working' | 'compacting' | 'stopped' | null {
+    if (client.isWorking()) {
+      return 'working';
+    }
+    if (client.isCompactingActive()) {
+      return 'compacting';
+    }
+    if (!client.isRunning()) {
+      return 'stopped';
+    }
+    return null;
+  }
+
+  private requeueWithReason(
+    dbSessionId: string,
+    msg: QueuedMessage,
+    reason: 'working' | 'compacting' | 'stopped'
+  ): void {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Re-queueing message', { dbSessionId, reason });
+    } else if (reason === 'stopped') {
+      logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
+    }
+    messageQueueService.requeue(dbSessionId, msg);
+  }
+
+  private isCompactCommand(text: string): boolean {
+    const trimmed = text.trim();
+    return trimmed === '/compact' || trimmed.startsWith('/compact ');
   }
 
   /**
