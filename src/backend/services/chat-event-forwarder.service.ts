@@ -111,7 +111,7 @@ class ChatEventForwarderService {
       logger.info('[Chat WS] Setting up event forwarding for session', { dbSessionId });
     }
 
-    // Send slash commands from initialize response (sent once per session setup)
+    // Store-then-forward slash commands from initialize response (sent once per session setup)
     const initResponse = client.getInitializeResponse();
     if (initResponse?.commands && initResponse.commands.length > 0) {
       if (DEBUG_CHAT_WS) {
@@ -120,10 +120,12 @@ class ChatEventForwarderService {
           commandCount: initResponse.commands.length,
         });
       }
-      chatConnectionService.forwardToSession(dbSessionId, {
+      const slashCommandsMsg = {
         type: 'slash_commands',
         slashCommands: initResponse.commands,
-      });
+      };
+      messageStateService.storeEvent(dbSessionId, slashCommandsMsg);
+      chatConnectionService.forwardToSession(dbSessionId, slashCommandsMsg);
     }
 
     const pendingToolNames = new Map<string, string>();

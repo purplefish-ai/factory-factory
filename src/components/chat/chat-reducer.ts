@@ -405,8 +405,9 @@ function createBaseResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
-  | 'slashCommands'
 > {
+  // Note: slashCommands is intentionally NOT reset here - it persists across chat clears
+  // since the backend only sends commands once during session setup
   return {
     messages: [],
     gitBranch: null,
@@ -422,7 +423,6 @@ function createBaseResetState(): Pick<
     hasCompactBoundary: false,
     activeHooks: new Map(),
     taskNotifications: [],
-    slashCommands: [],
   };
 }
 
@@ -448,7 +448,6 @@ function createSessionSwitchResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
-  | 'slashCommands'
 > {
   return {
     ...createBaseResetState(),

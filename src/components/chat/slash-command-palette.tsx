@@ -111,8 +111,8 @@ export function SlashCommandPalette({
     return undefined;
   }, [isOpen, handleKeyDown]);
 
-  // Don't render if not open or no commands
-  if (!isOpen || filteredCommands.length === 0) {
+  // Don't render if not open
+  if (!isOpen) {
     return null;
   }
 

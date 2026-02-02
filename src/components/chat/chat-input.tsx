@@ -400,10 +400,9 @@ export const ChatInput = memo(function ChatInput({
   // Handle key press for Enter to send
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      // If slash menu is open, let the palette handle keyboard events
-      // (except for typing which continues to filter)
+      // If slash menu is open, prevent default and let the palette handle keyboard events
       if (slashMenuOpen && ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(event.key)) {
-        // Don't prevent default here - the SlashCommandPalette handles these via window listener
+        event.preventDefault();
         return;
       }
 
