@@ -369,9 +369,16 @@ export const ChatInput = memo(function ChatInput({
     [setAttachments]
   );
 
-  // Handle key press for Enter to send
+  // Handle key press for Enter to send and Shift+Tab for plan mode toggle
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Shift+Tab toggles plan mode
+      if (event.key === 'Tab' && event.shiftKey) {
+        event.preventDefault();
+        onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+        return;
+      }
+
       // Enter without Shift sends the message (queues if agent is running)
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -384,7 +391,7 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     },
-    [onSend, disabled, onChange, setAttachments, attachments]
+    [onSend, disabled, onChange, setAttachments, attachments, settings, onSettingsChange]
   );
 
   // Handle send button click
