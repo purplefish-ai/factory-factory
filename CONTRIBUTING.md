@@ -49,6 +49,9 @@ Before submitting a pull request, ensure your code passes all checks:
 # Run tests
 pnpm test
 
+# Watch tests while developing
+pnpm test:watch
+
 # Type checking
 pnpm typecheck
 
@@ -69,13 +72,22 @@ pnpm db:generate
 pnpm db:studio
 ```
 
+### Storybook
+
+Use Storybook for UI development and to validate component changes:
+
+```bash
+pnpm storybook
+```
+
 ## Pull Request Process
 
 1. **Fork the repository** and create a new branch from `main`
 2. **Make your changes** with clear, focused commits
 3. **Run all checks** (`pnpm test`, `pnpm typecheck`, `pnpm check:fix`)
 4. **Write or update tests** for your changes
-5. **Update documentation** if needed
+5. **Add or update Storybook stories** for UI changes
+6. **Update documentation** if needed
 6. **Submit a pull request** with a clear description
 
 ### Commit Messages
@@ -93,6 +105,7 @@ Write clear, descriptive commit messages:
 - Run `pnpm check:fix` to automatically fix issues
 - Follow existing patterns in the codebase
 - Use TypeScript strict mode
+- Prefer Zod for schemas and validation; avoid raw typecasts
 
 ## Project Structure
 
@@ -111,6 +124,14 @@ src/
 electron/             # Electron main process
 prisma/               # Database schema and migrations
 ```
+
+## Contributor Checklist
+
+- Add or update tests and run `pnpm test` (use `pnpm test:watch` while developing)
+- Add or update Storybook stories when UI changes are introduced (`pnpm storybook`)
+- Run `pnpm typecheck` and `pnpm check:fix`
+- Ensure schemas use Zod and avoid raw typecasts
+- Update docs when behavior or commands change
 
 ## Reporting Issues
 
