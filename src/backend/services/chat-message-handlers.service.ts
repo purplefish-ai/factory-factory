@@ -143,15 +143,14 @@ class ChatMessageHandlerService {
       try {
         await this.dispatchMessage(dbSessionId, client, msg);
       } catch (error) {
-        // If dispatch fails (e.g., setMaxThinkingTokens throws), requeue the message
+        // If dispatch fails (e.g., setMaxThinkingTokens throws before state change),
+        // the message is still in ACCEPTED state and can be safely requeued
         logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
           dbSessionId,
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
         });
         messageQueueService.requeue(dbSessionId, msg);
-        // Update state back to ACCEPTED since dispatch failed
-        messageStateService.updateState(dbSessionId, msg.id, MessageState.ACCEPTED);
       }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
@@ -267,16 +266,18 @@ class ChatMessageHandlerService {
     client: ClaudeClient,
     msg: QueuedMessage
   ): Promise<void> {
-    // Update state to DISPATCHED - emits message_state_changed event
+    // Set thinking budget first - this can throw and must complete before we
+    // change any state. If it fails, the message remains in ACCEPTED state
+    // and can be safely requeued by the caller.
+    const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+    await client.setMaxThinkingTokens(thinkingTokens);
+
+    // Now that thinking budget is set, update state to DISPATCHED
     messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
 
     // Notify frontend that agent is working - this ensures the spinner shows
     // for subsequent messages when client is already running
     chatConnectionService.forwardToSession(dbSessionId, { type: 'status', running: true });
-
-    // Set thinking budget based on message settings (must complete before sending message)
-    const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-    await client.setMaxThinkingTokens(thinkingTokens);
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
