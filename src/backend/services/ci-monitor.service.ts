@@ -20,40 +20,23 @@ const MAX_CONCURRENT_CHECKS = 5;
 const MIN_NOTIFICATION_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes - don't spam sessions
 
 class CIMonitorService {
-  private monitorInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
-  private checkInProgress: Promise<unknown> | null = null;
+  private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(MAX_CONCURRENT_CHECKS);
 
   /**
    * Start the CI monitor
    */
   start(): void {
-    if (this.monitorInterval) {
+    if (this.monitorLoop) {
       return; // Already running
     }
 
     // Reset shutdown flag
     this.isShuttingDown = false;
 
-    // Run immediately on start, then on interval
-    this.checkAllWorkspaces().catch((err) => {
-      logger.error('Initial CI check failed', err as Error);
-    });
-
-    this.monitorInterval = setInterval(() => {
-      if (this.isShuttingDown) {
-        return;
-      }
-
-      this.checkInProgress = this.checkAllWorkspaces()
-        .catch((err) => {
-          logger.error('CI monitor check failed', err as Error);
-        })
-        .finally(() => {
-          this.checkInProgress = null;
-        });
-    }, CI_MONITOR_INTERVAL_MS);
+    // Start the continuous monitoring loop
+    this.monitorLoop = this.runContinuousLoop();
 
     logger.info('CI monitor started', { intervalMs: CI_MONITOR_INTERVAL_MS });
   }
@@ -64,17 +47,38 @@ class CIMonitorService {
   async stop(): Promise<void> {
     this.isShuttingDown = true;
 
-    if (this.monitorInterval) {
-      clearInterval(this.monitorInterval);
-      this.monitorInterval = null;
-    }
-
-    if (this.checkInProgress) {
-      logger.debug('Waiting for in-flight CI checks to complete');
-      await this.checkInProgress;
+    if (this.monitorLoop) {
+      logger.debug('Waiting for CI monitor loop to complete');
+      await this.monitorLoop;
+      this.monitorLoop = null;
     }
 
     logger.info('CI monitor stopped');
+  }
+
+  /**
+   * Continuous loop that checks all workspaces, waits for completion, then sleeps
+   */
+  private async runContinuousLoop(): Promise<void> {
+    while (!this.isShuttingDown) {
+      try {
+        await this.checkAllWorkspaces();
+      } catch (err) {
+        logger.error('CI monitor check failed', err as Error);
+      }
+
+      // Wait for the interval before next check (unless shutting down)
+      if (!this.isShuttingDown) {
+        await this.sleep(CI_MONITOR_INTERVAL_MS);
+      }
+    }
+  }
+
+  /**
+   * Sleep for specified milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
