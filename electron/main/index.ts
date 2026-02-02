@@ -41,6 +41,15 @@ async function createWindow() {
 
     mainWindow.loadURL(url);
     console.log('[electron] Window created and URL loaded');
+
+    // Track window focus state for notifications
+    mainWindow.on('focus', () => {
+      mainWindow?.webContents.send('window-focus-changed', true);
+    });
+
+    mainWindow.on('blur', () => {
+      mainWindow?.webContents.send('window-focus-changed', false);
+    });
   } catch (error) {
     console.error('[electron] Failed to create window:', error);
     dialog.showErrorBox(

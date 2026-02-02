@@ -478,7 +478,9 @@ export interface WebSocketMessage {
     | 'hook_response'
     // Context compaction events
     | 'compacting_start'
-    | 'compacting_end';
+    | 'compacting_end'
+    | 'queue'
+    | 'workspace_notification_request';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -539,6 +541,11 @@ export interface WebSocketMessage {
   // Status update fields
   /** Permission mode from status updates */
   permissionMode?: string;
+  // Workspace notification request fields
+  workspaceId?: string;
+  workspaceName?: string;
+  sessionCount?: number;
+  finishedAt?: string;
 }
 
 // =============================================================================

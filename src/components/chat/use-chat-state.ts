@@ -405,6 +405,22 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       }
       const wsMessage = data;
 
+      // Handle workspace notification requests
+      if (wsMessage.type === 'workspace_notification_request') {
+        // Dispatch custom event for WorkspaceNotificationManager
+        window.dispatchEvent(
+          new CustomEvent('workspace-notification-request', {
+            detail: {
+              workspaceId: wsMessage.workspaceId,
+              workspaceName: wsMessage.workspaceName,
+              sessionCount: wsMessage.sessionCount,
+              finishedAt: wsMessage.finishedAt,
+            },
+          })
+        );
+        return;
+      }
+
       // Handle Claude messages specially for tool input streaming
       if (isWsClaudeMessage(wsMessage)) {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
