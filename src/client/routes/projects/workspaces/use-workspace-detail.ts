@@ -13,6 +13,8 @@ interface UseWorkspaceDataOptions {
 }
 
 export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
+  const utils = trpc.useUtils();
+
   // Increased staleTime to reduce unnecessary re-renders from background fetches
   const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
     { id: workspaceId },
@@ -22,6 +24,23 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
       refetchOnWindowFocus: false, // Don't refetch on tab focus
     }
   );
+
+  // Sync PR status from GitHub on page load (if workspace has a PR)
+  const syncPRStatus = trpc.workspace.syncPRStatus.useMutation({
+    onSuccess: () => {
+      // Refresh workspace data after PR sync
+      utils.workspace.get.invalidate({ id: workspaceId });
+    },
+  });
+
+  // Sync PR status once when workspace loads with a PR URL
+  const hasSyncedRef = useRef(false);
+  useEffect(() => {
+    if (workspace?.prUrl && !hasSyncedRef.current && !syncPRStatus.isPending) {
+      hasSyncedRef.current = true;
+      syncPRStatus.mutate({ workspaceId });
+    }
+  }, [workspace?.prUrl, workspaceId, syncPRStatus]);
 
   const { data: claudeSessions, isLoading: sessionsLoading } =
     trpc.session.listClaudeSessions.useQuery(

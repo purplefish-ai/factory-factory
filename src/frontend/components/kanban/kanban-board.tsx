@@ -13,18 +13,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
 
 export function KanbanControls() {
-  const { refetch, hiddenColumns, toggleColumnVisibility } = useKanban();
+  const { syncAndRefetch, isSyncing, hiddenColumns, toggleColumnVisibility } = useKanban();
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => refetch()}>
-        <RefreshCw className="h-4 w-4 mr-2" />
-        Refresh
+      <Button variant="outline" size="sm" onClick={() => syncAndRefetch()} disabled={isSyncing}>
+        <RefreshCw className={cn('h-4 w-4 mr-2', isSyncing && 'animate-spin')} />
+        {isSyncing ? 'Syncing...' : 'Refresh'}
       </Button>
 
       <DropdownMenu>

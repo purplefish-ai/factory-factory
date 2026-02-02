@@ -6,7 +6,7 @@ import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from '../services/factory-config.service';
 import { githubCLIService } from '../services/github-cli.service';
-import { computeKanbanColumn } from '../services/kanban-state.service';
+import { computeKanbanColumn, kanbanStateService } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
 import { sessionService } from '../services/session.service';
 import { terminalService } from '../services/terminal.service';
@@ -355,6 +355,91 @@ export const workspaceRouter = router({
         });
         return null;
       }
+    }),
+
+  // Sync PR status for a workspace (immediate refresh from GitHub)
+  syncPRStatus: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ input }) => {
+      const workspace = await workspaceAccessor.findById(input.workspaceId);
+      if (!workspace) {
+        throw new Error('Workspace not found');
+      }
+
+      if (!workspace.prUrl) {
+        return { success: false, reason: 'no_pr_url' as const };
+      }
+
+      const prResult = await githubCLIService.fetchAndComputePRState(workspace.prUrl);
+      if (!prResult) {
+        return { success: false, reason: 'fetch_failed' as const };
+      }
+
+      await workspaceAccessor.update(input.workspaceId, {
+        prNumber: prResult.prNumber,
+        prState: prResult.prState,
+        prReviewState: prResult.prReviewState,
+        prCiStatus: prResult.prCiStatus,
+        prUpdatedAt: new Date(),
+      });
+
+      await kanbanStateService.updateCachedKanbanColumn(input.workspaceId);
+
+      logger.info('PR status synced manually', {
+        workspaceId: input.workspaceId,
+        prNumber: prResult.prNumber,
+        prState: prResult.prState,
+      });
+
+      return { success: true, prState: prResult.prState };
+    }),
+
+  // Sync PR status for all workspaces in a project (immediate refresh from GitHub)
+  syncAllPRStatuses: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ input }) => {
+      const workspaces = await workspaceAccessor.findByProjectIdWithSessions(input.projectId, {
+        excludeStatuses: [WorkspaceStatus.ARCHIVED],
+      });
+
+      const workspacesWithPRs = workspaces.filter(
+        (w): w is typeof w & { prUrl: string } => w.prUrl !== null
+      );
+
+      if (workspacesWithPRs.length === 0) {
+        return { synced: 0, failed: 0 };
+      }
+
+      let synced = 0;
+      let failed = 0;
+
+      // Sync all workspaces with PRs (with concurrency limit)
+      await Promise.all(
+        workspacesWithPRs.map((workspace) =>
+          gitConcurrencyLimit(async () => {
+            const prResult = await githubCLIService.fetchAndComputePRState(workspace.prUrl);
+            if (!prResult) {
+              failed++;
+              return;
+            }
+
+            await workspaceAccessor.update(workspace.id, {
+              prNumber: prResult.prNumber,
+              prState: prResult.prState,
+              prReviewState: prResult.prReviewState,
+              prCiStatus: prResult.prCiStatus,
+              prUpdatedAt: new Date(),
+            });
+
+            await kanbanStateService.updateCachedKanbanColumn(workspace.id);
+            synced++;
+          })
+        )
+      );
+
+      logger.info('Batch PR status sync completed', { projectId: input.projectId, synced, failed });
+
+      return { synced, failed };
     }),
 
   // Merge sub-routers
