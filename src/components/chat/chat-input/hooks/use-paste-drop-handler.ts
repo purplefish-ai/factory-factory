@@ -90,18 +90,12 @@ export function usePasteDropHandler({
         return;
       }
 
-      // Check for large text
+      // Check for large text (must have non-whitespace content)
       const text = getClipboardText(event.nativeEvent);
-      if (text && isLargeText(text)) {
+      if (text && text.trim().length > 0 && isLargeText(text)) {
         event.preventDefault();
-        try {
-          const attachment = textToAttachment(text);
-          setAttachments((prev) => [...prev, attachment]);
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : 'Failed to create text attachment';
-          toast.error(message);
-        }
+        const attachment = textToAttachment(text);
+        setAttachments((prev) => [...prev, attachment]);
         return;
       }
 
