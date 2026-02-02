@@ -13,8 +13,8 @@ import { createLogger } from './logger.service';
 
 const logger = createLogger('scheduler');
 
-const PR_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const STALE_THRESHOLD_MINUTES = 5;
+const PR_SYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+const STALE_THRESHOLD_MINUTES = 2;
 const MAX_CONCURRENT_PR_SYNCS = 5;
 
 class SchedulerService {
