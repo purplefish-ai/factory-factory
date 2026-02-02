@@ -44,6 +44,14 @@ export function runMigrations(options: MigrationOptions): void {
       )
     `);
 
+    // Add checksum column if it doesn't exist (for existing databases)
+    const columns = db.prepare('PRAGMA table_info(_prisma_migrations)').all() as Array<{
+      name: string;
+    }>;
+    if (!columns.some((col) => col.name === 'checksum')) {
+      db.exec(`ALTER TABLE _prisma_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`);
+    }
+
     // Get list of applied migrations
     const appliedMigrations = new Set(
       (
