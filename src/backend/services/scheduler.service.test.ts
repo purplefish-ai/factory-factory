@@ -245,7 +245,7 @@ describe('SchedulerService', () => {
   });
 
   describe('interval behavior', () => {
-    it('should run sync every 5 minutes when started', async () => {
+    it('should run sync every 2 minutes when started', async () => {
       mockFindNeedingPRSync.mockResolvedValue([]);
 
       schedulerService.start();
@@ -253,12 +253,12 @@ describe('SchedulerService', () => {
       // Initial state - no calls yet
       expect(mockFindNeedingPRSync).not.toHaveBeenCalled();
 
-      // First interval tick (5 minutes)
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      // First interval tick (2 minutes)
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
       expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(1);
 
       // Second interval tick
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
       expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(2);
 
       await schedulerService.stop();
@@ -274,7 +274,7 @@ describe('SchedulerService', () => {
       mockFindNeedingPRSync.mockClear();
 
       // Advance time - should not trigger sync
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
       expect(mockFindNeedingPRSync).not.toHaveBeenCalled();
     });
   });
@@ -289,10 +289,10 @@ describe('SchedulerService', () => {
       schedulerService.start();
 
       // First tick - should fail but not crash
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
 
       // Second tick - should still work
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
 
       expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(2);
 
