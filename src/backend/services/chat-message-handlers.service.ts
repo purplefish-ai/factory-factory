@@ -304,11 +304,11 @@ class ChatMessageHandlerService {
     if (client.isWorking()) {
       return 'working';
     }
-    if (client.isCompactingActive()) {
-      return 'compacting';
-    }
     if (!client.isRunning()) {
       return 'stopped';
+    }
+    if (client.isCompactingActive()) {
+      return 'compacting';
     }
     return null;
   }
