@@ -140,7 +140,7 @@ class ChatMessageHandlerService {
         return;
       }
 
-      this.dispatchMessage(dbSessionId, client, msg);
+      await this.dispatchMessage(dbSessionId, client, msg);
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
     }
@@ -250,7 +250,11 @@ class ChatMessageHandlerService {
   /**
    * Dispatch a message to the client.
    */
-  private dispatchMessage(dbSessionId: string, client: ClaudeClient, msg: QueuedMessage): void {
+  private async dispatchMessage(
+    dbSessionId: string,
+    client: ClaudeClient,
+    msg: QueuedMessage
+  ): Promise<void> {
     // Update state to DISPATCHED - emits message_state_changed event
     messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
 
@@ -258,9 +262,9 @@ class ChatMessageHandlerService {
     // for subsequent messages when client is already running
     chatConnectionService.forwardToSession(dbSessionId, { type: 'status', running: true });
 
-    // Set thinking budget based on message settings
+    // Set thinking budget based on message settings (must complete before sending message)
     const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-    client.setMaxThinkingTokens(thinkingTokens);
+    await client.setMaxThinkingTokens(thinkingTokens);
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
