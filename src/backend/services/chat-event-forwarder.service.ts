@@ -510,6 +510,20 @@ class ChatEventForwarderService {
       messageStateService.clearSession(dbSessionId);
     });
 
+    // Forward request cancellation to frontend (e.g., when CLI cancels during permission or question prompt)
+    client.on('permission_cancelled', (requestId: string) => {
+      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+        eventType: 'permission_cancelled',
+        requestId,
+      });
+      // Only clear if the requestId matches to avoid race conditions with newer requests
+      this.clearPendingRequestIfMatches(dbSessionId, requestId);
+      chatConnectionService.forwardToSession(dbSessionId, {
+        type: 'permission_cancelled',
+        requestId,
+      });
+    });
+
     client.on('error', (error) => {
       chatConnectionService.forwardToSession(dbSessionId, {
         type: 'error',

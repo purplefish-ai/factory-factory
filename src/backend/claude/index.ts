@@ -8,6 +8,7 @@
 
 import { EventEmitter } from 'node:events';
 import { AskUserQuestionInputSchema, safeParseToolInput } from '../schemas/tool-inputs.schema';
+import { createLogger } from '../services/logger.service';
 import {
   AutoApproveHandler,
   createAllowResponse,
@@ -19,6 +20,7 @@ import {
 import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './process';
 import type { ControlResponseBody } from './protocol';
 import { type HistoryMessage, SessionManager } from './session';
+import type { ControlCancelRequest } from './types';
 import {
   type AssistantMessage,
   type CanUseToolRequest,
@@ -44,6 +46,8 @@ import {
   type ToolUseSummaryMessage,
   type UserMessage,
 } from './types';
+
+const logger = createLogger('claude-client');
 
 // =============================================================================
 // Types
@@ -128,6 +132,10 @@ export class ClaudeClient extends EventEmitter {
   private interactiveHandler: DeferredHandler;
   /** Store pending interactive requests to retrieve original input when responding */
   private pendingInteractiveRequests: Map<string, CanUseToolRequest> = new Map();
+  /** Map protocol request_id to tool_use_id for cancel request handling */
+  private protocolToToolRequestId: Map<string, string> = new Map();
+  /** Track cancelled protocol request IDs to avoid sending deny response */
+  private cancelledProtocolRequests: Set<string> = new Set();
   /** Track whether context compaction is in progress (toggle-based detection) */
   private isCompacting = false;
 
@@ -480,6 +488,7 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'hook_response', handler: (msg: SystemHookResponseMessage) => void): this;
   override on(event: 'compacting_start', handler: () => void): this;
   override on(event: 'compacting_end', handler: () => void): this;
+  override on(event: 'permission_cancelled', handler: (requestId: string) => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -506,6 +515,7 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'hook_response', msg: SystemHookResponseMessage): boolean;
   override emit(event: 'compacting_start'): boolean;
   override emit(event: 'compacting_end'): boolean;
+  override emit(event: 'permission_cancelled', requestId: string): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -644,10 +654,37 @@ export class ClaudeClient extends EventEmitter {
       // Emit the permission request for visibility
       this.emit('permission_request', controlRequest);
 
+      // Track mapping from protocol request_id to tool_use_id for interactive tools
+      // This allows control_cancel to find the right request to cancel
+      if (
+        isCanUseToolRequest(controlRequest.request) &&
+        INTERACTIVE_TOOLS.has(controlRequest.request.tool_name)
+      ) {
+        const toolUseId = controlRequest.request.tool_use_id;
+        if (toolUseId) {
+          this.protocolToToolRequestId.set(controlRequest.request_id, toolUseId);
+        }
+      }
+
       try {
         const response = await this.handleControlRequest(controlRequest.request);
+        // Clean up mapping on successful response
+        this.protocolToToolRequestId.delete(controlRequest.request_id);
         this.process?.protocol.sendControlResponse(controlRequest.request_id, response);
       } catch (error) {
+        // Clean up mapping on error
+        this.protocolToToolRequestId.delete(controlRequest.request_id);
+
+        // Check if this request was cancelled - if so, don't send a deny response
+        // The protocol states "No response is required" for control_cancel_request
+        if (this.cancelledProtocolRequests.has(controlRequest.request_id)) {
+          this.cancelledProtocolRequests.delete(controlRequest.request_id);
+          logger.debug('Skipping deny response for cancelled request', {
+            requestId: controlRequest.request_id,
+          });
+          return;
+        }
+
         // On error, deny the request
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.process?.protocol.sendControlResponse(controlRequest.request_id, {
@@ -655,6 +692,40 @@ export class ClaudeClient extends EventEmitter {
           message: `Permission handler error: ${errorMessage}`,
         });
       }
+    });
+
+    // Handle cancel requests from CLI (e.g., when user interrupts during permission or question prompt)
+    this.process.protocol.on('control_cancel', (cancelRequest: ControlCancelRequest) => {
+      // Look up the tool_use_id from protocol request_id mapping
+      // DeferredHandler and pendingInteractiveRequests use tool_use_id as key, not protocol request_id
+      const toolUseId = this.protocolToToolRequestId.get(cancelRequest.request_id);
+      const requestIdToCancel = toolUseId ?? cancelRequest.request_id;
+
+      logger.debug('Control cancel received', {
+        protocolRequestId: cancelRequest.request_id,
+        toolUseId,
+        requestIdToCancel,
+      });
+
+      // Mark request as cancelled BEFORE cancelling to prevent deny response
+      // The control_request handler checks this set to avoid sending a response
+      this.cancelledProtocolRequests.add(cancelRequest.request_id);
+
+      // Cancel the deferred interactive handler's pending request
+      this.interactiveHandler.cancel(requestIdToCancel, 'Request cancelled by CLI');
+
+      // Clean up stored request and mapping
+      const hadStoredRequest = this.pendingInteractiveRequests.has(requestIdToCancel);
+      this.pendingInteractiveRequests.delete(requestIdToCancel);
+      this.protocolToToolRequestId.delete(cancelRequest.request_id);
+
+      logger.debug('Request cancelled cleanup', {
+        requestIdToCancel,
+        hadStoredRequest,
+      });
+
+      // Emit for forwarding to frontend (use tool_use_id which matches what frontend expects)
+      this.emit('permission_cancelled', requestIdToCancel);
     });
   }
 

@@ -473,6 +473,7 @@ export interface WebSocketMessage {
     // Interactive requests
     | 'permission_request'
     | 'user_question'
+    | 'permission_cancelled'
     // Queue error handling
     | 'message_rejected'
     | 'message_used_as_response'

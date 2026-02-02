@@ -165,6 +165,7 @@ export type ChatAction =
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
+  | { type: 'WS_PERMISSION_CANCELLED'; payload: { requestId: string } }
   // Session actions
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
@@ -693,6 +694,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case 'QUESTION_RESPONSE':
       return { ...state, pendingRequest: { type: 'none' } };
+
+    // Request cancelled by CLI (e.g., Ctrl+C during permission or question prompt)
+    case 'WS_PERMISSION_CANCELLED': {
+      // Only clear if the cancelled request matches the current pending request
+      const currentRequestId =
+        state.pendingRequest.type === 'permission'
+          ? state.pendingRequest.request.requestId
+          : state.pendingRequest.type === 'question'
+            ? state.pendingRequest.request.requestId
+            : null;
+      if (currentRequestId === action.payload.requestId) {
+        return { ...state, pendingRequest: { type: 'none' } };
+      }
+      return state;
+    }
 
     // Session switching
     case 'SESSION_SWITCH_START':
@@ -1291,6 +1307,13 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
+    // Request cancelled by CLI (e.g., Ctrl+C during permission or question prompt)
+    case 'permission_cancelled':
+      if (!data.requestId) {
+        // biome-ignore lint/suspicious/noConsole: Error logging for debugging malformed WebSocket messages
+        console.error('[Chat Reducer] Received permission_cancelled without requestId', data);
+      }
+      return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId ?? '' } };
     // Interactive response handling
     case 'message_used_as_response':
       return data.id && data.text
