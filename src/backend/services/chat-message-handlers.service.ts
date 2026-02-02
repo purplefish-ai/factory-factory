@@ -140,7 +140,19 @@ class ChatMessageHandlerService {
         return;
       }
 
-      await this.dispatchMessage(dbSessionId, client, msg);
+      try {
+        await this.dispatchMessage(dbSessionId, client, msg);
+      } catch (error) {
+        // If dispatch fails (e.g., setMaxThinkingTokens throws), requeue the message
+        logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
+          dbSessionId,
+          messageId: msg.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        messageQueueService.requeue(dbSessionId, msg);
+        // Update state back to ACCEPTED since dispatch failed
+        messageStateService.updateState(dbSessionId, msg.id, MessageState.ACCEPTED);
+      }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
     }

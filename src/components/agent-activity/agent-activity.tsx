@@ -16,7 +16,6 @@ import { ToolSequenceGroup } from './tool-renderers';
 
 /**
  * Gets message text for display, handling undefined values.
- * Note: The thinking suffix is no longer appended to messages, so no stripping is needed.
  */
 function getMessageText(text: string | undefined): string {
   return text ?? '';
