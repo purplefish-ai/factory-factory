@@ -589,7 +589,7 @@ function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
             }
           }}
           className={cn(
-            'flex items-center justify-end gap-1 text-xs hover:opacity-80 transition-opacity p-0',
+            'flex w-[72px] items-center justify-end gap-1 text-xs hover:opacity-80 transition-opacity p-0',
             workspace.prState === 'MERGED'
               ? 'text-green-500'
               : 'text-muted-foreground hover:text-foreground'
