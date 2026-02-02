@@ -351,7 +351,7 @@ export const ChatInput = memo(function ChatInput({
             )}
             {/* Send button - always enabled (except when disconnected), queues when running */}
             <InputGroupButton
-              onClick={() => actions.handleSendClick(inputRef ?? { current: null })}
+              onClick={() => actions.handleSendClick(resolvedInputRef)}
               disabled={isDisabled}
               size="icon-sm"
               aria-label={running ? 'Queue message' : 'Send message'}
