@@ -336,8 +336,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   inputAttachmentsRef.current = inputAttachments;
   // Track rewind preview timeout for cleanup
   const rewindTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track current rewind request nonce for race condition handling
-  const rewindNonceRef = useRef<string | null>(null);
 
   // =============================================================================
   // Session Switching Effect
@@ -623,7 +621,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
       // Generate unique nonce for this request (handles retry race conditions)
       const requestNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      rewindNonceRef.current = requestNonce;
 
       // Start preview state first - this ensures the reducer can handle error states
       dispatch({
