@@ -171,6 +171,7 @@
     "@biomejs/biome": "^2.3.13",
     "@electron/rebuild": "^4.0.2",
     "@storybook/addon-a11y": "10.2.3",
+    "@storybook/addon-docs": "10.2.3",
     "@storybook/addon-mcp": "^0.2.2",
     "@storybook/addon-themes": "10.2.3",
     "@storybook/react": "10.2.3",
