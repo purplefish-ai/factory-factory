@@ -528,6 +528,7 @@ class ChatEventForwarderService {
       });
       client.removeAllListeners();
       this.clientEventSetup.delete(dbSessionId);
+      this.lastCompactBoundaryAt.delete(dbSessionId);
       // Note: We intentionally do NOT clear the message queue on exit
       // Queue is preserved so messages can be sent when user starts next interaction
       // Clear any pending interactive requests when process exits

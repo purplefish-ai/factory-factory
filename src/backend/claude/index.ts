@@ -380,6 +380,17 @@ export class ClaudeClient extends EventEmitter {
     this.emit('compacting_start');
   }
 
+  /**
+   * Mark compaction as ended and emit an event if needed.
+   */
+  endCompaction(): void {
+    if (!this.isCompacting) {
+      return;
+    }
+    this.isCompacting = false;
+    this.emit('compacting_end');
+  }
+
   // ===========================================================================
   // Interactive Tool Responses
   // ===========================================================================
@@ -597,10 +608,7 @@ export class ClaudeClient extends EventEmitter {
     switch (msg.type) {
       case 'assistant':
         // End compaction if in progress (fallback for single-boundary case)
-        if (this.isCompacting) {
-          this.isCompacting = false;
-          this.emit('compacting_end');
-        }
+        this.endCompaction();
         this.emit('message', msg);
         this.extractToolUseEvents(msg);
         break;
@@ -639,10 +647,7 @@ export class ClaudeClient extends EventEmitter {
         break;
       case 'compact_boundary':
         this.emit('compact_boundary', msg as SystemCompactBoundaryMessage);
-        if (this.isCompacting) {
-          this.isCompacting = false;
-          this.emit('compacting_end');
-        }
+        this.endCompaction();
         break;
       case 'hook_started':
         this.emit('hook_started', msg as SystemHookStartedMessage);

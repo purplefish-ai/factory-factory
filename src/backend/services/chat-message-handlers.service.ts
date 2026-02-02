@@ -126,15 +126,6 @@ class ChatMessageHandlerService {
         client = newClient;
       }
 
-      // Check if Claude is busy
-      if (client.isWorking()) {
-        if (DEBUG_CHAT_WS) {
-          logger.info('[Chat WS] Claude is working, re-queueing message', { dbSessionId });
-        }
-        messageQueueService.requeue(dbSessionId, msg);
-        return;
-      }
-
       const shouldRequeueReason = this.getRequeueReason(client);
       if (shouldRequeueReason) {
         this.requeueWithReason(dbSessionId, msg, shouldRequeueReason);
@@ -270,9 +261,7 @@ class ChatMessageHandlerService {
     client: ClaudeClient,
     msg: QueuedMessage
   ): Promise<void> {
-    if (this.isCompactCommand(msg.text)) {
-      client.startCompaction();
-    }
+    const isCompactCommand = this.isCompactCommand(msg.text);
 
     // Set thinking budget first - this can throw and must complete before we
     // change any state. If it fails, the message remains in ACCEPTED state
@@ -289,7 +278,18 @@ class ChatMessageHandlerService {
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
-    client.sendMessage(content);
+    if (isCompactCommand) {
+      client.startCompaction();
+    }
+
+    try {
+      client.sendMessage(content);
+    } catch (error) {
+      if (isCompactCommand) {
+        client.endCompaction();
+      }
+      throw error;
+    }
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
