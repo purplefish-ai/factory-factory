@@ -488,6 +488,13 @@ class ConfigService {
   }
 
   /**
+   * Get uploads directory for user-uploaded files
+   */
+  getUploadsDir(): string {
+    return join(this.config.baseDir, 'uploads');
+  }
+
+  /**
    * Get database file path (SQLite)
    */
   getDatabasePath(): string {

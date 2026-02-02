@@ -5,6 +5,7 @@ interface UpdateUserSettingsInput {
   preferredIde?: string;
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
+  notificationSoundPath?: string | null;
 }
 
 class UserSettingsAccessor {

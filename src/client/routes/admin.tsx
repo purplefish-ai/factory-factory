@@ -1,6 +1,16 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, CheckCircle2, FileJson, RefreshCw, Terminal } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  Bot,
+  CheckCircle2,
+  FileJson,
+  Play,
+  RefreshCw,
+  Terminal,
+  Trash2,
+  Upload,
+  Volume2,
+} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -500,8 +510,13 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
 }
 
 function NotificationSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const { data: settings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
+  const { data: soundInfo, isLoading: isLoadingSoundInfo } =
+    trpc.userSettings.getNotificationSoundUrl.useQuery();
   const utils = trpc.useUtils();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
       utils.userSettings.get.invalidate();
@@ -511,16 +526,105 @@ function NotificationSettingsSection() {
     },
   });
 
+  const uploadSound = trpc.userSettings.uploadNotificationSound.useMutation({
+    onSuccess: () => {
+      toast.success('Custom notification sound uploaded');
+      utils.userSettings.getNotificationSoundUrl.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to upload sound: ${error.message}`);
+    },
+  });
+
+  const deleteSound = trpc.userSettings.deleteNotificationSound.useMutation({
+    onSuccess: () => {
+      toast.success('Reset to default notification sound');
+      utils.userSettings.getNotificationSoundUrl.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to reset sound: ${error.message}`);
+    },
+  });
+
   const handleToggleSound = (checked: boolean) => {
     updateSettings.mutate({ playSoundOnComplete: checked });
   };
+
+  const handleFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        return;
+      }
+
+      // Validate file type
+      const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3'];
+      if (!allowedTypes.includes(file.type)) {
+        toast.error('Invalid file type. Please upload an MP3, WAV, or OGG file.');
+        return;
+      }
+
+      // Validate file size (1MB max)
+      if (file.size > 1024 * 1024) {
+        toast.error('File too large. Maximum size is 1MB.');
+        return;
+      }
+
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        uploadSound.mutate({
+          fileName: file.name,
+          fileData: base64,
+          mimeType: file.type as 'audio/mpeg' | 'audio/wav' | 'audio/ogg',
+        });
+      };
+      reader.onerror = () => {
+        toast.error('Failed to read file');
+      };
+      reader.readAsDataURL(file);
+
+      // Reset input so same file can be selected again
+      event.target.value = '';
+    },
+    [uploadSound]
+  );
+
+  const handlePlaySound = useCallback(() => {
+    if (!soundInfo?.url) {
+      return;
+    }
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    const audio = new Audio(soundInfo.url);
+    audio.volume = 0.5;
+    audioRef.current = audio;
+    audio.play().catch(() => {
+      toast.error('Failed to play sound. Try interacting with the page first.');
+    });
+  }, [soundInfo?.url]);
+
+  const handleResetToDefault = useCallback(() => {
+    deleteSound.mutate();
+  }, [deleteSound]);
+
+  const isLoading = isLoadingSettings || isLoadingSoundInfo;
 
   if (isLoading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Notification Settings</CardTitle>
-          <CardDescription>Configure notification behavior</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Volume2 className="w-5 h-5" />
+            Notification Settings
+          </CardTitle>
+          <CardDescription>Configure notification behavior and sounds</CardDescription>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-10 w-full" />
@@ -532,8 +636,11 @@ function NotificationSettingsSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Notification Settings</CardTitle>
-        <CardDescription>Configure notification behavior</CardDescription>
+        <CardTitle className="flex items-center gap-2">
+          <Volume2 className="w-5 h-5" />
+          Notification Settings
+        </CardTitle>
+        <CardDescription>Configure notification behavior and sounds</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
@@ -547,6 +654,57 @@ function NotificationSettingsSection() {
             onCheckedChange={handleToggleSound}
             disabled={updateSettings.isPending}
           />
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-sm font-medium">
+                {soundInfo?.isCustom ? 'Custom Sound' : 'Default Sound'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {soundInfo?.isCustom ? soundInfo.fileName : 'workspace-complete.mp3'}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={handlePlaySound} className="gap-2">
+              <Play className="w-4 h-4" />
+              Preview
+            </Button>
+          </div>
+
+          <div className="flex gap-2 mt-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/mpeg,audio/wav,audio/ogg,audio/mp3,.mp3,.wav,.ogg"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadSound.isPending}
+              className="gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              {uploadSound.isPending ? 'Uploading...' : 'Upload Custom Sound'}
+            </Button>
+            {soundInfo?.isCustom && (
+              <Button
+                variant="outline"
+                onClick={handleResetToDefault}
+                disabled={deleteSound.isPending}
+                className="gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {deleteSound.isPending ? 'Resetting...' : 'Reset to Default'}
+              </Button>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground mt-2">
+            Supported formats: MP3, WAV, OGG. Maximum file size: 1MB.
+          </p>
         </div>
       </CardContent>
     </Card>

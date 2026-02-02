@@ -133,8 +133,6 @@ model Workspace {
   prReviewState       String?           // Raw GitHub review state
   prCiStatus          CIStatus          @default(UNKNOWN)  // CI check status
   prUpdatedAt         DateTime?         // Last PR sync time
-
-  // CI failure tracking
   prCiFailedAt        DateTime?         // When CI first failed (cleared on success)
   prCiLastNotifiedAt  DateTime?         // Last time we notified about CI failure
 
@@ -194,6 +192,7 @@ model UserSettings {
 
   // Notification Settings
   playSoundOnComplete Boolean @default(true)  // Play sound when workspace completes
+  notificationSoundPath String?  // Path to custom notification sound file (relative to uploads dir)
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

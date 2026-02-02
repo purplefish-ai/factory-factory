@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 import { useWindowFocus } from '../../client/hooks/use-window-focus';
 import { trpc } from '../../frontend/lib/trpc';
@@ -10,6 +10,8 @@ interface NotificationRequest {
   finishedAt: string;
 }
 
+const DEFAULT_SOUND_URL = '/sounds/workspace-complete.mp3';
+
 /**
  * Manages workspace completion notifications.
  * Handles suppression logic based on window focus and visible workspace.
@@ -17,7 +19,57 @@ interface NotificationRequest {
 export function WorkspaceNotificationManager() {
   const location = useLocation();
   const isWindowFocused = useWindowFocus();
-  const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
+
+  // Fetch user settings for playSoundOnComplete toggle
+  const { data: settings, isSuccess: isSettingsLoaded } = trpc.userSettings.get.useQuery();
+
+  // Fetch custom sound URL from settings
+  const { data: soundInfo } = trpc.userSettings.getNotificationSoundUrl.useQuery(undefined, {
+    staleTime: 60_000, // Cache for 1 minute to avoid excessive requests
+  });
+
+  // Use ref to store the sound URL so callbacks don't need to depend on it
+  const soundUrlRef = useRef<string>(DEFAULT_SOUND_URL);
+  useEffect(() => {
+    soundUrlRef.current = soundInfo?.url ?? DEFAULT_SOUND_URL;
+  }, [soundInfo?.url]);
+
+  const playNotificationSound = useCallback(() => {
+    try {
+      const audio = new Audio(soundUrlRef.current);
+      audio.volume = 0.5;
+      audio.play().catch(() => {
+        // Silently fail if autoplay is blocked
+      });
+    } catch {
+      // Silently fail if audio doesn't load
+    }
+  }, []);
+
+  const sendWorkspaceNotification = useCallback(
+    (workspaceName: string, sessionCount: number, shouldPlaySound: boolean) => {
+      // Play sound notification if enabled
+      if (shouldPlaySound) {
+        playNotificationSound();
+      }
+
+      if (!('Notification' in window)) {
+        return;
+      }
+
+      // Request permission if needed
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          if (permission === 'granted') {
+            showNotification(workspaceName, sessionCount);
+          }
+        });
+      } else if (Notification.permission === 'granted') {
+        showNotification(workspaceName, sessionCount);
+      }
+    },
+    [playNotificationSound]
+  );
 
   const handleWorkspaceNotification = useCallback(
     (request: NotificationRequest) => {
@@ -31,14 +83,21 @@ export function WorkspaceNotificationManager() {
         return;
       }
 
-      // Send notification
       // Only play sound if settings have loaded and user has it enabled
       // Default to true once settings are available, but don't play while loading
       // to avoid playing sound when user may have disabled it
-      const playSoundOnComplete = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
+      const playSoundOnComplete = isSettingsLoaded
+        ? (settings?.playSoundOnComplete ?? true)
+        : false;
       sendWorkspaceNotification(workspaceName, sessionCount, playSoundOnComplete);
     },
-    [location.pathname, isWindowFocused, settings?.playSoundOnComplete, isSuccess]
+    [
+      location.pathname,
+      isWindowFocused,
+      settings?.playSoundOnComplete,
+      isSettingsLoaded,
+      sendWorkspaceNotification,
+    ]
   );
 
   useEffect(() => {
@@ -62,50 +121,6 @@ export function WorkspaceNotificationManager() {
   }, [handleWorkspaceNotification]);
 
   return null; // No UI, just notification logic
-}
-
-/**
- * Plays the workspace completion sound.
- */
-function playNotificationSound(): void {
-  try {
-    const audio = new Audio('/sounds/workspace-complete.mp3');
-    // Set a reasonable volume
-    audio.volume = 0.5;
-    // Play the sound (browsers may block autoplay, so we catch errors)
-    audio.play().catch((_error) => {
-      // Silently fail if autoplay is blocked
-      // User can enable sound by interacting with the page first
-    });
-  } catch (_error) {
-    // Silently fail if audio doesn't load
-  }
-}
-
-function sendWorkspaceNotification(
-  workspaceName: string,
-  sessionCount: number,
-  playSoundOnComplete: boolean
-): void {
-  // Play sound notification if enabled
-  if (playSoundOnComplete) {
-    playNotificationSound();
-  }
-
-  if (!('Notification' in window)) {
-    return;
-  }
-
-  // Request permission if needed
-  if (Notification.permission === 'default') {
-    Notification.requestPermission().then((permission) => {
-      if (permission === 'granted') {
-        showNotification(workspaceName, sessionCount);
-      }
-    });
-  } else if (Notification.permission === 'granted') {
-    showNotification(workspaceName, sessionCount);
-  }
 }
 
 function showNotification(workspaceName: string, sessionCount: number): void {

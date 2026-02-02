@@ -127,6 +127,18 @@ export function createServer(requestedPort?: number): ServerInstance {
   );
 
   // ============================================================================
+  // Serve User Uploads (notification sounds, etc.)
+  // ============================================================================
+  const uploadsDir = configService.getUploadsDir();
+  app.use(
+    '/uploads',
+    express.static(uploadsDir, {
+      maxAge: '1d',
+      etag: true,
+    })
+  );
+
+  // ============================================================================
   // Static File Serving (Production Mode)
   // ============================================================================
   const frontendStaticPath = configService.getFrontendStaticPath();
@@ -166,6 +178,7 @@ export function createServer(requestedPort?: number): ServerInstance {
         req.path.startsWith('/api') ||
         req.path.startsWith('/mcp') ||
         req.path.startsWith('/health') ||
+        req.path.startsWith('/uploads') ||
         req.path === '/chat' ||
         req.path === '/terminal' ||
         req.path === '/dev-logs'
