@@ -529,26 +529,6 @@ export interface WebSocketMessage {
   // Status update fields
   /** Permission mode from status updates */
   permissionMode?: string;
-  // System init fields
-  /** Session init data for system_init events */
-  systemInitData?: SessionInitData;
-  // Hook fields
-  /** Hook ID for hook_started/hook_response events */
-  hookId?: string;
-  /** Hook name for hook_started events */
-  hookName?: string;
-  /** Hook event type for hook_started events */
-  hookEvent?: string;
-  /** Hook output for hook_response events */
-  hookOutput?: string;
-  /** Hook stdout for hook_response events */
-  hookStdout?: string;
-  /** Hook stderr for hook_response events */
-  hookStderr?: string;
-  /** Hook exit code for hook_response events */
-  hookExitCode?: number;
-  /** Hook outcome for hook_response events */
-  hookOutcome?: string;
 }
 
 // =============================================================================

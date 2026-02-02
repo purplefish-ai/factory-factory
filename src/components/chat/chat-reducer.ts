@@ -214,7 +214,7 @@ export type ChatAction =
       };
     }
   // SDK message type actions
-  | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string; status?: string } }
+  | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string } }
   | {
       type: 'SDK_TOOL_PROGRESS';
       payload: { toolUseId: string; toolName: string; elapsedSeconds: number };
@@ -984,8 +984,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SYSTEM_INIT':
       return { ...state, sessionInitData: action.payload };
 
-    case 'COMPACT_BOUNDARY':
-      return { ...state, hasCompactBoundary: true };
+    case 'COMPACT_BOUNDARY': {
+      // Create a synthetic ClaudeMessage to render the compact boundary indicator
+      const compactBoundaryMessage: ChatMessage = {
+        id: `compact-boundary-${Date.now()}`,
+        source: 'claude',
+        message: {
+          type: 'system',
+          subtype: 'compact_boundary',
+        } as ClaudeMessage,
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        ...state,
+        hasCompactBoundary: true,
+        messages: [...state.messages, compactBoundaryMessage],
+      };
+    }
 
     case 'HOOK_STARTED': {
       const { hookId, hookName, hookEvent } = action.payload;
@@ -1236,10 +1251,7 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'status_update':
       return {
         type: 'SDK_STATUS_UPDATE',
-        payload: {
-          permissionMode: data.permissionMode,
-          status: (data as { status?: string }).status,
-        },
+        payload: { permissionMode: data.permissionMode },
       };
     case 'task_notification':
       return data.message
