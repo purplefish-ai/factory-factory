@@ -8,7 +8,7 @@ import {
   Plus,
   Settings,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -132,6 +132,20 @@ export function AppSidebar() {
   const reviewCount = projectState?.reviewCount ?? 0;
 
   const utils = trpc.useUtils();
+
+  // Sync PR statuses from GitHub once when project changes
+  const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation({
+    onSuccess: () => {
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+    },
+  });
+  const lastSyncedProjectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedProjectId && selectedProjectId !== lastSyncedProjectRef.current) {
+      lastSyncedProjectRef.current = selectedProjectId;
+      syncAllPRStatuses.mutate({ projectId: selectedProjectId });
+    }
+  }, [selectedProjectId, syncAllPRStatuses]);
 
   // Use the workspace list state management hook
   const {
