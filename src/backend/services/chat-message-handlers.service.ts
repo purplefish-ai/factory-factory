@@ -15,6 +15,7 @@ import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { AskUserQuestionInputSchema, safeParseToolInput } from '../schemas/tool-inputs.schema';
 import type {
   ChatMessageInput,
   PermissionResponseMessage,
@@ -502,8 +503,13 @@ class ChatMessageHandlerService {
     try {
       if (pendingRequest.toolName === 'AskUserQuestion') {
         // For AskUserQuestion, answer each question with "Other" + the message text
-        const input = pendingRequest.input as { questions?: Array<{ question: string }> };
-        const questions = input.questions ?? [];
+        const parsed = safeParseToolInput(
+          AskUserQuestionInputSchema,
+          pendingRequest.input,
+          'AskUserQuestion',
+          logger
+        );
+        const questions = parsed.success ? parsed.data.questions : [];
         const answers: Record<string, string> = {};
 
         for (const q of questions) {
@@ -663,12 +669,18 @@ class ChatMessageHandlerService {
     pendingRequest: NonNullable<ReturnType<typeof chatEventForwarderService.getPendingRequest>>
   ): void {
     if (pendingRequest.toolName === 'AskUserQuestion') {
-      const input = pendingRequest.input as { questions?: unknown[] };
+      const parsed = safeParseToolInput(
+        AskUserQuestionInputSchema,
+        pendingRequest.input,
+        'AskUserQuestion',
+        logger
+      );
+      const questions = parsed.success ? parsed.data.questions : [];
       ws.send(
         JSON.stringify({
           type: 'user_question',
           requestId: pendingRequest.requestId,
-          questions: input.questions ?? [],
+          questions,
         })
       );
       return;

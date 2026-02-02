@@ -401,23 +401,41 @@ interface UserQuestionRequest {
 }
 
 /**
+ * Default plan content for stories and tests.
+ */
+export const DEFAULT_PLAN_CONTENT = `# Implementation Plan
+
+## Summary
+This plan outlines the steps to implement the requested feature.
+
+## Steps
+1. Create the initial component structure
+2. Add unit tests
+3. Update documentation
+
+## Notes
+- All changes will be tested before committing
+- Code follows existing project patterns`;
+
+/**
  * Creates a plan approval permission request.
  * Used when the agent is in plan mode and needs user approval.
+ *
+ * Uses SDK format with inline `plan` content (not file path).
  */
-export function createPlanApprovalRequest(
-  planFile = '/Users/developer/.claude/plans/example-plan.md'
-): PermissionRequest {
+export function createPlanApprovalRequest(planContent = DEFAULT_PLAN_CONTENT): PermissionRequest {
   return {
     requestId: generateRequestId(),
     toolName: 'ExitPlanMode',
     toolInput: {
-      planFile,
+      plan: planContent,
       allowedPrompts: [
         { tool: 'Bash', prompt: 'run tests' },
         { tool: 'Bash', prompt: 'install dependencies' },
       ],
     },
     timestamp: generateTimestamp(),
+    planContent,
   };
 }
 

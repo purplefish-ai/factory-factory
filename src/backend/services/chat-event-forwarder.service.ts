@@ -13,6 +13,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { interceptorRegistry } from '../interceptors';
+import {
+  ExitPlanModeInputSchema,
+  extractInputValue,
+  isString,
+} from '../schemas/tool-inputs.schema';
 import { chatConnectionService } from './chat-connection.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
@@ -318,9 +323,7 @@ class ChatEventForwarderService {
   ): void {
     // Compute planContent for ExitPlanMode, null for others
     const planContent =
-      request.toolName === 'ExitPlanMode'
-        ? this.readPlanFileContent((request.input as { planFile?: string }).planFile)
-        : null;
+      request.toolName === 'ExitPlanMode' ? this.extractPlanContent(request.input) : null;
 
     // Store for session restore (single location for all request types)
     this.pendingInteractiveRequests.set(dbSessionId, {
@@ -365,14 +368,41 @@ class ChatEventForwarderService {
   }
 
   /**
+   * Extract plan content from ExitPlanMode input.
+   * Handles both SDK format (inline `plan`) and CLI format (`planFile` path).
+   *
+   * Priority: inline `plan` content > `planFile` content
+   */
+  private extractPlanContent(input: Record<string, unknown>): string | null {
+    // Validate input structure (logs warning if invalid)
+    const parsed = ExitPlanModeInputSchema.safeParse(input);
+    if (!parsed.success) {
+      logger.warn('[Chat WS] ExitPlanMode input validation failed', {
+        errors: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        inputKeys: Object.keys(input),
+      });
+    }
+
+    // Check for inline plan content first (SDK format - preferred)
+    const inlinePlan = extractInputValue(input, 'plan', isString, 'ExitPlanMode', logger);
+    if (inlinePlan) {
+      return inlinePlan;
+    }
+
+    // Fall back to planFile path (CLI format)
+    const planFile = extractInputValue(input, 'planFile', isString, 'ExitPlanMode', logger);
+    if (planFile) {
+      return this.readPlanFileContent(planFile);
+    }
+
+    return null;
+  }
+
+  /**
    * Read plan file content for ExitPlanMode requests.
    * Returns null if file doesn't exist (normal case) or on read error.
    */
-  private readPlanFileContent(planFile: string | undefined): string | null {
-    if (!planFile) {
-      return null;
-    }
-
+  private readPlanFileContent(planFile: string): string | null {
     if (!existsSync(planFile)) {
       // File not existing is normal - plan may not have been written yet
       logger.debug('[Chat WS] Plan file does not exist', { planFile });
