@@ -287,7 +287,7 @@ export type ChatAction =
   // Rewind files actions
   | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string } }
   | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }
-  | { type: 'REWIND_PREVIEW_ERROR'; payload: { error: string } }
+  | { type: 'REWIND_PREVIEW_ERROR'; payload: { error: string; userMessageId?: string } }
   | { type: 'REWIND_CANCEL' }
   | { type: 'REWIND_EXECUTING' } // Actual rewind in progress
   | { type: 'REWIND_SUCCESS' }; // Actual rewind completed
@@ -1238,17 +1238,27 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    case 'REWIND_PREVIEW_ERROR':
-      return state.rewindPreview
-        ? {
-            ...state,
-            rewindPreview: {
-              ...state.rewindPreview,
-              isLoading: false,
-              error: action.payload.error,
-            },
-          }
-        : state;
+    case 'REWIND_PREVIEW_ERROR': {
+      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
+      if (!state.rewindPreview) {
+        return state;
+      }
+      if (
+        action.payload.userMessageId &&
+        action.payload.userMessageId !== state.rewindPreview.userMessageId
+      ) {
+        // Error is for a different rewind request, ignore it
+        return state;
+      }
+      return {
+        ...state,
+        rewindPreview: {
+          ...state.rewindPreview,
+          isLoading: false,
+          error: action.payload.error,
+        },
+      };
+    }
 
     case 'REWIND_CANCEL':
       return { ...state, rewindPreview: null };
@@ -1560,7 +1570,10 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       };
     case 'rewind_files_error':
       return data.rewindError
-        ? { type: 'REWIND_PREVIEW_ERROR', payload: { error: data.rewindError } }
+        ? {
+            type: 'REWIND_PREVIEW_ERROR',
+            payload: { error: data.rewindError, userMessageId: data.userMessageId },
+          }
         : null;
     default:
       return null;

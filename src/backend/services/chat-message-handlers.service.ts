@@ -1014,6 +1014,7 @@ class ChatMessageHandlerService {
       ws.send(
         JSON.stringify({
           type: 'rewind_files_error',
+          userMessageId: message.userMessageId,
           rewindError: 'No active client for session',
         })
       );
@@ -1049,6 +1050,7 @@ class ChatMessageHandlerService {
       ws.send(
         JSON.stringify({
           type: 'rewind_files_error',
+          userMessageId: message.userMessageId,
           rewindError: `Failed to rewind files: ${errorMessage}`,
         })
       );
