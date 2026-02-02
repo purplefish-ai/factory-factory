@@ -28,6 +28,7 @@ class EventsPollerService {
   private workspaceDetailInterval: NodeJS.Timeout | null = null;
   private adminInterval: NodeJS.Timeout | null = null;
   private lastReviewCount = 0;
+  private lastPollAt = new Map<string, number>();
 
   start(): void {
     if (!this.projectSummaryInterval) {
@@ -144,6 +145,9 @@ class EventsPollerService {
 
     await Promise.all(
       Array.from(projectIds).map(async (projectId) => {
+        if (!this.shouldPoll(`project-summary:${projectId}`, PROJECT_SUMMARY_INTERVAL_MS)) {
+          return;
+        }
         const snapshot = await eventsSnapshotService.getProjectSummarySnapshot(
           projectId,
           this.lastReviewCount
@@ -166,6 +170,9 @@ class EventsPollerService {
 
     await Promise.all(
       Array.from(workspaceIds).map(async (workspaceId) => {
+        if (!this.shouldPoll(`workspace-init:${workspaceId}`, WORKSPACE_INIT_INTERVAL_MS)) {
+          return;
+        }
         const snapshot = await eventsSnapshotService.getWorkspaceInitStatusSnapshot(workspaceId);
         if (!snapshot) {
           return;
@@ -185,6 +192,10 @@ class EventsPollerService {
       return;
     }
 
+    if (!this.shouldPoll('reviews', REVIEWS_INTERVAL_MS)) {
+      return;
+    }
+
     const health = await githubCLIService.checkHealth();
     if (!(health.isInstalled && health.isAuthenticated)) {
       this.lastReviewCount = 0;
@@ -192,6 +203,7 @@ class EventsPollerService {
         type: 'reviews_snapshot',
         payload: { type: 'reviews_snapshot', prs: [], health, error: null },
         cacheKey: 'reviews',
+        scope: 'global',
       });
       return;
     }
@@ -203,6 +215,7 @@ class EventsPollerService {
         type: 'reviews_snapshot',
         payload: { type: 'reviews_snapshot', prs, health, error: null },
         cacheKey: 'reviews',
+        scope: 'global',
       });
     } catch (error) {
       eventsHubService.publishSnapshot({
@@ -214,6 +227,7 @@ class EventsPollerService {
           error: error instanceof Error ? error.message : 'Failed to fetch review requests',
         },
         cacheKey: 'reviews',
+        scope: 'global',
       });
     }
   }
@@ -223,11 +237,16 @@ class EventsPollerService {
       return;
     }
 
+    if (!this.shouldPoll('project-list', PROJECT_LIST_INTERVAL_MS)) {
+      return;
+    }
+
     const snapshot = await eventsSnapshotService.getProjectListSnapshot();
     eventsHubService.publishSnapshot({
       type: snapshot.type,
       payload: snapshot,
       cacheKey: 'project-list',
+      scope: 'global',
     });
   }
 
@@ -239,6 +258,9 @@ class EventsPollerService {
 
     await Promise.all(
       Array.from(projectIds).map(async (projectId) => {
+        if (!this.shouldPoll(`workspace-list:${projectId}`, WORKSPACE_LIST_INTERVAL_MS)) {
+          return;
+        }
         const [listSnapshot, kanbanSnapshot] = await Promise.all([
           eventsSnapshotService.getWorkspaceListSnapshot(projectId),
           eventsSnapshotService.getKanbanSnapshot(projectId),
@@ -269,6 +291,9 @@ class EventsPollerService {
 
     await Promise.all(
       Array.from(workspaceIds).map(async (workspaceId) => {
+        if (!this.shouldPoll(`workspace-detail:${workspaceId}`, WORKSPACE_DETAIL_INTERVAL_MS)) {
+          return;
+        }
         const [detailSnapshot, sessionSnapshot] = await Promise.all([
           eventsSnapshotService.getWorkspaceDetailSnapshot(workspaceId),
           eventsSnapshotService.getSessionListSnapshot(workspaceId),
@@ -298,19 +323,37 @@ class EventsPollerService {
       return;
     }
 
-    const statsSnapshot = eventsSnapshotService.getAdminStatsSnapshot();
-    eventsHubService.publishSnapshot({
-      type: statsSnapshot.type,
-      payload: statsSnapshot,
-      cacheKey: 'admin-stats',
-    });
+    if (this.shouldPoll('admin-stats', ADMIN_INTERVAL_MS)) {
+      const statsSnapshot = eventsSnapshotService.getAdminStatsSnapshot();
+      eventsHubService.publishSnapshot({
+        type: statsSnapshot.type,
+        payload: statsSnapshot,
+        cacheKey: 'admin-stats',
+        scope: 'global',
+      });
+    }
 
-    const processesSnapshot = await eventsSnapshotService.getAdminProcessesSnapshot();
-    eventsHubService.publishSnapshot({
-      type: processesSnapshot.type,
-      payload: processesSnapshot,
-      cacheKey: 'admin-processes',
-    });
+    if (this.shouldPoll('admin-processes', ADMIN_INTERVAL_MS)) {
+      const processesSnapshot = await eventsSnapshotService.getAdminProcessesSnapshot();
+      eventsHubService.publishSnapshot({
+        type: processesSnapshot.type,
+        payload: processesSnapshot,
+        cacheKey: 'admin-processes',
+        scope: 'global',
+      });
+    }
+  }
+
+  private shouldPoll(cacheKey: string, intervalMs: number): boolean {
+    const lastPolled = this.lastPollAt.get(cacheKey) ?? 0;
+    const lastPublished = eventsHubService.getLastPublishedAt(cacheKey) ?? 0;
+    const last = Math.max(lastPolled, lastPublished);
+    const now = Date.now();
+    if (now - last < intervalMs) {
+      return false;
+    }
+    this.lastPollAt.set(cacheKey, now);
+    return true;
   }
 }
 

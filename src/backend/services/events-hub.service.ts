@@ -15,6 +15,7 @@ export interface EventsConnectionInfo {
   ws: WebSocket;
   projectId?: string;
   workspaceId?: string;
+  scopes: Set<string>;
 }
 
 export interface PublishSnapshotOptions {
@@ -28,6 +29,8 @@ export interface PublishSnapshotOptions {
   projectId?: string;
   /** Optional filter: only send to connections for this workspace */
   workspaceId?: string;
+  /** Optional scope filter (e.g., global) */
+  scope?: string;
   /** Optional target WebSocket for one-off sends (e.g., initial snapshot) */
   targetWs?: WebSocket;
 }
@@ -35,6 +38,7 @@ export interface PublishSnapshotOptions {
 class EventsHubService {
   private connections = new Map<WebSocket, EventsConnectionInfo>();
   private lastSnapshots = new Map<string, string>();
+  private lastPublishedAt = new Map<string, number>();
 
   addConnection(info: EventsConnectionInfo): void {
     this.connections.set(info.ws, info);
@@ -76,7 +80,7 @@ class EventsHubService {
   }
 
   publishSnapshot(options: PublishSnapshotOptions): void {
-    const { type, payload, cacheKey, projectId, workspaceId, targetWs } = options;
+    const { type, payload, cacheKey, projectId, workspaceId, targetWs, scope } = options;
     if (!this.shouldPublish(cacheKey, payload, targetWs)) {
       return;
     }
@@ -89,7 +93,7 @@ class EventsHubService {
     }
 
     for (const info of this.connections.values()) {
-      this.sendSnapshotToConnection(info, message, { type, projectId, workspaceId });
+      this.sendSnapshotToConnection(info, message, { type, projectId, workspaceId, scope });
     }
   }
 
@@ -104,14 +108,22 @@ class EventsHubService {
       return false;
     }
     this.lastSnapshots.set(cacheKey, serialized);
+    this.lastPublishedAt.set(cacheKey, Date.now());
     return true;
+  }
+
+  getLastPublishedAt(cacheKey: string): number | null {
+    return this.lastPublishedAt.get(cacheKey) ?? null;
   }
 
   private sendSnapshotToConnection(
     info: EventsConnectionInfo,
     message: object,
-    options: { type: string; projectId?: string; workspaceId?: string }
+    options: { type: string; projectId?: string; workspaceId?: string; scope?: string }
   ) {
+    if (options.scope && !info.scopes.has(options.scope)) {
+      return;
+    }
     if (options.projectId && info.projectId !== options.projectId) {
       return;
     }

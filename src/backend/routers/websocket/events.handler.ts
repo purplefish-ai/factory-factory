@@ -24,12 +24,13 @@ export function handleEventsUpgrade(
 ): void {
   const projectId = url.searchParams.get('projectId') || undefined;
   const workspaceId = url.searchParams.get('workspaceId') || undefined;
+  const scopes = parseScopes(url.searchParams.get('scope'));
 
   wss.handleUpgrade(request, socket, head, (ws) => {
     wsAliveMap.set(ws, true);
     ws.on('pong', () => wsAliveMap.set(ws, true));
 
-    eventsHubService.addConnection({ ws, projectId, workspaceId });
+    eventsHubService.addConnection({ ws, projectId, workspaceId, scopes });
 
     void sendInitialSnapshots(ws, projectId, workspaceId);
 
@@ -43,6 +44,18 @@ export function handleEventsUpgrade(
       });
     });
   });
+}
+
+function parseScopes(value: string | null): Set<string> {
+  if (!value) {
+    return new Set();
+  }
+  return new Set(
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  );
 }
 
 async function sendInitialSnapshots(

@@ -1,65 +1,10 @@
-import type { WorkspaceStatus } from '@prisma-gen/browser';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useProjectContext } from '@/frontend/lib/providers';
 import { trpc } from '@/frontend/lib/trpc';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
-
-type EventsMessage =
-  | {
-      type: 'project_list_snapshot';
-      projects: unknown[];
-    }
-  | {
-      type: 'project_summary_snapshot';
-      projectId: string;
-      workspaces: unknown[];
-      reviewCount: number;
-    }
-  | {
-      type: 'workspace_list_snapshot';
-      projectId: string;
-      workspaces: unknown[];
-    }
-  | {
-      type: 'kanban_snapshot';
-      projectId: string;
-      workspaces: unknown[];
-    }
-  | {
-      type: 'workspace_detail_snapshot';
-      workspaceId: string;
-      workspace: unknown;
-    }
-  | {
-      type: 'session_list_snapshot';
-      workspaceId: string;
-      sessions: unknown[];
-    }
-  | {
-      type: 'workspace_init_status_snapshot';
-      workspaceId: string;
-      status: WorkspaceStatus;
-      initErrorMessage: string | null;
-      initStartedAt: string | null;
-      initCompletedAt: string | null;
-      hasStartupScript: boolean;
-    }
-  | {
-      type: 'reviews_snapshot';
-      prs: unknown[];
-      health: { isInstalled: boolean; isAuthenticated: boolean };
-      error: string | null;
-    }
-  | {
-      type: 'admin_stats_snapshot';
-      stats: unknown;
-    }
-  | {
-      type: 'admin_processes_snapshot';
-      processes: unknown;
-    };
+import { EventsSnapshotSchema } from '@/shared/events-snapshots';
 
 function getWorkspaceIdFromPath(pathname: string): string | undefined {
   const match = pathname.match(/\/workspaces\/([^/]+)/);
@@ -74,6 +19,14 @@ export function EventsSocketManager() {
 
   const url = useMemo(() => {
     const params: Record<string, string> = {};
+    const wantsGlobal =
+      location.pathname.startsWith('/admin') ||
+      location.pathname.startsWith('/reviews') ||
+      location.pathname.startsWith('/projects') ||
+      !projectId;
+    if (wantsGlobal) {
+      params.scope = 'global';
+    }
     if (projectId) {
       params.projectId = projectId;
     }
@@ -81,60 +34,38 @@ export function EventsSocketManager() {
       params.workspaceId = workspaceId;
     }
     return buildWebSocketUrl('/events', params);
-  }, [projectId, workspaceId]);
+  }, [projectId, workspaceId, location.pathname]);
 
   const handleMessage = (data: unknown) => {
-    const message = data as EventsMessage;
-    if (!message || typeof message !== 'object' || !('type' in message)) {
+    const parsed = EventsSnapshotSchema.safeParse(data);
+    if (!parsed.success) {
       return;
     }
+    const message = parsed.data;
 
     switch (message.type) {
       case 'project_list_snapshot': {
-        utils.project.list.setData({ isArchived: false }, message.projects as never[]);
+        utils.project.list.invalidate({ isArchived: false });
         break;
       }
       case 'project_summary_snapshot': {
-        utils.workspace.getProjectSummaryState.setData(
-          { projectId: message.projectId },
-          { workspaces: message.workspaces as never[], reviewCount: message.reviewCount }
-        );
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: message.projectId });
         break;
       }
       case 'workspace_list_snapshot': {
-        const statusFilters: WorkspaceStatus[] = [
-          'NEW',
-          'PROVISIONING',
-          'READY',
-          'FAILED',
-          'ARCHIVED',
-        ];
-        const workspaces = message.workspaces as Array<{ status?: WorkspaceStatus }>;
-        utils.workspace.list.setData({ projectId: message.projectId }, workspaces as never[]);
-        for (const status of statusFilters) {
-          utils.workspace.list.setData(
-            { projectId: message.projectId, status },
-            workspaces.filter((workspace) => workspace.status === status) as never[]
-          );
-        }
+        utils.workspace.list.invalidate({ projectId: message.projectId });
         break;
       }
       case 'kanban_snapshot': {
-        utils.workspace.listWithKanbanState.setData(
-          { projectId: message.projectId },
-          message.workspaces as never[]
-        );
+        utils.workspace.listWithKanbanState.invalidate({ projectId: message.projectId });
         break;
       }
       case 'workspace_detail_snapshot': {
-        utils.workspace.get.setData({ id: message.workspaceId }, message.workspace as never);
+        utils.workspace.get.invalidate({ id: message.workspaceId });
         break;
       }
       case 'session_list_snapshot': {
-        utils.session.listClaudeSessions.setData(
-          { workspaceId: message.workspaceId },
-          message.sessions as never[]
-        );
+        utils.session.listClaudeSessions.invalidate({ workspaceId: message.workspaceId });
         break;
       }
       case 'workspace_init_status_snapshot': {
@@ -151,19 +82,15 @@ export function EventsSocketManager() {
         break;
       }
       case 'reviews_snapshot': {
-        utils.prReview.listReviewRequests.setData(undefined, {
-          prs: message.prs as never[],
-          health: message.health,
-          error: message.error,
-        });
+        utils.prReview.listReviewRequests.invalidate();
         break;
       }
       case 'admin_stats_snapshot': {
-        utils.admin.getSystemStats.setData(undefined, message.stats as never);
+        utils.admin.getSystemStats.invalidate();
         break;
       }
       case 'admin_processes_snapshot': {
-        utils.admin.getActiveProcesses.setData(undefined, message.processes as never);
+        utils.admin.getActiveProcesses.invalidate();
         break;
       }
       default:

@@ -94,6 +94,7 @@ export const projectRouter = router({
           type: snapshot.type,
           payload: snapshot,
           cacheKey: 'project-list',
+          scope: 'global',
         });
       } catch {
         // Best-effort snapshot publish
@@ -165,6 +166,7 @@ export const projectRouter = router({
           type: snapshot.type,
           payload: snapshot,
           cacheKey: 'project-list',
+          scope: 'global',
         });
       } catch {
         // Best-effort snapshot publish
@@ -182,6 +184,7 @@ export const projectRouter = router({
         type: snapshot.type,
         payload: snapshot,
         cacheKey: 'project-list',
+        scope: 'global',
       });
     } catch {
       // Best-effort snapshot publish

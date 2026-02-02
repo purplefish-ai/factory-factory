@@ -6,6 +6,17 @@
 
 import { SessionStatus, WorkspaceStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
+import type {
+  AdminProcessesSnapshot,
+  AdminStatsSnapshot,
+  KanbanSnapshot,
+  ProjectListSnapshot,
+  ProjectSummarySnapshot,
+  SessionListSnapshot,
+  WorkspaceDetailSnapshot,
+  WorkspaceInitStatusSnapshot,
+  WorkspaceListSnapshot,
+} from '@/shared/events-snapshots';
 import { getWorkspaceGitStats } from '../lib/git-helpers';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
@@ -22,97 +33,6 @@ const logger = createLogger('events-snapshot');
 
 const DEFAULT_GIT_CONCURRENCY = 3;
 const gitConcurrencyLimit = pLimit(DEFAULT_GIT_CONCURRENCY);
-
-export interface ProjectSummarySnapshot {
-  type: 'project_summary_snapshot';
-  projectId: string;
-  workspaces: Array<{
-    id: string;
-    name: string;
-    branchName: string | null;
-    prUrl: string | null;
-    prNumber: number | null;
-    prState: string | null;
-    prCiStatus: string | null;
-    isWorking: boolean;
-    gitStats: {
-      total: number;
-      additions: number;
-      deletions: number;
-      hasUncommitted: boolean;
-    } | null;
-    lastActivityAt: string | null;
-  }>;
-  reviewCount: number;
-}
-
-export interface WorkspaceInitStatusSnapshot {
-  type: 'workspace_init_status_snapshot';
-  workspaceId: string;
-  status: string;
-  initErrorMessage: string | null;
-  initStartedAt: string | null;
-  initCompletedAt: string | null;
-  hasStartupScript: boolean;
-}
-
-export interface ReviewsSnapshot {
-  type: 'reviews_snapshot';
-  prs: unknown[];
-  health: { isInstalled: boolean; isAuthenticated: boolean };
-  error: string | null;
-}
-
-export interface WorkspaceListSnapshot {
-  type: 'workspace_list_snapshot';
-  projectId: string;
-  workspaces: unknown[];
-}
-
-export interface KanbanSnapshot {
-  type: 'kanban_snapshot';
-  projectId: string;
-  workspaces: unknown[];
-}
-
-export interface ProjectListSnapshot {
-  type: 'project_list_snapshot';
-  projects: unknown[];
-}
-
-export interface WorkspaceDetailSnapshot {
-  type: 'workspace_detail_snapshot';
-  workspaceId: string;
-  workspace: unknown;
-}
-
-export interface SessionListSnapshot {
-  type: 'session_list_snapshot';
-  workspaceId: string;
-  sessions: unknown[];
-}
-
-export interface AdminStatsSnapshot {
-  type: 'admin_stats_snapshot';
-  stats: unknown;
-}
-
-export interface AdminProcessesSnapshot {
-  type: 'admin_processes_snapshot';
-  processes: unknown;
-}
-
-export type EventsSnapshot =
-  | ProjectSummarySnapshot
-  | WorkspaceInitStatusSnapshot
-  | ReviewsSnapshot
-  | WorkspaceListSnapshot
-  | KanbanSnapshot
-  | ProjectListSnapshot
-  | WorkspaceDetailSnapshot
-  | SessionListSnapshot
-  | AdminStatsSnapshot
-  | AdminProcessesSnapshot;
 
 class EventsSnapshotService {
   async getProjectListSnapshot(): Promise<ProjectListSnapshot> {
