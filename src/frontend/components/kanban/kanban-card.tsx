@@ -1,9 +1,10 @@
-import type { KanbanColumn, PRState, Workspace } from '@prisma-gen/browser';
+import type { CIStatus, KanbanColumn, PRState, Workspace } from '@prisma-gen/browser';
 import { ExternalLink, GitBranch } from 'lucide-react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
+import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { cn } from '@/lib/utils';
 
 export interface WorkspaceWithKanban extends Workspace {
@@ -84,6 +85,11 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
               >
                 {prBadge.label}
               </Badge>
+              <CIFailureWarning
+                ciStatus={workspace.prCiStatus as CIStatus}
+                prUrl={workspace.prUrl}
+                size="sm"
+              />
               {workspace.prUrl && (
                 <button
                   type="button"

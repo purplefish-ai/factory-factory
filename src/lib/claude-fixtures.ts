@@ -148,22 +148,26 @@ Time:        2.345 s`,
 // Message Factories
 // =============================================================================
 
+/** Counter for generating unique order values in fixtures */
+let fixtureOrderCounter = 0;
+
 /**
  * Creates a user chat message.
  */
-export function createUserMessage(text: string): ChatMessage {
+export function createUserMessage(text: string, order?: number): ChatMessage {
   return {
     id: generateMessageId(),
     source: 'user',
     text,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
 /**
  * Creates an assistant chat message with text content.
  */
-export function createAssistantMessage(text: string): ChatMessage {
+export function createAssistantMessage(text: string, order?: number): ChatMessage {
   const claudeMessage: ClaudeMessage = {
     type: 'assistant',
     timestamp: generateTimestamp(),
@@ -178,6 +182,7 @@ export function createAssistantMessage(text: string): ChatMessage {
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
@@ -186,7 +191,8 @@ export function createAssistantMessage(text: string): ChatMessage {
  */
 export function createToolUseMessage(
   toolName: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  order?: number
 ): ChatMessage {
   const toolUseId = generateToolUseId();
   const toolUseContent: ToolUseContent = {
@@ -213,6 +219,7 @@ export function createToolUseMessage(
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
@@ -222,7 +229,8 @@ export function createToolUseMessage(
 export function createToolResultMessage(
   toolUseId: string,
   content: string,
-  isError = false
+  isError = false,
+  order?: number
 ): ChatMessage {
   const toolResultContent: ToolResultContent = {
     type: 'tool_result',
@@ -248,13 +256,14 @@ export function createToolResultMessage(
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
 /**
  * Creates a stream event chat message.
  */
-export function createStreamEventMessage(event: ClaudeStreamEvent): ChatMessage {
+export function createStreamEventMessage(event: ClaudeStreamEvent, order?: number): ChatMessage {
   const claudeMessage: ClaudeMessage = {
     type: 'stream_event',
     timestamp: generateTimestamp(),
@@ -266,13 +275,14 @@ export function createStreamEventMessage(event: ClaudeStreamEvent): ChatMessage 
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
 /**
  * Creates a result chat message with token stats.
  */
-export function createResultMessage(stats: Partial<TokenStats> = {}): ChatMessage {
+export function createResultMessage(stats: Partial<TokenStats> = {}, order?: number): ChatMessage {
   const fullStats = createTokenStats(stats);
 
   const claudeMessage: ClaudeMessage = {
@@ -292,13 +302,14 @@ export function createResultMessage(stats: Partial<TokenStats> = {}): ChatMessag
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
 /**
  * Creates an error chat message.
  */
-export function createErrorMessage(error: string): ChatMessage {
+export function createErrorMessage(error: string, order?: number): ChatMessage {
   const claudeMessage: ClaudeMessage = {
     type: 'error',
     timestamp: generateTimestamp(),
@@ -311,13 +322,14 @@ export function createErrorMessage(error: string): ChatMessage {
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
 /**
  * Creates a thinking content chat message.
  */
-export function createThinkingMessage(thinking: string): ChatMessage {
+export function createThinkingMessage(thinking: string, order?: number): ChatMessage {
   const event: ClaudeStreamEvent = {
     type: 'content_block_start',
     index: 0,
@@ -338,13 +350,18 @@ export function createThinkingMessage(thinking: string): ChatMessage {
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
 /**
  * Creates a system init chat message.
  */
-export function createSystemMessage(model: string, tools?: ToolDefinition[]): ChatMessage {
+export function createSystemMessage(
+  model: string,
+  tools?: ToolDefinition[],
+  order?: number
+): ChatMessage {
   const claudeMessage: ClaudeMessage = {
     type: 'system',
     timestamp: generateTimestamp(),
@@ -360,6 +377,7 @@ export function createSystemMessage(model: string, tools?: ToolDefinition[]): Ch
     source: 'claude',
     message: claudeMessage,
     timestamp: generateTimestamp(),
+    order: order ?? fixtureOrderCounter++,
   };
 }
 
@@ -450,9 +468,16 @@ export function createTokenStats(overrides: Partial<TokenStats> = {}): TokenStat
   return {
     inputTokens: overrides.inputTokens ?? 1500,
     outputTokens: overrides.outputTokens ?? 850,
+    cacheReadInputTokens: overrides.cacheReadInputTokens ?? 800,
+    cacheCreationInputTokens: overrides.cacheCreationInputTokens ?? 200,
     totalCostUsd: overrides.totalCostUsd ?? 0.0125,
     totalDurationMs: overrides.totalDurationMs ?? 3500,
+    totalDurationApiMs: overrides.totalDurationApiMs ?? 2800,
     turnCount: overrides.turnCount ?? 3,
+    webSearchRequests: overrides.webSearchRequests ?? 0,
+    contextWindow: overrides.contextWindow ?? 200_000,
+    maxOutputTokens: overrides.maxOutputTokens ?? 16_384,
+    serviceTier: overrides.serviceTier ?? null,
   };
 }
 

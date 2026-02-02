@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
 import { Kanban, List, Loader2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
+import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
@@ -123,6 +124,7 @@ export default function WorkspacesListPage() {
       <KanbanProvider projectId={project.id} projectSlug={slug}>
         <div className="flex flex-col h-screen p-6 gap-4">
           <PageHeader title="Workspaces">
+            <KanbanControls />
             <ToggleGroup
               type="single"
               value={viewMode}
@@ -136,7 +138,6 @@ export default function WorkspacesListPage() {
                 <List className="h-4 w-4" />
               </ToggleGroupItem>
             </ToggleGroup>
-            <KanbanControls />
             <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating} />
           </PageHeader>
 
@@ -151,19 +152,6 @@ export default function WorkspacesListPage() {
   return (
     <div className="space-y-4 p-6">
       <PageHeader title="Workspaces">
-        <ToggleGroup
-          type="single"
-          value={viewMode}
-          onValueChange={(value) => value && setViewMode(value as ViewMode)}
-          size="sm"
-        >
-          <ToggleGroupItem value="board" aria-label="Board view">
-            <Kanban className="h-4 w-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" aria-label="List view">
-            <List className="h-4 w-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="All Statuses" />
@@ -177,6 +165,19 @@ export default function WorkspacesListPage() {
             ))}
           </SelectContent>
         </Select>
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          onValueChange={(value) => value && setViewMode(value as ViewMode)}
+          size="sm"
+        >
+          <ToggleGroupItem value="board" aria-label="Board view">
+            <Kanban className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" aria-label="List view">
+            <List className="h-4 w-4" />
+          </ToggleGroupItem>
+        </ToggleGroup>
         <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating} />
       </PageHeader>
 
@@ -209,12 +210,19 @@ export default function WorkspacesListPage() {
               {workspaces.map((workspace: WorkspaceWithSessions) => (
                 <TableRow key={workspace.id}>
                   <TableCell>
-                    <Link
-                      to={`/projects/${slug}/workspaces/${workspace.id}`}
-                      className="font-medium hover:underline"
-                    >
-                      {workspace.name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/projects/${slug}/workspaces/${workspace.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {workspace.name}
+                      </Link>
+                      <CIFailureWarning
+                        ciStatus={workspace.prCiStatus as CIStatus}
+                        prUrl={workspace.prUrl}
+                        size="sm"
+                      />
+                    </div>
                     {workspace.description && (
                       <p className="text-sm text-muted-foreground truncate max-w-md">
                         {workspace.description.length > 100

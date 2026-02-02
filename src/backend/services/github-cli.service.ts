@@ -46,7 +46,11 @@ export interface PRStatusFromGitHub {
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   mergedAt: string | null;
   updatedAt: string;
-  statusCheckRollup: Array<{ state: string }> | null;
+  statusCheckRollup: Array<{
+    status: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
+    conclusion?: string; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, etc.
+    state?: string; // Legacy format support
+  }> | null;
 }
 
 export interface PRInfo {
@@ -260,30 +264,65 @@ class GitHubCLIService {
 
   /**
    * Convert GitHub status check rollup to our CIStatus enum.
+   * Handles both GitHub Check Run format (status + conclusion) and legacy format (state).
    */
-  computeCIStatus(statusCheckRollup: Array<{ state: string }> | null): CIStatus {
+  computeCIStatus(
+    statusCheckRollup: Array<{
+      status: string;
+      conclusion?: string;
+      state?: string;
+    }> | null
+  ): CIStatus {
     if (!statusCheckRollup || statusCheckRollup.length === 0) {
       return CIStatus.UNKNOWN;
     }
 
+    // Helper to get the effective state from a check
+    const getEffectiveState = (check: {
+      status: string;
+      conclusion?: string;
+      state?: string;
+    }): string => {
+      // For GitHub Check Runs: use conclusion if completed, otherwise use status
+      if (check.status === 'COMPLETED' && check.conclusion) {
+        return check.conclusion;
+      }
+      // For legacy format or non-completed checks
+      return check.state || check.status;
+    };
+
     // Check for any failures first
-    const hasFailure = statusCheckRollup.some(
-      (check) => check.state === 'FAILURE' || check.state === 'ERROR'
-    );
+    const hasFailure = statusCheckRollup.some((check) => {
+      const state = getEffectiveState(check);
+      return state === 'FAILURE' || state === 'ERROR' || state === 'ACTION_REQUIRED';
+    });
     if (hasFailure) {
       return CIStatus.FAILURE;
     }
 
-    // Check if any are still pending
-    const hasPending = statusCheckRollup.some(
-      (check) => check.state === 'PENDING' || check.state === 'EXPECTED' || check.state === 'QUEUED'
-    );
+    // Check if any are still pending/running
+    const hasPending = statusCheckRollup.some((check) => {
+      const state = getEffectiveState(check);
+      return (
+        state === 'PENDING' ||
+        state === 'EXPECTED' ||
+        state === 'QUEUED' ||
+        state === 'IN_PROGRESS' ||
+        check.status === 'QUEUED' ||
+        check.status === 'IN_PROGRESS'
+      );
+    });
     if (hasPending) {
       return CIStatus.PENDING;
     }
 
-    // All checks passed
-    const allSuccess = statusCheckRollup.every((check) => check.state === 'SUCCESS');
+    // All checks passed (ignoring NEUTRAL, CANCELLED, SKIPPED)
+    const allSuccess = statusCheckRollup.every((check) => {
+      const state = getEffectiveState(check);
+      return (
+        state === 'SUCCESS' || state === 'NEUTRAL' || state === 'CANCELLED' || state === 'SKIPPED'
+      );
+    });
     if (allSuccess) {
       return CIStatus.SUCCESS;
     }

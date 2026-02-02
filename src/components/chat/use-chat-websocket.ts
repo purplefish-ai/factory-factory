@@ -9,6 +9,7 @@ import type {
   MessageAttachment,
   QueuedMessage,
   SessionInfo,
+  TokenStats,
 } from '@/lib/claude-types';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import type { PendingMessageContent, PendingRequest, SessionStatus } from './chat-reducer';
@@ -59,6 +60,8 @@ export interface UseChatWebSocketReturn {
   permissionMode: string | null;
   // Slash commands from CLI initialize response
   slashCommands: CommandInfo[];
+  // Accumulated token usage stats for the session
+  tokenStats: TokenStats;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -165,6 +168,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     taskNotifications: chat.taskNotifications,
     permissionMode: chat.permissionMode,
     slashCommands: chat.slashCommands,
+    tokenStats: chat.tokenStats,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
