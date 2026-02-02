@@ -633,12 +633,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTED':
       return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      // Clear toolProgress and isCompacting when session stops to prevent stale indicators
+      // Clear toolProgress, isCompacting, and activeHooks when session stops to prevent stale indicators
       return {
         ...state,
         sessionStatus: { phase: 'ready' },
         toolProgress: new Map(),
         isCompacting: false,
+        activeHooks: new Map(),
       };
 
     // Claude message handling (delegated to helper)

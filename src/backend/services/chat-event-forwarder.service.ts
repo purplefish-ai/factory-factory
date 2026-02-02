@@ -244,7 +244,6 @@ class ChatEventForwarderService {
       const msg = {
         type: 'status_update',
         permissionMode: event.permission_mode,
-        status: event.status,
       };
       messageStateService.storeEvent(dbSessionId, msg);
       chatConnectionService.forwardToSession(dbSessionId, msg);
@@ -258,9 +257,8 @@ class ChatEventForwarderService {
         eventType: 'compact_boundary',
         data: event,
       });
-      const msg = { type: 'compact_boundary' };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      // Note: We don't forward compact_boundary directly - visual indicator is sent
+      // via compacting_end to avoid duplicate indicators (CLI sends two boundary markers)
     });
 
     client.on('hook_started', (event) => {
@@ -335,6 +333,10 @@ class ChatEventForwarderService {
       const event = { type: 'compacting_end' };
       messageStateService.storeEvent(dbSessionId, event);
       chatConnectionService.forwardToSession(dbSessionId, event);
+      // Send compact_boundary to create visual indicator (only once per compaction cycle)
+      const boundaryMsg = { type: 'compact_boundary' };
+      messageStateService.storeEvent(dbSessionId, boundaryMsg);
+      chatConnectionService.forwardToSession(dbSessionId, boundaryMsg);
     });
 
     client.on('message', (msg) => {
