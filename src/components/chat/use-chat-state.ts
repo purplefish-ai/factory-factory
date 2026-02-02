@@ -336,6 +336,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   inputAttachmentsRef.current = inputAttachments;
   // Track rewind preview timeout for cleanup
   const rewindTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track current rewind request nonce for race condition handling
+  const rewindNonceRef = useRef<string | null>(null);
 
   // =============================================================================
   // Session Switching Effect
@@ -619,8 +621,15 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         rewindTimeoutRef.current = null;
       }
 
+      // Generate unique nonce for this request (handles retry race conditions)
+      const requestNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      rewindNonceRef.current = requestNonce;
+
       // Start preview state first - this ensures the reducer can handle error states
-      dispatch({ type: 'REWIND_PREVIEW_START', payload: { userMessageId: userMessageUuid } });
+      dispatch({
+        type: 'REWIND_PREVIEW_START',
+        payload: { userMessageId: userMessageUuid, requestNonce },
+      });
 
       // Send dry run request to get affected files
       const msg: RewindFilesRequest = {
@@ -636,16 +645,18 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
           type: 'REWIND_PREVIEW_ERROR',
           payload: {
             error: 'Not connected to server. Please check your connection and try again.',
+            requestNonce,
           },
         });
         return;
       }
 
       // Set timeout to handle case where response never arrives
+      // Capture nonce in closure to ensure late timeouts are filtered correctly
       rewindTimeoutRef.current = setTimeout(() => {
         dispatch({
           type: 'REWIND_PREVIEW_ERROR',
-          payload: { error: 'Request timed out. Please try again.' },
+          payload: { error: 'Request timed out. Please try again.', requestNonce },
         });
         rewindTimeoutRef.current = null;
       }, 30_000); // 30 second timeout
@@ -682,16 +693,19 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         type: 'REWIND_PREVIEW_ERROR',
         payload: {
           error: 'Not connected to server. Please check your connection and try again.',
+          requestNonce: rewindPreview.requestNonce,
         },
       });
       return;
     }
 
     // Set timeout to handle case where response never arrives
+    // Capture nonce in closure to ensure late timeouts are filtered correctly
+    const nonce = rewindPreview.requestNonce;
     rewindTimeoutRef.current = setTimeout(() => {
       dispatch({
         type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: 'Request timed out. Please try again.' },
+        payload: { error: 'Request timed out. Please try again.', requestNonce: nonce },
       });
       rewindTimeoutRef.current = null;
     }, 30_000); // 30 second timeout

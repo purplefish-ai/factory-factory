@@ -102,6 +102,8 @@ export interface TaskNotification {
 export interface RewindPreviewState {
   /** User message UUID we're rewinding to */
   userMessageId: string;
+  /** Unique identifier for this specific rewind request (for race condition handling) */
+  requestNonce: string;
   /** Whether we're currently loading the preview or executing the rewind */
   isLoading: boolean;
   /** Whether the actual rewind is in progress (vs just previewing) */
@@ -291,9 +293,12 @@ export type ChatAction =
   // User message UUID tracking (for rewind functionality)
   | { type: 'USER_MESSAGE_UUID_RECEIVED'; payload: { uuid: string } }
   // Rewind files actions
-  | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string } }
+  | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string; requestNonce: string } }
   | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }
-  | { type: 'REWIND_PREVIEW_ERROR'; payload: { error: string; userMessageId?: string } }
+  | {
+      type: 'REWIND_PREVIEW_ERROR';
+      payload: { error: string; userMessageId?: string; requestNonce?: string };
+    }
   | { type: 'REWIND_CANCEL' }
   | { type: 'REWIND_EXECUTING' } // Actual rewind in progress
   | { type: 'REWIND_SUCCESS'; payload: { userMessageId?: string } }; // Actual rewind completed
@@ -1236,6 +1241,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         rewindPreview: {
           userMessageId: action.payload.userMessageId,
+          requestNonce: action.payload.requestNonce,
           isLoading: true,
         },
       };
@@ -1263,10 +1269,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'REWIND_PREVIEW_ERROR': {
-      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
+      // Ignore if no preview state or if request identifiers don't match (race condition protection)
       if (!state.rewindPreview) {
         return state;
       }
+      // Check requestNonce first (more specific) - this handles local timeout race conditions
+      if (
+        action.payload.requestNonce &&
+        action.payload.requestNonce !== state.rewindPreview.requestNonce
+      ) {
+        // Error is for a stale rewind request, ignore it
+        return state;
+      }
+      // Also check userMessageId for protocol-level errors that may not have nonce
       if (
         action.payload.userMessageId &&
         action.payload.userMessageId !== state.rewindPreview.userMessageId
