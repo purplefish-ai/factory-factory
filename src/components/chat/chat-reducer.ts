@@ -605,8 +605,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTED':
       return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      // Clear toolProgress when session stops to prevent stale progress indicators
-      return { ...state, sessionStatus: { phase: 'ready' }, toolProgress: new Map() };
+      // Clear toolProgress and isCompacting when session stops to prevent stale indicators
+      return {
+        ...state,
+        sessionStatus: { phase: 'ready' },
+        toolProgress: new Map(),
+        isCompacting: false,
+      };
 
     // Claude message handling (delegated to helper)
     case 'WS_CLAUDE_MESSAGE':
@@ -957,9 +962,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'SDK_TASK_NOTIFICATION': {
-      // Append new task notification
+      // Append new task notification with UUID to avoid collisions under bursty updates
       const newNotification: TaskNotification = {
-        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        id: crypto.randomUUID(),
         message: action.payload.message,
         timestamp: new Date().toISOString(),
       };

@@ -3,6 +3,7 @@
 import { Bell, X } from 'lucide-react';
 import { memo, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
+import { formatRelativeTime } from '@/lib/utils';
 import type { TaskNotification } from './chat-reducer';
 
 // =============================================================================
@@ -18,40 +19,6 @@ export interface TaskNotificationsPanelProps {
   onClearAll?: () => void;
   /** Optional className for additional styling */
   className?: string;
-}
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Format a timestamp as a relative time string (e.g., "2m ago", "just now").
- */
-function formatRelativeTime(timestamp: string): string {
-  const now = Date.now();
-  const then = new Date(timestamp).getTime();
-  const diffMs = now - then;
-  const diffSeconds = Math.floor(diffMs / 1000);
-
-  if (diffSeconds < 10) {
-    return 'just now';
-  }
-  if (diffSeconds < 60) {
-    return `${diffSeconds}s ago`;
-  }
-
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) {
-    return `${diffMinutes}m ago`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
 }
 
 // =============================================================================
