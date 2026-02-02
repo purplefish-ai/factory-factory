@@ -92,7 +92,7 @@ interface CIStatusBadgeProps {
 export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
   if (!checks || checks.length === 0) {
     return (
-      <Badge variant="outline" className="text-[10px]">
+      <Badge variant="outline" className="text-xs">
         No checks
       </Badge>
     );
@@ -108,20 +108,20 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
 
   if (failed > 0) {
     return (
-      <Badge variant="destructive" className="text-[10px]">
+      <Badge variant="destructive" className="text-xs">
         {failed} failed
       </Badge>
     );
   }
   if (pending > 0) {
     return (
-      <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 text-[10px]">
+      <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 text-xs">
         {pending} pending
       </Badge>
     );
   }
   return (
-    <Badge variant="secondary" className="bg-green-500/20 text-green-600 text-[10px]">
+    <Badge variant="secondary" className="bg-green-500/20 text-green-600 text-xs">
       {passed} passed
     </Badge>
   );
@@ -135,25 +135,25 @@ export function ReviewDecisionBadge({ decision }: ReviewDecisionBadgeProps) {
   switch (decision) {
     case 'APPROVED':
       return (
-        <Badge className="bg-green-500/20 text-green-600 border-green-500/30 text-[10px]">
+        <Badge className="bg-green-500/20 text-green-600 border-green-500/30 text-xs">
           Approved
         </Badge>
       );
     case 'CHANGES_REQUESTED':
       return (
-        <Badge className="bg-red-500/20 text-red-600 border-red-500/30 text-[10px]">
+        <Badge className="bg-red-500/20 text-red-600 border-red-500/30 text-xs">
           Changes requested
         </Badge>
       );
     case 'REVIEW_REQUIRED':
       return (
-        <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30 text-[10px]">
+        <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30 text-xs">
           Review required
         </Badge>
       );
     default:
       return (
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           Pending
         </Badge>
       );

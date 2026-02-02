@@ -179,8 +179,8 @@ function ReviewsPageContent() {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground">
         <div className="text-center">
-          <p className="text-lg font-medium">No review requests</p>
-          <p className="text-sm">You have no pending PR reviews</p>
+          <p className="text-sm font-medium">No review requests</p>
+          <p className="text-xs">You have no pending PR reviews</p>
         </div>
       </div>
     );
@@ -190,13 +190,13 @@ function ReviewsPageContent() {
     <div className="h-full grid grid-cols-[minmax(380px,440px)_1fr] gap-0">
       {/* Left panel - PR list */}
       <div className="border-r flex flex-col h-full overflow-hidden">
-        <div className="px-3 py-2 border-b bg-muted/30">
+        <div className="px-4 py-3 border-b bg-muted/30">
           <h1 className="text-sm font-semibold">Review Requests</h1>
           <p className="text-xs text-muted-foreground">
             {prs.length} PR{prs.length !== 1 ? 's' : ''} awaiting your review
           </p>
         </div>
-        <div className="flex-1 overflow-auto p-2 space-y-1">
+        <div className="flex-1 overflow-auto p-2 space-y-2">
           {prs.map((pr, index) => {
             const key = `${pr.repository.nameWithOwner}#${pr.number}`;
             const details = prDetails.get(key);
