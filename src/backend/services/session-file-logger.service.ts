@@ -21,23 +21,26 @@ import { createLogger } from './logger.service';
 const logger = createLogger('session-file-logger');
 
 /**
+ * State for an active session log
+ */
+interface SessionLogState {
+  logFile: string;
+  stream: WriteStream;
+  pending: string[];
+  flushing: boolean;
+  closed: boolean; // Session closed intentionally - no more logs accepted but flush remaining
+  errored: boolean; // Stream errored - do not write
+  endWhenDone: boolean;
+}
+
+/**
  * Logs WebSocket events to a per-session file for debugging.
  * Log files are stored in .context/ws-logs/<session-id>.log
  */
 export class SessionFileLogger {
   private enabled: boolean;
   private logDir: string;
-  private sessionLogs = new Map<
-    string,
-    {
-      logFile: string;
-      stream: WriteStream;
-      pending: string[];
-      flushing: boolean;
-      closed: boolean;
-      endWhenDone: boolean;
-    }
-  >();
+  private sessionLogs = new Map<string, SessionLogState>();
 
   constructor() {
     // Default: only enabled in development unless explicitly overridden
@@ -69,13 +72,15 @@ export class SessionFileLogger {
     const logFile = join(this.logDir, `${safeSessionId}_${timestamp}.log`);
     const stream = createWriteStream(logFile, { flags: 'a' });
 
-    // Handle stream errors to prevent crashes - log and mark session as closed
+    // Handle stream errors to prevent crashes - log, mark session as errored, and destroy stream
     stream.on('error', (err) => {
       logger.error('Write stream error', { sessionId, logFile, error: err });
       const state = this.sessionLogs.get(sessionId);
       if (state) {
-        state.closed = true;
+        state.errored = true;
         this.sessionLogs.delete(sessionId);
+        // Destroy stream to release file descriptor
+        stream.destroy();
       }
     });
 
@@ -85,6 +90,7 @@ export class SessionFileLogger {
       pending: [],
       flushing: false,
       closed: false,
+      errored: false,
       endWhenDone: false,
     });
 
@@ -117,7 +123,7 @@ export class SessionFileLogger {
     }
 
     const logState = this.sessionLogs.get(sessionId);
-    if (!logState || logState.closed) {
+    if (!logState || logState.closed || logState.errored) {
       return;
     }
 
@@ -255,23 +261,19 @@ export class SessionFileLogger {
     }
   }
 
-  private flushAsync(
-    sessionId: string,
-    logState: {
-      logFile: string;
-      stream: WriteStream;
-      pending: string[];
-      flushing: boolean;
-      closed: boolean;
-      endWhenDone: boolean;
-    }
-  ): void {
+  private flushAsync(sessionId: string, logState: SessionLogState): void {
     if (logState.flushing) {
       return;
     }
     logState.flushing = true;
 
     const flush = () => {
+      // Check if stream has errored before writing
+      if (logState.errored) {
+        logState.flushing = false;
+        return;
+      }
+
       while (logState.pending.length > 0) {
         const chunk = logState.pending.shift();
         if (!chunk) {
@@ -279,11 +281,19 @@ export class SessionFileLogger {
         }
         const canContinue = logState.stream.write(chunk);
         if (!canContinue) {
-          // Reset flushing and re-call flushAsync on drain to handle errors/close during backpressure
-          logState.stream.once('drain', () => {
+          // Set up drain handler and error handler to avoid getting stuck
+          const onDrain = () => {
+            logState.stream.removeListener('error', onError);
             logState.flushing = false;
             this.flushAsync(sessionId, logState);
-          });
+          };
+          const onError = () => {
+            logState.stream.removeListener('drain', onDrain);
+            logState.flushing = false;
+            // Error handler already handles cleanup
+          };
+          logState.stream.once('drain', onDrain);
+          logState.stream.once('error', onError);
           return;
         }
       }
