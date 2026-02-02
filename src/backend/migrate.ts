@@ -6,6 +6,8 @@
  * 1. As a module: import { runMigrations } from './migrate'
  * 2. As a script: node migrate.js (uses environment variables)
  */
+
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -35,12 +37,24 @@ export function runMigrations(options: MigrationOptions): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS _prisma_migrations (
         id TEXT PRIMARY KEY,
+        checksum TEXT NOT NULL,
         migration_name TEXT NOT NULL UNIQUE,
+        logs TEXT,
+        rolled_back_at DATETIME,
         finished_at DATETIME,
         started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         applied_steps_count INTEGER NOT NULL DEFAULT 0
       )
     `);
+
+    // Ensure Prisma checksum column exists for legacy databases
+    const columns = db.prepare("PRAGMA table_info('_prisma_migrations')").all() as Array<{
+      name: string;
+    }>;
+    const hasChecksum = columns.some((column) => column.name === 'checksum');
+    if (!hasChecksum) {
+      db.exec("ALTER TABLE _prisma_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT ''");
+    }
 
     // Get list of applied migrations
     const appliedMigrations = new Set(
@@ -71,12 +85,13 @@ export function runMigrations(options: MigrationOptions): void {
 
       log(`[migrate] Applying: ${migrationName}`);
       const sql = readFileSync(sqlPath, 'utf-8');
+      const checksum = createHash('sha256').update(sql).digest('hex');
 
       // Record migration start
       const id = crypto.randomUUID();
       db.prepare(
-        'INSERT INTO _prisma_migrations (id, migration_name, started_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
-      ).run(id, migrationName);
+        'INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
+      ).run(id, checksum, migrationName);
 
       try {
         // Execute the migration
