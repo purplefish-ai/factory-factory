@@ -24,6 +24,7 @@ import {
   isStreamEventMessage,
   type KeepAliveMessage,
   type PermissionMode,
+  type RewindFilesResponse,
   type StreamEventMessage,
 } from './types';
 
@@ -278,9 +279,9 @@ export class ClaudeProtocol extends EventEmitter {
    *
    * @param userMessageId - The UUID of the user message to rewind to
    * @param dryRun - If true, returns preview of files that would be reverted without making changes
-   * @returns Promise that resolves when the message is sent
+   * @returns Promise resolving to the rewind files response (affected files list)
    */
-  async sendRewindFiles(userMessageId: string, dryRun?: boolean): Promise<void> {
+  sendRewindFiles(userMessageId: string, dryRun?: boolean): Promise<RewindFilesResponse> {
     const requestId = randomUUID();
 
     const message = {
@@ -293,7 +294,22 @@ export class ClaudeProtocol extends EventEmitter {
       },
     };
 
-    await this.sendRaw(message);
+    return new Promise<RewindFilesResponse>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error(`Rewind files request timed out after ${this.requestTimeout}ms`));
+      }, this.requestTimeout);
+
+      this.pendingRequests.set(requestId, {
+        requestId,
+        resolve: resolve as (response: unknown) => void,
+        reject,
+        timeoutId,
+      });
+
+      // Fire-and-forget the send - backpressure handled internally
+      void this.sendRaw(message);
+    });
   }
 
   // ===========================================================================

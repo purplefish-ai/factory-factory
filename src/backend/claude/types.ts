@@ -472,6 +472,15 @@ export interface RewindFilesRequest {
 }
 
 /**
+ * Response from rewind files request.
+ * Contains list of files that were/would be affected.
+ */
+export interface RewindFilesResponse {
+  /** List of file paths that were/would be reverted */
+  affected_files?: string[];
+}
+
+/**
  * Union of all request subtypes SDK can send to CLI.
  */
 export type SdkToCliRequest =

@@ -145,6 +145,11 @@ interface QuestionResponseMessage {
   answers: Record<string, string | string[]>;
 }
 
+/**
+ * Rewind files request message.
+ * Note: This mirrors the RewindFilesMessage type from the backend Zod schema.
+ * We keep a separate frontend type to avoid importing backend modules in client code.
+ */
 interface RewindFilesRequest {
   type: 'rewind_files';
   userMessageId: string;
@@ -329,6 +334,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track input attachments in a ref for stable sendMessage callback
   const inputAttachmentsRef = useRef(inputAttachments);
   inputAttachmentsRef.current = inputAttachments;
+  // Track rewind preview timeout for cleanup
+  const rewindTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // =============================================================================
   // Session Switching Effect
@@ -431,6 +438,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
           })
         );
         return;
+      }
+
+      // Clear rewind timeout when we receive rewind response
+      if (wsMessage.type === 'rewind_files_preview' || wsMessage.type === 'rewind_files_error') {
+        if (rewindTimeoutRef.current) {
+          clearTimeout(rewindTimeoutRef.current);
+          rewindTimeoutRef.current = null;
+        }
       }
 
       // Handle Claude messages specially for tool input streaming
@@ -583,8 +598,11 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Rewind files actions
   const startRewindPreview = useCallback(
     (userMessageUuid: string) => {
-      // Start preview state
-      dispatch({ type: 'REWIND_PREVIEW_START', payload: { userMessageId: userMessageUuid } });
+      // Clear any existing timeout
+      if (rewindTimeoutRef.current) {
+        clearTimeout(rewindTimeoutRef.current);
+        rewindTimeoutRef.current = null;
+      }
 
       // Send dry run request to get affected files
       const msg: RewindFilesRequest = {
@@ -592,14 +610,44 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         userMessageId: userMessageUuid,
         dryRun: true,
       };
-      send(msg);
+      const sent = send(msg);
+
+      // Check if message was sent successfully
+      if (!sent) {
+        dispatch({
+          type: 'REWIND_PREVIEW_ERROR',
+          payload: {
+            error: 'Not connected to server. Please check your connection and try again.',
+          },
+        });
+        return;
+      }
+
+      // Start preview state after confirming send succeeded
+      dispatch({ type: 'REWIND_PREVIEW_START', payload: { userMessageId: userMessageUuid } });
+
+      // Set timeout to handle case where response never arrives
+      rewindTimeoutRef.current = setTimeout(() => {
+        dispatch({
+          type: 'REWIND_PREVIEW_ERROR',
+          payload: { error: 'Request timed out. Please try again.' },
+        });
+        rewindTimeoutRef.current = null;
+      }, 30_000); // 30 second timeout
     },
     [send]
   );
 
   const confirmRewind = useCallback(() => {
+    // Clear the timeout since we're completing the flow
+    if (rewindTimeoutRef.current) {
+      clearTimeout(rewindTimeoutRef.current);
+      rewindTimeoutRef.current = null;
+    }
+
     const rewindPreview = stateRef.current.rewindPreview;
     if (!rewindPreview) {
+      debug.log('[Chat] confirmRewind called but rewindPreview is null - potential race condition');
       return;
     }
 
@@ -616,11 +664,22 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   }, [send]);
 
   const cancelRewind = useCallback(() => {
+    // Clear the timeout when canceling
+    if (rewindTimeoutRef.current) {
+      clearTimeout(rewindTimeoutRef.current);
+      rewindTimeoutRef.current = null;
+    }
     dispatch({ type: 'REWIND_CANCEL' });
   }, []);
 
   const getUuidForMessageIndex = useCallback((index: number): string | undefined => {
-    return stateRef.current.messageIndexToUuid.get(index);
+    // Get message at the given index
+    const message = stateRef.current.messages[index];
+    if (!message) {
+      return undefined;
+    }
+    // Look up UUID by message ID (stable identifier)
+    return stateRef.current.messageIdToUuid.get(message.id);
   }, []);
 
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
@@ -639,11 +698,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     }, 300);
   }, []);
 
-  // Clean up pending debounced persist on unmount to prevent stale writes
+  // Clean up pending debounced persist and rewind timeout on unmount
   useEffect(() => {
     return () => {
       if (persistDraftDebounced.current) {
         clearTimeout(persistDraftDebounced.current);
+      }
+      if (rewindTimeoutRef.current) {
+        clearTimeout(rewindTimeoutRef.current);
       }
     };
   }, []);

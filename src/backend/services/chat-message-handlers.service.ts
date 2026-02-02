@@ -945,26 +945,32 @@ class ChatMessageHandlerService {
   ): Promise<void> {
     const client = sessionService.getClient(sessionId);
     if (!client) {
-      ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+      ws.send(
+        JSON.stringify({
+          type: 'rewind_files_error',
+          rewindError: 'No active client for session',
+        })
+      );
       return;
     }
 
     try {
-      await client.rewindFiles(message.userMessageId, message.dryRun);
+      const response = await client.rewindFiles(message.userMessageId, message.dryRun);
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Rewind files request sent', {
+        logger.info('[Chat WS] Rewind files request completed', {
           sessionId,
           userMessageId: message.userMessageId,
           dryRun: message.dryRun,
+          affectedFiles: response.affected_files?.length ?? 0,
         });
       }
-      // The response will come back through the regular message stream from the CLI
-      // We just acknowledge that the request was sent successfully
+      // Send preview response with affected files list
       ws.send(
         JSON.stringify({
-          type: 'rewind_files_requested',
+          type: 'rewind_files_preview',
           userMessageId: message.userMessageId,
           dryRun: message.dryRun ?? false,
+          affectedFiles: response.affected_files ?? [],
         })
       );
     } catch (error) {
@@ -975,7 +981,10 @@ class ChatMessageHandlerService {
         error: errorMessage,
       });
       ws.send(
-        JSON.stringify({ type: 'error', message: `Failed to rewind files: ${errorMessage}` })
+        JSON.stringify({
+          type: 'rewind_files_error',
+          rewindError: `Failed to rewind files: ${errorMessage}`,
+        })
       );
     }
   }

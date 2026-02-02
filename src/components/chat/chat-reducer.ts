@@ -161,15 +161,17 @@ export interface ChatState {
   /** Slash commands from CLI initialize response */
   slashCommands: CommandInfo[];
   /**
-   * Queue of SDK-assigned UUIDs for user messages (in order received).
-   * Used to correlate frontend message IDs with SDK UUIDs for rewind functionality.
+   * Queue of SDK-assigned UUIDs waiting to be mapped to user messages.
+   * Used when UUIDs arrive before their corresponding messages.
    */
-  userMessageUuids: string[];
+  pendingUserMessageUuids: string[];
   /**
-   * Map from user message index (position in messages array) to SDK-assigned UUID.
+   * Map from user message ID (stable identifier) to SDK-assigned UUID.
    * Populated as user_message_uuid events are received.
+   * Using message IDs instead of indices ensures correct mapping even when
+   * messages are inserted or removed from the array.
    */
-  messageIndexToUuid: Map<number, string>;
+  messageIdToUuid: Map<string, string>;
   /** Current rewind preview state (null when not showing rewind dialog) */
   rewindPreview: RewindPreviewState | null;
 }
@@ -420,8 +422,8 @@ function createBaseResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
-  | 'userMessageUuids'
-  | 'messageIndexToUuid'
+  | 'pendingUserMessageUuids'
+  | 'messageIdToUuid'
   | 'rewindPreview'
 > {
   // Note: slashCommands is intentionally NOT reset here.
@@ -443,8 +445,8 @@ function createBaseResetState(): Pick<
     hasCompactBoundary: false,
     activeHooks: new Map(),
     taskNotifications: [],
-    userMessageUuids: [],
-    messageIndexToUuid: new Map(),
+    pendingUserMessageUuids: [],
+    messageIdToUuid: new Map(),
     rewindPreview: null,
   };
 }
@@ -472,8 +474,8 @@ function createSessionSwitchResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
   | 'slashCommands'
-  | 'userMessageUuids'
-  | 'messageIndexToUuid'
+  | 'pendingUserMessageUuids'
+  | 'messageIdToUuid'
   | 'rewindPreview'
 > {
   return {
@@ -505,8 +507,8 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     activeHooks: new Map(),
     taskNotifications: [],
     slashCommands: [],
-    userMessageUuids: [],
-    messageIndexToUuid: new Map(),
+    pendingUserMessageUuids: [],
+    messageIdToUuid: new Map(),
     rewindPreview: null,
     ...overrides,
   };
@@ -974,11 +976,24 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           },
         });
 
+        // Check if there are pending UUIDs to map to this new message
+        let newMessageIdToUuid = state.messageIdToUuid;
+        let newPendingUuids = state.pendingUserMessageUuids;
+        if (state.pendingUserMessageUuids.length > 0) {
+          // Consume the first pending UUID for this message
+          const [uuid, ...remainingUuids] = state.pendingUserMessageUuids;
+          newMessageIdToUuid = new Map(state.messageIdToUuid);
+          newMessageIdToUuid.set(id, uuid);
+          newPendingUuids = remainingUuids;
+        }
+
         return {
           ...state,
           messages: insertMessageByOrder(state.messages, newMessage),
           queuedMessages: newQueuedMessages,
           pendingMessages: newPendingMessages,
+          messageIdToUuid: newMessageIdToUuid,
+          pendingUserMessageUuids: newPendingUuids,
         };
       }
 
@@ -1142,23 +1157,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     // User message UUID tracking (for rewind functionality)
     case 'USER_MESSAGE_UUID_RECEIVED': {
-      // Add to queue of UUIDs and map to the next user message
-      const newUuids = [...state.userMessageUuids, action.payload.uuid];
       // Find user messages that don't have UUIDs mapped yet
-      const userMessageIndices = state.messages
-        .map((m, i) => (m.source === 'user' ? i : -1))
-        .filter((i) => i >= 0 && !state.messageIndexToUuid.has(i));
+      const unmappedUserMessages = state.messages.filter(
+        (m) => m.source === 'user' && !state.messageIdToUuid.has(m.id)
+      );
+
       // Map UUID to the first unmapped user message if available
-      if (userMessageIndices.length > 0) {
-        const newMap = new Map(state.messageIndexToUuid);
-        newMap.set(userMessageIndices[0], action.payload.uuid);
+      if (unmappedUserMessages.length > 0) {
+        const targetMessage = unmappedUserMessages[0];
+        const newMap = new Map(state.messageIdToUuid);
+        newMap.set(targetMessage.id, action.payload.uuid);
         return {
           ...state,
-          userMessageUuids: newUuids,
-          messageIndexToUuid: newMap,
+          messageIdToUuid: newMap,
         };
       }
-      return { ...state, userMessageUuids: newUuids };
+
+      // If no unmapped message found, store in pending queue for later mapping
+      // This handles edge cases where UUID arrives before the message is added to state
+      debug.log(
+        `[chat-reducer] UUID received but no unmapped user message found, queueing: ${action.payload.uuid}`
+      );
+      return {
+        ...state,
+        pendingUserMessageUuids: [...state.pendingUserMessageUuids, action.payload.uuid],
+      };
     }
 
     // Rewind actions
@@ -1393,6 +1416,7 @@ function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: switch statement complexity is inherent to message type dispatch
 export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAction | null {
   switch (data.type) {
     case 'status':
@@ -1471,6 +1495,16 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'user_message_uuid':
       return data.uuid
         ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } }
+        : null;
+    // Rewind files response events
+    case 'rewind_files_preview':
+      return {
+        type: 'REWIND_PREVIEW_SUCCESS',
+        payload: { affectedFiles: data.affectedFiles ?? [] },
+      };
+    case 'rewind_files_error':
+      return data.rewindError
+        ? { type: 'REWIND_PREVIEW_ERROR', payload: { error: data.rewindError } }
         : null;
     default:
       return null;
