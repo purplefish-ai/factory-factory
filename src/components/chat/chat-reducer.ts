@@ -1025,6 +1025,33 @@ function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
   };
 }
 
+function handleToolProgressMessage(data: WebSocketMessage): ChatAction | null {
+  if (!(data.tool_use_id && data.tool_name && data.elapsed_time_seconds !== undefined)) {
+    return null;
+  }
+  return {
+    type: 'SDK_TOOL_PROGRESS',
+    payload: {
+      toolUseId: data.tool_use_id,
+      toolName: data.tool_name,
+      elapsedSeconds: data.elapsed_time_seconds,
+    },
+  };
+}
+
+function handleToolUseSummaryMessage(data: WebSocketMessage): ChatAction | null {
+  if (!(data.summary && data.preceding_tool_use_ids)) {
+    return null;
+  }
+  return {
+    type: 'SDK_TOOL_USE_SUMMARY',
+    payload: {
+      summary: data.summary,
+      precedingToolUseIds: data.preceding_tool_use_ids,
+    },
+  };
+}
+
 /**
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
@@ -1062,26 +1089,9 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handleMessageStateChanged(data);
     // SDK message type events
     case 'tool_progress':
-      return data.tool_use_id && data.tool_name && data.elapsed_time_seconds !== undefined
-        ? {
-            type: 'SDK_TOOL_PROGRESS',
-            payload: {
-              toolUseId: data.tool_use_id,
-              toolName: data.tool_name,
-              elapsedSeconds: data.elapsed_time_seconds,
-            },
-          }
-        : null;
+      return handleToolProgressMessage(data);
     case 'tool_use_summary':
-      return data.summary && data.preceding_tool_use_ids
-        ? {
-            type: 'SDK_TOOL_USE_SUMMARY',
-            payload: {
-              summary: data.summary,
-              precedingToolUseIds: data.preceding_tool_use_ids,
-            },
-          }
-        : null;
+      return handleToolUseSummaryMessage(data);
     case 'status_update':
       return { type: 'SDK_STATUS_UPDATE', payload: { permissionMode: data.permissionMode } };
     case 'task_notification':

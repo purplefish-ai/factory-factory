@@ -146,21 +146,16 @@ export function shouldAutoApprove(mode: PermissionMode, toolName: string): boole
 
   switch (mode) {
     case 'bypassPermissions':
-      return true;
     case 'plan':
       // ExitPlanMode already handled by INTERACTIVE_TOOLS check above
       return true;
     case 'acceptEdits':
       return READ_ONLY_TOOLS.has(toolName) || EDIT_TOOLS.has(toolName);
     case 'delegate':
-      // Delegate mode treats like default - only auto-approve read-only tools
-      return READ_ONLY_TOOLS.has(toolName);
     case 'dontAsk':
-      // dontAsk mode: only auto-approve read-only tools, deny everything else
-      // (denial is handled by the caller checking this return value)
-      return READ_ONLY_TOOLS.has(toolName);
-    default:
-      // 'default' mode: only auto-approve read-only tools
+    case 'default':
+      // These modes only auto-approve read-only tools
+      // Note: dontAsk mode denial is handled by shouldDenyInDontAskMode
       return READ_ONLY_TOOLS.has(toolName);
   }
 }
