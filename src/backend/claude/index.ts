@@ -134,6 +134,8 @@ export class ClaudeClient extends EventEmitter {
   private pendingInteractiveRequests: Map<string, CanUseToolRequest> = new Map();
   /** Map protocol request_id to tool_use_id for cancel request handling */
   private protocolToToolRequestId: Map<string, string> = new Map();
+  /** Track cancelled protocol request IDs to avoid sending deny response */
+  private cancelledProtocolRequests: Set<string> = new Set();
   /** Track whether context compaction is in progress (toggle-based detection) */
   private isCompacting = false;
 
@@ -672,6 +674,17 @@ export class ClaudeClient extends EventEmitter {
       } catch (error) {
         // Clean up mapping on error
         this.protocolToToolRequestId.delete(controlRequest.request_id);
+
+        // Check if this request was cancelled - if so, don't send a deny response
+        // The protocol states "No response is required" for control_cancel_request
+        if (this.cancelledProtocolRequests.has(controlRequest.request_id)) {
+          this.cancelledProtocolRequests.delete(controlRequest.request_id);
+          logger.debug('Skipping deny response for cancelled request', {
+            requestId: controlRequest.request_id,
+          });
+          return;
+        }
+
         // On error, deny the request
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.process?.protocol.sendControlResponse(controlRequest.request_id, {
@@ -693,6 +706,10 @@ export class ClaudeClient extends EventEmitter {
         toolUseId,
         requestIdToCancel,
       });
+
+      // Mark request as cancelled BEFORE cancelling to prevent deny response
+      // The control_request handler checks this set to avoid sending a response
+      this.cancelledProtocolRequests.add(cancelRequest.request_id);
 
       // Cancel the deferred interactive handler's pending request
       this.interactiveHandler.cancel(requestIdToCancel, 'Request cancelled by CLI');
