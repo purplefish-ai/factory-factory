@@ -1,7 +1,6 @@
-import type { CIStatus, KanbanColumn, PRState, Workspace } from '@prisma-gen/browser';
-import { ExternalLink, GitBranch } from 'lucide-react';
+import type { CIStatus, KanbanColumn, Workspace } from '@prisma-gen/browser';
+import { GitBranch, GitPullRequest } from 'lucide-react';
 import { Link } from 'react-router';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
@@ -17,22 +16,8 @@ interface KanbanCardProps {
   projectSlug: string;
 }
 
-const prStateBadgeVariants: Record<
-  PRState,
-  { variant: 'default' | 'secondary' | 'outline' | 'destructive'; label: string }
-> = {
-  NONE: { variant: 'outline', label: '' },
-  DRAFT: { variant: 'secondary', label: 'Draft' },
-  OPEN: { variant: 'default', label: 'Open' },
-  CHANGES_REQUESTED: { variant: 'destructive', label: 'Changes' },
-  APPROVED: { variant: 'default', label: 'Approved' },
-  MERGED: { variant: 'secondary', label: 'Merged' },
-  CLOSED: { variant: 'outline', label: 'Closed' },
-};
-
 export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
-  const prBadge = prStateBadgeVariants[workspace.prState];
-  const showPRBadge = workspace.prState !== 'NONE' && prBadge.label;
+  const showPR = workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -62,35 +47,15 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {workspace.branchName && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-              <GitBranch className="h-3 w-3 shrink-0" />
-              <span className="font-mono truncate">{workspace.branchName}</span>
-            </div>
-          )}
-
-          {showPRBadge && (
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={prBadge.variant}
-                className={cn(
-                  'text-xs',
-                  workspace.prState === 'APPROVED' &&
-                    'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30',
-                  workspace.prState === 'MERGED' &&
-                    'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30',
-                  workspace.prState === 'CLOSED' &&
-                    'bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/30'
-                )}
-              >
-                {prBadge.label}
-              </Badge>
-              <CIFailureWarning
-                ciStatus={workspace.prCiStatus as CIStatus}
-                prUrl={workspace.prUrl}
-                size="sm"
-              />
-              {workspace.prUrl && (
+          {(workspace.branchName || showPR) && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+              {workspace.branchName && (
+                <>
+                  <GitBranch className="h-3 w-3 shrink-0" />
+                  <span className="font-mono truncate">{workspace.branchName}</span>
+                </>
+              )}
+              {showPR && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -98,11 +63,22 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
                     e.stopPropagation();
                     window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
                   }}
-                  className="text-muted-foreground hover:text-foreground"
+                  className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
                 >
-                  <ExternalLink className="h-3 w-3" />
+                  <GitPullRequest className="h-3 w-3" />
+                  <span>#{workspace.prNumber}</span>
                 </button>
               )}
+            </div>
+          )}
+
+          {showPR && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <CIFailureWarning
+                ciStatus={workspace.prCiStatus as CIStatus}
+                prUrl={workspace.prUrl}
+                size="sm"
+              />
             </div>
           )}
 
