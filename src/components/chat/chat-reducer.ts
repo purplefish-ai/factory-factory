@@ -15,6 +15,7 @@ import type {
   ChatMessage,
   ChatSettings,
   ClaudeMessage,
+  CommandInfo,
   MessageAttachment,
   PendingInteractiveRequest,
   PermissionRequest,
@@ -145,6 +146,8 @@ export interface ChatState {
   activeHooks: Map<string, ActiveHookInfo>;
   /** Task notifications from SDK (e.g., subagent updates) */
   taskNotifications: TaskNotification[];
+  /** Slash commands from CLI initialize response */
+  slashCommands: CommandInfo[];
 }
 
 // =============================================================================
@@ -242,7 +245,9 @@ export type ChatAction =
   | { type: 'HOOK_RESPONSE'; payload: { hookId: string } }
   // Task notification management
   | { type: 'DISMISS_TASK_NOTIFICATION'; payload: { id: string } }
-  | { type: 'CLEAR_TASK_NOTIFICATIONS' };
+  | { type: 'CLEAR_TASK_NOTIFICATIONS' }
+  // Slash commands discovery
+  | { type: 'WS_SLASH_COMMANDS'; payload: { commands: CommandInfo[] } };
 
 // =============================================================================
 // Helper Functions
@@ -400,6 +405,7 @@ function createBaseResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
+  | 'slashCommands'
 > {
   return {
     messages: [],
@@ -416,6 +422,7 @@ function createBaseResetState(): Pick<
     hasCompactBoundary: false,
     activeHooks: new Map(),
     taskNotifications: [],
+    slashCommands: [],
   };
 }
 
@@ -441,6 +448,7 @@ function createSessionSwitchResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
+  | 'slashCommands'
 > {
   return {
     ...createBaseResetState(),
@@ -469,6 +477,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     hasCompactBoundary: false,
     activeHooks: new Map(),
     taskNotifications: [],
+    slashCommands: [],
     ...overrides,
   };
 }
@@ -1051,6 +1060,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, activeHooks: newActiveHooks };
     }
 
+    // Slash commands discovery
+    case 'WS_SLASH_COMMANDS':
+      return { ...state, slashCommands: action.payload.commands };
+
     case 'DISMISS_TASK_NOTIFICATION':
       return {
         ...state,
@@ -1313,6 +1326,11 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return { type: 'SDK_COMPACTING_START' };
     case 'compacting_end':
       return { type: 'SDK_COMPACTING_END' };
+    // Slash commands discovery
+    case 'slash_commands':
+      return data.slashCommands
+        ? { type: 'WS_SLASH_COMMANDS', payload: { commands: data.slashCommands } }
+        : null;
     default:
       return null;
   }

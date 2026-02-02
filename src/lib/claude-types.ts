@@ -10,6 +10,19 @@
  */
 
 // =============================================================================
+// Slash Command Types
+// =============================================================================
+
+/**
+ * Information about a slash command from the Claude CLI.
+ */
+export interface CommandInfo {
+  name: string;
+  description: string;
+  argumentHint?: string;
+}
+
+// =============================================================================
 // Model and Settings Types
 // =============================================================================
 
@@ -478,7 +491,9 @@ export interface WebSocketMessage {
     | 'hook_response'
     // Context compaction events
     | 'compacting_start'
-    | 'compacting_end';
+    | 'compacting_end'
+    // Slash commands discovery
+    | 'slash_commands';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -539,6 +554,8 @@ export interface WebSocketMessage {
   // Status update fields
   /** Permission mode from status updates */
   permissionMode?: string;
+  /** Slash commands from CLI initialize response */
+  slashCommands?: CommandInfo[];
 }
 
 // =============================================================================
