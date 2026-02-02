@@ -731,7 +731,7 @@ export interface ChatMessage {
   timestamp: string;
   attachments?: MessageAttachment[]; // For user uploaded images/files
   /** Backend-assigned order for reliable sorting (monotonically increasing per session) */
-  order?: number;
+  order: number;
 }
 
 /**

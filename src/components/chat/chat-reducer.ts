@@ -160,7 +160,7 @@ export type ChatAction =
   | { type: 'WS_STARTING' }
   | { type: 'WS_STARTED' }
   | { type: 'WS_STOPPED' }
-  | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order?: number } }
+  | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order: number } }
   | { type: 'WS_ERROR'; payload: { message: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
@@ -188,7 +188,7 @@ export type ChatAction =
     }
   | { type: 'CLEAR_REJECTED_MESSAGE' }
   // Message used as interactive response (clears pending request and adds message)
-  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string; order?: number } }
+  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string; order: number } }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -222,7 +222,7 @@ export type ChatAction =
           attachments?: MessageAttachment[];
           settings?: ChatSettings;
           /** Backend-assigned order for reliable sorting */
-          order?: number;
+          order: number;
         };
       };
     }
@@ -258,7 +258,7 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function createClaudeMessage(message: ClaudeMessage, order?: number): ChatMessage {
+function createClaudeMessage(message: ClaudeMessage, order: number): ChatMessage {
   return {
     id: generateMessageId(),
     source: 'claude',
@@ -266,15 +266,6 @@ function createClaudeMessage(message: ClaudeMessage, order?: number): ChatMessag
     timestamp: new Date().toISOString(),
     order,
   };
-}
-
-function createErrorMessage(error: string): ChatMessage {
-  const errorMsg: ClaudeMessage = {
-    type: 'error',
-    error,
-    timestamp: new Date().toISOString(),
-  };
-  return createClaudeMessage(errorMsg);
 }
 
 /**
@@ -528,11 +519,7 @@ function convertPendingRequest(req: PendingInteractiveRequest | null | undefined
 /**
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
-function handleClaudeMessage(
-  state: ChatState,
-  claudeMsg: ClaudeMessage,
-  order?: number
-): ChatState {
+function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage, order: number): ChatState {
   // Transition from starting to running when receiving a Claude message
   let baseState: ChatState =
     state.sessionStatus.phase === 'starting'
@@ -666,12 +653,26 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_CLAUDE_MESSAGE':
       return handleClaudeMessage(state, action.payload.message, action.payload.order);
 
-    // Error message
-    case 'WS_ERROR':
+    // Error message - appended at end with order higher than any existing message
+    case 'WS_ERROR': {
+      const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
+      const errorMsg: ClaudeMessage = {
+        type: 'error',
+        error: action.payload.message,
+        timestamp: new Date().toISOString(),
+      };
+      const errorChatMessage: ChatMessage = {
+        id: generateMessageId(),
+        source: 'claude',
+        message: errorMsg,
+        timestamp: new Date().toISOString(),
+        order: maxOrder + 1,
+      };
       return {
         ...state,
-        messages: [...state.messages, createErrorMessage(action.payload.message)],
+        messages: [...state.messages, errorChatMessage],
       };
+    }
 
     // Session management
     case 'WS_SESSIONS':
@@ -1055,6 +1056,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case 'COMPACT_BOUNDARY': {
       // Create a synthetic ClaudeMessage to render the compact boundary indicator
+      // Use order higher than any existing message to ensure it appears at end
+      const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
       const compactBoundaryMessage: ChatMessage = {
         id: `compact-boundary-${Date.now()}`,
         source: 'claude',
@@ -1063,6 +1066,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           subtype: 'compact_boundary',
         } as ClaudeMessage,
         timestamp: new Date().toISOString(),
+        order: maxOrder + 1,
       };
       return {
         ...state,
@@ -1120,7 +1124,7 @@ function handleStatusMessage(data: WebSocketMessage): ChatAction {
 }
 
 function handleClaudeMessageAction(data: WebSocketMessage): ChatAction | null {
-  if (isWsClaudeMessage(data)) {
+  if (isWsClaudeMessage(data) && data.order !== undefined) {
     return { type: 'WS_CLAUDE_MESSAGE', payload: { message: data.data, order: data.order } };
   }
   return null;
@@ -1189,6 +1193,11 @@ function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
   if (!(data.id && data.newState)) {
     return null;
   }
+  // If userMessage exists, order is required
+  const userMessage =
+    data.userMessage && data.userMessage.order !== undefined
+      ? { ...data.userMessage, order: data.userMessage.order }
+      : undefined;
   return {
     type: 'MESSAGE_STATE_CHANGED',
     payload: {
@@ -1196,7 +1205,7 @@ function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
       newState: data.newState,
       queuePosition: data.queuePosition,
       errorMessage: data.errorMessage,
-      userMessage: data.userMessage,
+      userMessage,
     },
   };
 }
@@ -1323,7 +1332,7 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId ?? '' } };
     // Interactive response handling
     case 'message_used_as_response':
-      return data.id && data.text
+      return data.id && data.text && data.order !== undefined
         ? {
             type: 'MESSAGE_USED_AS_RESPONSE',
             payload: { id: data.id, text: data.text, order: data.order },
@@ -1375,12 +1384,13 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
 /**
  * Creates a user message action.
  */
-export function createUserMessageAction(text: string): ChatAction {
+export function createUserMessageAction(text: string, order: number): ChatAction {
   const chatMessage: ChatMessage = {
     id: generateMessageId(),
     source: 'user',
     text,
     timestamp: new Date().toISOString(),
+    order,
   };
   return { type: 'USER_MESSAGE_SENT', payload: chatMessage };
 }
