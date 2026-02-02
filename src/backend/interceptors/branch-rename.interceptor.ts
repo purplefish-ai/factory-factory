@@ -1,7 +1,7 @@
 /**
  * Branch Rename Interceptor
  *
- * Monitors Bash tool executions for `git branch -m` commands
+ * Monitors Bash tool executions for `git branch -m` or `git branch -M` commands
  * and updates the workspace with the new branch name when detected.
  */
 
@@ -23,10 +23,11 @@ export const branchRenameInterceptor: ToolInterceptor = {
       return;
     }
 
-    // Check if this was a `git branch -m` command (branch rename)
+    // Check if this was a `git branch -m` or `git branch -M` command (branch rename)
+    // -m: rename branch, -M: force rename (overwrite if target exists)
     // Use regex to avoid false positives from strings containing "git branch -m"
     const command = extractInputValue(event.input, 'command', isString, 'Bash', logger);
-    if (!(command && /\bgit\s+branch\s+-m\b/.test(command))) {
+    if (!(command && /\bgit\s+branch\s+-[mM]\b/.test(command))) {
       return;
     }
 

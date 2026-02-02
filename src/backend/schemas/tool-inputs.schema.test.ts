@@ -169,9 +169,11 @@ describe('AskUserQuestionInputSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects empty questions array', () => {
+  it('accepts empty questions array (validation passes, but callers should check length)', () => {
     const result = AskUserQuestionInputSchema.safeParse({ questions: [] });
-    expect(result.success).toBe(true); // Empty array is valid per schema
+    // Schema allows empty array - callers are responsible for checking length
+    // and handling empty questions appropriately (e.g., denying the request)
+    expect(result.success).toBe(true);
   });
 });
 
