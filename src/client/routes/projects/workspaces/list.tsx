@@ -60,6 +60,7 @@ export default function WorkspacesListPage() {
       <KanbanProvider projectId={project.id} projectSlug={slug}>
         <div className="flex flex-col h-screen p-6 gap-4">
           <PageHeader title="Workspaces">
+            <KanbanControls />
             <ToggleGroup
               type="single"
               value={viewMode}
@@ -73,7 +74,6 @@ export default function WorkspacesListPage() {
                 <List className="h-4 w-4" />
               </ToggleGroupItem>
             </ToggleGroup>
-            <KanbanControls />
             <Button size="sm" asChild>
               <Link to={`/projects/${slug}/workspaces/new`}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -93,19 +93,6 @@ export default function WorkspacesListPage() {
   return (
     <div className="space-y-4 p-6">
       <PageHeader title="Workspaces">
-        <ToggleGroup
-          type="single"
-          value={viewMode}
-          onValueChange={(value) => value && setViewMode(value as ViewMode)}
-          size="sm"
-        >
-          <ToggleGroupItem value="board" aria-label="Board view">
-            <Kanban className="h-4 w-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" aria-label="List view">
-            <List className="h-4 w-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="All Statuses" />
@@ -119,7 +106,20 @@ export default function WorkspacesListPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button asChild>
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          onValueChange={(value) => value && setViewMode(value as ViewMode)}
+          size="sm"
+        >
+          <ToggleGroupItem value="board" aria-label="Board view">
+            <Kanban className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" aria-label="List view">
+            <List className="h-4 w-4" />
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <Button size="sm" asChild>
           <Link to={`/projects/${slug}/workspaces/new`}>
             <Plus className="h-4 w-4 mr-2" />
             New Workspace
