@@ -159,7 +159,27 @@ export function useSessionManagement({
   });
 
   const deleteSession = trpc.session.deleteClaudeSession.useMutation({
-    onSuccess: () => {
+    onMutate: async ({ id }) => {
+      // Cancel outgoing refetches so they don't overwrite our optimistic update
+      await utils.session.listClaudeSessions.cancel({ workspaceId });
+
+      // Snapshot previous value
+      const previousSessions = utils.session.listClaudeSessions.getData({ workspaceId });
+
+      // Optimistically remove the session from the list
+      utils.session.listClaudeSessions.setData({ workspaceId }, (old) =>
+        old?.filter((s) => s.id !== id)
+      );
+
+      return { previousSessions };
+    },
+    onError: (_err, _variables, context) => {
+      // Roll back on error
+      if (context?.previousSessions) {
+        utils.session.listClaudeSessions.setData({ workspaceId }, context.previousSessions);
+      }
+    },
+    onSettled: () => {
       utils.session.listClaudeSessions.invalidate({ workspaceId });
     },
   });
