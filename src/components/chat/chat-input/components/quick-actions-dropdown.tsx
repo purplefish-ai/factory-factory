@@ -16,6 +16,8 @@ interface QuickActionsDropdownProps {
   disabled?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  shortcut?: string;
+  showShortcut?: boolean;
 }
 
 /**
@@ -26,7 +28,10 @@ export function QuickActionsDropdown({
   disabled,
   open,
   onOpenChange,
+  shortcut,
+  showShortcut = false,
 }: QuickActionsDropdownProps) {
+  const shortcutText = showShortcut && shortcut ? ` (${shortcut})` : '';
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <TooltipProvider>
@@ -43,12 +48,12 @@ export function QuickActionsDropdown({
                 <Zap className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>Quick actions</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>Quick actions{shortcutText}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
       <DropdownMenuContent align="start" className="w-56">
         {QUICK_ACTIONS.map((action) => (
           <DropdownMenuItem

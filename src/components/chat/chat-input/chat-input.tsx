@@ -1,7 +1,7 @@
 'use client';
 
 import { Brain, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { SlashCommandPalette } from '@/components/chat/slash-command-palette';
@@ -21,7 +21,6 @@ import { ModelSelector } from './components/model-selector';
 import { QuickActionsDropdown } from './components/quick-actions-dropdown';
 import { SettingsToggle } from './components/settings-toggle';
 import { useChatInputActions } from './hooks/use-chat-input-actions';
-import { usePasteDropHandler } from './hooks/use-paste-drop-handler';
 import { useSlashCommands } from './hooks/use-slash-commands';
 import { useTextareaResize } from './hooks/use-textarea-resize';
 
@@ -93,6 +92,7 @@ export const ChatInput = memo(function ChatInput({
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [modifierHeld, setModifierHeld] = useState(false);
 
   // Use controlled or uncontrolled attachments based on props
   // Controlled mode requires the setter (onAttachmentsChange) - the setter is what makes it controlled
@@ -142,11 +142,36 @@ export const ChatInput = memo(function ChatInput({
     onHeightChange,
   });
 
-  // Paste and drag-drop handler hook
-  const pasteDropHandler = usePasteDropHandler({
-    setAttachments,
-    disabled,
-  });
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Meta' || event.key === 'Control') {
+        setModifierHeld(true);
+      }
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Meta' || event.key === 'Control') {
+        setModifierHeld(false);
+      }
+    };
+    const handleBlur = () => setModifierHeld(false);
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
+  const modLabel = useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return 'Ctrl';
+    }
+    const platform = navigator.platform?.toLowerCase() ?? '';
+    return platform.includes('mac') ? '⌘' : 'Ctrl';
+  }, []);
 
   // Restore input value from draft when component mounts or value prop changes
   // This preserves the draft across tab switches
@@ -190,16 +215,11 @@ export const ChatInput = memo(function ChatInput({
           ref={inputRef}
           onKeyDown={actions.handleKeyDown}
           onChange={slash.handleInputChange}
-          onPaste={pasteDropHandler.handlePaste}
-          onDrop={pasteDropHandler.handleDrop}
-          onDragOver={pasteDropHandler.handleDragOver}
-          onDragLeave={pasteDropHandler.handleDragLeave}
           disabled={isDisabled}
           placeholder={isDisabled ? 'Connecting...' : placeholder}
           className={cn(
             'min-h-[40px] max-h-[110px] overflow-y-auto [field-sizing:content]',
-            isDisabled && 'opacity-50 cursor-not-allowed',
-            pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
+            isDisabled && 'opacity-50 cursor-not-allowed'
           )}
           rows={1}
         />
@@ -224,6 +244,8 @@ export const ChatInput = memo(function ChatInput({
               icon={Brain}
               label="Extended thinking mode"
               ariaLabel="Toggle thinking mode"
+              shortcut={`${modLabel}+Shift+T`}
+              showShortcut={modifierHeld}
             />
             <SettingsToggle
               pressed={settings?.planModeEnabled ?? false}
@@ -232,6 +254,8 @@ export const ChatInput = memo(function ChatInput({
               icon={MapIcon}
               label="Plan mode"
               ariaLabel="Toggle plan mode"
+              shortcut={`${modLabel}+Shift+P`}
+              showShortcut={modifierHeld}
             />
             <div className="h-4 w-px bg-border" />
             {/* File upload button */}
@@ -250,7 +274,10 @@ export const ChatInput = memo(function ChatInput({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  <p>Upload image</p>
+                  <p>
+                    Upload image
+                    {modifierHeld ? ` (${modLabel}+Shift+U)` : ''}
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -259,6 +286,8 @@ export const ChatInput = memo(function ChatInput({
               disabled={isDisabled}
               open={quickActionsOpen}
               onOpenChange={setQuickActionsOpen}
+              shortcut={`${modLabel}+Shift+A`}
+              showShortcut={modifierHeld}
             />
             {/* Hidden file input */}
             <input
