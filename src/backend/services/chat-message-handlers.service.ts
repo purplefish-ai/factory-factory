@@ -9,7 +9,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import { MessageState } from '@/lib/claude-types';
+import { DEFAULT_THINKING_BUDGET, MessageState } from '@/lib/claude-types';
 import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
@@ -63,7 +63,6 @@ export interface ClientCreator {
 // ============================================================================
 
 const VALID_MODELS = ['sonnet', 'opus'];
-const THINKING_SUFFIX = ' ultrathink';
 
 // ============================================================================
 // Service
@@ -142,7 +141,18 @@ class ChatMessageHandlerService {
         return;
       }
 
-      this.dispatchMessage(dbSessionId, client, msg);
+      try {
+        await this.dispatchMessage(dbSessionId, client, msg);
+      } catch (error) {
+        // If dispatch fails (e.g., setMaxThinkingTokens throws before state change),
+        // the message is still in ACCEPTED state and can be safely requeued
+        logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
+          dbSessionId,
+          messageId: msg.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        messageQueueService.requeue(dbSessionId, msg);
+      }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
     }
@@ -252,8 +262,18 @@ class ChatMessageHandlerService {
   /**
    * Dispatch a message to the client.
    */
-  private dispatchMessage(dbSessionId: string, client: ClaudeClient, msg: QueuedMessage): void {
-    // Update state to DISPATCHED - emits message_state_changed event
+  private async dispatchMessage(
+    dbSessionId: string,
+    client: ClaudeClient,
+    msg: QueuedMessage
+  ): Promise<void> {
+    // Set thinking budget first - this can throw and must complete before we
+    // change any state. If it fails, the message remains in ACCEPTED state
+    // and can be safely requeued by the caller.
+    const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+    await client.setMaxThinkingTokens(thinkingTokens);
+
+    // Now that thinking budget is set, update state to DISPATCHED
     messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
 
     // Notify frontend that agent is working - this ensures the spinner shows
@@ -275,17 +295,15 @@ class ChatMessageHandlerService {
 
   /**
    * Build message content for sending to Claude.
+   * Note: Thinking is now controlled via setMaxThinkingTokens, not message suffix.
    */
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-    const textWithThinking =
-      msg.settings.thinkingEnabled && msg.text ? `${msg.text}${THINKING_SUFFIX}` : msg.text;
-
     // If there are attachments, send as content array
     if (msg.attachments && msg.attachments.length > 0) {
       const content: ClaudeContentItem[] = [];
 
       if (msg.text) {
-        content.push({ type: 'text', text: textWithThinking });
+        content.push({ type: 'text', text: msg.text });
       }
 
       for (const attachment of msg.attachments) {
@@ -302,7 +320,7 @@ class ChatMessageHandlerService {
       return content;
     }
 
-    return textWithThinking;
+    return msg.text;
   }
 
   // ============================================================================

@@ -38,6 +38,7 @@ import type {
 } from '@/lib/claude-types';
 import {
   DEFAULT_CHAT_SETTINGS,
+  DEFAULT_THINKING_BUDGET,
   isStreamEventMessage,
   isWebSocketMessage,
   isWsClaudeMessage,
@@ -511,12 +512,21 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     [send]
   );
 
-  const updateSettings = useCallback((settings: Partial<ChatSettings>) => {
-    dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
-    // Persist updated settings
-    const newSettings = { ...stateRef.current.chatSettings, ...settings };
-    persistSettings(dbSessionIdRef.current, newSettings);
-  }, []);
+  const updateSettings = useCallback(
+    (settings: Partial<ChatSettings>) => {
+      dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
+      // Persist updated settings
+      const newSettings = { ...stateRef.current.chatSettings, ...settings };
+      persistSettings(dbSessionIdRef.current, newSettings);
+
+      // Send thinking budget update when thinkingEnabled changes
+      if ('thinkingEnabled' in settings) {
+        const maxTokens = settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+        send({ type: 'set_thinking_budget', max_tokens: maxTokens });
+      }
+    },
+    [send]
+  );
 
   const removeQueuedMessage = useCallback(
     (id: string) => {

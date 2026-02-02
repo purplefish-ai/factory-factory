@@ -4,7 +4,7 @@ import { Copy, X } from 'lucide-react';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
-import { extractTextFromMessage, isToolSequence, THINKING_SUFFIX } from '@/lib/claude-types';
+import { extractTextFromMessage, isToolSequence } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
@@ -15,17 +15,10 @@ import { ToolSequenceGroup } from './tool-renderers';
 // =============================================================================
 
 /**
- * Strips the thinking suffix from user message text for display.
- * This is appended when thinking mode is enabled but shouldn't be shown in the UI.
+ * Gets message text for display, handling undefined values.
  */
-function stripThinkingSuffix(text: string | undefined): string {
-  if (!text) {
-    return '';
-  }
-  if (text.endsWith(THINKING_SUFFIX)) {
-    return text.slice(0, -THINKING_SUFFIX.length);
-  }
-  return text;
+function getMessageText(text: string | undefined): string {
+  return text ?? '';
 }
 
 // =============================================================================
@@ -47,7 +40,7 @@ export const MessageItem = memo(function MessageItem({
 }: MessageItemProps) {
   // User messages
   if (message.source === 'user') {
-    const userText = stripThinkingSuffix(message.text);
+    const userText = getMessageText(message.text);
     return (
       <MessageWrapper>
         {/* Wrapper for positioning action buttons outside opacity container */}

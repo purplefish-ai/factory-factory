@@ -13,7 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatSettings, QueuedMessage } from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS, THINKING_SUFFIX } from '@/lib/claude-types';
+import { DEFAULT_CHAT_SETTINGS, DEFAULT_THINKING_BUDGET } from '@/lib/claude-types';
 import type { ChatState } from './chat-reducer';
 import { chatReducer, createInitialChatState } from './chat-reducer';
 
@@ -138,11 +138,8 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
     planModeEnabled: chatSettings.planModeEnabled,
   });
 
-  // Send user input (with thinking suffix if enabled)
-  const messageText = chatSettings.thinkingEnabled
-    ? `${nextMsg.text}${THINKING_SUFFIX}`
-    : nextMsg.text;
-  sentMessages.push({ type: 'user_input', text: messageText });
+  // Send user input (thinking is now controlled via setMaxThinkingTokens, not suffix)
+  sentMessages.push({ type: 'user_input', text: nextMsg.text });
 
   return {
     shouldDrain: true,
@@ -351,7 +348,8 @@ describe('queue draining actions', () => {
     expect(userInputMsg?.text).toBe('Hello Claude');
   });
 
-  it('should append THINKING_SUFFIX when thinking enabled', () => {
+  it('should NOT append suffix when thinking enabled (thinking controlled via SDK)', () => {
+    // Thinking is now controlled via setMaxThinkingTokens, not message suffix
     const state = createInitialChatState({
       sessionStatus: { phase: 'ready' } as const,
       queuedMessages: toQueuedMessagesMap([createQueuedMessage('Hello Claude')]),
@@ -364,7 +362,8 @@ describe('queue draining actions', () => {
     const result = simulateDrainQueue(state, 'session-123');
 
     const userInputMsg = result.sentMessages.find((m) => m.type === 'user_input');
-    expect(userInputMsg?.text).toBe(`Hello Claude${THINKING_SUFFIX}`);
+    // Text should be unchanged - no suffix appended
+    expect(userInputMsg?.text).toBe('Hello Claude');
   });
 
   it('should dispatch WS_STARTING action', () => {
@@ -693,5 +692,61 @@ describe('queue edge cases', () => {
     // Stop running (becomes ready)
     state = chatReducer(state, { type: 'WS_STATUS', payload: { running: false } });
     expect(shouldDrainOnStateChange('running', state.sessionStatus.phase, 1)).toBe(true);
+  });
+});
+
+// =============================================================================
+// updateSettings Pattern Tests - Thinking Budget
+// =============================================================================
+
+describe('updateSettings thinking budget', () => {
+  /**
+   * Simulates the updateSettings logic for thinking toggle from use-chat-state.ts.
+   * Returns what WebSocket message would be sent when thinkingEnabled changes.
+   */
+  function simulateUpdateSettingsThinking(
+    settings: Partial<ChatSettings>
+  ): { type: string; max_tokens: number | null } | null {
+    // Only send thinking budget update when thinkingEnabled changes
+    if ('thinkingEnabled' in settings) {
+      const maxTokens = settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+      return { type: 'set_thinking_budget', max_tokens: maxTokens };
+    }
+    return null;
+  }
+
+  it('should send set_thinking_budget with tokens when enabling thinking', () => {
+    const msg = simulateUpdateSettingsThinking({ thinkingEnabled: true });
+
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('set_thinking_budget');
+    expect(msg?.max_tokens).toBe(DEFAULT_THINKING_BUDGET);
+  });
+
+  it('should send set_thinking_budget with null when disabling thinking', () => {
+    const msg = simulateUpdateSettingsThinking({ thinkingEnabled: false });
+
+    expect(msg).not.toBeNull();
+    expect(msg?.type).toBe('set_thinking_budget');
+    expect(msg?.max_tokens).toBeNull();
+  });
+
+  it('should NOT send message when changing other settings', () => {
+    const msg = simulateUpdateSettingsThinking({ selectedModel: 'sonnet' });
+
+    expect(msg).toBeNull();
+  });
+
+  it('should NOT send message when changing planModeEnabled', () => {
+    const msg = simulateUpdateSettingsThinking({ planModeEnabled: true });
+
+    expect(msg).toBeNull();
+  });
+
+  it('should use DEFAULT_THINKING_BUDGET constant for budget value', () => {
+    const msg = simulateUpdateSettingsThinking({ thinkingEnabled: true });
+
+    // Verify the constant value is used (10_000 tokens)
+    expect(msg?.max_tokens).toBe(10_000);
   });
 });
