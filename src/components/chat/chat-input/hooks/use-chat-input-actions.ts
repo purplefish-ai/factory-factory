@@ -11,6 +11,7 @@ interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
   onStop?: () => void;
   onOpenQuickActions?: () => void;
+  onCloseSlashMenu?: () => void;
   onChange?: (value: string) => void;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   disabled: boolean;
@@ -105,6 +106,7 @@ export function useChatInputActions({
   onSend,
   onStop,
   onOpenQuickActions,
+  onCloseSlashMenu,
   onChange,
   onSettingsChange,
   disabled,
@@ -150,6 +152,7 @@ export function useChatInputActions({
         shift: false,
         alt: false,
         action: (event) => {
+          onCloseSlashMenu?.();
           sendFromInput(event.currentTarget);
         },
       },
@@ -211,6 +214,7 @@ export function useChatInputActions({
     ],
     [
       disabled,
+      onCloseSlashMenu,
       onOpenQuickActions,
       onSettingsChange,
       onStop,

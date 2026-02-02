@@ -126,6 +126,7 @@ export const ChatInput = memo(function ChatInput({
     onSend,
     onStop,
     onOpenQuickActions: () => setQuickActionsOpen(true),
+    onCloseSlashMenu: slash.handleSlashMenuClose,
     onChange,
     onSettingsChange,
     disabled,
