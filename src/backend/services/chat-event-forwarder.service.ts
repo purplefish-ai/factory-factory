@@ -234,7 +234,7 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Received system_status event', {
           dbSessionId,
           status: event.status,
-          permissionMode: event.permissionMode,
+          permission_mode: event.permission_mode,
         });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
@@ -243,7 +243,7 @@ class ChatEventForwarderService {
       });
       const msg = {
         type: 'status_update',
-        permissionMode: event.permissionMode,
+        permissionMode: event.permission_mode,
         status: event.status,
       };
       messageStateService.storeEvent(dbSessionId, msg);

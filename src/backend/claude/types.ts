@@ -1018,7 +1018,7 @@ export interface SystemStatusMessage extends SystemMessage {
   type: 'system';
   subtype: 'status';
   status?: string;
-  permissionMode?: string;
+  permission_mode?: string;
 }
 
 /**

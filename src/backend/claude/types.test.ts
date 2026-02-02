@@ -71,7 +71,7 @@ const systemStatusMessage: SystemStatusMessage = {
   subtype: 'status',
   session_id: 'abc123',
   status: 'running',
-  permissionMode: 'default',
+  permission_mode: 'default',
 };
 
 const systemCompactBoundaryMessage: SystemCompactBoundaryMessage = {
