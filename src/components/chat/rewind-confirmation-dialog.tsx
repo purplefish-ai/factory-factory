@@ -35,6 +35,7 @@ export function RewindConfirmationDialog({
 }: RewindConfirmationDialogProps) {
   const isOpen = rewindPreview !== null;
   const isLoading = rewindPreview?.isLoading ?? false;
+  const isExecuting = rewindPreview?.isExecuting ?? false;
   const hasError = !!rewindPreview?.error;
   const affectedFiles = rewindPreview?.affectedFiles ?? [];
   const hasFiles = affectedFiles.length > 0;
@@ -56,7 +57,9 @@ export function RewindConfirmationDialog({
           {isLoading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">Loading preview...</span>
+              <span className="ml-2 text-sm text-muted-foreground">
+                {isExecuting ? 'Reverting files...' : 'Loading preview...'}
+              </span>
             </div>
           ) : hasError ? (
             <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3">
