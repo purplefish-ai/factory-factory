@@ -75,6 +75,32 @@ function getStatusDotClass(workspace: WorkspaceListItem): string {
   return 'bg-gray-400';
 }
 
+/**
+ * Get tooltip text explaining the status dot color.
+ * Uses same priority as getStatusDotClass.
+ */
+function getStatusTooltip(workspace: WorkspaceListItem): string {
+  if (workspace.isWorking) {
+    return 'Claude is working';
+  }
+  if (workspace.prState === 'MERGED') {
+    return 'PR merged';
+  }
+  if (workspace.prCiStatus === 'FAILURE') {
+    return 'CI checks failing';
+  }
+  if (workspace.prCiStatus === 'PENDING') {
+    return 'CI checks running';
+  }
+  if (workspace.prCiStatus === 'SUCCESS') {
+    return 'CI checks passing';
+  }
+  if (workspace.gitStats?.hasUncommitted) {
+    return 'Uncommitted changes';
+  }
+  return 'Ready';
+}
+
 export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
@@ -318,12 +344,19 @@ export function AppSidebar() {
                               {isArchivingItem ? (
                                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
                               ) : (
-                                <span
-                                  className={cn(
-                                    'h-2 w-2 rounded-full',
-                                    getStatusDotClass(workspace)
-                                  )}
-                                />
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className={cn(
+                                        'h-2 w-2 rounded-full',
+                                        getStatusDotClass(workspace)
+                                      )}
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right">
+                                    {getStatusTooltip(workspace)}
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
                             </span>
 
