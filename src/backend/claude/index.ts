@@ -19,6 +19,7 @@ import {
 import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './process';
 import type { ControlResponseBody } from './protocol';
 import { type HistoryMessage, SessionManager } from './session';
+import type { ControlCancelRequest } from './types';
 import {
   type AssistantMessage,
   type CanUseToolRequest,
@@ -480,6 +481,7 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'hook_response', handler: (msg: SystemHookResponseMessage) => void): this;
   override on(event: 'compacting_start', handler: () => void): this;
   override on(event: 'compacting_end', handler: () => void): this;
+  override on(event: 'permission_cancelled', handler: (requestId: string) => void): this;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
   override on(event: string, handler: (...args: any[]) => void): this {
     return super.on(event, handler);
@@ -506,6 +508,7 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'hook_response', msg: SystemHookResponseMessage): boolean;
   override emit(event: 'compacting_start'): boolean;
   override emit(event: 'compacting_end'): boolean;
+  override emit(event: 'permission_cancelled', requestId: string): boolean;
   // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
   override emit(event: string, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -655,6 +658,16 @@ export class ClaudeClient extends EventEmitter {
           message: `Permission handler error: ${errorMessage}`,
         });
       }
+    });
+
+    // Handle cancel requests from CLI (e.g., when user interrupts during permission prompt)
+    this.process.protocol.on('control_cancel', (cancelRequest: ControlCancelRequest) => {
+      // Cancel the deferred handler's pending request (rejects the promise)
+      this.interactiveHandler.cancel(cancelRequest.request_id, 'Request cancelled by CLI');
+      // Clean up stored request
+      this.pendingInteractiveRequests.delete(cancelRequest.request_id);
+      // Emit for forwarding to frontend
+      this.emit('permission_cancelled', cancelRequest.request_id);
     });
   }
 
