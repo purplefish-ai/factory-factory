@@ -270,19 +270,10 @@ function createClaudeMessage(message: ClaudeMessage, order: number): ChatMessage
 
 /**
  * Inserts a message into the messages array at the correct position based on order.
- * Uses binary search to find the insertion point for O(log n) performance.
- * Messages are ordered by their backend-assigned order (oldest first).
- *
- * All messages (user and Claude) should have an order assigned by the backend.
- * Messages without order are treated as having order Infinity (appended to end)
- * for backwards compatibility with older stored events.
+ * Uses binary search for O(log n) performance. Messages are sorted by their
+ * backend-assigned order (lowest first).
  */
 function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
-  // If new message has no order, append to end
-  if (newMessage.order === undefined) {
-    return [...messages, newMessage];
-  }
-
   const newOrder = newMessage.order;
 
   // Binary search to find insertion point based on order
@@ -291,10 +282,7 @@ function insertMessageByOrder(messages: ChatMessage[], newMessage: ChatMessage):
 
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    const midOrder = messages[mid].order;
-
-    // Treat undefined order as Infinity (move right past them)
-    if (midOrder === undefined || midOrder <= newOrder) {
+    if (messages[mid].order <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;
