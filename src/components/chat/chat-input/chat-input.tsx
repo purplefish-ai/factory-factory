@@ -55,6 +55,7 @@ export interface ChatInputProps {
   onAttachmentsChange?: (attachments: MessageAttachment[]) => void;
   // Slash commands for autocomplete
   slashCommands?: CommandInfo[];
+  slashCommandsLoaded?: boolean;
   // Token usage stats for context window indicator
   tokenStats?: TokenStats;
 }
@@ -88,12 +89,15 @@ export const ChatInput = memo(function ChatInput({
   attachments: controlledAttachments,
   onAttachmentsChange,
   slashCommands = [],
+  slashCommandsLoaded = false,
   tokenStats,
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [modifierHeld, setModifierHeld] = useState(false);
+  const fallbackInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const resolvedInputRef = inputRef ?? fallbackInputRef;
 
   // Use controlled or uncontrolled attachments based on props
   // Controlled mode requires the setter (onAttachmentsChange) - the setter is what makes it controlled
@@ -117,7 +121,8 @@ export const ChatInput = memo(function ChatInput({
   // Slash commands hook
   const slash = useSlashCommands({
     slashCommands,
-    inputRef: inputRef ?? { current: null },
+    commandsLoaded: slashCommandsLoaded,
+    inputRef: resolvedInputRef,
     onChange,
   });
 
@@ -140,7 +145,7 @@ export const ChatInput = memo(function ChatInput({
 
   // Textarea resize hook
   useTextareaResize({
-    textareaRef: inputRef ?? { current: null },
+    textareaRef: resolvedInputRef,
     onHeightChange,
   });
 
@@ -186,13 +191,13 @@ export const ChatInput = memo(function ChatInput({
   const prevValueRef = useRef(value);
   useEffect(() => {
     // Only restore if value has actually changed from what we last synced
-    if (inputRef?.current && value !== undefined && value !== prevValueRef.current) {
-      inputRef.current.value = value;
+    if (resolvedInputRef.current && value !== undefined && value !== prevValueRef.current) {
+      resolvedInputRef.current.value = value;
       prevValueRef.current = value;
     }
-  }, [value, inputRef]);
+  }, [value, resolvedInputRef]);
 
-  const isDisabled = disabled || !inputRef;
+  const isDisabled = disabled;
 
   return (
     <div className={cn('px-4 py-3 relative', className)}>
@@ -200,10 +205,11 @@ export const ChatInput = memo(function ChatInput({
       <SlashCommandPalette
         commands={slashCommands}
         isOpen={slash.slashMenuOpen}
+        isLoading={!slash.commandsReady}
         onClose={slash.handleSlashMenuClose}
         onSelect={slash.handleSlashCommandSelect}
         filter={slash.slashFilter}
-        anchorRef={inputRef as React.RefObject<HTMLElement | null>}
+        anchorRef={resolvedInputRef as React.RefObject<HTMLElement | null>}
         paletteRef={slash.paletteRef}
       />
 
@@ -220,7 +226,7 @@ export const ChatInput = memo(function ChatInput({
 
         {/* Text input row */}
         <InputGroupTextarea
-          ref={inputRef}
+          ref={resolvedInputRef}
           onKeyDown={actions.handleKeyDown}
           onChange={slash.handleInputChange}
           onPaste={pasteDropHandler.handlePaste}
@@ -348,7 +354,7 @@ export const ChatInput = memo(function ChatInput({
             )}
             {/* Send button - always enabled (except when disconnected), queues when running */}
             <InputGroupButton
-              onClick={() => actions.handleSendClick(inputRef ?? { current: null })}
+              onClick={() => actions.handleSendClick(resolvedInputRef)}
               disabled={isDisabled}
               size="icon-sm"
               aria-label={running ? 'Queue message' : 'Send message'}
