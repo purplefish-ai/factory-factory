@@ -415,7 +415,7 @@ export const ChatInput = memo(function ChatInput({
     [setAttachments]
   );
 
-  // Handle key press for Enter to send
+  // Handle key press for Enter to send and Shift+Tab for plan mode toggle
   const handleKeyDown = useCallback(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles slash menu + send logic
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -432,6 +432,13 @@ export const ChatInput = memo(function ChatInput({
         }
       }
 
+      // Shift+Tab toggles plan mode (only when not running, matching the button's disabled state)
+      if (event.key === 'Tab' && event.shiftKey && !running) {
+        event.preventDefault();
+        onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+        return;
+      }
+
       // Enter without Shift sends the message (queues if agent is running)
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -444,7 +451,17 @@ export const ChatInput = memo(function ChatInput({
         }
       }
     },
-    [onSend, disabled, onChange, setAttachments, attachments, slashMenuOpen]
+    [
+      onSend,
+      disabled,
+      running,
+      onChange,
+      setAttachments,
+      attachments,
+      slashMenuOpen,
+      settings,
+      onSettingsChange,
+    ]
   );
 
   // Handle send button click
