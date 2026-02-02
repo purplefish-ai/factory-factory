@@ -15,6 +15,7 @@ import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { AskUserQuestionInputSchema, safeParseToolInput } from '../schemas/tool-inputs.schema';
 import type {
   ChatMessageInput,
   PermissionResponseMessage,
@@ -501,17 +502,7 @@ class ChatMessageHandlerService {
 
     try {
       if (pendingRequest.toolName === 'AskUserQuestion') {
-        // For AskUserQuestion, answer each question with "Other" + the message text
-        const input = pendingRequest.input as { questions?: Array<{ question: string }> };
-        const questions = input.questions ?? [];
-        const answers: Record<string, string> = {};
-
-        for (const q of questions) {
-          // Use the message text as the "Other" response for all questions
-          answers[q.question] = text;
-        }
-
-        client.answerQuestion(pendingRequest.requestId, answers);
+        this.handleAskUserQuestionResponse(client, sessionId, pendingRequest, text);
       } else {
         // ExitPlanMode: deny with the message text as feedback
         client.denyInteractiveRequest(pendingRequest.requestId, text);
@@ -552,6 +543,45 @@ class ChatMessageHandlerService {
     }
 
     return true;
+  }
+
+  /**
+   * Handle AskUserQuestion response by validating input and answering with provided text.
+   * On validation failure or empty questions, denies the request instead of sending empty answers.
+   */
+  private handleAskUserQuestionResponse(
+    client: ClaudeClient,
+    sessionId: string,
+    pendingRequest: { requestId: string; input: Record<string, unknown> },
+    text: string
+  ): void {
+    const parsed = safeParseToolInput(
+      AskUserQuestionInputSchema,
+      pendingRequest.input,
+      'AskUserQuestion',
+      logger
+    );
+
+    // Treat validation failure or empty questions as an error
+    if (!parsed.success || parsed.data.questions.length === 0) {
+      logger.warn('[Chat WS] Invalid or empty AskUserQuestion input, denying request', {
+        sessionId,
+        requestId: pendingRequest.requestId,
+        validationSuccess: parsed.success,
+      });
+      client.denyInteractiveRequest(
+        pendingRequest.requestId,
+        'Invalid question format - unable to process response'
+      );
+      return;
+    }
+
+    const answers: Record<string, string> = {};
+    for (const q of parsed.data.questions) {
+      // Use the message text as the "Other" response for all questions
+      answers[q.question] = text;
+    }
+    client.answerQuestion(pendingRequest.requestId, answers);
   }
 
   private handleRemoveQueuedMessage(
@@ -663,12 +693,34 @@ class ChatMessageHandlerService {
     pendingRequest: NonNullable<ReturnType<typeof chatEventForwarderService.getPendingRequest>>
   ): void {
     if (pendingRequest.toolName === 'AskUserQuestion') {
-      const input = pendingRequest.input as { questions?: unknown[] };
+      const parsed = safeParseToolInput(
+        AskUserQuestionInputSchema,
+        pendingRequest.input,
+        'AskUserQuestion',
+        logger
+      );
+
+      // Only send valid questions to the frontend
+      if (!parsed.success || parsed.data.questions.length === 0) {
+        logger.warn('[Chat WS] Cannot replay invalid AskUserQuestion request', {
+          requestId: pendingRequest.requestId,
+          validationSuccess: parsed.success,
+        });
+        // Send error event instead of empty questions
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            message: 'Unable to restore question prompt - invalid format',
+          })
+        );
+        return;
+      }
+
       ws.send(
         JSON.stringify({
           type: 'user_question',
           requestId: pendingRequest.requestId,
-          questions: input.questions ?? [],
+          questions: parsed.data.questions,
         })
       );
       return;

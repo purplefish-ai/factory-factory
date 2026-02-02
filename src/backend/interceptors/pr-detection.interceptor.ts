@@ -6,6 +6,7 @@
  */
 
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { extractInputValue, isString } from '../schemas/tool-inputs.schema';
 import { githubCLIService } from '../services/github-cli.service';
 import { createLogger } from '../services/logger.service';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
@@ -23,7 +24,7 @@ export const prDetectionInterceptor: ToolInterceptor = {
     }
 
     // Check if this was a `gh pr create` command
-    const command = event.input.command as string | undefined;
+    const command = extractInputValue(event.input, 'command', isString, 'Bash', logger);
     if (!command?.includes('gh pr create')) {
       return;
     }

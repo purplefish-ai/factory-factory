@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { AskUserQuestionInputSchema, safeParseToolInput } from '../schemas/tool-inputs.schema';
 import {
   AutoApproveHandler,
   createAllowResponse,
@@ -19,7 +20,6 @@ import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './pro
 import type { ControlResponseBody } from './protocol';
 import { type HistoryMessage, SessionManager } from './session';
 import {
-  type AskUserQuestionInput,
   type AssistantMessage,
   type CanUseToolRequest,
   type ClaudeContentItem,
@@ -363,9 +363,16 @@ export class ClaudeClient extends EventEmitter {
       throw new Error(`No pending interactive request found with ID: ${requestId}`);
     }
 
-    // Get questions from the stored request
-    const input = storedRequest.input as unknown as AskUserQuestionInput;
-    const questions = input.questions;
+    // Get questions from the stored request with validation
+    const parsed = safeParseToolInput(
+      AskUserQuestionInputSchema,
+      storedRequest.input,
+      'AskUserQuestion'
+    );
+    if (!parsed.success) {
+      throw new Error(`Invalid AskUserQuestion input for request ID: ${requestId}`);
+    }
+    const questions = parsed.data.questions;
 
     // Clean up stored request
     this.pendingInteractiveRequests.delete(requestId);

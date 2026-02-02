@@ -105,7 +105,20 @@ export const GlobSearch: Story = {
 
 export const PlanApproval: Story = {
   args: {
-    permission: createPlanApprovalRequest('/Users/developer/.claude/plans/refactor-auth-system.md'),
+    permission: createPlanApprovalRequest(`# Refactor Authentication System
+
+## Summary
+Modernize the authentication flow to use JWT tokens with refresh token rotation.
+
+## Steps
+1. Update auth service to issue JWT tokens
+2. Add refresh token endpoint
+3. Implement token rotation logic
+4. Update frontend to handle token refresh
+
+## Notes
+- Maintains backward compatibility with existing sessions
+- Gradual rollout via feature flag`),
   },
   parameters: {
     docs: {
@@ -218,12 +231,27 @@ export function Button({ label, onClick }: ButtonProps) {
 export const ExpandedPlanApproval: ExpandedStory = {
   render: (args) => <PermissionPromptExpanded {...args} />,
   args: {
-    permission: createPlanApprovalRequest('/Users/developer/.claude/plans/implement-dark-mode.md'),
+    permission: createPlanApprovalRequest(`# Implement Dark Mode
+
+## Summary
+Add dark mode support across the application with user preference persistence.
+
+## Steps
+1. Create theme context provider
+2. Add CSS variables for dark theme colors
+3. Update all components to use theme variables
+4. Add theme toggle in settings
+5. Persist preference to localStorage
+6. Respect system preference on first visit
+
+## Technical Notes
+- Uses CSS custom properties for instant theme switching
+- No FOUC (Flash of Unstyled Content) on page load`),
   },
   parameters: {
     docs: {
       description: {
-        story: 'Expanded plan approval showing the full plan file path and requested permissions.',
+        story: 'Expanded plan approval showing the full plan content and requested permissions.',
       },
     },
   },
