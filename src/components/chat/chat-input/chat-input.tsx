@@ -194,7 +194,7 @@ export const ChatInput = memo(function ChatInput({
     }
   }, [value, resolvedInputRef]);
 
-  const isDisabled = disabled || !inputRef;
+  const isDisabled = disabled;
 
   return (
     <div className={cn('px-4 py-3 relative', className)}>
