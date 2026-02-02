@@ -19,7 +19,9 @@ export type PermissionMode =
   | 'default' // Ask permission for each tool
   | 'acceptEdits' // Auto-accept file edits
   | 'plan' // Planning mode - manual review before execution
-  | 'bypassPermissions'; // Auto-approve everything
+  | 'bypassPermissions' // Auto-approve everything
+  | 'delegate' // Delegated mode - treat like default
+  | 'dontAsk'; // Don't ask - deny non-pre-approved tools
 
 /**
  * System message subtypes indicating the nature of the system message.
@@ -32,9 +34,22 @@ export type SystemMessageSubtype =
   | 'hook_response';
 
 /**
- * Hook event names for PreToolUse and Stop hooks.
+ * Hook event names for PreToolUse, Stop, and other SDK hooks.
  */
-export type HookEventName = 'PreToolUse' | 'Stop';
+export type HookEventName =
+  | 'PreToolUse'
+  | 'PostToolUse'
+  | 'PostToolUseFailure'
+  | 'Notification'
+  | 'UserPromptSubmit'
+  | 'SessionStart'
+  | 'SessionEnd'
+  | 'Stop'
+  | 'SubagentStart'
+  | 'SubagentStop'
+  | 'PreCompact'
+  | 'PermissionRequest'
+  | 'Setup';
 
 // =============================================================================
 // Content Item Types
@@ -132,9 +147,17 @@ export interface ThinkingDelta {
 }
 
 /**
+ * Delta for tool input JSON streaming.
+ */
+export interface InputJsonDelta {
+  type: 'input_json_delta';
+  partial_json: string;
+}
+
+/**
  * Union of content block delta types.
  */
-export type ContentBlockDelta = TextDelta | ThinkingDelta;
+export type ContentBlockDelta = TextDelta | ThinkingDelta | InputJsonDelta;
 
 /**
  * Message delta with stop information.
@@ -153,6 +176,20 @@ export interface ClaudeUsage {
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
   service_tier?: string;
+}
+
+/**
+ * Model usage statistics with cost information.
+ */
+export interface ModelUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  webSearchRequests: number;
+  costUSD: number;
+  contextWindow: number;
+  maxOutputTokens: number;
 }
 
 /**
@@ -410,9 +447,40 @@ export interface InterruptRequest {
 }
 
 /**
+ * Request to set the model.
+ */
+export interface SetModelRequest {
+  subtype: 'set_model';
+  model?: string;
+}
+
+/**
+ * Request to set max thinking tokens.
+ */
+export interface SetMaxThinkingTokensRequest {
+  subtype: 'set_max_thinking_tokens';
+  max_thinking_tokens: number | null;
+}
+
+/**
+ * Request to rewind files to a previous state.
+ */
+export interface RewindFilesRequest {
+  subtype: 'rewind_files';
+  user_message_id: string;
+  dry_run?: boolean;
+}
+
+/**
  * Union of all request subtypes SDK can send to CLI.
  */
-export type SdkToCliRequest = InitializeRequest | SetPermissionModeRequest | InterruptRequest;
+export type SdkToCliRequest =
+  | InitializeRequest
+  | SetPermissionModeRequest
+  | InterruptRequest
+  | SetModelRequest
+  | SetMaxThinkingTokensRequest
+  | RewindFilesRequest;
 
 // =============================================================================
 // Control Response Types (SDK -> CLI)
@@ -595,12 +663,27 @@ export interface StreamEventMessage {
 }
 
 /**
+ * Permission denial information from SDK.
+ */
+export interface SDKPermissionDenial {
+  toolName: string;
+  message: string;
+  timestamp?: string;
+}
+
+/**
  * Result message - final conversation result with usage stats.
  * Supports both camelCase and snake_case field names.
  */
 export interface ResultMessage {
   type: 'result';
-  subtype?: 'success' | 'error';
+  subtype?:
+    | 'success'
+    | 'error'
+    | 'error_during_execution'
+    | 'error_max_turns'
+    | 'error_max_budget_usd'
+    | 'error_max_structured_output_retries';
   // Session ID (both formats supported)
   session_id?: string;
   sessionId?: string;
@@ -610,6 +693,8 @@ export interface ResultMessage {
   // Duration (both formats supported)
   durationMs?: number;
   duration_ms?: number;
+  // API duration
+  duration_api_ms?: number;
   // Turn count (both formats supported)
   numTurns?: number;
   num_turns?: number;
@@ -620,6 +705,43 @@ export interface ResultMessage {
   // Model usage (both formats supported)
   modelUsage?: Record<string, { contextWindow?: number }>;
   model_usage?: Record<string, { contextWindow?: number }>;
+  // Cost information
+  total_cost_usd?: number;
+  // Permission denials
+  permission_denials?: SDKPermissionDenial[];
+  // Structured output
+  structured_output?: unknown;
+}
+
+/**
+ * Tool progress message - sent during long-running tool execution.
+ */
+export interface ToolProgressMessage {
+  type: 'tool_progress';
+  tool_use_id: string;
+  tool_name: string;
+  parent_tool_use_id?: string;
+  elapsed_time_seconds: number;
+  uuid: string;
+  session_id: string;
+}
+
+/**
+ * Tool use summary message - summarizes completed tool executions.
+ */
+export interface ToolUseSummaryMessage {
+  type: 'tool_use_summary';
+  summary: string;
+  preceding_tool_use_ids: string[];
+  uuid: string;
+  session_id: string;
+}
+
+/**
+ * Keep-alive message - sent periodically to maintain connection.
+ */
+export interface KeepAliveMessage {
+  type: 'keep_alive';
 }
 
 /**
@@ -684,7 +806,10 @@ export type ClaudeJson =
   | ResultMessage
   | ControlRequest
   | ControlResponse
-  | ControlCancelRequest;
+  | ControlCancelRequest
+  | ToolProgressMessage
+  | ToolUseSummaryMessage
+  | KeepAliveMessage;
 
 /**
  * Union of all message types that SDK can send to CLI.
@@ -837,4 +962,32 @@ export function isMessageDeltaEvent(event: ClaudeStreamEvent): event is MessageD
  */
 export function isMessageStopEvent(event: ClaudeStreamEvent): event is MessageStopEvent {
   return event.type === 'message_stop';
+}
+
+/**
+ * Type guard to check if a message is a ToolProgressMessage.
+ */
+export function isToolProgressMessage(msg: ClaudeJson): msg is ToolProgressMessage {
+  return msg.type === 'tool_progress';
+}
+
+/**
+ * Type guard to check if a message is a ToolUseSummaryMessage.
+ */
+export function isToolUseSummaryMessage(msg: ClaudeJson): msg is ToolUseSummaryMessage {
+  return msg.type === 'tool_use_summary';
+}
+
+/**
+ * Type guard to check if a message is a KeepAliveMessage.
+ */
+export function isKeepAliveMessage(msg: ClaudeJson): msg is KeepAliveMessage {
+  return msg.type === 'keep_alive';
+}
+
+/**
+ * Type guard to check if a delta is an InputJsonDelta.
+ */
+export function isInputJsonDelta(delta: ContentBlockDelta): delta is InputJsonDelta {
+  return delta.type === 'input_json_delta';
 }

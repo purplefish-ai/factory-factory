@@ -146,16 +146,34 @@ export function shouldAutoApprove(mode: PermissionMode, toolName: string): boole
 
   switch (mode) {
     case 'bypassPermissions':
-      return true;
     case 'plan':
       // ExitPlanMode already handled by INTERACTIVE_TOOLS check above
       return true;
     case 'acceptEdits':
       return READ_ONLY_TOOLS.has(toolName) || EDIT_TOOLS.has(toolName);
-    default:
-      // 'default' mode: only auto-approve read-only tools
+    case 'delegate':
+    case 'dontAsk':
+    case 'default':
+      // These modes only auto-approve read-only tools
+      // Note: dontAsk mode denial is handled by shouldDenyInDontAskMode
       return READ_ONLY_TOOLS.has(toolName);
   }
+}
+
+/**
+ * Determine if a tool should be denied without asking in dontAsk mode.
+ * Returns true if the tool should be denied, false if it can proceed.
+ */
+export function shouldDenyInDontAskMode(mode: PermissionMode, toolName: string): boolean {
+  if (mode !== 'dontAsk') {
+    return false;
+  }
+  // In dontAsk mode, deny tools that aren't read-only and aren't interactive
+  // Interactive tools always require user input regardless of mode
+  if (INTERACTIVE_TOOLS.has(toolName)) {
+    return false;
+  }
+  return !READ_ONLY_TOOLS.has(toolName);
 }
 
 // =============================================================================
@@ -220,6 +238,8 @@ export class AutoDenyHandler implements PermissionHandler {
  * - acceptEdits: Auto-approve read-only + file edits, ask for Bash
  * - plan: Auto-approve all except ExitPlanMode
  * - bypassPermissions: Auto-approve everything
+ * - delegate: Treat like default (ask for non-read-only tools)
+ * - dontAsk: Deny all tools that aren't pre-approved (read-only)
  */
 export class ModeBasedHandler implements PermissionHandler {
   private mode: PermissionMode;
@@ -236,6 +256,13 @@ export class ModeBasedHandler implements PermissionHandler {
   onCanUseTool(request: CanUseToolRequest): Promise<ControlResponseBody> {
     if (shouldAutoApprove(this.mode, request.tool_name)) {
       return Promise.resolve(createAllowResponse(request.input as Record<string, unknown>));
+    }
+
+    // In dontAsk mode, deny tools that aren't pre-approved without asking
+    if (shouldDenyInDontAskMode(this.mode, request.tool_name)) {
+      return Promise.resolve(
+        createDenyResponse(`Tool '${request.tool_name}' not pre-approved in dontAsk mode`)
+      );
     }
 
     // If we have an onAsk callback, use it

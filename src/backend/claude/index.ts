@@ -33,7 +33,9 @@ import {
   type PermissionMode,
   type ResultMessage,
   type StreamEventMessage,
+  type ToolProgressMessage,
   type ToolUseContent,
+  type ToolUseSummaryMessage,
   type UserMessage,
 } from './types';
 
@@ -405,12 +407,42 @@ export class ClaudeClient extends EventEmitter {
   }
 
   // ===========================================================================
+  // Model and Thinking Control
+  // ===========================================================================
+
+  /**
+   * Set the model for subsequent messages.
+   *
+   * @param model - Optional model name (undefined to use default)
+   */
+  async setModel(model?: string): Promise<void> {
+    if (!this.process) {
+      throw new Error('ClaudeClient not initialized');
+    }
+    await this.process.protocol.sendSetModel(model);
+  }
+
+  /**
+   * Set the maximum thinking tokens for extended thinking mode.
+   *
+   * @param tokens - Maximum tokens for thinking (null to disable)
+   */
+  async setMaxThinkingTokens(tokens: number | null): Promise<void> {
+    if (!this.process) {
+      throw new Error('ClaudeClient not initialized');
+    }
+    await this.process.protocol.sendSetMaxThinkingTokens(tokens);
+  }
+
+  // ===========================================================================
   // Event Emitter Overloads (for TypeScript)
   // ===========================================================================
 
   override on(event: 'message', handler: (msg: AssistantMessage | UserMessage) => void): this;
   override on(event: 'tool_use', handler: (toolUse: ToolUseContent) => void): this;
   override on(event: 'stream', handler: (event: StreamEventMessage) => void): this;
+  override on(event: 'tool_progress', handler: (event: ToolProgressMessage) => void): this;
+  override on(event: 'tool_use_summary', handler: (event: ToolUseSummaryMessage) => void): this;
   override on(event: 'permission_request', handler: (req: ControlRequest) => void): this;
   override on(
     event: 'interactive_request',
@@ -429,6 +461,8 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'message', msg: AssistantMessage | UserMessage): boolean;
   override emit(event: 'tool_use', toolUse: ToolUseContent): boolean;
   override emit(event: 'stream', event_: StreamEventMessage): boolean;
+  override emit(event: 'tool_progress', event_: ToolProgressMessage): boolean;
+  override emit(event: 'tool_use_summary', event_: ToolUseSummaryMessage): boolean;
   override emit(event: 'permission_request', req: ControlRequest): boolean;
   override emit(event: 'interactive_request', req: PendingInteractiveRequest): boolean;
   override emit(event: 'result', result: ResultMessage): boolean;
@@ -494,6 +528,13 @@ export class ClaudeClient extends EventEmitter {
         break;
       case 'stream_event':
         this.emit('stream', msg);
+        break;
+      // SDK message types - forward as dedicated events
+      case 'tool_progress':
+        this.emit('tool_progress', msg);
+        break;
+      case 'tool_use_summary':
+        this.emit('tool_use_summary', msg);
         break;
     }
   }

@@ -21,6 +21,8 @@ import type {
   QuestionResponseMessage,
   QueueMessageInput,
   RemoveQueuedMessageInput,
+  SetModelMessage,
+  SetThinkingBudgetMessage,
   StartMessageInput,
   UserInputMessage,
 } from '../schemas/websocket';
@@ -201,6 +203,12 @@ class ChatMessageHandlerService {
         break;
       case 'permission_response':
         this.handlePermissionResponseMessage(ws, dbSessionId, message);
+        break;
+      case 'set_model':
+        await this.handleSetModelMessage(ws, dbSessionId, message);
+        break;
+      case 'set_thinking_budget':
+        await this.handleSetThinkingBudgetMessage(ws, dbSessionId, message);
         break;
     }
   }
@@ -794,6 +802,64 @@ class ChatMessageHandlerService {
           type: 'error',
           message: `Failed to respond to permission: ${errorMessage}`,
         })
+      );
+    }
+  }
+
+  private async handleSetModelMessage(
+    ws: WebSocket,
+    sessionId: string,
+    message: SetModelMessage
+  ): Promise<void> {
+    const client = sessionService.getClient(sessionId);
+    if (!client) {
+      ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+      return;
+    }
+
+    try {
+      await client.setModel(message.model);
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Set model', { sessionId, model: message.model });
+      }
+      ws.send(JSON.stringify({ type: 'model_set', model: message.model }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[Chat WS] Failed to set model', {
+        sessionId,
+        model: message.model,
+        error: errorMessage,
+      });
+      ws.send(JSON.stringify({ type: 'error', message: `Failed to set model: ${errorMessage}` }));
+    }
+  }
+
+  private async handleSetThinkingBudgetMessage(
+    ws: WebSocket,
+    sessionId: string,
+    message: SetThinkingBudgetMessage
+  ): Promise<void> {
+    const client = sessionService.getClient(sessionId);
+    if (!client) {
+      ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+      return;
+    }
+
+    try {
+      await client.setMaxThinkingTokens(message.max_tokens);
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Set thinking budget', { sessionId, maxTokens: message.max_tokens });
+      }
+      ws.send(JSON.stringify({ type: 'thinking_budget_set', max_tokens: message.max_tokens }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[Chat WS] Failed to set thinking budget', {
+        sessionId,
+        maxTokens: message.max_tokens,
+        error: errorMessage,
+      });
+      ws.send(
+        JSON.stringify({ type: 'error', message: `Failed to set thinking budget: ${errorMessage}` })
       );
     }
   }

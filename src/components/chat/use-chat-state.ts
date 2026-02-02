@@ -31,6 +31,7 @@ import type {
   ChatSettings,
   ClaudeMessage,
   ClaudeStreamEvent,
+  InputJsonDelta,
   MessageAttachment,
   QueuedMessage,
   WebSocketMessage,
@@ -143,15 +144,6 @@ function generateMessageId(): string {
 }
 
 /**
- * Extended delta type that includes input_json_delta (not in the main types).
- * This is used during tool input streaming when Claude sends partial JSON.
- */
-interface InputJsonDelta {
-  type: 'input_json_delta';
-  partial_json: string;
-}
-
-/**
  * Get stream event data from a Claude message.
  * Returns the event if the message is a stream_event type, null otherwise.
  */
@@ -192,7 +184,7 @@ function handleToolInputDelta(
     return null;
   }
 
-  // Cast delta to check for input_json_delta (not in standard types)
+  // Cast delta to check for input_json_delta
   const delta = event.delta as InputJsonDelta | typeof event.delta;
   if (delta.type !== 'input_json_delta' || !('partial_json' in delta)) {
     return null;

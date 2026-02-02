@@ -20,7 +20,9 @@ import {
   type InitializeResponseData,
   isControlCancelRequest,
   isControlRequest,
+  isKeepAliveMessage,
   isStreamEventMessage,
+  type KeepAliveMessage,
   type PermissionMode,
   type StreamEventMessage,
 } from './types';
@@ -229,6 +231,48 @@ export class ClaudeProtocol extends EventEmitter {
     await this.sendRaw(message);
   }
 
+  /**
+   * Send request to set the model.
+   *
+   * @param model - Optional model name to set (undefined to use default)
+   * @returns Promise that resolves when the message is sent
+   */
+  async sendSetModel(model?: string): Promise<void> {
+    const requestId = randomUUID();
+
+    const message = {
+      type: 'control_request' as const,
+      request_id: requestId,
+      request: {
+        subtype: 'set_model' as const,
+        ...(model !== undefined && { model }),
+      },
+    };
+
+    await this.sendRaw(message);
+  }
+
+  /**
+   * Send request to set max thinking tokens.
+   *
+   * @param tokens - Max thinking tokens (null to disable)
+   * @returns Promise that resolves when the message is sent
+   */
+  async sendSetMaxThinkingTokens(tokens: number | null): Promise<void> {
+    const requestId = randomUUID();
+
+    const message = {
+      type: 'control_request' as const,
+      request_id: requestId,
+      request: {
+        subtype: 'set_max_thinking_tokens' as const,
+        max_thinking_tokens: tokens,
+      },
+    };
+
+    await this.sendRaw(message);
+  }
+
   // ===========================================================================
   // Stream Processing
   // ===========================================================================
@@ -394,6 +438,12 @@ export class ClaudeProtocol extends EventEmitter {
    * Handle a parsed message from the CLI.
    */
   private handleMessage(msg: ClaudeJson): void {
+    // Handle keep-alive messages - don't emit as regular message
+    if (isKeepAliveMessage(msg)) {
+      this.emit('keep_alive', msg);
+      return;
+    }
+
     // Always emit the raw message
     this.emit('message', msg);
 
@@ -491,6 +541,7 @@ export class ClaudeProtocol extends EventEmitter {
   override on(event: 'control_request', handler: (req: ControlRequest) => void): this;
   override on(event: 'stream_event', handler: (event: StreamEventMessage) => void): this;
   override on(event: 'control_cancel', handler: (req: ControlCancelRequest) => void): this;
+  override on(event: 'keep_alive', handler: (msg: KeepAliveMessage) => void): this;
   override on(event: 'sending', handler: () => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'close', handler: () => void): this;
@@ -503,6 +554,7 @@ export class ClaudeProtocol extends EventEmitter {
   override emit(event: 'control_request', req: ControlRequest): boolean;
   override emit(event: 'stream_event', event_: StreamEventMessage): boolean;
   override emit(event: 'control_cancel', req: ControlCancelRequest): boolean;
+  override emit(event: 'keep_alive', msg: KeepAliveMessage): boolean;
   override emit(event: 'sending'): boolean;
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'close'): boolean;
