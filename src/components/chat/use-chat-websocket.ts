@@ -50,6 +50,8 @@ export interface UseChatWebSocketReturn {
   latestThinking: string | null;
   // Pending messages awaiting backend confirmation (Map from ID to content for recovery)
   pendingMessages: Map<string, PendingMessageContent>;
+  // Context compaction state
+  isCompacting: boolean;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -149,6 +151,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     queuedMessages: chat.queuedMessages,
     latestThinking: chat.latestThinking,
     pendingMessages: chat.pendingMessages,
+    isCompacting: chat.isCompacting,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
