@@ -58,7 +58,28 @@ export function WorkspaceNotificationManager() {
   return null; // No UI, just notification logic
 }
 
+/**
+ * Plays the workspace completion sound.
+ */
+function playNotificationSound(): void {
+  try {
+    const audio = new Audio('/sounds/workspace-complete.mp3');
+    // Set a reasonable volume
+    audio.volume = 0.5;
+    // Play the sound (browsers may block autoplay, so we catch errors)
+    audio.play().catch((_error) => {
+      // Silently fail if autoplay is blocked
+      // User can enable sound by interacting with the page first
+    });
+  } catch (_error) {
+    // Silently fail if audio doesn't load
+  }
+}
+
 function sendWorkspaceNotification(workspaceName: string, sessionCount: number): void {
+  // Play sound notification
+  playNotificationSound();
+
   if (!('Notification' in window)) {
     return;
   }
