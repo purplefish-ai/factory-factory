@@ -4,6 +4,7 @@ import { prisma } from '../db';
 interface UpdateUserSettingsInput {
   preferredIde?: string;
   customIdeCommand?: string | null;
+  playSoundOnComplete?: boolean;
 }
 
 class UserSettingsAccessor {
@@ -25,6 +26,7 @@ class UserSettingsAccessor {
           userId,
           preferredIde: 'cursor',
           customIdeCommand: null,
+          playSoundOnComplete: true,
         },
       });
     }
@@ -46,6 +48,7 @@ class UserSettingsAccessor {
         userId,
         preferredIde: data.preferredIde ?? 'cursor',
         customIdeCommand: data.customIdeCommand ?? null,
+        playSoundOnComplete: data.playSoundOnComplete ?? true,
       },
     });
   }
