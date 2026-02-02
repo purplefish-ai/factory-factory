@@ -40,3 +40,5 @@ export { sessionService } from './session.service';
 export { SessionFileLogger, sessionFileLogger } from './session-file-logger.service';
 // Terminal service
 export { terminalService } from './terminal.service';
+// Workspace activity service
+export { workspaceActivityService } from './workspace-activity.service';

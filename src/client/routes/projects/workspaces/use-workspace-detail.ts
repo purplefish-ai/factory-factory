@@ -74,6 +74,8 @@ interface UseSessionManagementOptions {
   setSelectedDbSessionId: React.Dispatch<React.SetStateAction<string | null>>;
   /** Selected model from chat settings */
   selectedModel: string;
+  /** Whether the session is ready to receive messages (session_loaded received) */
+  isSessionReady: boolean;
 }
 
 /** Minimal mutation interface exposing only the properties we use */
@@ -114,21 +116,39 @@ export function useSessionManagement({
   selectedDbSessionId,
   setSelectedDbSessionId,
   selectedModel,
+  isSessionReady,
 }: UseSessionManagementOptions): UseSessionManagementReturn {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
   // Ref to store pending quick action prompt (to send after session is ready)
   const pendingQuickActionRef = useRef<{ dbSessionId: string; prompt: string } | null>(null);
+  // Track whether we've seen the session go through loading state (to avoid stale isSessionReady)
+  const hasSeenLoadingRef = useRef(false);
 
-  // Effect to send pending quick action prompt when session is selected
+  // Effect to track when session enters loading state (reset detection)
+  useEffect(() => {
+    if (!isSessionReady) {
+      // Session is loading - mark that we've seen the loading state
+      hasSeenLoadingRef.current = true;
+    }
+  }, [isSessionReady]);
+
+  // Effect to send pending quick action prompt when session is ready
+  // Waits for: session selected, session went through loading, and now ready
   useEffect(() => {
     const pending = pendingQuickActionRef.current;
-    if (pending && pending.dbSessionId === selectedDbSessionId) {
+    if (
+      pending &&
+      pending.dbSessionId === selectedDbSessionId &&
+      isSessionReady &&
+      hasSeenLoadingRef.current
+    ) {
       pendingQuickActionRef.current = null;
+      hasSeenLoadingRef.current = false;
       sendMessage(pending.prompt);
     }
-  }, [selectedDbSessionId, sendMessage]);
+  }, [selectedDbSessionId, sendMessage, isSessionReady]);
 
   const createSession = trpc.session.createClaudeSession.useMutation({
     onSuccess: (_data) => {
@@ -214,7 +234,7 @@ export function useSessionManagement({
     (workflowId: string) => {
       const chatName = getNextChatName();
       createSession.mutate(
-        { workspaceId, workflow: workflowId, model: selectedModel, name: chatName },
+        { workspaceId, workflow: workflowId, model: selectedModel || undefined, name: chatName },
         {
           onSuccess: (session) => {
             // Setting the new session ID triggers WebSocket reconnection automatically
@@ -231,7 +251,7 @@ export function useSessionManagement({
     const name = getNextChatName();
 
     createSession.mutate(
-      { workspaceId, workflow: 'followup', model: selectedModel, name },
+      { workspaceId, workflow: 'followup', model: selectedModel || undefined, name },
       {
         onSuccess: (session) => {
           // Setting the new session ID triggers WebSocket reconnection automatically
@@ -252,11 +272,13 @@ export function useSessionManagement({
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
       createSession.mutate(
-        { workspaceId, workflow: 'followup', name, model: selectedModel },
+        { workspaceId, workflow: 'followup', name, model: selectedModel || undefined },
         {
           onSuccess: (session) => {
             // Store the pending prompt to be sent once the session state settles
             pendingQuickActionRef.current = { dbSessionId: session.id, prompt };
+            // Reset the loading detection - we need to see the new session go through loading
+            hasSeenLoadingRef.current = false;
             // Setting the new session ID triggers WebSocket reconnection automatically
             setSelectedDbSessionId(session.id);
           },

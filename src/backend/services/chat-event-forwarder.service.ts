@@ -12,7 +12,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
+import { WS_READY_STATE } from '../constants';
 import { interceptorRegistry } from '../interceptors';
+import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import {
   AskUserQuestionInputSchema,
   ExitPlanModeInputSchema,
@@ -25,6 +27,7 @@ import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
+import { workspaceActivityService } from './workspace-activity.service';
 
 const logger = createLogger('chat-event-forwarder');
 
@@ -54,6 +57,9 @@ class ChatEventForwarderService {
 
   /** Pending interactive requests by session ID (for restore on reconnect) */
   private pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
+
+  /** Guard to prevent multiple workspace notification setups */
+  private workspaceNotificationsSetup = false;
 
   /**
    * Check if event forwarding is already set up for a session.
@@ -86,6 +92,47 @@ class ChatEventForwarderService {
     if (pending?.requestId === requestId) {
       this.pendingInteractiveRequests.delete(dbSessionId);
     }
+  }
+
+  /**
+   * Set up workspace-level notification forwarding.
+   * Call this once during handler initialization.
+   */
+  setupWorkspaceNotifications(): void {
+    if (this.workspaceNotificationsSetup) {
+      return; // Already set up
+    }
+    this.workspaceNotificationsSetup = true;
+
+    workspaceActivityService.on('request_notification', async (data) => {
+      const { workspaceId, workspaceName, sessionCount, finishedAt } = data;
+
+      logger.debug('Broadcasting workspace notification request', { workspaceId });
+
+      // Send to all connections viewing this workspace
+      for (const info of chatConnectionService.values()) {
+        if (info.dbSessionId && info.ws.readyState === WS_READY_STATE.OPEN) {
+          try {
+            const session = await claudeSessionAccessor.findById(info.dbSessionId);
+            if (session?.workspaceId === workspaceId) {
+              info.ws.send(
+                JSON.stringify({
+                  type: 'workspace_notification_request',
+                  workspaceId,
+                  workspaceName,
+                  sessionCount,
+                  finishedAt: finishedAt.toISOString(),
+                })
+              );
+            }
+          } catch (error) {
+            logger.error('Failed to check session workspace', error as Error, {
+              dbSessionId: info.dbSessionId,
+            });
+          }
+        }
+      }
+    });
   }
 
   /**
@@ -154,6 +201,9 @@ class ChatEventForwarderService {
           claudeSessionId,
         });
       }
+
+      // Mark workspace as active
+      workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
 
       // Store-then-forward: store event for replay before forwarding
       const statusMsg = { type: 'status', running: true };
@@ -419,6 +469,9 @@ class ChatEventForwarderService {
       const resultMsg = { type: 'claude_message', data: result };
       messageStateService.storeEvent(dbSessionId, resultMsg);
       chatConnectionService.forwardToSession(dbSessionId, resultMsg);
+
+      // Mark session as idle
+      workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
 
       const statusMsg = { type: 'status', running: false };
       messageStateService.storeEvent(dbSessionId, statusMsg);

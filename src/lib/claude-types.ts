@@ -492,6 +492,8 @@ export interface WebSocketMessage {
     // Context compaction events
     | 'compacting_start'
     | 'compacting_end'
+    | 'queue'
+    | 'workspace_notification_request'
     // Slash commands discovery
     | 'slash_commands';
   sessionId?: string;
@@ -556,6 +558,11 @@ export interface WebSocketMessage {
   permissionMode?: string;
   /** Slash commands from CLI initialize response */
   slashCommands?: CommandInfo[];
+  // Workspace notification request fields
+  workspaceId?: string;
+  workspaceName?: string;
+  sessionCount?: number;
+  finishedAt?: string;
 }
 
 // =============================================================================
