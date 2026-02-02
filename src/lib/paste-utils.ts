@@ -83,7 +83,7 @@ export async function getClipboardImages(event: ClipboardEvent): Promise<Message
  */
 export function textToAttachment(text: string, name?: string): MessageAttachment {
   const lineCount = text.split('\n').length;
-  const displayName = name || `Pasted text (${lineCount} lines)`;
+  const displayName = name || `Pasted text (${lineCount} ${lineCount === 1 ? 'line' : 'lines'})`;
 
   return {
     id: generateAttachmentId(),

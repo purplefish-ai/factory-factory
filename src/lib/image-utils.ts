@@ -102,6 +102,7 @@ export async function fileToAttachment(file: File): Promise<MessageAttachment> {
     type: file.type,
     size: file.size,
     data: base64,
+    contentType: 'image',
   };
 }
 

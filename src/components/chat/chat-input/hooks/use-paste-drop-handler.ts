@@ -59,7 +59,6 @@ export function usePasteDropHandler({
    * - Small text falls through to default behavior
    */
   const handlePaste = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: paste handling requires multiple conditional paths
     async (event: ClipboardEvent<HTMLTextAreaElement>) => {
       if (disabled) {
         return;
@@ -72,6 +71,9 @@ export function usePasteDropHandler({
           const imageAttachments = await getClipboardImages(event.nativeEvent);
           if (imageAttachments.length > 0) {
             setAttachments((prev) => [...prev, ...imageAttachments]);
+          } else {
+            // hasClipboardImages returned true but no images could be extracted
+            toast.error('Could not paste image from clipboard');
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to paste image';
@@ -123,8 +125,6 @@ export function usePasteDropHandler({
           // Check if it's an image
           if (isSupportedImageType(file.type)) {
             const attachment = await fileToAttachment(file);
-            // Add contentType for consistency
-            attachment.contentType = 'image';
             newAttachments.push(attachment);
           }
           // Check if it's a supported text file
