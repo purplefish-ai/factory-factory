@@ -468,9 +468,16 @@ export function createTokenStats(overrides: Partial<TokenStats> = {}): TokenStat
   return {
     inputTokens: overrides.inputTokens ?? 1500,
     outputTokens: overrides.outputTokens ?? 850,
+    cacheReadInputTokens: overrides.cacheReadInputTokens ?? 800,
+    cacheCreationInputTokens: overrides.cacheCreationInputTokens ?? 200,
     totalCostUsd: overrides.totalCostUsd ?? 0.0125,
     totalDurationMs: overrides.totalDurationMs ?? 3500,
+    totalDurationApiMs: overrides.totalDurationApiMs ?? 2800,
     turnCount: overrides.turnCount ?? 3,
+    webSearchRequests: overrides.webSearchRequests ?? 0,
+    contextWindow: overrides.contextWindow ?? 200_000,
+    maxOutputTokens: overrides.maxOutputTokens ?? 16_384,
+    serviceTier: overrides.serviceTier ?? null,
   };
 }
 

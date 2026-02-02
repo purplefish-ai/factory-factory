@@ -23,16 +23,19 @@ import type {
   SessionInfo,
   SessionInitData,
   SessionStatus as SharedSessionStatus,
+  TokenStats,
   ToolUseContent,
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
 import {
+  createEmptyTokenStats,
   DEFAULT_CHAT_SETTINGS,
   getToolUseIdFromEvent,
   isStreamEventMessage,
   isWsClaudeMessage,
   MessageState,
+  updateTokenStatsFromResult,
 } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 
@@ -99,8 +102,10 @@ export interface TaskNotification {
 export interface RewindPreviewState {
   /** User message UUID we're rewinding to */
   userMessageId: string;
-  /** Whether we're currently loading the preview */
+  /** Whether we're currently loading the preview or executing the rewind */
   isLoading: boolean;
+  /** Whether the actual rewind is in progress (vs just previewing) */
+  isExecuting?: boolean;
   /** Files that would be affected (populated after dry run completes) */
   affectedFiles?: string[];
   /** Error message if preview failed */
@@ -160,6 +165,8 @@ export interface ChatState {
   taskNotifications: TaskNotification[];
   /** Slash commands from CLI initialize response */
   slashCommands: CommandInfo[];
+  /** Accumulated token usage stats for the session */
+  tokenStats: TokenStats;
   /**
    * Queue of SDK-assigned UUIDs waiting to be mapped to user messages.
    * Used when UUIDs arrive before their corresponding messages.
@@ -279,10 +286,11 @@ export type ChatAction =
   | { type: 'USER_MESSAGE_UUID_RECEIVED'; payload: { uuid: string } }
   // Rewind files actions
   | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string } }
-  | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[] } }
+  | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }
   | { type: 'REWIND_PREVIEW_ERROR'; payload: { error: string } }
   | { type: 'REWIND_CANCEL' }
-  | { type: 'REWIND_CONFIRM' };
+  | { type: 'REWIND_EXECUTING' } // Actual rewind in progress
+  | { type: 'REWIND_SUCCESS' }; // Actual rewind completed
 
 // =============================================================================
 // Helper Functions
@@ -422,6 +430,7 @@ function createBaseResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
+  | 'tokenStats'
   | 'pendingUserMessageUuids'
   | 'messageIdToUuid'
   | 'rewindPreview'
@@ -445,6 +454,7 @@ function createBaseResetState(): Pick<
     hasCompactBoundary: false,
     activeHooks: new Map(),
     taskNotifications: [],
+    tokenStats: createEmptyTokenStats(),
     pendingUserMessageUuids: [],
     messageIdToUuid: new Map(),
     rewindPreview: null,
@@ -474,6 +484,7 @@ function createSessionSwitchResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
   | 'slashCommands'
+  | 'tokenStats'
   | 'pendingUserMessageUuids'
   | 'messageIdToUuid'
   | 'rewindPreview'
@@ -507,6 +518,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     activeHooks: new Map(),
     taskNotifications: [],
     slashCommands: [],
+    tokenStats: createEmptyTokenStats(),
     pendingUserMessageUuids: [],
     messageIdToUuid: new Map(),
     rewindPreview: null,
@@ -560,9 +572,13 @@ function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage, order: 
       ? { ...state, sessionStatus: { phase: 'running' } }
       : state;
 
-  // Set to ready when we receive a result
+  // Set to ready when we receive a result, and accumulate token stats
   if (claudeMsg.type === 'result') {
-    baseState = { ...baseState, sessionStatus: { phase: 'ready' } };
+    baseState = {
+      ...baseState,
+      sessionStatus: { phase: 'ready' },
+      tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
+    };
   }
 
   // Check if message should be stored
@@ -911,6 +927,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Preserve slashCommands - they are session metadata that may not be immediately
       // re-sent if Claude has exited (stored events are cleared on exit). Commands will
       // be re-sent when the user sends a message and Claude restarts.
+      // Clear UUID tracking state since message IDs in snapshot may be different
+      // from what we had previously mapped.
       return {
         ...state,
         messages: snapshotMessages,
@@ -920,6 +938,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,
         lastRejectedMessage: null,
+        // Clear UUID tracking state to prevent stale mappings
+        messageIdToUuid: new Map(),
+        pendingUserMessageUuids: [],
+        rewindPreview: null,
       };
     }
 
@@ -1194,17 +1216,27 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         },
       };
 
-    case 'REWIND_PREVIEW_SUCCESS':
-      return state.rewindPreview
-        ? {
-            ...state,
-            rewindPreview: {
-              ...state.rewindPreview,
-              isLoading: false,
-              affectedFiles: action.payload.affectedFiles,
-            },
-          }
-        : state;
+    case 'REWIND_PREVIEW_SUCCESS': {
+      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
+      if (!state.rewindPreview) {
+        return state;
+      }
+      if (
+        action.payload.userMessageId &&
+        action.payload.userMessageId !== state.rewindPreview.userMessageId
+      ) {
+        // Response is for a different rewind request, ignore it
+        return state;
+      }
+      return {
+        ...state,
+        rewindPreview: {
+          ...state.rewindPreview,
+          isLoading: false,
+          affectedFiles: action.payload.affectedFiles,
+        },
+      };
+    }
 
     case 'REWIND_PREVIEW_ERROR':
       return state.rewindPreview
@@ -1219,7 +1251,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         : state;
 
     case 'REWIND_CANCEL':
-    case 'REWIND_CONFIRM':
+      return { ...state, rewindPreview: null };
+
+    case 'REWIND_EXECUTING':
+      // Keep preview state open but mark as loading (executing actual rewind)
+      return state.rewindPreview
+        ? {
+            ...state,
+            rewindPreview: {
+              ...state.rewindPreview,
+              isLoading: true,
+              isExecuting: true, // Flag to show different UI during actual rewind
+            },
+          }
+        : state;
+
+    case 'REWIND_SUCCESS':
+      // Actual rewind completed successfully, clear the preview state
       return { ...state, rewindPreview: null };
 
     default:
@@ -1498,9 +1546,17 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
         : null;
     // Rewind files response events
     case 'rewind_files_preview':
+      // If dryRun is false, this is the actual rewind completion
+      if (data.dryRun === false) {
+        return { type: 'REWIND_SUCCESS' };
+      }
+      // Otherwise, this is a preview (dry run) response
       return {
         type: 'REWIND_PREVIEW_SUCCESS',
-        payload: { affectedFiles: data.affectedFiles ?? [] },
+        payload: {
+          affectedFiles: data.affectedFiles ?? [],
+          userMessageId: data.userMessageId,
+        },
       };
     case 'rewind_files_error':
       return data.rewindError

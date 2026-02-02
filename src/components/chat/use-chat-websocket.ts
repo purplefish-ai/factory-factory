@@ -9,6 +9,7 @@ import type {
   MessageAttachment,
   QueuedMessage,
   SessionInfo,
+  TokenStats,
 } from '@/lib/claude-types';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import type {
@@ -64,6 +65,8 @@ export interface UseChatWebSocketReturn {
   permissionMode: string | null;
   // Slash commands from CLI initialize response
   slashCommands: CommandInfo[];
+  // Accumulated token usage stats for the session
+  tokenStats: TokenStats;
   // Rewind preview state (for confirmation dialog)
   rewindPreview: RewindPreviewState | null;
   // Actions
@@ -83,8 +86,8 @@ export interface UseChatWebSocketReturn {
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;
   cancelRewind: () => void;
-  /** Get the UUID for a user message at the given index */
-  getUuidForMessageIndex: (index: number) => string | undefined;
+  /** Get the SDK-assigned UUID for a user message by its stable message ID */
+  getUuidForMessageId: (messageId: string) => string | undefined;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -178,6 +181,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     taskNotifications: chat.taskNotifications,
     permissionMode: chat.permissionMode,
     slashCommands: chat.slashCommands,
+    tokenStats: chat.tokenStats,
     rewindPreview: chat.rewindPreview,
     // Actions from chat
     sendMessage: chat.sendMessage,
@@ -195,7 +199,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     startRewindPreview: chat.startRewindPreview,
     confirmRewind: chat.confirmRewind,
     cancelRewind: chat.cancelRewind,
-    getUuidForMessageIndex: chat.getUuidForMessageIndex,
+    getUuidForMessageId: chat.getUuidForMessageId,
     // Refs from chat
     inputRef: chat.inputRef,
     messagesEndRef: chat.messagesEndRef,

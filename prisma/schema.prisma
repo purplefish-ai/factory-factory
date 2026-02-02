@@ -134,6 +134,10 @@ model Workspace {
   prCiStatus          CIStatus          @default(UNKNOWN)  // CI check status
   prUpdatedAt         DateTime?         // Last PR sync time
 
+  // CI failure tracking
+  prCiFailedAt        DateTime?         // When CI first failed (cleared on success)
+  prCiLastNotifiedAt  DateTime?         // Last time we notified about CI failure
+
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
 

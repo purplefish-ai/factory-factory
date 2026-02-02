@@ -97,8 +97,8 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;
   cancelRewind: () => void;
-  /** Get the UUID for a user message at the given index */
-  getUuidForMessageIndex: (index: number) => string | undefined;
+  /** Get the SDK-assigned UUID for a user message by its stable message ID */
+  getUuidForMessageId: (messageId: string) => string | undefined;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
   // Refs for UI
@@ -604,6 +604,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         rewindTimeoutRef.current = null;
       }
 
+      // Start preview state first - this ensures the reducer can handle error states
+      dispatch({ type: 'REWIND_PREVIEW_START', payload: { userMessageId: userMessageUuid } });
+
       // Send dry run request to get affected files
       const msg: RewindFilesRequest = {
         type: 'rewind_files',
@@ -623,9 +626,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         return;
       }
 
-      // Start preview state after confirming send succeeded
-      dispatch({ type: 'REWIND_PREVIEW_START', payload: { userMessageId: userMessageUuid } });
-
       // Set timeout to handle case where response never arrives
       rewindTimeoutRef.current = setTimeout(() => {
         dispatch({
@@ -639,7 +639,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   );
 
   const confirmRewind = useCallback(() => {
-    // Clear the timeout since we're completing the flow
+    // Clear any existing timeout
     if (rewindTimeoutRef.current) {
       clearTimeout(rewindTimeoutRef.current);
       rewindTimeoutRef.current = null;
@@ -651,16 +651,35 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       return;
     }
 
+    // Mark as executing (keep dialog open with loading state for actual rewind)
+    dispatch({ type: 'REWIND_EXECUTING' });
+
     // Send actual rewind request (not dry run)
     const msg: RewindFilesRequest = {
       type: 'rewind_files',
       userMessageId: rewindPreview.userMessageId,
       dryRun: false,
     };
-    send(msg);
+    const sent = send(msg);
 
-    // Clear the preview state
-    dispatch({ type: 'REWIND_CONFIRM' });
+    if (!sent) {
+      dispatch({
+        type: 'REWIND_PREVIEW_ERROR',
+        payload: {
+          error: 'Not connected to server. Please check your connection and try again.',
+        },
+      });
+      return;
+    }
+
+    // Set timeout to handle case where response never arrives
+    rewindTimeoutRef.current = setTimeout(() => {
+      dispatch({
+        type: 'REWIND_PREVIEW_ERROR',
+        payload: { error: 'Request timed out. Please try again.' },
+      });
+      rewindTimeoutRef.current = null;
+    }, 30_000); // 30 second timeout
   }, [send]);
 
   const cancelRewind = useCallback(() => {
@@ -672,14 +691,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dispatch({ type: 'REWIND_CANCEL' });
   }, []);
 
-  const getUuidForMessageIndex = useCallback((index: number): string | undefined => {
-    // Get message at the given index
-    const message = stateRef.current.messages[index];
-    if (!message) {
-      return undefined;
-    }
+  const getUuidForMessageId = useCallback((messageId: string): string | undefined => {
     // Look up UUID by message ID (stable identifier)
-    return stateRef.current.messageIdToUuid.get(message.id);
+    return stateRef.current.messageIdToUuid.get(messageId);
   }, []);
 
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
@@ -743,7 +757,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       startRewindPreview,
       confirmRewind,
       cancelRewind,
-      getUuidForMessageIndex,
+      getUuidForMessageId,
       // Message handler for transport (stable - no deps)
       handleMessage,
       // Refs for UI
@@ -769,7 +783,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       startRewindPreview,
       confirmRewind,
       cancelRewind,
-      getUuidForMessageIndex,
+      getUuidForMessageId,
       handleMessage,
     ]
   );

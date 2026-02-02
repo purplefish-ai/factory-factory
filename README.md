@@ -103,8 +103,8 @@ ff db:studio    # Open Prisma Studio
 ```bash
 # Server
 pnpm dev              # Start dev server
-pnpm dev --no-open    # Without browser auto-open
-pnpm dev --verbose    # With detailed logging
+pnpm dev -- --no-open    # Without browser auto-open
+pnpm dev -- --verbose    # With detailed logging
 pnpm build            # Build for production
 pnpm start            # Start production server
 

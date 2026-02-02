@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  FileQuestion,
-  Files,
-  GitCompare,
-  ListTodo,
-  Plus,
-  ScrollText,
-  Terminal,
-  X,
-} from 'lucide-react';
+import { FileQuestion, Files, GitCompare, ListTodo, Plus, Terminal, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
@@ -230,15 +221,12 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
             <PanelTab
               label="Dev Logs"
               icon={
-                <span className="flex items-center gap-1.5">
-                  <ScrollText className="h-3.5 w-3.5" />
-                  <span
-                    className={cn(
-                      'w-1.5 h-1.5 rounded-full',
-                      devLogs.connected ? 'bg-green-500' : 'bg-red-500'
-                    )}
-                  />
-                </span>
+                <span
+                  className={cn(
+                    'w-1.5 h-1.5 rounded-full',
+                    devLogs.connected ? 'bg-green-500' : 'bg-red-500'
+                  )}
+                />
               }
               isActive={activeBottomTab === 'dev-logs'}
               onClick={() => handleBottomTabChange('dev-logs')}

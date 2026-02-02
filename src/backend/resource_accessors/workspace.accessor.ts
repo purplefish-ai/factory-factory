@@ -38,6 +38,9 @@ interface UpdateWorkspaceInput {
   prReviewState?: string | null;
   prCiStatus?: CIStatus;
   prUpdatedAt?: Date | null;
+  // CI failure tracking
+  prCiFailedAt?: Date | null;
+  prCiLastNotifiedAt?: Date | null;
   // Activity tracking
   hasHadSessions?: boolean;
   // Cached kanban column
@@ -244,6 +247,43 @@ class WorkspaceAccessor {
       },
       orderBy: { updatedAt: 'desc' },
     });
+  }
+
+  /**
+   * Find ACTIVE workspaces with PR URLs for CI monitoring.
+   * Returns workspaces that have PRs to monitor for CI status changes.
+   */
+  findWithPRsForCIMonitoring(): Promise<
+    Array<{
+      id: string;
+      prUrl: string;
+      prCiStatus: CIStatus;
+      prCiFailedAt: Date | null;
+      prCiLastNotifiedAt: Date | null;
+    }>
+  > {
+    return prisma.workspace.findMany({
+      where: {
+        status: 'READY',
+        prUrl: { not: null },
+      },
+      select: {
+        id: true,
+        prUrl: true,
+        prCiStatus: true,
+        prCiFailedAt: true,
+        prCiLastNotifiedAt: true,
+      },
+      orderBy: { prUpdatedAt: 'asc' },
+    }) as Promise<
+      Array<{
+        id: string;
+        prUrl: string;
+        prCiStatus: CIStatus;
+        prCiFailedAt: Date | null;
+        prCiLastNotifiedAt: Date | null;
+      }>
+    >;
   }
 
   /**

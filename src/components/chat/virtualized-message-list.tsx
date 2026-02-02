@@ -33,8 +33,8 @@ interface VirtualizedMessageListProps {
   onRemoveQueuedMessage?: (id: string) => void;
   /** Whether context compaction is in progress */
   isCompacting?: boolean;
-  /** Get the SDK-assigned UUID for a message at the given index */
-  getUuidForMessageIndex?: (index: number) => string | undefined;
+  /** Get the SDK-assigned UUID for a user message by its stable message ID */
+  getUuidForMessageId?: (messageId: string) => string | undefined;
   /** Callback when user initiates rewind to a message */
   onRewindToMessage?: (uuid: string) => void;
 }
@@ -109,7 +109,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   queuedMessageIds,
   onRemoveQueuedMessage,
   isCompacting = false,
-  getUuidForMessageIndex,
+  getUuidForMessageId,
   onRewindToMessage,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
@@ -204,10 +204,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
           const item = messages[virtualRow.index];
           const isQueued = queuedMessageIds?.has(item.id) ?? false;
           // Get UUID for user messages to enable rewind functionality
+          // Use message ID (stable identifier) instead of array index to avoid issues
+          // when messages are grouped or filtered
           const userMessageUuid =
-            'source' in item && item.source === 'user'
-              ? getUuidForMessageIndex?.(virtualRow.index)
-              : undefined;
+            'source' in item && item.source === 'user' ? getUuidForMessageId?.(item.id) : undefined;
           return (
             <div
               key={virtualRow.key}
