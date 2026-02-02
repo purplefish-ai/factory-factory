@@ -41,6 +41,8 @@ interface KanbanContextValue {
   isError: boolean;
   error: { message: string } | null;
   refetch: () => void;
+  syncAndRefetch: () => Promise<void>;
+  isSyncing: boolean;
   hiddenColumns: KanbanColumnType[];
   toggleColumnVisibility: (columnId: KanbanColumnType) => void;
 }
@@ -79,6 +81,13 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     { refetchInterval: 15_000, staleTime: 10_000 }
   );
 
+  const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
+
+  const syncAndRefetch = async () => {
+    await syncMutation.mutateAsync({ projectId });
+    refetch();
+  };
+
   const toggleColumnVisibility = (columnId: KanbanColumnType) => {
     setHiddenColumns((prev) => {
       const newHidden = prev.includes(columnId)
@@ -99,6 +108,8 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
         isError,
         error: error ? { message: error.message } : null,
         refetch,
+        syncAndRefetch,
+        isSyncing: syncMutation.isPending,
         hiddenColumns,
         toggleColumnVisibility,
       }}
