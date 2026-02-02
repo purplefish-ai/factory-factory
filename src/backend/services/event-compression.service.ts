@@ -208,7 +208,7 @@ class EventCompressionService {
       return; // No compression occurred
     }
 
-    const ratio = stats.originalCount / stats.compressedCount;
+    const ratio = stats.compressedCount > 0 ? stats.originalCount / stats.compressedCount : 0;
     logger.info('Event compression applied', {
       sessionId,
       originalCount: stats.originalCount,
