@@ -2,7 +2,8 @@
 
 // Types
 export type { ChatMessage } from '@/lib/claude-types';
-export { ChatInput } from './chat-input';
+export type { ChatInputProps } from './chat-input/chat-input';
+export { ChatInput } from './chat-input/chat-input';
 export type { TaskNotification } from './chat-reducer';
 export { CompactingIndicator } from './compacting-indicator';
 export { LatestThinking } from './latest-thinking';
