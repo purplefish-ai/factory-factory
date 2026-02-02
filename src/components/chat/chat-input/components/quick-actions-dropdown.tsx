@@ -48,12 +48,12 @@ export function QuickActionsDropdown({
                 <Zap className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="top">
-          <p>Quick actions{shortcutText}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p>Quick actions{shortcutText}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <DropdownMenuContent align="start" className="w-56">
         {QUICK_ACTIONS.map((action) => (
           <DropdownMenuItem

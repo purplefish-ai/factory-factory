@@ -181,7 +181,7 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!running && !disabled) {
+          if (!(running || disabled)) {
             fileInputRef.current?.click();
           }
         },
@@ -254,11 +254,7 @@ export function useChatInputActions({
       // Post-slash shortcuts (e.g., Enter send)
       runShortcuts(event, postSlashShortcuts);
     },
-    [
-      preSlashShortcuts,
-      delegateToSlashMenu,
-      postSlashShortcuts,
-    ]
+    [preSlashShortcuts, delegateToSlashMenu, postSlashShortcuts]
   );
 
   // Handle send button click
