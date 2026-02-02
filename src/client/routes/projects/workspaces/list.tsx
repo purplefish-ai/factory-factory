@@ -74,7 +74,7 @@ export default function WorkspacesListPage() {
               </ToggleGroupItem>
             </ToggleGroup>
             <KanbanControls />
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link to={`/projects/${slug}/workspaces/new`}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Workspace
