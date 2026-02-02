@@ -74,7 +74,8 @@ export function SlashCommandPalette({
       switch (event.key) {
         case 'ArrowDown':
           event.preventDefault();
-          setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
+          // Guard against empty filteredCommands (length - 1 would be -1)
+          setSelectedIndex((prev) => Math.min(prev + 1, Math.max(0, filteredCommands.length - 1)));
           break;
         case 'ArrowUp':
           event.preventDefault();

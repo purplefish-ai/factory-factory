@@ -328,6 +328,22 @@ export const ChatInput = memo(function ChatInput({
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
 
+  // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
+  useEffect(() => {
+    if (slashCommands.length > 0 && inputRef?.current) {
+      const currentValue = inputRef.current.value;
+      if (currentValue.startsWith('/')) {
+        const afterSlash = currentValue.slice(1);
+        const spaceIndex = afterSlash.indexOf(' ');
+        // Only open if still completing command name (no space yet)
+        if (spaceIndex === -1) {
+          setSlashFilter(afterSlash);
+          setSlashMenuOpen(true);
+        }
+      }
+    }
+  }, [slashCommands.length, inputRef]);
+
   // Handle input changes to preserve draft across tab switches and detect slash commands
   const handleInputChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
