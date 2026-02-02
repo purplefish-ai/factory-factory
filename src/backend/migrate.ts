@@ -6,6 +6,7 @@
  * 1. As a module: import { runMigrations } from './migrate'
  * 2. As a script: node migrate.js (uses environment variables)
  */
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -35,6 +36,7 @@ export function runMigrations(options: MigrationOptions): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS _prisma_migrations (
         id TEXT PRIMARY KEY,
+        checksum TEXT NOT NULL DEFAULT '',
         migration_name TEXT NOT NULL UNIQUE,
         finished_at DATETIME,
         started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -74,9 +76,10 @@ export function runMigrations(options: MigrationOptions): void {
 
       // Record migration start
       const id = crypto.randomUUID();
+      const checksum = createHash('sha256').update(sql).digest('hex');
       db.prepare(
-        'INSERT INTO _prisma_migrations (id, migration_name, started_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
-      ).run(id, migrationName);
+        'INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
+      ).run(id, checksum, migrationName);
 
       try {
         // Execute the migration
