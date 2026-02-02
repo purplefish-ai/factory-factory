@@ -227,6 +227,8 @@ export function useChatInputActions({
       {
         key: 'Enter',
         shift: false,
+        alt: false,
+        mod: false,
         action: (event) => {
           sendFromInput(event.currentTarget);
         },
