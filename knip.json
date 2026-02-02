@@ -15,6 +15,8 @@
   },
   "ignore": [
     "src/components/ui/**",
+    "src/components/chat/chat-input/hooks/use-paste-drop-handler.ts",
+    "src/lib/paste-utils.ts",
     "src/backend/services/index.ts",
     "src/backend/services/*.service.ts",
     "src/backend/resource_accessors/index.ts",
