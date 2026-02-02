@@ -33,66 +33,6 @@ export interface SessionInfo {
 }
 
 /**
- * Check if text content is system content that should be skipped.
- */
-function isSystemUserContent(text: string): boolean {
-  return text.startsWith('<system_instruction>') || text.startsWith('<local-command');
-}
-
-/**
- * Extract user text content from a message, skipping system content.
- */
-function extractUserTextFromMessage(message: ClaudeMessage): string | null {
-  if (!message.content) {
-    return null;
-  }
-
-  // Handle string content
-  if (typeof message.content === 'string') {
-    return isSystemUserContent(message.content) ? null : message.content;
-  }
-
-  // Handle array content - find the last non-system text item
-  if (Array.isArray(message.content)) {
-    let lastText: string | null = null;
-    for (const item of message.content as ClaudeContentItem[]) {
-      if (item.type === 'text' && !isSystemUserContent(item.text)) {
-        lastText = item.text;
-      }
-    }
-    return lastText;
-  }
-
-  return null;
-}
-
-/**
- * Extract the last user text content from session lines.
- */
-function extractLastUserTextFromLines(lines: string[]): string | null {
-  let lastUserTextContent: string | null = null;
-
-  for (const line of lines) {
-    try {
-      const entry = JSON.parse(line) as Record<string, unknown>;
-      if (entry.type === 'user') {
-        const message = entry.message as ClaudeMessage | undefined;
-        if (message) {
-          const text = extractUserTextFromMessage(message);
-          if (text !== null) {
-            lastUserTextContent = text;
-          }
-        }
-      }
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  return lastUserTextContent;
-}
-
-/**
  * Session manager for reading session history and listing sessions
  */
 export class SessionManager {
@@ -179,37 +119,6 @@ export class SessionManager {
     }
 
     return null;
-  }
-
-  /**
-   * Infer if thinking mode was enabled by checking if the last user text message
-   * ends with the thinking suffix (e.g., ' ultrathink').
-   */
-  static async getSessionThinkingEnabled(
-    claudeSessionId: string,
-    workingDir: string,
-    thinkingSuffix = ' ultrathink'
-  ): Promise<boolean> {
-    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
-
-    try {
-      const content = await readFile(sessionPath, 'utf-8');
-      const lines = content.split('\n').filter((line) => line.trim());
-
-      // Find the last user message with text content
-      const lastUserTextContent = extractLastUserTextFromLines(lines);
-
-      // Check if the last user text message ends with the thinking suffix
-      if (lastUserTextContent) {
-        return lastUserTextContent.endsWith(thinkingSuffix);
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Error reading session for thinking mode', { claudeSessionId, error });
-      }
-    }
-
-    return false;
   }
 
   /**

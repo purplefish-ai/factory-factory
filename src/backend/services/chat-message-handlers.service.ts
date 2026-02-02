@@ -9,7 +9,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import { MessageState } from '@/lib/claude-types';
+import { DEFAULT_THINKING_BUDGET, MessageState } from '@/lib/claude-types';
 import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
@@ -62,7 +62,6 @@ export interface ClientCreator {
 // ============================================================================
 
 const VALID_MODELS = ['sonnet', 'opus'];
-const THINKING_SUFFIX = ' ultrathink';
 
 // ============================================================================
 // Service
@@ -259,6 +258,10 @@ class ChatMessageHandlerService {
     // for subsequent messages when client is already running
     chatConnectionService.forwardToSession(dbSessionId, { type: 'status', running: true });
 
+    // Set thinking budget based on message settings
+    const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+    client.setMaxThinkingTokens(thinkingTokens);
+
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
     client.sendMessage(content);
@@ -274,17 +277,15 @@ class ChatMessageHandlerService {
 
   /**
    * Build message content for sending to Claude.
+   * Note: Thinking is now controlled via setMaxThinkingTokens, not message suffix.
    */
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-    const textWithThinking =
-      msg.settings.thinkingEnabled && msg.text ? `${msg.text}${THINKING_SUFFIX}` : msg.text;
-
     // If there are attachments, send as content array
     if (msg.attachments && msg.attachments.length > 0) {
       const content: ClaudeContentItem[] = [];
 
       if (msg.text) {
-        content.push({ type: 'text', text: textWithThinking });
+        content.push({ type: 'text', text: msg.text });
       }
 
       for (const attachment of msg.attachments) {
@@ -301,7 +302,7 @@ class ChatMessageHandlerService {
       return content;
     }
 
-    return textWithThinking;
+    return msg.text;
   }
 
   // ============================================================================
