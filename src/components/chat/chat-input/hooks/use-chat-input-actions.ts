@@ -46,6 +46,7 @@ interface ShortcutDefinition {
   ctrl?: boolean;
   meta?: boolean;
   action: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  shouldHandle?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
   preventDefault?: boolean;
 }
 
@@ -89,6 +90,9 @@ function runShortcuts(
 ): boolean {
   for (const shortcut of shortcuts) {
     if (matchesShortcut(event, shortcut)) {
+      if (shortcut.shouldHandle && !shortcut.shouldHandle(event)) {
+        continue;
+      }
       if (shortcut.preventDefault !== false) {
         event.preventDefault();
       }
@@ -140,10 +144,9 @@ export function useChatInputActions({
       {
         key: 'Tab',
         shift: true,
+        shouldHandle: () => !running,
         action: () => {
-          if (!running) {
-            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
-          }
+          onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
         },
       },
       {
