@@ -132,6 +132,8 @@ export class ClaudeClient extends EventEmitter {
   private interactiveHandler: DeferredHandler;
   /** Store pending interactive requests to retrieve original input when responding */
   private pendingInteractiveRequests: Map<string, CanUseToolRequest> = new Map();
+  /** Map protocol request_id to tool_use_id for cancel request handling */
+  private protocolToToolRequestId: Map<string, string> = new Map();
   /** Track whether context compaction is in progress (toggle-based detection) */
   private isCompacting = false;
 
@@ -650,10 +652,26 @@ export class ClaudeClient extends EventEmitter {
       // Emit the permission request for visibility
       this.emit('permission_request', controlRequest);
 
+      // Track mapping from protocol request_id to tool_use_id for interactive tools
+      // This allows control_cancel to find the right request to cancel
+      if (
+        isCanUseToolRequest(controlRequest.request) &&
+        INTERACTIVE_TOOLS.has(controlRequest.request.tool_name)
+      ) {
+        const toolUseId = controlRequest.request.tool_use_id;
+        if (toolUseId) {
+          this.protocolToToolRequestId.set(controlRequest.request_id, toolUseId);
+        }
+      }
+
       try {
         const response = await this.handleControlRequest(controlRequest.request);
+        // Clean up mapping on successful response
+        this.protocolToToolRequestId.delete(controlRequest.request_id);
         this.process?.protocol.sendControlResponse(controlRequest.request_id, response);
       } catch (error) {
+        // Clean up mapping on error
+        this.protocolToToolRequestId.delete(controlRequest.request_id);
         // On error, deny the request
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.process?.protocol.sendControlResponse(controlRequest.request_id, {
@@ -665,18 +683,32 @@ export class ClaudeClient extends EventEmitter {
 
     // Handle cancel requests from CLI (e.g., when user interrupts during permission or question prompt)
     this.process.protocol.on('control_cancel', (cancelRequest: ControlCancelRequest) => {
-      logger.debug('Control cancel received', { requestId: cancelRequest.request_id });
-      // Cancel the deferred interactive handler's pending request (distinct from protocol-level requests)
-      this.interactiveHandler.cancel(cancelRequest.request_id, 'Request cancelled by CLI');
-      // Clean up stored request
-      const hadStoredRequest = this.pendingInteractiveRequests.has(cancelRequest.request_id);
-      this.pendingInteractiveRequests.delete(cancelRequest.request_id);
+      // Look up the tool_use_id from protocol request_id mapping
+      // DeferredHandler and pendingInteractiveRequests use tool_use_id as key, not protocol request_id
+      const toolUseId = this.protocolToToolRequestId.get(cancelRequest.request_id);
+      const requestIdToCancel = toolUseId ?? cancelRequest.request_id;
+
+      logger.debug('Control cancel received', {
+        protocolRequestId: cancelRequest.request_id,
+        toolUseId,
+        requestIdToCancel,
+      });
+
+      // Cancel the deferred interactive handler's pending request
+      this.interactiveHandler.cancel(requestIdToCancel, 'Request cancelled by CLI');
+
+      // Clean up stored request and mapping
+      const hadStoredRequest = this.pendingInteractiveRequests.has(requestIdToCancel);
+      this.pendingInteractiveRequests.delete(requestIdToCancel);
+      this.protocolToToolRequestId.delete(cancelRequest.request_id);
+
       logger.debug('Request cancelled cleanup', {
-        requestId: cancelRequest.request_id,
+        requestIdToCancel,
         hadStoredRequest,
       });
-      // Emit for forwarding to frontend
-      this.emit('permission_cancelled', cancelRequest.request_id);
+
+      // Emit for forwarding to frontend (use tool_use_id which matches what frontend expects)
+      this.emit('permission_cancelled', requestIdToCancel);
     });
   }
 

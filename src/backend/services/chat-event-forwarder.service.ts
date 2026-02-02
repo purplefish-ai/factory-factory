@@ -446,7 +446,8 @@ class ChatEventForwarderService {
         eventType: 'permission_cancelled',
         requestId,
       });
-      this.pendingInteractiveRequests.delete(dbSessionId);
+      // Only clear if the requestId matches to avoid race conditions with newer requests
+      this.clearPendingRequestIfMatches(dbSessionId, requestId);
       chatConnectionService.forwardToSession(dbSessionId, {
         type: 'permission_cancelled',
         requestId,
