@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { useWindowFocus } from '../../client/hooks/use-window-focus';
+import { trpc } from '../../frontend/lib/trpc';
 
 interface NotificationRequest {
   workspaceId: string;
@@ -16,6 +17,7 @@ interface NotificationRequest {
 export function WorkspaceNotificationManager() {
   const location = useLocation();
   const isWindowFocused = useWindowFocus();
+  const { data: settings } = trpc.userSettings.get.useQuery();
 
   const handleWorkspaceNotification = useCallback(
     (request: NotificationRequest) => {
@@ -30,9 +32,10 @@ export function WorkspaceNotificationManager() {
       }
 
       // Send notification
-      sendWorkspaceNotification(workspaceName, sessionCount);
+      const playSoundOnComplete = settings?.playSoundOnComplete ?? true;
+      sendWorkspaceNotification(workspaceName, sessionCount, playSoundOnComplete);
     },
-    [location.pathname, isWindowFocused]
+    [location.pathname, isWindowFocused, settings?.playSoundOnComplete]
   );
 
   useEffect(() => {
@@ -76,9 +79,15 @@ function playNotificationSound(): void {
   }
 }
 
-function sendWorkspaceNotification(workspaceName: string, sessionCount: number): void {
-  // Play sound notification
-  playNotificationSound();
+function sendWorkspaceNotification(
+  workspaceName: string,
+  sessionCount: number,
+  playSoundOnComplete: boolean
+): void {
+  // Play sound notification if enabled
+  if (playSoundOnComplete) {
+    playNotificationSound();
+  }
 
   if (!('Notification' in window)) {
     return;

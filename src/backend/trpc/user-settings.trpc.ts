@@ -37,6 +37,7 @@ export const userSettingsRouter = router({
           )
           .nullable()
           .optional(),
+        playSoundOnComplete: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {

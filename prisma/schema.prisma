@@ -188,6 +188,9 @@ model UserSettings {
   preferredIde      String   @default("cursor")  // "cursor" | "vscode" | "custom"
   customIdeCommand  String?  // For custom IDE, supports placeholders like {workspace}
 
+  // Notification Settings
+  playSoundOnComplete Boolean @default(true)  // Play sound when workspace completes
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

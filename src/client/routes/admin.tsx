@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -498,6 +499,60 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
   );
 }
 
+function NotificationSettingsSection() {
+  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const utils = trpc.useUtils();
+  const updateSettings = trpc.userSettings.update.useMutation({
+    onSuccess: () => {
+      utils.userSettings.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to update settings: ${error.message}`);
+    },
+  });
+
+  const handleToggleSound = (checked: boolean) => {
+    updateSettings.mutate({ playSoundOnComplete: checked });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Notification Settings</CardTitle>
+          <CardDescription>Configure notification behavior</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Notification Settings</CardTitle>
+        <CardDescription>Configure notification behavior</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="sound-toggle">Play completion sound</Label>
+            <p className="text-sm text-muted-foreground">Play a sound when a workspace finishes</p>
+          </div>
+          <Switch
+            id="sound-toggle"
+            checked={settings?.playSoundOnComplete ?? true}
+            onCheckedChange={handleToggleSound}
+            disabled={updateSettings.isPending}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function IdeSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
@@ -682,7 +737,8 @@ export default function AdminDashboardPage() {
         {/* Factory Configuration */}
         {projects && projects.length > 0 && <FactoryConfigSection projectId={projects[0].id} />}
 
-        {/* IDE Settings */}
+        {/* User Settings */}
+        <NotificationSettingsSection />
         <IdeSettingsSection />
       </div>
     </div>
