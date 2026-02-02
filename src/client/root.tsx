@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { ResizableLayout } from '@/components/layout/resizable-layout';
 import { Toaster } from '@/components/ui/sonner';
+import { WorkspaceNotificationManager } from '@/components/workspace/WorkspaceNotificationManager';
 import { AppSidebar } from '@/frontend/components/app-sidebar';
 import { CLIHealthBanner } from '@/frontend/components/cli-health-banner';
 import { ThemeProvider } from '@/frontend/components/theme-provider';
@@ -44,6 +45,7 @@ export function Root() {
   return (
     <ThemeProvider>
       <TRPCProvider>
+        <WorkspaceNotificationManager />
         <RootLayout />
         <Toaster />
       </TRPCProvider>

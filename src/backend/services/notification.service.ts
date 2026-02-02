@@ -315,6 +315,22 @@ class NotificationService {
   }
 
   /**
+   * Send a workspace completion notification
+   */
+  async notifyWorkspaceComplete(
+    workspaceName: string,
+    _workspaceId: string,
+    sessionCount: number
+  ): Promise<void> {
+    const message =
+      sessionCount === 1
+        ? 'Agent finished and is ready for your attention'
+        : `All ${sessionCount} agents finished and ready for your attention`;
+
+    await this.notify(`Workspace Ready: ${workspaceName}`, message);
+  }
+
+  /**
    * Get current configuration
    */
   getConfig(): NotificationConfig {

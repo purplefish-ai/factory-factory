@@ -331,6 +331,8 @@ function WorkspaceChatContent() {
   // Derive boolean flags from sessionStatus for local use
   const running = sessionStatus.phase === 'running';
   const loadingSession = sessionStatus.phase === 'loading';
+  // Session is ready when session_loaded has been received (ready or running phase)
+  const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
 
   // Session management
   const {
@@ -354,6 +356,7 @@ function WorkspaceChatContent() {
     selectedDbSessionId,
     setSelectedDbSessionId,
     selectedModel: chatSettings.selectedModel,
+    isSessionReady,
   });
 
   // Ref for scroll handling (virtualized list manages its own content)
