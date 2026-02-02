@@ -93,6 +93,12 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  // Rewind files actions
+  startRewindPreview: (userMessageUuid: string) => void;
+  confirmRewind: () => void;
+  cancelRewind: () => void;
+  /** Get the SDK-assigned UUID for a user message by its stable message ID */
+  getUuidForMessageId: (messageId: string) => string | undefined;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
   // Refs for UI
@@ -137,6 +143,17 @@ interface QuestionResponseMessage {
   type: 'question_response';
   requestId: string;
   answers: Record<string, string | string[]>;
+}
+
+/**
+ * Rewind files request message.
+ * Note: This mirrors the RewindFilesMessage type from the backend Zod schema.
+ * We keep a separate frontend type to avoid importing backend modules in client code.
+ */
+interface RewindFilesRequest {
+  type: 'rewind_files';
+  userMessageId: string;
+  dryRun?: boolean;
 }
 
 // =============================================================================
@@ -317,6 +334,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track input attachments in a ref for stable sendMessage callback
   const inputAttachmentsRef = useRef(inputAttachments);
   inputAttachmentsRef.current = inputAttachments;
+  // Track rewind preview timeout for cleanup
+  const rewindTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // =============================================================================
   // Session Switching Effect
@@ -396,6 +415,26 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // WebSocket Message Handler
   // =============================================================================
 
+  /**
+   * Clears the rewind timeout if the response matches the current rewind request.
+   * Validates userMessageId to prevent stale responses from clearing the timeout.
+   */
+  const clearRewindTimeoutIfMatching = useCallback((wsMessage: WebSocketMessage) => {
+    if (wsMessage.type !== 'rewind_files_preview' && wsMessage.type !== 'rewind_files_error') {
+      return;
+    }
+    const currentUserMessageId = stateRef.current.rewindPreview?.userMessageId;
+    const responseUserMessageId = wsMessage.userMessageId;
+    // Only clear timeout if this response is for the current rewind request
+    if (
+      rewindTimeoutRef.current &&
+      (!responseUserMessageId || responseUserMessageId === currentUserMessageId)
+    ) {
+      clearTimeout(rewindTimeoutRef.current);
+      rewindTimeoutRef.current = null;
+    }
+  }, []);
+
   const handleMessage = useCallback(
     (data: unknown) => {
       // Validate incoming data is a WebSocket message
@@ -421,6 +460,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         return;
       }
 
+      // Clear rewind timeout when we receive rewind response for the current request
+      clearRewindTimeoutIfMatching(wsMessage);
+
       // Handle Claude messages specially for tool input streaming
       if (isWsClaudeMessage(wsMessage)) {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
@@ -432,7 +474,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         dispatch(action);
       }
     },
-    [] // No dependencies - uses refs for session ID
+    [clearRewindTimeoutIfMatching]
   );
 
   // =============================================================================
@@ -568,6 +610,107 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
   }, []);
 
+  // Rewind files actions
+  const startRewindPreview = useCallback(
+    (userMessageUuid: string) => {
+      // Clear any existing timeout
+      if (rewindTimeoutRef.current) {
+        clearTimeout(rewindTimeoutRef.current);
+        rewindTimeoutRef.current = null;
+      }
+
+      // Start preview state first - this ensures the reducer can handle error states
+      dispatch({ type: 'REWIND_PREVIEW_START', payload: { userMessageId: userMessageUuid } });
+
+      // Send dry run request to get affected files
+      const msg: RewindFilesRequest = {
+        type: 'rewind_files',
+        userMessageId: userMessageUuid,
+        dryRun: true,
+      };
+      const sent = send(msg);
+
+      // Check if message was sent successfully
+      if (!sent) {
+        dispatch({
+          type: 'REWIND_PREVIEW_ERROR',
+          payload: {
+            error: 'Not connected to server. Please check your connection and try again.',
+          },
+        });
+        return;
+      }
+
+      // Set timeout to handle case where response never arrives
+      rewindTimeoutRef.current = setTimeout(() => {
+        dispatch({
+          type: 'REWIND_PREVIEW_ERROR',
+          payload: { error: 'Request timed out. Please try again.' },
+        });
+        rewindTimeoutRef.current = null;
+      }, 30_000); // 30 second timeout
+    },
+    [send]
+  );
+
+  const confirmRewind = useCallback(() => {
+    // Clear any existing timeout
+    if (rewindTimeoutRef.current) {
+      clearTimeout(rewindTimeoutRef.current);
+      rewindTimeoutRef.current = null;
+    }
+
+    const rewindPreview = stateRef.current.rewindPreview;
+    if (!rewindPreview) {
+      debug.log('[Chat] confirmRewind called but rewindPreview is null - potential race condition');
+      return;
+    }
+
+    // Mark as executing (keep dialog open with loading state for actual rewind)
+    dispatch({ type: 'REWIND_EXECUTING' });
+
+    // Send actual rewind request (not dry run)
+    const msg: RewindFilesRequest = {
+      type: 'rewind_files',
+      userMessageId: rewindPreview.userMessageId,
+      dryRun: false,
+    };
+    const sent = send(msg);
+
+    if (!sent) {
+      dispatch({
+        type: 'REWIND_PREVIEW_ERROR',
+        payload: {
+          error: 'Not connected to server. Please check your connection and try again.',
+        },
+      });
+      return;
+    }
+
+    // Set timeout to handle case where response never arrives
+    rewindTimeoutRef.current = setTimeout(() => {
+      dispatch({
+        type: 'REWIND_PREVIEW_ERROR',
+        payload: { error: 'Request timed out. Please try again.' },
+      });
+      rewindTimeoutRef.current = null;
+    }, 30_000); // 30 second timeout
+  }, [send]);
+
+  const cancelRewind = useCallback(() => {
+    // Clear the timeout when canceling
+    if (rewindTimeoutRef.current) {
+      clearTimeout(rewindTimeoutRef.current);
+      rewindTimeoutRef.current = null;
+    }
+    dispatch({ type: 'REWIND_CANCEL' });
+  }, []);
+
+  const getUuidForMessageId = useCallback((messageId: string): string | undefined => {
+    // Look up UUID by message ID (stable identifier)
+    return stateRef.current.messageIdToUuid.get(messageId);
+  }, []);
+
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
   const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -584,11 +727,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     }, 300);
   }, []);
 
-  // Clean up pending debounced persist on unmount to prevent stale writes
+  // Clean up pending debounced persist and rewind timeout on unmount
   useEffect(() => {
     return () => {
       if (persistDraftDebounced.current) {
         clearTimeout(persistDraftDebounced.current);
+      }
+      if (rewindTimeoutRef.current) {
+        clearTimeout(rewindTimeoutRef.current);
       }
     };
   }, []);
@@ -622,6 +768,11 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       removeQueuedMessage,
       dismissTaskNotification,
       clearTaskNotifications,
+      // Rewind files actions
+      startRewindPreview,
+      confirmRewind,
+      cancelRewind,
+      getUuidForMessageId,
       // Message handler for transport (stable - no deps)
       handleMessage,
       // Refs for UI
@@ -644,6 +795,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       removeQueuedMessage,
       dismissTaskNotification,
       clearTaskNotifications,
+      startRewindPreview,
+      confirmRewind,
+      cancelRewind,
+      getUuidForMessageId,
       handleMessage,
     ]
   );

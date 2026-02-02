@@ -514,7 +514,12 @@ export interface WebSocketMessage {
     | 'queue'
     | 'workspace_notification_request'
     // Slash commands discovery
-    | 'slash_commands';
+    | 'slash_commands'
+    // User message UUID tracking (for rewind functionality)
+    | 'user_message_uuid'
+    // Rewind files response events
+    | 'rewind_files_preview'
+    | 'rewind_files_error';
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
@@ -577,6 +582,17 @@ export interface WebSocketMessage {
   permissionMode?: string;
   /** Slash commands from CLI initialize response */
   slashCommands?: CommandInfo[];
+  // User message UUID tracking fields (for rewind functionality)
+  /** SDK-assigned UUID for user_message_uuid events */
+  uuid?: string;
+  /** User message ID for rewind_files_preview/error events */
+  userMessageId?: string;
+  /** Whether the rewind was a dry run */
+  dryRun?: boolean;
+  /** Affected files list for rewind_files_preview events */
+  affectedFiles?: string[];
+  /** Error message for rewind_files_error events */
+  rewindError?: string;
   // Workspace notification request fields
   workspaceId?: string;
   workspaceName?: string;
