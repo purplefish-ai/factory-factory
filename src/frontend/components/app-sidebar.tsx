@@ -125,7 +125,7 @@ export function AppSidebar() {
   // Fetch unified project summary state (workspaces + working status + git stats + review count)
   const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
-    { enabled: !!selectedProjectId, refetchInterval: 2000 }
+    { enabled: !!selectedProjectId }
   );
 
   const serverWorkspaces = projectState?.workspaces;

@@ -19,7 +19,6 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
     { id: workspaceId },
     {
-      refetchInterval: 30_000, // Poll every 30s for background updates (worktreePath set on creation)
       staleTime: 10_000, // Data considered fresh for 10s
       refetchOnWindowFocus: false, // Don't refetch on tab focus
     }
@@ -46,7 +45,6 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     trpc.session.listClaudeSessions.useQuery(
       { workspaceId },
       {
-        refetchInterval: 10_000, // Poll every 10s instead of 5s
         staleTime: 0, // Always refetch on invalidate - critical for session creation UX
         refetchOnWindowFocus: false,
       }

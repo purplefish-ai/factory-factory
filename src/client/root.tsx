@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
+import { EventsSocketManager } from '@/client/components/events-socket-manager';
 import { ResizableLayout } from '@/components/layout/resizable-layout';
 import { Toaster } from '@/components/ui/sonner';
 import { WorkspaceNotificationManager } from '@/components/workspace/WorkspaceNotificationManager';
@@ -45,6 +46,7 @@ export function Root() {
   return (
     <ThemeProvider>
       <TRPCProvider>
+        <EventsSocketManager />
         <WorkspaceNotificationManager />
         <RootLayout />
         <Toaster />

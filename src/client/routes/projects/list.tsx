@@ -21,11 +21,7 @@ export default function ProjectsListPage() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [projectToArchive, setProjectToArchive] = useState<string | null>(null);
 
-  const {
-    data: projects,
-    isLoading,
-    refetch,
-  } = trpc.project.list.useQuery({ isArchived: false }, { refetchInterval: 10_000 });
+  const { data: projects, isLoading, refetch } = trpc.project.list.useQuery({ isArchived: false });
 
   const archiveMutation = trpc.project.archive.useMutation({
     onSuccess: () => {

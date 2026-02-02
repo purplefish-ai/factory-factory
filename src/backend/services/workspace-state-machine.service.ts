@@ -17,6 +17,9 @@
 
 import type { Workspace, WorkspaceStatus } from '@prisma-gen/client';
 import { prisma } from '../db';
+import { eventsHubService } from './events-hub.service';
+import { eventsPollerService } from './events-poller.service';
+import { eventsSnapshotService } from './events-snapshot.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('workspace-state-machine');
@@ -65,6 +68,42 @@ export interface StartProvisioningOptions {
 }
 
 class WorkspaceStateMachineService {
+  private async publishWorkspaceSnapshots(workspaceId: string, projectId: string): Promise<void> {
+    const initSnapshot = await eventsSnapshotService.getWorkspaceInitStatusSnapshot(workspaceId);
+    if (initSnapshot) {
+      eventsHubService.publishSnapshot({
+        type: initSnapshot.type,
+        payload: initSnapshot,
+        cacheKey: `workspace-init:${workspaceId}`,
+        workspaceId,
+      });
+    }
+
+    const subscribedProjectIds = eventsHubService.getSubscribedProjectIds();
+    if (subscribedProjectIds.has(projectId)) {
+      const summarySnapshot = await eventsSnapshotService.getProjectSummarySnapshot(
+        projectId,
+        eventsPollerService.getReviewCount()
+      );
+      eventsHubService.publishSnapshot({
+        type: summarySnapshot.type,
+        payload: summarySnapshot,
+        cacheKey: `project-summary:${projectId}`,
+        projectId,
+      });
+    }
+
+    const detailSnapshot = await eventsSnapshotService.getWorkspaceDetailSnapshot(workspaceId);
+    if (detailSnapshot) {
+      eventsHubService.publishSnapshot({
+        type: detailSnapshot.type,
+        payload: detailSnapshot,
+        cacheKey: `workspace-detail:${workspaceId}`,
+        workspaceId,
+      });
+    }
+  }
+
   /**
    * Check if a state transition is valid.
    */
@@ -137,6 +176,15 @@ class WorkspaceStateMachineService {
       to: targetStatus,
     });
 
+    try {
+      await this.publishWorkspaceSnapshots(workspaceId, updated.projectId);
+    } catch (error) {
+      logger.debug('Failed to publish workspace transition snapshots', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     return updated;
   }
 
@@ -163,54 +211,71 @@ class WorkspaceStateMachineService {
 
     const currentStatus = workspace.status;
 
-    // NEW → PROVISIONING (initial provisioning)
     if (currentStatus === 'NEW') {
       return this.transition(workspaceId, 'PROVISIONING');
     }
 
-    // FAILED → PROVISIONING (retry)
-    if (currentStatus === 'FAILED') {
-      // Use atomic conditional update to check retry count
-      const result = await prisma.workspace.updateMany({
-        where: {
-          id: workspaceId,
-          status: 'FAILED',
-          initRetryCount: { lt: maxRetries },
-        },
-        data: {
-          status: 'PROVISIONING',
-          initRetryCount: { increment: 1 },
-          initStartedAt: new Date(),
-          initErrorMessage: null,
-        },
-      });
-
-      if (result.count === 0) {
-        logger.warn('Max retries exceeded for workspace', {
-          workspaceId,
-          maxRetries,
-          currentRetryCount: workspace.initRetryCount,
-        });
-        return null; // Max retries exceeded
-      }
-
-      const updated = await prisma.workspace.findUnique({ where: { id: workspaceId } });
-
-      logger.debug('Workspace retry started', {
+    if (currentStatus !== 'FAILED') {
+      throw new WorkspaceStateMachineError(
         workspaceId,
-        retryCount: updated?.initRetryCount,
-      });
-
-      return updated;
+        currentStatus,
+        'PROVISIONING',
+        `Cannot start provisioning from status: ${currentStatus}`
+      );
     }
 
-    // Invalid starting state
-    throw new WorkspaceStateMachineError(
+    // FAILED → PROVISIONING (retry)
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id: workspaceId,
+        status: 'FAILED',
+        initRetryCount: { lt: maxRetries },
+      },
+      data: {
+        status: 'PROVISIONING',
+        initRetryCount: { increment: 1 },
+        initStartedAt: new Date(),
+        initErrorMessage: null,
+      },
+    });
+
+    if (result.count === 0) {
+      logger.warn('Max retries exceeded for workspace', {
+        workspaceId,
+        maxRetries,
+        currentRetryCount: workspace.initRetryCount,
+      });
+      return null; // Max retries exceeded
+    }
+
+    const updated = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+
+    logger.debug('Workspace retry started', {
       workspaceId,
-      currentStatus,
-      'PROVISIONING',
-      `Cannot start provisioning from status: ${currentStatus}`
-    );
+      retryCount: updated?.initRetryCount,
+    });
+
+    if (updated) {
+      try {
+        const initSnapshot =
+          await eventsSnapshotService.getWorkspaceInitStatusSnapshot(workspaceId);
+        if (initSnapshot) {
+          eventsHubService.publishSnapshot({
+            type: initSnapshot.type,
+            payload: initSnapshot,
+            cacheKey: `workspace-init:${workspaceId}`,
+            workspaceId,
+          });
+        }
+      } catch (error) {
+        logger.debug('Failed to publish retry init snapshot', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return updated;
   }
 
   /**

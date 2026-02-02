@@ -7,6 +7,9 @@
 
 import { EventEmitter } from 'node:events';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { eventsHubService } from './events-hub.service';
+import { eventsPollerService } from './events-poller.service';
+import { eventsSnapshotService } from './events-snapshot.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('workspace-activity');
@@ -22,6 +25,55 @@ class WorkspaceActivityService extends EventEmitter {
 
   constructor() {
     super();
+
+    const publishProjectSummary = async (workspaceId: string) => {
+      try {
+        const workspace = await workspaceAccessor.findById(workspaceId);
+        if (!workspace?.projectId) {
+          return;
+        }
+        const subscribedProjects = eventsHubService.getSubscribedProjectIds();
+        if (!subscribedProjects.has(workspace.projectId)) {
+          return;
+        }
+        const snapshot = await eventsSnapshotService.getProjectSummarySnapshot(
+          workspace.projectId,
+          eventsPollerService.getReviewCount()
+        );
+        eventsHubService.publishSnapshot({
+          type: snapshot.type,
+          payload: snapshot,
+          cacheKey: `project-summary:${workspace.projectId}`,
+          projectId: workspace.projectId,
+        });
+      } catch (error) {
+        logger.debug('Failed to publish project summary snapshot', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    const publishSessionList = async (workspaceId: string) => {
+      try {
+        const subscribed = eventsHubService.getSubscribedWorkspaceIds();
+        if (!subscribed.has(workspaceId)) {
+          return;
+        }
+        const snapshot = await eventsSnapshotService.getSessionListSnapshot(workspaceId);
+        eventsHubService.publishSnapshot({
+          type: snapshot.type,
+          payload: snapshot,
+          cacheKey: `session-list:${workspaceId}`,
+          workspaceId,
+        });
+      } catch (error) {
+        logger.debug('Failed to publish session list snapshot', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
 
     // Listen for workspace idle events and trigger notification requests
     this.on('workspace_idle', async ({ workspaceId, finishedAt }) => {
@@ -39,9 +91,16 @@ class WorkspaceActivityService extends EventEmitter {
           sessionCount: workspace.claudeSessions.length,
           finishedAt,
         });
+        await publishProjectSummary(workspaceId);
+        await publishSessionList(workspaceId);
       } catch (error) {
         logger.error('Failed to process workspace idle event', error as Error, { workspaceId });
       }
+    });
+
+    this.on('workspace_active', async ({ workspaceId }) => {
+      await publishProjectSummary(workspaceId);
+      await publishSessionList(workspaceId);
     });
   }
 

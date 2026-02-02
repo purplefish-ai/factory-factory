@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { getWorkspaceGitStats } from '../lib/git-helpers';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { eventsHubService } from '../services/events-hub.service';
+import { eventsPollerService } from '../services/events-poller.service';
+import { eventsSnapshotService } from '../services/events-snapshot.service';
 import { FactoryConfigService } from '../services/factory-config.service';
 import { githubCLIService } from '../services/github-cli.service';
 import { computeKanbanColumn, kanbanStateService } from '../services/kanban-state.service';
@@ -33,6 +36,55 @@ const gitConcurrencyLimit = pLimit(DEFAULT_GIT_CONCURRENCY);
 // Cache for GitHub review requests (expensive API call)
 let cachedReviewCount: { count: number; fetchedAt: number } | null = null;
 const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
+
+async function publishWorkspaceSnapshots(projectId: string, workspaceId?: string): Promise<void> {
+  const subscribedProjects = eventsHubService.getSubscribedProjectIds();
+  if (!subscribedProjects.has(projectId)) {
+    return;
+  }
+
+  const [listSnapshot, kanbanSnapshot, summarySnapshot] = await Promise.all([
+    eventsSnapshotService.getWorkspaceListSnapshot(projectId),
+    eventsSnapshotService.getKanbanSnapshot(projectId),
+    eventsSnapshotService.getProjectSummarySnapshot(
+      projectId,
+      eventsPollerService.getReviewCount()
+    ),
+  ]);
+
+  eventsHubService.publishSnapshot({
+    type: listSnapshot.type,
+    payload: listSnapshot,
+    cacheKey: `workspace-list:${projectId}`,
+    projectId,
+  });
+
+  eventsHubService.publishSnapshot({
+    type: kanbanSnapshot.type,
+    payload: kanbanSnapshot,
+    cacheKey: `kanban:${projectId}`,
+    projectId,
+  });
+
+  eventsHubService.publishSnapshot({
+    type: summarySnapshot.type,
+    payload: summarySnapshot,
+    cacheKey: `project-summary:${projectId}`,
+    projectId,
+  });
+
+  if (workspaceId) {
+    const detailSnapshot = await eventsSnapshotService.getWorkspaceDetailSnapshot(workspaceId);
+    if (detailSnapshot) {
+      eventsHubService.publishSnapshot({
+        type: detailSnapshot.type,
+        payload: detailSnapshot,
+        cacheKey: `workspace-detail:${workspaceId}`,
+        workspaceId,
+      });
+    }
+  }
+}
 
 // =============================================================================
 // Router
@@ -237,6 +289,15 @@ export const workspaceRouter = router({
         );
       });
 
+      try {
+        await publishWorkspaceSnapshots(workspace.projectId, workspace.id);
+      } catch (error) {
+        logger.debug('Failed to publish workspace snapshots', {
+          workspaceId: workspace.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       return workspace;
     }),
 
@@ -256,9 +317,20 @@ export const workspaceRouter = router({
         githubIssueUrl: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...updates } = input;
-      return workspaceAccessor.update(id, updates);
+      const workspace = await workspaceAccessor.update(id, updates);
+
+      try {
+        await publishWorkspaceSnapshots(workspace.projectId, workspace.id);
+      } catch (error) {
+        logger.debug('Failed to publish workspace snapshots', {
+          workspaceId: workspace.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      return workspace;
     }),
 
   // Archive a workspace
@@ -273,7 +345,16 @@ export const workspaceRouter = router({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return workspaceStateMachine.archive(input.id);
+    const workspace = await workspaceStateMachine.archive(input.id);
+    try {
+      await publishWorkspaceSnapshots(workspace.projectId, workspace.id);
+    } catch (error) {
+      logger.debug('Failed to publish workspace snapshots', {
+        workspaceId: workspace.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return workspace;
   }),
 
   // Delete a workspace
@@ -288,7 +369,16 @@ export const workspaceRouter = router({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return workspaceAccessor.delete(input.id);
+    const workspace = await workspaceAccessor.delete(input.id);
+    try {
+      await publishWorkspaceSnapshots(workspace.projectId);
+    } catch (error) {
+      logger.debug('Failed to publish workspace snapshots', {
+        workspaceId: input.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return workspace;
   }),
 
   // Refresh factory-factory.json configuration for all workspaces

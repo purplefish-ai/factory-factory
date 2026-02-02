@@ -7,9 +7,25 @@ import { claudeSessionAccessor } from '../resource_accessors/claude-session.acce
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from '../services/config.service';
+import { eventsHubService } from '../services/events-hub.service';
+import { eventsSnapshotService } from '../services/events-snapshot.service';
 import { messageQueueService } from '../services/message-queue.service';
 import { sessionService } from '../services/session.service';
 import { publicProcedure, router } from './trpc';
+
+async function publishSessionListSnapshot(workspaceId: string): Promise<void> {
+  const subscribed = eventsHubService.getSubscribedWorkspaceIds();
+  if (!subscribed.has(workspaceId)) {
+    return;
+  }
+  const snapshot = await eventsSnapshotService.getSessionListSnapshot(workspaceId);
+  eventsHubService.publishSnapshot({
+    type: snapshot.type,
+    payload: snapshot,
+    cacheKey: `session-list:${workspaceId}`,
+    workspaceId,
+  });
+}
 
 export const sessionRouter = router({
   // Session limits
@@ -95,6 +111,11 @@ export const sessionRouter = router({
       }
 
       const session = await claudeSessionAccessor.create(input);
+      try {
+        await publishSessionListSnapshot(input.workspaceId);
+      } catch {
+        // Best-effort snapshot publish
+      }
       return session;
     }),
 
@@ -109,9 +130,15 @@ export const sessionRouter = router({
         claudeSessionId: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...updates } = input;
-      return claudeSessionAccessor.update(id, updates);
+      const session = await claudeSessionAccessor.update(id, updates);
+      try {
+        await publishSessionListSnapshot(session.workspaceId);
+      } catch {
+        // Best-effort snapshot publish
+      }
+      return session;
     }),
 
   // Start a claude session (spawns the Claude process)
@@ -126,7 +153,15 @@ export const sessionRouter = router({
       await sessionService.startClaudeSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
-      return claudeSessionAccessor.findById(input.id);
+      const session = await claudeSessionAccessor.findById(input.id);
+      if (session) {
+        try {
+          await publishSessionListSnapshot(session.workspaceId);
+        } catch {
+          // Best-effort snapshot publish
+        }
+      }
+      return session;
     }),
 
   // Stop a claude session (gracefully stops the process)
@@ -134,7 +169,15 @@ export const sessionRouter = router({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
       await sessionService.stopClaudeSession(input.id);
-      return claudeSessionAccessor.findById(input.id);
+      const session = await claudeSessionAccessor.findById(input.id);
+      if (session) {
+        try {
+          await publishSessionListSnapshot(session.workspaceId);
+        } catch {
+          // Best-effort snapshot publish
+        }
+      }
+      return session;
     }),
 
   // Delete a claude session
@@ -145,7 +188,13 @@ export const sessionRouter = router({
       await sessionService.stopClaudeSession(input.id);
       // Clear any queued messages to prevent memory leak
       messageQueueService.clear(input.id);
-      return claudeSessionAccessor.delete(input.id);
+      const session = await claudeSessionAccessor.delete(input.id);
+      try {
+        await publishSessionListSnapshot(session.workspaceId);
+      } catch {
+        // Best-effort snapshot publish
+      }
+      return session;
     }),
 
   // Terminal Sessions

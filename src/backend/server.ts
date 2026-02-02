@@ -31,12 +31,14 @@ import { initializeMcpTools } from './routers/mcp/index';
 import {
   handleChatUpgrade,
   handleDevLogsUpgrade,
+  handleEventsUpgrade,
   handleTerminalUpgrade,
 } from './routers/websocket';
 import {
   ciMonitorService,
   configService,
   createLogger,
+  eventsPollerService,
   findAvailablePort,
   rateLimiter,
   reconciliationService,
@@ -168,7 +170,8 @@ export function createServer(requestedPort?: number): ServerInstance {
         req.path.startsWith('/health') ||
         req.path === '/chat' ||
         req.path === '/terminal' ||
-        req.path === '/dev-logs'
+        req.path === '/dev-logs' ||
+        req.path === '/events'
       ) {
         return next();
       }
@@ -228,6 +231,11 @@ export function createServer(requestedPort?: number): ServerInstance {
       return;
     }
 
+    if (url.pathname === '/events') {
+      handleEventsUpgrade(request, socket, head, url, wss, wsAliveMap);
+      return;
+    }
+
     socket.destroy();
   });
 
@@ -256,6 +264,7 @@ export function createServer(requestedPort?: number): ServerInstance {
     await schedulerService.stop();
     await ciMonitorService.stop();
     await reconciliationService.stopPeriodicCleanup();
+    await eventsPollerService.stop();
     await prisma.$disconnect();
 
     logger.info('Graceful cleanup completed');
@@ -305,6 +314,7 @@ export function createServer(requestedPort?: number): ServerInstance {
           rateLimiter.start();
           schedulerService.start();
           ciMonitorService.start();
+          eventsPollerService.start();
 
           logger.info('Server endpoints available', {
             server: `http://localhost:${actualPort}`,
@@ -313,6 +323,7 @@ export function createServer(requestedPort?: number): ServerInstance {
             trpc: `http://localhost:${actualPort}/api/trpc`,
             wsChat: `ws://localhost:${actualPort}/chat`,
             wsTerminal: `ws://localhost:${actualPort}/terminal`,
+            wsEvents: `ws://localhost:${actualPort}/events`,
           });
 
           resolve(`http://localhost:${actualPort}`);

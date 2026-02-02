@@ -16,6 +16,12 @@ export { ciMonitorService } from './ci-monitor.service';
 export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
 export { configService, type SessionProfile } from './config.service';
+// Events hub service
+export { eventsHubService } from './events-hub.service';
+// Events poller service
+export { eventsPollerService } from './events-poller.service';
+// Events snapshot service
+export { eventsSnapshotService } from './events-snapshot.service';
 // GitHub CLI service
 export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.service';
 // Kanban state service

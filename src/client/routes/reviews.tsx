@@ -29,9 +29,7 @@ function ReviewsPageContent() {
   const utils = trpc.useUtils();
 
   // Fetch review requests list
-  const { data, isLoading } = trpc.prReview.listReviewRequests.useQuery(undefined, {
-    refetchInterval: 30_000,
-  });
+  const { data, isLoading } = trpc.prReview.listReviewRequests.useQuery(undefined, {});
 
   const prs = data?.prs ?? [];
 

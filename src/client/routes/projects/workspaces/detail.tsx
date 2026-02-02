@@ -284,16 +284,7 @@ function WorkspaceChatContent() {
 
   // Query workspace status to show initialization overlay
   const { data: workspaceInitStatus, isPending: isInitStatusPending } =
-    trpc.workspace.getInitStatus.useQuery(
-      { id: workspaceId },
-      {
-        // Poll while not ready
-        refetchInterval: (query) => {
-          const status = query.state.data?.status;
-          return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
-        },
-      }
-    );
+    trpc.workspace.getInitStatus.useQuery({ id: workspaceId });
 
   // When init status becomes READY, refetch workspace to get updated worktreePath.
   // Also handles edge case where init is already READY on first load but workspace

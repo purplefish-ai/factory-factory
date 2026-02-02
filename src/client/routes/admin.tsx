@@ -681,15 +681,11 @@ export default function AdminDashboardPage() {
     data: stats,
     isLoading: isLoadingStats,
     refetch,
-  } = trpc.admin.getSystemStats.useQuery(undefined, {
-    refetchInterval: 5000,
-  });
+  } = trpc.admin.getSystemStats.useQuery(undefined, {});
 
   const { data: processes, isLoading: isLoadingProcesses } = trpc.admin.getActiveProcesses.useQuery(
     undefined,
-    {
-      refetchInterval: 5000,
-    }
+    {}
   );
 
   // Get first project for factory config refresh

@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { configService } from '../services/config.service';
+import { eventsHubService } from '../services/events-hub.service';
+import { eventsSnapshotService } from '../services/events-snapshot.service';
 import { publicProcedure, router } from './trpc';
 
 export const projectRouter = router({
@@ -65,7 +67,7 @@ export const projectRouter = router({
       }
 
       // Use transaction to ensure atomic creation with startup script config
-      return prisma.$transaction(async (tx) => {
+      const project = await prisma.$transaction(async (tx) => {
         // Create the project
         const project = await projectAccessor.create(createInput, {
           worktreeBaseDir: configService.getWorktreeBaseDir(),
@@ -85,6 +87,19 @@ export const projectRouter = router({
 
         return project;
       });
+
+      try {
+        const snapshot = await eventsSnapshotService.getProjectListSnapshot();
+        eventsHubService.publishSnapshot({
+          type: snapshot.type,
+          payload: snapshot,
+          cacheKey: 'project-list',
+        });
+      } catch {
+        // Best-effort snapshot publish
+      }
+
+      return project;
     }),
 
   // Update a project
@@ -142,12 +157,36 @@ export const projectRouter = router({
         }
       }
 
-      return projectAccessor.update(id, updates);
+      const project = await projectAccessor.update(id, updates);
+
+      try {
+        const snapshot = await eventsSnapshotService.getProjectListSnapshot();
+        eventsHubService.publishSnapshot({
+          type: snapshot.type,
+          payload: snapshot,
+          cacheKey: 'project-list',
+        });
+      } catch {
+        // Best-effort snapshot publish
+      }
+
+      return project;
     }),
 
   // Archive a project (soft delete)
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
-    return projectAccessor.archive(input.id);
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    const project = await projectAccessor.archive(input.id);
+    try {
+      const snapshot = await eventsSnapshotService.getProjectListSnapshot();
+      eventsHubService.publishSnapshot({
+        type: snapshot.type,
+        payload: snapshot,
+        cacheKey: 'project-list',
+      });
+    } catch {
+      // Best-effort snapshot publish
+    }
+    return project;
   }),
 
   // Validate repo path
