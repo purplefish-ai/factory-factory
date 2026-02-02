@@ -58,11 +58,11 @@ export function SlashCommandPalette({
     cmd.name.toLowerCase().includes(filter.toLowerCase())
   );
 
-  // Reset selection when filter changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: filter is intentionally used to trigger reset
+  // Reset selection when filter changes or palette opens
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filter and isOpen are intentionally used to trigger reset
   useEffect(() => {
     setSelectedIndex(0);
-  }, [filter]);
+  }, [filter, isOpen]);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
@@ -82,8 +82,10 @@ export function SlashCommandPalette({
           setSelectedIndex((prev) => Math.max(prev - 1, 0));
           break;
         case 'Enter':
-          event.preventDefault();
+          // Only prevent default and select if there's a valid command to select
+          // This allows the message to be sent when no commands match (e.g., "/xyz")
           if (filteredCommands[selectedIndex]) {
+            event.preventDefault();
             onSelect(filteredCommands[selectedIndex]);
           }
           break;
@@ -125,7 +127,7 @@ export function SlashCommandPalette({
         'rounded-md border bg-popover text-popover-foreground shadow-md'
       )}
     >
-      <Command className="[&_[cmdk-list]]:max-h-[200px]">
+      <Command shouldFilter={false} className="[&_[cmdk-list]]:max-h-[200px]">
         <CommandList>
           <CommandEmpty>No commands found</CommandEmpty>
           <CommandGroup>

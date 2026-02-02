@@ -846,6 +846,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Note: queuedMessages are now managed via MESSAGE_STATE_CHANGED events.
       // The snapshot contains final ChatMessages, not intermediate states.
       // Clear queuedMessages since snapshot represents fully processed state.
+      // Clear slashCommands - they will be re-sent by the backend for the new session.
       return {
         ...state,
         messages: snapshotMessages,
@@ -855,6 +856,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,
         lastRejectedMessage: null,
+        slashCommands: [],
       };
     }
 
