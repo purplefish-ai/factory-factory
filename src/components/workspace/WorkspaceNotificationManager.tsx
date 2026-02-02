@@ -17,7 +17,7 @@ interface NotificationRequest {
 export function WorkspaceNotificationManager() {
   const location = useLocation();
   const isWindowFocused = useWindowFocus();
-  const { data: settings } = trpc.userSettings.get.useQuery();
+  const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
 
   const handleWorkspaceNotification = useCallback(
     (request: NotificationRequest) => {
@@ -32,10 +32,13 @@ export function WorkspaceNotificationManager() {
       }
 
       // Send notification
-      const playSoundOnComplete = settings?.playSoundOnComplete ?? true;
+      // Only play sound if settings have loaded and user has it enabled
+      // Default to true once settings are available, but don't play while loading
+      // to avoid playing sound when user may have disabled it
+      const playSoundOnComplete = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
       sendWorkspaceNotification(workspaceName, sessionCount, playSoundOnComplete);
     },
-    [location.pathname, isWindowFocused, settings?.playSoundOnComplete]
+    [location.pathname, isWindowFocused, settings?.playSoundOnComplete, isSuccess]
   );
 
   useEffect(() => {
