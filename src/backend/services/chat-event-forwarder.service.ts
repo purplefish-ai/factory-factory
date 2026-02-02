@@ -9,7 +9,9 @@
  * - Routing interactive tool requests to appropriate message formats
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { interceptorRegistry } from '../interceptors';
@@ -249,7 +251,7 @@ class ChatEventForwarderService {
         data: request,
       });
 
-      this.routeInteractiveRequest(dbSessionId, request);
+      this.routeInteractiveRequest(dbSessionId, request, context.workingDir);
     });
 
     client.on('exit', (result) => {
@@ -286,12 +288,23 @@ class ChatEventForwarderService {
       toolName: string;
       toolUseId: string;
       input: Record<string, unknown>;
-    }
+    },
+    workingDir: string
   ): void {
+    // Log ExitPlanMode input for debugging plan file path discovery
+    if (request.toolName === 'ExitPlanMode') {
+      logger.info('[Chat WS] ExitPlanMode request received', {
+        dbSessionId,
+        input: request.input,
+        inputKeys: Object.keys(request.input),
+        workingDir,
+      });
+    }
+
     // Compute planContent for ExitPlanMode, null for others
     const planContent =
       request.toolName === 'ExitPlanMode'
-        ? this.readPlanFileContent((request.input as { planFile?: string }).planFile)
+        ? this.readPlanFileContent(this.extractPlanFilePath(request.input, workingDir))
         : null;
 
     // Store for session restore (single location for all request types)
@@ -334,6 +347,88 @@ class ChatEventForwarderService {
       toolUseId: request.toolUseId,
       input: request.input,
     });
+  }
+
+  /**
+   * Extract plan file path from ExitPlanMode input or find it in default locations.
+   *
+   * Claude Code stores plans in ~/.claude/plans/ with session-specific names.
+   * When the model calls ExitPlanMode, the plan file should already exist.
+   *
+   * Search order:
+   * 1. Check if planFile is in the input (future-proofing)
+   * 2. Find the most recently modified plan file in ~/.claude/plans/
+   */
+  private extractPlanFilePath(
+    input: Record<string, unknown>,
+    workingDir?: string
+  ): string | undefined {
+    // Try common field names that Claude CLI might use (in case future versions add this)
+    const possibleFields = ['planFile', 'plan_file', 'planFilePath', 'plan_file_path', 'file'];
+    for (const field of possibleFields) {
+      if (typeof input[field] === 'string') {
+        logger.debug('[Chat WS] Found plan file path in input', { field, path: input[field] });
+        return input[field] as string;
+      }
+    }
+
+    // Plan file path is not in input - search for it in Claude's default location
+    logger.debug('[Chat WS] No plan file path in ExitPlanMode input, searching defaults', {
+      availableKeys: Object.keys(input),
+      workingDir,
+    });
+
+    // Try to find the most recently modified plan in ~/.claude/plans/
+    const plansDir = join(homedir(), '.claude', 'plans');
+    const planPath = this.findMostRecentPlanFile(plansDir);
+    if (planPath) {
+      logger.info('[Chat WS] Found plan file in default location', { planPath });
+      return planPath;
+    }
+
+    logger.debug('[Chat WS] No plan file found in default location');
+    return undefined;
+  }
+
+  /**
+   * Find the most recently modified .md file in the given directory.
+   * Returns undefined if no plan files are found.
+   */
+  private findMostRecentPlanFile(plansDir: string): string | undefined {
+    if (!existsSync(plansDir)) {
+      return undefined;
+    }
+
+    try {
+      const files = readdirSync(plansDir)
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => {
+          const fullPath = join(plansDir, f);
+          const stats = statSync(fullPath);
+          return { path: fullPath, mtime: stats.mtime.getTime() };
+        })
+        .sort((a, b) => b.mtime - a.mtime); // Most recent first
+
+      if (files.length > 0) {
+        // Only return if the file was modified within the last 5 minutes
+        // This avoids returning stale plans from old sessions
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        if (files[0].mtime > fiveMinutesAgo) {
+          return files[0].path;
+        }
+        logger.debug('[Chat WS] Most recent plan file is too old', {
+          path: files[0].path,
+          ageMs: Date.now() - files[0].mtime,
+        });
+      }
+    } catch (error) {
+      logger.error('[Chat WS] Error searching for plan files', {
+        plansDir,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return undefined;
   }
 
   /**
