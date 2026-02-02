@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { formatRelativeTime } from '@/lib/utils';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { CIStatusDot } from './pr-status-badges';
@@ -39,12 +40,12 @@ export const PRInboxItem = forwardRef<HTMLDivElement, PRInboxItemProps>(function
           onSelect();
         }
       }}
-      className={`cursor-pointer transition-all outline-none border-l-2 px-2 py-1.5 rounded-sm w-full max-w-full overflow-hidden ${
+      className={`cursor-pointer transition-all outline-none border px-3 py-2 rounded-md w-full max-w-full overflow-hidden ${
         isSelected
-          ? 'bg-blue-500/10 border-l-blue-500'
+          ? 'bg-muted border-border shadow-sm'
           : isApproved
-            ? 'border-l-green-500 hover:bg-muted/50'
-            : 'border-l-orange-500 hover:bg-muted/50'
+            ? 'border-transparent hover:bg-muted/50'
+            : 'border-transparent hover:bg-muted/50'
       }`}
     >
       <div className="flex items-start gap-2 w-full">
@@ -56,36 +57,38 @@ export const PRInboxItem = forwardRef<HTMLDivElement, PRInboxItemProps>(function
         {/* Main content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-primary/70 truncate max-w-[100px]">
+            <span className="font-mono text-xs text-primary/70 truncate max-w-[120px]">
               {pr.repository.name}
             </span>
-            <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+            <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
               #{pr.number}
             </span>
             {pr.isDraft && (
-              <span className="text-[10px] text-muted-foreground whitespace-nowrap">[draft]</span>
+              <Badge variant="outline" className="text-xs">
+                Draft
+              </Badge>
             )}
             {needsReview && (
-              <span className="text-[10px] font-medium text-orange-600 bg-orange-500/10 px-1 rounded whitespace-nowrap">
+              <Badge className="bg-orange-500/10 text-orange-700 border-orange-500/20 text-xs">
                 Review
-              </span>
+              </Badge>
             )}
             {isApproved && (
-              <span className="text-[10px] font-medium text-green-600 bg-green-500/10 px-1 rounded whitespace-nowrap">
+              <Badge className="bg-green-500/10 text-green-700 border-green-500/20 text-xs">
                 Approved
-              </span>
+              </Badge>
             )}
             <span className="flex-1" />
-            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
               {formatRelativeTimeWithAgo(pr.updatedAt)}
             </span>
           </div>
 
-          <div className="font-medium text-[13px] truncate leading-tight" title={pr.title}>
+          <div className="font-medium text-sm truncate leading-tight" title={pr.title}>
             {pr.title}
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="truncate max-w-[80px]">{pr.author.login}</span>
             <span className="text-green-600 whitespace-nowrap">+{pr.additions}</span>
             <span className="text-red-600 whitespace-nowrap">-{pr.deletions}</span>
