@@ -21,6 +21,7 @@ import { ModelSelector } from './components/model-selector';
 import { QuickActionsDropdown } from './components/quick-actions-dropdown';
 import { SettingsToggle } from './components/settings-toggle';
 import { useChatInputActions } from './hooks/use-chat-input-actions';
+import { usePasteDropHandler } from './hooks/use-paste-drop-handler';
 import { useSlashCommands } from './hooks/use-slash-commands';
 import { useTextareaResize } from './hooks/use-textarea-resize';
 
@@ -137,6 +138,12 @@ export const ChatInput = memo(function ChatInput({
     onHeightChange,
   });
 
+  // Paste and drag-drop handler hook
+  const pasteDropHandler = usePasteDropHandler({
+    setAttachments,
+    disabled,
+  });
+
   // Restore input value from draft when component mounts or value prop changes
   // This preserves the draft across tab switches
   const prevValueRef = useRef(value);
@@ -179,11 +186,16 @@ export const ChatInput = memo(function ChatInput({
           ref={inputRef}
           onKeyDown={actions.handleKeyDown}
           onChange={slash.handleInputChange}
+          onPaste={pasteDropHandler.handlePaste}
+          onDrop={pasteDropHandler.handleDrop}
+          onDragOver={pasteDropHandler.handleDragOver}
+          onDragLeave={pasteDropHandler.handleDragLeave}
           disabled={isDisabled}
           placeholder={isDisabled ? 'Connecting...' : placeholder}
           className={cn(
             'min-h-[40px] max-h-[110px] overflow-y-auto [field-sizing:content]',
-            isDisabled && 'opacity-50 cursor-not-allowed'
+            isDisabled && 'opacity-50 cursor-not-allowed',
+            pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
           )}
           rows={1}
         />

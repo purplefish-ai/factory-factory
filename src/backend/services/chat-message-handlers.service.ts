@@ -294,19 +294,85 @@ class ChatMessageHandlerService {
   }
 
   /**
+   * Validate an attachment before processing.
+   * @throws Error if attachment is invalid
+   */
+  private validateAttachment(attachment: {
+    id: string;
+    name: string;
+    type: string;
+    data: string;
+    contentType?: 'image' | 'text';
+  }): void {
+    if (!attachment.data) {
+      logger.error('[Chat WS] Attachment missing data', { attachmentId: attachment.id });
+      throw new Error(`Attachment "${attachment.name}" is missing data`);
+    }
+
+    if (attachment.contentType === 'image' || attachment.contentType === undefined) {
+      // Validate base64 for image attachments (basic check - alphanumeric, +, /, =)
+      if (!/^[A-Za-z0-9+/=]+$/.test(attachment.data)) {
+        logger.error('[Chat WS] Invalid base64 data in attachment', {
+          attachmentId: attachment.id,
+          name: attachment.name,
+        });
+        throw new Error(`Attachment "${attachment.name}" has invalid image data`);
+      }
+    }
+  }
+
+  /**
+   * Sanitize attachment name to prevent log injection or display issues.
+   * Removes control characters and limits length.
+   */
+  private sanitizeAttachmentName(name: string): string {
+    // Remove control characters (ASCII 0-31 and 127) and limit length
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matching control chars to remove them
+    return name.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 255);
+  }
+
+  /**
    * Build message content for sending to Claude.
    * Note: Thinking is now controlled via setMaxThinkingTokens, not message suffix.
+   *
+   * Text attachments are combined into the main text content with a prefix.
+   * Image attachments are sent as separate image content blocks.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: attachment validation and branching logic is inherently complex
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-    // If there are attachments, send as content array
+    // If there are attachments, process them
     if (msg.attachments && msg.attachments.length > 0) {
-      const content: ClaudeContentItem[] = [];
-
-      if (msg.text) {
-        content.push({ type: 'text', text: msg.text });
+      // Validate all attachments before processing
+      for (const attachment of msg.attachments) {
+        this.validateAttachment(attachment);
       }
 
-      for (const attachment of msg.attachments) {
+      const textAttachments = msg.attachments.filter((a) => a.contentType === 'text');
+      const imageAttachments = msg.attachments.filter((a) => a.contentType !== 'text');
+
+      // Build the combined text content (user message + text attachments)
+      let combinedText = msg.text || '';
+
+      // Append text attachments with a prefix for context
+      for (const attachment of textAttachments) {
+        const prefix = combinedText ? '\n\n' : '';
+        const safeName = this.sanitizeAttachmentName(attachment.name);
+        combinedText += `${prefix}[Pasted content: ${safeName}]\n${attachment.data}`;
+      }
+
+      // If we only have text (no images), return as string
+      if (imageAttachments.length === 0) {
+        return combinedText;
+      }
+
+      // If we have images, build content array
+      const content: ClaudeContentItem[] = [];
+
+      if (combinedText) {
+        content.push({ type: 'text', text: combinedText });
+      }
+
+      for (const attachment of imageAttachments) {
         content.push({
           type: 'image',
           source: {
