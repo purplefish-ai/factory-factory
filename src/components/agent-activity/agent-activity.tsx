@@ -50,13 +50,9 @@ export const MessageItem = memo(function MessageItem({
     const userText = stripThinkingSuffix(message.text);
     return (
       <MessageWrapper>
-        <div
-          className={cn(
-            'group relative inline-block max-w-full space-y-2',
-            isQueued && 'opacity-50'
-          )}
-        >
-          {/* Action buttons group - positioned at top-right */}
+        {/* Wrapper for positioning action buttons outside opacity container */}
+        <div className="group relative inline-block max-w-full">
+          {/* Action buttons group - positioned at top-right, outside opacity container */}
           <div
             className={cn(
               'absolute -top-1 -right-1 flex items-center gap-1',
@@ -109,18 +105,21 @@ export const MessageItem = memo(function MessageItem({
               </button>
             )}
           </div>
-          {/* Attachments */}
-          {message.attachments && message.attachments.length > 0 && (
-            <AttachmentPreview attachments={message.attachments} readOnly />
-          )}
-          {/* Text */}
-          {message.text && (
-            <div className="relative inline-block max-w-full">
-              <div className="rounded bg-background border border-border px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
-                {userText}
+          {/* Message content - opacity applied here to fade queued messages without affecting buttons */}
+          <div className={cn('space-y-2', isQueued && 'opacity-50')}>
+            {/* Attachments */}
+            {message.attachments && message.attachments.length > 0 && (
+              <AttachmentPreview attachments={message.attachments} readOnly />
+            )}
+            {/* Text */}
+            {message.text && (
+              <div className="relative inline-block max-w-full">
+                <div className="rounded bg-background border border-border px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
+                  {userText}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </MessageWrapper>
     );
