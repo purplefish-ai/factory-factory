@@ -194,6 +194,7 @@ interface WorkspaceHeaderProps {
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
   running: boolean;
   isCreatingSession: boolean;
+  hasChanges?: boolean;
 }
 
 function WorkspaceHeader({
@@ -207,6 +208,7 @@ function WorkspaceHeader({
   handleQuickAction,
   running,
   isCreatingSession,
+  hasChanges,
 }: WorkspaceHeaderProps) {
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b">
@@ -217,6 +219,30 @@ function WorkspaceHeader({
         <WorkspaceCiStatus workspace={workspace} />
       </div>
       <div className="flex items-center gap-1">
+        {hasChanges &&
+          !running &&
+          (workspace.prState === 'NONE' || workspace.prState === 'CLOSED') && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  disabled={isCreatingSession}
+                  onClick={() =>
+                    handleQuickAction(
+                      'Create Pull Request',
+                      'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.'
+                    )
+                  }
+                >
+                  <GitPullRequest className="h-3.5 w-3.5" />
+                  Create PR
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Create a pull request for this branch</TooltipContent>
+            </Tooltip>
+          )}
         <QuickActionsMenu
           onExecuteAgent={(action) => {
             if (action.content) {
@@ -574,6 +600,12 @@ function WorkspaceChatContent() {
 
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
 
+// Check if branch has changes (for showing Create PR button)
+  const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
+    { workspaceId },
+    { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
+  );
+
   const { workspaceInitStatus, isInitializing } = useWorkspaceInitStatus(
     workspaceId,
     workspace,
@@ -733,7 +765,7 @@ function WorkspaceChatContent() {
       {/* Archiving Overlay - shown while workspace is being archived */}
       {archiveWorkspace.isPending && <ArchivingOverlay />}
 
-      <WorkspaceHeader
+<WorkspaceHeader
         workspace={workspace}
         workspaceId={workspaceId}
         availableIdes={availableIdes}
@@ -744,6 +776,7 @@ function WorkspaceChatContent() {
         handleQuickAction={handleQuickAction}
         running={running}
         isCreatingSession={createSession.isPending}
+        hasChanges={hasChanges}
       />
 
       {/* Main Content Area: Resizable two-column layout */}
