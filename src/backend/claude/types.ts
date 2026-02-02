@@ -649,6 +649,8 @@ export interface UserMessage {
   isSynthetic?: boolean;
   isReplay?: boolean;
   message: ClaudeMessage;
+  /** SDK-assigned UUID for this user message (used for rewind_files) */
+  uuid?: string;
 }
 
 /**

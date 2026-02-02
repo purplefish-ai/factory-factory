@@ -17,6 +17,7 @@ import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
+  RewindConfirmationDialog,
   useChatWebSocket,
   VirtualizedMessageList,
 } from '@/components/chat';
@@ -103,6 +104,12 @@ interface ChatContentProps {
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
   slashCommands: CommandInfo[];
+  // Rewind files
+  rewindPreview: ReturnType<typeof useChatWebSocket>['rewindPreview'];
+  startRewindPreview: ReturnType<typeof useChatWebSocket>['startRewindPreview'];
+  confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
+  cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
+  getUuidForMessageIndex: ReturnType<typeof useChatWebSocket>['getUuidForMessageIndex'];
 }
 
 /**
@@ -136,6 +143,11 @@ const ChatContent = memo(function ChatContent({
   pendingMessages,
   isCompacting,
   slashCommands,
+  rewindPreview,
+  startRewindPreview,
+  confirmRewind,
+  cancelRewind,
+  getUuidForMessageIndex,
 }: ChatContentProps) {
   // Group adjacent tool calls for display (memoized)
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
@@ -181,6 +193,8 @@ const ChatContent = memo(function ChatContent({
           queuedMessageIds={queuedMessageIds}
           onRemoveQueuedMessage={removeQueuedMessage}
           isCompacting={isCompacting}
+          getUuidForMessageIndex={getUuidForMessageIndex}
+          onRewindToMessage={startRewindPreview}
         />
       </div>
 
@@ -231,6 +245,13 @@ const ChatContent = memo(function ChatContent({
           slashCommands={slashCommands}
         />
       </div>
+
+      {/* Rewind Confirmation Dialog */}
+      <RewindConfirmationDialog
+        rewindPreview={rewindPreview}
+        onConfirm={confirmRewind}
+        onCancel={cancelRewind}
+      />
     </div>
   );
 });
@@ -319,6 +340,7 @@ function WorkspaceChatContent() {
     pendingMessages,
     isCompacting,
     slashCommands,
+    rewindPreview,
     sendMessage,
     stopChat,
     approvePermission,
@@ -326,6 +348,10 @@ function WorkspaceChatContent() {
     updateSettings,
     setInputDraft,
     setInputAttachments,
+    startRewindPreview,
+    confirmRewind,
+    cancelRewind,
+    getUuidForMessageIndex,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
@@ -590,6 +616,11 @@ function WorkspaceChatContent() {
                 pendingMessages={pendingMessages}
                 isCompacting={isCompacting}
                 slashCommands={slashCommands}
+                rewindPreview={rewindPreview}
+                startRewindPreview={startRewindPreview}
+                confirmRewind={confirmRewind}
+                cancelRewind={cancelRewind}
+                getUuidForMessageIndex={getUuidForMessageIndex}
               />
             </WorkspaceContentView>
           </div>

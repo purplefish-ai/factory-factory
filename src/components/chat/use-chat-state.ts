@@ -93,6 +93,12 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  // Rewind files actions
+  startRewindPreview: (userMessageUuid: string) => void;
+  confirmRewind: () => void;
+  cancelRewind: () => void;
+  /** Get the UUID for a user message at the given index */
+  getUuidForMessageIndex: (index: number) => string | undefined;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
   // Refs for UI
@@ -137,6 +143,12 @@ interface QuestionResponseMessage {
   type: 'question_response';
   requestId: string;
   answers: Record<string, string | string[]>;
+}
+
+interface RewindFilesRequest {
+  type: 'rewind_files';
+  userMessageId: string;
+  dryRun?: boolean;
 }
 
 // =============================================================================
@@ -568,6 +580,49 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
   }, []);
 
+  // Rewind files actions
+  const startRewindPreview = useCallback(
+    (userMessageUuid: string) => {
+      // Start preview state
+      dispatch({ type: 'REWIND_PREVIEW_START', payload: { userMessageId: userMessageUuid } });
+
+      // Send dry run request to get affected files
+      const msg: RewindFilesRequest = {
+        type: 'rewind_files',
+        userMessageId: userMessageUuid,
+        dryRun: true,
+      };
+      send(msg);
+    },
+    [send]
+  );
+
+  const confirmRewind = useCallback(() => {
+    const rewindPreview = stateRef.current.rewindPreview;
+    if (!rewindPreview) {
+      return;
+    }
+
+    // Send actual rewind request (not dry run)
+    const msg: RewindFilesRequest = {
+      type: 'rewind_files',
+      userMessageId: rewindPreview.userMessageId,
+      dryRun: false,
+    };
+    send(msg);
+
+    // Clear the preview state
+    dispatch({ type: 'REWIND_CONFIRM' });
+  }, [send]);
+
+  const cancelRewind = useCallback(() => {
+    dispatch({ type: 'REWIND_CANCEL' });
+  }, []);
+
+  const getUuidForMessageIndex = useCallback((index: number): string | undefined => {
+    return stateRef.current.messageIndexToUuid.get(index);
+  }, []);
+
   // Debounce sessionStorage persistence to avoid blocking on every keystroke
   const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -622,6 +677,11 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       removeQueuedMessage,
       dismissTaskNotification,
       clearTaskNotifications,
+      // Rewind files actions
+      startRewindPreview,
+      confirmRewind,
+      cancelRewind,
+      getUuidForMessageIndex,
       // Message handler for transport (stable - no deps)
       handleMessage,
       // Refs for UI
@@ -644,6 +704,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       removeQueuedMessage,
       dismissTaskNotification,
       clearTaskNotifications,
+      startRewindPreview,
+      confirmRewind,
+      cancelRewind,
+      getUuidForMessageIndex,
       handleMessage,
     ]
   );

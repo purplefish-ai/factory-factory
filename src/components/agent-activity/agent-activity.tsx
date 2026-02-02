@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, X } from 'lucide-react';
+import { Copy, RotateCcw, X } from 'lucide-react';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
@@ -31,12 +31,18 @@ export interface MessageItemProps {
   isQueued?: boolean;
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
+  /** SDK-assigned UUID for this user message (enables rewind functionality) */
+  userMessageUuid?: string;
+  /** Callback to initiate rewind to before this message */
+  onRewindToMessage?: (uuid: string) => void;
 }
 
 export const MessageItem = memo(function MessageItem({
   message,
   isQueued,
   onRemove,
+  userMessageUuid,
+  onRewindToMessage,
 }: MessageItemProps) {
   // User messages
   if (message.source === 'user') {
@@ -77,6 +83,25 @@ export const MessageItem = memo(function MessageItem({
                 aria-label="Copy message to clipboard"
               >
                 <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+            {/* Rewind button for messages with tracked UUIDs */}
+            {userMessageUuid && onRewindToMessage && (
+              <button
+                onClick={() => onRewindToMessage(userMessageUuid)}
+                onMouseDown={(e) => e.preventDefault()}
+                className={cn(
+                  'p-1.5 rounded-md',
+                  'bg-background/90 hover:bg-amber-50 dark:hover:bg-amber-900/20',
+                  'border border-border hover:border-amber-500/50',
+                  'shadow-sm',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                title="Rewind files to before this message"
+                type="button"
+                aria-label="Rewind files to before this message"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400" />
               </button>
             )}
             {/* Cancel button for queued messages */}
@@ -148,6 +173,10 @@ export interface GroupedMessageItemRendererProps {
   isQueued?: boolean;
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
+  /** SDK-assigned UUID for user messages (enables rewind functionality) */
+  userMessageUuid?: string;
+  /** Callback to initiate rewind to before this message */
+  onRewindToMessage?: (uuid: string) => void;
 }
 
 /**
@@ -157,9 +186,19 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   item,
   isQueued,
   onRemove,
+  userMessageUuid,
+  onRewindToMessage,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     return <ToolSequenceGroup sequence={item} />;
   }
-  return <MessageItem message={item} isQueued={isQueued} onRemove={onRemove} />;
+  return (
+    <MessageItem
+      message={item}
+      isQueued={isQueued}
+      onRemove={onRemove}
+      userMessageUuid={userMessageUuid}
+      onRewindToMessage={onRewindToMessage}
+    />
+  );
 });

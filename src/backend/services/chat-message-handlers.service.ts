@@ -22,6 +22,7 @@ import type {
   QuestionResponseMessage,
   QueueMessageInput,
   RemoveQueuedMessageInput,
+  RewindFilesMessage,
   SetModelMessage,
   SetThinkingBudgetMessage,
   StartMessageInput,
@@ -220,6 +221,9 @@ class ChatMessageHandlerService {
         break;
       case 'set_thinking_budget':
         await this.handleSetThinkingBudgetMessage(ws, dbSessionId, message);
+        break;
+      case 'rewind_files':
+        await this.handleRewindFilesMessage(ws, dbSessionId, message);
         break;
     }
   }
@@ -930,6 +934,48 @@ class ChatMessageHandlerService {
       });
       ws.send(
         JSON.stringify({ type: 'error', message: `Failed to set thinking budget: ${errorMessage}` })
+      );
+    }
+  }
+
+  private async handleRewindFilesMessage(
+    ws: WebSocket,
+    sessionId: string,
+    message: RewindFilesMessage
+  ): Promise<void> {
+    const client = sessionService.getClient(sessionId);
+    if (!client) {
+      ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
+      return;
+    }
+
+    try {
+      await client.rewindFiles(message.userMessageId, message.dryRun);
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Rewind files request sent', {
+          sessionId,
+          userMessageId: message.userMessageId,
+          dryRun: message.dryRun,
+        });
+      }
+      // The response will come back through the regular message stream from the CLI
+      // We just acknowledge that the request was sent successfully
+      ws.send(
+        JSON.stringify({
+          type: 'rewind_files_requested',
+          userMessageId: message.userMessageId,
+          dryRun: message.dryRun ?? false,
+        })
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[Chat WS] Failed to rewind files', {
+        sessionId,
+        userMessageId: message.userMessageId,
+        error: errorMessage,
+      });
+      ws.send(
+        JSON.stringify({ type: 'error', message: `Failed to rewind files: ${errorMessage}` })
       );
     }
   }

@@ -413,6 +413,7 @@ class ChatEventForwarderService {
 
       const msgWithType = msg as {
         type?: string;
+        uuid?: string;
         message?: { content?: Array<{ type?: string }> };
       };
       if (msgWithType.type !== 'user') {
@@ -422,6 +423,20 @@ class ChatEventForwarderService {
           type: msgWithType.type,
         });
         return;
+      }
+
+      // Forward user message UUID for rewind functionality
+      // This allows the frontend to track which SDK-assigned UUID corresponds to each message
+      if (msgWithType.uuid) {
+        const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid };
+        messageStateService.storeEvent(dbSessionId, uuidMsg);
+        chatConnectionService.forwardToSession(dbSessionId, uuidMsg);
+        if (DEBUG_CHAT_WS) {
+          logger.info('[Chat WS] Forwarding user message UUID', {
+            dbSessionId,
+            uuid: msgWithType.uuid,
+          });
+        }
       }
 
       const content = msgWithType.message?.content;

@@ -273,6 +273,29 @@ export class ClaudeProtocol extends EventEmitter {
     await this.sendRaw(message);
   }
 
+  /**
+   * Send request to rewind files to state before a user message.
+   *
+   * @param userMessageId - The UUID of the user message to rewind to
+   * @param dryRun - If true, returns preview of files that would be reverted without making changes
+   * @returns Promise that resolves when the message is sent
+   */
+  async sendRewindFiles(userMessageId: string, dryRun?: boolean): Promise<void> {
+    const requestId = randomUUID();
+
+    const message = {
+      type: 'control_request' as const,
+      request_id: requestId,
+      request: {
+        subtype: 'rewind_files' as const,
+        user_message_id: userMessageId,
+        ...(dryRun !== undefined && { dry_run: dryRun }),
+      },
+    };
+
+    await this.sendRaw(message);
+  }
+
   // ===========================================================================
   // Stream Processing
   // ===========================================================================

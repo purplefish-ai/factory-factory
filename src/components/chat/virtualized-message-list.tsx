@@ -33,6 +33,10 @@ interface VirtualizedMessageListProps {
   onRemoveQueuedMessage?: (id: string) => void;
   /** Whether context compaction is in progress */
   isCompacting?: boolean;
+  /** Get the SDK-assigned UUID for a message at the given index */
+  getUuidForMessageIndex?: (index: number) => string | undefined;
+  /** Callback when user initiates rewind to a message */
+  onRewindToMessage?: (uuid: string) => void;
 }
 
 // =============================================================================
@@ -60,6 +64,10 @@ interface VirtualRowProps {
   measureElement: (node: HTMLElement | null) => void;
   isQueued?: boolean;
   onRemove?: () => void;
+  /** SDK-assigned UUID for user messages (enables rewind functionality) */
+  userMessageUuid?: string;
+  /** Callback when user initiates rewind to this message */
+  onRewindToMessage?: (uuid: string) => void;
 }
 
 const VirtualRow = memo(function VirtualRow({
@@ -68,10 +76,18 @@ const VirtualRow = memo(function VirtualRow({
   measureElement,
   isQueued,
   onRemove,
+  userMessageUuid,
+  onRewindToMessage,
 }: VirtualRowProps) {
   return (
     <div ref={measureElement} data-index={index} className="pb-2">
-      <GroupedMessageItemRenderer item={item} isQueued={isQueued} onRemove={onRemove} />
+      <GroupedMessageItemRenderer
+        item={item}
+        isQueued={isQueued}
+        onRemove={onRemove}
+        userMessageUuid={userMessageUuid}
+        onRewindToMessage={onRewindToMessage}
+      />
     </div>
   );
 });
@@ -93,6 +109,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   queuedMessageIds,
   onRemoveQueuedMessage,
   isCompacting = false,
+  getUuidForMessageIndex,
+  onRewindToMessage,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
   const isAutoScrollingRef = useRef(false);
@@ -185,6 +203,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {virtualItems.map((virtualRow) => {
           const item = messages[virtualRow.index];
           const isQueued = queuedMessageIds?.has(item.id) ?? false;
+          // Get UUID for user messages to enable rewind functionality
+          const userMessageUuid =
+            'source' in item && item.source === 'user'
+              ? getUuidForMessageIndex?.(virtualRow.index)
+              : undefined;
           return (
             <div
               key={virtualRow.key}
@@ -206,6 +229,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
                     ? () => onRemoveQueuedMessage(item.id)
                     : undefined
                 }
+                userMessageUuid={userMessageUuid}
+                onRewindToMessage={onRewindToMessage}
               />
             </div>
           );
