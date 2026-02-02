@@ -407,13 +407,13 @@ export function AppSidebar() {
                                           }
                                         }}
                                         className={cn(
-                                          'text-xs hover:opacity-80 transition-opacity p-0',
+                                          'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity p-0',
                                           workspace.prState === 'MERGED'
                                             ? 'text-green-500'
                                             : 'text-muted-foreground hover:text-foreground'
                                         )}
                                       >
-                                        #{workspace.prNumber}
+                                        <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
                                         <span className="inline-block w-3.5 ml-0.5">
                                           {workspace.prState === 'MERGED' && (
                                             <CheckCircle2 className="h-3 w-3 inline text-green-500" />

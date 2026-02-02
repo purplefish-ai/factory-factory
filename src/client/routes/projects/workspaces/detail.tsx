@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Circle,
   GitBranch,
+  GitPullRequest,
   Loader2,
   PanelRight,
   XCircle,
@@ -452,7 +453,7 @@ function WorkspaceChatContent() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              #{workspace.prNumber}
+              <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
               {workspace.prState === 'MERGED' && (
                 <CheckCircle2 className="h-3 w-3 text-green-500" />
               )}
