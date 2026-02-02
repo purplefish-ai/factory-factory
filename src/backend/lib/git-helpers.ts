@@ -93,14 +93,14 @@ export function parseNumstatOutput(output: string): { additions: number; deletio
 
 /**
  * Get the merge base between HEAD and the default branch.
- * Tries local branch first, falls back to origin/.
+ * Tries origin/ first (which stays current with fetches), falls back to local branch.
  * Returns null if no merge base can be found.
  */
 export async function getMergeBase(
   worktreePath: string,
   defaultBranch: string
 ): Promise<string | null> {
-  const candidates = [defaultBranch, `origin/${defaultBranch}`];
+  const candidates = [`origin/${defaultBranch}`, defaultBranch];
 
   for (const base of candidates) {
     const result = await gitCommand(['merge-base', 'HEAD', base], worktreePath);
