@@ -296,17 +296,38 @@ class ChatMessageHandlerService {
   /**
    * Build message content for sending to Claude.
    * Note: Thinking is now controlled via setMaxThinkingTokens, not message suffix.
+   *
+   * Text attachments are combined into the main text content with a prefix.
+   * Image attachments are sent as separate image content blocks.
    */
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-    // If there are attachments, send as content array
+    // If there are attachments, process them
     if (msg.attachments && msg.attachments.length > 0) {
-      const content: ClaudeContentItem[] = [];
+      const textAttachments = msg.attachments.filter((a) => a.contentType === 'text');
+      const imageAttachments = msg.attachments.filter((a) => a.contentType !== 'text');
 
-      if (msg.text) {
-        content.push({ type: 'text', text: msg.text });
+      // Build the combined text content (user message + text attachments)
+      let combinedText = msg.text || '';
+
+      // Append text attachments with a prefix for context
+      for (const attachment of textAttachments) {
+        const prefix = combinedText ? '\n\n' : '';
+        combinedText += `${prefix}[Pasted content: ${attachment.name}]\n${attachment.data}`;
       }
 
-      for (const attachment of msg.attachments) {
+      // If we only have text (no images), return as string
+      if (imageAttachments.length === 0) {
+        return combinedText;
+      }
+
+      // If we have images, build content array
+      const content: ClaudeContentItem[] = [];
+
+      if (combinedText) {
+        content.push({ type: 'text', text: combinedText });
+      }
+
+      for (const attachment of imageAttachments) {
         content.push({
           type: 'image',
           source: {
