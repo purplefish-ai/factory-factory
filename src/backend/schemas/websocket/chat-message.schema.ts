@@ -103,6 +103,13 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('set_thinking_budget'),
     max_tokens: z.number().nullable(),
   }),
+
+  // Rewind files to a previous state
+  z.object({
+    type: z.literal('rewind_files'),
+    userMessageId: z.string().min(1),
+    dryRun: z.boolean().optional(),
+  }),
 ]);
 
 // ============================================================================
@@ -120,3 +127,4 @@ export type UserInputMessage = Extract<ChatMessageInput, { type: 'user_input' }>
 export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove_queued_message' }>;
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
 export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;
+export type RewindFilesMessage = Extract<ChatMessageInput, { type: 'rewind_files' }>;

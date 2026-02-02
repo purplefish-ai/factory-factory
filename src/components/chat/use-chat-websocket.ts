@@ -12,7 +12,12 @@ import type {
   TokenStats,
 } from '@/lib/claude-types';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
-import type { PendingMessageContent, PendingRequest, SessionStatus } from './chat-reducer';
+import type {
+  PendingMessageContent,
+  PendingRequest,
+  RewindPreviewState,
+  SessionStatus,
+} from './chat-reducer';
 import { useChatState } from './use-chat-state';
 
 // =============================================================================
@@ -62,6 +67,8 @@ export interface UseChatWebSocketReturn {
   slashCommands: CommandInfo[];
   // Accumulated token usage stats for the session
   tokenStats: TokenStats;
+  // Rewind preview state (for confirmation dialog)
+  rewindPreview: RewindPreviewState | null;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -75,6 +82,12 @@ export interface UseChatWebSocketReturn {
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  // Rewind files actions
+  startRewindPreview: (userMessageUuid: string) => void;
+  confirmRewind: () => void;
+  cancelRewind: () => void;
+  /** Get the SDK-assigned UUID for a user message by its stable message ID */
+  getUuidForMessageId: (messageId: string) => string | undefined;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -169,6 +182,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     permissionMode: chat.permissionMode,
     slashCommands: chat.slashCommands,
     tokenStats: chat.tokenStats,
+    rewindPreview: chat.rewindPreview,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
@@ -181,6 +195,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     removeQueuedMessage: chat.removeQueuedMessage,
     dismissTaskNotification: chat.dismissTaskNotification,
     clearTaskNotifications: chat.clearTaskNotifications,
+    // Rewind files actions
+    startRewindPreview: chat.startRewindPreview,
+    confirmRewind: chat.confirmRewind,
+    cancelRewind: chat.cancelRewind,
+    getUuidForMessageId: chat.getUuidForMessageId,
     // Refs from chat
     inputRef: chat.inputRef,
     messagesEndRef: chat.messagesEndRef,

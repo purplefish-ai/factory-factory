@@ -98,6 +98,20 @@ export interface TaskNotification {
   timestamp: string;
 }
 
+/** Rewind preview state for displaying confirmation dialog */
+export interface RewindPreviewState {
+  /** User message UUID we're rewinding to */
+  userMessageId: string;
+  /** Whether we're currently loading the preview or executing the rewind */
+  isLoading: boolean;
+  /** Whether the actual rewind is in progress (vs just previewing) */
+  isExecuting?: boolean;
+  /** Files that would be affected (populated after dry run completes) */
+  affectedFiles?: string[];
+  /** Error message if preview failed */
+  error?: string;
+}
+
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
@@ -153,6 +167,26 @@ export interface ChatState {
   slashCommands: CommandInfo[];
   /** Accumulated token usage stats for the session */
   tokenStats: TokenStats;
+  /**
+   * Queue of SDK-assigned UUIDs waiting to be mapped to user messages.
+   * Used when UUIDs arrive before their corresponding messages.
+   */
+  pendingUserMessageUuids: string[];
+  /**
+   * Map from user message ID (stable identifier) to SDK-assigned UUID.
+   * Populated as user_message_uuid events are received.
+   * Using message IDs instead of indices ensures correct mapping even when
+   * messages are inserted or removed from the array.
+   */
+  messageIdToUuid: Map<string, string>;
+  /**
+   * Set of user message IDs that were sent in the current session (not loaded from snapshot).
+   * Used to ensure UUIDs are only mapped to messages sent in this session,
+   * not historical messages from loaded sessions.
+   */
+  localUserMessageIds: Set<string>;
+  /** Current rewind preview state (null when not showing rewind dialog) */
+  rewindPreview: RewindPreviewState | null;
 }
 
 // =============================================================================
@@ -253,7 +287,16 @@ export type ChatAction =
   | { type: 'DISMISS_TASK_NOTIFICATION'; payload: { id: string } }
   | { type: 'CLEAR_TASK_NOTIFICATIONS' }
   // Slash commands discovery
-  | { type: 'WS_SLASH_COMMANDS'; payload: { commands: CommandInfo[] } };
+  | { type: 'WS_SLASH_COMMANDS'; payload: { commands: CommandInfo[] } }
+  // User message UUID tracking (for rewind functionality)
+  | { type: 'USER_MESSAGE_UUID_RECEIVED'; payload: { uuid: string } }
+  // Rewind files actions
+  | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string } }
+  | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }
+  | { type: 'REWIND_PREVIEW_ERROR'; payload: { error: string; userMessageId?: string } }
+  | { type: 'REWIND_CANCEL' }
+  | { type: 'REWIND_EXECUTING' } // Actual rewind in progress
+  | { type: 'REWIND_SUCCESS'; payload: { userMessageId?: string } }; // Actual rewind completed
 
 // =============================================================================
 // Helper Functions
@@ -394,6 +437,10 @@ function createBaseResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
   | 'tokenStats'
+  | 'pendingUserMessageUuids'
+  | 'messageIdToUuid'
+  | 'localUserMessageIds'
+  | 'rewindPreview'
 > {
   // Note: slashCommands is intentionally NOT reset here.
   // - For CLEAR_CHAT: Commands persist because we're clearing messages in the same session.
@@ -415,6 +462,10 @@ function createBaseResetState(): Pick<
     activeHooks: new Map(),
     taskNotifications: [],
     tokenStats: createEmptyTokenStats(),
+    pendingUserMessageUuids: [],
+    messageIdToUuid: new Map(),
+    localUserMessageIds: new Set(),
+    rewindPreview: null,
   };
 }
 
@@ -442,6 +493,10 @@ function createSessionSwitchResetState(): Pick<
   | 'taskNotifications'
   | 'slashCommands'
   | 'tokenStats'
+  | 'pendingUserMessageUuids'
+  | 'messageIdToUuid'
+  | 'localUserMessageIds'
+  | 'rewindPreview'
 > {
   return {
     ...createBaseResetState(),
@@ -473,6 +528,10 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     taskNotifications: [],
     slashCommands: [],
     tokenStats: createEmptyTokenStats(),
+    pendingUserMessageUuids: [],
+    messageIdToUuid: new Map(),
+    localUserMessageIds: new Set(),
+    rewindPreview: null,
     ...overrides,
   };
 }
@@ -878,6 +937,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Preserve slashCommands - they are session metadata that may not be immediately
       // re-sent if Claude has exited (stored events are cleared on exit). Commands will
       // be re-sent when the user sends a message and Claude restarts.
+      // Clear UUID tracking state since message IDs in snapshot may be different
+      // from what we had previously mapped.
       return {
         ...state,
         messages: snapshotMessages,
@@ -887,6 +948,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,
         lastRejectedMessage: null,
+        // Clear UUID tracking state to prevent stale mappings
+        // localUserMessageIds is cleared so UUIDs only map to messages sent after snapshot
+        messageIdToUuid: new Map(),
+        pendingUserMessageUuids: [],
+        localUserMessageIds: new Set(),
+        rewindPreview: null,
       };
     }
 
@@ -943,11 +1010,30 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           },
         });
 
+        // Track this message ID as locally sent (not from snapshot)
+        // This ensures UUIDs are only mapped to messages sent in this session
+        const newLocalUserMessageIds = new Set(state.localUserMessageIds);
+        newLocalUserMessageIds.add(id);
+
+        // Check if there are pending UUIDs to map to this new message
+        let newMessageIdToUuid = state.messageIdToUuid;
+        let newPendingUuids = state.pendingUserMessageUuids;
+        if (state.pendingUserMessageUuids.length > 0) {
+          // Consume the first pending UUID for this message
+          const [uuid, ...remainingUuids] = state.pendingUserMessageUuids;
+          newMessageIdToUuid = new Map(state.messageIdToUuid);
+          newMessageIdToUuid.set(id, uuid);
+          newPendingUuids = remainingUuids;
+        }
+
         return {
           ...state,
           messages: insertMessageByOrder(state.messages, newMessage),
           queuedMessages: newQueuedMessages,
           pendingMessages: newPendingMessages,
+          messageIdToUuid: newMessageIdToUuid,
+          pendingUserMessageUuids: newPendingUuids,
+          localUserMessageIds: newLocalUserMessageIds,
         };
       }
 
@@ -1108,6 +1194,127 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case 'CLEAR_TASK_NOTIFICATIONS':
       return { ...state, taskNotifications: [] };
+
+    // User message UUID tracking (for rewind functionality)
+    case 'USER_MESSAGE_UUID_RECEIVED': {
+      // Find user messages that:
+      // 1. Were sent in this session (in localUserMessageIds, not from snapshot)
+      // 2. Don't have UUIDs mapped yet
+      // This prevents historical messages from snapshot getting UUIDs meant for new messages
+      const unmappedUserMessages = state.messages.filter(
+        (m) =>
+          m.source === 'user' &&
+          state.localUserMessageIds.has(m.id) &&
+          !state.messageIdToUuid.has(m.id)
+      );
+
+      // Map UUID to the first unmapped user message if available
+      if (unmappedUserMessages.length > 0) {
+        const targetMessage = unmappedUserMessages[0];
+        const newMap = new Map(state.messageIdToUuid);
+        newMap.set(targetMessage.id, action.payload.uuid);
+        return {
+          ...state,
+          messageIdToUuid: newMap,
+        };
+      }
+
+      // If no unmapped message found, store in pending queue for later mapping
+      // This handles edge cases where UUID arrives before the message is added to state
+      debug.log(
+        `[chat-reducer] UUID received but no unmapped user message found, queueing: ${action.payload.uuid}`
+      );
+      return {
+        ...state,
+        pendingUserMessageUuids: [...state.pendingUserMessageUuids, action.payload.uuid],
+      };
+    }
+
+    // Rewind actions
+    case 'REWIND_PREVIEW_START':
+      return {
+        ...state,
+        rewindPreview: {
+          userMessageId: action.payload.userMessageId,
+          isLoading: true,
+        },
+      };
+
+    case 'REWIND_PREVIEW_SUCCESS': {
+      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
+      if (!state.rewindPreview) {
+        return state;
+      }
+      if (
+        action.payload.userMessageId &&
+        action.payload.userMessageId !== state.rewindPreview.userMessageId
+      ) {
+        // Response is for a different rewind request, ignore it
+        return state;
+      }
+      return {
+        ...state,
+        rewindPreview: {
+          ...state.rewindPreview,
+          isLoading: false,
+          affectedFiles: action.payload.affectedFiles,
+        },
+      };
+    }
+
+    case 'REWIND_PREVIEW_ERROR': {
+      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
+      if (!state.rewindPreview) {
+        return state;
+      }
+      if (
+        action.payload.userMessageId &&
+        action.payload.userMessageId !== state.rewindPreview.userMessageId
+      ) {
+        // Error is for a different rewind request, ignore it
+        return state;
+      }
+      return {
+        ...state,
+        rewindPreview: {
+          ...state.rewindPreview,
+          isLoading: false,
+          error: action.payload.error,
+        },
+      };
+    }
+
+    case 'REWIND_CANCEL':
+      return { ...state, rewindPreview: null };
+
+    case 'REWIND_EXECUTING':
+      // Keep preview state open but mark as loading (executing actual rewind)
+      return state.rewindPreview
+        ? {
+            ...state,
+            rewindPreview: {
+              ...state.rewindPreview,
+              isLoading: true,
+              isExecuting: true, // Flag to show different UI during actual rewind
+            },
+          }
+        : state;
+
+    case 'REWIND_SUCCESS': {
+      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
+      if (!state.rewindPreview) {
+        return state;
+      }
+      if (
+        action.payload.userMessageId &&
+        action.payload.userMessageId !== state.rewindPreview.userMessageId
+      ) {
+        // Response is for a different rewind request, ignore it
+        return state;
+      }
+      // Actual rewind completed successfully, clear the preview state
+      return { ...state, rewindPreview: null };
+    }
 
     default:
       return state;
@@ -1303,6 +1510,7 @@ function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: switch statement complexity is inherent to message type dispatch
 export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAction | null {
   switch (data.type) {
     case 'status':
@@ -1376,6 +1584,32 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'slash_commands':
       return data.slashCommands
         ? { type: 'WS_SLASH_COMMANDS', payload: { commands: data.slashCommands } }
+        : null;
+    // User message UUID tracking (for rewind functionality)
+    case 'user_message_uuid':
+      return data.uuid
+        ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } }
+        : null;
+    // Rewind files response events
+    case 'rewind_files_preview':
+      // If dryRun is false, this is the actual rewind completion
+      if (data.dryRun === false) {
+        return { type: 'REWIND_SUCCESS', payload: { userMessageId: data.userMessageId } };
+      }
+      // Otherwise, this is a preview (dry run) response
+      return {
+        type: 'REWIND_PREVIEW_SUCCESS',
+        payload: {
+          affectedFiles: data.affectedFiles ?? [],
+          userMessageId: data.userMessageId,
+        },
+      };
+    case 'rewind_files_error':
+      return data.rewindError
+        ? {
+            type: 'REWIND_PREVIEW_ERROR',
+            payload: { error: data.rewindError, userMessageId: data.userMessageId },
+          }
         : null;
     default:
       return null;

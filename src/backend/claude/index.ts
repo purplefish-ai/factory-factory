@@ -34,6 +34,7 @@ import {
   isHookCallbackRequest,
   type PermissionMode,
   type ResultMessage,
+  type RewindFilesResponse,
   type StreamEventMessage,
   type SystemCompactBoundaryMessage,
   type SystemHookResponseMessage,
@@ -455,6 +456,20 @@ export class ClaudeClient extends EventEmitter {
       throw new Error('ClaudeClient not initialized');
     }
     await this.process.protocol.sendSetMaxThinkingTokens(tokens);
+  }
+
+  /**
+   * Rewind files to the state before a user message was processed.
+   *
+   * @param userMessageId - The UUID of the user message to rewind to
+   * @param dryRun - If true, returns preview of files that would be reverted without making changes
+   * @returns Response containing list of affected files
+   */
+  rewindFiles(userMessageId: string, dryRun?: boolean): Promise<RewindFilesResponse> {
+    if (!this.process) {
+      return Promise.reject(new Error('ClaudeClient not initialized'));
+    }
+    return this.process.protocol.sendRewindFiles(userMessageId, dryRun);
   }
 
   // ===========================================================================

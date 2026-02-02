@@ -10,6 +10,8 @@ export { LatestThinking } from './latest-thinking';
 export { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 export { QuestionPrompt } from './question-prompt';
 export { QueuedMessages } from './queued-messages';
+export type { RewindConfirmationDialogProps } from './rewind-confirmation-dialog';
+export { RewindConfirmationDialog } from './rewind-confirmation-dialog';
 export { SessionPicker } from './session-picker';
 export { SessionTabBar } from './session-tab-bar';
 export type { SlashCommandPaletteHandle, SlashKeyResult } from './slash-command-palette';
