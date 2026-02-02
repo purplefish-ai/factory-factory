@@ -23,16 +23,19 @@ import type {
   SessionInfo,
   SessionInitData,
   SessionStatus as SharedSessionStatus,
+  TokenStats,
   ToolUseContent,
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
 import {
+  createEmptyTokenStats,
   DEFAULT_CHAT_SETTINGS,
   getToolUseIdFromEvent,
   isStreamEventMessage,
   isWsClaudeMessage,
   MessageState,
+  updateTokenStatsFromResult,
 } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 
@@ -148,6 +151,8 @@ export interface ChatState {
   taskNotifications: TaskNotification[];
   /** Slash commands from CLI initialize response */
   slashCommands: CommandInfo[];
+  /** Accumulated token usage stats for the session */
+  tokenStats: TokenStats;
 }
 
 // =============================================================================
@@ -388,6 +393,7 @@ function createBaseResetState(): Pick<
   | 'hasCompactBoundary'
   | 'activeHooks'
   | 'taskNotifications'
+  | 'tokenStats'
 > {
   // Note: slashCommands is intentionally NOT reset here.
   // - For CLEAR_CHAT: Commands persist because we're clearing messages in the same session.
@@ -408,6 +414,7 @@ function createBaseResetState(): Pick<
     hasCompactBoundary: false,
     activeHooks: new Map(),
     taskNotifications: [],
+    tokenStats: createEmptyTokenStats(),
   };
 }
 
@@ -434,6 +441,7 @@ function createSessionSwitchResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
   | 'slashCommands'
+  | 'tokenStats'
 > {
   return {
     ...createBaseResetState(),
@@ -464,6 +472,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     activeHooks: new Map(),
     taskNotifications: [],
     slashCommands: [],
+    tokenStats: createEmptyTokenStats(),
     ...overrides,
   };
 }
@@ -514,9 +523,13 @@ function handleClaudeMessage(state: ChatState, claudeMsg: ClaudeMessage, order: 
       ? { ...state, sessionStatus: { phase: 'running' } }
       : state;
 
-  // Set to ready when we receive a result
+  // Set to ready when we receive a result, and accumulate token stats
   if (claudeMsg.type === 'result') {
-    baseState = { ...baseState, sessionStatus: { phase: 'ready' } };
+    baseState = {
+      ...baseState,
+      sessionStatus: { phase: 'ready' },
+      tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
+    };
   }
 
   // Check if message should be stored
