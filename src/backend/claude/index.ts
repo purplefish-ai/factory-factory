@@ -8,6 +8,7 @@
 
 import { EventEmitter } from 'node:events';
 import { AskUserQuestionInputSchema, safeParseToolInput } from '../schemas/tool-inputs.schema';
+import { createLogger } from '../services/logger.service';
 import {
   AutoApproveHandler,
   createAllowResponse,
@@ -45,6 +46,8 @@ import {
   type ToolUseSummaryMessage,
   type UserMessage,
 } from './types';
+
+const logger = createLogger('claude-client');
 
 // =============================================================================
 // Types
@@ -660,12 +663,18 @@ export class ClaudeClient extends EventEmitter {
       }
     });
 
-    // Handle cancel requests from CLI (e.g., when user interrupts during permission prompt)
+    // Handle cancel requests from CLI (e.g., when user interrupts during permission or question prompt)
     this.process.protocol.on('control_cancel', (cancelRequest: ControlCancelRequest) => {
-      // Cancel the deferred handler's pending request (rejects the promise)
+      logger.debug('Control cancel received', { requestId: cancelRequest.request_id });
+      // Cancel the deferred interactive handler's pending request (distinct from protocol-level requests)
       this.interactiveHandler.cancel(cancelRequest.request_id, 'Request cancelled by CLI');
       // Clean up stored request
+      const hadStoredRequest = this.pendingInteractiveRequests.has(cancelRequest.request_id);
       this.pendingInteractiveRequests.delete(cancelRequest.request_id);
+      logger.debug('Request cancelled cleanup', {
+        requestId: cancelRequest.request_id,
+        hadStoredRequest,
+      });
       // Emit for forwarding to frontend
       this.emit('permission_cancelled', cancelRequest.request_id);
     });

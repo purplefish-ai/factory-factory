@@ -683,7 +683,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'QUESTION_RESPONSE':
       return { ...state, pendingRequest: { type: 'none' } };
 
-    // Permission cancelled by CLI (e.g., Ctrl+C during permission prompt)
+    // Request cancelled by CLI (e.g., Ctrl+C during permission or question prompt)
     case 'WS_PERMISSION_CANCELLED': {
       // Only clear if the cancelled request matches the current pending request
       const currentRequestId =
@@ -1288,11 +1288,13 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
       return handlePermissionRequestMessage(data);
     case 'user_question':
       return handleUserQuestionMessage(data);
-    // Permission cancelled by CLI
+    // Request cancelled by CLI (e.g., Ctrl+C during permission or question prompt)
     case 'permission_cancelled':
-      return data.requestId
-        ? { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId } }
-        : null;
+      if (!data.requestId) {
+        // biome-ignore lint/suspicious/noConsole: Error logging for debugging malformed WebSocket messages
+        console.error('[Chat Reducer] Received permission_cancelled without requestId', data);
+      }
+      return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId ?? '' } };
     // Interactive response handling
     case 'message_used_as_response':
       return data.id && data.text
