@@ -283,4 +283,20 @@ export const adminRouter = router({
       ...result,
     };
   }),
+
+  /**
+   * Manually trigger PR review comment check for all workspaces with PRs.
+   * Useful for testing PR review auto-fix functionality.
+   */
+  triggerPRReviewCheck: publicProcedure.mutation(async ({ ctx }) => {
+    const { prReviewMonitorService } = ctx.appContext.services;
+    const logger = getLogger(ctx);
+
+    logger.info('Manually triggering PR review check for all workspaces');
+    const result = await prReviewMonitorService.checkAllWorkspaces();
+    return {
+      success: true,
+      ...result,
+    };
+  }),
 });

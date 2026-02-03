@@ -8,6 +8,9 @@ interface UpdateUserSettingsInput {
   notificationSoundPath?: string | null;
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   autoFixCiIssues?: boolean;
+  autoFixPrReviewComments?: boolean;
+  prReviewFixAllowedUsers?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
+  prReviewFixPrompt?: string | null;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }

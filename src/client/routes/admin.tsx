@@ -1,5 +1,13 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, CheckCircle2, FileJson, RefreshCw, Terminal, Wrench } from 'lucide-react';
+import {
+  Bot,
+  CheckCircle2,
+  FileJson,
+  MessageSquare,
+  RefreshCw,
+  Terminal,
+  Wrench,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -25,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { type AppRouter, trpc } from '../../frontend/lib/trpc';
@@ -765,6 +774,184 @@ function CiSettingsSection() {
   );
 }
 
+function PrReviewSettingsSection() {
+  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const utils = trpc.useUtils();
+  const updateSettings = trpc.userSettings.update.useMutation({
+    onSuccess: () => {
+      toast.success('PR review settings updated');
+      utils.userSettings.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to update settings: ${error.message}`);
+    },
+  });
+
+  const triggerReviewCheck = trpc.admin.triggerPRReviewCheck.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `Review check completed: ${result.checked} checked, ${result.newComments} with new comments, ${result.triggered} sessions triggered`
+      );
+    },
+    onError: (error) => {
+      toast.error(`Failed to trigger review check: ${error.message}`);
+    },
+  });
+
+  const [allowedUsers, setAllowedUsers] = useState<string>('');
+  const [customPrompt, setCustomPrompt] = useState<string>('');
+
+  // Update local state when settings load
+  useEffect(() => {
+    if (settings) {
+      const users = (settings.prReviewFixAllowedUsers as string[]) ?? [];
+      setAllowedUsers(users.join(', '));
+      setCustomPrompt(settings.prReviewFixPrompt ?? '');
+    }
+  }, [settings]);
+
+  const handleSaveAllowedUsers = () => {
+    const users = allowedUsers
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    updateSettings.mutate({
+      prReviewFixAllowedUsers: users.length > 0 ? users : null,
+    });
+  };
+
+  const handleSaveCustomPrompt = () => {
+    updateSettings.mutate({
+      prReviewFixPrompt: customPrompt.trim() || null,
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5" />
+            PR Review Auto-Fix Settings
+          </CardTitle>
+          <CardDescription>Configure automatic handling of PR review comments</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="w-5 h-5" />
+          PR Review Auto-Fix Settings
+        </CardTitle>
+        <CardDescription>Configure automatic handling of PR review comments</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Toggle for enabling/disabling */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="auto-fix-reviews">Automatically address PR review comments</Label>
+            <p className="text-sm text-muted-foreground">
+              When enabled, creates dedicated Claude sessions to address review feedback
+              automatically
+            </p>
+          </div>
+          <Switch
+            id="auto-fix-reviews"
+            checked={settings?.autoFixPrReviewComments ?? false}
+            onCheckedChange={(checked) => {
+              updateSettings.mutate({ autoFixPrReviewComments: checked });
+            }}
+            disabled={updateSettings.isPending}
+          />
+        </div>
+
+        {/* Allowed users input */}
+        <div className="space-y-2 border-t pt-4">
+          <Label htmlFor="allowed-users">Allowed Users (GitHub usernames)</Label>
+          <p className="text-sm text-muted-foreground">
+            Only auto-fix comments from these users. Leave empty to process all users.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              id="allowed-users"
+              placeholder="user1, user2, user3"
+              value={allowedUsers}
+              onChange={(e) => setAllowedUsers(e.target.value)}
+              className="flex-1"
+            />
+            <Button
+              variant="outline"
+              onClick={handleSaveAllowedUsers}
+              disabled={updateSettings.isPending}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+
+        {/* Custom prompt textarea */}
+        <div className="space-y-2 border-t pt-4">
+          <Label htmlFor="custom-prompt">Custom Instructions (Optional)</Label>
+          <p className="text-sm text-muted-foreground">
+            Additional instructions for the Claude session when addressing review comments
+          </p>
+          <Textarea
+            id="custom-prompt"
+            placeholder="Example: Focus on code style issues first. Always run tests before committing..."
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            rows={3}
+          />
+          <Button
+            variant="outline"
+            onClick={handleSaveCustomPrompt}
+            disabled={updateSettings.isPending}
+          >
+            Save Instructions
+          </Button>
+        </div>
+
+        {/* Manual trigger button */}
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Manual Review Check</Label>
+              <p className="text-sm text-muted-foreground">
+                Manually trigger review comment check for all workspaces with PRs
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => triggerReviewCheck.mutate()}
+              disabled={triggerReviewCheck.isPending}
+            >
+              {triggerReviewCheck.isPending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Trigger Review Check
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboardPage() {
   const {
     data: stats,
@@ -832,6 +1019,9 @@ export default function AdminDashboardPage() {
 
         {/* CI Settings */}
         <CiSettingsSection />
+
+        {/* PR Review Settings */}
+        <PrReviewSettingsSection />
       </div>
     </div>
   );

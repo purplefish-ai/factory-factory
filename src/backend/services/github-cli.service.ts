@@ -673,6 +673,98 @@ class GitHubCLIService {
       throw new Error(`Failed to submit review: ${errorMessage}`);
     }
   }
+
+  /**
+   * Get review comments (line-level comments on code) for a PR.
+   * These are different from regular PR comments - they're attached to specific lines in the diff.
+   */
+  async getReviewComments(
+    repo: string,
+    prNumber: number
+  ): Promise<
+    Array<{
+      id: number;
+      author: { login: string };
+      body: string;
+      path: string;
+      line: number | null;
+      createdAt: string;
+      url: string;
+    }>
+  > {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['api', `repos/${repo}/pulls/${prNumber}/comments`, '--paginate'],
+        { timeout: 30_000 }
+      );
+
+      if (!stdout.trim()) {
+        return [];
+      }
+
+      const comments = JSON.parse(stdout);
+      return comments.map(
+        (comment: {
+          id: number;
+          user: { login: string };
+          body: string;
+          path: string;
+          line: number | null;
+          created_at: string;
+          html_url: string;
+        }) => ({
+          id: comment.id,
+          author: { login: comment.user.login },
+          body: comment.body,
+          path: comment.path,
+          line: comment.line,
+          createdAt: comment.created_at,
+          url: comment.html_url,
+        })
+      );
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to fetch PR review comments via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to fetch PR review comments: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Add a comment to a PR.
+   */
+  async addPRComment(repo: string, prNumber: number, body: string): Promise<void> {
+    try {
+      await execFileAsync(
+        'gh',
+        ['pr', 'comment', String(prNumber), '--repo', repo, '--body', body],
+        {
+          timeout: 30_000,
+        }
+      );
+      logger.info('PR comment added successfully', { repo, prNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to add PR comment via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to add PR comment: ${errorMessage}`);
+    }
+  }
 }
 
 export const githubCLIService = new GitHubCLIService();
