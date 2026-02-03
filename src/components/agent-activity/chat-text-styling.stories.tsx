@@ -1,5 +1,3 @@
-'use client';
-
 import type { Meta, StoryObj } from '@storybook/react';
 import type * as React from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';

@@ -1,5 +1,3 @@
-'use client';
-
 import { ChevronDown, ChevronRight, File, FileCode, Folder, Loader2 } from 'lucide-react';
 import { memo, useCallback } from 'react';
 

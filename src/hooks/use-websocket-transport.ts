@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getReconnectDelay, MAX_RECONNECT_ATTEMPTS } from '@/lib/websocket-config';
 

@@ -1,5 +1,3 @@
-'use client';
-
 import type { SessionStatus } from '@prisma-gen/client';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';

@@ -1,5 +1,3 @@
-'use client';
-
 import { AlertTriangle, FileText, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {

@@ -1,5 +1,3 @@
-'use client';
-
 import { FileText, ShieldCheck, ShieldX, Terminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 

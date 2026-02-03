@@ -1,5 +1,3 @@
-'use client';
-
 import type { inferRouterOutputs } from '@trpc/server';
 import { Bug, Code, Compass, MessageSquare, Play } from 'lucide-react';
 import { useState } from 'react';
