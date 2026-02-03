@@ -69,17 +69,17 @@ function formatToolInput(input: Record<string, unknown>): string {
 function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
   const approveButtonRef = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(true);
+  const permissionRequestId = permission?.requestId;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Only re-focus when requestId changes
   useEffect(() => {
-    if (!permission) {
+    if (!permissionRequestId) {
       return;
     }
     const timeoutId = setTimeout(() => {
       approveButtonRef.current?.focus();
     }, 100);
     return () => clearTimeout(timeoutId);
-  }, [permission?.requestId]);
+  }, [permissionRequestId]);
 
   if (!permission) {
     return null;
@@ -158,11 +158,11 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
  */
 export function PermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
+  const permissionRequestId = permission?.requestId;
 
   // Focus the Allow button when the prompt appears for keyboard accessibility
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Only re-focus when requestId changes
   useEffect(() => {
-    if (!permission) {
+    if (!permissionRequestId) {
       return;
     }
     // Small delay to ensure the element is rendered and focusable
@@ -170,7 +170,7 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
       allowButtonRef.current?.focus();
     }, 100);
     return () => clearTimeout(timeoutId);
-  }, [permission?.requestId]);
+  }, [permissionRequestId]);
 
   if (!permission) {
     return null;
@@ -230,18 +230,18 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
  */
 export function PermissionPromptExpanded({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
+  const permissionRequestId = permission?.requestId;
 
   // Focus the Allow button when the prompt appears for keyboard accessibility
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Only re-focus when requestId changes
   useEffect(() => {
-    if (!permission) {
+    if (!permissionRequestId) {
       return;
     }
     const timeoutId = setTimeout(() => {
       allowButtonRef.current?.focus();
     }, 100);
     return () => clearTimeout(timeoutId);
-  }, [permission?.requestId]);
+  }, [permissionRequestId]);
 
   if (!permission) {
     return null;

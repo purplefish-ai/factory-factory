@@ -53,12 +53,8 @@ BreadcrumbLink.displayName = 'BreadcrumbLink';
 
 const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWithoutRef<'span'>>(
   ({ className, ...props }, ref) => (
-    // biome-ignore lint/a11y/useFocusableInteractive: Current page indicator, not meant to be interactive
-    // biome-ignore lint/a11y/useSemanticElements: Using span with link role for breadcrumb pattern
     <span
       ref={ref}
-      role="link"
-      aria-disabled="true"
       aria-current="page"
       className={cn('font-normal text-foreground', className)}
       {...props}
