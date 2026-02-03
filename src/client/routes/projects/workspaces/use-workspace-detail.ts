@@ -25,6 +25,11 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     }
   );
 
+  // Expose invalidate function for external triggers (e.g., when session stops running)
+  const invalidateWorkspace = useCallback(() => {
+    utils.workspace.get.invalidate({ id: workspaceId });
+  }, [utils, workspaceId]);
+
   // Sync PR status from GitHub on page load (if workspace has a PR)
   const syncPRStatus = trpc.workspace.syncPRStatus.useMutation({
     onSuccess: () => {
@@ -76,6 +81,7 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
+    invalidateWorkspace,
   };
 }
 

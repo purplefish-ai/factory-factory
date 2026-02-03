@@ -618,6 +618,7 @@ function WorkspaceChatContent() {
     recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
+    invalidateWorkspace,
   } = useWorkspaceData({ workspaceId: workspaceId });
 
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
@@ -687,6 +688,17 @@ function WorkspaceChatContent() {
   const loadingSession = sessionStatus.phase === 'loading';
   // Session is ready when session_loaded has been received (ready or running phase)
   const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
+
+  // Track previous running state to detect when session stops
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    // When session transitions from running to not running, refresh workspace data
+    // This catches PR creation, commits, and other state changes made during the session
+    if (wasRunningRef.current && !running) {
+      invalidateWorkspace();
+    }
+    wasRunningRef.current = running;
+  }, [running, invalidateWorkspace]);
 
   // Session management
   const {
