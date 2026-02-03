@@ -1,0 +1,35 @@
+import type { ClaudeContentItem } from '../../../claude/types';
+import type { UserInputMessage } from '../../../schemas/websocket';
+import { sessionService } from '../../session.service';
+import type { ChatMessageHandler } from '../types';
+
+export function createUserInputHandler(): ChatMessageHandler {
+  return ({ ws, sessionId, message }) => {
+    const typedMessage = message as UserInputMessage;
+    const rawContent = typedMessage.content || typedMessage.text;
+    if (!rawContent) {
+      return;
+    }
+
+    if (typeof rawContent === 'string' && !rawContent.trim()) {
+      return;
+    }
+
+    // Cast content array to ClaudeContentItem[] - validation is done at WebSocket handler level
+    const messageContent =
+      typeof rawContent === 'string' ? rawContent : (rawContent as ClaudeContentItem[]);
+
+    const existingClient = sessionService.getClient(sessionId);
+    if (existingClient?.isRunning()) {
+      existingClient.sendMessage(messageContent);
+      return;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'No active Claude session. Use queue_message to queue messages.',
+      })
+    );
+  };
+}

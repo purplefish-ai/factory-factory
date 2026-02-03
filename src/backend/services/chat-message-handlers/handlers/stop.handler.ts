@@ -1,0 +1,13 @@
+import { chatEventForwarderService } from '../../chat-event-forwarder.service';
+import { sessionService } from '../../session.service';
+import type { ChatMessageHandler } from '../types';
+
+export function createStopHandler(): ChatMessageHandler {
+  return async ({ ws, sessionId }) => {
+    await sessionService.stopClaudeSession(sessionId);
+    // Only clear pending requests here - clientEventSetup cleanup happens in the exit handler
+    // to avoid race conditions where a new client is created before the old one exits
+    chatEventForwarderService.clearPendingRequest(sessionId);
+    ws.send(JSON.stringify({ type: 'stopped', dbSessionId: sessionId }));
+  };
+}
