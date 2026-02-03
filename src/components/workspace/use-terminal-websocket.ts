@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback } from 'react';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';

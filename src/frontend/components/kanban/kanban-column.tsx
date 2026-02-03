@@ -1,5 +1,3 @@
-'use client';
-
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { Badge } from '@/components/ui/badge';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';

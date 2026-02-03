@@ -1,5 +1,3 @@
-'use client';
-
 import { AlertCircle, Eye, FileCode, Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 

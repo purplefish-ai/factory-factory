@@ -1,5 +1,3 @@
-'use client';
-
 import { Clock, Coins, Database, Globe, Layers, Zap } from 'lucide-react';
 
 import { Progress } from '@/components/ui/progress';

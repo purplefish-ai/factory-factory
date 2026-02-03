@@ -1,5 +1,3 @@
-'use client';
-
 import { ExternalLink } from 'lucide-react';
 import mermaid from 'mermaid';
 import { type ComponentPropsWithoutRef, memo, useEffect, useMemo, useRef, useState } from 'react';

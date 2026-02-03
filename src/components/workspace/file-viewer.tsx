@@ -1,5 +1,3 @@
-'use client';
-
 import { AlertCircle, AlertTriangle, Eye, FileCode, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState } from 'react';

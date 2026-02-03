@@ -1,5 +1,3 @@
-'use client';
-
 import { AlertCircle, FileCode, FileMinus, FilePlus, FileQuestion, Loader2 } from 'lucide-react';
 import { memo, useCallback } from 'react';
 
