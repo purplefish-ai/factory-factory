@@ -23,6 +23,7 @@ import { type ConnectionInfo, chatConnectionService } from '../../services/chat-
 import { chatEventForwarderService } from '../../services/chat-event-forwarder.service';
 import { chatMessageHandlerService } from '../../services/chat-message-handlers.service';
 import {
+  chatTransportAdapterService,
   configService,
   createLogger,
   messageStateService,
@@ -34,6 +35,9 @@ import { toMessageString } from './message-utils';
 const logger = createLogger('chat-handler');
 
 const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
+
+// Ensure message state events are forwarded over WebSocket transport.
+chatTransportAdapterService.setup();
 
 function sendBadRequest(socket: Duplex, message: string): void {
   socket.write(`HTTP/1.1 400 Bad Request\r\n\r\n${message}`);
