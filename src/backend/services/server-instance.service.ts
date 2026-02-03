@@ -1,23 +1,20 @@
+import type { ServerInstance } from '@/backend/types/server-instance';
+
 /**
  * Server Instance Service
  *
  * Provides global access to the server instance for retrieving runtime information
  * like the actual port the server is running on.
- *
- * Uses any type to avoid circular dependency with server.ts
  */
 
-// biome-ignore lint/suspicious/noExplicitAny: Avoiding circular dependency with server.ts
-let serverInstance: any = null;
+let serverInstance: ServerInstance | null = null;
 
 export const serverInstanceService = {
-  // biome-ignore lint/suspicious/noExplicitAny: Avoiding circular dependency with server.ts
-  setInstance(instance: any): void {
+  setInstance(instance: ServerInstance): void {
     serverInstance = instance;
   },
 
-  // biome-ignore lint/suspicious/noExplicitAny: Avoiding circular dependency with server.ts
-  getInstance(): any {
+  getInstance(): ServerInstance | null {
     return serverInstance;
   },
 

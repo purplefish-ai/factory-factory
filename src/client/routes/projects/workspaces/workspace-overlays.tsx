@@ -38,9 +38,8 @@ export function InitializationOverlay({
   });
 
   // Auto-scroll to bottom when new output arrives
-  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger scroll when initOutput changes
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && initOutput !== null) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [initOutput]);

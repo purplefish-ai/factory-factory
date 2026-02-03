@@ -40,20 +40,9 @@ import {
 } from './routers/websocket';
 import { reconciliationService } from './services/reconciliation.service';
 import { appRouter, createContext } from './trpc/index';
+import type { ServerInstance } from './types/server-instance';
 
-/**
- * Server instance returned by createServer()
- */
-export interface ServerInstance {
-  /** Start the server and return the URL */
-  start(): Promise<string>;
-  /** Stop the server gracefully */
-  stop(): Promise<void>;
-  /** Get the actual port the server is listening on */
-  getPort(): number;
-  /** Get the HTTP server instance (for Electron to monitor) */
-  getHttpServer(): HttpServer;
-}
+export type { ServerInstance };
 
 /**
  * Create and configure the backend server.

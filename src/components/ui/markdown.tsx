@@ -1,6 +1,14 @@
 import { ExternalLink } from 'lucide-react';
 import mermaid from 'mermaid';
-import { type ComponentPropsWithoutRef, memo, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ComponentPropsWithoutRef,
+  isValidElement,
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -88,9 +96,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       // Override pre for code blocks
       pre: ({ children, ...props }: ComponentPropsWithoutRef<'pre'>) => {
         // Check if the child is a Mermaid diagram
-        // biome-ignore lint/suspicious/noExplicitAny: Need to check child props dynamically
-        const child = children as any;
-        if (child?.props?.className?.includes('language-mermaid')) {
+        const child = Array.isArray(children) ? children[0] : children;
+        if (
+          isValidElement<{ className?: string }>(child) &&
+          typeof child.props.className === 'string' &&
+          child.props.className.includes('language-mermaid')
+        ) {
           return <>{children}</>;
         }
         return (
