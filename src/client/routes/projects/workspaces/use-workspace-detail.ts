@@ -98,8 +98,11 @@ interface UseSessionManagementOptions {
 }
 
 /** Minimal mutation interface exposing only the properties we use */
-interface MutationLike<TInput, TOutput = unknown> {
-  mutate: (input: TInput, options?: { onSuccess?: (data: TOutput) => void }) => void;
+interface MutationLike<TInput, TOutput = unknown, TError = unknown> {
+  mutate: (
+    input: TInput,
+    options?: { onSuccess?: (data: TOutput) => void; onError?: (error: TError) => void }
+  ) => void;
   isPending: boolean;
 }
 
@@ -115,7 +118,7 @@ export interface UseSessionManagementReturn {
     { id: string }
   >;
   deleteSession: MutationLike<{ id: string }>;
-  archiveWorkspace: MutationLike<{ id: string }>;
+  archiveWorkspace: MutationLike<{ id: string; commitUncommitted?: boolean }>;
   openInIde: MutationLike<{ id: string }>;
   availableIdes: AvailableIde[];
   preferredIde: string;
