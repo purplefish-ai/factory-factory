@@ -11,6 +11,7 @@ const meta = {
   tags: ['autodocs'],
   args: {
     onSelect: fn(),
+    workspaceId: 'mock-workspace-id',
   },
 } satisfies Meta<typeof WorkflowSelector>;
 
