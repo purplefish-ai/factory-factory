@@ -36,9 +36,6 @@ const logger = createLogger('chat-handler');
 
 const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
 
-// Ensure message state events are forwarded over WebSocket transport.
-chatTransportAdapterService.setup();
-
 function sendBadRequest(socket: Duplex, message: string): void {
   socket.write(`HTTP/1.1 400 Bad Request\r\n\r\n${message}`);
   socket.destroy();
@@ -227,6 +224,9 @@ export function handleChatUpgrade(
   wss: WebSocketServer,
   wsAliveMap: WeakMap<WebSocket, boolean>
 ): void {
+  // Ensure message state events are forwarded over WebSocket transport.
+  chatTransportAdapterService.setup();
+
   const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
   const dbSessionId = url.searchParams.get('sessionId') || null;
   const rawWorkingDir = url.searchParams.get('workingDir');
