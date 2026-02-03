@@ -85,3 +85,53 @@ export function useAutoFocusChatInput({
     }
   }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace, inputRef]);
 }
+
+/**
+ * Hook to handle pending prompts stored in sessionStorage.
+ * Used when creating a workspace with a default prompt that should be sent
+ * once the session is ready.
+ */
+export function usePendingPrompt({
+  selectedDbSessionId,
+  isSessionReady,
+  sendMessage,
+}: {
+  selectedDbSessionId: string | null;
+  isSessionReady: boolean;
+  sendMessage: (text: string) => void;
+}) {
+  const wasSessionReadyRef = useRef(isSessionReady);
+  const hasSentPromptRef = useRef(false);
+  const prevSessionIdRef = useRef(selectedDbSessionId);
+
+  useEffect(() => {
+    // Reset state when session ID changes
+    if (prevSessionIdRef.current !== selectedDbSessionId) {
+      hasSentPromptRef.current = false;
+      wasSessionReadyRef.current = false;
+      prevSessionIdRef.current = selectedDbSessionId;
+    }
+
+    if (!selectedDbSessionId) {
+      return;
+    }
+
+    const transitionedToReady = !wasSessionReadyRef.current && isSessionReady;
+    wasSessionReadyRef.current = isSessionReady;
+
+    // Only send on transition to ready, and only once
+    if (transitionedToReady && !hasSentPromptRef.current) {
+      const storageKey = `pending-prompt-${selectedDbSessionId}`;
+      const pendingPrompt = sessionStorage.getItem(storageKey);
+
+      if (pendingPrompt) {
+        hasSentPromptRef.current = true;
+        sessionStorage.removeItem(storageKey);
+        // Small delay to ensure the UI is fully ready
+        setTimeout(() => {
+          sendMessage(pendingPrompt);
+        }, 100);
+      }
+    }
+  }, [selectedDbSessionId, isSessionReady, sendMessage]);
+}

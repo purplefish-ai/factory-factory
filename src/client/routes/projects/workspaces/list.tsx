@@ -1,8 +1,7 @@
 import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
-import { Kanban, List, Loader2, Plus } from 'lucide-react';
+import { Kanban, List } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
-import { toast } from 'sonner';
+import { Link, useParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
@@ -22,12 +21,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { NewWorkspaceDropdown } from '@/components/workspace';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
-import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { trpc } from '../../../../frontend/lib/trpc';
 
 const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
@@ -38,77 +37,19 @@ type WorkspaceWithSessions = Workspace & {
   claudeSessions?: unknown[];
 };
 
-function useCreateWorkspace(projectId: string | undefined, slug: string) {
-  const navigate = useNavigate();
-  const utils = trpc.useUtils();
-  const [isCreating, setIsCreating] = useState(false);
-  const createWorkspace = trpc.workspace.create.useMutation();
-
-  // Get existing workspace names for unique name generation
-  const { data: allWorkspaces } = trpc.workspace.list.useQuery(
-    { projectId: projectId ?? '' },
-    { enabled: !!projectId }
-  );
-  const existingNames = allWorkspaces?.map((w) => w.name) ?? [];
-
-  const handleCreate = async () => {
-    if (!projectId || isCreating) {
-      return;
-    }
-    const name = generateUniqueWorkspaceName(existingNames);
-    setIsCreating(true);
-
-    try {
-      const workspace = await createWorkspace.mutateAsync({
-        projectId,
-        name,
-      });
-
-      utils.workspace.list.invalidate({ projectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId });
-      // Note: We intentionally don't reset isCreating here. On success, navigate()
-      // unmounts this component, making state updates unnecessary. Resetting in a
-      // finally block could trigger React warnings about updating unmounted components.
-      // This matches the sidebar implementation in app-sidebar.tsx.
-      navigate(`/projects/${slug}/workspaces/${workspace.id}`);
-    } catch (error) {
-      setIsCreating(false);
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Failed to create workspace: ${message}`);
-    }
-  };
-
-  return { handleCreate, isCreating };
-}
-
-function NewWorkspaceButton({
-  onClick,
-  isCreating,
-  children = 'New Workspace',
-}: {
-  onClick: () => void;
-  isCreating: boolean;
-  children?: React.ReactNode;
-}) {
-  return (
-    <Button size="sm" onClick={onClick} disabled={isCreating}>
-      {isCreating ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-      ) : (
-        <Plus className="h-4 w-4 mr-2" />
-      )}
-      {children}
-    </Button>
-  );
-}
-
 export default function WorkspacesListPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('board');
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
-  const { handleCreate, isCreating } = useCreateWorkspace(project?.id, slug);
+
+  // Get existing workspace names for unique name generation
+  const { data: allWorkspaces } = trpc.workspace.list.useQuery(
+    { projectId: project?.id ?? '' },
+    { enabled: !!project?.id }
+  );
+  const existingNames = allWorkspaces?.map((w) => w.name) ?? [];
 
   // Only fetch list data when in list view
   const { data: workspaces, isLoading } = trpc.workspace.list.useQuery(
@@ -142,7 +83,11 @@ export default function WorkspacesListPage() {
                 <List className="h-4 w-4" />
               </ToggleGroupItem>
             </ToggleGroup>
-            <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating} />
+            <NewWorkspaceDropdown
+              projectId={project.id}
+              projectSlug={slug}
+              existingNames={existingNames}
+            />
           </PageHeader>
 
           <div className="flex-1 min-h-0">
@@ -182,7 +127,11 @@ export default function WorkspacesListPage() {
             <List className="h-4 w-4" />
           </ToggleGroupItem>
         </ToggleGroup>
-        <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating} />
+        <NewWorkspaceDropdown
+          projectId={project.id}
+          projectSlug={slug}
+          existingNames={existingNames}
+        />
       </PageHeader>
 
       <Card>
@@ -194,9 +143,13 @@ export default function WorkspacesListPage() {
               <EmptyTitle>No workspaces found</EmptyTitle>
               <EmptyDescription>Get started by creating your first workspace.</EmptyDescription>
             </EmptyHeader>
-            <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating}>
+            <NewWorkspaceDropdown
+              projectId={project.id}
+              projectSlug={slug}
+              existingNames={existingNames}
+            >
               Create your first workspace
-            </NewWorkspaceButton>
+            </NewWorkspaceDropdown>
           </Empty>
         ) : (
           <Table>

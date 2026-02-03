@@ -16,6 +16,7 @@ import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll, useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
+  usePendingPrompt,
   useSelectedSessionId,
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
@@ -171,6 +172,13 @@ export function WorkspaceDetailContainer() {
     activeTabId,
     loadingSession,
     inputRef,
+  });
+
+  // Handle pending prompts from workspace creation (stored in sessionStorage)
+  usePendingPrompt({
+    selectedDbSessionId,
+    isSessionReady,
+    sendMessage,
   });
 
   if (workspaceLoading) {

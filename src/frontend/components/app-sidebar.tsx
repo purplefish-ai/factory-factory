@@ -22,7 +22,6 @@ import {
   GripVertical,
   Kanban,
   Loader2,
-  Plus,
   Settings,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -50,9 +49,8 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ArchiveWorkspaceDialog } from '@/components/workspace';
+import { ArchiveWorkspaceDialog, NewWorkspaceIconButton } from '@/components/workspace';
 import { cn, formatRelativeTime } from '@/lib/utils';
-import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
@@ -197,7 +195,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const {
     workspaceList,
     existingNames,
-    isCreating,
     startCreating,
     cancelCreating,
     startArchiving,
@@ -276,7 +273,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     [workspaceList, selectedProjectId, updateWorkspaceOrder]
   );
 
-  const createWorkspace = trpc.workspace.create.useMutation();
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
@@ -292,35 +288,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       toast.error(error.message);
     },
   });
-
-  const handleCreateWorkspace = async () => {
-    if (!selectedProjectId || isCreating) {
-      return;
-    }
-    const name = generateUniqueWorkspaceName(existingNames);
-    startCreating(name);
-
-    try {
-      // Create workspace (branchName defaults to project's default branch)
-      // Don't create a session - user will choose workflow in workspace page
-      const workspace = await createWorkspace.mutateAsync({
-        projectId: selectedProjectId,
-        name,
-      });
-
-      // Invalidate caches to trigger immediate refetch
-      utils.workspace.list.invalidate({ projectId: selectedProjectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-
-      // Navigate to workspace (workflow selection will be shown)
-      navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
-    } catch (error) {
-      // Clear the creating state on error so the UI doesn't get stuck
-      cancelCreating();
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Failed to create workspace: ${message}`);
-    }
-  };
 
   const handleArchiveRequest = (workspace: WorkspaceListItem) => {
     setWorkspaceToArchive(workspace.id);
@@ -441,19 +408,13 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
               >
                 <Kanban className="h-3.5 w-3.5" />
               </Link>
-              <button
-                type="button"
-                onClick={handleCreateWorkspace}
-                disabled={isCreating}
-                className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
-                title="New Workspace"
-              >
-                {isCreating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Plus className="h-3.5 w-3.5" />
-                )}
-              </button>
+              <NewWorkspaceIconButton
+                projectId={selectedProjectId}
+                projectSlug={selectedProjectSlug}
+                existingNames={existingNames}
+                onCreatingStart={startCreating}
+                onCreatingError={cancelCreating}
+              />
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
               <DndContext
