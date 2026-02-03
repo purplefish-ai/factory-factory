@@ -1,5 +1,3 @@
-'use client';
-
 import { Copy, RotateCcw, X } from 'lucide-react';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';

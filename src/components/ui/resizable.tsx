@@ -1,5 +1,3 @@
-'use client';
-
 import { GripVertical } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useCallback, useEffect, useState } from 'react';

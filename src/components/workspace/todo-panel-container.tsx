@@ -1,5 +1,3 @@
-'use client';
-
 import { memo } from 'react';
 import type { ChatMessage } from '@/components/chat';
 import { TodoPanel } from '@/components/chat/todo-panel';

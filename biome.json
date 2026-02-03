@@ -112,7 +112,11 @@
       }
     }
   },
-  "plugins": ["biome-rules/no-await-import.grit", "biome-rules/no-native-dialogs.grit"],
+  "plugins": [
+    "biome-rules/no-await-import.grit",
+    "biome-rules/no-native-dialogs.grit",
+    "biome-rules/no-next-directives.grit"
+  ],
   "overrides": [
     {
       "includes": [

@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   Command,

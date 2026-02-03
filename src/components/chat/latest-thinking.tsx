@@ -1,5 +1,3 @@
-'use client';
-
 import { Loader2 } from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';

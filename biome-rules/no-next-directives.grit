@@ -1,0 +1,11 @@
+or {
+  `'use client';` as $directive,
+  `"use client";` as $directive,
+  `'use server';` as $directive,
+  `"use server";` as $directive
+} where {
+  register_diagnostic(
+    span=$directive,
+    message="Do not use Next.js directives in this codebase. Remove 'use client'/'use server'."
+  )
+}

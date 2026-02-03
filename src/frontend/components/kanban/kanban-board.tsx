@@ -1,5 +1,3 @@
-'use client';
-
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { RefreshCw, Settings } from 'lucide-react';
 import { useMemo } from 'react';

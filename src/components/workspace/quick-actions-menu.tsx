@@ -1,5 +1,3 @@
-'use client';
-
 import type { inferRouterOutputs } from '@trpc/server';
 import {
   Check,

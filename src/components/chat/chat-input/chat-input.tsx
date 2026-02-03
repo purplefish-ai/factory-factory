@@ -1,5 +1,3 @@
-'use client';
-
 import { Brain, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 

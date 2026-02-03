@@ -1,5 +1,3 @@
-'use client';
-
 import { cn } from '@/lib/utils';
 
 import { DiffViewer } from './diff-viewer';

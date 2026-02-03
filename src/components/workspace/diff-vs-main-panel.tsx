@@ -1,5 +1,3 @@
-'use client';
-
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AlertCircle, FileCode, FileMinus, FilePlus, Loader2 } from 'lucide-react';
 import { memo, useCallback, useRef } from 'react';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Chat state management hook using the chat reducer and persistence modules.
  *
