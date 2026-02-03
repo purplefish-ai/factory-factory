@@ -92,7 +92,6 @@ class SlashCommandCacheService {
 
       await userSettingsAccessor.update({
         cachedSlashCommands: payload,
-        cachedSlashCommandsUpdatedAt: new Date(),
       });
     } catch (error) {
       logger.warn('Failed to update cached slash commands', {

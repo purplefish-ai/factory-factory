@@ -8,7 +8,6 @@ CREATE TABLE "new_UserSettings" (
     "customIdeCommand" TEXT,
     "playSoundOnComplete" BOOLEAN NOT NULL DEFAULT true,
     "cachedSlashCommands" TEXT,
-    "cachedSlashCommandsUpdatedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );

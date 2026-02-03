@@ -6,7 +6,6 @@ interface UpdateUserSettingsInput {
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
-  cachedSlashCommandsUpdatedAt?: Date | null;
 }
 
 class UserSettingsAccessor {
@@ -52,7 +51,6 @@ class UserSettingsAccessor {
         customIdeCommand: data.customIdeCommand ?? null,
         playSoundOnComplete: data.playSoundOnComplete ?? true,
         cachedSlashCommands: data.cachedSlashCommands ?? undefined,
-        cachedSlashCommandsUpdatedAt: data.cachedSlashCommandsUpdatedAt ?? null,
       },
     });
   }
