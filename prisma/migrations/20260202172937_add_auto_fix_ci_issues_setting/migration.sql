@@ -12,7 +12,7 @@ CREATE TABLE "new_UserSettings" (
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
-INSERT INTO "new_UserSettings" ("createdAt", "customIdeCommand", "id", "notificationSoundPath", "playSoundOnComplete", "preferredIde", "updatedAt", "userId") SELECT "createdAt", "customIdeCommand", "id", "notificationSoundPath", coalesce("playSoundOnComplete", true), "preferredIde", "updatedAt", "userId" FROM "UserSettings";
+INSERT INTO "new_UserSettings" ("createdAt", "customIdeCommand", "id", "notificationSoundPath", "preferredIde", "updatedAt", "userId") SELECT "createdAt", "customIdeCommand", "id", "notificationSoundPath", "preferredIde", "updatedAt", "userId" FROM "UserSettings";
 DROP TABLE "UserSettings";
 ALTER TABLE "new_UserSettings" RENAME TO "UserSettings";
 CREATE UNIQUE INDEX "UserSettings_userId_key" ON "UserSettings"("userId");
