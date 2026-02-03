@@ -13,6 +13,7 @@ import { FactoryConfigService } from '../services/factory-config.service';
 import { githubCLIService } from '../services/github-cli.service';
 import { computeKanbanColumn, kanbanStateService } from '../services/kanban-state.service';
 import { createLogger } from '../services/logger.service';
+import { RunScriptService } from '../services/run-script.service';
 import { sessionService } from '../services/session.service';
 import { terminalService } from '../services/terminal.service';
 import { workspaceStateMachine } from '../services/workspace-state-machine.service';
@@ -400,9 +401,10 @@ export const workspaceRouter = router({
         });
       }
 
-      // Clean up running sessions and terminals before archiving
+      // Clean up running sessions, terminals, and dev processes before archiving
       try {
         await sessionService.stopWorkspaceSessions(input.id);
+        await RunScriptService.stopRunScript(input.id);
         terminalService.destroyWorkspaceTerminals(input.id);
       } catch (error) {
         logger.error('Failed to cleanup workspace resources before archive', {
@@ -427,9 +429,10 @@ export const workspaceRouter = router({
 
   // Delete a workspace
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    // Clean up running sessions and terminals before deleting
+    // Clean up running sessions, terminals, and dev processes before deleting
     try {
       await sessionService.stopWorkspaceSessions(input.id);
+      await RunScriptService.stopRunScript(input.id);
       terminalService.destroyWorkspaceTerminals(input.id);
     } catch (error) {
       logger.error('Failed to cleanup workspace resources before delete', {
