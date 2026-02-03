@@ -76,6 +76,11 @@ class SessionService {
    * All sessions use ClaudeClient for unified lifecycle management.
    */
   async stopClaudeSession(sessionId: string): Promise<void> {
+    if (this.processManager.isStopInProgress(sessionId)) {
+      logger.debug('Session stop already in progress', { sessionId });
+      return;
+    }
+
     await this.processManager.stopClient(sessionId);
 
     await this.repository.updateSession(sessionId, {

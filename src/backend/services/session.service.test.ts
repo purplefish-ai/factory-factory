@@ -157,6 +157,15 @@ describe('SessionService', () => {
     expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
   });
 
+  it('skips stop when already stopping', async () => {
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(true);
+
+    await sessionService.stopClaudeSession('session-1');
+
+    expect(sessionProcessManager.stopClient).not.toHaveBeenCalled();
+    expect(sessionRepository.updateSession).not.toHaveBeenCalled();
+  });
+
   it('returns null session options when workspace is missing', async () => {
     const session = {
       id: 'session-1',
