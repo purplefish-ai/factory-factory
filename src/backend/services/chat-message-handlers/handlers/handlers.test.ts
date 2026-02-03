@@ -82,6 +82,7 @@ vi.mock('../../message-state.service', () => ({
     createUserMessage: vi.fn(),
     getStoredEvents: vi.fn(() => []),
     loadFromHistory: vi.fn(),
+    storeEvent: vi.fn(),
     sendSnapshot: vi.fn(),
     updateState: vi.fn(),
   },
