@@ -1773,14 +1773,20 @@ describe('createActionFromWebSocketMessage', () => {
     const wsMessage: WebSocketMessage = { type: 'status', running: true };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STATUS', payload: { running: true } });
+    expect(action).toEqual({
+      type: 'WS_STATUS',
+      payload: { running: true, processAlive: undefined },
+    });
   });
 
   it('should default running to false if not provided in status message', () => {
     const wsMessage: WebSocketMessage = { type: 'status' };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STATUS', payload: { running: false } });
+    expect(action).toEqual({
+      type: 'WS_STATUS',
+      payload: { running: false, processAlive: undefined },
+    });
   });
 
   it('should convert starting message to WS_STARTING action', () => {
@@ -1804,11 +1810,11 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toEqual({ type: 'WS_STOPPED' });
   });
 
-  it('should convert process_exit message to WS_STOPPED action', () => {
+  it('should convert process_exit message to WS_PROCESS_EXIT action', () => {
     const wsMessage: WebSocketMessage = { type: 'process_exit', code: 0 };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STOPPED' });
+    expect(action).toEqual({ type: 'WS_PROCESS_EXIT', payload: { code: 0 } });
   });
 
   it('should convert claude_message to WS_CLAUDE_MESSAGE action', () => {

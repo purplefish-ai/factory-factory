@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 
 import {
   ChatInput,
+  ClaudeProcessStatus,
   PermissionPrompt,
   QuestionPrompt,
   RewindConfirmationDialog,
@@ -283,6 +284,7 @@ function WorkspaceHeader({
 interface ChatContentProps {
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
+  processStatus: ReturnType<typeof useChatWebSocket>['processStatus'];
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   viewportRef: React.RefObject<HTMLDivElement | null>;
   isNearBottom: boolean;
@@ -324,6 +326,7 @@ interface ChatContentProps {
 const ChatContent = memo(function ChatContent({
   messages,
   sessionStatus,
+  processStatus,
   messagesEndRef,
   viewportRef,
   isNearBottom,
@@ -430,6 +433,7 @@ const ChatContent = memo(function ChatContent({
           question={pendingRequest.type === 'question' ? pendingRequest.request : null}
           onAnswer={answerQuestion}
         />
+        <ClaudeProcessStatus processStatus={processStatus} sessionStatus={sessionStatus} />
 
         <ChatInput
           onSend={sendMessage}
@@ -592,6 +596,7 @@ function WorkspaceChatContent() {
     messages,
     connected,
     sessionStatus,
+    processStatus,
     pendingRequest,
     chatSettings,
     inputDraft,
@@ -772,6 +777,7 @@ function WorkspaceChatContent() {
               <ChatContent
                 messages={messages}
                 sessionStatus={sessionStatus}
+                processStatus={processStatus}
                 messagesEndRef={messagesEndRef}
                 viewportRef={viewportRef}
                 isNearBottom={isNearBottom}

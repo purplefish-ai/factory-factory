@@ -39,6 +39,8 @@ export interface UseChatWebSocketReturn {
   connected: boolean;
   // Session lifecycle status (replaces running, stopping, loadingSession, startingSession)
   sessionStatus: SessionStatus;
+  // Claude process status (alive vs stopped)
+  processStatus: ReturnType<typeof useChatState>['processStatus'];
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
@@ -168,6 +170,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     messages: chat.messages,
     connected: transport.connected,
     sessionStatus: chat.sessionStatus,
+    processStatus: chat.processStatus,
     gitBranch: chat.gitBranch,
     availableSessions: chat.availableSessions,
     pendingRequest: chat.pendingRequest,
