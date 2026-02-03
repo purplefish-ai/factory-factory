@@ -511,6 +511,7 @@ export interface WebSocketMessage {
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
+  processAlive?: boolean;
   message?: string;
   code?: number;
   data?: unknown;
