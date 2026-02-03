@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
+import type { ClaudeClient } from '../../../claude/index';
 import { SessionManager } from '../../../claude/index';
 import { claudeSessionAccessor } from '../../../resource_accessors/claude-session.accessor';
 import { chatEventForwarderService } from '../../chat-event-forwarder.service';
@@ -141,7 +142,10 @@ describe('chat message handlers', () => {
 
   it('user_input forwards to running client', () => {
     const sendMessage = vi.fn();
-    mockedSessionService.getClient.mockReturnValue({ isRunning: () => true, sendMessage });
+    mockedSessionService.getClient.mockReturnValue({
+      isRunning: () => true,
+      sendMessage,
+    } as unknown as ClaudeClient);
 
     const handler = createUserInputHandler();
     const ws = createWs();
@@ -158,7 +162,7 @@ describe('chat message handlers', () => {
   });
 
   it('queue_message enqueues and dispatches', async () => {
-    mockedMessageQueueService.enqueue.mockReturnValue({ ok: true });
+    mockedMessageQueueService.enqueue.mockReturnValue({ position: 0 });
 
     const handler = createQueueMessageHandler({
       ...deps,
@@ -213,7 +217,9 @@ describe('chat message handlers', () => {
   });
 
   it('get_history returns history when claude session exists', async () => {
-    mockedSessionService.getClient.mockReturnValue({ getClaudeSessionId: () => 'claude-1' });
+    mockedSessionService.getClient.mockReturnValue({
+      getClaudeSessionId: () => 'claude-1',
+    } as unknown as ClaudeClient);
     (mockedSessionManager.getHistory as ReturnType<typeof vi.fn>).mockResolvedValue([{ role: 'user' }]);
 
     const handler = createGetHistoryHandler();
@@ -250,7 +256,7 @@ describe('chat message handlers', () => {
   });
 
   it('get_queue sends snapshot', () => {
-    mockedSessionService.getClient.mockReturnValue(null);
+    mockedSessionService.getClient.mockReturnValue(undefined);
     const handler = createGetQueueHandler();
 
     handler({
@@ -264,7 +270,7 @@ describe('chat message handlers', () => {
   });
 
   it('question_response errors without client', () => {
-    mockedSessionService.getClient.mockReturnValue(null);
+    mockedSessionService.getClient.mockReturnValue(undefined);
 
     const handler = createQuestionResponseHandler();
     const ws = createWs();
@@ -286,7 +292,7 @@ describe('chat message handlers', () => {
     mockedSessionService.getClient.mockReturnValue({
       approveInteractiveRequest,
       denyInteractiveRequest: vi.fn(),
-    });
+    } as unknown as ClaudeClient);
 
     const handler = createPermissionResponseHandler();
     const ws = createWs();
@@ -302,7 +308,7 @@ describe('chat message handlers', () => {
   });
 
   it('set_model sends error without client', async () => {
-    mockedSessionService.getClient.mockReturnValue(null);
+    mockedSessionService.getClient.mockReturnValue(undefined);
 
     const handler = createSetModelHandler();
     const ws = createWs();
@@ -320,7 +326,7 @@ describe('chat message handlers', () => {
   });
 
   it('set_thinking_budget sends error without client', async () => {
-    mockedSessionService.getClient.mockReturnValue(null);
+    mockedSessionService.getClient.mockReturnValue(undefined);
 
     const handler = createSetThinkingBudgetHandler();
     const ws = createWs();
@@ -338,7 +344,7 @@ describe('chat message handlers', () => {
   });
 
   it('rewind_files returns error without client', async () => {
-    mockedSessionService.getClient.mockReturnValue(null);
+    mockedSessionService.getClient.mockReturnValue(undefined);
 
     const handler = createRewindFilesHandler();
     const ws = createWs();

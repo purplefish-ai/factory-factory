@@ -5,7 +5,10 @@ import { chatConnectionService } from '../chat-connection.service';
 import { chatEventForwarderService } from '../chat-event-forwarder.service';
 import { messageStateService } from '../message-state.service';
 import { sessionService } from '../session.service';
-import { DEBUG_CHAT_WS, logger } from './constants';
+import { DEBUG_CHAT_WS } from './constants';
+import { createLogger } from '../logger.service';
+
+const logger = createLogger('chat-message-handlers');
 
 export function tryHandleAsInteractiveResponse(
   ws: WebSocket,

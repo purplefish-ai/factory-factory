@@ -1,8 +1,11 @@
-import type { PermissionResponseMessage } from '../../../schemas/websocket';
+import type { PermissionResponseMessage } from '@/shared/websocket';
 import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import { sessionService } from '../../session.service';
-import { DEBUG_CHAT_WS, logger } from '../constants';
+import { DEBUG_CHAT_WS } from '../constants';
+import { createLogger } from '../../logger.service';
 import type { ChatMessageHandler } from '../types';
+
+const logger = createLogger('chat-message-handlers');
 
 export function createPermissionResponseHandler(): ChatMessageHandler {
   return ({ ws, sessionId, message }) => {

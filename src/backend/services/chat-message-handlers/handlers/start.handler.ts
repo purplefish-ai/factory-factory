@@ -1,8 +1,10 @@
-import type { StartMessageInput } from '../../../schemas/websocket';
+import type { StartMessageInput } from '@/shared/websocket';
 import { sessionService } from '../../session.service';
-import { logger } from '../constants';
+import { createLogger } from '../../logger.service';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
 import { getValidModel } from '../utils';
+
+const logger = createLogger('chat-message-handlers');
 
 export function createStartHandler(deps: HandlerRegistryDependencies): ChatMessageHandler {
   return async ({ ws, sessionId, message }) => {

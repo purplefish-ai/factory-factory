@@ -1,5 +1,5 @@
 import type { ClaudeContentItem } from '../../../claude/types';
-import type { UserInputMessage } from '../../../schemas/websocket';
+import type { UserInputMessage } from '@/shared/websocket';
 import { sessionService } from '../../session.service';
 import type { ChatMessageHandler } from '../types';
 

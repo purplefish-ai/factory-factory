@@ -9,8 +9,10 @@ import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import { eventCompressionService } from '../../event-compression.service';
 import { messageStateService } from '../../message-state.service';
 import { sessionService } from '../../session.service';
-import { logger } from '../constants';
+import { createLogger } from '../../logger.service';
 import type { ChatMessageHandler } from '../types';
+
+const logger = createLogger('chat-message-handlers');
 
 export function createLoadSessionHandler(): ChatMessageHandler {
   return async ({ ws, sessionId, workingDir }) => {

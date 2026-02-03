@@ -1,7 +1,10 @@
-import type { SetThinkingBudgetMessage } from '../../../schemas/websocket';
+import type { SetThinkingBudgetMessage } from '@/shared/websocket';
 import { sessionService } from '../../session.service';
-import { DEBUG_CHAT_WS, logger } from '../constants';
+import { DEBUG_CHAT_WS } from '../constants';
+import { createLogger } from '../../logger.service';
 import type { ChatMessageHandler } from '../types';
+
+const logger = createLogger('chat-message-handlers');
 
 export function createSetThinkingBudgetHandler(): ChatMessageHandler {
   return async ({ ws, sessionId, message }) => {

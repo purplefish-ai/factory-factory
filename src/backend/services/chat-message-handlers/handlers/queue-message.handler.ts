@@ -1,4 +1,4 @@
-import type { QueueMessageInput } from '../../../schemas/websocket';
+import type { QueueMessageInput } from '@/shared/websocket';
 import { messageQueueService } from '../../message-queue.service';
 import { messageStateService } from '../../message-state.service';
 import { tryHandleAsInteractiveResponse } from '../interactive-response';

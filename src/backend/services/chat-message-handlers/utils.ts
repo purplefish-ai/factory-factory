@@ -1,7 +1,10 @@
-import type { QueueMessageInput, StartMessageInput } from '../../schemas/websocket';
+import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
 import type { QueuedMessage } from '../message-queue.service';
 import { messageStateService } from '../message-state.service';
-import { DEBUG_CHAT_WS, isValidModel, logger } from './constants';
+import { DEBUG_CHAT_WS, isValidModel } from './constants';
+import { createLogger } from '../logger.service';
+
+const logger = createLogger('chat-message-handlers');
 
 export function getValidModel(message: StartMessageInput): string | undefined {
   const requestedModel = message.selectedModel || message.model;

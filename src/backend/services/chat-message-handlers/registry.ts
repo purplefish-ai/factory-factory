@@ -1,4 +1,4 @@
-import type { ChatMessageInput } from '../../schemas/websocket';
+import type { ChatMessageInput } from '@/shared/websocket';
 import { createGetHistoryHandler } from './handlers/get-history.handler';
 import { createGetQueueHandler } from './handlers/get-queue.handler';
 import { createListSessionsHandler } from './handlers/list-sessions.handler';
