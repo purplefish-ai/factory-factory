@@ -27,6 +27,7 @@ import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
+import { slashCommandCacheService } from './slash-command-cache.service';
 import { workspaceActivityService } from './workspace-activity.service';
 
 const logger = createLogger('chat-event-forwarder');
@@ -175,6 +176,7 @@ class ChatEventForwarderService {
       };
       messageStateService.storeEvent(dbSessionId, slashCommandsMsg);
       chatConnectionService.forwardToSession(dbSessionId, slashCommandsMsg);
+      void slashCommandCacheService.setCachedCommands(initResponse.commands);
     }
 
     const pendingToolNames = new Map<string, string>();
