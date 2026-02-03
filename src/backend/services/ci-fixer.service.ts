@@ -9,6 +9,7 @@ import { SessionStatus } from '@prisma-gen/client';
 import { prisma } from '../db';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
 
@@ -133,6 +134,23 @@ class CIFixerService {
           };
         }
 
+        // Check session limit before creating new session
+        const allSessions = await tx.claudeSession.findMany({
+          where: { workspaceId },
+          select: { id: true },
+        });
+        const maxSessions = configService.getMaxSessionsPerWorkspace();
+        if (allSessions.length >= maxSessions) {
+          logger.warn('Cannot create CI fix session: workspace session limit reached', {
+            workspaceId,
+            currentSessions: allSessions.length,
+            maxSessions,
+          });
+          return {
+            action: 'limit_reached' as const,
+          };
+        }
+
         // Get model from most recent session in workspace
         const recentSession = await tx.claudeSession.findFirst({
           where: { workspaceId, workflow: { not: CI_FIX_WORKFLOW } },
@@ -165,6 +183,10 @@ class CIFixerService {
       });
 
       // Handle the result outside the transaction
+      if (result.action === 'limit_reached') {
+        return { status: 'skipped', reason: 'Workspace session limit reached' };
+      }
+
       const initialPrompt = this.buildInitialPrompt(prUrl, prNumber, failureDetails);
 
       if (result.action === 'already_fixing') {

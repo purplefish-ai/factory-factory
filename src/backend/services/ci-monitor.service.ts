@@ -98,8 +98,13 @@ class CIMonitorService {
       return { checked: 0, failures: 0, notified: 0 };
     }
 
-    logger.info('Checking CI status for workspaces', {
+    // Fetch settings once for all workspaces (avoid N+1 queries)
+    const settings = await userSettingsAccessor.get();
+    const autoFixEnabled = settings.autoFixCiIssues;
+
+    logger.debug('Checking CI status for workspaces', {
       count: workspaces.length,
+      autoFixEnabled,
       workspaces: workspaces.map((w) => ({
         id: w.id,
         prUrl: w.prUrl,
@@ -109,7 +114,9 @@ class CIMonitorService {
 
     // Process workspaces concurrently with rate limiting
     const results = await Promise.all(
-      workspaces.map((workspace) => this.checkLimit(() => this.checkWorkspaceCI(workspace)))
+      workspaces.map((workspace) =>
+        this.checkLimit(() => this.checkWorkspaceCI(workspace, autoFixEnabled))
+      )
     );
 
     const failures = results.filter((r) => r.hasFailed).length;
@@ -129,13 +136,16 @@ class CIMonitorService {
   /**
    * Check CI status for a single workspace and notify if needed
    */
-  private async checkWorkspaceCI(workspace: {
-    id: string;
-    prUrl: string;
-    prCiStatus: CIStatus;
-    prCiFailedAt: Date | null;
-    prCiLastNotifiedAt: Date | null;
-  }): Promise<{ hasFailed: boolean; notified: boolean }> {
+  private async checkWorkspaceCI(
+    workspace: {
+      id: string;
+      prUrl: string;
+      prCiStatus: CIStatus;
+      prCiFailedAt: Date | null;
+      prCiLastNotifiedAt: Date | null;
+    },
+    autoFixEnabled: boolean
+  ): Promise<{ hasFailed: boolean; notified: boolean }> {
     if (this.isShuttingDown) {
       return { hasFailed: false, notified: false };
     }
@@ -156,7 +166,7 @@ class CIMonitorService {
       const justFailed = previousStatus !== CIStatus.FAILURE && currentStatus === CIStatus.FAILURE;
       const recovered = previousStatus === CIStatus.FAILURE && currentStatus === CIStatus.SUCCESS;
 
-      logger.info('CI status check for workspace', {
+      logger.debug('CI status check for workspace', {
         workspaceId: workspace.id,
         previousStatus,
         currentStatus,
@@ -165,65 +175,23 @@ class CIMonitorService {
         prNumber: prResult.prNumber,
       });
 
-      // Update workspace with new CI status
-      const updates: {
-        prCiStatus: CIStatus;
-        prCiFailedAt?: Date | null;
-        prUpdatedAt: Date;
-      } = {
-        prCiStatus: currentStatus,
-        prUpdatedAt: new Date(),
-      };
+      // Handle status transition and update workspace
+      await this.handleCIStatusTransition(
+        workspace,
+        currentStatus,
+        justFailed,
+        recovered,
+        prResult.prNumber
+      );
 
-      if (justFailed) {
-        // CI just failed - mark the failure time
-        updates.prCiFailedAt = new Date();
-        logger.warn('CI failure detected', {
-          workspaceId: workspace.id,
-          prUrl: workspace.prUrl,
-          prNumber: prResult.prNumber,
-        });
-      } else if (recovered) {
-        // CI recovered - clear the failure time
-        updates.prCiFailedAt = null;
-        logger.info('CI recovered', {
-          workspaceId: workspace.id,
-          prUrl: workspace.prUrl,
-          prNumber: prResult.prNumber,
-        });
-
-        // Notify CI fixing session that CI passed
-        await ciFixerService.notifyCIPassed(workspace.id);
-      }
-
-      await workspaceAccessor.update(workspace.id, updates);
-
-      // Notify active session if CI is currently failing
-      let notified = false;
-      if (currentStatus === CIStatus.FAILURE) {
-        // Check if we should notify (either just failed or it's been a while since last notification)
-        const shouldNotify = this.shouldNotifySession(workspace.prCiLastNotifiedAt, justFailed);
-
-        if (shouldNotify) {
-          notified = await this.notifyActiveSession(
-            workspace.id,
-            workspace.prUrl,
-            prResult.prNumber
-          );
-
-          if (notified) {
-            // Update last notification time
-            await workspaceAccessor.update(workspace.id, {
-              prCiLastNotifiedAt: new Date(),
-            });
-          }
-        }
-
-        // Trigger CI auto-fix if setting is enabled
-        if (justFailed) {
-          await this.triggerCIAutoFix(workspace.id, workspace.prUrl, prResult.prNumber);
-        }
-      }
+      // Handle failure notifications and auto-fix
+      const notified = await this.handleCIFailure(
+        workspace,
+        currentStatus,
+        justFailed,
+        autoFixEnabled,
+        prResult.prNumber
+      );
 
       return { hasFailed: currentStatus === CIStatus.FAILURE, notified };
     } catch (error) {
@@ -233,6 +201,78 @@ class CIMonitorService {
       });
       return { hasFailed: false, notified: false };
     }
+  }
+
+  /**
+   * Handle CI status transition and update workspace
+   */
+  private async handleCIStatusTransition(
+    workspace: { id: string; prUrl: string },
+    currentStatus: CIStatus,
+    justFailed: boolean,
+    recovered: boolean,
+    prNumber: number | undefined
+  ): Promise<void> {
+    const updates: {
+      prCiStatus: CIStatus;
+      prCiFailedAt?: Date | null;
+      prUpdatedAt: Date;
+    } = {
+      prCiStatus: currentStatus,
+      prUpdatedAt: new Date(),
+    };
+
+    if (justFailed) {
+      updates.prCiFailedAt = new Date();
+      logger.warn('CI failure detected', {
+        workspaceId: workspace.id,
+        prUrl: workspace.prUrl,
+        prNumber,
+      });
+    } else if (recovered) {
+      updates.prCiFailedAt = null;
+      logger.info('CI recovered', {
+        workspaceId: workspace.id,
+        prUrl: workspace.prUrl,
+        prNumber,
+      });
+      await ciFixerService.notifyCIPassed(workspace.id);
+    }
+
+    await workspaceAccessor.update(workspace.id, updates);
+  }
+
+  /**
+   * Handle CI failure notifications and auto-fix triggering
+   */
+  private async handleCIFailure(
+    workspace: { id: string; prUrl: string; prCiLastNotifiedAt: Date | null },
+    currentStatus: CIStatus,
+    justFailed: boolean,
+    autoFixEnabled: boolean,
+    prNumber: number | undefined
+  ): Promise<boolean> {
+    if (currentStatus !== CIStatus.FAILURE) {
+      return false;
+    }
+
+    let notified = false;
+    const shouldNotify = this.shouldNotifySession(workspace.prCiLastNotifiedAt, justFailed);
+
+    if (shouldNotify) {
+      notified = await this.notifyActiveSession(workspace.id, workspace.prUrl, prNumber);
+      if (notified) {
+        await workspaceAccessor.update(workspace.id, {
+          prCiLastNotifiedAt: new Date(),
+        });
+      }
+    }
+
+    if (autoFixEnabled && justFailed) {
+      await this.triggerCIAutoFix(workspace.id, workspace.prUrl, prNumber);
+    }
+
+    return notified;
   }
 
   /**
@@ -255,7 +295,8 @@ class CIMonitorService {
   }
 
   /**
-   * Trigger CI auto-fix if the setting is enabled
+   * Trigger CI auto-fix for a workspace.
+   * Caller is responsible for checking if auto-fix is enabled.
    */
   private async triggerCIAutoFix(
     workspaceId: string,
@@ -263,17 +304,6 @@ class CIMonitorService {
     prNumber: number | undefined
   ): Promise<void> {
     try {
-      // Check if auto-fix is enabled
-      const settings = await userSettingsAccessor.get();
-      logger.info('CI auto-fix settings check', {
-        workspaceId,
-        autoFixCiIssues: settings.autoFixCiIssues,
-      });
-      if (!settings.autoFixCiIssues) {
-        logger.debug('CI auto-fix is disabled', { workspaceId });
-        return;
-      }
-
       if (!prNumber) {
         logger.debug('Cannot trigger CI fix without PR number', { workspaceId });
         return;
