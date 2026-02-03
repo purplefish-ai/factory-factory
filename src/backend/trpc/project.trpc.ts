@@ -4,6 +4,53 @@ import { gitCommandC } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { publicProcedure, router } from './trpc';
 
+async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
+  const result = await gitCommandC(repoPath, [
+    'for-each-ref',
+    '--format=%(refname:short) %(objectname)',
+    refPrefix,
+  ]);
+  if (result.code !== 0) {
+    throw new Error(`Failed to list branches: ${result.stderr || result.stdout}`);
+  }
+
+  const branchMap = new Map<string, string>();
+  const lines = result.stdout.split('\n').filter(Boolean);
+  for (const line of lines) {
+    const [name, sha] = line.split(' ');
+    if (name && sha) {
+      branchMap.set(name, sha);
+    }
+  }
+
+  return branchMap;
+}
+
+function buildRemoteEntries(
+  localMap: Map<string, string>,
+  remoteMap: Map<string, string>
+): Array<{ name: string; displayName: string; refType: 'remote' }> {
+  const entries: Array<{ name: string; displayName: string; refType: 'remote' }> = [];
+
+  for (const [fullName, sha] of remoteMap.entries()) {
+    if (fullName === 'origin/HEAD') {
+      continue;
+    }
+    const shortName = fullName.replace(/^origin\//, '');
+    const localSha = localMap.get(shortName);
+    if (localSha && localSha === sha) {
+      continue;
+    }
+    entries.push({
+      name: fullName,
+      displayName: localSha ? fullName : shortName,
+      refType: 'remote',
+    });
+  }
+
+  return entries;
+}
+
 export const projectRouter = router({
   // List all projects
   list: publicProcedure
@@ -47,51 +94,18 @@ export const projectRouter = router({
         throw new Error(`Project not found: ${input.projectId}`);
       }
 
-      const localResult = await gitCommandC(project.repoPath, [
-        'for-each-ref',
-        '--format=%(refname:short)',
-        'refs/heads',
-      ]);
-      if (localResult.code !== 0) {
-        throw new Error(
-          `Failed to list local branches: ${localResult.stderr || localResult.stdout}`
-        );
-      }
+      const localMap = await getBranchMap(project.repoPath, 'refs/heads');
+      const remoteMap = await getBranchMap(project.repoPath, 'refs/remotes/origin');
 
-      const remoteResult = await gitCommandC(project.repoPath, [
-        'for-each-ref',
-        '--format=%(refname:short)',
-        'refs/remotes/origin',
-      ]);
-      if (remoteResult.code !== 0) {
-        throw new Error(
-          `Failed to list remote branches: ${remoteResult.stderr || remoteResult.stdout}`
-        );
-      }
-
-      const localBranches = localResult.stdout.split('\n').filter(Boolean);
-      const localSet = new Set(localBranches);
-
-      const remoteBranches = remoteResult.stdout
-        .split('\n')
-        .filter(Boolean)
-        .filter((branch) => branch !== 'origin/HEAD')
-        .filter((branch) => {
-          const shortName = branch.replace(/^origin\//, '');
-          return !localSet.has(shortName);
-        });
+      const remoteEntries = buildRemoteEntries(localMap, remoteMap);
 
       const branches = [
-        ...localBranches.map((branch) => ({
+        ...localMap.keys().map((branch) => ({
           name: branch,
           displayName: branch,
           refType: 'local' as const,
         })),
-        ...remoteBranches.map((branch) => ({
-          name: branch,
-          displayName: branch.replace(/^origin\//, ''),
-          refType: 'remote' as const,
-        })),
+        ...remoteEntries,
       ].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
       return { branches };

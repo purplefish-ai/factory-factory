@@ -138,21 +138,43 @@ type BranchInfo = {
 
 const RESUME_WORKSPACE_IDS_KEY = 'ff_resume_workspace_ids';
 
-function rememberResumeWorkspace(workspaceId: string) {
+function readResumeWorkspaceIds(): string[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(RESUME_WORKSPACE_IDS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeResumeWorkspaceIds(ids: string[]) {
   if (typeof window === 'undefined') {
     return;
   }
 
   try {
-    const raw = window.localStorage.getItem(RESUME_WORKSPACE_IDS_KEY);
-    const existing = raw ? (JSON.parse(raw) as string[]) : [];
-    if (!existing.includes(workspaceId)) {
-      existing.push(workspaceId);
-      window.localStorage.setItem(RESUME_WORKSPACE_IDS_KEY, JSON.stringify(existing));
-    }
+    window.localStorage.setItem(RESUME_WORKSPACE_IDS_KEY, JSON.stringify(ids));
   } catch {
     // Non-blocking: ignore localStorage failures.
   }
+}
+
+function rememberResumeWorkspace(workspaceId: string) {
+  const existing = readResumeWorkspaceIds();
+  if (!existing.includes(workspaceId)) {
+    existing.push(workspaceId);
+  }
+  const trimmed = existing.slice(-200);
+  writeResumeWorkspaceIds(trimmed);
+}
+
+export function forgetResumeWorkspace(workspaceId: string) {
+  const existing = readResumeWorkspaceIds().filter((id) => id !== workspaceId);
+  writeResumeWorkspaceIds(existing);
 }
 
 function ResumeBranchDialog({

@@ -302,6 +302,8 @@ class WorktreeLifecycleService {
         workspaceId,
       });
       await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
+    } finally {
+      workspaceInitModes.delete(workspaceId);
     }
   }
 }

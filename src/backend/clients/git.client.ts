@@ -25,6 +25,20 @@ export interface GitWorktreeEntry {
   branchName?: string;
 }
 
+async function isLocalBehindOrigin(
+  repoPath: string,
+  localBranch: string,
+  originBranch: string
+): Promise<boolean> {
+  const result = await gitCommandC(repoPath, [
+    'merge-base',
+    '--is-ancestor',
+    localBranch,
+    originBranch,
+  ]);
+  return result.code === 0;
+}
+
 function parseWorktreeEntries(output: string): GitWorktreeEntry[] {
   const entries: GitWorktreeEntry[] = [];
   const lines = output.split('\n');
@@ -164,16 +178,17 @@ export class GitClient {
     const originBranch = `origin/${localBranchName}`;
     const originExists = await this.branchExists(originBranch);
 
-    let checkoutRef = branchRef;
-    if (fetchSucceeded && originExists) {
-      checkoutRef = originBranch;
-    } else if (originExists) {
-      checkoutRef = originBranch;
-    }
+    const checkoutRef = originExists ? originBranch : branchRef;
+    const shouldResetToOrigin =
+      localExists && fetchSucceeded && originExists
+        ? await isLocalBehindOrigin(this.baseRepoPath, localBranchName, originBranch)
+        : false;
 
-    const args = localExists
-      ? ['worktree', 'add', worktreePath, localBranchName]
-      : ['worktree', 'add', '-b', localBranchName, worktreePath, checkoutRef];
+    const args = shouldResetToOrigin
+      ? ['worktree', 'add', '-B', localBranchName, worktreePath, checkoutRef]
+      : localExists
+        ? ['worktree', 'add', worktreePath, localBranchName]
+        : ['worktree', 'add', '-b', localBranchName, worktreePath, checkoutRef];
 
     const result = await gitCommandC(this.baseRepoPath, args);
     if (result.code !== 0) {
