@@ -5,11 +5,13 @@ import {
   AskUserQuestionInputSchema,
   safeParseToolInput,
 } from '../../../schemas/tool-inputs.schema';
+import { chatConnectionService } from '../../chat-connection.service';
 import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import { eventCompressionService } from '../../event-compression.service';
 import { createLogger } from '../../logger.service';
 import { messageStateService } from '../../message-state.service';
 import { sessionService } from '../../session.service';
+import { slashCommandCacheService } from '../../slash-command-cache.service';
 import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
@@ -29,6 +31,8 @@ export function createLoadSessionHandler(): ChatMessageHandler {
     } else {
       await loadHistoryFromJSONL(sessionId, workingDir, dbSession.claudeSessionId);
     }
+
+    await sendCachedSlashCommandsIfNeeded(sessionId);
   };
 }
 
@@ -149,4 +153,24 @@ async function loadHistoryFromJSONL(
   }
   const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
   messageStateService.sendSnapshot(sessionId, sessionStatus, null);
+}
+
+async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void> {
+  const cached = await slashCommandCacheService.getCachedCommands();
+  if (!cached || cached.length === 0) {
+    return;
+  }
+
+  const storedEvents = messageStateService.getStoredEvents(sessionId);
+  const hasSlashCommands = storedEvents.some((event) => event.type === 'slash_commands');
+  if (hasSlashCommands) {
+    return;
+  }
+
+  const slashCommandsMsg = {
+    type: 'slash_commands',
+    slashCommands: cached,
+  };
+  messageStateService.storeEvent(sessionId, slashCommandsMsg);
+  chatConnectionService.forwardToSession(sessionId, slashCommandsMsg);
 }

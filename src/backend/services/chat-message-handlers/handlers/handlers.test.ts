@@ -3,10 +3,12 @@ import type { WebSocket } from 'ws';
 import type { ClaudeClient } from '../../../claude/index';
 import { SessionManager } from '../../../claude/index';
 import { claudeSessionAccessor } from '../../../resource_accessors/claude-session.accessor';
+import { chatConnectionService } from '../../chat-connection.service';
 import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import { messageQueueService } from '../../message-queue.service';
 import { messageStateService } from '../../message-state.service';
 import { sessionService } from '../../session.service';
+import { slashCommandCacheService } from '../../slash-command-cache.service';
 import { createGetHistoryHandler } from './get-history.handler';
 import { createGetQueueHandler } from './get-queue.handler';
 import { createListSessionsHandler } from './list-sessions.handler';
@@ -59,6 +61,12 @@ vi.mock('../../event-compression.service', () => ({
   },
 }));
 
+vi.mock('../../slash-command-cache.service', () => ({
+  slashCommandCacheService: {
+    getCachedCommands: vi.fn(),
+  },
+}));
+
 vi.mock('../../message-queue.service', () => ({
   messageQueueService: {
     enqueue: vi.fn(),
@@ -102,6 +110,8 @@ const mockedChatEventForwarderService = vi.mocked(chatEventForwarderService);
 const mockedMessageQueueService = vi.mocked(messageQueueService);
 const mockedMessageStateService = vi.mocked(messageStateService);
 const mockedSessionService = vi.mocked(sessionService);
+const mockedSlashCommandCacheService = vi.mocked(slashCommandCacheService);
+const mockedChatConnectionService = vi.mocked(chatConnectionService);
 
 describe('chat message handlers', () => {
   beforeEach(() => {
@@ -257,6 +267,36 @@ describe('chat message handlers', () => {
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'error', message: 'Session not found' })
     );
+  });
+
+  it('load_session sends cached slash commands when missing', async () => {
+    mockedClaudeSessionAccessor.findById.mockResolvedValue({
+      id: 'session-1',
+      claudeSessionId: null,
+    } as unknown as Awaited<ReturnType<typeof claudeSessionAccessor.findById>>);
+    mockedSessionService.getClient.mockReturnValue(undefined);
+    mockedSlashCommandCacheService.getCachedCommands.mockResolvedValue([
+      { name: '/help', description: 'Help' },
+    ]);
+
+    const handler = createLoadSessionHandler();
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'load_session' },
+    });
+
+    expect(messageStateService.storeEvent).toHaveBeenCalledWith('session-1', {
+      type: 'slash_commands',
+      slashCommands: [{ name: '/help', description: 'Help' }],
+    });
+    expect(mockedChatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
+      type: 'slash_commands',
+      slashCommands: [{ name: '/help', description: 'Help' }],
+    });
   });
 
   it('get_queue sends snapshot', () => {
