@@ -40,6 +40,8 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Create a feature branch: `git switch -c your-branch-name`.
 - Keep work tidy: `git status`, `git diff`, `git add -p`, `git commit -m "Verb phrase"`.
 - Open a PR: `gh pr create --fill` (edit title/body as needed), then push updates with `git push`.
+- For multi-line PR bodies, prefer `--body-file` to avoid newline escaping issues (write content to a temp file and pass it to `gh pr create`).
+- For multi-line issue bodies, prefer `gh issue create --body-file` or `gh issue edit --body-file` to preserve newlines.
 
 ## Contributor Checklist
 - Add or update tests and run `pnpm test` (use `pnpm test:watch` during development).
