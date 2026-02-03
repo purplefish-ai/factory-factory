@@ -75,6 +75,208 @@ function ToggleRightPanelButton() {
 }
 
 // =============================================================================
+// Workspace Header
+// =============================================================================
+
+function WorkspaceTitle({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  if (workspace.branchName) {
+    return (
+      <div className="flex items-center gap-2">
+        <GitBranch className="h-4 w-4 text-muted-foreground" />
+        <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
+      </div>
+    );
+  }
+
+  return <h1 className="text-lg font-semibold">{workspace.name}</h1>;
+}
+
+function WorkspacePrLink({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  if (!(workspace.prUrl && workspace.prNumber) || workspace.prState === 'NONE') {
+    return null;
+  }
+
+  return (
+    <a
+      href={workspace.prUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
+        workspace.prState === 'MERGED'
+          ? 'text-green-500'
+          : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
+      {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+    </a>
+  );
+}
+
+const CI_STATUS_CONFIG = {
+  SUCCESS: {
+    label: 'CI Passing',
+    tooltip: 'All CI checks are passing',
+    className: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
+    Icon: CheckCircle2,
+  },
+  FAILURE: {
+    label: 'CI Failing',
+    tooltip: 'Some CI checks are failing',
+    className: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
+    Icon: XCircle,
+  },
+  PENDING: {
+    label: 'CI Running',
+    tooltip: 'CI checks are currently running',
+    className: 'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
+    Icon: Circle,
+  },
+  UNKNOWN: {
+    label: 'CI Unknown',
+    tooltip: 'CI status not yet determined',
+    className: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+    Icon: Circle,
+  },
+} as const;
+
+function WorkspaceCiStatus({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  if (!workspace.prUrl || workspace.prState !== 'OPEN') {
+    return null;
+  }
+
+  const statusConfig = CI_STATUS_CONFIG[workspace.prCiStatus];
+  if (!statusConfig) {
+    return null;
+  }
+
+  const { Icon } = statusConfig;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
+            statusConfig.className
+          )}
+        >
+          <Icon className={cn('h-3 w-3', workspace.prCiStatus === 'PENDING' && 'animate-pulse')} />
+          <span>{statusConfig.label}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{statusConfig.tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+interface WorkspaceHeaderProps {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspaceId: string;
+  availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
+  preferredIde: ReturnType<typeof useSessionManagement>['preferredIde'];
+  openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
+  archivePending: boolean;
+  onArchiveRequest: () => void;
+  handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
+  running: boolean;
+  isCreatingSession: boolean;
+}
+
+function WorkspaceHeader({
+  workspace,
+  workspaceId,
+  availableIdes,
+  preferredIde,
+  openInIde,
+  archivePending,
+  onArchiveRequest,
+  handleQuickAction,
+  running,
+  isCreatingSession,
+}: WorkspaceHeaderProps) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2 border-b">
+      <div className="flex items-center gap-3">
+        <WorkspaceTitle workspace={workspace} />
+        <RunScriptPortBadge workspaceId={workspaceId} />
+        <WorkspacePrLink workspace={workspace} />
+        <WorkspaceCiStatus workspace={workspace} />
+      </div>
+      <div className="flex items-center gap-1">
+        <QuickActionsMenu
+          onExecuteAgent={(action) => {
+            if (action.content) {
+              handleQuickAction(action.name, action.content);
+            }
+          }}
+          disabled={running || isCreatingSession}
+        />
+        <RunScriptButton workspaceId={workspaceId} />
+        {availableIdes.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => openInIde.mutate({ id: workspaceId })}
+                disabled={openInIde.isPending || !workspace.worktreePath}
+              >
+                {openInIde.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <AppWindow className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Open in {availableIdes.find((ide) => ide.id === preferredIde)?.name ?? 'IDE'}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
+              size="icon"
+              className={cn(
+                'h-8 w-8',
+                workspace.prState === 'MERGED'
+                  ? ''
+                  : 'hover:bg-destructive/10 hover:text-destructive'
+              )}
+              onClick={onArchiveRequest}
+              disabled={archivePending}
+            >
+              {archivePending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Archive className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{archivePending ? 'Archiving...' : 'Archive'}</TooltipContent>
+        </Tooltip>
+        <ToggleRightPanelButton />
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Chat Content Component (extracted for use with MainViewContent)
 // =============================================================================
 
@@ -267,7 +469,89 @@ const ChatContent = memo(function ChatContent({
 // Main Workspace Chat Component
 // =============================================================================
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: main workspace component with multiple features
+function useWorkspaceInitStatus(
+  workspaceId: string,
+  workspace: ReturnType<typeof useWorkspaceData>['workspace'],
+  utils: ReturnType<typeof trpc.useUtils>
+) {
+  const { data: workspaceInitStatus, isPending: isInitStatusPending } =
+    trpc.workspace.getInitStatus.useQuery(
+      { id: workspaceId },
+      {
+        refetchInterval: (query) => {
+          const status = query.state.data?.status;
+          return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
+        },
+      }
+    );
+
+  const prevInitStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const currentStatus = workspaceInitStatus?.status;
+    const prevStatus = prevInitStatusRef.current;
+
+    if (currentStatus === 'READY') {
+      const isTransitionToReady = prevStatus !== undefined && prevStatus !== 'READY';
+      const isStaleOnFirstLoad = prevStatus === undefined && !workspace?.worktreePath;
+
+      if (isTransitionToReady || isStaleOnFirstLoad) {
+        utils.workspace.get.invalidate({ id: workspaceId });
+      }
+    }
+
+    prevInitStatusRef.current = currentStatus;
+  }, [workspaceInitStatus?.status, workspaceId, utils, workspace?.worktreePath]);
+
+  const status = workspaceInitStatus?.status;
+  const isInitializing =
+    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
+
+  return { workspaceInitStatus, isInitStatusPending, isInitializing };
+}
+
+function useSelectedSessionId(initialDbSessionId: string | null) {
+  const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialDbSessionId && selectedDbSessionId === null) {
+      setSelectedDbSessionId(initialDbSessionId);
+    }
+  }, [initialDbSessionId, selectedDbSessionId]);
+
+  return { selectedDbSessionId, setSelectedDbSessionId };
+}
+
+function useAutoFocusChatInput({
+  workspaceLoading,
+  workspace,
+  selectedDbSessionId,
+  activeTabId,
+  loadingSession,
+  inputRef,
+}: {
+  workspaceLoading: boolean;
+  workspace: ReturnType<typeof useWorkspaceData>['workspace'];
+  selectedDbSessionId: string | null;
+  activeTabId: string | null;
+  loadingSession: boolean;
+  inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
+}) {
+  const hasFocusedOnEntryRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref object
+  useEffect(() => {
+    if (
+      !(hasFocusedOnEntryRef.current || workspaceLoading) &&
+      workspace &&
+      selectedDbSessionId &&
+      activeTabId === 'chat' &&
+      !loadingSession
+    ) {
+      hasFocusedOnEntryRef.current = true;
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace]);
+}
+
 function WorkspaceChatContent() {
   const { slug = '', id: workspaceId = '' } = useParams<{ slug: string; id: string }>();
   const navigate = useNavigate();
@@ -286,43 +570,16 @@ function WorkspaceChatContent() {
 
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
 
-  // Query workspace status to show initialization overlay
-  const { data: workspaceInitStatus, isPending: isInitStatusPending } =
-    trpc.workspace.getInitStatus.useQuery(
-      { id: workspaceId },
-      {
-        // Poll while not ready
-        refetchInterval: (query) => {
-          const status = query.state.data?.status;
-          return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
-        },
-      }
-    );
-
-  // When init status becomes READY, refetch workspace to get updated worktreePath.
-  // Also handles edge case where init is already READY on first load but workspace
-  // data is stale (missing worktreePath).
-  const prevInitStatusRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const currentStatus = workspaceInitStatus?.status;
-    const prevStatus = prevInitStatusRef.current;
-
-    if (currentStatus === 'READY') {
-      // Invalidate on status transition to READY, or if status was already READY
-      // on first load but workspace is missing worktreePath (stale data)
-      const isTransitionToReady = prevStatus !== undefined && prevStatus !== 'READY';
-      const isStaleOnFirstLoad = prevStatus === undefined && !workspace?.worktreePath;
-
-      if (isTransitionToReady || isStaleOnFirstLoad) {
-        utils.workspace.get.invalidate({ id: workspaceId });
-      }
-    }
-
-    prevInitStatusRef.current = currentStatus;
-  }, [workspaceInitStatus?.status, workspaceId, utils, workspace?.worktreePath]);
+  const { workspaceInitStatus, isInitializing } = useWorkspaceInitStatus(
+    workspaceId,
+    workspace,
+    utils
+  );
 
   // Manage selected session state here so it's available for useChatWebSocket
-  const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
+  const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
+    initialDbSessionId ?? null
+  );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
@@ -330,14 +587,6 @@ function WorkspaceChatContent() {
     { enabled: !!workspace?.worktreePath, refetchInterval: 15_000, staleTime: 10_000 }
   );
   const hasUncommitted = gitStatus?.hasUncommitted === true;
-
-  // Initialize selectedDbSessionId when sessions first load
-  useEffect(() => {
-    if (initialDbSessionId && selectedDbSessionId === null) {
-      setSelectedDbSessionId(initialDbSessionId);
-    }
-  }, [initialDbSessionId, selectedDbSessionId]);
-
   // Initialize WebSocket connection with chat hook
   const {
     messages,
@@ -436,22 +685,14 @@ function WorkspaceChatContent() {
   // Auto-scroll behavior with RAF throttling
   const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
 
-  // Auto-focus chat input when entering workspace with active chat tab
-  const hasFocusedOnEntryRef = useRef(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref object
-  useEffect(() => {
-    if (
-      !(hasFocusedOnEntryRef.current || workspaceLoading) &&
-      workspace &&
-      selectedDbSessionId &&
-      activeTabId === 'chat' &&
-      !loadingSession
-    ) {
-      hasFocusedOnEntryRef.current = true;
-      // Use setTimeout to ensure the input is mounted and ready
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace]);
+  useAutoFocusChatInput({
+    workspaceLoading,
+    workspace,
+    selectedDbSessionId,
+    activeTabId,
+    loadingSession,
+    inputRef,
+  });
 
   // Show loading while fetching workspace (but not sessions - they can load in background)
   if (workspaceLoading) {
@@ -472,13 +713,6 @@ function WorkspaceChatContent() {
   // The running session is always the currently selected session
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
 
-  // Check if workspace is still initializing
-  // Show overlay for NEW, PROVISIONING, or FAILED states.
-  // Include isPending to prevent flash of main UI while query is loading.
-  const status = workspaceInitStatus?.status;
-  const isInitializing =
-    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
-
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Initialization Overlay - shown while workspace is being set up */}
@@ -494,149 +728,18 @@ function WorkspaceChatContent() {
       {/* Archiving Overlay - shown while workspace is being archived */}
       {archiveWorkspace.isPending && <ArchivingOverlay />}
 
-      {/* Header: Branch name, status, and toggle button */}
-      <div className="flex items-center justify-between px-4 py-2 border-b">
-        <div className="flex items-center gap-3">
-          {workspace.branchName ? (
-            <div className="flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
-            </div>
-          ) : (
-            <h1 className="text-lg font-semibold">{workspace.name}</h1>
-          )}
-          {/* Run Script Port Badge */}
-          <RunScriptPortBadge workspaceId={workspaceId} />
-          {/* PR Link */}
-          {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
-            <a
-              href={workspace.prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
-                workspace.prState === 'MERGED'
-                  ? 'text-green-500'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
-              {workspace.prState === 'MERGED' && (
-                <CheckCircle2 className="h-3 w-3 text-green-500" />
-              )}
-            </a>
-          )}
-          {/* CI Status Badge - shown for all open PRs */}
-          {workspace.prUrl && workspace.prState === 'OPEN' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
-                    workspace.prCiStatus === 'SUCCESS' &&
-                      'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
-                    workspace.prCiStatus === 'FAILURE' &&
-                      'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
-                    workspace.prCiStatus === 'PENDING' &&
-                      'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
-                    workspace.prCiStatus === 'UNKNOWN' &&
-                      'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                  )}
-                >
-                  {workspace.prCiStatus === 'SUCCESS' && (
-                    <>
-                      <CheckCircle2 className="h-3 w-3" />
-                      <span>CI Passing</span>
-                    </>
-                  )}
-                  {workspace.prCiStatus === 'FAILURE' && (
-                    <>
-                      <XCircle className="h-3 w-3" />
-                      <span>CI Failing</span>
-                    </>
-                  )}
-                  {workspace.prCiStatus === 'PENDING' && (
-                    <>
-                      <Circle className="h-3 w-3 animate-pulse" />
-                      <span>CI Running</span>
-                    </>
-                  )}
-                  {workspace.prCiStatus === 'UNKNOWN' && (
-                    <>
-                      <Circle className="h-3 w-3" />
-                      <span>CI Unknown</span>
-                    </>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                {workspace.prCiStatus === 'SUCCESS' && 'All CI checks are passing'}
-                {workspace.prCiStatus === 'FAILURE' && 'Some CI checks are failing'}
-                {workspace.prCiStatus === 'PENDING' && 'CI checks are currently running'}
-                {workspace.prCiStatus === 'UNKNOWN' && 'CI status not yet determined'}
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <QuickActionsMenu
-            onExecuteAgent={(action) => {
-              if (action.content) {
-                handleQuickAction(action.name, action.content);
-              }
-            }}
-            disabled={running || createSession.isPending}
-          />
-          <RunScriptButton workspaceId={workspaceId} />
-          {availableIdes.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => openInIde.mutate({ id: workspaceId })}
-                  disabled={openInIde.isPending || !workspace.worktreePath}
-                >
-                  {openInIde.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <AppWindow className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Open in {availableIdes.find((ide) => ide.id === preferredIde)?.name ?? 'IDE'}
-              </TooltipContent>
-            </Tooltip>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
-                size="icon"
-                className={cn(
-                  'h-8 w-8',
-                  workspace.prState === 'MERGED'
-                    ? ''
-                    : 'hover:bg-destructive/10 hover:text-destructive'
-                )}
-                onClick={handleArchiveRequest}
-                disabled={archiveWorkspace.isPending}
-              >
-                {archiveWorkspace.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Archive className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {archiveWorkspace.isPending ? 'Archiving...' : 'Archive'}
-            </TooltipContent>
-          </Tooltip>
-          <ToggleRightPanelButton />
-        </div>
-      </div>
+      <WorkspaceHeader
+        workspace={workspace}
+        workspaceId={workspaceId}
+        availableIdes={availableIdes}
+        preferredIde={preferredIde}
+        openInIde={openInIde}
+        archivePending={archiveWorkspace.isPending}
+        onArchiveRequest={handleArchiveRequest}
+        handleQuickAction={handleQuickAction}
+        running={running}
+        isCreatingSession={createSession.isPending}
+      />
 
       {/* Main Content Area: Resizable two-column layout */}
       <ResizablePanelGroup
