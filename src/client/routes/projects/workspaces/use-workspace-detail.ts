@@ -2,7 +2,28 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
+import type { GitHubIssue } from '@/backend/services/github-cli.service';
 import { trpc } from '@/frontend/lib/trpc';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Generate a prompt from a GitHub issue to send as the first message.
+ */
+function generateIssuePrompt(issue: GitHubIssue): string {
+  return `I want to work on the following GitHub issue:
+
+## Issue #${issue.number}: ${issue.title}
+
+${issue.body || 'No description provided.'}
+
+---
+Issue URL: ${issue.url}
+
+Please analyze this issue and help me implement a solution.`;
+}
 
 // =============================================================================
 // useWorkspaceData - Fetches workspace and session data
@@ -130,7 +151,7 @@ export interface UseSessionManagementReturn {
   preferredIde: string;
   handleSelectSession: (dbSessionId: string) => void;
   handleCloseSession: (dbSessionId: string) => void;
-  handleWorkflowSelect: (workflowId: string) => void;
+  handleWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
   handleNewChat: () => void;
   handleQuickAction: (name: string, prompt: string) => void;
 }
@@ -151,31 +172,21 @@ export function useSessionManagement({
 
   // Ref to store pending quick action prompt (to send after session is ready)
   const pendingQuickActionRef = useRef<{ dbSessionId: string; prompt: string } | null>(null);
-  // Track whether we've seen the session go through loading state (to avoid stale isSessionReady)
-  const hasSeenLoadingRef = useRef(false);
-
-  // Effect to track when session enters loading state (reset detection)
-  useEffect(() => {
-    if (!isSessionReady) {
-      // Session is loading - mark that we've seen the loading state
-      hasSeenLoadingRef.current = true;
-    }
-  }, [isSessionReady]);
 
   // Effect to send pending quick action prompt when session is ready
-  // Waits for: session selected, session went through loading, and now ready
+  // We track the previous isSessionReady value to detect the transition from false -> true
+  const wasSessionReadyRef = useRef(isSessionReady);
   useEffect(() => {
     const pending = pendingQuickActionRef.current;
-    if (
-      pending &&
-      pending.dbSessionId === selectedDbSessionId &&
-      isSessionReady &&
-      hasSeenLoadingRef.current
-    ) {
+    const transitionedToReady = !wasSessionReadyRef.current && isSessionReady;
+
+    // Send pending prompt when session transitions from not-ready to ready
+    if (pending && pending.dbSessionId === selectedDbSessionId && transitionedToReady) {
       pendingQuickActionRef.current = null;
-      hasSeenLoadingRef.current = false;
       sendMessage(pending.prompt);
     }
+
+    wasSessionReadyRef.current = isSessionReady;
   }, [selectedDbSessionId, sendMessage, isSessionReady]);
 
   const createSession = trpc.session.createClaudeSession.useMutation({
@@ -279,12 +290,17 @@ export function useSessionManagement({
   }, [claudeSessions]);
 
   const handleWorkflowSelect = useCallback(
-    (workflowId: string) => {
+    (workflowId: string, linkedIssue?: GitHubIssue) => {
       const chatName = getNextChatName();
       createSession.mutate(
         { workspaceId, workflow: workflowId, model: selectedModel || undefined, name: chatName },
         {
           onSuccess: (session) => {
+            // If there's a linked issue, queue the prompt to auto-send once session is ready
+            if (linkedIssue) {
+              const issuePrompt = generateIssuePrompt(linkedIssue);
+              pendingQuickActionRef.current = { dbSessionId: session.id, prompt: issuePrompt };
+            }
             // Setting the new session ID triggers WebSocket reconnection automatically
             setSelectedDbSessionId(session.id);
             setTimeout(() => inputRef.current?.focus(), 0);
@@ -325,8 +341,6 @@ export function useSessionManagement({
           onSuccess: (session) => {
             // Store the pending prompt to be sent once the session state settles
             pendingQuickActionRef.current = { dbSessionId: session.id, prompt };
-            // Reset the loading detection - we need to see the new session go through loading
-            hasSeenLoadingRef.current = false;
             // Setting the new session ID triggers WebSocket reconnection automatically
             setSelectedDbSessionId(session.id);
           },
