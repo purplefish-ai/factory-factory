@@ -208,7 +208,7 @@ class ChatEventForwarderService {
       workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
 
       // Store-then-forward: store event for replay before forwarding
-      const statusMsg = { type: 'status', running: true };
+      const statusMsg = { type: 'status', running: true, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);
       chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
@@ -499,7 +499,7 @@ class ChatEventForwarderService {
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
 
-      const statusMsg = { type: 'status', running: false };
+      const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);
       chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
@@ -525,6 +525,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, {
         type: 'process_exit',
         code: result.code,
+        processAlive: false,
       });
       client.removeAllListeners();
       this.clientEventSetup.delete(dbSessionId);

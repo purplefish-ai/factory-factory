@@ -35,6 +35,7 @@ export type {
   ChatState,
   PendingMessageContent,
   PendingRequest,
+  ProcessStatus,
   RejectedMessageInfo,
   RewindPreviewState,
   SessionStatus,
@@ -86,7 +87,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 // Individual message type handlers for createActionFromWebSocketMessage
 
 function handleStatusMessage(data: WebSocketMessage): ChatAction {
-  return { type: 'WS_STATUS', payload: { running: data.running ?? false } };
+  return {
+    type: 'WS_STATUS',
+    payload: { running: data.running ?? false, processAlive: data.processAlive },
+  };
 }
 
 function handleClaudeMessageAction(data: WebSocketMessage): ChatAction | null {
@@ -278,8 +282,9 @@ export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAc
     case 'started':
       return { type: 'WS_STARTED' };
     case 'stopped':
-    case 'process_exit':
       return { type: 'WS_STOPPED' };
+    case 'process_exit':
+      return { type: 'WS_PROCESS_EXIT', payload: { code: data.code ?? null } };
     case 'claude_message':
       return handleClaudeMessageAction(data);
     case 'error':

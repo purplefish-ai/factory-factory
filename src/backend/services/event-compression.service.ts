@@ -35,6 +35,7 @@ export interface StoredEvent {
   type: string;
   data?: unknown;
   running?: boolean;
+  processAlive?: boolean;
 }
 
 /** Compression statistics for monitoring */
@@ -418,11 +419,16 @@ class EventCompressionService {
   ): { deduplicated: StoredEvent; endIndex: number } {
     const first = events[startIndex];
     const runningState = first.running;
+    const processAlive = first.processAlive;
     let endIndex = startIndex;
 
     for (let i = startIndex + 1; i < events.length; i++) {
       const event = events[i];
-      if (!this.isStatusEvent(event) || event.running !== runningState) {
+      if (
+        !this.isStatusEvent(event) ||
+        event.running !== runningState ||
+        event.processAlive !== processAlive
+      ) {
         break;
       }
       endIndex = i;

@@ -233,6 +233,24 @@ describe('chatReducer', () => {
 
       expect(newState.sessionStatus).toEqual({ phase: 'ready' });
     });
+
+    it('should preserve lastExit info when stopping after a process exit', () => {
+      const state = {
+        ...initialState,
+        processStatus: {
+          state: 'stopped' as const,
+          lastExit: {
+            code: 1,
+            exitedAt: '2026-02-03T12:00:00.000Z',
+            unexpected: true,
+          },
+        },
+      };
+      const action: ChatAction = { type: 'WS_STOPPED' };
+      const newState = chatReducer(state, action);
+
+      expect(newState.processStatus).toEqual(state.processStatus);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1773,14 +1791,20 @@ describe('createActionFromWebSocketMessage', () => {
     const wsMessage: WebSocketMessage = { type: 'status', running: true };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STATUS', payload: { running: true } });
+    expect(action).toEqual({
+      type: 'WS_STATUS',
+      payload: { running: true, processAlive: undefined },
+    });
   });
 
   it('should default running to false if not provided in status message', () => {
     const wsMessage: WebSocketMessage = { type: 'status' };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STATUS', payload: { running: false } });
+    expect(action).toEqual({
+      type: 'WS_STATUS',
+      payload: { running: false, processAlive: undefined },
+    });
   });
 
   it('should convert starting message to WS_STARTING action', () => {
@@ -1804,11 +1828,11 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toEqual({ type: 'WS_STOPPED' });
   });
 
-  it('should convert process_exit message to WS_STOPPED action', () => {
+  it('should convert process_exit message to WS_PROCESS_EXIT action', () => {
     const wsMessage: WebSocketMessage = { type: 'process_exit', code: 0 };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STOPPED' });
+    expect(action).toEqual({ type: 'WS_PROCESS_EXIT', payload: { code: 0 } });
   });
 
   it('should convert claude_message to WS_CLAUDE_MESSAGE action', () => {
