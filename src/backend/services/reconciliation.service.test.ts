@@ -58,7 +58,10 @@ describe('ReconciliationService', () => {
 
       await reconciliationService.reconcile();
 
-      expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', 'feature/test');
+      expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', {
+        branchName: 'feature/test',
+        useExistingBranch: false,
+      });
     });
 
     it('should mark stale PROVISIONING workspaces as FAILED', async () => {
@@ -120,7 +123,10 @@ describe('ReconciliationService', () => {
       await reconciliationService.reconcile();
 
       // NEW workspace should be initialized
-      expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', 'feature/new');
+      expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', {
+        branchName: 'feature/new',
+        useExistingBranch: false,
+      });
 
       // Stale PROVISIONING should be marked as FAILED
       expect(mockUpdate).toHaveBeenCalledWith({
