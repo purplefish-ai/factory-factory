@@ -1,34 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '../app-context';
 
 // Mock configService CORS config
 const mockGetCorsConfig = vi.fn();
 
-// Mock the services before importing middlewares
-vi.mock('../services/index', () => ({
-  configService: {
-    getCorsConfig: () => mockGetCorsConfig(),
-  },
-  createLogger: () => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
-
-// Mock the logger service before importing middlewares
-vi.mock('../services/logger.service', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
-
-import { corsMiddleware } from './cors.middleware';
-import { requestLoggerMiddleware } from './request-logger.middleware';
+import { createCorsMiddleware } from './cors.middleware';
+import { createRequestLoggerMiddleware } from './request-logger.middleware';
 // Import after mocks are set up
 import { securityMiddleware } from './security.middleware';
 
@@ -129,6 +107,7 @@ describe('securityMiddleware', () => {
 describe('corsMiddleware', () => {
   let mockRes: MockRes;
   let mockNext: NextFunction;
+  let corsMiddleware: ReturnType<typeof createCorsMiddleware>;
 
   beforeEach(() => {
     mockRes = createMockRes();
@@ -137,6 +116,14 @@ describe('corsMiddleware', () => {
     mockGetCorsConfig.mockReturnValue({
       allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
     });
+    const appContext = {
+      services: {
+        configService: {
+          getCorsConfig: () => mockGetCorsConfig(),
+        },
+      },
+    } as unknown as AppContext;
+    corsMiddleware = createCorsMiddleware(appContext);
   });
 
   afterEach(() => {
@@ -291,10 +278,22 @@ describe('corsMiddleware', () => {
 describe('requestLoggerMiddleware', () => {
   let mockRes: MockRes;
   let mockNext: NextFunction;
+  let requestLoggerMiddleware: ReturnType<typeof createRequestLoggerMiddleware>;
 
   beforeEach(() => {
     mockRes = createMockRes();
     mockNext = vi.fn() as unknown as NextFunction;
+    const appContext = {
+      services: {
+        createLogger: () => ({
+          info: vi.fn(),
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        }),
+      },
+    } as unknown as AppContext;
+    requestLoggerMiddleware = createRequestLoggerMiddleware(appContext);
   });
 
   it('should call next() immediately', () => {

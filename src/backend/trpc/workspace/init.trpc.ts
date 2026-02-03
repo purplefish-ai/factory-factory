@@ -9,8 +9,6 @@ import { startupScriptService } from '../../services/startup-script.service';
 import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import { publicProcedure, router } from '../trpc';
 
-const logger = createLogger('workspace-init-trpc');
-
 // Cache the authenticated GitHub username (fetched once per server lifetime)
 let cachedGitHubUsername: string | null | undefined;
 
@@ -19,13 +17,34 @@ type WorkspaceWithProject = Exclude<
   null | undefined
 >;
 
-async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
+type InitLogger = ReturnType<typeof createLogger>;
+type InitDeps = {
+  logger: InitLogger;
+  githubCLIService: typeof githubCLIService;
+  startupScriptService: typeof startupScriptService;
+  workspaceStateMachine: typeof workspaceStateMachine;
+};
+
+function createInitDeps(overrides: Partial<InitDeps> = {}): InitDeps {
+  const deps: InitDeps = {
+    logger: createLogger('workspace-init-trpc'),
+    githubCLIService,
+    startupScriptService,
+    workspaceStateMachine,
+  };
+  return {
+    ...deps,
+    ...overrides,
+  };
+}
+
+async function startProvisioningOrLog(workspaceId: string, deps: InitDeps): Promise<boolean> {
   try {
-    await workspaceStateMachine.startProvisioning(workspaceId);
+    await deps.workspaceStateMachine.startProvisioning(workspaceId);
     return true;
   } catch (error) {
     // If we can't start provisioning (e.g., workspace deleted), log and return
-    logger.error('Failed to start provisioning', error as Error, { workspaceId });
+    deps.logger.error('Failed to start provisioning', error as Error, { workspaceId });
     return false;
   }
 }
@@ -57,21 +76,22 @@ async function ensureBaseBranchExists(
   }
 }
 
-async function getCachedGitHubUsername(): Promise<string | null> {
+async function getCachedGitHubUsername(deps: InitDeps): Promise<string | null> {
   if (cachedGitHubUsername === undefined) {
-    cachedGitHubUsername = await githubCLIService.getAuthenticatedUsername();
+    cachedGitHubUsername = await deps.githubCLIService.getAuthenticatedUsername();
   }
   return cachedGitHubUsername ?? null;
 }
 
 async function readFactoryConfigSafe(
   worktreePath: string,
-  workspaceId: string
+  workspaceId: string,
+  deps: InitDeps
 ): Promise<Awaited<ReturnType<typeof FactoryConfigService.readConfig>>> {
   try {
     const factoryConfig = await FactoryConfigService.readConfig(worktreePath);
     if (factoryConfig) {
-      logger.info('Found factory-factory.json config', {
+      deps.logger.info('Found factory-factory.json config', {
         workspaceId,
         hasSetup: !!factoryConfig.scripts.setup,
         hasRun: !!factoryConfig.scripts.run,
@@ -80,7 +100,7 @@ async function readFactoryConfigSafe(
     }
     return factoryConfig;
   } catch (error) {
-    logger.error('Failed to parse factory-factory.json', error as Error, {
+    deps.logger.error('Failed to parse factory-factory.json', error as Error, {
       workspaceId,
     });
     // Continue without factory config if parsing fails
@@ -92,15 +112,16 @@ async function runFactorySetupScriptIfConfigured(
   workspaceId: string,
   workspaceWithProject: WorkspaceWithProject,
   worktreePath: string,
-  factoryConfig: Awaited<ReturnType<typeof FactoryConfigService.readConfig>>
+  factoryConfig: Awaited<ReturnType<typeof FactoryConfigService.readConfig>>,
+  deps: InitDeps
 ): Promise<boolean> {
   if (!factoryConfig?.scripts.setup) {
     return false;
   }
 
-  logger.info('Running setup script from factory-factory.json', { workspaceId });
+  deps.logger.info('Running setup script from factory-factory.json', { workspaceId });
 
-  const scriptResult = await startupScriptService.runStartupScript(
+  const scriptResult = await deps.startupScriptService.runStartupScript(
     { ...workspaceWithProject, worktreePath },
     {
       ...workspaceWithProject.project,
@@ -112,7 +133,7 @@ async function runFactorySetupScriptIfConfigured(
   // If script failed, log but don't throw (workspace is still usable)
   if (!scriptResult.success) {
     const finalWorkspace = await workspaceAccessor.findById(workspaceId);
-    logger.warn('Setup script from factory-factory.json failed but workspace created', {
+    deps.logger.warn('Setup script from factory-factory.json failed but workspace created', {
       workspaceId,
       error: finalWorkspace?.initErrorMessage,
     });
@@ -124,20 +145,21 @@ async function runFactorySetupScriptIfConfigured(
 async function runProjectStartupScriptIfConfigured(
   workspaceId: string,
   workspaceWithProject: WorkspaceWithProject,
-  worktreePath: string
+  worktreePath: string,
+  deps: InitDeps
 ): Promise<boolean> {
   const project = workspaceWithProject.project;
-  if (!startupScriptService.hasStartupScript(project)) {
+  if (!deps.startupScriptService.hasStartupScript(project)) {
     return false;
   }
 
-  logger.info('Running startup script for workspace', {
+  deps.logger.info('Running startup script for workspace', {
     workspaceId,
     hasCommand: !!project.startupScriptCommand,
     hasScriptPath: !!project.startupScriptPath,
   });
 
-  const scriptResult = await startupScriptService.runStartupScript(
+  const scriptResult = await deps.startupScriptService.runStartupScript(
     { ...workspaceWithProject, worktreePath },
     project
   );
@@ -145,7 +167,7 @@ async function runProjectStartupScriptIfConfigured(
   // If script failed, log but don't throw (workspace is still usable)
   if (!scriptResult.success) {
     const finalWorkspace = await workspaceAccessor.findById(workspaceId);
-    logger.warn('Startup script failed but workspace created', {
+    deps.logger.warn('Startup script failed but workspace created', {
       workspaceId,
       error: finalWorkspace?.initErrorMessage,
     });
@@ -165,12 +187,14 @@ async function runProjectStartupScriptIfConfigured(
  */
 export async function initializeWorkspaceWorktree(
   workspaceId: string,
-  requestedBranchName?: string
+  requestedBranchName?: string,
+  depsOverrides?: Partial<InitDeps>
 ): Promise<void> {
+  const deps = createInitDeps(depsOverrides);
   // Transition to PROVISIONING state first, before any validation.
   // This ensures that any error during initialization can be properly surfaced
   // via markFailed() since PROVISIONING -> FAILED is a valid transition.
-  const startedProvisioning = await startProvisioningOrLog(workspaceId);
+  const startedProvisioning = await startProvisioningOrLog(workspaceId, deps);
   if (!startedProvisioning) {
     return;
   }
@@ -190,7 +214,7 @@ export async function initializeWorkspaceWorktree(
     await ensureBaseBranchExists(gitClient, baseBranch, project.defaultBranch);
 
     // Get the authenticated user's GitHub username for branch prefix (cached)
-    const gitHubUsername = await getCachedGitHubUsername();
+    const gitHubUsername = await getCachedGitHubUsername(deps);
 
     const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
       branchPrefix: gitHubUsername ?? undefined,
@@ -199,7 +223,7 @@ export async function initializeWorkspaceWorktree(
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
     // Read factory-factory.json configuration from the worktree
-    const factoryConfig = await readFactoryConfigSafe(worktreePath, workspaceId);
+    const factoryConfig = await readFactoryConfigSafe(worktreePath, workspaceId, deps);
 
     // Update workspace with worktree info and run script from factory-factory.json
     await workspaceAccessor.update(workspaceId, {
@@ -214,7 +238,8 @@ export async function initializeWorkspaceWorktree(
       workspaceId,
       workspaceWithProject,
       worktreePath,
-      factoryConfig
+      factoryConfig,
+      deps
     );
     if (ranFactorySetup) {
       return;
@@ -224,20 +249,21 @@ export async function initializeWorkspaceWorktree(
     const ranProjectSetup = await runProjectStartupScriptIfConfigured(
       workspaceId,
       workspaceWithProject,
-      worktreePath
+      worktreePath,
+      deps
     );
     if (ranProjectSetup) {
       return;
     }
 
     // No startup script - mark as ready
-    await workspaceStateMachine.markReady(workspaceId);
+    await deps.workspaceStateMachine.markReady(workspaceId);
   } catch (error) {
-    logger.error('Failed to initialize workspace worktree', error as Error, {
+    deps.logger.error('Failed to initialize workspace worktree', error as Error, {
       workspaceId,
     });
     // Mark workspace as failed so user can see the error and retry
-    await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
+    await deps.workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
   }
 }
 
@@ -270,6 +296,7 @@ export const workspaceInitRouter = router({
 
   // Retry failed initialization
   retryInit: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    const deps = createInitDeps();
     const workspace = await workspaceAccessor.findByIdWithProject(input.id);
     if (!workspace?.project) {
       throw new TRPCError({
@@ -290,7 +317,7 @@ export const workspaceInitRouter = router({
     // If worktree wasn't created (early failure), re-run full initialization
     if (!workspace.worktreePath) {
       // Reset to NEW state so initializeWorkspaceWorktree can transition properly
-      const resetResult = await workspaceStateMachine.resetToNew(workspace.id, maxRetries);
+      const resetResult = await deps.workspaceStateMachine.resetToNew(workspace.id, maxRetries);
       if (!resetResult) {
         throw new TRPCError({
           code: 'TOO_MANY_REQUESTS',
@@ -303,7 +330,7 @@ export const workspaceInitRouter = router({
     }
 
     // Worktree exists - just retry the startup script
-    const updatedWorkspace = await workspaceStateMachine.startProvisioning(input.id, {
+    const updatedWorkspace = await deps.workspaceStateMachine.startProvisioning(input.id, {
       maxRetries,
     });
     if (!updatedWorkspace) {
@@ -314,7 +341,7 @@ export const workspaceInitRouter = router({
     }
 
     // Run script with the updated workspace (retry count already incremented)
-    await startupScriptService.runStartupScript(
+    await deps.startupScriptService.runStartupScript(
       { ...workspace, ...updatedWorkspace },
       workspace.project
     );

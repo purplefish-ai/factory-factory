@@ -10,14 +10,8 @@ import { gitCommand } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from '../services/factory-config.service';
-import { githubCLIService } from '../services/github-cli.service';
-import { computeKanbanColumn, kanbanStateService } from '../services/kanban-state.service';
-import { createLogger } from '../services/logger.service';
-import { RunScriptService } from '../services/run-script.service';
-import { sessionService } from '../services/session.service';
-import { terminalService } from '../services/terminal.service';
-import { workspaceStateMachine } from '../services/workspace-state-machine.service';
-import { publicProcedure, router } from './trpc';
+import { computeKanbanColumn } from '../services/kanban-state.service';
+import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
 import { workspaceIdeRouter } from './workspace/ide.trpc';
@@ -29,7 +23,8 @@ import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 export type { GitFileStatus, GitStatusFile } from '../lib/git-helpers';
 export { parseGitStatusOutput } from '../lib/git-helpers';
 
-const logger = createLogger('workspace-trpc');
+const loggerName = 'workspace-trpc';
+const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 // Limit concurrent git operations to prevent resource exhaustion.
 // The value 3 is arbitrary but works well in practice - high enough for parallelism,
@@ -185,7 +180,9 @@ export const workspaceRouter = router({
   // Get unified project summary state for sidebar (workspaces + working status + git stats + review count)
   getProjectSummaryState: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { githubCLIService, sessionService } = ctx.appContext.services;
+      const logger = getLogger(ctx);
       // 1. Fetch project (for defaultBranch) and non-archived workspaces with sessions in parallel
       const [project, workspaces] = await Promise.all([
         projectAccessor.findById(input.projectId),
@@ -295,7 +292,8 @@ export const workspaceRouter = router({
         offset: z.number().min(0).optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { sessionService } = ctx.appContext.services;
       const { projectId, ...filters } = input;
 
       // Get workspaces with sessions included (exclude archived from kanban view at DB level)
@@ -346,7 +344,8 @@ export const workspaceRouter = router({
         branchName: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
       // Create the workspace record
       const workspace = await workspaceAccessor.create(input);
 
@@ -392,7 +391,10 @@ export const workspaceRouter = router({
   // Archive a workspace
   archive: publicProcedure
     .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { runScriptService, sessionService, terminalService, workspaceStateMachine } =
+        ctx.appContext.services;
+      const logger = getLogger(ctx);
       const workspace = await getWorkspaceWithProjectOrThrow(input.id);
       if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVED')) {
         throw new TRPCError({
@@ -404,7 +406,7 @@ export const workspaceRouter = router({
       // Clean up running sessions, terminals, and dev processes before archiving
       try {
         await sessionService.stopWorkspaceSessions(input.id);
-        await RunScriptService.stopRunScript(input.id);
+        await runScriptService.stopRunScript(input.id);
         terminalService.destroyWorkspaceTerminals(input.id);
       } catch (error) {
         logger.error('Failed to cleanup workspace resources before archive', {
@@ -428,11 +430,13 @@ export const workspaceRouter = router({
     }),
 
   // Delete a workspace
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const { runScriptService, sessionService, terminalService } = ctx.appContext.services;
+    const logger = getLogger(ctx);
     // Clean up running sessions, terminals, and dev processes before deleting
     try {
       await sessionService.stopWorkspaceSessions(input.id);
-      await RunScriptService.stopRunScript(input.id);
+      await runScriptService.stopRunScript(input.id);
       terminalService.destroyWorkspaceTerminals(input.id);
     } catch (error) {
       logger.error('Failed to cleanup workspace resources before delete', {
@@ -446,7 +450,8 @@ export const workspaceRouter = router({
   // Refresh factory-factory.json configuration for all workspaces
   refreshFactoryConfigs: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
       // Get all workspaces for this project that have worktrees
       const workspaces = await workspaceAccessor.findByProjectId(input.projectId);
 
@@ -491,7 +496,8 @@ export const workspaceRouter = router({
   // Get factory-factory.json configuration for a project
   getFactoryConfig: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
       const project = await projectAccessor.findById(input.projectId);
       if (!project) {
         throw new Error('Project not found');
@@ -512,7 +518,9 @@ export const workspaceRouter = router({
   // Sync PR status for a workspace (immediate refresh from GitHub)
   syncPRStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { githubCLIService, kanbanStateService } = ctx.appContext.services;
+      const logger = getLogger(ctx);
       const workspace = await workspaceAccessor.findById(input.workspaceId);
       if (!workspace) {
         throw new Error('Workspace not found');
@@ -549,7 +557,9 @@ export const workspaceRouter = router({
   // Sync PR status for all workspaces in a project (immediate refresh from GitHub)
   syncAllPRStatuses: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { githubCLIService, kanbanStateService } = ctx.appContext.services;
+      const logger = getLogger(ctx);
       const workspaces = await workspaceAccessor.findByProjectIdWithSessions(input.projectId, {
         excludeStatuses: [WorkspaceStatus.ARCHIVED],
       });

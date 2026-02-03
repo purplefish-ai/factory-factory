@@ -5,14 +5,14 @@ import { isPathSafe } from '../../lib/file-helpers';
 import { getMergeBase, parseGitStatusOutput } from '../../lib/git-helpers';
 import { gitCommand } from '../../lib/shell';
 import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
-import { createLogger } from '../../services/logger.service';
-import { publicProcedure, router } from '../trpc';
+import { type Context, publicProcedure, router } from '../trpc';
 import {
   getWorkspaceWithProjectAndWorktreeOrThrow,
   getWorkspaceWithWorktree,
 } from './workspace-helpers';
 
-const logger = createLogger('workspace-git-trpc');
+const loggerName = 'workspace-git-trpc';
+const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 export const workspaceGitRouter = router({
   // Get git status for workspace
@@ -56,7 +56,8 @@ export const workspaceGitRouter = router({
   // Get diff vs main branch for workspace
   getDiffVsMain: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
       // Use findByIdWithProject directly since we need project info
       const workspace = await workspaceAccessor.findByIdWithProject(input.workspaceId);
       if (!workspace) {

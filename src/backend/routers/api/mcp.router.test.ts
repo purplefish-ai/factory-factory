@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '../../app-context';
 
 // Mock dependencies before importing the router
 const mockExecuteMcpTool = vi.fn();
@@ -8,17 +9,7 @@ vi.mock('../mcp/index', () => ({
   executeMcpTool: (...args: unknown[]) => mockExecuteMcpTool(...args),
 }));
 
-vi.mock('../../services/index', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
-
-// Import after mocks are set up
-import { mcpRouter } from './mcp.router';
+import { createMcpRouter } from './mcp.router';
 
 // Helper to create mock Request/Response
 function createMockReqRes(body: Record<string, unknown> = {}) {
@@ -37,9 +28,9 @@ function createMockReqRes(body: Record<string, unknown> = {}) {
 }
 
 // Get the route handler from the router
-function getExecuteHandler() {
+function getExecuteHandler(router: ReturnType<typeof createMcpRouter>) {
   // Access the router's stack to get the handler for POST /execute
-  const layer = mcpRouter.stack.find((l) => {
+  const layer = router.stack.find((l) => {
     const route = l.route as { path?: string; methods?: Record<string, boolean> } | undefined;
     return route?.path === '/execute' && route?.methods?.post;
   });
@@ -56,10 +47,22 @@ function getExecuteHandler() {
 
 describe('mcpRouter', () => {
   let executeHandler: ReturnType<typeof getExecuteHandler>;
+  let router: ReturnType<typeof createMcpRouter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    executeHandler = getExecuteHandler();
+    const appContext = {
+      services: {
+        createLogger: () => ({
+          info: vi.fn(),
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        }),
+      },
+    } as unknown as AppContext;
+    router = createMcpRouter(appContext);
+    executeHandler = getExecuteHandler(router);
   });
 
   describe('POST /execute - validation', () => {

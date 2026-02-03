@@ -6,17 +6,14 @@ import { DEFAULT_FIRST_SESSION, DEFAULT_FOLLOWUP, listWorkflows } from '../promp
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { configService } from '../services/config.service';
-import { messageQueueService } from '../services/message-queue.service';
-import { sessionService } from '../services/session.service';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
   // Session limits
 
   // Get the maximum number of sessions allowed per workspace
-  getMaxSessionsPerWorkspace: publicProcedure.query(() => {
-    return configService.getMaxSessionsPerWorkspace();
+  getMaxSessionsPerWorkspace: publicProcedure.query(({ ctx }) => {
+    return ctx.appContext.services.configService.getMaxSessionsPerWorkspace();
   }),
 
   // Workflows
@@ -53,7 +50,8 @@ export const sessionRouter = router({
         limit: z.number().min(1).max(100).optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { sessionService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
       const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
       // Augment sessions with real-time working status from in-memory process state
@@ -82,7 +80,8 @@ export const sessionRouter = router({
         model: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { configService } = ctx.appContext.services;
       // Check per-workspace session limit
       const maxSessions = configService.getMaxSessionsPerWorkspace();
       const existingSessions = await claudeSessionAccessor.findByWorkspaceId(input.workspaceId);
@@ -122,7 +121,8 @@ export const sessionRouter = router({
         initialPrompt: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { sessionService } = ctx.appContext.services;
       await sessionService.startClaudeSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
@@ -132,7 +132,8 @@ export const sessionRouter = router({
   // Stop a claude session (gracefully stops the process)
   stopClaudeSession: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { sessionService } = ctx.appContext.services;
       await sessionService.stopClaudeSession(input.id);
       return claudeSessionAccessor.findById(input.id);
     }),
@@ -140,7 +141,8 @@ export const sessionRouter = router({
   // Delete a claude session
   deleteClaudeSession: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { messageQueueService, sessionService } = ctx.appContext.services;
       // Stop process first to prevent orphaned Claude processes
       await sessionService.stopClaudeSession(input.id);
       // Clear any queued messages to prevent memory leak
