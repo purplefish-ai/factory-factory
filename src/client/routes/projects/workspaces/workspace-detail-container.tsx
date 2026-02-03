@@ -197,6 +197,7 @@ export function WorkspaceDetailContainer() {
           workspaceId={workspaceId}
           status={workspaceInitStatus?.status ?? 'PROVISIONING'}
           initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
+          initOutput={workspaceInitStatus?.initOutput ?? null}
           hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
         />
       )}

@@ -41,6 +41,7 @@ export const workspaceInitRouter = router({
       // Return status field - frontend maps NEW/PROVISIONING/FAILED to show overlay
       status: workspace.status,
       initErrorMessage: workspace.initErrorMessage,
+      initOutput: workspace.initOutput,
       initStartedAt: workspace.initStartedAt,
       initCompletedAt: workspace.initCompletedAt,
       hasStartupScript: !!(
