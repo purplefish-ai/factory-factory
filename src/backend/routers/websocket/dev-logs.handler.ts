@@ -8,7 +8,6 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '../../app-context';
-import { RunScriptService } from '../../services/run-script.service';
 
 // ============================================================================
 // Types
@@ -33,6 +32,7 @@ const devLogsListenerCleanup = new WeakMap<WebSocket, () => void>();
 
 export function createDevLogsUpgradeHandler(appContext: AppContext) {
   const logger = appContext.services.createLogger('dev-logs-handler');
+  const runScriptService = appContext.services.runScriptService;
 
   return function handleDevLogsUpgrade(
     request: IncomingMessage,
@@ -66,7 +66,7 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
       ws.send(JSON.stringify({ type: 'status', connected: true }));
 
       // Send existing output buffer
-      const outputBuffer = RunScriptService.getOutputBuffer(workspaceId);
+      const outputBuffer = runScriptService.getOutputBuffer(workspaceId);
       if (outputBuffer.length > 0) {
         logger.info('Sending existing output buffer', {
           workspaceId,
@@ -78,7 +78,7 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
       }
 
       // Subscribe to new output
-      const unsubscribe = RunScriptService.subscribeToOutput(workspaceId, (data) => {
+      const unsubscribe = runScriptService.subscribeToOutput(workspaceId, (data) => {
         if (ws.readyState === 1) {
           ws.send(JSON.stringify({ type: 'output', data }));
         }

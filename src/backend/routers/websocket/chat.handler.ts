@@ -46,6 +46,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
   const logger = createLogger('chat-handler');
   const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
+  let isInitialized = false;
 
   // ==========================================================================
   // Client Creation
@@ -90,18 +91,25 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return client;
   }
 
-  // Initialize client creator for message handler service
-  chatMessageHandlerService.setClientCreator({
-    getOrCreate: getOrCreateChatClient,
-  });
+  function ensureInitialized(): void {
+    if (isInitialized) {
+      return;
+    }
+    isInitialized = true;
 
-  // Register callback for event forwarding when clients are created
-  // This ensures event forwarding is set up even for sessions started without WebSocket
-  sessionService.setOnClientCreated((sessionId, client, context) => {
-    chatEventForwarderService.setupClientEvents(sessionId, client, context, () =>
-      chatMessageHandlerService.tryDispatchNextMessage(sessionId)
-    );
-  });
+    // Initialize client creator for message handler service
+    chatMessageHandlerService.setClientCreator({
+      getOrCreate: getOrCreateChatClient,
+    });
+
+    // Register callback for event forwarding when clients are created
+    // This ensures event forwarding is set up even for sessions started without WebSocket
+    sessionService.setOnClientCreated((sessionId, client, context) => {
+      chatEventForwarderService.setupClientEvents(sessionId, client, context, () =>
+        chatMessageHandlerService.tryDispatchNextMessage(sessionId)
+      );
+    });
+  }
 
   // ==========================================================================
   // Security Validation
@@ -230,6 +238,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
+    ensureInitialized();
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
     const dbSessionId = url.searchParams.get('sessionId') || null;
     const rawWorkingDir = url.searchParams.get('workingDir');
