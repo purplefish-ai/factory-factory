@@ -692,15 +692,14 @@ function handleToolInputUpdate(
 }
 
 // =============================================================================
-// Reducer
+// Reducer Slices
 // =============================================================================
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Reducer handles many action types by design
-export function chatReducer(state: ChatState, action: ChatAction): ChatState {
+type ReducerSlice = (state: ChatState, action: ChatAction) => ChatState;
+
+function reduceSessionSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
-    // WebSocket status messages
     case 'WS_STATUS':
-      // WS_STATUS updates running state - transition to running or ready based on payload
       return {
         ...state,
         sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
@@ -710,7 +709,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'WS_STARTED':
       return { ...state, sessionStatus: { phase: 'running' }, latestThinking: null };
     case 'WS_STOPPED':
-      // Clear toolProgress, isCompacting, and activeHooks when session stops to prevent stale indicators
       return {
         ...state,
         sessionStatus: { phase: 'ready' },
@@ -718,12 +716,75 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isCompacting: false,
         activeHooks: new Map(),
       };
+    case 'WS_SESSIONS':
+      return { ...state, availableSessions: action.payload.sessions };
+    case 'SESSION_SWITCH_START':
+      return {
+        ...state,
+        ...createSessionSwitchResetState(),
+      };
+    case 'SESSION_LOADING_START':
+      return { ...state, sessionStatus: { phase: 'loading' } };
+    case 'STOP_REQUESTED':
+      return { ...state, sessionStatus: { phase: 'stopping' } };
+    default:
+      return state;
+  }
+}
 
-    // Claude message handling (delegated to helper)
+function reduceRequestSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'WS_PERMISSION_REQUEST':
+      return { ...state, pendingRequest: { type: 'permission', request: action.payload } };
+    case 'WS_USER_QUESTION':
+      return { ...state, pendingRequest: { type: 'question', request: action.payload } };
+    case 'PERMISSION_RESPONSE': {
+      const shouldDisablePlanMode =
+        action.payload.allow &&
+        state.pendingRequest.type === 'permission' &&
+        state.pendingRequest.request.toolName === 'ExitPlanMode';
+      return {
+        ...state,
+        pendingRequest: { type: 'none' },
+        ...(shouldDisablePlanMode && {
+          chatSettings: { ...state.chatSettings, planModeEnabled: false },
+        }),
+      };
+    }
+    case 'QUESTION_RESPONSE':
+      return { ...state, pendingRequest: { type: 'none' } };
+    case 'WS_PERMISSION_CANCELLED': {
+      const currentRequestId =
+        state.pendingRequest.type === 'permission'
+          ? state.pendingRequest.request.requestId
+          : state.pendingRequest.type === 'question'
+            ? state.pendingRequest.request.requestId
+            : null;
+      if (currentRequestId === action.payload.requestId) {
+        return { ...state, pendingRequest: { type: 'none' } };
+      }
+      return state;
+    }
+    default:
+      return state;
+  }
+}
+
+function reduceSettingsSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'UPDATE_SETTINGS':
+      return { ...state, chatSettings: { ...state.chatSettings, ...action.payload } };
+    case 'SET_SETTINGS':
+      return { ...state, chatSettings: action.payload };
+    default:
+      return state;
+  }
+}
+
+function reduceMessageTransportSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
     case 'WS_CLAUDE_MESSAGE':
       return handleClaudeMessage(state, action.payload.message, action.payload.order);
-
-    // Error message - appended at end with order higher than any existing message
     case 'WS_ERROR': {
       const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
       const errorMsg: ClaudeMessage = {
@@ -743,79 +804,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...state.messages, errorChatMessage],
       };
     }
-
-    // Session management
-    case 'WS_SESSIONS':
-      return { ...state, availableSessions: action.payload.sessions };
-
-    // Permission and question requests
-    // Always accept new requests (overwriting existing) to match backend behavior.
-    // Discriminated union naturally prevents both types being active simultaneously.
-    case 'WS_PERMISSION_REQUEST':
-      return { ...state, pendingRequest: { type: 'permission', request: action.payload } };
-    case 'WS_USER_QUESTION':
-      return { ...state, pendingRequest: { type: 'question', request: action.payload } };
-
-    case 'PERMISSION_RESPONSE': {
-      // If ExitPlanMode was approved, disable plan mode in settings
-      const shouldDisablePlanMode =
-        action.payload.allow &&
-        state.pendingRequest.type === 'permission' &&
-        state.pendingRequest.request.toolName === 'ExitPlanMode';
-      return {
-        ...state,
-        pendingRequest: { type: 'none' },
-        ...(shouldDisablePlanMode && {
-          chatSettings: { ...state.chatSettings, planModeEnabled: false },
-        }),
-      };
-    }
-    case 'QUESTION_RESPONSE':
-      return { ...state, pendingRequest: { type: 'none' } };
-
-    // Request cancelled by CLI (e.g., Ctrl+C during permission or question prompt)
-    case 'WS_PERMISSION_CANCELLED': {
-      // Only clear if the cancelled request matches the current pending request
-      const currentRequestId =
-        state.pendingRequest.type === 'permission'
-          ? state.pendingRequest.request.requestId
-          : state.pendingRequest.type === 'question'
-            ? state.pendingRequest.request.requestId
-            : null;
-      if (currentRequestId === action.payload.requestId) {
-        return { ...state, pendingRequest: { type: 'none' } };
-      }
+    default:
       return state;
-    }
+  }
+}
 
-    // Session switching
-    case 'SESSION_SWITCH_START':
-      return {
-        ...state,
-        ...createSessionSwitchResetState(),
-      };
-    case 'SESSION_LOADING_START':
-      return { ...state, sessionStatus: { phase: 'loading' } };
-
-    // Tool input streaming (delegated to helper)
-    case 'TOOL_INPUT_UPDATE':
-      return handleToolInputUpdate(state, action.payload.toolUseId, action.payload.input);
-    case 'TOOL_USE_INDEXED': {
-      const newToolUseIdToIndex = new Map(state.toolUseIdToIndex);
-      newToolUseIdToIndex.set(action.payload.toolUseId, action.payload.index);
-      return { ...state, toolUseIdToIndex: newToolUseIdToIndex };
-    }
-
-    // Stop request
-    case 'STOP_REQUESTED':
-      return { ...state, sessionStatus: { phase: 'stopping' } };
-
-    // User messages
+function reduceMessageQueueSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
     case 'USER_MESSAGE_SENT':
       return { ...state, messages: [...state.messages, action.payload] };
-
-    // Queue management (optimistic local state)
-    // ADD_TO_QUEUE: Optimistically add message to queuedMessages for queue display
     case 'ADD_TO_QUEUE': {
       const newQueuedMessages = new Map(state.queuedMessages);
       newQueuedMessages.set(action.payload.id, action.payload);
@@ -824,43 +821,26 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         queuedMessages: newQueuedMessages,
       };
     }
-
-    // MESSAGE_SENDING: Store content for recovery if rejected.
-    // Message will be added to messages array when backend confirms with ACCEPTED state.
     case 'MESSAGE_SENDING': {
       const { id, text, attachments } = action.payload;
-
-      // Store content in pendingMessages for recovery if rejected
       const newPendingMessages = new Map(state.pendingMessages);
       newPendingMessages.set(id, { text, attachments });
-
       return {
         ...state,
         pendingMessages: newPendingMessages,
       };
     }
-
-    // CLEAR_REJECTED_MESSAGE: Clear the rejected message after user has seen it
     case 'CLEAR_REJECTED_MESSAGE':
       return {
         ...state,
         lastRejectedMessage: null,
       };
-
-    // MESSAGE_USED_AS_RESPONSE: Message was used as a response to pending interactive request
-    // Adds message to chat and clears the pending request
-    // De-duplication: Skip adding if message ID already exists (handles reconnect/multi-tab scenarios)
     case 'MESSAGE_USED_AS_RESPONSE': {
-      // Get pending content to preserve attachments before removing
       const pendingContent = state.pendingMessages.get(action.payload.id);
-
-      // Remove from pending messages
       const newPendingMessages = new Map(state.pendingMessages);
       newPendingMessages.delete(action.payload.id);
 
-      // De-dupe check: Skip if message already exists in messages array
       if (state.messages.some((m) => m.id === action.payload.id)) {
-        // Still clear pending state since this was handled
         return {
           ...state,
           pendingMessages: newPendingMessages,
@@ -868,7 +848,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         };
       }
 
-      // Create user message, preserving attachments from pending state
       const userMessage: ChatMessage = {
         id: action.payload.id,
         source: 'user',
@@ -885,25 +864,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         pendingRequest: { type: 'none' },
       };
     }
+    default:
+      return state;
+  }
+}
 
-    // Settings
-    case 'UPDATE_SETTINGS':
-      return { ...state, chatSettings: { ...state.chatSettings, ...action.payload } };
-    case 'SET_SETTINGS':
-      return { ...state, chatSettings: action.payload };
-
-    // Thinking (extended thinking mode)
-    case 'THINKING_DELTA':
-      return {
-        ...state,
-        latestThinking: (state.latestThinking ?? '') + action.payload.thinking,
-      };
-    case 'THINKING_CLEAR':
-      return { ...state, latestThinking: null };
-
-    // Clear/reset
+function reduceMessageResetSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
     case 'CLEAR_CHAT': {
-      // Preserve running state, but reset stopping/starting to ready
       const sessionStatus: SessionStatus =
         state.sessionStatus.phase === 'running' ? state.sessionStatus : { phase: 'ready' };
       return {
@@ -918,16 +886,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         ...createSessionSwitchResetState(),
       };
+    default:
+      return state;
+  }
+}
 
-    // New message state machine actions
+function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
     case 'MESSAGES_SNAPSHOT': {
-      // Messages come pre-built from backend - just use them directly
       const snapshotMessages = action.payload.messages;
-
-      // Build set of message IDs from backend snapshot for pending message cleanup
       const snapshotIds = new Set(snapshotMessages.map((m) => m.id));
-
-      // Keep pending messages that haven't been acknowledged by backend yet
       const newPendingMessages = new Map<string, PendingMessageContent>();
       for (const [id, content] of state.pendingMessages) {
         if (!snapshotIds.has(id)) {
@@ -935,20 +903,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
 
-      // Session status comes from backend, which knows about queued messages
       const sessionStatus: SessionStatus = action.payload.sessionStatus;
-
-      // Convert pending interactive request to UI state format
       const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
 
-      // Note: queuedMessages are now managed via MESSAGE_STATE_CHANGED events.
-      // The snapshot contains final ChatMessages, not intermediate states.
-      // Clear queuedMessages since snapshot represents fully processed state.
-      // Preserve slashCommands - they are session metadata that may not be immediately
-      // re-sent if Claude has exited (stored events are cleared on exit). Commands will
-      // be re-sent when the user sends a message and Claude restarts.
-      // Clear UUID tracking state since message IDs in snapshot may be different
-      // from what we had previously mapped.
       return {
         ...state,
         messages: snapshotMessages,
@@ -958,202 +915,208 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,
         lastRejectedMessage: null,
-        // Clear UUID tracking state to prevent stale mappings
-        // localUserMessageIds is cleared so UUIDs only map to messages sent after snapshot
         messageIdToUuid: new Map(),
         pendingUserMessageUuids: [],
         localUserMessageIds: new Set(),
         rewindPreview: null,
       };
     }
+    default:
+      return state;
+  }
+}
 
-    case 'MESSAGE_STATE_CHANGED': {
-      const { id, newState, userMessage, errorMessage } = action.payload;
+function reduceMessageStateMachineSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'MESSAGE_STATE_CHANGED':
+      return applyMessageStateChange(state, action.payload);
+    default:
+      return state;
+  }
+}
 
-      // ACCEPTED: Add message to list and queue
-      // De-duplication: Skip adding if message ID already exists (handles reconnect/multi-tab scenarios)
-      if (newState === MessageState.ACCEPTED && userMessage) {
-        const newPendingMessages = new Map(state.pendingMessages);
-        newPendingMessages.delete(id);
+function applyMessageStateChange(
+  state: ChatState,
+  payload: Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']
+): ChatState {
+  const { id, newState, userMessage, errorMessage } = payload;
 
-        // Check if message already exists (e.g., from reconnect or multi-tab)
-        if (state.messages.some((m) => m.id === id)) {
-          // Still need to update queue and clear pending state
-          const newQueuedMessages = new Map(state.queuedMessages);
-          newQueuedMessages.set(id, {
-            id,
-            text: userMessage.text,
-            timestamp: userMessage.timestamp,
-            attachments: userMessage.attachments,
-            settings: userMessage.settings ?? {
-              selectedModel: null,
-              thinkingEnabled: false,
-              planModeEnabled: false,
-            },
-          });
-          return {
-            ...state,
-            queuedMessages: newQueuedMessages,
-            pendingMessages: newPendingMessages,
-          };
-        }
-
-        const newMessage: ChatMessage = {
-          id,
-          source: 'user',
-          text: userMessage.text,
-          timestamp: userMessage.timestamp,
-          attachments: userMessage.attachments,
-          order: userMessage.order,
-        };
-
-        const newQueuedMessages = new Map(state.queuedMessages);
-        newQueuedMessages.set(id, {
-          id,
-          text: userMessage.text,
-          timestamp: userMessage.timestamp,
-          attachments: userMessage.attachments,
-          settings: userMessage.settings ?? {
-            selectedModel: null,
-            thinkingEnabled: false,
-            planModeEnabled: false,
-          },
-        });
-
-        // Track this message ID as locally sent (not from snapshot)
-        // This ensures UUIDs are only mapped to messages sent in this session
-        const newLocalUserMessageIds = new Set(state.localUserMessageIds);
-        newLocalUserMessageIds.add(id);
-
-        // Check if there are pending UUIDs to map to this new message
-        let newMessageIdToUuid = state.messageIdToUuid;
-        let newPendingUuids = state.pendingUserMessageUuids;
-        if (state.pendingUserMessageUuids.length > 0) {
-          // Consume the first pending UUID for this message
-          const [uuid, ...remainingUuids] = state.pendingUserMessageUuids;
-          newMessageIdToUuid = new Map(state.messageIdToUuid);
-          newMessageIdToUuid.set(id, uuid);
-          newPendingUuids = remainingUuids;
-        }
-
-        return {
-          ...state,
-          messages: insertMessageByOrder(state.messages, newMessage),
-          queuedMessages: newQueuedMessages,
-          pendingMessages: newPendingMessages,
-          messageIdToUuid: newMessageIdToUuid,
-          pendingUserMessageUuids: newPendingUuids,
-          localUserMessageIds: newLocalUserMessageIds,
-        };
-      }
-
-      // DISPATCHED, COMMITTED, COMPLETE: Remove from queue
-      if (
-        newState === MessageState.DISPATCHED ||
-        newState === MessageState.COMMITTED ||
-        newState === MessageState.COMPLETE
-      ) {
-        const newQueuedMessages = new Map(state.queuedMessages);
-        newQueuedMessages.delete(id);
-        return { ...state, queuedMessages: newQueuedMessages };
-      }
-
-      // CANCELLED: Remove from queue and messages
-      if (newState === MessageState.CANCELLED) {
-        const newQueuedMessages = new Map(state.queuedMessages);
-        newQueuedMessages.delete(id);
-        return {
-          ...state,
-          messages: state.messages.filter((m) => m.id !== id),
-          queuedMessages: newQueuedMessages,
-        };
-      }
-
-      // REJECTED, FAILED: Remove from queue/messages, save for recovery
-      if (newState === MessageState.REJECTED || newState === MessageState.FAILED) {
-        const queuedMessage = state.queuedMessages.get(id);
-        const pendingContent = state.pendingMessages.get(id);
-        const recoveryContent = queuedMessage ?? pendingContent;
-
-        const newQueuedMessages = new Map(state.queuedMessages);
-        newQueuedMessages.delete(id);
-
-        const newPendingMessages = new Map(state.pendingMessages);
-        newPendingMessages.delete(id);
-
-        return {
-          ...state,
-          messages: state.messages.filter((m) => m.id !== id),
-          queuedMessages: newQueuedMessages,
-          pendingMessages: newPendingMessages,
-          lastRejectedMessage: recoveryContent
-            ? {
-                text: queuedMessage?.text ?? pendingContent?.text ?? '',
-                attachments: recoveryContent.attachments,
-                error: errorMessage ?? 'Message failed',
-              }
-            : null,
-        };
-      }
-
-      // Ignore other state transitions (SENT, PENDING, STREAMING) - tracked by backend
+  switch (newState) {
+    case MessageState.ACCEPTED:
+      return userMessage ? handleAcceptedState(state, id, userMessage) : state;
+    case MessageState.DISPATCHED:
+    case MessageState.COMMITTED:
+    case MessageState.COMPLETE:
+      return handleRemoveFromQueue(state, id);
+    case MessageState.CANCELLED:
+      return handleCancelledState(state, id);
+    case MessageState.REJECTED:
+    case MessageState.FAILED:
+      return handleRejectedOrFailedState(state, id, errorMessage);
+    default:
       debug.log(`[chat-reducer] Ignoring state transition to ${newState} for message ${id}`);
       return state;
-    }
+  }
+}
 
-    // SDK message type actions
-    case 'SDK_STATUS_UPDATE': {
-      // Store permission mode from status updates
-      const { permissionMode } = action.payload;
-      if (permissionMode !== undefined) {
-        return { ...state, permissionMode };
+function handleAcceptedState(
+  state: ChatState,
+  id: string,
+  userMessage: Extract<
+    Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
+    object
+  >
+): ChatState {
+  const newPendingMessages = new Map(state.pendingMessages);
+  newPendingMessages.delete(id);
+
+  if (state.messages.some((m) => m.id === id)) {
+    const newQueuedMessages = new Map(state.queuedMessages);
+    newQueuedMessages.set(id, {
+      id,
+      text: userMessage.text,
+      timestamp: userMessage.timestamp,
+      attachments: userMessage.attachments,
+      settings: userMessage.settings ?? {
+        selectedModel: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    return {
+      ...state,
+      queuedMessages: newQueuedMessages,
+      pendingMessages: newPendingMessages,
+    };
+  }
+
+  const newMessage: ChatMessage = {
+    id,
+    source: 'user',
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
+    order: userMessage.order,
+  };
+
+  const newQueuedMessages = new Map(state.queuedMessages);
+  newQueuedMessages.set(id, {
+    id,
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
+    settings: userMessage.settings ?? {
+      selectedModel: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+  });
+
+  const newLocalUserMessageIds = new Set(state.localUserMessageIds);
+  newLocalUserMessageIds.add(id);
+
+  let newMessageIdToUuid = state.messageIdToUuid;
+  let newPendingUuids = state.pendingUserMessageUuids;
+  if (state.pendingUserMessageUuids.length > 0) {
+    const [uuid, ...remainingUuids] = state.pendingUserMessageUuids;
+    newMessageIdToUuid = new Map(state.messageIdToUuid);
+    newMessageIdToUuid.set(id, uuid);
+    newPendingUuids = remainingUuids;
+  }
+
+  return {
+    ...state,
+    messages: insertMessageByOrder(state.messages, newMessage),
+    queuedMessages: newQueuedMessages,
+    pendingMessages: newPendingMessages,
+    messageIdToUuid: newMessageIdToUuid,
+    pendingUserMessageUuids: newPendingUuids,
+    localUserMessageIds: newLocalUserMessageIds,
+  };
+}
+
+function handleRemoveFromQueue(state: ChatState, id: string): ChatState {
+  const newQueuedMessages = new Map(state.queuedMessages);
+  newQueuedMessages.delete(id);
+  return { ...state, queuedMessages: newQueuedMessages };
+}
+
+function handleCancelledState(state: ChatState, id: string): ChatState {
+  const newQueuedMessages = new Map(state.queuedMessages);
+  newQueuedMessages.delete(id);
+  return {
+    ...state,
+    messages: state.messages.filter((m) => m.id !== id),
+    queuedMessages: newQueuedMessages,
+  };
+}
+
+function handleRejectedOrFailedState(
+  state: ChatState,
+  id: string,
+  errorMessage?: string
+): ChatState {
+  const queuedMessage = state.queuedMessages.get(id);
+  const pendingContent = state.pendingMessages.get(id);
+  const recoveryContent = queuedMessage ?? pendingContent;
+
+  const newQueuedMessages = new Map(state.queuedMessages);
+  newQueuedMessages.delete(id);
+
+  const newPendingMessages = new Map(state.pendingMessages);
+  newPendingMessages.delete(id);
+
+  return {
+    ...state,
+    messages: state.messages.filter((m) => m.id !== id),
+    queuedMessages: newQueuedMessages,
+    pendingMessages: newPendingMessages,
+    lastRejectedMessage: recoveryContent
+      ? {
+          text: queuedMessage?.text ?? pendingContent?.text ?? '',
+          attachments: recoveryContent.attachments,
+          error: errorMessage ?? 'Message failed',
+        }
+      : null,
+  };
+}
+
+function reduceMessageUuidSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'USER_MESSAGE_UUID_RECEIVED': {
+      const unmappedUserMessages = state.messages.filter(
+        (m) =>
+          m.source === 'user' &&
+          state.localUserMessageIds.has(m.id) &&
+          !state.messageIdToUuid.has(m.id)
+      );
+
+      if (unmappedUserMessages.length > 0) {
+        const targetMessage = unmappedUserMessages[0];
+        const newMap = new Map(state.messageIdToUuid);
+        newMap.set(targetMessage.id, action.payload.uuid);
+        return {
+          ...state,
+          messageIdToUuid: newMap,
+        };
       }
-      return state;
-    }
 
-    case 'SDK_TOOL_PROGRESS': {
-      const { toolUseId, toolName, elapsedSeconds } = action.payload;
-      const newToolProgress = new Map(state.toolProgress);
-      newToolProgress.set(toolUseId, { toolName, elapsedSeconds });
-      return { ...state, toolProgress: newToolProgress };
-    }
-
-    case 'SDK_TOOL_USE_SUMMARY': {
-      // When we get a tool use summary, clear the progress for those tools
-      const { precedingToolUseIds } = action.payload;
-      const newToolProgress = new Map(state.toolProgress);
-      for (const toolUseId of precedingToolUseIds) {
-        newToolProgress.delete(toolUseId);
-      }
-      return { ...state, toolProgress: newToolProgress };
-    }
-
-    case 'SDK_TASK_NOTIFICATION': {
-      // Append new task notification with UUID to avoid collisions under bursty updates
-      const newNotification: TaskNotification = {
-        id: crypto.randomUUID(),
-        message: action.payload.message,
-        timestamp: new Date().toISOString(),
-      };
+      debug.log(
+        `[chat-reducer] UUID received but no unmapped user message found, queueing: ${action.payload.uuid}`
+      );
       return {
         ...state,
-        taskNotifications: [...state.taskNotifications, newNotification],
+        pendingUserMessageUuids: [...state.pendingUserMessageUuids, action.payload.uuid],
       };
     }
+    default:
+      return state;
+  }
+}
 
-    case 'SDK_COMPACTING_START':
-      return { ...state, isCompacting: true };
-
-    case 'SDK_COMPACTING_END':
-      return { ...state, isCompacting: false };
-
-    // System subtype actions
-    case 'SYSTEM_INIT':
-      return { ...state, sessionInitData: action.payload, slashCommandsLoaded: true };
-
+function reduceMessageCompactSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
     case 'COMPACT_BOUNDARY': {
-      // Create a synthetic ClaudeMessage to render the compact boundary indicator
-      // Use order higher than any existing message to ensure it appears at end
       const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
       const compactBoundaryMessage: ChatMessage = {
         id: `compact-boundary-${Date.now()}`,
@@ -1171,7 +1134,72 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...state.messages, compactBoundaryMessage],
       };
     }
+    default:
+      return state;
+  }
+}
 
+function reduceToolingSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'TOOL_INPUT_UPDATE':
+      return handleToolInputUpdate(state, action.payload.toolUseId, action.payload.input);
+    case 'TOOL_USE_INDEXED': {
+      const newToolUseIdToIndex = new Map(state.toolUseIdToIndex);
+      newToolUseIdToIndex.set(action.payload.toolUseId, action.payload.index);
+      return { ...state, toolUseIdToIndex: newToolUseIdToIndex };
+    }
+    case 'THINKING_DELTA':
+      return {
+        ...state,
+        latestThinking: (state.latestThinking ?? '') + action.payload.thinking,
+      };
+    case 'THINKING_CLEAR':
+      return { ...state, latestThinking: null };
+    case 'SDK_TOOL_PROGRESS': {
+      const { toolUseId, toolName, elapsedSeconds } = action.payload;
+      const newToolProgress = new Map(state.toolProgress);
+      newToolProgress.set(toolUseId, { toolName, elapsedSeconds });
+      return { ...state, toolProgress: newToolProgress };
+    }
+    case 'SDK_TOOL_USE_SUMMARY': {
+      const { precedingToolUseIds } = action.payload;
+      const newToolProgress = new Map(state.toolProgress);
+      for (const toolUseId of precedingToolUseIds) {
+        newToolProgress.delete(toolUseId);
+      }
+      return { ...state, toolProgress: newToolProgress };
+    }
+    case 'SDK_COMPACTING_START':
+      return { ...state, isCompacting: true };
+    case 'SDK_COMPACTING_END':
+      return { ...state, isCompacting: false };
+    default:
+      return state;
+  }
+}
+
+function reduceSystemSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'SDK_STATUS_UPDATE': {
+      const { permissionMode } = action.payload;
+      if (permissionMode !== undefined) {
+        return { ...state, permissionMode };
+      }
+      return state;
+    }
+    case 'SDK_TASK_NOTIFICATION': {
+      const newNotification: TaskNotification = {
+        id: crypto.randomUUID(),
+        message: action.payload.message,
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        ...state,
+        taskNotifications: [...state.taskNotifications, newNotification],
+      };
+    }
+    case 'SYSTEM_INIT':
+      return { ...state, sessionInitData: action.payload, slashCommandsLoaded: true };
     case 'HOOK_STARTED': {
       const { hookId, hookName, hookEvent } = action.payload;
       const newActiveHooks = new Map(state.activeHooks);
@@ -1183,21 +1211,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       });
       return { ...state, activeHooks: newActiveHooks };
     }
-
     case 'HOOK_RESPONSE': {
       const newActiveHooks = new Map(state.activeHooks);
       newActiveHooks.delete(action.payload.hookId);
       return { ...state, activeHooks: newActiveHooks };
     }
-
-    // Slash commands discovery
     case 'WS_SLASH_COMMANDS':
       return {
         ...state,
         slashCommands: action.payload.commands,
         slashCommandsLoaded: true,
       };
-
     case 'DISMISS_TASK_NOTIFICATION':
       return {
         ...state,
@@ -1205,46 +1229,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           (notif) => notif.id !== action.payload.id
         ),
       };
-
     case 'CLEAR_TASK_NOTIFICATIONS':
       return { ...state, taskNotifications: [] };
+    default:
+      return state;
+  }
+}
 
-    // User message UUID tracking (for rewind functionality)
-    case 'USER_MESSAGE_UUID_RECEIVED': {
-      // Find user messages that:
-      // 1. Were sent in this session (in localUserMessageIds, not from snapshot)
-      // 2. Don't have UUIDs mapped yet
-      // This prevents historical messages from snapshot getting UUIDs meant for new messages
-      const unmappedUserMessages = state.messages.filter(
-        (m) =>
-          m.source === 'user' &&
-          state.localUserMessageIds.has(m.id) &&
-          !state.messageIdToUuid.has(m.id)
-      );
-
-      // Map UUID to the first unmapped user message if available
-      if (unmappedUserMessages.length > 0) {
-        const targetMessage = unmappedUserMessages[0];
-        const newMap = new Map(state.messageIdToUuid);
-        newMap.set(targetMessage.id, action.payload.uuid);
-        return {
-          ...state,
-          messageIdToUuid: newMap,
-        };
-      }
-
-      // If no unmapped message found, store in pending queue for later mapping
-      // This handles edge cases where UUID arrives before the message is added to state
-      debug.log(
-        `[chat-reducer] UUID received but no unmapped user message found, queueing: ${action.payload.uuid}`
-      );
-      return {
-        ...state,
-        pendingUserMessageUuids: [...state.pendingUserMessageUuids, action.payload.uuid],
-      };
-    }
-
-    // Rewind actions
+function reduceRewindPreviewSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
     case 'REWIND_PREVIEW_START':
       return {
         ...state,
@@ -1254,9 +1247,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           isLoading: true,
         },
       };
-
     case 'REWIND_PREVIEW_SUCCESS': {
-      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
       if (!state.rewindPreview) {
         return state;
       }
@@ -1264,7 +1255,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         action.payload.userMessageId &&
         action.payload.userMessageId !== state.rewindPreview.userMessageId
       ) {
-        // Response is for a different rewind request, ignore it
         return state;
       }
       return {
@@ -1276,26 +1266,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         },
       };
     }
-
     case 'REWIND_PREVIEW_ERROR': {
-      // Ignore if no preview state or if request identifiers don't match (race condition protection)
       if (!state.rewindPreview) {
         return state;
       }
-      // Check requestNonce first (more specific) - this handles local timeout race conditions
       if (
         action.payload.requestNonce &&
         action.payload.requestNonce !== state.rewindPreview.requestNonce
       ) {
-        // Error is for a stale rewind request, ignore it
         return state;
       }
-      // Also check userMessageId for protocol-level errors that may not have nonce
       if (
         action.payload.userMessageId &&
         action.payload.userMessageId !== state.rewindPreview.userMessageId
       ) {
-        // Error is for a different rewind request, ignore it
         return state;
       }
       return {
@@ -1307,25 +1291,27 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         },
       };
     }
-
     case 'REWIND_CANCEL':
       return { ...state, rewindPreview: null };
+    default:
+      return state;
+  }
+}
 
+function reduceRewindExecutionSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
     case 'REWIND_EXECUTING':
-      // Keep preview state open but mark as loading (executing actual rewind)
       return state.rewindPreview
         ? {
             ...state,
             rewindPreview: {
               ...state.rewindPreview,
               isLoading: true,
-              isExecuting: true, // Flag to show different UI during actual rewind
+              isExecuting: true,
             },
           }
         : state;
-
     case 'REWIND_SUCCESS': {
-      // Ignore if no preview state or if userMessageId doesn't match (race condition protection)
       if (!state.rewindPreview) {
         return state;
       }
@@ -1333,16 +1319,45 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         action.payload.userMessageId &&
         action.payload.userMessageId !== state.rewindPreview.userMessageId
       ) {
-        // Response is for a different rewind request, ignore it
         return state;
       }
-      // Actual rewind completed successfully, clear the preview state
       return { ...state, rewindPreview: null };
     }
-
     default:
       return state;
   }
+}
+
+// =============================================================================
+// Reducer
+// =============================================================================
+
+const chatReducerSlices: ReducerSlice[] = [
+  reduceSessionSlice,
+  reduceRequestSlice,
+  reduceSettingsSlice,
+  reduceMessageTransportSlice,
+  reduceMessageQueueSlice,
+  reduceMessageResetSlice,
+  reduceMessageSnapshotSlice,
+  reduceMessageStateMachineSlice,
+  reduceMessageUuidSlice,
+  reduceMessageCompactSlice,
+  reduceToolingSlice,
+  reduceSystemSlice,
+  reduceRewindPreviewSlice,
+  reduceRewindExecutionSlice,
+];
+
+export function chatReducer(state: ChatState, action: ChatAction): ChatState {
+  let nextState = state;
+  for (const reduce of chatReducerSlices) {
+    const updated = reduce(nextState, action);
+    if (updated !== nextState) {
+      nextState = updated;
+    }
+  }
+  return nextState;
 }
 
 // =============================================================================
