@@ -243,6 +243,22 @@ function WorkspaceHeader({
               <TooltipContent>Create a pull request for this branch</TooltipContent>
             </Tooltip>
           )}
+        {workspace.prUrl &&
+          workspace.prNumber &&
+          workspace.prState !== 'NONE' &&
+          workspace.prState !== 'CLOSED' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" asChild>
+                  <a href={workspace.prUrl} target="_blank" rel="noopener noreferrer">
+                    <GitPullRequest className="h-3.5 w-3.5" />
+                    PR #{workspace.prNumber}
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>View pull request</TooltipContent>
+            </Tooltip>
+          )}
         <QuickActionsMenu
           onExecuteAgent={(action) => {
             if (action.content) {
@@ -600,7 +616,7 @@ function WorkspaceChatContent() {
 
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
 
-// Check if branch has changes (for showing Create PR button)
+  // Check if branch has changes (for showing Create PR button)
   const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
     { workspaceId },
     { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
@@ -765,7 +781,7 @@ function WorkspaceChatContent() {
       {/* Archiving Overlay - shown while workspace is being archived */}
       {archiveWorkspace.isPending && <ArchivingOverlay />}
 
-<WorkspaceHeader
+      <WorkspaceHeader
         workspace={workspace}
         workspaceId={workspaceId}
         availableIdes={availableIdes}
