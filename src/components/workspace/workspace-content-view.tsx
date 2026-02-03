@@ -1,6 +1,7 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { ReactNode } from 'react';
 
+import type { GitHubIssue } from '@/backend/services/github-cli.service';
 import type { AppRouter } from '@/frontend/lib/trpc';
 
 import { MainViewContent } from './main-view-content';
@@ -24,7 +25,7 @@ interface WorkspaceContentViewProps {
   runningSessionId: string | undefined;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
-  onWorkflowSelect: (workflowId: string) => void;
+  onWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
@@ -78,6 +79,7 @@ export function WorkspaceContentView({
                 ? 'Workspace is initializing... Please wait for the worktree to be created.'
                 : undefined
             }
+            workspaceId={workspaceId}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

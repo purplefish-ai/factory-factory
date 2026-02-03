@@ -81,6 +81,16 @@ export interface GitHubCLIHealthStatus {
   errorType?: GitHubCLIErrorType;
 }
 
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+  state: 'OPEN' | 'CLOSED';
+  createdAt: string;
+  author: { login: string };
+}
+
 /**
  * Service for interacting with GitHub via the `gh` CLI.
  * Uses the locally authenticated gh CLI instead of API tokens.
@@ -671,6 +681,45 @@ class GitHubCLIService {
       });
 
       throw new Error(`Failed to submit review: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * List open issues for a repository.
+   * Fetches fresh on every call (no caching).
+   */
+  async listIssues(owner: string, repo: string, limit = 50): Promise<GitHubIssue[]> {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        [
+          'issue',
+          'list',
+          '--repo',
+          `${owner}/${repo}`,
+          '--state',
+          'open',
+          '--json',
+          'number,title,body,url,state,createdAt,author',
+          '--limit',
+          String(limit),
+        ],
+        { timeout: 30_000 }
+      );
+
+      return JSON.parse(stdout) as GitHubIssue[];
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to list issues via gh CLI', {
+        owner,
+        repo,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to list issues: ${errorMessage}`);
     }
   }
 }

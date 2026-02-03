@@ -1,5 +1,6 @@
 import { adminRouter } from './admin.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
+import { githubRouter } from './github.trpc';
 import { prReviewRouter } from './pr-review.trpc';
 import { projectRouter } from './project.trpc';
 import { sessionRouter } from './session.trpc';
@@ -15,6 +16,7 @@ export const appRouter = router({
   session: sessionRouter,
   prReview: prReviewRouter,
   userSettings: userSettingsRouter,
+  github: githubRouter,
 });
 
 // Export type for use in frontend
