@@ -14,6 +14,7 @@ import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
 import { type TerminalMessageInput, TerminalMessageSchema } from '../../schemas/websocket';
 import { createLogger } from '../../services/index';
 import { terminalService } from '../../services/terminal.service';
+import { toMessageString } from './message-utils';
 
 const logger = createLogger('terminal-handler');
 
@@ -136,26 +137,7 @@ function sendExistingTerminals(ws: WebSocket, workspaceId: string): void {
   }
 }
 
-function toMessageString(data: unknown): string {
-  if (typeof data === 'string') {
-    return data;
-  }
-  if (Buffer.isBuffer(data)) {
-    return data.toString();
-  }
-  if (Array.isArray(data)) {
-    return Buffer.concat(data).toString();
-  }
-  if (data instanceof ArrayBuffer) {
-    return Buffer.from(data).toString();
-  }
-  return String(data);
-}
-
-function parseTerminalMessage(
-  workspaceId: string,
-  data: unknown
-): TerminalMessageInput | null {
+function parseTerminalMessage(workspaceId: string, data: unknown): TerminalMessageInput | null {
   const rawMessage: unknown = JSON.parse(toMessageString(data));
   const parseResult = TerminalMessageSchema.safeParse(rawMessage);
 
@@ -261,11 +243,7 @@ function handleInputMessage(
       terminalId: message.terminalId,
       dataLen: message.data.length,
     });
-    const success = terminalService.writeToTerminal(
-      workspaceId,
-      message.terminalId,
-      message.data
-    );
+    const success = terminalService.writeToTerminal(workspaceId, message.terminalId, message.data);
     if (!success) {
       logger.warn('Failed to write to terminal', {
         workspaceId,
@@ -287,12 +265,7 @@ function handleResizeMessage(
       cols: message.cols,
       rows: message.rows,
     });
-    terminalService.resizeTerminal(
-      workspaceId,
-      message.terminalId,
-      message.cols,
-      message.rows
-    );
+    terminalService.resizeTerminal(workspaceId, message.terminalId, message.cols, message.rows);
   } else {
     logger.warn('Resize message missing required fields', { message });
   }

@@ -29,6 +29,7 @@ import {
   sessionService,
 } from '../../services/index';
 import { sessionFileLogger } from '../../services/session-file-logger.service';
+import { toMessageString } from './message-utils';
 
 const logger = createLogger('chat-handler');
 
@@ -176,10 +177,7 @@ function sendSnapshotIfNeeded(dbSessionId: string | null, isRunning: boolean): v
   messageStateService.sendSnapshot(dbSessionId, sessionStatus, pendingRequest);
 }
 
-function parseChatMessage(
-  connectionId: string,
-  data: unknown
-): ChatMessageInput | null {
+function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
   const rawMessage: unknown = JSON.parse(toMessageString(data));
   const parseResult = ChatMessageSchema.safeParse(rawMessage);
 
@@ -200,22 +198,6 @@ function sendChatError(ws: WebSocket, dbSessionId: string | null, message: strin
     sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
   }
   ws.send(JSON.stringify(errorResponse));
-}
-
-function toMessageString(data: unknown): string {
-  if (typeof data === 'string') {
-    return data;
-  }
-  if (Buffer.isBuffer(data)) {
-    return data.toString();
-  }
-  if (Array.isArray(data)) {
-    return Buffer.concat(data).toString();
-  }
-  if (data instanceof ArrayBuffer) {
-    return Buffer.from(data).toString();
-  }
-  return String(data);
 }
 
 // ============================================================================

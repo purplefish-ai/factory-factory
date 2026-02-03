@@ -255,12 +255,9 @@ async function resolvePortsOrExit(
 
     if (options.dev) {
       const backendPort = await findAvailablePort(requestedBackendPort, options.host);
-      const frontendPort = await findAvailablePort(
-        requestedFrontendPort,
-        options.host,
-        20,
-        [backendPort]
-      );
+      const frontendPort = await findAvailablePort(requestedFrontendPort, options.host, 20, [
+        backendPort,
+      ]);
 
       if (frontendPort !== requestedFrontendPort || backendPort !== requestedBackendPort) {
         console.log(

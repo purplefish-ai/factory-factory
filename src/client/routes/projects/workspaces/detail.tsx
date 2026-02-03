@@ -77,6 +77,110 @@ function ToggleRightPanelButton() {
 // Workspace Header
 // =============================================================================
 
+function WorkspaceTitle({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  if (workspace.branchName) {
+    return (
+      <div className="flex items-center gap-2">
+        <GitBranch className="h-4 w-4 text-muted-foreground" />
+        <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
+      </div>
+    );
+  }
+
+  return <h1 className="text-lg font-semibold">{workspace.name}</h1>;
+}
+
+function WorkspacePrLink({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  if (!(workspace.prUrl && workspace.prNumber) || workspace.prState === 'NONE') {
+    return null;
+  }
+
+  return (
+    <a
+      href={workspace.prUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
+        workspace.prState === 'MERGED'
+          ? 'text-green-500'
+          : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
+      {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+    </a>
+  );
+}
+
+const CI_STATUS_CONFIG = {
+  SUCCESS: {
+    label: 'CI Passing',
+    tooltip: 'All CI checks are passing',
+    className: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
+    Icon: CheckCircle2,
+  },
+  FAILURE: {
+    label: 'CI Failing',
+    tooltip: 'Some CI checks are failing',
+    className: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
+    Icon: XCircle,
+  },
+  PENDING: {
+    label: 'CI Running',
+    tooltip: 'CI checks are currently running',
+    className: 'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
+    Icon: Circle,
+  },
+  UNKNOWN: {
+    label: 'CI Unknown',
+    tooltip: 'CI status not yet determined',
+    className: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+    Icon: Circle,
+  },
+} as const;
+
+function WorkspaceCiStatus({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  if (!workspace.prUrl || workspace.prState !== 'OPEN') {
+    return null;
+  }
+
+  const statusConfig = CI_STATUS_CONFIG[workspace.prCiStatus];
+  if (!statusConfig) {
+    return null;
+  }
+
+  const { Icon } = statusConfig;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
+            statusConfig.className
+          )}
+        >
+          <Icon className={cn('h-3 w-3', workspace.prCiStatus === 'PENDING' && 'animate-pulse')} />
+          <span>{statusConfig.label}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{statusConfig.tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 interface WorkspaceHeaderProps {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   workspaceId: string;
@@ -105,82 +209,10 @@ function WorkspaceHeader({
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b">
       <div className="flex items-center gap-3">
-        {workspace.branchName ? (
-          <div className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-muted-foreground" />
-            <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
-          </div>
-        ) : (
-          <h1 className="text-lg font-semibold">{workspace.name}</h1>
-        )}
+        <WorkspaceTitle workspace={workspace} />
         <RunScriptPortBadge workspaceId={workspaceId} />
-        {workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE' && (
-          <a
-            href={workspace.prUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
-              workspace.prState === 'MERGED'
-                ? 'text-green-500'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
-            {workspace.prState === 'MERGED' && (
-              <CheckCircle2 className="h-3 w-3 text-green-500" />
-            )}
-          </a>
-        )}
-        {workspace.prUrl && workspace.prState === 'OPEN' && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
-                  workspace.prCiStatus === 'SUCCESS' &&
-                    'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
-                  workspace.prCiStatus === 'FAILURE' &&
-                    'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
-                  workspace.prCiStatus === 'PENDING' &&
-                    'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
-                  workspace.prCiStatus === 'UNKNOWN' &&
-                    'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                )}
-              >
-                {workspace.prCiStatus === 'SUCCESS' && (
-                  <>
-                    <CheckCircle2 className="h-3 w-3" />
-                    <span>CI Passing</span>
-                  </>
-                )}
-                {workspace.prCiStatus === 'FAILURE' && (
-                  <>
-                    <XCircle className="h-3 w-3" />
-                    <span>CI Failing</span>
-                  </>
-                )}
-                {workspace.prCiStatus === 'PENDING' && (
-                  <>
-                    <Circle className="h-3 w-3 animate-pulse" />
-                    <span>CI Running</span>
-                  </>
-                )}
-                {workspace.prCiStatus === 'UNKNOWN' && (
-                  <>
-                    <Circle className="h-3 w-3" />
-                    <span>CI Unknown</span>
-                  </>
-                )}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              {workspace.prCiStatus === 'SUCCESS' && 'All CI checks are passing'}
-              {workspace.prCiStatus === 'FAILURE' && 'Some CI checks are failing'}
-              {workspace.prCiStatus === 'PENDING' && 'CI checks are currently running'}
-              {workspace.prCiStatus === 'UNKNOWN' && 'CI status not yet determined'}
-            </TooltipContent>
-          </Tooltip>
-        )}
+        <WorkspacePrLink workspace={workspace} />
+        <WorkspaceCiStatus workspace={workspace} />
       </div>
       <div className="flex items-center gap-1">
         <QuickActionsMenu
@@ -241,9 +273,7 @@ function WorkspaceHeader({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            {archiveWorkspace.isPending ? 'Archiving...' : 'Archive'}
-          </TooltipContent>
+          <TooltipContent>{archiveWorkspace.isPending ? 'Archiving...' : 'Archive'}</TooltipContent>
         </Tooltip>
         <ToggleRightPanelButton />
       </div>
@@ -552,8 +582,7 @@ function WorkspaceChatContent() {
   );
 
   // Manage selected session state here so it's available for useChatWebSocket
-  const { selectedDbSessionId, setSelectedDbSessionId } =
-    useSelectedSessionId(initialDbSessionId);
+  const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(initialDbSessionId);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   // Initialize WebSocket connection with chat hook
@@ -656,13 +685,6 @@ function WorkspaceChatContent() {
 
   // The running session is always the currently selected session
   const runningSessionId = running && selectedDbSessionId ? selectedDbSessionId : undefined;
-
-  // Check if workspace is still initializing
-  // Show overlay for NEW, PROVISIONING, or FAILED states.
-  // Include isPending to prevent flash of main UI while query is loading.
-  const status = workspaceInitStatus?.status;
-  const isInitializing =
-    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
