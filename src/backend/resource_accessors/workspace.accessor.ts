@@ -41,6 +41,9 @@ interface UpdateWorkspaceInput {
   // CI failure tracking
   prCiFailedAt?: Date | null;
   prCiLastNotifiedAt?: Date | null;
+  // PR Review tracking
+  prReviewLastCheckedAt?: Date | null;
+  prReviewLastCommentId?: string | null;
   // Activity tracking
   hasHadSessions?: boolean;
   // Cached kanban column
@@ -282,6 +285,44 @@ class WorkspaceAccessor {
         prCiStatus: CIStatus;
         prCiFailedAt: Date | null;
         prCiLastNotifiedAt: Date | null;
+      }>
+    >;
+  }
+
+  /**
+   * Find ACTIVE workspaces with PR URLs for PR review monitoring.
+   * Returns workspaces that have PRs to monitor for review comments.
+   */
+  findWithPRsForReviewMonitoring(): Promise<
+    Array<{
+      id: string;
+      prUrl: string;
+      prNumber: number;
+      prReviewLastCheckedAt: Date | null;
+      prReviewLastCommentId: string | null;
+    }>
+  > {
+    return prisma.workspace.findMany({
+      where: {
+        status: 'READY',
+        prUrl: { not: null },
+        prNumber: { not: null },
+      },
+      select: {
+        id: true,
+        prUrl: true,
+        prNumber: true,
+        prReviewLastCheckedAt: true,
+        prReviewLastCommentId: true,
+      },
+      orderBy: { prReviewLastCheckedAt: 'asc' },
+    }) as Promise<
+      Array<{
+        id: string;
+        prUrl: string;
+        prNumber: number;
+        prReviewLastCheckedAt: Date | null;
+        prReviewLastCommentId: string | null;
       }>
     >;
   }

@@ -139,6 +139,10 @@ model Workspace {
   prCiFailedAt        DateTime?         // When CI first failed (cleared on success)
   prCiLastNotifiedAt  DateTime?         // Last time we notified about CI failure
 
+  // PR Review tracking
+  prReviewLastCheckedAt   DateTime?     // When PR review comments were last checked
+  prReviewLastCommentId   String?       // ID of the last processed review comment
+
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
 
@@ -205,6 +209,11 @@ model UserSettings {
 
   // CI Settings
   autoFixCiIssues       Boolean  @default(false)  // Global toggle for CI auto-fixing
+
+  // PR Review Auto-Fix Settings
+  autoFixPrReviewComments   Boolean  @default(false)  // Global toggle for PR review auto-fixing
+  prReviewFixAllowedUsers   Json?    // Array of GitHub usernames whose comments trigger auto-fix
+  prReviewFixPrompt         String?  // Custom instructions for the PR review fixing session
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
