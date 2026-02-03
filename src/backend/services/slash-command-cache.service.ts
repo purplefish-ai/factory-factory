@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma-gen/client';
 import type { CommandInfo } from '@/shared/claude-protocol';
 import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { createLogger } from './logger.service';
@@ -72,6 +73,14 @@ class SlashCommandCacheService {
     }
 
     const normalized = normalizeCommands(commands);
+    const payload = normalized.map(
+      (command) =>
+        ({
+          name: command.name,
+          description: command.description,
+          ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}),
+        }) satisfies Prisma.InputJsonObject
+    ) as Prisma.InputJsonArray;
 
     try {
       const settings = await userSettingsAccessor.get();
@@ -82,7 +91,7 @@ class SlashCommandCacheService {
       }
 
       await userSettingsAccessor.update({
-        cachedSlashCommands: normalized,
+        cachedSlashCommands: payload,
         cachedSlashCommandsUpdatedAt: new Date(),
       });
     } catch (error) {

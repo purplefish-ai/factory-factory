@@ -5,7 +5,7 @@ interface UpdateUserSettingsInput {
   preferredIde?: string;
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
-  cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | null;
+  cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   cachedSlashCommandsUpdatedAt?: Date | null;
 }
 
