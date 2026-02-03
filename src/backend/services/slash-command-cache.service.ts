@@ -26,7 +26,7 @@ function normalizeCommands(commands: CommandInfo[]): CommandInfo[] {
   return commands.map((command) => ({
     name: command.name,
     description: command.description ?? '',
-    argumentHint: command.argumentHint,
+    argumentHint: command.argumentHint?.trim() ? command.argumentHint : undefined,
   }));
 }
 
@@ -35,7 +35,7 @@ function toCommandInfoArray(value: unknown): CommandInfo[] | null {
     return null;
   }
   const commands = value.filter(isCommandInfo);
-  return commands.length > 0 ? commands : null;
+  return commands.length > 0 ? normalizeCommands(commands) : null;
 }
 
 function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {

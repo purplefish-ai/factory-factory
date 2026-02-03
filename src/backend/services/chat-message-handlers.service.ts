@@ -908,14 +908,14 @@ class ChatMessageHandlerService {
   }
 
   private async sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void> {
-    const storedEvents = messageStateService.getStoredEvents(sessionId);
-    const hasSlashCommands = storedEvents.some((event) => event.type === 'slash_commands');
-    if (hasSlashCommands) {
+    const cached = await slashCommandCacheService.getCachedCommands();
+    if (!cached || cached.length === 0) {
       return;
     }
 
-    const cached = await slashCommandCacheService.getCachedCommands();
-    if (!cached || cached.length === 0) {
+    const storedEvents = messageStateService.getStoredEvents(sessionId);
+    const hasSlashCommands = storedEvents.some((event) => event.type === 'slash_commands');
+    if (hasSlashCommands) {
       return;
     }
 

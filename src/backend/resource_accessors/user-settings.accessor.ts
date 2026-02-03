@@ -51,6 +51,8 @@ class UserSettingsAccessor {
         preferredIde: data.preferredIde ?? 'cursor',
         customIdeCommand: data.customIdeCommand ?? null,
         playSoundOnComplete: data.playSoundOnComplete ?? true,
+        cachedSlashCommands: data.cachedSlashCommands ?? undefined,
+        cachedSlashCommandsUpdatedAt: data.cachedSlashCommandsUpdatedAt ?? null,
       },
     });
   }
