@@ -24,11 +24,27 @@ class GitOpsService {
     return getWorkspaceGitStats(worktreePath, defaultBranch);
   }
 
+  /**
+   * Check if a path is a valid git repository (worktree or regular repo).
+   * Returns true if git commands can be run in this directory.
+   */
+  async isValidGitRepo(worktreePath: string): Promise<boolean> {
+    const result = await gitCommand(['rev-parse', '--git-dir'], worktreePath);
+    return result.code === 0;
+  }
+
   async commitIfNeeded(
     worktreePath: string,
     workspaceName: string,
     commitUncommitted: boolean
   ): Promise<void> {
+    // Check if this is a valid git repo first - if not, skip commit
+    // This can happen if the worktree was corrupted or the .git file was removed
+    const isValid = await this.isValidGitRepo(worktreePath);
+    if (!isValid) {
+      return;
+    }
+
     const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
     if (statusResult.code !== 0) {
       throw new TRPCError({
