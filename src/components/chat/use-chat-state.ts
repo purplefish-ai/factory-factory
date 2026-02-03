@@ -30,6 +30,14 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS, DEFAULT_THINKING_BUDGET } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
+import type {
+  PermissionResponseMessage,
+  QuestionResponseMessage,
+  QueueMessageInput,
+  RemoveQueuedMessageInput,
+  RewindFilesMessage,
+  StopMessage,
+} from '@/shared/websocket';
 import { clearDraft, loadAllSessionData, persistDraft, persistSettings } from './chat-persistence';
 import { type ChatState, chatReducer, createInitialChatState } from './chat-reducer';
 import { useChatTransport } from './use-chat-transport';
@@ -93,49 +101,9 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
 // WebSocket Message Types (outgoing) - used by action callbacks
 // =============================================================================
 
-interface StopMessage {
-  type: 'stop';
-}
-
-interface QueueMessageRequest {
-  type: 'queue_message';
-  id: string;
-  text: string;
-  attachments?: MessageAttachment[];
-  settings: {
-    selectedModel: string | null;
-    thinkingEnabled: boolean;
-    planModeEnabled: boolean;
-  };
-}
-
-interface RemoveQueuedMessageRequest {
-  type: 'remove_queued_message';
-  messageId: string;
-}
-
-interface PermissionResponseMessage {
-  type: 'permission_response';
-  requestId: string;
-  allow: boolean;
-}
-
-interface QuestionResponseMessage {
-  type: 'question_response';
-  requestId: string;
-  answers: Record<string, string | string[]>;
-}
-
-/**
- * Rewind files request message.
- * Note: This mirrors the RewindFilesMessage type from the backend Zod schema.
- * We keep a separate frontend type to avoid importing backend modules in client code.
- */
-interface RewindFilesRequest {
-  type: 'rewind_files';
-  userMessageId: string;
-  dryRun?: boolean;
-}
+type QueueMessageRequest = QueueMessageInput;
+type RemoveQueuedMessageRequest = RemoveQueuedMessageInput;
+type RewindFilesRequest = RewindFilesMessage;
 
 // =============================================================================
 // Helper Functions
