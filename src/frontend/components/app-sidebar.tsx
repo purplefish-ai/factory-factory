@@ -617,7 +617,7 @@ function SortableWorkspaceItem({
             {/* Drag handle */}
             <button
               type="button"
-              className="w-4 shrink-0 flex justify-center mt-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
+              className="w-4 shrink-0 flex justify-center mt-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
               aria-label="Drag to reorder"
               {...attributes}
               {...listeners}
