@@ -26,16 +26,14 @@ async function withResumeModeLock<T>(
   const next = new Promise<void>((resolve) => {
     release = resolve;
   });
-  resumeModeLocks.set(
-    worktreeBasePath,
-    previous.then(() => next)
-  );
+  const lock = previous.then(() => next);
+  resumeModeLocks.set(worktreeBasePath, lock);
   await previous;
   try {
     return await handler();
   } finally {
     release?.();
-    if (resumeModeLocks.get(worktreeBasePath) === next) {
+    if (resumeModeLocks.get(worktreeBasePath) === lock) {
       resumeModeLocks.delete(worktreeBasePath);
     }
   }
