@@ -207,6 +207,7 @@ export function GitHubIssuePickerDialog({
     onOpenChange(false);
     setSelectedIssue(null);
     setFilterText('');
+    setOnlyMyIssues(true);
   };
 
   return (
