@@ -236,6 +236,118 @@ interface MigrateOptions {
 
 const program = new Command();
 
+function resolveDatabasePath(options: ServeOptions): string {
+  const defaultDbPath = join(homedir(), 'factory-factory', 'data.db');
+  return options.databasePath || process.env.DATABASE_PATH || defaultDbPath;
+}
+
+async function resolvePortsOrExit(
+  options: ServeOptions,
+  verbose: boolean
+): Promise<{ frontendPort: number; backendPort: number }> {
+  const requestedFrontendPort = Number.parseInt(options.port, 10);
+  const requestedBackendPort = Number.parseInt(options.backendPort, 10);
+
+  try {
+    if (verbose) {
+      console.log(chalk.gray('  Checking port availability...'));
+    }
+
+    if (options.dev) {
+      const backendPort = await findAvailablePort(requestedBackendPort, options.host);
+      const frontendPort = await findAvailablePort(
+        requestedFrontendPort,
+        options.host,
+        20,
+        [backendPort]
+      );
+
+      if (frontendPort !== requestedFrontendPort || backendPort !== requestedBackendPort) {
+        console.log(
+          chalk.yellow(
+            `  ⚠ Requested ports in use, using Frontend: ${frontendPort}, Backend: ${backendPort}`
+          )
+        );
+      }
+
+      return { frontendPort, backendPort };
+    }
+
+    const frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
+    const backendPort = frontendPort;
+
+    if (frontendPort !== requestedFrontendPort) {
+      console.log(chalk.yellow(`  ⚠ Port ${requestedFrontendPort} in use, using ${frontendPort}`));
+    }
+
+    return { frontendPort, backendPort };
+  } catch (error) {
+    console.error(chalk.red(`\n  ✗ ${(error as Error).message}`));
+    process.exit(1);
+  }
+}
+
+async function runMigrationsOrExit(databasePath: string, verbose: boolean): Promise<void> {
+  console.log(chalk.blue('  📦 Running database migrations...'));
+  try {
+    await runMigrations(databasePath, verbose);
+    console.log(chalk.green('  ✓ Migrations completed'));
+  } catch (error) {
+    console.error(chalk.red(`\n  ✗ Migration failed: ${(error as Error).message}`));
+    process.exit(1);
+  }
+}
+
+function createShutdownHandler(
+  processes: { name: string; proc: ChildProcess }[],
+  shutdownState: { shuttingDown: boolean }
+) {
+  return (signal: string) => {
+    if (shutdownState.shuttingDown) {
+      return;
+    }
+    shutdownState.shuttingDown = true;
+
+    console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
+    for (const { proc } of processes) {
+      proc.kill('SIGTERM');
+    }
+
+    setTimeout(() => {
+      const alive = processes.filter(({ proc }) => !proc.killed && proc.exitCode === null);
+      if (alive.length > 0) {
+        console.log(
+          chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
+        );
+        for (const { proc } of alive) {
+          proc.kill('SIGKILL');
+        }
+      }
+      process.exit(1);
+    }, 5000);
+  };
+}
+
+function registerShutdownHandlers(shutdown: (signal: string) => void): void {
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+function buildServeEnv(
+  options: ServeOptions,
+  databasePath: string,
+  frontendPort: number,
+  backendPort: number
+): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    DATABASE_PATH: databasePath,
+    FRONTEND_PORT: frontendPort.toString(),
+    BACKEND_PORT: backendPort.toString(),
+    NODE_ENV: options.dev ? 'development' : 'production',
+  };
+}
+
 program
   .name('ff')
   .description('FACTORY FACTORY - Workspace-based coding environment')
@@ -255,14 +367,11 @@ program
   .option('--dev', 'Run in development mode with hot reloading')
   .option('--no-open', 'Do not open browser automatically')
   .option('-v, --verbose', 'Enable verbose logging')
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: CLI serve action handles multiple setup steps
   .action(async (options: ServeOptions) => {
     const verbose = options.verbose ?? false;
     const shouldOpen = options.open !== false;
 
-    // Database path - defaults to ~/factory-factory/data.db
-    const defaultDbPath = join(homedir(), 'factory-factory', 'data.db');
-    const databasePath = options.databasePath || process.env.DATABASE_PATH || defaultDbPath;
+    const databasePath = resolveDatabasePath(options);
 
     // Show startup banner
     console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
@@ -273,108 +382,16 @@ program
     }
     ensureDataDir(databasePath);
 
-    // Find available ports
-    const requestedFrontendPort = Number.parseInt(options.port, 10);
-    const requestedBackendPort = Number.parseInt(options.backendPort, 10);
+    const { frontendPort, backendPort } = await resolvePortsOrExit(options, verbose);
+    await runMigrationsOrExit(databasePath, verbose);
 
-    let frontendPort: number;
-    let backendPort: number;
-
-    try {
-      if (verbose) {
-        console.log(chalk.gray('  Checking port availability...'));
-      }
-
-      if (options.dev) {
-        // In development mode, find two non-conflicting ports
-        // We need to ensure neither port is in use by ANY service
-        backendPort = await findAvailablePort(requestedBackendPort, options.host);
-
-        // Frontend port must not conflict with:
-        // 1. The backend port we just allocated
-        // 2. Any other running service
-        // We exclude backendPort to ensure no collision
-        frontendPort = await findAvailablePort(
-          requestedFrontendPort,
-          options.host,
-          20, // Increased attempts to find a free port
-          [backendPort] // Exclude backend port
-        );
-
-        if (frontendPort !== requestedFrontendPort || backendPort !== requestedBackendPort) {
-          console.log(
-            chalk.yellow(
-              `  ⚠ Requested ports in use, using Frontend: ${frontendPort}, Backend: ${backendPort}`
-            )
-          );
-        }
-      } else {
-        // In production mode, frontend and backend run on the same port
-        frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
-        backendPort = frontendPort; // Same port in production
-
-        if (frontendPort !== requestedFrontendPort) {
-          console.log(
-            chalk.yellow(`  ⚠ Port ${requestedFrontendPort} in use, using ${frontendPort}`)
-          );
-        }
-      }
-    } catch (error) {
-      console.error(chalk.red(`\n  ✗ ${(error as Error).message}`));
-      process.exit(1);
-    }
-
-    // Run database migrations
-    console.log(chalk.blue('  📦 Running database migrations...'));
-    try {
-      await runMigrations(databasePath, verbose);
-      console.log(chalk.green('  ✓ Migrations completed'));
-    } catch (error) {
-      console.error(chalk.red(`\n  ✗ Migration failed: ${(error as Error).message}`));
-      process.exit(1);
-    }
-
-    // Set environment variables
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      DATABASE_PATH: databasePath,
-      FRONTEND_PORT: frontendPort.toString(),
-      BACKEND_PORT: backendPort.toString(), // Use pre-allocated backend port
-      NODE_ENV: options.dev ? 'development' : 'production',
-    };
+    const env = buildServeEnv(options, databasePath, frontendPort, backendPort);
 
     const processes: { name: string; proc: ChildProcess }[] = [];
     const shutdownState = { shuttingDown: false };
 
-    // Handle shutdown
-    const shutdown = (signal: string) => {
-      if (shutdownState.shuttingDown) {
-        return;
-      }
-      shutdownState.shuttingDown = true;
-
-      console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
-      for (const { proc } of processes) {
-        proc.kill('SIGTERM');
-      }
-
-      // Force kill after timeout
-      setTimeout(() => {
-        const alive = processes.filter(({ proc }) => !proc.killed && proc.exitCode === null);
-        if (alive.length > 0) {
-          console.log(
-            chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
-          );
-          for (const { proc } of alive) {
-            proc.kill('SIGKILL');
-          }
-        }
-        process.exit(1);
-      }, 5000);
-    };
-
-    process.on('SIGINT', () => shutdown('SIGINT'));
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    const shutdown = createShutdownHandler(processes, shutdownState);
+    registerShutdownHandlers(shutdown);
 
     const createOnReady = (actualBackendPort: number) => async () => {
       // In production mode, frontend and backend run on the same port (actualBackendPort)
