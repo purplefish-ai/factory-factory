@@ -287,6 +287,62 @@ describe('chat message handlers', () => {
     });
   });
 
+  it('queue_message treats text/plain attachment without contentType as text', async () => {
+    const answerQuestion = vi.fn();
+    mockedSessionService.getClient.mockReturnValue({
+      answerQuestion,
+      denyInteractiveRequest: vi.fn(),
+    } as unknown as ClaudeClient);
+    mockedChatEventForwarderService.getPendingRequest.mockReturnValue({
+      requestId: 'req-2',
+      toolName: 'AskUserQuestion',
+      toolUseId: 'tool-use-2',
+      input: {
+        questions: [
+          {
+            question: 'What is this?',
+            header: 'Question',
+            options: [{ label: 'A', description: 'A' }],
+            multiSelect: false,
+          },
+        ],
+      },
+      planContent: null,
+      timestamp: new Date().toISOString(),
+    });
+
+    const handler = createQueueMessageHandler({
+      ...deps,
+      tryDispatchNextMessage: vi.fn(),
+    });
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: {
+        type: 'queue_message',
+        id: 'msg-2',
+        text: '',
+        attachments: [
+          {
+            id: 'att-2',
+            name: 'Pasted text (12 lines)',
+            type: 'text/plain',
+            size: 42,
+            data: 'pasted content without contentType',
+          },
+        ],
+      },
+    });
+
+    expect(mockedMessageQueueService.enqueue).not.toHaveBeenCalled();
+    expect(answerQuestion).toHaveBeenCalledWith('req-2', {
+      'What is this?': 'pasted content without contentType',
+    });
+  });
+
   it('remove_queued_message updates state when removed', () => {
     mockedMessageQueueService.remove.mockReturnValue(true);
 
