@@ -9,7 +9,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import { DEFAULT_THINKING_BUDGET, MessageState } from '@/lib/claude-types';
+import { DEFAULT_THINKING_BUDGET, MessageState } from '@/shared/claude-protocol';
 import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';

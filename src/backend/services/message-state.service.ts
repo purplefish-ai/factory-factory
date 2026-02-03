@@ -24,7 +24,7 @@ import {
   type QueuedMessage,
   type SessionStatus,
   type UserMessageWithState,
-} from '@/lib/claude-types';
+} from '@/shared/claude-protocol';
 import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
 import { MessageEventStore } from './message-event-store';

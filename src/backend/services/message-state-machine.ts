@@ -8,7 +8,7 @@ import {
   type QueuedMessage,
   type UserMessageState,
   type UserMessageWithState,
-} from '@/lib/claude-types';
+} from '@/shared/claude-protocol';
 
 /**
  * Valid state transitions for user messages.
