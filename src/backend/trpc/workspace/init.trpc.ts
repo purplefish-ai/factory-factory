@@ -3,7 +3,10 @@ import { z } from 'zod';
 import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
 import { startupScriptService } from '../../services/startup-script.service';
 import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
-import { worktreeLifecycleService } from '../../services/worktree-lifecycle.service';
+import {
+  setWorkspaceInitMode,
+  worktreeLifecycleService,
+} from '../../services/worktree-lifecycle.service';
 import { publicProcedure, router } from '../trpc';
 // =============================================================================
 // Background Initialization
@@ -79,6 +82,13 @@ export const workspaceInitRouter = router({
             code: 'TOO_MANY_REQUESTS',
             message: `Maximum retry attempts (${maxRetries}) exceeded`,
           });
+        }
+        if (input.useExistingBranch !== undefined) {
+          await setWorkspaceInitMode(
+            workspace.id,
+            input.useExistingBranch,
+            workspace.project.worktreeBasePath
+          );
         }
         // Run full initialization (creates worktree + runs startup script)
         initializeWorkspaceWorktree(workspace.id, {
