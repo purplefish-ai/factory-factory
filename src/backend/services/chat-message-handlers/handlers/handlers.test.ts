@@ -194,6 +194,99 @@ describe('chat message handlers', () => {
     expect(mockedMessageStateService.createRejectedMessage).not.toHaveBeenCalled();
   });
 
+  it('queue_message with attachments-only enqueues normally when no pending request', async () => {
+    mockedMessageQueueService.enqueue.mockReturnValue({ position: 0 });
+    mockedChatEventForwarderService.getPendingRequest.mockReturnValue(undefined);
+
+    const handler = createQueueMessageHandler({
+      ...deps,
+      tryDispatchNextMessage: vi.fn(),
+    });
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: {
+        type: 'queue_message',
+        id: 'msg-1',
+        text: '',
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'test.txt',
+            type: 'text/plain',
+            size: 11,
+            data: 'hello world',
+            contentType: 'text',
+          },
+        ],
+      },
+    });
+
+    expect(mockedMessageQueueService.enqueue).toHaveBeenCalled();
+    expect(mockedMessageStateService.createRejectedMessage).not.toHaveBeenCalled();
+  });
+
+  it('queue_message with attachments-only handles as interactive response when pending AskUserQuestion', async () => {
+    const answerQuestion = vi.fn();
+    mockedSessionService.getClient.mockReturnValue({
+      answerQuestion,
+      denyInteractiveRequest: vi.fn(),
+    } as unknown as ClaudeClient);
+    mockedChatEventForwarderService.getPendingRequest.mockReturnValue({
+      requestId: 'req-1',
+      toolName: 'AskUserQuestion',
+      toolUseId: 'tool-use-1',
+      input: {
+        questions: [
+          {
+            question: 'What is this?',
+            header: 'Question',
+            options: [{ label: 'A', description: 'A' }],
+            multiSelect: false,
+          },
+        ],
+      },
+      planContent: null,
+      timestamp: new Date().toISOString(),
+    });
+
+    const handler = createQueueMessageHandler({
+      ...deps,
+      tryDispatchNextMessage: vi.fn(),
+    });
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: {
+        type: 'queue_message',
+        id: 'msg-1',
+        text: '',
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'Pasted text (15 lines)',
+            type: 'text/plain',
+            size: 25,
+            data: 'large pasted content here',
+            contentType: 'text',
+          },
+        ],
+      },
+    });
+
+    // Should handle as interactive response, not enqueue
+    expect(mockedMessageQueueService.enqueue).not.toHaveBeenCalled();
+    expect(answerQuestion).toHaveBeenCalledWith('req-1', {
+      'What is this?': 'large pasted content here',
+    });
+  });
+
   it('remove_queued_message updates state when removed', () => {
     mockedMessageQueueService.remove.mockReturnValue(true);
 

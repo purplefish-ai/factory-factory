@@ -15,6 +15,7 @@ export const AttachmentSchema = z.object({
   type: z.string(),
   size: z.number(),
   data: z.string(),
+  contentType: z.enum(['image', 'text']).optional(),
 });
 
 // ============================================================================
