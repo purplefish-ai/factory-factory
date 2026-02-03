@@ -615,8 +615,10 @@ function SortableWorkspaceItem({
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
           <div className="flex w-full min-w-0 items-start gap-2">
             {/* Drag handle */}
-            <span
+            <button
+              type="button"
               className="w-4 shrink-0 flex justify-center mt-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
+              aria-label="Drag to reorder"
               {...attributes}
               {...listeners}
               onClick={(e) => {
@@ -626,7 +628,7 @@ function SortableWorkspaceItem({
               }}
             >
               <GripVertical className="h-3 w-3" />
-            </span>
+            </button>
 
             {/* Status dot */}
             <span className="w-4 shrink-0 flex justify-center mt-2">
