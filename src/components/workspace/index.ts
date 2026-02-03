@@ -14,6 +14,7 @@ export * from './terminal-instance';
 export * from './terminal-panel';
 export * from './terminal-tab-bar';
 export * from './todo-panel-container';
+export * from './use-persistent-scroll';
 export * from './use-terminal-websocket';
 export * from './workflow-selector';
 export * from './workspace-content-view';
