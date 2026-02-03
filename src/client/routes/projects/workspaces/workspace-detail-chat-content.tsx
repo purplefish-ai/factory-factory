@@ -1,0 +1,187 @@
+import { ArrowDown } from 'lucide-react';
+import { memo, useCallback, useMemo } from 'react';
+import type { useChatWebSocket } from '@/components/chat';
+import {
+  ChatInput,
+  ClaudeProcessStatus,
+  PermissionPrompt,
+  QuestionPrompt,
+  RewindConfirmationDialog,
+  VirtualizedMessageList,
+} from '@/components/chat';
+import { Button } from '@/components/ui/button';
+import type { CommandInfo, TokenStats } from '@/lib/claude-types';
+import { groupAdjacentToolCalls } from '@/lib/claude-types';
+
+interface ChatContentProps {
+  messages: ReturnType<typeof useChatWebSocket>['messages'];
+  sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
+  processStatus: ReturnType<typeof useChatWebSocket>['processStatus'];
+  messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  viewportRef: React.RefObject<HTMLDivElement | null>;
+  isNearBottom: boolean;
+  scrollToBottom: () => void;
+  onScroll: () => void;
+  pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
+  approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
+  answerQuestion: ReturnType<typeof useChatWebSocket>['answerQuestion'];
+  connected: boolean;
+  sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
+  stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
+  inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
+  chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
+  updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
+  inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
+  setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
+  inputAttachments: ReturnType<typeof useChatWebSocket>['inputAttachments'];
+  setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
+  queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
+  removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
+  latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
+  pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
+  isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
+  slashCommands: CommandInfo[];
+  slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
+  tokenStats: TokenStats;
+  rewindPreview: ReturnType<typeof useChatWebSocket>['rewindPreview'];
+  startRewindPreview: ReturnType<typeof useChatWebSocket>['startRewindPreview'];
+  confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
+  cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
+  getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
+}
+
+export const ChatContent = memo(function ChatContent({
+  messages,
+  sessionStatus,
+  processStatus,
+  messagesEndRef,
+  viewportRef,
+  isNearBottom,
+  scrollToBottom,
+  onScroll,
+  pendingRequest,
+  approvePermission,
+  answerQuestion,
+  connected,
+  sendMessage,
+  stopChat,
+  inputRef,
+  chatSettings,
+  updateSettings,
+  inputDraft,
+  setInputDraft,
+  inputAttachments,
+  setInputAttachments,
+  queuedMessages,
+  removeQueuedMessage,
+  latestThinking,
+  pendingMessages,
+  isCompacting,
+  slashCommands,
+  slashCommandsLoaded,
+  tokenStats,
+  rewindPreview,
+  startRewindPreview,
+  confirmRewind,
+  cancelRewind,
+  getUuidForMessageId,
+}: ChatContentProps) {
+  const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
+
+  const queuedMessageIds = useMemo(
+    () => new Set(queuedMessages.map((msg) => msg.id)),
+    [queuedMessages]
+  );
+
+  const handleHeightChange = useCallback(() => {
+    if (isNearBottom && viewportRef.current) {
+      viewportRef.current.scrollTo({
+        top: viewportRef.current.scrollHeight,
+        behavior: 'instant',
+      });
+    }
+  }, [isNearBottom, viewportRef]);
+
+  const running = sessionStatus.phase === 'running';
+  const stopping = sessionStatus.phase === 'stopping';
+  const startingSession = sessionStatus.phase === 'starting';
+  const loadingSession = sessionStatus.phase === 'loading';
+
+  return (
+    <div className="relative flex h-full flex-col overflow-hidden">
+      <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
+        <VirtualizedMessageList
+          messages={groupedMessages}
+          running={running}
+          startingSession={startingSession}
+          loadingSession={loadingSession}
+          scrollContainerRef={viewportRef}
+          onScroll={onScroll}
+          messagesEndRef={messagesEndRef}
+          isNearBottom={isNearBottom}
+          latestThinking={latestThinking}
+          queuedMessageIds={queuedMessageIds}
+          onRemoveQueuedMessage={removeQueuedMessage}
+          isCompacting={isCompacting}
+          getUuidForMessageId={getUuidForMessageId}
+          onRewindToMessage={startRewindPreview}
+        />
+      </div>
+
+      {!isNearBottom && (
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={scrollToBottom}
+            className="rounded-full shadow-lg"
+          >
+            <ArrowDown className="h-4 w-4 mr-1" />
+            Scroll to bottom
+          </Button>
+        </div>
+      )}
+
+      <div className="border-t">
+        <PermissionPrompt
+          permission={pendingRequest.type === 'permission' ? pendingRequest.request : null}
+          onApprove={approvePermission}
+        />
+        <QuestionPrompt
+          question={pendingRequest.type === 'question' ? pendingRequest.request : null}
+          onAnswer={answerQuestion}
+        />
+        <ClaudeProcessStatus processStatus={processStatus} sessionStatus={sessionStatus} />
+
+        <ChatInput
+          onSend={sendMessage}
+          onStop={stopChat}
+          disabled={!connected}
+          running={running}
+          stopping={stopping}
+          inputRef={inputRef}
+          placeholder={
+            stopping ? 'Stopping...' : running ? 'Message will be queued...' : 'Type a message...'
+          }
+          settings={chatSettings}
+          onSettingsChange={updateSettings}
+          value={inputDraft}
+          onChange={setInputDraft}
+          attachments={inputAttachments}
+          onAttachmentsChange={setInputAttachments}
+          onHeightChange={handleHeightChange}
+          pendingMessageCount={pendingMessages.size}
+          slashCommands={slashCommands}
+          slashCommandsLoaded={slashCommandsLoaded}
+          tokenStats={tokenStats}
+        />
+      </div>
+
+      <RewindConfirmationDialog
+        rewindPreview={rewindPreview}
+        onConfirm={confirmRewind}
+        onCancel={cancelRewind}
+      />
+    </div>
+  );
+});
