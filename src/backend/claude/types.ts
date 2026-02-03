@@ -8,6 +8,54 @@
  * @see docs/claude/claude-code-cli-reference.md
  */
 
+import type {
+  AskUserQuestion,
+  AskUserQuestionOption,
+  ClaudeContentItem,
+  ClaudeMessagePayload,
+  ClaudeStreamEvent,
+  ClaudeUsage,
+  CommandInfo,
+  ContentBlockDelta,
+  ImageItem,
+  InputJsonDelta,
+  ModelUsage,
+  PluginInfo,
+  ModelInfo as SharedModelInfo,
+  TextContent,
+  TextDelta,
+  TextItem,
+  ThinkingContent,
+  ThinkingDelta,
+  ToolDefinition,
+  ToolResultContent,
+  ToolResultContentValue,
+  ToolUseContent,
+} from '@/shared/claude';
+
+export type {
+  AskUserQuestion,
+  AskUserQuestionOption,
+  ClaudeContentItem,
+  ClaudeStreamEvent,
+  ClaudeUsage,
+  CommandInfo,
+  ContentBlockDelta,
+  InputJsonDelta,
+  ImageItem,
+  ModelUsage,
+  PluginInfo,
+  TextContent,
+  TextDelta,
+  TextItem,
+  ThinkingContent,
+  ThinkingDelta,
+  ToolDefinition,
+  ToolResultContent,
+  ToolResultContentValue,
+  ToolUseContent,
+};
+
 // =============================================================================
 // Enums and Constants
 // =============================================================================
@@ -52,206 +100,50 @@ export type HookEventName =
   | 'Setup';
 
 // =============================================================================
-// Content Item Types
+// Shared Claude Protocol Types
 // =============================================================================
 
 /**
- * Text content block in a message.
+ * Shared protocol types are re-exported above from src/shared/claude.
+ * Use those definitions to avoid client/server drift.
  */
-export interface TextContent {
-  type: 'text';
-  text: string;
-}
-
-/**
- * Thinking/reasoning content block (extended thinking).
- */
-export interface ThinkingContent {
-  type: 'thinking';
-  thinking: string;
-}
-
-/**
- * Tool use content block - Claude requesting to use a tool.
- */
-export interface ToolUseContent {
-  type: 'tool_use';
-  id: string;
-  name: string;
-  input: Record<string, unknown>;
-}
-
-/**
- * Tool result content block - result of a tool execution.
- */
-export interface ToolResultContent {
-  type: 'tool_result';
-  tool_use_id: string;
-  content: ToolResultContentValue;
-  is_error?: boolean;
-}
-
-/**
- * Union of all content item types that can appear in a message.
- */
-export type ClaudeContentItem = TextContent | ThinkingContent | ToolUseContent | ToolResultContent;
-
-// =============================================================================
-// Tool Result Content Value Types
-// =============================================================================
-
-/**
- * Text item in a tool result content array.
- */
-export interface TextItem {
-  type: 'text';
-  text: string;
-}
-
-/**
- * Image item in a tool result content array (base64 encoded).
- */
-export interface ImageItem {
-  type: 'image';
-  source: {
-    type: 'base64';
-    data: string;
-    media_type: string;
-  };
-}
-
-/**
- * Value type for tool_result content field.
- * Can be a plain string (text or JSON) or an array of text/image items.
- */
-export type ToolResultContentValue = string | Array<TextItem | ImageItem>;
-
-// =============================================================================
-// Stream Event Types
-// =============================================================================
-
-/**
- * Delta for text content blocks during streaming.
- */
-export interface TextDelta {
-  type: 'text_delta';
-  text: string;
-}
-
-/**
- * Delta for thinking content blocks during streaming.
- */
-export interface ThinkingDelta {
-  type: 'thinking_delta';
-  thinking: string;
-}
-
-/**
- * Delta for tool input JSON streaming.
- */
-export interface InputJsonDelta {
-  type: 'input_json_delta';
-  partial_json: string;
-}
-
-/**
- * Union of content block delta types.
- */
-export type ContentBlockDelta = TextDelta | ThinkingDelta | InputJsonDelta;
 
 /**
  * Message delta with stop information.
  */
-export interface MessageDelta {
-  stop_reason?: string;
-  stop_sequence?: string;
-}
-
-/**
- * Token usage statistics.
- */
-export interface ClaudeUsage {
-  input_tokens?: number;
-  output_tokens?: number;
-  cache_creation_input_tokens?: number;
-  cache_read_input_tokens?: number;
-  service_tier?: string;
-}
-
-/**
- * Model usage statistics with cost information.
- */
-export interface ModelUsage {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadInputTokens: number;
-  cacheCreationInputTokens: number;
-  webSearchRequests: number;
-  costUSD: number;
-  contextWindow: number;
-  maxOutputTokens: number;
-}
+export type MessageDelta = NonNullable<
+  Extract<ClaudeStreamEvent, { type: 'message_delta' }>['delta']
+>;
 
 /**
  * Stream event: message_start - beginning of a new message.
  */
-export interface MessageStartEvent {
-  type: 'message_start';
-  message: ClaudeMessage;
-}
+export type MessageStartEvent = Extract<ClaudeStreamEvent, { type: 'message_start' }>;
 
 /**
  * Stream event: content_block_start - beginning of a content block.
  */
-export interface ContentBlockStartEvent {
-  type: 'content_block_start';
-  index: number;
-  content_block: ClaudeContentItem;
-}
+export type ContentBlockStartEvent = Extract<ClaudeStreamEvent, { type: 'content_block_start' }>;
 
 /**
  * Stream event: content_block_delta - incremental update to a content block.
  */
-export interface ContentBlockDeltaEvent {
-  type: 'content_block_delta';
-  index: number;
-  delta: ContentBlockDelta;
-}
+export type ContentBlockDeltaEvent = Extract<ClaudeStreamEvent, { type: 'content_block_delta' }>;
 
 /**
  * Stream event: content_block_stop - end of a content block.
  */
-export interface ContentBlockStopEvent {
-  type: 'content_block_stop';
-  index: number;
-}
+export type ContentBlockStopEvent = Extract<ClaudeStreamEvent, { type: 'content_block_stop' }>;
 
 /**
  * Stream event: message_delta - message-level update with usage stats.
  */
-export interface MessageDeltaEvent {
-  type: 'message_delta';
-  delta?: MessageDelta;
-  usage?: ClaudeUsage;
-}
+export type MessageDeltaEvent = Extract<ClaudeStreamEvent, { type: 'message_delta' }>;
 
 /**
  * Stream event: message_stop - end of the message.
  */
-export interface MessageStopEvent {
-  type: 'message_stop';
-}
-
-/**
- * Union of all stream event types.
- */
-export type ClaudeStreamEvent =
-  | MessageStartEvent
-  | ContentBlockStartEvent
-  | ContentBlockDeltaEvent
-  | ContentBlockStopEvent
-  | MessageDeltaEvent
-  | MessageStopEvent;
+export type MessageStopEvent = Extract<ClaudeStreamEvent, { type: 'message_stop' }>;
 
 // =============================================================================
 // Message Types
@@ -260,55 +152,16 @@ export type ClaudeStreamEvent =
 /**
  * A Claude message containing role and content.
  */
-export interface ClaudeMessage {
-  id?: string;
-  type?: string;
-  role: 'assistant' | 'user';
-  model?: string;
-  content: ClaudeContentItem[] | string;
-  stop_reason?: string;
-}
-
-// =============================================================================
-// Utility Types
-// =============================================================================
-
-/**
- * Tool definition from system init message.
- */
-export interface ToolDefinition {
-  name: string;
-  description?: string;
-  input_schema?: Record<string, unknown>;
-}
-
-/**
- * Plugin information from system init message.
- */
-export interface PluginInfo {
-  name: string;
-  path: string;
-}
+export type ClaudeMessage = ClaudeMessagePayload;
 
 // =============================================================================
 // Initialize Response Metadata
 // =============================================================================
 
 /**
- * Slash command information returned in initialize response.
- */
-export interface CommandInfo {
-  name: string;
-  description: string;
-  argumentHint?: string;
-}
-
-/**
  * Model option information returned in initialize response.
  */
-export interface ModelInfo {
-  value: string;
-  displayName: string;
+export interface ModelInfo extends SharedModelInfo {
   description: string;
 }
 
@@ -575,24 +428,6 @@ export interface TaskToolInput {
   max_turns?: number;
   run_in_background?: boolean;
   resume?: string;
-}
-
-/**
- * Option for AskUserQuestion.
- */
-export interface AskUserQuestionOption {
-  label: string;
-  description: string;
-}
-
-/**
- * Question in AskUserQuestion input.
- */
-export interface AskUserQuestion {
-  question: string;
-  header?: string;
-  options: AskUserQuestionOption[];
-  multiSelect?: boolean;
 }
 
 /**

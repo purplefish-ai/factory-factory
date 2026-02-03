@@ -1,4 +1,4 @@
-import { MessageState } from '@/shared/claude-protocol';
+import { MessageState } from '@/shared/claude';
 import type { RemoveQueuedMessageInput } from '@/shared/websocket';
 import { createLogger } from '../../logger.service';
 import { messageQueueService } from '../../message-queue.service';

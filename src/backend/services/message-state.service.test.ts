@@ -4,8 +4,8 @@
  * Tests the message state machine that manages unified message state for chat sessions.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { HistoryMessage, QueuedMessage } from '@/shared/claude-protocol';
-import { isClaudeMessage, isUserMessage, MessageState } from '@/shared/claude-protocol';
+import type { HistoryMessage, QueuedMessage } from '@/shared/claude';
+import { isClaudeMessage, isUserMessage, MessageState } from '@/shared/claude';
 import { type MessageStateEvent, messageStateService } from './message-state.service';
 
 // =============================================================================

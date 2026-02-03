@@ -25,7 +25,7 @@ import {
   type QueuedMessage,
   type SessionStatus,
   type UserMessageWithState,
-} from '@/shared/claude-protocol';
+} from '@/shared/claude';
 import { createLogger } from './logger.service';
 import { MessageEventStore } from './message-event-store';
 import { isValidTransition, MessageStateMachine } from './message-state-machine';
