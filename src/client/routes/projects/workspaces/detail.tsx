@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { toast } from 'sonner';
 
 import {
   ChatInput,
@@ -22,10 +23,10 @@ import {
   VirtualizedMessageList,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
+  ArchiveWorkspaceDialog,
   QuickActionsMenu,
   RightPanel,
   RunScriptButton,
@@ -187,8 +188,8 @@ interface WorkspaceHeaderProps {
   availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
   preferredIde: ReturnType<typeof useSessionManagement>['preferredIde'];
   openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
-  archiveWorkspace: ReturnType<typeof useSessionManagement>['archiveWorkspace'];
-  setArchiveDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  archivePending: boolean;
+  onArchiveRequest: () => void;
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
   running: boolean;
   isCreatingSession: boolean;
@@ -200,8 +201,8 @@ function WorkspaceHeader({
   availableIdes,
   preferredIde,
   openInIde,
-  archiveWorkspace,
-  setArchiveDialogOpen,
+  archivePending,
+  onArchiveRequest,
   handleQuickAction,
   running,
   isCreatingSession,
@@ -257,23 +258,17 @@ function WorkspaceHeader({
                   ? ''
                   : 'hover:bg-destructive/10 hover:text-destructive'
               )}
-              onClick={() => {
-                if (workspace.prState === 'MERGED') {
-                  archiveWorkspace.mutate({ id: workspaceId });
-                } else {
-                  setArchiveDialogOpen(true);
-                }
-              }}
-              disabled={archiveWorkspace.isPending}
+              onClick={onArchiveRequest}
+              disabled={archivePending}
             >
-              {archiveWorkspace.isPending ? (
+              {archivePending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Archive className="h-4 w-4" />
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{archiveWorkspace.isPending ? 'Archiving...' : 'Archive'}</TooltipContent>
+          <TooltipContent>{archivePending ? 'Archiving...' : 'Archive'}</TooltipContent>
         </Tooltip>
         <ToggleRightPanelButton />
       </div>
@@ -587,6 +582,11 @@ function WorkspaceChatContent() {
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
+  const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
+    { workspaceId },
+    { enabled: !!workspace?.worktreePath, refetchInterval: 15_000, staleTime: 10_000 }
+  );
+  const hasUncommitted = gitStatus?.hasUncommitted === true;
   // Initialize WebSocket connection with chat hook
   const {
     messages,
@@ -654,6 +654,31 @@ function WorkspaceChatContent() {
     isSessionReady,
   });
 
+  const handleArchiveError = useCallback((error: unknown) => {
+    const typedError = error as { data?: { code?: string }; message?: string };
+    if (typedError.data?.code === 'PRECONDITION_FAILED') {
+      toast.error('Archiving blocked: enable commit before archiving to proceed.');
+      return;
+    }
+    toast.error(typedError.message ?? 'Failed to archive workspace');
+  }, []);
+
+  const handleArchive = useCallback(
+    (commitUncommitted: boolean) => {
+      archiveWorkspace.mutate(
+        { id: workspaceId, commitUncommitted },
+        {
+          onError: handleArchiveError,
+        }
+      );
+    },
+    [archiveWorkspace, handleArchiveError, workspaceId]
+  );
+
+  const handleArchiveRequest = useCallback(() => {
+    setArchiveDialogOpen(true);
+  }, []);
+
   // Ref for scroll handling (virtualized list manages its own content)
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
@@ -709,8 +734,8 @@ function WorkspaceChatContent() {
         availableIdes={availableIdes}
         preferredIde={preferredIde}
         openInIde={openInIde}
-        archiveWorkspace={archiveWorkspace}
-        setArchiveDialogOpen={setArchiveDialogOpen}
+        archivePending={archiveWorkspace.isPending}
+        onArchiveRequest={handleArchiveRequest}
         handleQuickAction={handleQuickAction}
         running={running}
         isCreatingSession={createSession.isPending}
@@ -797,18 +822,12 @@ function WorkspaceChatContent() {
         )}
       </ResizablePanelGroup>
 
-      <ConfirmDialog
+      <ArchiveWorkspaceDialog
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}
-        title="Archive Workspace"
-        description="Are you sure you want to archive this workspace?"
-        confirmText="Archive"
-        variant="destructive"
-        onConfirm={() => {
-          archiveWorkspace.mutate({ id: workspaceId });
-          setArchiveDialogOpen(false);
-        }}
+        hasUncommitted={hasUncommitted}
         isPending={archiveWorkspace.isPending}
+        onConfirm={handleArchive}
       />
     </div>
   );

@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Select,
   SelectContent,
@@ -34,6 +33,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useProjectContext } from '../lib/providers';
@@ -178,6 +178,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     startCreating,
     cancelCreating,
     startArchiving,
+    cancelArchiving,
   } = useWorkspaceListState(serverWorkspaces);
 
   const createWorkspace = trpc.workspace.create.useMutation();
@@ -190,6 +191,10 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       if (archivedId === currentId) {
         navigate(`/projects/${selectedProjectSlug}/workspaces`);
       }
+    },
+    onError: (error, variables) => {
+      cancelArchiving(variables.id);
+      toast.error(error.message);
     },
   });
 
@@ -221,6 +226,16 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       toast.error(`Failed to create workspace: ${message}`);
     }
   };
+
+  const handleArchiveRequest = (workspace: WorkspaceListItem) => {
+    setWorkspaceToArchive(workspace.id);
+    setArchiveDialogOpen(true);
+  };
+
+  const workspacePendingArchive = workspaceToArchive
+    ? serverWorkspaces?.find((workspace) => workspace.id === workspaceToArchive)
+    : null;
+  const archiveHasUncommitted = workspacePendingArchive?.gitStats?.hasUncommitted === true;
 
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
@@ -422,8 +437,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          setWorkspaceToArchive(workspace.id);
-                                          setArchiveDialogOpen(true);
+                                          handleArchiveRequest(workspace);
                                         }}
                                         className={cn(
                                           'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
@@ -516,22 +530,21 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         </div>
       </SidebarFooter>
 
-      <ConfirmDialog
+      <ArchiveWorkspaceDialog
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}
-        title="Archive Workspace"
-        description="Are you sure you want to archive this workspace?"
-        confirmText="Archive"
-        variant="destructive"
-        onConfirm={() => {
+        hasUncommitted={archiveHasUncommitted}
+        isPending={archiveWorkspace.isPending}
+        onConfirm={(commitUncommitted) => {
           if (workspaceToArchive) {
             // Start archiving state management (optimistic UI)
             startArchiving(workspaceToArchive);
-            archiveWorkspace.mutate({ id: workspaceToArchive });
+            archiveWorkspace.mutate({
+              id: workspaceToArchive,
+              commitUncommitted,
+            });
           }
-          setArchiveDialogOpen(false);
         }}
-        isPending={archiveWorkspace.isPending}
       />
     </Sidebar>
   );
