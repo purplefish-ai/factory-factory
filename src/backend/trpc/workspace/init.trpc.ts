@@ -14,6 +14,146 @@ const logger = createLogger('workspace-init-trpc');
 // Cache the authenticated GitHub username (fetched once per server lifetime)
 let cachedGitHubUsername: string | null | undefined;
 
+type WorkspaceWithProject = Exclude<
+  Awaited<ReturnType<typeof workspaceAccessor.findByIdWithProject>>,
+  null | undefined
+>;
+
+async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
+  try {
+    await workspaceStateMachine.startProvisioning(workspaceId);
+    return true;
+  } catch (error) {
+    // If we can't start provisioning (e.g., workspace deleted), log and return
+    logger.error('Failed to start provisioning', error as Error, { workspaceId });
+    return false;
+  }
+}
+
+async function getWorkspaceWithProjectOrThrow(workspaceId: string): Promise<WorkspaceWithProject> {
+  const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspaceId);
+  if (!workspaceWithProject?.project) {
+    throw new Error('Workspace project not found');
+  }
+  return workspaceWithProject;
+}
+
+async function ensureBaseBranchExists(
+  gitClient: ReturnType<typeof GitClientFactory.forProject>,
+  baseBranch: string,
+  defaultBranch: string
+): Promise<void> {
+  const branchExists = await gitClient.branchExists(baseBranch);
+  if (branchExists) {
+    return;
+  }
+
+  // Also check if it's a remote branch (origin/branchName)
+  const remoteBranchExists = await gitClient.branchExists(`origin/${baseBranch}`);
+  if (!remoteBranchExists) {
+    throw new Error(
+      `Branch '${baseBranch}' does not exist. Please specify an existing branch or leave empty to use the default branch '${defaultBranch}'.`
+    );
+  }
+}
+
+async function getCachedGitHubUsername(): Promise<string | null> {
+  if (cachedGitHubUsername === undefined) {
+    cachedGitHubUsername = await githubCLIService.getAuthenticatedUsername();
+  }
+  return cachedGitHubUsername ?? null;
+}
+
+async function readFactoryConfigSafe(
+  worktreePath: string,
+  workspaceId: string
+): Promise<Awaited<ReturnType<typeof FactoryConfigService.readConfig>>> {
+  try {
+    const factoryConfig = await FactoryConfigService.readConfig(worktreePath);
+    if (factoryConfig) {
+      logger.info('Found factory-factory.json config', {
+        workspaceId,
+        hasSetup: !!factoryConfig.scripts.setup,
+        hasRun: !!factoryConfig.scripts.run,
+        hasCleanup: !!factoryConfig.scripts.cleanup,
+      });
+    }
+    return factoryConfig;
+  } catch (error) {
+    logger.error('Failed to parse factory-factory.json', error as Error, {
+      workspaceId,
+    });
+    // Continue without factory config if parsing fails
+    return null;
+  }
+}
+
+async function runFactorySetupScriptIfConfigured(
+  workspaceId: string,
+  workspaceWithProject: WorkspaceWithProject,
+  worktreePath: string,
+  factoryConfig: Awaited<ReturnType<typeof FactoryConfigService.readConfig>>
+): Promise<boolean> {
+  if (!factoryConfig?.scripts.setup) {
+    return false;
+  }
+
+  logger.info('Running setup script from factory-factory.json', { workspaceId });
+
+  const scriptResult = await startupScriptService.runStartupScript(
+    { ...workspaceWithProject, worktreePath },
+    {
+      ...workspaceWithProject.project,
+      startupScriptCommand: factoryConfig.scripts.setup,
+      startupScriptPath: null,
+    }
+  );
+
+  // If script failed, log but don't throw (workspace is still usable)
+  if (!scriptResult.success) {
+    const finalWorkspace = await workspaceAccessor.findById(workspaceId);
+    logger.warn('Setup script from factory-factory.json failed but workspace created', {
+      workspaceId,
+      error: finalWorkspace?.initErrorMessage,
+    });
+  }
+  // startup script service already updates init status
+  return true;
+}
+
+async function runProjectStartupScriptIfConfigured(
+  workspaceId: string,
+  workspaceWithProject: WorkspaceWithProject,
+  worktreePath: string
+): Promise<boolean> {
+  const project = workspaceWithProject.project;
+  if (!startupScriptService.hasStartupScript(project)) {
+    return false;
+  }
+
+  logger.info('Running startup script for workspace', {
+    workspaceId,
+    hasCommand: !!project.startupScriptCommand,
+    hasScriptPath: !!project.startupScriptPath,
+  });
+
+  const scriptResult = await startupScriptService.runStartupScript(
+    { ...workspaceWithProject, worktreePath },
+    project
+  );
+
+  // If script failed, log but don't throw (workspace is still usable)
+  if (!scriptResult.success) {
+    const finalWorkspace = await workspaceAccessor.findById(workspaceId);
+    logger.warn('Startup script failed but workspace created', {
+      workspaceId,
+      error: finalWorkspace?.initErrorMessage,
+    });
+  }
+  // startup script service already updates init status
+  return true;
+}
+
 // =============================================================================
 // Background Initialization
 // =============================================================================
@@ -23,7 +163,6 @@ let cachedGitHubUsername: string | null | undefined;
  * This function is called after the workspace record is created and allows
  * the API to return immediately while the worktree is being set up.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex initialization logic with factory-factory.json support
 export async function initializeWorkspaceWorktree(
   workspaceId: string,
   requestedBranchName?: string
@@ -31,20 +170,13 @@ export async function initializeWorkspaceWorktree(
   // Transition to PROVISIONING state first, before any validation.
   // This ensures that any error during initialization can be properly surfaced
   // via markFailed() since PROVISIONING -> FAILED is a valid transition.
-  try {
-    await workspaceStateMachine.startProvisioning(workspaceId);
-  } catch (error) {
-    // If we can't start provisioning (e.g., workspace deleted), log and return
-    logger.error('Failed to start provisioning', error as Error, { workspaceId });
+  const startedProvisioning = await startProvisioningOrLog(workspaceId);
+  if (!startedProvisioning) {
     return;
   }
 
   try {
-    const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspaceId);
-    if (!workspaceWithProject?.project) {
-      throw new Error('Workspace project not found');
-    }
-
+    const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
     const project = workspaceWithProject.project;
     const gitClient = GitClientFactory.forProject({
       repoPath: project.repoPath,
@@ -55,46 +187,19 @@ export async function initializeWorkspaceWorktree(
     const baseBranch = requestedBranchName ?? project.defaultBranch;
 
     // Validate that the base branch exists before attempting to create worktree
-    const branchExists = await gitClient.branchExists(baseBranch);
-    if (!branchExists) {
-      // Also check if it's a remote branch (origin/branchName)
-      const remoteBranchExists = await gitClient.branchExists(`origin/${baseBranch}`);
-      if (!remoteBranchExists) {
-        throw new Error(
-          `Branch '${baseBranch}' does not exist. Please specify an existing branch or leave empty to use the default branch '${project.defaultBranch}'.`
-        );
-      }
-    }
+    await ensureBaseBranchExists(gitClient, baseBranch, project.defaultBranch);
 
     // Get the authenticated user's GitHub username for branch prefix (cached)
-    if (cachedGitHubUsername === undefined) {
-      cachedGitHubUsername = await githubCLIService.getAuthenticatedUsername();
-    }
+    const gitHubUsername = await getCachedGitHubUsername();
 
     const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, {
-      branchPrefix: cachedGitHubUsername ?? undefined,
+      branchPrefix: gitHubUsername ?? undefined,
       workspaceName: workspaceWithProject.name,
     });
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
     // Read factory-factory.json configuration from the worktree
-    let factoryConfig = null;
-    try {
-      factoryConfig = await FactoryConfigService.readConfig(worktreePath);
-      if (factoryConfig) {
-        logger.info('Found factory-factory.json config', {
-          workspaceId,
-          hasSetup: !!factoryConfig.scripts.setup,
-          hasRun: !!factoryConfig.scripts.run,
-          hasCleanup: !!factoryConfig.scripts.cleanup,
-        });
-      }
-    } catch (error) {
-      logger.error('Failed to parse factory-factory.json', error as Error, {
-        workspaceId,
-      });
-      // Continue without factory config if parsing fails
-    }
+    const factoryConfig = await readFactoryConfigSafe(worktreePath, workspaceId);
 
     // Update workspace with worktree info and run script from factory-factory.json
     await workspaceAccessor.update(workspaceId, {
@@ -105,54 +210,23 @@ export async function initializeWorkspaceWorktree(
     });
 
     // Run setup script from factory-factory.json if configured
-    if (factoryConfig?.scripts.setup) {
-      logger.info('Running setup script from factory-factory.json', {
-        workspaceId,
-      });
-
-      const scriptResult = await startupScriptService.runStartupScript(
-        { ...workspaceWithProject, worktreePath },
-        {
-          ...project,
-          startupScriptCommand: factoryConfig.scripts.setup,
-          startupScriptPath: null,
-        }
-      );
-
-      // If script failed, log but don't throw (workspace is still usable)
-      if (!scriptResult.success) {
-        const finalWorkspace = await workspaceAccessor.findById(workspaceId);
-        logger.warn('Setup script from factory-factory.json failed but workspace created', {
-          workspaceId,
-          error: finalWorkspace?.initErrorMessage,
-        });
-      }
-      // startup script service already updates init status
+    const ranFactorySetup = await runFactorySetupScriptIfConfigured(
+      workspaceId,
+      workspaceWithProject,
+      worktreePath,
+      factoryConfig
+    );
+    if (ranFactorySetup) {
       return;
     }
 
     // Fallback to project-level startup script if configured
-    if (startupScriptService.hasStartupScript(project)) {
-      logger.info('Running startup script for workspace', {
-        workspaceId,
-        hasCommand: !!project.startupScriptCommand,
-        hasScriptPath: !!project.startupScriptPath,
-      });
-
-      const scriptResult = await startupScriptService.runStartupScript(
-        { ...workspaceWithProject, worktreePath },
-        project
-      );
-
-      // If script failed, log but don't throw (workspace is still usable)
-      if (!scriptResult.success) {
-        const finalWorkspace = await workspaceAccessor.findById(workspaceId);
-        logger.warn('Startup script failed but workspace created', {
-          workspaceId,
-          error: finalWorkspace?.initErrorMessage,
-        });
-      }
-      // startup script service already updates init status
+    const ranProjectSetup = await runProjectStartupScriptIfConfigured(
+      workspaceId,
+      workspaceWithProject,
+      worktreePath
+    );
+    if (ranProjectSetup) {
       return;
     }
 
