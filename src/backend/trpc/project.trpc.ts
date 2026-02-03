@@ -99,14 +99,15 @@ export const projectRouter = router({
 
       const remoteEntries = buildRemoteEntries(localMap, remoteMap);
 
-      const branches = [
-        ...localMap.keys().map((branch) => ({
-          name: branch,
-          displayName: branch,
-          refType: 'local' as const,
-        })),
-        ...remoteEntries,
-      ].sort((a, b) => a.displayName.localeCompare(b.displayName));
+      const localBranches = Array.from(localMap.keys()).map((branch) => ({
+        name: branch,
+        displayName: branch,
+        refType: 'local' as const,
+      }));
+
+      const branches = [...localBranches, ...remoteEntries].sort((a, b) =>
+        a.displayName.localeCompare(b.displayName)
+      );
 
       return { branches };
     }),
