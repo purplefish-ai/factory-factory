@@ -34,6 +34,11 @@ const logger = createLogger('chat-handler');
 
 const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
 
+function sendBadRequest(socket: Duplex, message: string): void {
+  socket.write(`HTTP/1.1 400 Bad Request\r\n\r\n${message}`);
+  socket.destroy();
+}
+
 // ============================================================================
 // Client Creation
 // ============================================================================
@@ -121,6 +126,98 @@ function validateWorkingDir(workingDir: string): string | null {
   return realPath;
 }
 
+function countConnectionsViewingSession(dbSessionId: string | null): number {
+  if (!dbSessionId) {
+    return 0;
+  }
+
+  let viewingCount = 0;
+  for (const info of chatConnectionService.values()) {
+    if (info.dbSessionId === dbSessionId) {
+      viewingCount++;
+    }
+  }
+  return viewingCount;
+}
+
+function getInitialStatus(dbSessionId: string | null): {
+  type: 'status';
+  dbSessionId: string | null;
+  running: boolean;
+} {
+  const client = dbSessionId ? sessionService.getClient(dbSessionId) : null;
+  const isRunning = client?.isWorking() ?? false;
+
+  return {
+    type: 'status',
+    dbSessionId,
+    running: isRunning,
+  };
+}
+
+function sendInitialStatus(
+  ws: WebSocket,
+  dbSessionId: string | null
+): { type: 'status'; dbSessionId: string | null; running: boolean } {
+  const initialStatus = getInitialStatus(dbSessionId);
+  if (dbSessionId) {
+    sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
+  }
+  ws.send(JSON.stringify(initialStatus));
+  return initialStatus;
+}
+
+function sendSnapshotIfNeeded(dbSessionId: string | null, isRunning: boolean): void {
+  if (!dbSessionId) {
+    return;
+  }
+  const pendingRequest = chatEventForwarderService.getPendingRequest(dbSessionId);
+  const sessionStatus = messageStateService.computeSessionStatus(dbSessionId, isRunning);
+  messageStateService.sendSnapshot(dbSessionId, sessionStatus, pendingRequest);
+}
+
+function parseChatMessage(
+  connectionId: string,
+  data: unknown
+): ChatMessageInput | null {
+  const rawMessage: unknown = JSON.parse(toMessageString(data));
+  const parseResult = ChatMessageSchema.safeParse(rawMessage);
+
+  if (!parseResult.success) {
+    logger.warn('Invalid chat message format', {
+      errors: parseResult.error.issues,
+      connectionId,
+    });
+    return null;
+  }
+
+  return parseResult.data;
+}
+
+function sendChatError(ws: WebSocket, dbSessionId: string | null, message: string): void {
+  const errorResponse = { type: 'error', message };
+  if (dbSessionId) {
+    sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
+  }
+  ws.send(JSON.stringify(errorResponse));
+}
+
+function toMessageString(data: unknown): string {
+  if (typeof data === 'string') {
+    return data;
+  }
+  if (Buffer.isBuffer(data)) {
+    return data.toString();
+  }
+  if (Array.isArray(data)) {
+    return Buffer.concat(data).toString();
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString();
+  }
+  return String(data);
+}
+
 // ============================================================================
 // Chat Upgrade Handler
 // ============================================================================
@@ -139,20 +236,17 @@ export function handleChatUpgrade(
 
   if (!rawWorkingDir) {
     logger.warn('Missing workingDir parameter', { connectionId });
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\nMissing workingDir parameter');
-    socket.destroy();
+    sendBadRequest(socket, 'Missing workingDir parameter');
     return;
   }
 
   const workingDir = validateWorkingDir(rawWorkingDir);
   if (!workingDir) {
     logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\nInvalid workingDir');
-    socket.destroy();
+    sendBadRequest(socket, 'Invalid workingDir');
     return;
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket connection handler with multiple event handlers
   wss.handleUpgrade(request, socket, head, (ws) => {
     logger.info('Chat WebSocket connection established', {
       connectionId,
@@ -195,12 +289,7 @@ export function handleChatUpgrade(
     chatConnectionService.register(connectionId, connectionInfo);
 
     if (DEBUG_CHAT_WS) {
-      let viewingCount = 0;
-      for (const info of chatConnectionService.values()) {
-        if (info.dbSessionId === dbSessionId) {
-          viewingCount++;
-        }
-      }
+      const viewingCount = countConnectionsViewingSession(dbSessionId);
       logger.info('[Chat WS] Connection registered', {
         connectionId,
         dbSessionId,
@@ -208,58 +297,23 @@ export function handleChatUpgrade(
       });
     }
 
-    // Only check for running client if we have a session
-    const client = dbSessionId ? sessionService.getClient(dbSessionId) : null;
-    const isRunning = client?.isWorking() ?? false;
+    const initialStatus = sendInitialStatus(ws, dbSessionId);
+    sendSnapshotIfNeeded(dbSessionId, initialStatus.running);
 
-    const initialStatus = {
-      type: 'status',
-      dbSessionId,
-      running: isRunning,
-    };
-    if (dbSessionId) {
-      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
-    }
-    ws.send(JSON.stringify(initialStatus));
-
-    // Send messages_snapshot for reconnecting clients (new state machine)
-    if (dbSessionId) {
-      const pendingRequest = chatEventForwarderService.getPendingRequest(dbSessionId);
-      const sessionStatus = messageStateService.computeSessionStatus(dbSessionId, isRunning);
-      messageStateService.sendSnapshot(dbSessionId, sessionStatus, pendingRequest);
-    }
-
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebSocket handler requires validation and error handling
     ws.on('message', async (data) => {
       try {
-        const rawMessage: unknown = JSON.parse(data.toString());
-        const parseResult = ChatMessageSchema.safeParse(rawMessage);
-
-        if (!parseResult.success) {
-          logger.warn('Invalid chat message format', {
-            errors: parseResult.error.issues,
-            connectionId,
-          });
-          const errorResponse = { type: 'error', message: 'Invalid message format' };
-          if (dbSessionId) {
-            sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
-          }
-          ws.send(JSON.stringify(errorResponse));
+        const message = parseChatMessage(connectionId, data);
+        if (!message) {
+          sendChatError(ws, dbSessionId, 'Invalid message format');
           return;
         }
-
-        const message: ChatMessageInput = parseResult.data;
         if (dbSessionId) {
           sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
         }
         await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir, message);
       } catch (error) {
         logger.error('Error handling chat message', error as Error);
-        const errorResponse = { type: 'error', message: 'Invalid message format' };
-        if (dbSessionId) {
-          sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
-        }
-        ws.send(JSON.stringify(errorResponse));
+        sendChatError(ws, dbSessionId, 'Invalid message format');
       }
     });
 
