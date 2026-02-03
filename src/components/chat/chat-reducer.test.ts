@@ -233,6 +233,24 @@ describe('chatReducer', () => {
 
       expect(newState.sessionStatus).toEqual({ phase: 'ready' });
     });
+
+    it('should preserve lastExit info when stopping after a process exit', () => {
+      const state = {
+        ...initialState,
+        processStatus: {
+          state: 'stopped' as const,
+          lastExit: {
+            code: 1,
+            exitedAt: '2026-02-03T12:00:00.000Z',
+            unexpected: true,
+          },
+        },
+      };
+      const action: ChatAction = { type: 'WS_STOPPED' };
+      const newState = chatReducer(state, action);
+
+      expect(newState.processStatus).toEqual(state.processStatus);
+    });
   });
 
   // -------------------------------------------------------------------------

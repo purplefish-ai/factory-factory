@@ -29,7 +29,9 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
       return {
         ...state,
         sessionStatus: { phase: 'ready' },
-        processStatus: { state: 'stopped' },
+        processStatus: state.processStatus.lastExit
+          ? { state: 'stopped', lastExit: state.processStatus.lastExit }
+          : { state: 'stopped' },
         toolProgress: new Map(),
         isCompacting: false,
         activeHooks: new Map(),
