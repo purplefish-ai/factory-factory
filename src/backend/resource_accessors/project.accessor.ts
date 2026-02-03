@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Prisma, Project } from '@prisma-gen/client';
 import { GitClientFactory } from '../clients/git.client';
 import { prisma } from '../db';
+import { gitCommandC } from '../lib/shell';
 
 /**
  * Execute a command with proper argument separation (no shell injection).
@@ -87,6 +88,51 @@ function deriveSlugFromPath(repoPath: string): string {
 }
 
 /**
+ * Parse GitHub owner and repo from a git remote URL.
+ * Supports both SSH and HTTPS formats:
+ * - git@github.com:owner/repo.git
+ * - https://github.com/owner/repo.git
+ * - https://github.com/owner/repo
+ * Returns null if the URL is not a GitHub URL or cannot be parsed.
+ */
+export function parseGitHubRemoteUrl(remoteUrl: string): { owner: string; repo: string } | null {
+  // SSH format: git@github.com:owner/repo.git
+  // Repo name: alphanumeric, hyphens, underscores, dots (no slashes)
+  const sshMatch = remoteUrl.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/);
+  if (sshMatch) {
+    return { owner: sshMatch[1], repo: sshMatch[2] };
+  }
+
+  // HTTPS format: https://github.com/owner/repo.git or https://github.com/owner/repo
+  // Repo name: alphanumeric, hyphens, underscores, dots (no slashes)
+  const httpsMatch = remoteUrl.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/);
+  if (httpsMatch) {
+    return { owner: httpsMatch[1], repo: httpsMatch[2] };
+  }
+
+  return null;
+}
+
+/**
+ * Get GitHub owner/repo info from a git repository's remote.
+ * Checks the 'origin' remote first.
+ */
+async function getGitHubInfoFromRepo(
+  repoPath: string
+): Promise<{ owner: string; repo: string } | null> {
+  try {
+    const result = await gitCommandC(repoPath, ['remote', 'get-url', 'origin']);
+    if (result.code !== 0) {
+      return null;
+    }
+    const remoteUrl = result.stdout.trim();
+    return parseGitHubRemoteUrl(remoteUrl);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Compute the worktree path for a project.
  */
 function computeWorktreePath(worktreeBaseDir: string, slug: string): string {
@@ -105,6 +151,7 @@ class ProjectAccessor {
   /**
    * Create a new project from a repository path.
    * Name, slug, and worktree path are auto-derived.
+   * GitHub owner/repo are auto-detected from git remote if available.
    * If slug conflicts, appends a counter suffix (e.g., "my-project-2").
    *
    * @param data - Project creation input (repoPath)
@@ -113,6 +160,9 @@ class ProjectAccessor {
   async create(data: CreateProjectInput, context: ProjectAccessorContext): Promise<Project> {
     const name = deriveNameFromPath(data.repoPath);
     const baseSlug = deriveSlugFromPath(data.repoPath);
+
+    // Auto-detect GitHub info from git remote
+    const githubInfo = await getGitHubInfoFromRepo(data.repoPath);
 
     // Try base slug first, then with counter suffix if it conflicts
     let slug = baseSlug;
@@ -130,6 +180,8 @@ class ProjectAccessor {
             repoPath: data.repoPath,
             worktreeBasePath,
             defaultBranch: 'main',
+            githubOwner: githubInfo?.owner ?? null,
+            githubRepo: githubInfo?.repo ?? null,
           },
         });
       } catch (error) {
