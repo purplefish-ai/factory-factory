@@ -6,14 +6,14 @@
 
 import { z } from 'zod';
 import type { ReviewAction } from '@/shared/github-types';
-import { githubCLIService } from '../services/github-cli.service';
 import { publicProcedure, router } from './trpc';
 
 export const prReviewRouter = router({
   /**
    * List all PRs where the authenticated user is requested as a reviewer.
    */
-  listReviewRequests: publicProcedure.query(async () => {
+  listReviewRequests: publicProcedure.query(async ({ ctx }) => {
+    const { githubCLIService } = ctx.appContext.services;
     const health = await githubCLIService.checkHealth();
 
     if (!(health.isInstalled && health.isAuthenticated)) {
@@ -51,7 +51,8 @@ export const prReviewRouter = router({
         prNumber: z.number(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { githubCLIService } = ctx.appContext.services;
       await githubCLIService.approvePR(input.owner, input.repo, input.prNumber);
       return { success: true };
     }),
@@ -59,8 +60,8 @@ export const prReviewRouter = router({
   /**
    * Check gh CLI health status.
    */
-  checkHealth: publicProcedure.query(() => {
-    return githubCLIService.checkHealth();
+  checkHealth: publicProcedure.query(({ ctx }) => {
+    return ctx.appContext.services.githubCLIService.checkHealth();
   }),
 
   /**
@@ -73,8 +74,11 @@ export const prReviewRouter = router({
         number: z.number(),
       })
     )
-    .query(async ({ input }) => {
-      return await githubCLIService.getPRFullDetails(input.repo, input.number);
+    .query(async ({ ctx, input }) => {
+      return await ctx.appContext.services.githubCLIService.getPRFullDetails(
+        input.repo,
+        input.number
+      );
     }),
 
   /**
@@ -87,8 +91,11 @@ export const prReviewRouter = router({
         number: z.number(),
       })
     )
-    .query(async ({ input }) => {
-      const diff = await githubCLIService.getPRDiff(input.repo, input.number);
+    .query(async ({ ctx, input }) => {
+      const diff = await ctx.appContext.services.githubCLIService.getPRDiff(
+        input.repo,
+        input.number
+      );
       return { diff };
     }),
 
@@ -104,8 +111,8 @@ export const prReviewRouter = router({
         body: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
-      await githubCLIService.submitReview(
+    .mutation(async ({ ctx, input }) => {
+      await ctx.appContext.services.githubCLIService.submitReview(
         input.repo,
         input.number,
         input.action as ReviewAction,

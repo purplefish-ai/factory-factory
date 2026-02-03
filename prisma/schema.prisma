@@ -107,6 +107,7 @@ model Workspace {
 
   // Initialization tracking (used by NEW, PROVISIONING, FAILED states)
   initErrorMessage    String?
+  initOutput          String?           // Accumulated stdout/stderr from startup script
   initStartedAt       DateTime?
   initCompletedAt     DateTime?
   initRetryCount      Int                 @default(0)

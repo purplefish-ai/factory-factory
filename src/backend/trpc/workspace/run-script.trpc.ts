@@ -1,14 +1,15 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { RunScriptService } from '../../services/run-script.service';
 import { publicProcedure, router } from '../trpc';
 
 export const workspaceRunScriptRouter = router({
   // Start the run script for a workspace
   startRunScript: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ input }) => {
-      const result = await RunScriptService.startRunScript(input.workspaceId);
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.appContext.services.runScriptService.startRunScript(
+        input.workspaceId
+      );
 
       if (!result.success) {
         throw new TRPCError({
@@ -27,8 +28,10 @@ export const workspaceRunScriptRouter = router({
   // Stop the run script for a workspace
   stopRunScript: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ input }) => {
-      const result = await RunScriptService.stopRunScript(input.workspaceId);
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.appContext.services.runScriptService.stopRunScript(
+        input.workspaceId
+      );
 
       if (!result.success) {
         throw new TRPCError({
@@ -44,7 +47,7 @@ export const workspaceRunScriptRouter = router({
   getRunScriptStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     // biome-ignore lint/suspicious/useAwait: Service method is async
-    .query(async ({ input }) => {
-      return RunScriptService.getRunScriptStatus(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      return ctx.appContext.services.runScriptService.getRunScriptStatus(input.workspaceId);
     }),
 });

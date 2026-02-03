@@ -8,11 +8,11 @@ import {
   isPathSafe,
   MAX_FILE_SIZE,
 } from '../../lib/file-helpers';
-import { createLogger } from '../../services/logger.service';
-import { publicProcedure, router } from '../trpc';
+import { type Context, publicProcedure, router } from '../trpc';
 import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
 
-const logger = createLogger('workspace-files-trpc');
+const loggerName = 'workspace-files-trpc';
+const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 export const workspaceFilesRouter = router({
   // List files in directory
@@ -23,7 +23,8 @@ export const workspaceFilesRouter = router({
         path: z.string().optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
       const result = await getWorkspaceWithWorktree(input.workspaceId);
 
       logger.info('listFiles called', {

@@ -1,7 +1,9 @@
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
 
 // =============================================================================
@@ -12,6 +14,7 @@ interface InitializationOverlayProps {
   workspaceId: string;
   status: 'NEW' | 'PROVISIONING' | 'READY' | 'FAILED' | 'ARCHIVED';
   initErrorMessage: string | null;
+  initOutput: string | null;
   hasStartupScript: boolean;
 }
 
@@ -19,9 +22,11 @@ export function InitializationOverlay({
   workspaceId,
   status,
   initErrorMessage,
+  initOutput,
   hasStartupScript,
 }: InitializationOverlayProps) {
   const utils = trpc.useUtils();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const retryInit = trpc.workspace.retryInit.useMutation({
     onSuccess: () => {
@@ -32,12 +37,21 @@ export function InitializationOverlay({
     },
   });
 
+  // Auto-scroll to bottom when new output arrives
+  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger scroll when initOutput changes
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [initOutput]);
+
   const isFailed = status === 'FAILED';
   const isProvisioning = status === 'PROVISIONING';
+  const showLogs = hasStartupScript && (isProvisioning || isFailed);
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-4 p-8 max-w-md text-center">
+      <div className="flex flex-col items-center gap-4 p-8 max-w-2xl w-full text-center">
         {isFailed ? (
           <>
             <div className="rounded-full bg-destructive/10 p-3">
@@ -49,22 +63,6 @@ export function InitializationOverlay({
                 {initErrorMessage || 'An error occurred while setting up this workspace.'}
               </p>
             </div>
-            <Button
-              onClick={() => retryInit.mutate({ id: workspaceId })}
-              disabled={retryInit.isPending}
-            >
-              {retryInit.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Retrying...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Retry Setup
-                </>
-              )}
-            </Button>
           </>
         ) : (
           <>
@@ -78,6 +76,39 @@ export function InitializationOverlay({
               </p>
             </div>
           </>
+        )}
+
+        {/* Startup Script Output */}
+        {showLogs && (
+          <div className="w-full mt-4">
+            <ScrollArea
+              viewportRef={scrollRef}
+              className="h-48 w-full rounded-md border bg-zinc-950 text-left"
+            >
+              <pre className="p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
+                {initOutput || <span className="text-zinc-500 italic">Waiting for output...</span>}
+              </pre>
+            </ScrollArea>
+          </div>
+        )}
+
+        {isFailed && (
+          <Button
+            onClick={() => retryInit.mutate({ id: workspaceId })}
+            disabled={retryInit.isPending}
+          >
+            {retryInit.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Retrying...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry Setup
+              </>
+            )}
+          </Button>
         )}
       </div>
     </div>

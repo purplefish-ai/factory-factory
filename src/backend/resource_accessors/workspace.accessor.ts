@@ -298,6 +298,41 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Append output to initOutput field during startup script execution.
+   * Truncates from the beginning if output exceeds maxSize to prevent unbounded growth.
+   */
+  async appendInitOutput(id: string, output: string, maxSize = 50 * 1024): Promise<void> {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+      select: { initOutput: true },
+    });
+
+    let newOutput = (workspace?.initOutput ?? '') + output;
+
+    // Truncate from the beginning if too large
+    if (newOutput.length > maxSize) {
+      const truncationMarker = '[...truncated...]\n';
+      const keepSize = maxSize - truncationMarker.length;
+      newOutput = `${truncationMarker}${newOutput.slice(-keepSize)}`;
+    }
+
+    await prisma.workspace.update({
+      where: { id },
+      data: { initOutput: newOutput },
+    });
+  }
+
+  /**
+   * Clear initOutput field (called when retrying initialization).
+   */
+  async clearInitOutput(id: string): Promise<void> {
+    await prisma.workspace.update({
+      where: { id },
+      data: { initOutput: null },
+    });
+  }
+
+  /**
    * Find multiple workspaces by their IDs.
    * Used for batch lookups when enriching process info.
    */

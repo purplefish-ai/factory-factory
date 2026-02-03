@@ -1,31 +1,37 @@
 import { initTRPC } from '@trpc/server';
 import type { Request } from 'express';
 import superjson from 'superjson';
+import type { AppContext } from '../app-context';
 
 /**
  * Context for tRPC procedures.
  * Contains optional project/top-level task scoping from request headers.
  */
-type Context = {
+export type Context = {
   /** Project ID from X-Project-Id header */
   projectId?: string;
   /** Top-level Task ID from X-Top-Level-Task-Id header */
   topLevelTaskId?: string;
+  /** App-level services and config */
+  appContext: AppContext;
 };
 
 /**
  * Creates tRPC context from Express request.
  * Extracts project and top-level task scope from headers.
  */
-export const createContext = ({ req }: { req: Request }): Context => {
-  const projectId = req.headers['x-project-id'];
-  const topLevelTaskId = req.headers['x-top-level-task-id'];
+export const createContext =
+  (appContext: AppContext) =>
+  ({ req }: { req: Request }): Context => {
+    const projectId = req.headers['x-project-id'];
+    const topLevelTaskId = req.headers['x-top-level-task-id'];
 
-  return {
-    projectId: typeof projectId === 'string' ? projectId : undefined,
-    topLevelTaskId: typeof topLevelTaskId === 'string' ? topLevelTaskId : undefined,
+    return {
+      projectId: typeof projectId === 'string' ? projectId : undefined,
+      topLevelTaskId: typeof topLevelTaskId === 'string' ? topLevelTaskId : undefined,
+      appContext,
+    };
   };
-};
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,

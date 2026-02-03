@@ -21,33 +21,25 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
+import { type AppContext, createAppContext } from './app-context';
 import { prisma } from './db';
 import { registerInterceptors } from './interceptors';
-import { corsMiddleware, requestLoggerMiddleware, securityMiddleware } from './middleware';
-import { healthRouter } from './routers/api/health.router';
-import { mcpRouter } from './routers/api/mcp.router';
-import { projectRouter } from './routers/api/project.router';
+import {
+  createCorsMiddleware,
+  createRequestLoggerMiddleware,
+  securityMiddleware,
+} from './middleware';
+import { createHealthRouter } from './routers/api/health.router';
+import { createMcpRouter } from './routers/api/mcp.router';
+import { createProjectRouter } from './routers/api/project.router';
 import { initializeMcpTools } from './routers/mcp/index';
 import {
-  handleChatUpgrade,
-  handleDevLogsUpgrade,
-  handleTerminalUpgrade,
+  createChatUpgradeHandler,
+  createDevLogsUpgradeHandler,
+  createTerminalUpgradeHandler,
 } from './routers/websocket';
-import {
-  ciMonitorService,
-  configService,
-  createLogger,
-  findAvailablePort,
-  rateLimiter,
-  reconciliationService,
-  schedulerService,
-  sessionFileLogger,
-  sessionService,
-  terminalService,
-} from './services/index';
+import { reconciliationService } from './services/reconciliation.service';
 import { appRouter, createContext } from './trpc/index';
-
-const logger = createLogger('server');
 
 /**
  * Server instance returned by createServer()
@@ -70,7 +62,21 @@ export interface ServerInstance {
  * @param requestedPort - Port to listen on (default: from BACKEND_PORT env or 3001)
  * @returns ServerInstance with start/stop methods
  */
-export function createServer(requestedPort?: number): ServerInstance {
+export function createServer(requestedPort?: number, appContext?: AppContext): ServerInstance {
+  const context = appContext ?? createAppContext();
+  const {
+    ciMonitorService,
+    configService,
+    createLogger,
+    findAvailablePort,
+    rateLimiter,
+    schedulerService,
+    sessionFileLogger,
+    sessionService,
+    terminalService,
+  } = context.services;
+
+  const logger = createLogger('server');
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
   let actualPort: number = REQUESTED_PORT;
 
@@ -79,6 +85,9 @@ export function createServer(requestedPort?: number): ServerInstance {
   // Create HTTP server and WebSocket server
   const server = createHttpServer(app);
   const wss = new WebSocketServer({ noServer: true });
+  const chatUpgradeHandler = createChatUpgradeHandler(context);
+  const terminalUpgradeHandler = createTerminalUpgradeHandler(context);
+  const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
 
   // ============================================================================
   // WebSocket Heartbeat - Detect zombie connections
@@ -102,8 +111,8 @@ export function createServer(requestedPort?: number): ServerInstance {
   // Middleware
   // ============================================================================
   app.use(securityMiddleware);
-  app.use(corsMiddleware);
-  app.use(requestLoggerMiddleware);
+  app.use(createCorsMiddleware(context));
+  app.use(createRequestLoggerMiddleware(context));
   app.use(express.json({ limit: '10mb' }));
 
   // ============================================================================
@@ -115,14 +124,14 @@ export function createServer(requestedPort?: number): ServerInstance {
   // ============================================================================
   // Mount Routers
   // ============================================================================
-  app.use('/health', healthRouter);
-  app.use('/mcp', mcpRouter);
-  app.use('/api/projects', projectRouter);
+  app.use('/health', createHealthRouter(context));
+  app.use('/mcp', createMcpRouter(context));
+  app.use('/api/projects', createProjectRouter(context));
   app.use(
     '/api/trpc',
     createExpressMiddleware({
       router: appRouter,
-      createContext,
+      createContext: createContext(context),
     })
   );
 
@@ -214,17 +223,17 @@ export function createServer(requestedPort?: number): ServerInstance {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
 
     if (url.pathname === '/chat') {
-      handleChatUpgrade(request, socket, head, url, wss, wsAliveMap);
+      chatUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 
     if (url.pathname === '/terminal') {
-      handleTerminalUpgrade(request, socket, head, url, wss, wsAliveMap);
+      terminalUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 
     if (url.pathname === '/dev-logs') {
-      handleDevLogsUpgrade(request, socket, head, url, wss, wsAliveMap);
+      devLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 

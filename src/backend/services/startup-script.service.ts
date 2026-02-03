@@ -9,10 +9,14 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Project, Workspace } from '@prisma-gen/client';
+import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { createLogger } from './logger.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
 
 const logger = createLogger('startup-script');
+
+/** Callback type for streaming output during script execution */
+type OutputCallback = (output: string) => void;
 
 export interface StartupScriptResult {
   success: boolean;
@@ -56,13 +60,26 @@ class StartupScriptService {
     const startTime = Date.now();
     const timeoutMs = (project.startupScriptTimeout ?? 300) * 1000;
 
+    // Clear any previous output from retry attempts
+    await workspaceAccessor.clearInitOutput(workspace.id);
+
+    // Create output streaming callback with debouncing
+    const { callback: outputCallback, flush: flushOutput } = this.createDebouncedOutputCallback(
+      workspace.id
+    );
+
     try {
       const result = await this.executeScript(
         worktreePath,
         project.startupScriptCommand,
         project.startupScriptPath,
-        timeoutMs
+        timeoutMs,
+        5000,
+        outputCallback
       );
+
+      // Flush any remaining buffered output
+      await flushOutput();
 
       const durationMs = Date.now() - startTime;
 
@@ -88,6 +105,9 @@ class StartupScriptService {
 
       return { ...result, durationMs };
     } catch (error) {
+      // Flush any remaining buffered output before handling error
+      await flushOutput();
+
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -136,13 +156,15 @@ class StartupScriptService {
    * Commands are configured by project owners and run through bash.
    *
    * @param gracePeriodMs - Time between SIGTERM and SIGKILL (default 5000ms)
+   * @param onOutput - Optional callback for streaming output as it arrives
    */
   private async executeScript(
     cwd: string,
     command: string | null,
     scriptPath: string | null,
     timeoutMs: number,
-    gracePeriodMs = 5000
+    gracePeriodMs = 5000,
+    onOutput?: OutputCallback
   ): Promise<Omit<StartupScriptResult, 'durationMs'>> {
     // Build the bash arguments based on script type
     const bashArgs = this.buildBashArgs(cwd, command, scriptPath);
@@ -202,6 +224,11 @@ class StartupScriptService {
         const str = data.toString();
         const maxSize = 1024 * 1024;
         const keepSize = 512 * 1024;
+
+        // Stream output via callback if provided
+        if (onOutput) {
+          onOutput(str);
+        }
 
         if (target === 'stdout') {
           stdout += str;
@@ -284,6 +311,57 @@ class StartupScriptService {
    */
   hasStartupScript(project: Project): boolean {
     return !!(project.startupScriptCommand || project.startupScriptPath);
+  }
+
+  /**
+   * Create a debounced callback that batches output writes to the database.
+   * Flushes every 500ms or when buffer exceeds 4KB, whichever comes first.
+   * Returns both the callback and a flush function to call when script completes.
+   */
+  private createDebouncedOutputCallback(workspaceId: string): {
+    callback: OutputCallback;
+    flush: () => Promise<void>;
+  } {
+    let buffer = '';
+    let flushTimeout: NodeJS.Timeout | null = null;
+
+    const flush = async (): Promise<void> => {
+      if (flushTimeout) {
+        clearTimeout(flushTimeout);
+        flushTimeout = null;
+      }
+
+      if (buffer.length === 0) {
+        return;
+      }
+
+      const output = buffer;
+      buffer = '';
+
+      // Write to database and wait for completion
+      try {
+        await workspaceAccessor.appendInitOutput(workspaceId, output);
+      } catch (error) {
+        logger.warn('Failed to append init output', { workspaceId, error });
+      }
+    };
+
+    const callback = (output: string): void => {
+      buffer += output;
+
+      // Flush immediately if buffer is large enough
+      if (buffer.length >= 4096) {
+        flush();
+        return;
+      }
+
+      // Otherwise, schedule a debounced flush
+      if (!flushTimeout) {
+        flushTimeout = setTimeout(flush, 500);
+      }
+    };
+
+    return { callback, flush };
   }
 }
 
