@@ -582,7 +582,9 @@ function WorkspaceChatContent() {
   );
 
   // Manage selected session state here so it's available for useChatWebSocket
-  const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(initialDbSessionId);
+  const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
+    initialDbSessionId ?? null
+  );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   // Initialize WebSocket connection with chat hook
