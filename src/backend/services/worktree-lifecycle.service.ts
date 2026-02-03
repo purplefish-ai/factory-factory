@@ -15,6 +15,31 @@ import { workspaceStateMachine } from './workspace-state-machine.service';
 const logger = createLogger('worktree-lifecycle');
 const workspaceInitModes = new Map<string, boolean>();
 const RESUME_MODE_FILENAME = '.ff-resume-modes.json';
+const resumeModeLocks = new Map<string, Promise<void>>();
+
+async function withResumeModeLock<T>(
+  worktreeBasePath: string,
+  handler: () => Promise<T>
+): Promise<T> {
+  const previous = resumeModeLocks.get(worktreeBasePath) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  resumeModeLocks.set(
+    worktreeBasePath,
+    previous.then(() => next)
+  );
+  await previous;
+  try {
+    return await handler();
+  } finally {
+    release?.();
+    if (resumeModeLocks.get(worktreeBasePath) === next) {
+      resumeModeLocks.delete(worktreeBasePath);
+    }
+  }
+}
 
 async function readResumeModes(worktreeBasePath: string): Promise<Record<string, boolean>> {
   try {
@@ -37,6 +62,17 @@ async function writeResumeModes(
   );
 }
 
+async function updateResumeModes(
+  worktreeBasePath: string,
+  handler: (modes: Record<string, boolean>) => void
+): Promise<void> {
+  await withResumeModeLock(worktreeBasePath, async () => {
+    const modes = await readResumeModes(worktreeBasePath);
+    handler(modes);
+    await writeResumeModes(worktreeBasePath, modes);
+  });
+}
+
 export async function setWorkspaceInitMode(
   workspaceId: string,
   useExistingBranch: boolean | undefined,
@@ -47,9 +83,9 @@ export async function setWorkspaceInitMode(
   }
   workspaceInitModes.set(workspaceId, useExistingBranch);
   if (worktreeBasePath) {
-    const modes = await readResumeModes(worktreeBasePath);
-    modes[workspaceId] = useExistingBranch;
-    await writeResumeModes(worktreeBasePath, modes);
+    await updateResumeModes(worktreeBasePath, (modes) => {
+      modes[workspaceId] = useExistingBranch;
+    });
   }
 }
 
@@ -75,11 +111,11 @@ async function clearWorkspaceInitMode(
   if (!worktreeBasePath) {
     return;
   }
-  const modes = await readResumeModes(worktreeBasePath);
-  if (workspaceId in modes) {
-    delete modes[workspaceId];
-    await writeResumeModes(worktreeBasePath, modes);
-  }
+  await updateResumeModes(worktreeBasePath, (modes) => {
+    if (workspaceId in modes) {
+      delete modes[workspaceId];
+    }
+  });
 }
 
 // Cache the authenticated GitHub username (fetched once per server lifetime)

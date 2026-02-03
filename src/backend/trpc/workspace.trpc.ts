@@ -91,14 +91,15 @@ export const workspaceRouter = router({
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
       const { configService } = ctx.appContext.services;
+      let projectForResume: Awaited<ReturnType<typeof projectAccessor.findById>> | null = null;
       if (input.useExistingBranch) {
-        const project = await projectAccessor.findById(input.projectId);
-        if (!project) {
+        projectForResume = await projectAccessor.findById(input.projectId);
+        if (!projectForResume) {
           throw new Error(`Project not found: ${input.projectId}`);
         }
 
         const branchName = input.branchName ?? '';
-        const isCheckedOut = await gitOpsService.isBranchCheckedOut(project, branchName);
+        const isCheckedOut = await gitOpsService.isBranchCheckedOut(projectForResume, branchName);
         if (isCheckedOut) {
           throw new Error(`Branch '${branchName}' is already checked out in another worktree.`);
         }
@@ -106,12 +107,13 @@ export const workspaceRouter = router({
       // Create the workspace record
       const { useExistingBranch, ...createInput } = input;
       const workspace = await workspaceAccessor.create(createInput);
-      const projectForSession = await projectAccessor.findById(input.projectId);
-      await setWorkspaceInitMode(
-        workspace.id,
-        useExistingBranch,
-        projectForSession?.worktreeBasePath
-      );
+      if (useExistingBranch) {
+        await setWorkspaceInitMode(
+          workspace.id,
+          useExistingBranch,
+          projectForResume?.worktreeBasePath
+        );
+      }
 
       // Create a default Claude session so the workspace always has a chat tab.
       // This prevents users from getting stuck in file view before starting a session.
