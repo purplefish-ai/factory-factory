@@ -23,10 +23,33 @@ const logger = createLogger('session');
 // Track sessions currently being stopped to prevent race conditions
 const stoppingInProgress = new Set<string>();
 
+/**
+ * Callback type for client creation hook.
+ * Called after a ClaudeClient is created, allowing other services to set up
+ * event forwarding without creating circular dependencies.
+ */
+export type ClientCreatedCallback = (
+  sessionId: string,
+  client: ClaudeClient,
+  context: { workspaceId: string; workingDir: string }
+) => void;
+
 class SessionService {
   // Track ClaudeClients by dbSessionId - single source of truth for client lifecycle
   private readonly clients = new Map<string, ClaudeClient>();
   private readonly pendingCreation = new Map<string, Promise<ClaudeClient>>();
+
+  // Callback for when a client is created (used for event forwarding setup)
+  private onClientCreatedCallback: ClientCreatedCallback | null = null;
+
+  /**
+   * Register a callback to be called when a client is created.
+   * Used by chat handler to set up event forwarding without circular dependencies.
+   */
+  setOnClientCreated(callback: ClientCreatedCallback): void {
+    this.onClientCreatedCallback = callback;
+  }
+
   /**
    * Start a Claude session.
    * Uses createClient() internally for unified lifecycle management.
@@ -212,6 +235,15 @@ class SessionService {
 
     // Set up DB update handlers
     this.setupClientDbHandlers(sessionId, client);
+
+    // Call registered callback for event forwarding setup (if any)
+    // This allows chat handler to set up WebSocket event forwarding without circular deps
+    if (this.onClientCreatedCallback) {
+      this.onClientCreatedCallback(sessionId, client, {
+        workspaceId: session?.workspaceId ?? 'unknown',
+        workingDir: sessionOpts.workingDir,
+      });
+    }
 
     // Update DB status
     await claudeSessionAccessor.update(sessionId, {

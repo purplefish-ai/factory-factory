@@ -1,6 +1,4 @@
 import { useCallback, useEffect } from 'react';
-import { useLocation } from 'react-router';
-import { useWindowFocus } from '../../client/hooks/use-window-focus';
 import { trpc } from '../../frontend/lib/trpc';
 
 interface NotificationRequest {
@@ -12,33 +10,22 @@ interface NotificationRequest {
 
 /**
  * Manages workspace completion notifications.
- * Handles suppression logic based on window focus and visible workspace.
+ * Plays a sound and shows a browser notification when a workspace completes.
  */
 export function WorkspaceNotificationManager() {
-  const location = useLocation();
-  const isWindowFocused = useWindowFocus();
   const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
 
   const handleWorkspaceNotification = useCallback(
     (request: NotificationRequest) => {
-      const { workspaceId, workspaceName, sessionCount } = request;
+      const { workspaceName, sessionCount } = request;
 
-      // Suppression Logic
-      const isChatVisible = location.pathname.includes(`/workspace/${workspaceId}`);
-      const shouldSuppress = isWindowFocused || isChatVisible;
-
-      if (shouldSuppress) {
-        return;
-      }
-
-      // Send notification
       // Only play sound if settings have loaded and user has it enabled
       // Default to true once settings are available, but don't play while loading
       // to avoid playing sound when user may have disabled it
       const playSoundOnComplete = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
       sendWorkspaceNotification(workspaceName, sessionCount, playSoundOnComplete);
     },
-    [location.pathname, isWindowFocused, settings?.playSoundOnComplete, isSuccess]
+    [settings?.playSoundOnComplete, isSuccess]
   );
 
   useEffect(() => {

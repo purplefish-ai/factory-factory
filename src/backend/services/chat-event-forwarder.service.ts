@@ -14,7 +14,6 @@ import type { PendingInteractiveRequest } from '../../shared/pending-request-typ
 import type { ClaudeClient } from '../claude/index';
 import { WS_READY_STATE } from '../constants';
 import { interceptorRegistry } from '../interceptors';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import {
   AskUserQuestionInputSchema,
   ExitPlanModeInputSchema,
@@ -107,31 +106,26 @@ class ChatEventForwarderService {
     }
     this.workspaceNotificationsSetup = true;
 
-    workspaceActivityService.on('request_notification', async (data) => {
+    workspaceActivityService.on('request_notification', (data) => {
       const { workspaceId, workspaceName, sessionCount, finishedAt } = data;
 
       logger.debug('Broadcasting workspace notification request', { workspaceId });
 
-      // Send to all connections viewing this workspace
+      // Send to all open connections so any workspace can hear the notification
+      const message = JSON.stringify({
+        type: 'workspace_notification_request',
+        workspaceId,
+        workspaceName,
+        sessionCount,
+        finishedAt: finishedAt.toISOString(),
+      });
+
       for (const info of chatConnectionService.values()) {
-        if (info.dbSessionId && info.ws.readyState === WS_READY_STATE.OPEN) {
+        if (info.ws.readyState === WS_READY_STATE.OPEN) {
           try {
-            const session = await claudeSessionAccessor.findById(info.dbSessionId);
-            if (session?.workspaceId === workspaceId) {
-              info.ws.send(
-                JSON.stringify({
-                  type: 'workspace_notification_request',
-                  workspaceId,
-                  workspaceName,
-                  sessionCount,
-                  finishedAt: finishedAt.toISOString(),
-                })
-              );
-            }
+            info.ws.send(message);
           } catch (error) {
-            logger.error('Failed to check session workspace', error as Error, {
-              dbSessionId: info.dbSessionId,
-            });
+            logger.error('Failed to send workspace notification', error as Error);
           }
         }
       }
