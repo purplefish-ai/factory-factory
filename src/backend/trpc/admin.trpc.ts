@@ -12,25 +12,18 @@ import {
   terminalSessionAccessor,
   workspaceAccessor,
 } from '../resource_accessors/index';
-import {
-  ciMonitorService,
-  cliHealthService,
-  configService,
-  createLogger,
-  rateLimiter,
-  serverInstanceService,
-  sessionService,
-  terminalService,
-} from '../services/index';
-import { publicProcedure, router } from './trpc';
+import { type Context, publicProcedure, router } from './trpc';
 
-const logger = createLogger('admin-trpc');
+const loggerName = 'admin-trpc';
+
+const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 export const adminRouter = router({
   /**
    * Get server information (port, environment, etc.)
    */
-  getServerInfo: publicProcedure.query(() => {
+  getServerInfo: publicProcedure.query(({ ctx }) => {
+    const { configService, serverInstanceService } = ctx.appContext.services;
     const backendPort = serverInstanceService.getPort();
     const config = configService.getSystemConfig();
 
@@ -44,7 +37,8 @@ export const adminRouter = router({
   /**
    * Get system statistics
    */
-  getSystemStats: publicProcedure.query(() => {
+  getSystemStats: publicProcedure.query(({ ctx }) => {
+    const { configService, rateLimiter } = ctx.appContext.services;
     const apiUsage = rateLimiter.getApiUsageStats();
     const config = configService.getSystemConfig();
 
@@ -101,7 +95,10 @@ export const adminRouter = router({
         claudeRequestsPerHour: z.number().optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
+      const { rateLimiter } = ctx.appContext.services;
+      const logger = getLogger(ctx);
+
       logger.info('Updating rate limits', input);
 
       rateLimiter.updateConfig(input);
@@ -115,7 +112,8 @@ export const adminRouter = router({
   /**
    * Get API usage by agent
    */
-  getApiUsageByAgent: publicProcedure.query(() => {
+  getApiUsageByAgent: publicProcedure.query(({ ctx }) => {
+    const { rateLimiter } = ctx.appContext.services;
     const usageByAgent = rateLimiter.getUsageByAgent();
     const usageByTopLevelTask = rateLimiter.getUsageByTopLevelTask();
 
@@ -128,7 +126,8 @@ export const adminRouter = router({
   /**
    * Reset API usage statistics
    */
-  resetApiUsageStats: publicProcedure.mutation(() => {
+  resetApiUsageStats: publicProcedure.mutation(({ ctx }) => {
+    const { rateLimiter } = ctx.appContext.services;
     rateLimiter.resetUsageStats();
     return { success: true, message: 'API usage statistics reset' };
   }),
@@ -139,14 +138,17 @@ export const adminRouter = router({
    */
   checkCLIHealth: publicProcedure
     .input(z.object({ forceRefresh: z.boolean().default(false) }).optional())
-    .query(({ input }) => {
+    .query(({ ctx, input }) => {
+      const { cliHealthService } = ctx.appContext.services;
       return cliHealthService.checkHealth(input?.forceRefresh ?? false);
     }),
 
   /**
    * Get all active processes (Claude and Terminal)
    */
-  getActiveProcesses: publicProcedure.query(async () => {
+  getActiveProcesses: publicProcedure.query(async ({ ctx }) => {
+    const { sessionService, terminalService } = ctx.appContext.services;
+    const logger = getLogger(ctx);
     // Get active Claude processes from in-memory map
     const activeClaudeProcesses = sessionService.getAllActiveProcesses();
 
@@ -270,7 +272,10 @@ export const adminRouter = router({
    * Manually trigger CI checks for all workspaces with PRs.
    * Useful for testing CI auto-fix functionality.
    */
-  triggerCICheck: publicProcedure.mutation(async () => {
+  triggerCICheck: publicProcedure.mutation(async ({ ctx }) => {
+    const { ciMonitorService } = ctx.appContext.services;
+    const logger = getLogger(ctx);
+
     logger.info('Manually triggering CI check for all workspaces');
     const result = await ciMonitorService.checkAllWorkspaces();
     return {

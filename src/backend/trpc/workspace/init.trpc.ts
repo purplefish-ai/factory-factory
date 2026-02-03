@@ -5,7 +5,6 @@ import { startupScriptService } from '../../services/startup-script.service';
 import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import { worktreeLifecycleService } from '../../services/worktree-lifecycle.service';
 import { publicProcedure, router } from '../trpc';
-
 // =============================================================================
 // Background Initialization
 // =============================================================================

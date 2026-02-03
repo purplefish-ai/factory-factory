@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { prisma } from '../db';
 import { projectAccessor } from '../resource_accessors/project.accessor';
-import { configService } from '../services/config.service';
 import { publicProcedure, router } from './trpc';
 
 export const projectRouter = router({
@@ -49,7 +48,8 @@ export const projectRouter = router({
         startupScriptTimeout: z.number().min(1).max(3600).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { configService } = ctx.appContext.services;
       const { startupScriptCommand, startupScriptPath, startupScriptTimeout, ...createInput } =
         input;
 

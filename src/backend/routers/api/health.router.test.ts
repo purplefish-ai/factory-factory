@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '../../app-context';
 
 // Mock dependencies before importing the router
 const mockQueryRaw = vi.fn();
@@ -14,24 +15,7 @@ vi.mock('../../db', () => ({
   },
 }));
 
-vi.mock('../../services/index', () => ({
-  configService: {
-    getEnvironment: () => mockGetEnvironment(),
-    getAppVersion: () => mockGetAppVersion(),
-  },
-  createLogger: () => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-  rateLimiter: {
-    getApiUsageStats: () => mockGetApiUsageStats(),
-  },
-}));
-
-// Import after mocks are set up
-import { healthRouter } from './health.router';
+import { createHealthRouter } from './health.router';
 
 describe('healthRouter', () => {
   let app: express.Express;
@@ -39,7 +23,25 @@ describe('healthRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     app = express();
-    app.use('/health', healthRouter);
+    const appContext = {
+      services: {
+        configService: {
+          getEnvironment: () => mockGetEnvironment(),
+          getAppVersion: () => mockGetAppVersion(),
+        },
+        createLogger: () => ({
+          info: vi.fn(),
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        }),
+        rateLimiter: {
+          getApiUsageStats: () => mockGetApiUsageStats(),
+        },
+      },
+    } as unknown as AppContext;
+
+    app.use('/health', createHealthRouter(appContext));
 
     // Set default mock returns
     mockGetEnvironment.mockReturnValue('development');

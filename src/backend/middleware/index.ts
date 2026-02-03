@@ -1,3 +1,6 @@
-export { corsMiddleware } from './cors.middleware';
-export { requestLoggerMiddleware } from './request-logger.middleware';
+export { corsMiddleware, createCorsMiddleware } from './cors.middleware';
+export {
+  createRequestLoggerMiddleware,
+  requestLoggerMiddleware,
+} from './request-logger.middleware';
 export { securityMiddleware } from './security.middleware';

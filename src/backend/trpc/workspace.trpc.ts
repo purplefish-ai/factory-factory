@@ -1,13 +1,9 @@
 import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { createLogger } from '../services/logger.service';
-import { RunScriptService } from '../services/run-script.service';
-import { sessionService } from '../services/session.service';
-import { terminalService } from '../services/terminal.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
 import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
-import { publicProcedure, router } from './trpc';
+import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
 import { workspaceIdeRouter } from './workspace/ide.trpc';
@@ -19,7 +15,8 @@ import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 export type { GitFileStatus, GitStatusFile } from '../lib/git-helpers';
 export { parseGitStatusOutput } from '../lib/git-helpers';
 
-const logger = createLogger('workspace-trpc');
+const loggerName = 'workspace-trpc';
+const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 // =============================================================================
 // Router
@@ -78,7 +75,8 @@ export const workspaceRouter = router({
         branchName: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
       // Create the workspace record
       const workspace = await workspaceAccessor.create(input);
 
@@ -132,11 +130,13 @@ export const workspaceRouter = router({
     }),
 
   // Delete a workspace
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const { runScriptService, sessionService, terminalService } = ctx.appContext.services;
+    const logger = getLogger(ctx);
     // Clean up running sessions, terminals, and dev processes before deleting
     try {
       await sessionService.stopWorkspaceSessions(input.id);
-      await RunScriptService.stopRunScript(input.id);
+      await runScriptService.stopRunScript(input.id);
       terminalService.destroyWorkspaceTerminals(input.id);
     } catch (error) {
       logger.error('Failed to cleanup workspace resources before delete', {
