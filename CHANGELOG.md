@@ -5,6 +5,39 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-02-02
+
+### Added
+
+- Undo support via rewind_files control request (#484)
+- CI monitoring service with automatic session notifications (#465)
+- Model usage and cost tracking to chat UI (#481)
+- Large paste and drag-drop attachment support (#480)
+- Keyboard shortcuts to chat bar (#497)
+- Option to toggle completion sound in admin settings (#483)
+
+### Changed
+
+- Align sidebar workspace rows (#505)
+- Align review UI with chat styling (#501)
+- Unify New Workspace button behavior across UI (#474)
+- Remove icon from Dev Logs tab, keep connection status dot (#482)
+
+### Fixed
+
+- Fix initial slash command loading (#509)
+- Fix compaction flow and queue handling (#504)
+- Fix assorted code review feedback (#510)
+- Fix migration checksum handling (#499)
+- Make WS session logging async and dev-only (#496)
+- Fix PR merged state not showing in UI (#489)
+- Fix workspace header controls layout consistency (#478)
+- Fix session tab close requiring double-click (#477)
+
+### Documentation
+
+- Add agents guide and align contributing (#488)
+
 ## [0.1.4] - 2026-02-02
 
 ### Added
