@@ -1,4 +1,4 @@
-import type { ServerInstance } from '@/backend/server';
+import type { ServerInstance } from '@/backend/types/server-instance';
 
 /**
  * Server Instance Service

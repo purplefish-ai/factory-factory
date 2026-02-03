@@ -14,7 +14,6 @@
  */
 
 import { existsSync } from 'node:fs';
-import type { Server as HttpServer } from 'node:http';
 import { createServer as createHttpServer } from 'node:http';
 import { join } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
@@ -22,6 +21,7 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
 import { type AppContext, createAppContext } from './app-context';
+import type { ServerInstance } from './types/server-instance';
 import { prisma } from './db';
 import { registerInterceptors } from './interceptors';
 import {
@@ -41,19 +41,7 @@ import {
 import { reconciliationService } from './services/reconciliation.service';
 import { appRouter, createContext } from './trpc/index';
 
-/**
- * Server instance returned by createServer()
- */
-export interface ServerInstance {
-  /** Start the server and return the URL */
-  start(): Promise<string>;
-  /** Stop the server gracefully */
-  stop(): Promise<void>;
-  /** Get the actual port the server is listening on */
-  getPort(): number;
-  /** Get the HTTP server instance (for Electron to monitor) */
-  getHttpServer(): HttpServer;
-}
+export type { ServerInstance };
 
 /**
  * Create and configure the backend server.
