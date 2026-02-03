@@ -1,7 +1,12 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import pLimit from 'p-limit';
 import { z } from 'zod';
+import { GitClientFactory } from '../clients/git.client';
 import { getWorkspaceGitStats } from '../lib/git-helpers';
+import { gitCommand } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from '../services/factory-config.service';
@@ -17,6 +22,7 @@ import { workspaceGitRouter } from './workspace/git.trpc';
 import { workspaceIdeRouter } from './workspace/ide.trpc';
 import { initializeWorkspaceWorktree, workspaceInitRouter } from './workspace/init.trpc';
 import { workspaceRunScriptRouter } from './workspace/run-script.trpc';
+import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 
 // Re-export types for backward compatibility
 export type { GitFileStatus, GitStatusFile } from '../lib/git-helpers';
@@ -33,6 +39,127 @@ const gitConcurrencyLimit = pLimit(DEFAULT_GIT_CONCURRENCY);
 // Cache for GitHub review requests (expensive API call)
 let cachedReviewCount: { count: number; fetchedAt: number } | null = null;
 const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
+
+type WorkspaceWithProject = Awaited<ReturnType<typeof getWorkspaceWithProjectOrThrow>>;
+
+interface WorktreeCleanupOptions {
+  commitUncommitted: boolean;
+}
+
+function getProjectOrThrow(workspace: WorkspaceWithProject) {
+  const project = workspace.project;
+  if (!(project?.repoPath && project.worktreeBasePath)) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Workspace project paths are missing',
+    });
+  }
+  return project;
+}
+
+function assertWorktreePathSafe(worktreePath: string, worktreeBasePath: string): void {
+  const resolvedWorktreePath = path.resolve(worktreePath);
+  const resolvedBasePath = path.resolve(worktreeBasePath);
+  const basePrefix = `${resolvedBasePath}${path.sep}`;
+
+  if (resolvedWorktreePath === resolvedBasePath || !resolvedWorktreePath.startsWith(basePrefix)) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Workspace worktree path is outside the worktree base directory',
+    });
+  }
+}
+
+function pathExists(targetPath: string): Promise<boolean> {
+  return fs
+    .stat(targetPath)
+    .then(() => true)
+    .catch(() => false);
+}
+
+async function commitIfNeeded(
+  worktreePath: string,
+  workspaceName: string,
+  commitUncommitted: boolean
+): Promise<void> {
+  const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
+  if (statusResult.code !== 0) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: `Git status failed: ${statusResult.stderr || statusResult.stdout}`,
+    });
+  }
+
+  if (statusResult.stdout.trim().length === 0) {
+    return;
+  }
+
+  if (!commitUncommitted) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'Workspace has uncommitted changes. Enable commit-before-archive to proceed.',
+    });
+  }
+
+  const addResult = await gitCommand(['add', '-A'], worktreePath);
+  if (addResult.code !== 0) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: `Git add failed: ${addResult.stderr || addResult.stdout}`,
+    });
+  }
+
+  const commitMessage = `Archive workspace ${workspaceName}`;
+  const commitResult = await gitCommand(['commit', '-m', commitMessage], worktreePath);
+  if (commitResult.code !== 0) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: `Git commit failed: ${commitResult.stderr || commitResult.stdout}`,
+    });
+  }
+}
+
+async function removeWorktree(
+  worktreePath: string,
+  project: { repoPath: string; worktreeBasePath: string }
+): Promise<void> {
+  const gitClient = GitClientFactory.forProject({
+    repoPath: project.repoPath,
+    worktreeBasePath: project.worktreeBasePath,
+  });
+  const worktreeName = path.basename(worktreePath);
+
+  const registeredWorktree = await gitClient.checkWorktreeExists(worktreeName);
+  if (registeredWorktree) {
+    await gitClient.deleteWorktree(worktreeName);
+    return;
+  }
+
+  if (await pathExists(worktreePath)) {
+    await fs.rm(worktreePath, { recursive: true, force: true });
+  }
+}
+
+async function cleanupWorkspaceWorktree(
+  workspace: WorkspaceWithProject,
+  options: WorktreeCleanupOptions
+): Promise<void> {
+  const worktreePath = workspace.worktreePath;
+  if (!worktreePath) {
+    return;
+  }
+
+  const project = getProjectOrThrow(workspace);
+  assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
+
+  const worktreeExists = await pathExists(worktreePath);
+  if (!worktreeExists) {
+    return;
+  }
+
+  await commitIfNeeded(worktreePath, workspace.name, options.commitUncommitted);
+  await removeWorktree(worktreePath, project);
+}
 
 // =============================================================================
 // Router
@@ -262,19 +389,41 @@ export const workspaceRouter = router({
     }),
 
   // Archive a workspace
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    // Clean up running sessions and terminals before archiving
-    try {
-      await sessionService.stopWorkspaceSessions(input.id);
-      terminalService.destroyWorkspaceTerminals(input.id);
-    } catch (error) {
-      logger.error('Failed to cleanup workspace resources before archive', {
-        workspaceId: input.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-    return workspaceStateMachine.archive(input.id);
-  }),
+  archive: publicProcedure
+    .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))
+    .mutation(async ({ input }) => {
+      const workspace = await getWorkspaceWithProjectOrThrow(input.id);
+      if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVED')) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Cannot archive workspace from status: ${workspace.status}`,
+        });
+      }
+
+      // Clean up running sessions and terminals before archiving
+      try {
+        await sessionService.stopWorkspaceSessions(input.id);
+        terminalService.destroyWorkspaceTerminals(input.id);
+      } catch (error) {
+        logger.error('Failed to cleanup workspace resources before archive', {
+          workspaceId: input.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      try {
+        await cleanupWorkspaceWorktree(workspace, {
+          commitUncommitted: input.commitUncommitted ?? true,
+        });
+      } catch (error) {
+        logger.error('Failed to cleanup workspace worktree before archive', {
+          workspaceId: input.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+      return workspaceStateMachine.archive(input.id);
+    }),
 
   // Delete a workspace
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
