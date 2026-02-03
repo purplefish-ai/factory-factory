@@ -265,6 +265,8 @@ class MessageStateService {
     const sessionCount = this.stateMachine.getSessionCount();
     this.stateMachine.clearAllSessions();
     this.eventStore.clearAllSessions();
+    // Test isolation: ensure no lingering domain listeners.
+    this.emitter.removeAllListeners('event');
     if (sessionCount && sessionCount > 0) {
       logger.info('All sessions cleared', { clearedCount: sessionCount });
     }
