@@ -92,4 +92,28 @@ export const userSettingsRouter = router({
         );
       }
     }),
+
+  /**
+   * Get workspace order for a project
+   */
+  getWorkspaceOrder: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input }) => {
+      return await userSettingsAccessor.getWorkspaceOrder(input.projectId);
+    }),
+
+  /**
+   * Update workspace order for a project
+   */
+  updateWorkspaceOrder: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        workspaceIds: z.array(z.string()),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await userSettingsAccessor.updateWorkspaceOrder(input.projectId, input.workspaceIds);
+      return { success: true };
+    }),
 });

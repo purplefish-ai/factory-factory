@@ -1,14 +1,31 @@
 import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   Archive,
   CheckCircle2,
   ExternalLink,
   GitPullRequest,
+  GripVertical,
   Kanban,
   Loader2,
   Plus,
   Settings,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -151,6 +168,12 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const serverWorkspaces = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
 
+  // Fetch workspace order for the selected project
+  const { data: workspaceOrder } = trpc.userSettings.getWorkspaceOrder.useQuery(
+    { projectId: selectedProjectId ?? '' },
+    { enabled: !!selectedProjectId && !isMocked }
+  );
+
   const utils = trpc.useUtils();
 
   // Sync PR statuses from GitHub once when project changes
@@ -179,7 +202,79 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     cancelCreating,
     startArchiving,
     cancelArchiving,
-  } = useWorkspaceListState(serverWorkspaces);
+  } = useWorkspaceListState(serverWorkspaces, {
+    customOrder: isMocked ? undefined : workspaceOrder,
+  });
+
+  // Mutation to update workspace order with optimistic updates
+  const updateWorkspaceOrder = trpc.userSettings.updateWorkspaceOrder.useMutation({
+    onMutate: async ({ projectId, workspaceIds }) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await utils.userSettings.getWorkspaceOrder.cancel({ projectId });
+
+      // Snapshot the previous value
+      const previousOrder = utils.userSettings.getWorkspaceOrder.getData({ projectId });
+
+      // Optimistically update to the new value
+      utils.userSettings.getWorkspaceOrder.setData({ projectId }, workspaceIds);
+
+      // Return context with the previous value for rollback
+      return { previousOrder };
+    },
+    onError: (_error, { projectId }, context) => {
+      // Roll back to the previous value on error
+      if (context?.previousOrder !== undefined) {
+        utils.userSettings.getWorkspaceOrder.setData({ projectId }, context.previousOrder);
+      }
+      // Refetch to ensure we're in sync with server after error
+      utils.userSettings.getWorkspaceOrder.invalidate({ projectId });
+    },
+  });
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px of movement before starting drag
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end - persist new order
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!over || active.id === over.id || !selectedProjectId) {
+        return;
+      }
+
+      // Get current workspace IDs (excluding creating placeholder)
+      const currentIds = workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id);
+
+      const oldIndex = currentIds.indexOf(active.id as string);
+      const newIndex = currentIds.indexOf(over.id as string);
+
+      if (oldIndex === -1 || newIndex === -1) {
+        return;
+      }
+
+      // Reorder the array
+      const newOrder = [...currentIds];
+      newOrder.splice(oldIndex, 1);
+      newOrder.splice(newIndex, 0, active.id as string);
+
+      // Persist the new order
+      updateWorkspaceOrder.mutate({
+        projectId: selectedProjectId,
+        workspaceIds: newOrder,
+      });
+    },
+    [workspaceList, selectedProjectId, updateWorkspaceOrder]
+  );
 
   const createWorkspace = trpc.workspace.create.useMutation();
   const archiveWorkspace = trpc.workspace.archive.useMutation({
@@ -361,123 +456,53 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
               </button>
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
-              <SidebarMenu className="gap-0 divide-y divide-sidebar-border/60">
-                {workspaceList.map((workspace) => {
-                  const isCreatingItem = workspace.uiState === 'creating';
-                  const isArchivingItem = workspace.uiState === 'archiving';
-                  const isActive = currentWorkspaceId === workspace.id;
-                  const { gitStats: stats } = workspace;
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <SidebarMenu className="gap-0 divide-y divide-sidebar-border/60">
+                    {workspaceList.map((workspace) => {
+                      const isCreatingItem = workspace.uiState === 'creating';
 
-                  // Creating placeholder - non-clickable
-                  if (isCreatingItem) {
-                    return (
-                      <SidebarMenuItem key={workspace.id}>
-                        <SidebarMenuButton size="lg" className="px-2 cursor-default">
-                          <div className="flex items-center gap-2 w-full min-w-0">
-                            <Loader2 className="h-2 w-2 shrink-0 text-muted-foreground animate-spin" />
-                            <span className="truncate text-sm text-muted-foreground">
-                              Creating...
-                            </span>
-                          </div>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  }
-
-                  return (
-                    <SidebarMenuItem key={workspace.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActive}
-                        className={cn(
-                          'h-auto px-2 py-2.5',
-                          isArchivingItem && 'opacity-50 pointer-events-none'
-                        )}
-                      >
-                        <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
-                          <div className="flex w-full min-w-0 items-start gap-2">
-                            {/* Status dot */}
-                            <span className="w-4 shrink-0 flex justify-center mt-2">
-                              {isArchivingItem ? (
-                                <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
-                              ) : (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span
-                                      className={cn(
-                                        'h-2 w-2 rounded-full',
-                                        getStatusDotClass(workspace)
-                                      )}
-                                    />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right">
-                                    {getStatusTooltip(workspace)}
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </span>
-
-                            <div className="min-w-0 flex-1 space-y-0">
-                              {/* Row 1: name + timestamp + archive */}
-                              <div className="flex items-center gap-2">
-                                <span className="truncate font-medium text-sm leading-tight flex-1">
-                                  {isArchivingItem ? 'Archiving...' : workspace.name}
+                      // Creating placeholder - non-clickable, not sortable
+                      if (isCreatingItem) {
+                        return (
+                          <SidebarMenuItem key={workspace.id}>
+                            <SidebarMenuButton size="lg" className="px-2 cursor-default">
+                              <div className="flex items-center gap-2 w-full min-w-0">
+                                <Loader2 className="h-2 w-2 shrink-0 text-muted-foreground animate-spin" />
+                                <span className="truncate text-sm text-muted-foreground">
+                                  Creating...
                                 </span>
-                                {workspace.lastActivityAt && (
-                                  <span className="shrink-0 text-xs text-muted-foreground">
-                                    {formatRelativeTime(workspace.lastActivityAt)}
-                                  </span>
-                                )}
-                                {/* Archive button (hover for non-merged, always visible for merged PRs) */}
-                                {!isArchivingItem && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          handleArchiveRequest(workspace);
-                                        }}
-                                        className={cn(
-                                          'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
-                                          workspace.prState === 'MERGED'
-                                            ? 'opacity-100 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25'
-                                            : workspace.prState === 'CLOSED'
-                                              ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
-                                              : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent'
-                                        )}
-                                      >
-                                        <Archive className="h-3 w-3" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right">Archive</TooltipContent>
-                                  </Tooltip>
-                                )}
                               </div>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      }
 
-                              {/* Row 2: branch name */}
-                              {!isArchivingItem && workspace.branchName && (
-                                <div className="truncate text-[11px] leading-tight text-muted-foreground font-mono">
-                                  {workspace.branchName}
-                                </div>
-                              )}
-
-                              {/* Row 3: files changed + deltas + PR */}
-                              <WorkspaceMetaRow workspace={workspace} stats={stats} />
-                            </div>
-                          </div>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-                {workspaceList.length === 0 && (
-                  <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                    No active workspaces
-                  </div>
-                )}
-              </SidebarMenu>
+                      return (
+                        <SortableWorkspaceItem
+                          key={workspace.id}
+                          workspace={workspace}
+                          isActive={currentWorkspaceId === workspace.id}
+                          selectedProjectSlug={selectedProjectSlug}
+                          onArchiveRequest={handleArchiveRequest}
+                        />
+                      );
+                    })}
+                    {workspaceList.length === 0 && (
+                      <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                        No active workspaces
+                      </div>
+                    )}
+                  </SidebarMenu>
+                </SortableContext>
+              </DndContext>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
@@ -547,6 +572,124 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         }}
       />
     </Sidebar>
+  );
+}
+
+/**
+ * Sortable workspace item component for drag and drop reordering
+ */
+function SortableWorkspaceItem({
+  workspace,
+  isActive,
+  selectedProjectSlug,
+  onArchiveRequest,
+}: {
+  workspace: WorkspaceListItem;
+  isActive: boolean;
+  selectedProjectSlug: string;
+  onArchiveRequest: (workspace: WorkspaceListItem) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: workspace.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const isArchivingItem = workspace.uiState === 'archiving';
+  const { gitStats: stats } = workspace;
+
+  return (
+    <SidebarMenuItem ref={setNodeRef} style={style}>
+      <SidebarMenuButton
+        asChild
+        isActive={isActive}
+        className={cn(
+          'h-auto px-2 py-2.5',
+          isArchivingItem && 'opacity-50 pointer-events-none',
+          isDragging && 'opacity-50 bg-sidebar-accent'
+        )}
+      >
+        <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
+          <div className="flex w-full min-w-0 items-start gap-2">
+            {/* Drag handle */}
+            <span
+              className="w-4 shrink-0 flex justify-center mt-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-3 w-3" />
+            </span>
+
+            {/* Status dot */}
+            <span className="w-4 shrink-0 flex justify-center mt-2">
+              {isArchivingItem ? (
+                <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
+                </Tooltip>
+              )}
+            </span>
+
+            <div className="min-w-0 flex-1 space-y-0">
+              {/* Row 1: name + timestamp + archive */}
+              <div className="flex items-center gap-2">
+                <span className="truncate font-medium text-sm leading-tight flex-1">
+                  {isArchivingItem ? 'Archiving...' : workspace.name}
+                </span>
+                {workspace.lastActivityAt && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatRelativeTime(workspace.lastActivityAt)}
+                  </span>
+                )}
+                {/* Archive button (hover for non-merged, always visible for merged PRs) */}
+                {!isArchivingItem && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onArchiveRequest(workspace);
+                        }}
+                        className={cn(
+                          'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
+                          workspace.prState === 'MERGED'
+                            ? 'opacity-100 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25'
+                            : workspace.prState === 'CLOSED'
+                              ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
+                              : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent'
+                        )}
+                      >
+                        <Archive className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Archive</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+
+              {/* Row 2: branch name */}
+              {!isArchivingItem && workspace.branchName && (
+                <div className="truncate text-[11px] leading-tight text-muted-foreground font-mono">
+                  {workspace.branchName}
+                </div>
+              )}
+
+              {/* Row 3: files changed + deltas + PR */}
+              <WorkspaceMetaRow workspace={workspace} stats={stats} />
+            </div>
+          </div>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
 
