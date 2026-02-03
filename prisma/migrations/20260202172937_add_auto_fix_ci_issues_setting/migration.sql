@@ -7,6 +7,7 @@ CREATE TABLE "new_UserSettings" (
     "preferredIde" TEXT NOT NULL DEFAULT 'cursor',
     "customIdeCommand" TEXT,
     "notificationSoundPath" TEXT,
+    "playSoundOnComplete" BOOLEAN NOT NULL DEFAULT true,
     "autoFixCiIssues" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
