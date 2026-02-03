@@ -1,0 +1,31 @@
+import type { ChatMessage, ClaudeMessage } from '@/lib/claude-types';
+import { generateMessageId, handleClaudeMessage } from '../../helpers';
+import type { ChatAction, ChatState } from '../../types';
+
+export function reduceMessageTransportSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'WS_CLAUDE_MESSAGE':
+      return handleClaudeMessage(state, action.payload.message, action.payload.order);
+    case 'WS_ERROR': {
+      const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
+      const errorMsg: ClaudeMessage = {
+        type: 'error',
+        error: action.payload.message,
+        timestamp: new Date().toISOString(),
+      };
+      const errorChatMessage: ChatMessage = {
+        id: generateMessageId(),
+        source: 'claude',
+        message: errorMsg,
+        timestamp: new Date().toISOString(),
+        order: maxOrder + 1,
+      };
+      return {
+        ...state,
+        messages: [...state.messages, errorChatMessage],
+      };
+    }
+    default:
+      return state;
+  }
+}
