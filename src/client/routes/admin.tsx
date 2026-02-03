@@ -676,6 +676,17 @@ function CiSettingsSection() {
     },
   });
 
+  const triggerCICheck = trpc.admin.triggerCICheck.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `CI check completed: ${result.checked} checked, ${result.failures} failures, ${result.notified} notified`
+      );
+    },
+    onError: (error) => {
+      toast.error(`Failed to trigger CI check: ${error.message}`);
+    },
+  });
+
   if (isLoading) {
     return (
       <Card>
@@ -719,6 +730,35 @@ function CiSettingsSection() {
             }}
             disabled={updateSettings.isPending}
           />
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Manual CI Check</Label>
+              <p className="text-sm text-muted-foreground">
+                Manually trigger CI status check for all workspaces with PRs
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => triggerCICheck.mutate()}
+              disabled={triggerCICheck.isPending}
+            >
+              {triggerCICheck.isPending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Trigger CI Check
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
