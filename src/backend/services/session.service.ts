@@ -132,6 +132,16 @@ class SessionService {
       model?: string;
     }
   ): Promise<ClaudeClient> {
+    const existing = this.processManager.getClient(sessionId);
+    if (existing) {
+      return existing;
+    }
+
+    const pending = this.processManager.getPendingClient(sessionId);
+    if (pending) {
+      return pending;
+    }
+
     const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
       thinkingEnabled: options?.thinkingEnabled,
       permissionMode: options?.permissionMode,

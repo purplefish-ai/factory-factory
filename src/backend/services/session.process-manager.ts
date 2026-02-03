@@ -70,6 +70,10 @@ export class SessionProcessManager {
     return client?.isRunning() ? client : undefined;
   }
 
+  getPendingClient(sessionId: string): Promise<ClaudeClient> | undefined {
+    return this.pendingCreation.get(sessionId);
+  }
+
   async createClient(
     sessionId: string,
     options: ClaudeClientOptions,

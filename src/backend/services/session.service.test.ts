@@ -38,6 +38,7 @@ vi.mock('./session.process-manager', () => ({
     createClient: vi.fn(),
     getOrCreateClient: vi.fn(),
     getClient: vi.fn(),
+    getPendingClient: vi.fn(),
     stopClient: vi.fn(),
     getClaudeProcess: vi.fn(),
     isSessionRunning: vi.fn(),
@@ -124,6 +125,36 @@ describe('SessionService', () => {
       status: SessionStatus.RUNNING,
       claudeProcessPid: 123,
     });
+  });
+
+  it('returns existing client without loading options', async () => {
+    const client = { isRunning: vi.fn().mockReturnValue(true) } as unknown as Awaited<
+      ReturnType<typeof sessionProcessManager.getClient>
+    >;
+
+    vi.mocked(sessionProcessManager.getClient).mockReturnValue(client);
+
+    const result = await sessionService.getOrCreateClient('session-1');
+
+    expect(result).toBe(client);
+    expect(sessionProcessManager.getOrCreateClient).not.toHaveBeenCalled();
+    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
+  });
+
+  it('returns pending client creation without loading options', async () => {
+    const client = { isRunning: vi.fn().mockReturnValue(true) } as unknown as Awaited<
+      ReturnType<typeof sessionProcessManager.getOrCreateClient>
+    >;
+    const pending = Promise.resolve(client);
+
+    vi.mocked(sessionProcessManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionProcessManager.getPendingClient).mockReturnValue(pending);
+
+    const result = await sessionService.getOrCreateClient('session-1');
+
+    expect(result).toBe(client);
+    expect(sessionProcessManager.getOrCreateClient).not.toHaveBeenCalled();
+    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
   });
 
   it('returns null session options when workspace is missing', async () => {
