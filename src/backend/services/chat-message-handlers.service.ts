@@ -9,17 +9,20 @@
  */
 
 import type { WebSocket } from 'ws';
-import { DEFAULT_THINKING_BUDGET, MessageState } from '@/lib/claude-types';
+import { DEFAULT_THINKING_BUDGET, MessageState } from '@/shared/claude-protocol';
+import type { ChatMessageInput } from '@/shared/websocket';
 import type { ClaudeClient } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
-import type { ChatMessageInput } from '../schemas/websocket';
 import { chatConnectionService } from './chat-connection.service';
-import { DEBUG_CHAT_WS, logger } from './chat-message-handlers/constants';
+import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
 import type { ClientCreator } from './chat-message-handlers/types';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
 import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
+import { createLogger } from './logger.service';
+
+const logger = createLogger('chat-message-handlers');
 
 // ============================================================================
 // Types

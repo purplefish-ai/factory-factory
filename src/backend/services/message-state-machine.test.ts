@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { HistoryMessage, QueuedMessage } from '@/lib/claude-types';
-import { MessageState } from '@/lib/claude-types';
+import type { HistoryMessage, QueuedMessage } from '@/shared/claude-protocol';
+import { MessageState } from '@/shared/claude-protocol';
 import { isValidTransition, MessageStateMachine } from './message-state-machine';
 
 function createTestQueuedMessage(id: string, text = 'Test message'): QueuedMessage {

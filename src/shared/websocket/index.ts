@@ -1,10 +1,8 @@
-/**
- * Re-exports all WebSocket message schemas and types.
- */
-
 export {
+  AttachmentSchema,
   type ChatMessageInput,
   ChatMessageSchema,
+  ChatSettingsSchema,
   type PermissionResponseMessage,
   type QuestionResponseMessage,
   type QueueMessageInput,
@@ -13,10 +11,6 @@ export {
   type SetModelMessage,
   type SetThinkingBudgetMessage,
   type StartMessageInput,
+  type StopMessage,
   type UserInputMessage,
-} from '@/shared/websocket';
-
-export {
-  type TerminalMessageInput,
-  TerminalMessageSchema,
-} from './terminal-message.schema';
+} from './chat-message.schema';
