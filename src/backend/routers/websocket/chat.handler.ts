@@ -23,6 +23,7 @@ import { type ConnectionInfo, chatConnectionService } from '../../services/chat-
 import { chatEventForwarderService } from '../../services/chat-event-forwarder.service';
 import { chatMessageHandlerService } from '../../services/chat-message-handlers.service';
 import {
+  chatTransportAdapterService,
   configService,
   createLogger,
   messageStateService,
@@ -223,6 +224,9 @@ export function handleChatUpgrade(
   wss: WebSocketServer,
   wsAliveMap: WeakMap<WebSocket, boolean>
 ): void {
+  // Ensure message state events are forwarded over WebSocket transport.
+  chatTransportAdapterService.setup();
+
   const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
   const dbSessionId = url.searchParams.get('sessionId') || null;
   const rawWorkingDir = url.searchParams.get('workingDir');

@@ -10,6 +10,8 @@ export { type ConnectionInfo, chatConnectionService } from './chat-connection.se
 export { chatEventForwarderService } from './chat-event-forwarder.service';
 // Chat message handlers service
 export { type ChatMessage, chatMessageHandlerService } from './chat-message-handlers.service';
+// Chat transport adapter service
+export { chatTransportAdapterService } from './chat-transport-adapter.service';
 // CI fixer service
 export { type CIFailureDetails, type CIFixResult, ciFixerService } from './ci-fixer.service';
 // CI monitor service

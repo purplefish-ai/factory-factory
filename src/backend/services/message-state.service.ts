@@ -5,7 +5,7 @@
  * This service tracks all messages (user and Claude) with their states, providing:
  * - Unified message storage per session
  * - State transitions with validation
- * - State change notifications via WebSocket
+ * - State change notifications via domain events
  *
  * User message flow:
  *   PENDING → SENT → ACCEPTED → DISPATCHED → COMMITTED
@@ -15,6 +15,7 @@
  *   STREAMING → COMPLETE
  */
 
+import { EventEmitter } from 'node:events';
 import {
   type ChatMessage,
   type HistoryMessage,
@@ -25,7 +26,6 @@ import {
   type SessionStatus,
   type UserMessageWithState,
 } from '@/shared/claude';
-import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
 import { MessageEventStore } from './message-event-store';
 import { isValidTransition, MessageStateMachine } from './message-state-machine';
@@ -36,9 +36,55 @@ const logger = createLogger('message-state-service');
 // MessageStateService Class
 // =============================================================================
 
+export type MessageStateEvent =
+  | {
+      type: 'message_state_changed';
+      sessionId: string;
+      data: {
+        id: string;
+        newState: MessageState;
+        queuePosition?: number;
+        errorMessage?: string;
+        userMessage?: {
+          text: string;
+          timestamp: string;
+          attachments?: UserMessageWithState['attachments'];
+          settings: UserMessageWithState['settings'];
+          order: number;
+        };
+      };
+    }
+  | {
+      type: 'messages_snapshot';
+      sessionId: string;
+      data: {
+        messages: ChatMessage[];
+        sessionStatus: SessionStatus;
+        pendingInteractiveRequest?: {
+          requestId: string;
+          toolName: string;
+          input: Record<string, unknown>;
+          planContent?: string | null;
+          timestamp: string;
+        } | null;
+      };
+    };
+
 class MessageStateService {
   private stateMachine = new MessageStateMachine();
   private eventStore = new MessageEventStore();
+  private emitter = new EventEmitter();
+
+  onEvent(listener: (event: MessageStateEvent) => void): () => void {
+    this.emitter.on('event', listener);
+    return () => {
+      this.emitter.off('event', listener);
+    };
+  }
+
+  hasEventListener(listener: (event: MessageStateEvent) => void): boolean {
+    return this.emitter.listeners('event').includes(listener);
+  }
 
   /**
    * Allocate and return the next order number for a session.
@@ -223,6 +269,8 @@ class MessageStateService {
     const sessionCount = this.stateMachine.getSessionCount();
     this.stateMachine.clearAllSessions();
     this.eventStore.clearAllSessions();
+    // Test isolation: ensure no lingering domain listeners.
+    this.emitter.removeAllListeners('event');
     if (sessionCount && sessionCount > 0) {
       logger.info('All sessions cleared', { clearedCount: sessionCount });
     }
@@ -277,7 +325,7 @@ class MessageStateService {
   }
 
   /**
-   * Send a full messages snapshot to all connections for a session.
+   * Emit a full messages snapshot event for a session.
    * Used on initial connect and reconnect to synchronize client state.
    *
    * Flattens user messages and Claude chatMessages into a single ChatMessage[]
@@ -326,12 +374,15 @@ class MessageStateService {
       }
     }
 
-    chatConnectionService.forwardToSession(sessionId, {
+    this.emitter.emit('event', {
       type: 'messages_snapshot',
-      messages: chatMessages,
-      sessionStatus,
-      pendingInteractiveRequest,
-    });
+      sessionId,
+      data: {
+        messages: chatMessages,
+        sessionStatus,
+        pendingInteractiveRequest,
+      },
+    } satisfies MessageStateEvent);
 
     // After sending snapshot, send MESSAGE_STATE_CHANGED events for any queued messages
     // (messages in ACCEPTED state). This allows the frontend to repopulate its queuedMessages
@@ -394,14 +445,17 @@ class MessageStateService {
           }
         : undefined;
 
-    chatConnectionService.forwardToSession(sessionId, {
+    this.emitter.emit('event', {
       type: 'message_state_changed',
-      id: message.id,
-      newState: message.state as MessageState,
-      queuePosition,
-      errorMessage,
-      userMessage,
-    });
+      sessionId,
+      data: {
+        id: message.id,
+        newState: message.state as MessageState,
+        queuePosition,
+        errorMessage,
+        userMessage,
+      },
+    } satisfies MessageStateEvent);
   }
 }
 
