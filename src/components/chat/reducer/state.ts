@@ -79,11 +79,13 @@ function createSessionSwitchResetState(): Pick<
   | 'messageIdToUuid'
   | 'localUserMessageIds'
   | 'rewindPreview'
+  | 'processStatus'
 > {
   return {
     ...createBaseResetState(),
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
+    processStatus: { state: 'unknown' },
     slashCommands: [], // Clear for new session - will be sent when Claude starts
     slashCommandsLoaded: false,
   };
@@ -93,6 +95,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
   return {
     messages: [],
     sessionStatus: { phase: 'loading' },
+    processStatus: { state: 'unknown' },
     gitBranch: null,
     availableSessions: [],
     pendingRequest: { type: 'none' },

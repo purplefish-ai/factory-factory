@@ -145,21 +145,24 @@ function getInitialStatus(dbSessionId: string | null): {
   type: 'status';
   dbSessionId: string | null;
   running: boolean;
+  processAlive: boolean;
 } {
   const client = dbSessionId ? sessionService.getClient(dbSessionId) : null;
   const isRunning = client?.isWorking() ?? false;
+  const processAlive = client?.isRunning() ?? false;
 
   return {
     type: 'status',
     dbSessionId,
     running: isRunning,
+    processAlive,
   };
 }
 
 function sendInitialStatus(
   ws: WebSocket,
   dbSessionId: string | null
-): { type: 'status'; dbSessionId: string | null; running: boolean } {
+): { type: 'status'; dbSessionId: string | null; running: boolean; processAlive: boolean } {
   const initialStatus = getInitialStatus(dbSessionId);
   if (dbSessionId) {
     sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);

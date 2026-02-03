@@ -58,6 +58,15 @@ export type SessionStatus =
   | { phase: 'running' }
   | { phase: 'stopping' };
 
+export interface ProcessStatus {
+  state: 'unknown' | 'alive' | 'stopped';
+  lastExit?: {
+    code: number | null;
+    exitedAt: string;
+    unexpected: boolean;
+  };
+}
+
 /** Tool progress tracking for long-running tool executions */
 export interface ToolProgressInfo {
   toolName: string;
@@ -95,6 +104,8 @@ export interface ChatState {
    * Replaces separate running, stopping, loadingSession, and startingSession booleans.
    */
   sessionStatus: SessionStatus;
+  /** Claude process lifecycle status (alive vs stopped) */
+  processStatus: ProcessStatus;
   /** Current git branch for the session */
   gitBranch: string | null;
   /** Available Claude CLI sessions */
@@ -172,10 +183,11 @@ export interface ChatState {
 
 export type ChatAction =
   // WebSocket message actions
-  | { type: 'WS_STATUS'; payload: { running: boolean } }
+  | { type: 'WS_STATUS'; payload: { running: boolean; processAlive?: boolean } }
   | { type: 'WS_STARTING' }
   | { type: 'WS_STARTED' }
   | { type: 'WS_STOPPED' }
+  | { type: 'WS_PROCESS_EXIT'; payload: { code: number | null } }
   | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order: number } }
   | { type: 'WS_ERROR'; payload: { message: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }

@@ -511,6 +511,8 @@ export interface WebSocketMessage {
   sessionId?: string;
   dbSessionId?: string;
   running?: boolean;
+  /** Whether the Claude process is alive (even if idle) */
+  processAlive?: boolean;
   message?: string;
   code?: number;
   data?: unknown;
