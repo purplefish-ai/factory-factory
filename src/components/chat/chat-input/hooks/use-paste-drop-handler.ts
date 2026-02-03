@@ -1,4 +1,4 @@
-import type { ClipboardEvent, DragEvent } from 'react';
+import type { ClipboardEvent as ReactClipboardEvent, DragEvent as ReactDragEvent } from 'react';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -26,11 +26,103 @@ interface UsePasteDropHandlerOptions {
 }
 
 interface UsePasteDropHandlerReturn {
-  handlePaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
-  handleDrop: (event: DragEvent<HTMLTextAreaElement>) => void;
-  handleDragOver: (event: DragEvent<HTMLTextAreaElement>) => void;
-  handleDragLeave: (event: DragEvent<HTMLTextAreaElement>) => void;
+  handlePaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
+  handleDrop: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
+  handleDragOver: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
+  handleDragLeave: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
   isDragging: boolean;
+}
+
+interface FileProcessingResult {
+  attachment?: MessageAttachment;
+  error?: string;
+}
+
+function shouldConvertTextToAttachment(text: string | null): text is string {
+  return !!text && text.trim().length > 0 && isLargeText(text);
+}
+
+async function handleClipboardImagePaste(
+  event: ReactClipboardEvent<HTMLTextAreaElement>,
+  setAttachments: (
+    updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])
+  ) => void
+): Promise<void> {
+  try {
+    const { attachments: imageAttachments, errors } = await getClipboardImages(event.nativeEvent);
+    if (imageAttachments.length > 0) {
+      setAttachments((prev) => [...prev, ...imageAttachments]);
+    }
+    if (errors.length > 0) {
+      toast.error(errors.join('; '));
+      return;
+    }
+    if (imageAttachments.length === 0) {
+      toast.error('Could not paste image from clipboard');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to paste image';
+    toast.error(message);
+  }
+}
+
+async function processDroppedFile(file: File): Promise<FileProcessingResult> {
+  try {
+    if (isSupportedImageType(file.type)) {
+      const attachment = await fileToAttachment(file);
+      return { attachment };
+    }
+
+    if (isSupportedTextFile(file.name)) {
+      const attachment = await textFileToAttachment(file);
+      return { attachment };
+    }
+
+    return { error: `${file.name}: unsupported file type` };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { error: `${file.name}: ${message}` };
+  }
+}
+
+async function collectDroppedAttachments(files: FileList): Promise<{
+  attachments: MessageAttachment[];
+  errors: string[];
+}> {
+  const attachments: MessageAttachment[] = [];
+  const errors: string[] = [];
+
+  for (const file of Array.from(files)) {
+    const result = await processDroppedFile(file);
+    if (result.attachment) {
+      attachments.push(result.attachment);
+    }
+    if (result.error) {
+      errors.push(result.error);
+    }
+  }
+
+  return { attachments, errors };
+}
+
+async function handleFileDrop(
+  files: FileList,
+  setAttachments: (
+    updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])
+  ) => void
+): Promise<void> {
+  const { attachments: newAttachments, errors } = await collectDroppedAttachments(files);
+
+  if (newAttachments.length > 0) {
+    setAttachments((prev) => [...prev, ...newAttachments]);
+  }
+
+  if (errors.length > 0) {
+    const supportedExts = SUPPORTED_TEXT_EXTENSIONS.join(', ');
+    toast.error(
+      `Could not add ${errors.length} file(s): ${errors.join('; ')}\n\nSupported text files: ${supportedExts}`
+    );
+  }
 }
 
 /**
@@ -59,7 +151,7 @@ export function usePasteDropHandler({
    * - Small text falls through to default behavior
    */
   const handlePaste = useCallback(
-    (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
       if (disabled) {
         return;
       }
@@ -67,32 +159,13 @@ export function usePasteDropHandler({
       // Check for images first
       if (hasClipboardImages(event.nativeEvent)) {
         event.preventDefault();
-        // Wrap async logic to prevent unhandled promise rejections
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: error handling requires multiple conditional paths
-        (async () => {
-          try {
-            const { attachments: imageAttachments, errors } = await getClipboardImages(
-              event.nativeEvent
-            );
-            if (imageAttachments.length > 0) {
-              setAttachments((prev) => [...prev, ...imageAttachments]);
-            }
-            if (errors.length > 0) {
-              toast.error(errors.join('; '));
-            } else if (imageAttachments.length === 0) {
-              toast.error('Could not paste image from clipboard');
-            }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to paste image';
-            toast.error(message);
-          }
-        })();
+        void handleClipboardImagePaste(event, setAttachments);
         return;
       }
 
       // Check for large text (must have non-whitespace content)
       const text = getClipboardText(event.nativeEvent);
-      if (text && text.trim().length > 0 && isLargeText(text)) {
+      if (shouldConvertTextToAttachment(text)) {
         event.preventDefault();
         const attachment = textToAttachment(text);
         setAttachments((prev) => [...prev, attachment]);
@@ -111,7 +184,7 @@ export function usePasteDropHandler({
    * - Show error for unsupported file types
    */
   const handleDrop = useCallback(
-    (event: DragEvent<HTMLTextAreaElement>) => {
+    (event: ReactDragEvent<HTMLTextAreaElement>) => {
       event.preventDefault();
       setIsDragging(false);
 
@@ -124,40 +197,7 @@ export function usePasteDropHandler({
         return;
       }
 
-      // Wrap async logic to prevent unhandled promise rejections
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: drop handling requires multiple conditional paths
-      (async () => {
-        const newAttachments: MessageAttachment[] = [];
-        const errors: string[] = [];
-
-        for (const file of Array.from(files)) {
-          try {
-            if (isSupportedImageType(file.type)) {
-              const attachment = await fileToAttachment(file);
-              newAttachments.push(attachment);
-            } else if (isSupportedTextFile(file.name)) {
-              const attachment = await textFileToAttachment(file);
-              newAttachments.push(attachment);
-            } else {
-              errors.push(`${file.name}: unsupported file type`);
-            }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            errors.push(`${file.name}: ${message}`);
-          }
-        }
-
-        if (newAttachments.length > 0) {
-          setAttachments((prev) => [...prev, ...newAttachments]);
-        }
-
-        if (errors.length > 0) {
-          const supportedExts = SUPPORTED_TEXT_EXTENSIONS.join(', ');
-          toast.error(
-            `Could not add ${errors.length} file(s): ${errors.join('; ')}\n\nSupported text files: ${supportedExts}`
-          );
-        }
-      })();
+      void handleFileDrop(files, setAttachments);
     },
     [disabled, setAttachments]
   );
@@ -166,7 +206,7 @@ export function usePasteDropHandler({
    * Handle drag over to show visual feedback.
    */
   const handleDragOver = useCallback(
-    (event: DragEvent<HTMLTextAreaElement>) => {
+    (event: ReactDragEvent<HTMLTextAreaElement>) => {
       event.preventDefault();
       if (!disabled) {
         setIsDragging(true);
@@ -178,7 +218,7 @@ export function usePasteDropHandler({
   /**
    * Handle drag leave to hide visual feedback.
    */
-  const handleDragLeave = useCallback((event: DragEvent<HTMLTextAreaElement>) => {
+  const handleDragLeave = useCallback((event: ReactDragEvent<HTMLTextAreaElement>) => {
     event.preventDefault();
     setIsDragging(false);
   }, []);

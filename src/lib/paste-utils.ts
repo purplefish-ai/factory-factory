@@ -56,6 +56,58 @@ export interface ClipboardImagesResult {
   errors: string[];
 }
 
+interface ClipboardImageProcessingResult {
+  attachment?: MessageAttachment;
+  error?: string;
+}
+
+function getClipboardImageItems(items: DataTransferItemList): DataTransferItem[] {
+  return Array.from(items).filter(
+    (item) => item.type.startsWith('image/') && isSupportedImageType(item.type)
+  );
+}
+
+function buildClipboardImageName(file: File, itemType: string): string {
+  if (file.name) {
+    return file.name;
+  }
+
+  const extension = itemType.split('/')[1];
+  return `pasted-image-${Date.now()}.${extension}`;
+}
+
+async function processClipboardImageItem(
+  item: DataTransferItem
+): Promise<ClipboardImageProcessingResult> {
+  const file = item.getAsFile();
+  if (!file) {
+    return { error: `Could not extract image from clipboard (${item.type})` };
+  }
+
+  if (file.size > MAX_IMAGE_SIZE) {
+    const actualSize = formatFileSize(file.size);
+    const maxSize = formatFileSize(MAX_IMAGE_SIZE);
+    return { error: `Image too large: ${actualSize} (max ${maxSize})` };
+  }
+
+  try {
+    const base64 = await fileToBase64(file);
+    return {
+      attachment: {
+        id: generateAttachmentId(),
+        name: buildClipboardImageName(file, item.type),
+        type: item.type,
+        size: file.size,
+        data: base64,
+        contentType: 'image',
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { error: `Failed to read image: ${message}` };
+  }
+}
+
 /**
  * Extract images from clipboard and convert to MessageAttachments.
  * Uses partial success pattern - continues processing after individual failures,
@@ -63,7 +115,6 @@ export interface ClipboardImagesResult {
  *
  * @returns Object with `attachments` array and `errors` array
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: error collection requires multiple conditional paths
 export async function getClipboardImages(event: ClipboardEvent): Promise<ClipboardImagesResult> {
   const items = event.clipboardData?.items;
   if (!items) {
@@ -73,36 +124,14 @@ export async function getClipboardImages(event: ClipboardEvent): Promise<Clipboa
   const attachments: MessageAttachment[] = [];
   const errors: string[] = [];
 
-  for (const item of Array.from(items)) {
-    if (item.type.startsWith('image/') && isSupportedImageType(item.type)) {
-      const file = item.getAsFile();
-      if (!file) {
-        // Browser security or corrupted clipboard data prevented file extraction
-        errors.push(`Could not extract image from clipboard (${item.type})`);
-        continue;
-      }
-
-      if (file.size > MAX_IMAGE_SIZE) {
-        const actualSize = formatFileSize(file.size);
-        const maxSize = formatFileSize(MAX_IMAGE_SIZE);
-        errors.push(`Image too large: ${actualSize} (max ${maxSize})`);
-        continue;
-      }
-
-      try {
-        const base64 = await fileToBase64(file);
-        attachments.push({
-          id: generateAttachmentId(),
-          name: file.name || `pasted-image-${Date.now()}.${item.type.split('/')[1]}`,
-          type: item.type,
-          size: file.size,
-          data: base64,
-          contentType: 'image',
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        errors.push(`Failed to read image: ${message}`);
-      }
+  const imageItems = getClipboardImageItems(items);
+  for (const item of imageItems) {
+    const result = await processClipboardImageItem(item);
+    if (result.attachment) {
+      attachments.push(result.attachment);
+    }
+    if (result.error) {
+      errors.push(result.error);
     }
   }
 
