@@ -31,11 +31,7 @@ export const PRInboxItem = forwardRef<HTMLButtonElement, PRInboxItemProps>(funct
       ref={ref}
       onClick={onSelect}
       className={`cursor-pointer transition-all outline-none border px-3 py-2 rounded-md w-full max-w-full overflow-hidden text-left ${
-        isSelected
-          ? 'bg-muted border-border shadow-sm'
-          : isApproved
-            ? 'border-transparent hover:bg-muted/50'
-            : 'border-transparent hover:bg-muted/50'
+        isSelected ? 'bg-muted border-border shadow-sm' : 'border-transparent hover:bg-muted/50'
       }`}
     >
       <div className="flex items-start gap-2 w-full">

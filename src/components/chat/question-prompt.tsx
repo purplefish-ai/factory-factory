@@ -148,8 +148,6 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   // Reset state when question changes (new question arrives)
   useEffect(() => {
     if (!currentRequestId) {
-      setAnswers({});
-      setCurrentIndex(0);
       return;
     }
     setAnswers({});

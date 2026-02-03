@@ -39,8 +39,7 @@ export function InitializationOverlay({
 
   // Auto-scroll to bottom when new output arrives
   useEffect(() => {
-    if (scrollRef.current) {
-      void initOutput;
+    if (scrollRef.current && initOutput !== null) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [initOutput]);
