@@ -1,6 +1,8 @@
 import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { gitOpsService } from '../services/git-ops.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
 import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
@@ -83,6 +85,18 @@ export const workspaceRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
+      if (input.useExistingBranch) {
+        const project = await projectAccessor.findById(input.projectId);
+        if (!project) {
+          throw new Error(`Project not found: ${input.projectId}`);
+        }
+
+        const branchName = input.branchName ?? '';
+        const isCheckedOut = await gitOpsService.isBranchCheckedOut(project, branchName);
+        if (isCheckedOut) {
+          throw new Error(`Branch '${branchName}' is already checked out in another worktree.`);
+        }
+      }
       // Create the workspace record
       const workspace = await workspaceAccessor.create(input);
 

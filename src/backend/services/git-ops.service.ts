@@ -20,6 +20,16 @@ function pathExists(targetPath: string): Promise<boolean> {
 }
 
 class GitOpsService {
+  private normalizeBranchName(branchName: string): string {
+    if (branchName.startsWith('origin/')) {
+      return branchName.slice('origin/'.length);
+    }
+    if (branchName.startsWith('refs/heads/')) {
+      return branchName.slice('refs/heads/'.length);
+    }
+    return branchName;
+  }
+
   getWorkspaceGitStats(worktreePath: string, defaultBranch: string): Promise<WorkspaceGitStats> {
     return getWorkspaceGitStats(worktreePath, defaultBranch);
   }
@@ -110,9 +120,7 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const normalizedBranch = baseBranch.startsWith('origin/')
-      ? baseBranch.slice('origin/'.length)
-      : baseBranch;
+    const normalizedBranch = this.normalizeBranchName(baseBranch);
 
     const branchExists = await gitClient.branchExists(normalizedBranch);
     if (branchExists) {
@@ -158,6 +166,21 @@ class GitOpsService {
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
     return { worktreePath, branchName: worktreeInfo.branchName };
+  }
+
+  async isBranchCheckedOut(project: ProjectPaths, branchName: string): Promise<boolean> {
+    const gitClient = GitClientFactory.forProject({
+      repoPath: project.repoPath,
+      worktreeBasePath: project.worktreeBasePath,
+    });
+
+    const normalizedBranch = this.normalizeBranchName(branchName);
+    const worktrees = await gitClient.listWorktreesWithBranches();
+
+    return worktrees.some(
+      (worktree) =>
+        worktree.branchName && this.normalizeBranchName(worktree.branchName) === normalizedBranch
+    );
   }
 }
 

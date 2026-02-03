@@ -20,6 +20,40 @@ export interface GitWorktreeInfo {
   branchName: string;
 }
 
+export interface GitWorktreeEntry {
+  path: string;
+  branchName?: string;
+}
+
+function parseWorktreeEntries(output: string): GitWorktreeEntry[] {
+  const entries: GitWorktreeEntry[] = [];
+  const lines = output.split('\n');
+  let current: GitWorktreeEntry | null = null;
+
+  const pushCurrent = () => {
+    if (current) {
+      entries.push(current);
+    }
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('worktree ')) {
+      pushCurrent();
+      current = { path: line.substring('worktree '.length) };
+      continue;
+    }
+
+    if (current && line.startsWith('branch ')) {
+      const ref = line.substring('branch '.length);
+      current.branchName = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+    }
+  }
+
+  pushCurrent();
+
+  return entries;
+}
+
 export interface CreateWorktreeOptions {
   /** GitHub username or org for branch prefix (e.g., 'martin-purplefish') */
   branchPrefix?: string;
@@ -237,6 +271,14 @@ export class GitClient {
     }
 
     return worktrees;
+  }
+
+  async listWorktreesWithBranches(): Promise<GitWorktreeEntry[]> {
+    const result = await gitCommandC(this.baseRepoPath, ['worktree', 'list', '--porcelain']);
+    if (result.code !== 0) {
+      throw new Error(`Failed to list worktrees: ${result.stderr || result.stdout}`);
+    }
+    return parseWorktreeEntries(result.stdout);
   }
 
   /**
