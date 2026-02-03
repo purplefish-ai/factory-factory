@@ -10,6 +10,9 @@ interface UpdateUserSettingsInput {
   autoFixCiIssues?: boolean;
 }
 
+// Type for workspace order storage: { [projectId]: workspaceId[] }
+export type WorkspaceOrderMap = Record<string, string[]>;
+
 class UserSettingsAccessor {
   /**
    * Get user settings for the default user.
@@ -53,6 +56,34 @@ class UserSettingsAccessor {
         customIdeCommand: data.customIdeCommand ?? null,
         playSoundOnComplete: data.playSoundOnComplete ?? true,
         cachedSlashCommands: data.cachedSlashCommands ?? undefined,
+      },
+    });
+  }
+
+  /**
+   * Get the workspace order for a specific project.
+   */
+  async getWorkspaceOrder(projectId: string): Promise<string[]> {
+    const settings = await this.get();
+    const orderMap = (settings.workspaceOrder as WorkspaceOrderMap) ?? {};
+    return orderMap[projectId] ?? [];
+  }
+
+  /**
+   * Update the workspace order for a specific project.
+   */
+  async updateWorkspaceOrder(projectId: string, workspaceIds: string[]): Promise<UserSettings> {
+    const userId = 'default';
+    const settings = await this.get();
+    const orderMap = (settings.workspaceOrder as WorkspaceOrderMap) ?? {};
+
+    // Update the order for this project
+    orderMap[projectId] = workspaceIds;
+
+    return await prisma.userSettings.update({
+      where: { userId },
+      data: {
+        workspaceOrder: orderMap,
       },
     });
   }

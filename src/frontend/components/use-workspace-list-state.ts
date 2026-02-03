@@ -29,8 +29,48 @@ export interface WorkspaceListItem extends ServerWorkspace {
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Creates a comparator function for sorting workspaces.
+ * Uses custom order if provided, otherwise sorts alphabetically by name.
+ */
+function createWorkspaceComparator(customOrder: string[] | undefined) {
+  return (a: ServerWorkspace, b: ServerWorkspace): number => {
+    // If no custom order, sort alphabetically
+    if (!customOrder || customOrder.length === 0) {
+      return a.name.localeCompare(b.name);
+    }
+
+    const indexA = customOrder.indexOf(a.id);
+    const indexB = customOrder.indexOf(b.id);
+
+    // Both in custom order: sort by position
+    if (indexA !== -1 && indexB !== -1) {
+      return indexA - indexB;
+    }
+    // Only A in custom order: A comes first
+    if (indexA !== -1) {
+      return -1;
+    }
+    // Only B in custom order: B comes first
+    if (indexB !== -1) {
+      return 1;
+    }
+    // Neither in custom order: sort by name
+    return a.name.localeCompare(b.name);
+  };
+}
+
+// =============================================================================
 // Hook
 // =============================================================================
+
+interface UseWorkspaceListStateOptions {
+  /** Custom order of workspace IDs. Workspaces not in this list appear at the end sorted by name. */
+  customOrder?: string[];
+}
 
 /**
  * Custom hook that manages workspace list state with optimistic updates.
@@ -40,8 +80,13 @@ export interface WorkspaceListItem extends ServerWorkspace {
  * - Creating placeholder appears at the top of the list
  * - Archiving workspaces stay in their original position (no jumping)
  * - Automatically clears optimistic states when server data reflects changes
+ * - Workspaces are ordered by customOrder if provided, otherwise alphabetically by name
  */
-export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | undefined) {
+export function useWorkspaceListState(
+  serverWorkspaces: ServerWorkspace[] | undefined,
+  options: UseWorkspaceListStateOptions = {}
+) {
+  const { customOrder } = options;
   // Track workspace being created (before it has an ID)
   const [creatingWorkspace, setCreatingWorkspace] = useState<{ name: string } | null>(null);
 
@@ -81,10 +126,11 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
 
     // Add server workspaces with appropriate UI states
     if (serverWorkspaces) {
-      for (const workspace of serverWorkspaces) {
-        // Check if this workspace is being archived
-        const isArchiving = archivingWorkspace?.id === workspace.id;
+      const comparator = createWorkspaceComparator(customOrder);
+      const sortedWorkspaces = [...serverWorkspaces].sort(comparator);
 
+      for (const workspace of sortedWorkspaces) {
+        const isArchiving = archivingWorkspace?.id === workspace.id;
         items.push({
           ...workspace,
           uiState: isArchiving ? 'archiving' : 'normal',
@@ -97,7 +143,13 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
     // The archivingWorkspace state will be cleared after a brief delay for visual feedback.
 
     return items;
-  }, [serverWorkspaces, creatingWorkspace, creatingWorkspaceInList, archivingWorkspace]);
+  }, [
+    serverWorkspaces,
+    creatingWorkspace,
+    creatingWorkspaceInList,
+    archivingWorkspace,
+    customOrder,
+  ]);
 
   // Clear creating state when workspace appears in list
   useEffect(() => {
