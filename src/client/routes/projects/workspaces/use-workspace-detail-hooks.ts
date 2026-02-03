@@ -72,7 +72,6 @@ export function useAutoFocusChatInput({
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const hasFocusedOnEntryRef = useRef(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref object
   useEffect(() => {
     if (
       !(hasFocusedOnEntryRef.current || workspaceLoading) &&
@@ -84,5 +83,5 @@ export function useAutoFocusChatInput({
       hasFocusedOnEntryRef.current = true;
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace]);
+  }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace, inputRef]);
 }

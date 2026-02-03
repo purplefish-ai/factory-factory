@@ -72,8 +72,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     const outputBufferRef = useRef<Map<string, string>>(new Map());
 
     // Ref to hold setActive function to break circular dependency with callbacks
-    // biome-ignore lint/suspicious/noEmptyBlockStatements: Placeholder until hook initializes
-    const setActiveRef = useRef<(terminalId: string) => void>(() => {});
+    const setActiveRef = useRef<(terminalId: string) => void>(() => undefined);
 
     // Handle terminal output - route to correct tab by terminalId
     const handleOutput = useCallback((terminalId: string, data: string) => {
