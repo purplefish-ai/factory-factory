@@ -172,6 +172,14 @@ export const workspaceRouter = router({
     .input(z.object({ workspaceId: z.string() }))
     .query(({ input }) => workspaceQueryService.hasChanges(input.workspaceId)),
 
+  // Mark workspace as seen (clears needsAttention flag)
+  markAsSeen: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ input }) => {
+      await workspaceAccessor.update(input.workspaceId, { needsAttention: false });
+      return { success: true };
+    }),
+
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,
   ...workspaceGitRouter._def.procedures,

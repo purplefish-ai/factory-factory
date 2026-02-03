@@ -141,6 +141,7 @@ model Workspace {
 
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
+  needsAttention      Boolean           @default(false)  // True when workspace completes and needs user review
 
   // Cached kanban column (for list performance)
   cachedKanbanColumn  KanbanColumn      @default(BACKLOG)

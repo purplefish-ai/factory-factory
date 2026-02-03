@@ -28,6 +28,15 @@ export function WorkspaceDetailContainer() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
+  // Mark workspace as seen when user navigates into it (clears needsAttention flag)
+  const markAsSeen = trpc.workspace.markAsSeen.useMutation();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only run once when workspaceId changes
+  useEffect(() => {
+    if (workspaceId) {
+      markAsSeen.mutate({ workspaceId });
+    }
+  }, [workspaceId]);
+
   const {
     workspace,
     workspaceLoading,

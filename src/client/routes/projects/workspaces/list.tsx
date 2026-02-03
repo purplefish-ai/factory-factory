@@ -27,6 +27,7 @@ import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { cn } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { trpc } from '../../../../frontend/lib/trpc';
 
@@ -212,7 +213,12 @@ export default function WorkspacesListPage() {
             </TableHeader>
             <TableBody>
               {workspaces.map((workspace: WorkspaceWithSessions) => (
-                <TableRow key={workspace.id}>
+                <TableRow
+                  key={workspace.id}
+                  className={cn(
+                    workspace.needsAttention && 'bg-yellow-500/5 border-l-2 border-l-yellow-500'
+                  )}
+                >
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Link

@@ -45,6 +45,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   githubIssueNumber: null,
   githubIssueUrl: null,
   hasHadSessions: true,
+  needsAttention: false,
   cachedKanbanColumn: 'IN_PROGRESS',
   stateComputedAt: new Date(),
   runScriptCommand: null,

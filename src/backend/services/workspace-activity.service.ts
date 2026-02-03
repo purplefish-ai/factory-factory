@@ -32,6 +32,9 @@ class WorkspaceActivityService extends EventEmitter {
           return;
         }
 
+        // Mark workspace as needing attention
+        await workspaceAccessor.update(workspaceId, { needsAttention: true });
+
         // Emit event to frontend for suppression check
         this.emit('request_notification', {
           workspaceId,

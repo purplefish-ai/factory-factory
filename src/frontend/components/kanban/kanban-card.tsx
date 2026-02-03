@@ -18,13 +18,17 @@ interface KanbanCardProps {
 
 export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
   const showPR = workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl;
+  // Show needs attention styling when workspace completed and user hasn't viewed it yet
+  // Don't show if workspace is currently working (takes priority)
+  const showNeedsAttention = workspace.needsAttention && !workspace.isWorking;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
         className={cn(
           'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
-          workspace.isWorking && 'border-brand/50 bg-brand/5'
+          workspace.isWorking && 'border-brand/50 bg-brand/5',
+          showNeedsAttention && 'border-yellow-500 bg-yellow-500/5'
         )}
       >
         <CardHeader className="pb-2">

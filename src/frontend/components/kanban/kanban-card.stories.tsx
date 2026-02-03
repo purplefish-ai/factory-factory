@@ -52,6 +52,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   githubIssueNumber: null,
   githubIssueUrl: null,
   hasHadSessions: true,
+  needsAttention: false,
   cachedKanbanColumn: 'IN_PROGRESS',
   stateComputedAt: new Date(),
   runScriptCommand: null,
@@ -159,6 +160,18 @@ export const Working: Story = {
       prState: 'OPEN',
       prUrl: 'https://github.com/example/repo/pull/48',
       prNumber: 48,
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const NeedsAttention: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Completed task',
+      needsAttention: true,
+      kanbanColumn: 'WAITING',
     },
     projectSlug: 'my-project',
   },

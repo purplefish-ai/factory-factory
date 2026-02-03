@@ -43,6 +43,7 @@ interface UpdateWorkspaceInput {
   prCiLastNotifiedAt?: Date | null;
   // Activity tracking
   hasHadSessions?: boolean;
+  needsAttention?: boolean;
   // Cached kanban column
   cachedKanbanColumn?: KanbanColumn;
   stateComputedAt?: Date | null;
