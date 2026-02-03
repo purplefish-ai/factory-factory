@@ -36,6 +36,7 @@ import { createLogger } from './logger.service';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
 import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
+import { slashCommandCacheService } from './slash-command-cache.service';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -783,6 +784,8 @@ class ChatMessageHandlerService {
     } else {
       await this.loadHistoryFromJSONL(sessionId, workingDir, dbSession.claudeSessionId);
     }
+
+    await this.sendCachedSlashCommandsIfNeeded(sessionId);
   }
 
   /**
@@ -902,6 +905,26 @@ class ChatMessageHandlerService {
     }
     const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
     messageStateService.sendSnapshot(sessionId, sessionStatus, null);
+  }
+
+  private async sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void> {
+    const storedEvents = messageStateService.getStoredEvents(sessionId);
+    const hasSlashCommands = storedEvents.some((event) => event.type === 'slash_commands');
+    if (hasSlashCommands) {
+      return;
+    }
+
+    const cached = await slashCommandCacheService.getCachedCommands();
+    if (!cached || cached.length === 0) {
+      return;
+    }
+
+    const slashCommandsMsg = {
+      type: 'slash_commands',
+      slashCommands: cached,
+    };
+    messageStateService.storeEvent(sessionId, slashCommandsMsg);
+    chatConnectionService.forwardToSession(sessionId, slashCommandsMsg);
   }
 
   /**

@@ -1,10 +1,12 @@
-import type { UserSettings } from '@prisma-gen/client';
+import type { Prisma, UserSettings } from '@prisma-gen/client';
 import { prisma } from '../db';
 
 interface UpdateUserSettingsInput {
   preferredIde?: string;
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
+  cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | null;
+  cachedSlashCommandsUpdatedAt?: Date | null;
 }
 
 class UserSettingsAccessor {

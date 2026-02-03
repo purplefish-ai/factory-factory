@@ -195,6 +195,10 @@ model UserSettings {
   // Notification Settings
   playSoundOnComplete Boolean @default(true)  // Play sound when workspace completes
 
+  // Cached slash commands (from Claude CLI initialize response)
+  cachedSlashCommands          Json?
+  cachedSlashCommandsUpdatedAt DateTime?
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
