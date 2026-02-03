@@ -1,4 +1,4 @@
-import { FileCode, FileDiff, MessageSquare, Plus, X } from 'lucide-react';
+import { FileCode, FileDiff, MessageSquare, Plus, Wrench, X } from 'lucide-react';
 import { useCallback } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -14,6 +14,7 @@ import { useWorkspacePanel } from './workspace-panel-context';
 interface Session {
   id: string;
   name: string | null;
+  workflow?: string;
   isWorking?: boolean;
 }
 
@@ -129,16 +130,31 @@ interface SessionTabItemProps {
   label: string;
   isActive: boolean;
   isRunning?: boolean;
+  isCIFix?: boolean;
   onSelect: () => void;
   onClose?: () => void;
 }
 
-function SessionTabItem({ label, isActive, isRunning, onSelect, onClose }: SessionTabItemProps) {
+function SessionTabItem({
+  label,
+  isActive,
+  isRunning,
+  isCIFix,
+  onSelect,
+  onClose,
+}: SessionTabItemProps) {
+  // Use Wrench icon for CI fix sessions, MessageSquare for regular sessions
+  const Icon = isCIFix ? Wrench : MessageSquare;
+
   return (
     <BaseTabItem
       icon={
-        <MessageSquare
-          className={cn('h-3.5 w-3.5 shrink-0', isRunning && 'animate-pulse text-brand')}
+        <Icon
+          className={cn(
+            'h-3.5 w-3.5 shrink-0',
+            isRunning && 'animate-pulse text-brand',
+            isCIFix && !isRunning && 'text-warning'
+          )}
         />
       }
       label={label}
@@ -200,6 +216,7 @@ export function MainViewTabBar({
           label={session.name ?? `Chat ${index + 1}`}
           isActive={session.id === currentSessionId && activeTabId === 'chat'}
           isRunning={session.isWorking || session.id === runningSessionId}
+          isCIFix={session.workflow === 'ci-fix'}
           onSelect={() => {
             onSelectSession?.(session.id);
             selectTab('chat');
