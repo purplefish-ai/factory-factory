@@ -7,48 +7,35 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { AskUserQuestionInputSchema, safeParseToolInput } from '../schemas/tool-inputs.schema';
-import { createLogger } from '../services/logger.service';
 import {
-  AutoApproveHandler,
-  createAllowResponse,
-  DeferredHandler,
-  INTERACTIVE_TOOLS,
-  ModeBasedHandler,
-  type PermissionHandler,
-} from './permissions';
+  ClaudePermissionCoordinator,
+  type PendingInteractiveRequest,
+} from './permission-coordinator';
+import { AutoApproveHandler, ModeBasedHandler, type PermissionHandler } from './permissions';
 import { ClaudeProcess, type ClaudeProcessOptions, type ExitResult } from './process';
-import type { ControlResponseBody } from './protocol';
 import { type HistoryMessage, SessionManager } from './session';
-import type { ControlCancelRequest } from './types';
-import {
-  type AssistantMessage,
-  type CanUseToolRequest,
-  type ClaudeContentItem,
-  type ClaudeJson,
-  type ControlRequest,
-  type HookCallbackRequest,
-  type HooksConfig,
-  type InitializeResponseData,
-  isCanUseToolRequest,
-  isHookCallbackRequest,
-  type PermissionMode,
-  type ResultMessage,
-  type RewindFilesResponse,
-  type StreamEventMessage,
-  type SystemCompactBoundaryMessage,
-  type SystemHookResponseMessage,
-  type SystemHookStartedMessage,
-  type SystemInitMessage,
-  type SystemMessage,
-  type SystemStatusMessage,
-  type ToolProgressMessage,
-  type ToolUseContent,
-  type ToolUseSummaryMessage,
-  type UserMessage,
+import type {
+  AssistantMessage,
+  ClaudeContentItem,
+  ClaudeJson,
+  ControlRequest,
+  HooksConfig,
+  InitializeResponseData,
+  PermissionMode,
+  ResultMessage,
+  RewindFilesResponse,
+  StreamEventMessage,
+  SystemCompactBoundaryMessage,
+  SystemHookResponseMessage,
+  SystemHookStartedMessage,
+  SystemInitMessage,
+  SystemMessage,
+  SystemStatusMessage,
+  ToolProgressMessage,
+  ToolUseContent,
+  ToolUseSummaryMessage,
+  UserMessage,
 } from './types';
-
-const logger = createLogger('claude-client');
 
 // =============================================================================
 // Types
@@ -115,54 +102,17 @@ export interface ClaudeClientOptions {
  * client.sendToolResult(toolUseId, { result: 'success' });
  * ```
  */
-/**
- * Pending interactive tool request (e.g., AskUserQuestion).
- */
-export interface PendingInteractiveRequest {
-  requestId: string;
-  toolName: string;
-  toolUseId: string;
-  input: Record<string, unknown>;
-}
-
 export class ClaudeClient extends EventEmitter {
   private process: ClaudeProcess | null = null;
-  private permissionHandler: PermissionHandler;
   private workingDir: string;
-  /** Handler for interactive tools that require user input (AskUserQuestion, etc.) */
-  private interactiveHandler: DeferredHandler;
-  /** Store pending interactive requests to retrieve original input when responding */
-  private pendingInteractiveRequests: Map<string, CanUseToolRequest> = new Map();
-  /** Map protocol request_id to tool_use_id for cancel request handling */
-  private protocolToToolRequestId: Map<string, string> = new Map();
-  /** Track cancelled protocol request IDs to avoid sending deny response */
-  private cancelledProtocolRequests: Set<string> = new Set();
+  private permissionCoordinator: ClaudePermissionCoordinator;
   /** Track whether context compaction is in progress */
   private isCompacting = false;
 
-  private constructor(workingDir: string, permissionHandler: PermissionHandler) {
+  private constructor(workingDir: string, permissionCoordinator: ClaudePermissionCoordinator) {
     super();
     this.workingDir = workingDir;
-    this.permissionHandler = permissionHandler;
-    this.interactiveHandler = new DeferredHandler({ timeout: 300_000 }); // 5 minute timeout
-
-    // Forward interactive tool requests as events and store them for later
-    this.interactiveHandler.on('permission_request', (request, requestId) => {
-      // Store the request so we can retrieve the input (e.g., questions) when responding
-      this.pendingInteractiveRequests.set(requestId, request);
-
-      this.emit('interactive_request', {
-        requestId,
-        toolName: request.tool_name,
-        toolUseId: request.tool_use_id,
-        input: request.input,
-      } as PendingInteractiveRequest);
-    });
-
-    // Clean up pendingInteractiveRequests when requests time out
-    this.interactiveHandler.on('request_timeout', (requestId) => {
-      this.pendingInteractiveRequests.delete(requestId);
-    });
+    this.permissionCoordinator = permissionCoordinator;
   }
 
   // ===========================================================================
@@ -191,8 +141,13 @@ export class ClaudeClient extends EventEmitter {
       permissionHandler = new ModeBasedHandler(options.permissionMode ?? 'default');
     }
 
+    const permissionCoordinator = new ClaudePermissionCoordinator({
+      permissionHandler,
+      interactiveTimeoutMs: 300_000,
+    });
+
     // Create the client
-    const client = new ClaudeClient(options.workingDir, permissionHandler);
+    const client = new ClaudeClient(options.workingDir, permissionCoordinator);
 
     // Build process options
     const processOptions: ClaudeProcessOptions = {
@@ -328,8 +283,8 @@ export class ClaudeClient extends EventEmitter {
    * Sends an interrupt signal and waits for graceful exit.
    */
   async stop(): Promise<void> {
-    this.pendingInteractiveRequests.clear();
-    this.interactiveHandler.cancelAll('Client stopping');
+    this.permissionCoordinator.stop('Client stopping');
+    this.permissionCoordinator.unbind();
     if (this.process) {
       await this.process.interrupt();
     }
@@ -339,8 +294,8 @@ export class ClaudeClient extends EventEmitter {
    * Forcefully kill the Claude process.
    */
   kill(): void {
-    this.pendingInteractiveRequests.clear();
-    this.interactiveHandler.cancelAll('Client killed');
+    this.permissionCoordinator.stop('Client killed');
+    this.permissionCoordinator.unbind();
     if (this.process) {
       this.process.kill();
     }
@@ -403,28 +358,7 @@ export class ClaudeClient extends EventEmitter {
    * @param answers - Map of question text to selected answer(s)
    */
   answerQuestion(requestId: string, answers: Record<string, string | string[]>): void {
-    // Retrieve the stored request to get the original questions
-    const storedRequest = this.pendingInteractiveRequests.get(requestId);
-    if (!storedRequest) {
-      throw new Error(`No pending interactive request found with ID: ${requestId}`);
-    }
-
-    // Get questions from the stored request with validation
-    const parsed = safeParseToolInput(
-      AskUserQuestionInputSchema,
-      storedRequest.input,
-      'AskUserQuestion'
-    );
-    if (!parsed.success) {
-      throw new Error(`Invalid AskUserQuestion input for request ID: ${requestId}`);
-    }
-    const questions = parsed.data.questions;
-
-    // Clean up stored request
-    this.pendingInteractiveRequests.delete(requestId);
-
-    // Approve with both questions and answers (required by Claude CLI)
-    this.interactiveHandler.approve(requestId, { questions, answers });
+    this.permissionCoordinator.answerQuestion(requestId, answers);
   }
 
   /**
@@ -434,17 +368,7 @@ export class ClaudeClient extends EventEmitter {
    * @param requestId - The request ID from the 'interactive_request' event
    */
   approveInteractiveRequest(requestId: string): void {
-    // Retrieve the stored request to pass through the original input
-    const storedRequest = this.pendingInteractiveRequests.get(requestId);
-    if (!storedRequest) {
-      throw new Error(`No pending interactive request found with ID: ${requestId}`);
-    }
-
-    // Clean up stored request
-    this.pendingInteractiveRequests.delete(requestId);
-
-    // Approve with the original input (pass it through unchanged)
-    this.interactiveHandler.approve(requestId, storedRequest.input);
+    this.permissionCoordinator.approveInteractiveRequest(requestId);
   }
 
   /**
@@ -454,9 +378,7 @@ export class ClaudeClient extends EventEmitter {
    * @param reason - The reason for denial
    */
   denyInteractiveRequest(requestId: string, reason: string): void {
-    // Clean up stored request
-    this.pendingInteractiveRequests.delete(requestId);
-    this.interactiveHandler.deny(requestId, reason);
+    this.permissionCoordinator.denyInteractiveRequest(requestId, reason);
   }
 
   // ===========================================================================
@@ -684,126 +606,16 @@ export class ClaudeClient extends EventEmitter {
       return;
     }
 
-    this.process.protocol.on('control_request', async (controlRequest: ControlRequest) => {
-      // Emit the permission request for visibility
-      this.emit('permission_request', controlRequest);
-
-      // Track mapping from protocol request_id to tool_use_id for interactive tools
-      // This allows control_cancel to find the right request to cancel
-      if (
-        isCanUseToolRequest(controlRequest.request) &&
-        INTERACTIVE_TOOLS.has(controlRequest.request.tool_name)
-      ) {
-        const toolUseId = controlRequest.request.tool_use_id;
-        if (toolUseId) {
-          this.protocolToToolRequestId.set(controlRequest.request_id, toolUseId);
-        }
-      }
-
-      try {
-        const response = await this.handleControlRequest(controlRequest.request);
-        // Clean up mapping on successful response
-        this.protocolToToolRequestId.delete(controlRequest.request_id);
-        this.process?.protocol.sendControlResponse(controlRequest.request_id, response);
-      } catch (error) {
-        // Clean up mapping on error
-        this.protocolToToolRequestId.delete(controlRequest.request_id);
-
-        // Check if this request was cancelled - if so, don't send a deny response
-        // The protocol states "No response is required" for control_cancel_request
-        if (this.cancelledProtocolRequests.has(controlRequest.request_id)) {
-          this.cancelledProtocolRequests.delete(controlRequest.request_id);
-          logger.debug('Skipping deny response for cancelled request', {
-            requestId: controlRequest.request_id,
-          });
-          return;
-        }
-
-        // On error, deny the request
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.process?.protocol.sendControlResponse(controlRequest.request_id, {
-          behavior: 'deny',
-          message: `Permission handler error: ${errorMessage}`,
-        });
-      }
+    this.permissionCoordinator.bind(this.process.protocol);
+    this.permissionCoordinator.on('permission_request', (request) => {
+      this.emit('permission_request', request);
     });
-
-    // Handle cancel requests from CLI (e.g., when user interrupts during permission or question prompt)
-    this.process.protocol.on('control_cancel', (cancelRequest: ControlCancelRequest) => {
-      // Look up the tool_use_id from protocol request_id mapping
-      // DeferredHandler and pendingInteractiveRequests use tool_use_id as key, not protocol request_id
-      const toolUseId = this.protocolToToolRequestId.get(cancelRequest.request_id);
-      const requestIdToCancel = toolUseId ?? cancelRequest.request_id;
-
-      logger.debug('Control cancel received', {
-        protocolRequestId: cancelRequest.request_id,
-        toolUseId,
-        requestIdToCancel,
-      });
-
-      // Mark request as cancelled BEFORE cancelling to prevent deny response
-      // The control_request handler checks this set to avoid sending a response
-      this.cancelledProtocolRequests.add(cancelRequest.request_id);
-
-      // Cancel the deferred interactive handler's pending request
-      this.interactiveHandler.cancel(requestIdToCancel, 'Request cancelled by CLI');
-
-      // Clean up stored request and mapping
-      const hadStoredRequest = this.pendingInteractiveRequests.has(requestIdToCancel);
-      this.pendingInteractiveRequests.delete(requestIdToCancel);
-      this.protocolToToolRequestId.delete(cancelRequest.request_id);
-
-      logger.debug('Request cancelled cleanup', {
-        requestIdToCancel,
-        hadStoredRequest,
-      });
-
-      // Emit for forwarding to frontend (use tool_use_id which matches what frontend expects)
-      this.emit('permission_cancelled', requestIdToCancel);
+    this.permissionCoordinator.on('interactive_request', (request) => {
+      this.emit('interactive_request', request);
     });
-  }
-
-  /**
-   * Handle a control request and return the appropriate response.
-   */
-  private async handleControlRequest(
-    request: ControlRequest['request']
-  ): Promise<ControlResponseBody> {
-    if (isCanUseToolRequest(request)) {
-      // Route interactive tools to the deferred handler to wait for user input
-      if (INTERACTIVE_TOOLS.has(request.tool_name)) {
-        return await this.interactiveHandler.onCanUseTool(request);
-      }
-      return await this.permissionHandler.onCanUseTool(request);
-    }
-
-    if (isHookCallbackRequest(request)) {
-      return await this.handleHookCallback(request);
-    }
-
-    // Unknown request type - deny for security
-    return {
-      behavior: 'deny',
-      message: `Unknown request subtype: ${(request as { subtype?: string }).subtype ?? 'undefined'}`,
-    };
-  }
-
-  /**
-   * Handle a hook callback request.
-   */
-  private async handleHookCallback(request: HookCallbackRequest): Promise<ControlResponseBody> {
-    const hookEventName = request.input.hook_event_name;
-
-    if (hookEventName === 'PreToolUse') {
-      return await this.permissionHandler.onPreToolUseHook(request);
-    }
-
-    if (hookEventName === 'Stop') {
-      return await this.permissionHandler.onStopHook(request);
-    }
-
-    // Unknown hook type - allow by default
-    return createAllowResponse();
+    this.permissionCoordinator.on('permission_cancelled', (requestId) => {
+      this.emit('permission_cancelled', requestId);
+    });
   }
 }
 
@@ -811,9 +623,11 @@ export class ClaudeClient extends EventEmitter {
 // Re-exports
 // =============================================================================
 
+export * from './permission-coordinator';
 export * from './permissions';
 export * from './process';
 export * from './protocol';
+export * from './protocol-io';
 export * from './registry';
 export * from './session';
 export * from './types';
