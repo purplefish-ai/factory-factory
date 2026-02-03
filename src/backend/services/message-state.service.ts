@@ -17,120 +17,28 @@
 
 import {
   type ChatMessage,
-  type ClaudeMessage,
-  type ClaudeMessageWithState,
   type HistoryMessage,
   isUserMessage,
   MessageState,
   type MessageWithState,
   type QueuedMessage,
   type SessionStatus,
-  type UserMessageState,
   type UserMessageWithState,
 } from '@/lib/claude-types';
 import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
+import { MessageEventStore } from './message-event-store';
+import { isValidTransition, MessageStateMachine } from './message-state-machine';
 
 const logger = createLogger('message-state-service');
-
-// =============================================================================
-// State Transition Validation
-// =============================================================================
-
-/**
- * Valid state transitions for user messages.
- * Maps each UserMessageState to the states it can transition to.
- */
-const USER_STATE_TRANSITIONS: Record<UserMessageState, UserMessageState[]> = {
-  PENDING: ['SENT'],
-  SENT: ['ACCEPTED', 'REJECTED'],
-  ACCEPTED: ['DISPATCHED', 'CANCELLED'],
-  DISPATCHED: ['COMMITTED', 'FAILED'],
-  COMMITTED: [],
-  REJECTED: [],
-  FAILED: [],
-  CANCELLED: [],
-};
-
-/**
- * Set of valid user message states for runtime validation.
- */
-const USER_STATES = new Set<string>(Object.keys(USER_STATE_TRANSITIONS));
-
-/**
- * Check if a user message state transition is valid.
- */
-function isValidUserTransition(from: UserMessageState, to: UserMessageState): boolean {
-  return USER_STATE_TRANSITIONS[from]?.includes(to) ?? false;
-}
-
-/**
- * Check if a state transition is valid.
- * Only user messages support state transitions - Claude messages are created in COMPLETE state
- * via loadFromHistory and are never transitioned.
- */
-function isValidTransition(
-  messageType: 'user' | 'claude',
-  from: MessageState,
-  to: MessageState
-): boolean {
-  if (messageType === 'claude') {
-    // Claude messages don't support state transitions - they're created in COMPLETE state
-    logger.error('Claude messages do not support state transitions', { from, to });
-    return false;
-  }
-
-  if (!(USER_STATES.has(from) && USER_STATES.has(to))) {
-    logger.error('Invalid user message state', { from, to });
-    return false;
-  }
-  return isValidUserTransition(from as UserMessageState, to as UserMessageState);
-}
 
 // =============================================================================
 // MessageStateService Class
 // =============================================================================
 
 class MessageStateService {
-  /**
-   * Messages indexed by session ID, then by message ID.
-   * Map<sessionId, Map<messageId, MessageWithState>>
-   */
-  private sessionMessages = new Map<string, Map<string, MessageWithState>>();
-
-  /**
-   * Raw WebSocket events for replay - stores EVERYTHING sent to WebSocket.
-   * Used to replay events when frontend reconnects to a running session.
-   * Map<sessionId, Array<{ type: string; data?: unknown }>>
-   */
-  private sessionEvents = new Map<string, Array<{ type: string; data?: unknown }>>();
-
-  /**
-   * Next order number for each session. Monotonically increasing.
-   * Map<sessionId, nextOrder>
-   */
-  private sessionOrderCounters = new Map<string, number>();
-
-  /**
-   * Get or create the message map for a session.
-   */
-  private getOrCreateSessionMap(sessionId: string): Map<string, MessageWithState> {
-    let messages = this.sessionMessages.get(sessionId);
-    if (!messages) {
-      messages = new Map();
-      this.sessionMessages.set(sessionId, messages);
-    }
-    return messages;
-  }
-
-  /**
-   * Get the next order number for a session and increment the counter.
-   */
-  private getNextOrder(sessionId: string): number {
-    const current = this.sessionOrderCounters.get(sessionId) ?? 0;
-    this.sessionOrderCounters.set(sessionId, current + 1);
-    return current;
-  }
+  private stateMachine = new MessageStateMachine();
+  private eventStore = new MessageEventStore();
 
   /**
    * Allocate and return the next order number for a session.
@@ -138,7 +46,7 @@ class MessageStateService {
    * (e.g., MESSAGE_USED_AS_RESPONSE).
    */
   allocateOrder(sessionId: string): number {
-    return this.getNextOrder(sessionId);
+    return this.stateMachine.allocateOrder(sessionId);
   }
 
   /**
@@ -146,34 +54,14 @@ class MessageStateService {
    * Starts in ACCEPTED state (backend has received it).
    */
   createUserMessage(sessionId: string, msg: QueuedMessage): UserMessageWithState {
-    const messages = this.getOrCreateSessionMap(sessionId);
-
-    // Queue position = count of ACCEPTED user messages (messages waiting in queue)
-    const queuePosition = this.getQueuedMessageCount(sessionId);
-
-    // Assign monotonically increasing order for reliable frontend sorting
-    const order = this.getNextOrder(sessionId);
-
-    const messageWithState: UserMessageWithState = {
-      id: msg.id,
-      type: 'user',
-      state: MessageState.ACCEPTED,
-      timestamp: msg.timestamp,
-      text: msg.text,
-      attachments: msg.attachments,
-      queuePosition,
-      settings: msg.settings,
-      order,
-    };
-
-    messages.set(msg.id, messageWithState);
+    const messageWithState = this.stateMachine.createUserMessage(sessionId, msg);
 
     logger.info('User message created', {
       sessionId,
       messageId: msg.id,
       state: messageWithState.state,
-      queuePosition,
-      order,
+      queuePosition: messageWithState.queuePosition,
+      order: messageWithState.order,
     });
 
     this.emitStateChange(sessionId, messageWithState);
@@ -191,22 +79,12 @@ class MessageStateService {
     errorMessage: string,
     text?: string
   ): UserMessageWithState {
-    const messages = this.getOrCreateSessionMap(sessionId);
-
-    // Assign order even for rejected messages to maintain consistency
-    const order = this.getNextOrder(sessionId);
-
-    const messageWithState: UserMessageWithState = {
-      id: messageId,
-      type: 'user',
-      state: MessageState.REJECTED,
-      timestamp: new Date().toISOString(),
-      text: text ?? '',
+    const messageWithState = this.stateMachine.createRejectedMessage(
+      sessionId,
+      messageId,
       errorMessage,
-      order,
-    };
-
-    messages.set(messageId, messageWithState);
+      text
+    );
 
     logger.info('User message rejected', {
       sessionId,
@@ -219,24 +97,6 @@ class MessageStateService {
   }
 
   /**
-   * Get count of user messages in ACCEPTED state (waiting in queue).
-   */
-  private getQueuedMessageCount(sessionId: string): number {
-    const messages = this.sessionMessages.get(sessionId);
-    if (!messages) {
-      return 0;
-    }
-
-    let count = 0;
-    for (const msg of messages.values()) {
-      if (msg.type === 'user' && msg.state === MessageState.ACCEPTED) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  /**
    * Update the state of an existing message.
    * Validates state transitions and emits state change events.
    */
@@ -246,8 +106,7 @@ class MessageStateService {
     newState: MessageState,
     metadata?: { queuePosition?: number; errorMessage?: string }
   ): boolean {
-    const messages = this.sessionMessages.get(sessionId);
-    const message = messages?.get(messageId);
+    const message = this.stateMachine.getMessage(sessionId, messageId);
 
     if (!message) {
       logger.warn('Message not found for state update', { sessionId, messageId, newState });
@@ -266,37 +125,26 @@ class MessageStateService {
       return false;
     }
 
-    const oldState = message.state;
-
-    // Update state - only user messages support state transitions
-    // (Claude messages are created in COMPLETE state and never transitioned)
-    if (!isUserMessage(message)) {
-      // This should never happen due to isValidTransition check above
-      logger.error('Unexpected state update for non-user message', {
-        sessionId,
-        messageId,
-        messageType: message.type,
-      });
+    const updateResult = this.stateMachine.updateState(sessionId, messageId, newState, metadata);
+    if (!updateResult.ok) {
+      if (updateResult.reason === 'non_user') {
+        logger.error('Unexpected state update for non-user message', {
+          sessionId,
+          messageId,
+          messageType: message.type,
+        });
+      }
       return false;
-    }
-
-    message.state = newState as UserMessageState;
-    // Update user-specific metadata if provided
-    if (metadata?.queuePosition !== undefined) {
-      message.queuePosition = metadata.queuePosition;
-    }
-    if (metadata?.errorMessage !== undefined) {
-      message.errorMessage = metadata.errorMessage;
     }
 
     logger.info('Message state updated', {
       sessionId,
       messageId,
-      oldState,
+      oldState: updateResult.oldState,
       newState,
     });
 
-    this.emitStateChange(sessionId, message);
+    this.emitStateChange(sessionId, updateResult.message);
     return true;
   }
 
@@ -304,7 +152,7 @@ class MessageStateService {
    * Get a specific message.
    */
   getMessage(sessionId: string, messageId: string): MessageWithState | undefined {
-    return this.sessionMessages.get(sessionId)?.get(messageId);
+    return this.stateMachine.getMessage(sessionId, messageId);
   }
 
   /**
@@ -313,30 +161,14 @@ class MessageStateService {
    * messages were never successfully processed and shouldn't appear in snapshots.
    */
   getAllMessages(sessionId: string): MessageWithState[] {
-    const messages = this.sessionMessages.get(sessionId);
-    if (!messages) {
-      return [];
-    }
-
-    // Terminal error states - messages that should not appear in conversation
-    // These are user message states where the message was never successfully processed
-    const terminalErrorStates: Set<string> = new Set(['REJECTED', 'FAILED', 'CANCELLED']);
-
-    return Array.from(messages.values())
-      .filter((msg) => !terminalErrorStates.has(msg.state))
-      .sort((a, b) => a.order - b.order);
+    return this.stateMachine.getAllMessages(sessionId);
   }
 
   /**
    * Remove a message from the session.
    */
   removeMessage(sessionId: string, messageId: string): boolean {
-    const messages = this.sessionMessages.get(sessionId);
-    if (!messages) {
-      return false;
-    }
-
-    const removed = messages.delete(messageId);
+    const removed = this.stateMachine.removeMessage(sessionId, messageId);
     if (removed) {
       logger.info('Message removed', { sessionId, messageId });
     }
@@ -347,16 +179,15 @@ class MessageStateService {
    * Clear all messages for a session.
    */
   clearSession(sessionId: string): void {
-    const messages = this.sessionMessages.get(sessionId);
-    if (messages && messages.size > 0) {
+    const messageCount = this.stateMachine.getMessageCount(sessionId);
+    if (messageCount > 0) {
       logger.info('Session messages cleared', {
         sessionId,
-        clearedCount: messages.size,
+        clearedCount: messageCount,
       });
     }
-    this.sessionMessages.delete(sessionId);
-    this.sessionEvents.delete(sessionId);
-    this.sessionOrderCounters.delete(sessionId);
+    this.stateMachine.clearSession(sessionId);
+    this.eventStore.clearSession(sessionId);
   }
 
   // =============================================================================
@@ -368,37 +199,31 @@ class MessageStateService {
    * Called by chatEventForwarderService for every event sent to WebSocket.
    */
   storeEvent(sessionId: string, event: { type: string; data?: unknown }): void {
-    let events = this.sessionEvents.get(sessionId);
-    if (!events) {
-      events = [];
-      this.sessionEvents.set(sessionId, events);
-    }
-    events.push(event);
+    this.eventStore.storeEvent(sessionId, event);
   }
 
   /**
    * Get all stored events for a session (for replay on reconnect).
    */
   getStoredEvents(sessionId: string): Array<{ type: string; data?: unknown }> {
-    return this.sessionEvents.get(sessionId) ?? [];
+    return this.eventStore.getStoredEvents(sessionId);
   }
 
   /**
    * Clear stored events for a session (called when session is loaded from JSONL).
    */
   clearStoredEvents(sessionId: string): void {
-    this.sessionEvents.delete(sessionId);
+    this.eventStore.clearSession(sessionId);
   }
 
   /**
    * Clear ALL sessions. Used for test isolation to reset singleton state.
    */
   clearAllSessions(): void {
-    const sessionCount = this.sessionMessages.size;
-    this.sessionMessages.clear();
-    this.sessionEvents.clear();
-    this.sessionOrderCounters.clear();
-    if (sessionCount > 0) {
+    const sessionCount = this.stateMachine.getSessionCount();
+    this.stateMachine.clearAllSessions();
+    this.eventStore.clearAllSessions();
+    if (sessionCount && sessionCount > 0) {
       logger.info('All sessions cleared', { clearedCount: sessionCount });
     }
   }
@@ -420,155 +245,35 @@ class MessageStateService {
    * returned and won't overwrite their state.
    */
   loadFromHistory(sessionId: string, history: HistoryMessage[]): void {
-    const existingMessages = this.sessionMessages.get(sessionId);
-    if (existingMessages && existingMessages.size > 0) {
+    const existingCount = this.stateMachine.getMessageCount(sessionId);
+    if (existingCount > 0) {
       logger.info('Skipping history load - session already has messages', {
         sessionId,
-        existingCount: existingMessages.size,
+        existingCount,
       });
       return;
     }
 
-    // Clear any existing messages for this session (handles empty map case)
-    this.sessionMessages.delete(sessionId);
-    // Reset order counter for fresh history load
-    this.sessionOrderCounters.delete(sessionId);
-    const messages = this.getOrCreateSessionMap(sessionId);
-
-    for (const historyMsg of history) {
-      const messageId =
-        historyMsg.uuid ||
-        `history-${historyMsg.timestamp}-${Math.random().toString(36).slice(2, 9)}`;
-
-      // Assign order to each message for reliable sorting
-      const order = this.getNextOrder(sessionId);
-
-      if (historyMsg.type === 'user') {
-        // User text message - already committed
-        const messageWithState: UserMessageWithState = {
-          id: messageId,
-          type: 'user',
-          state: MessageState.COMMITTED,
-          timestamp: historyMsg.timestamp,
-          text: historyMsg.content,
-          order,
-        };
-        messages.set(messageId, messageWithState);
-      } else if (
-        historyMsg.type === 'assistant' ||
-        historyMsg.type === 'tool_use' ||
-        historyMsg.type === 'tool_result' ||
-        historyMsg.type === 'thinking'
-      ) {
-        // Claude messages - already complete
-        // Convert to ChatMessage format for consistent frontend handling
-        const claudeMessage = this.historyToClaudeMessage(historyMsg);
-        const messageWithState: ClaudeMessageWithState = {
-          id: messageId,
-          type: 'claude',
-          state: MessageState.COMPLETE,
-          timestamp: historyMsg.timestamp,
-          chatMessages: [
-            {
-              id: `${messageId}-0`,
-              source: 'claude',
-              message: claudeMessage,
-              timestamp: historyMsg.timestamp,
-              order,
-            },
-          ],
-          order,
-        };
-        messages.set(messageId, messageWithState);
-      }
-    }
+    this.stateMachine.loadFromHistory(sessionId, history);
 
     logger.info('Loaded messages from history', {
       sessionId,
-      messageCount: messages.size,
+      messageCount: this.stateMachine.getMessageCount(sessionId),
     });
-  }
-
-  /**
-   * Convert a HistoryMessage to a ClaudeMessage for storage.
-   */
-  private historyToClaudeMessage(msg: HistoryMessage): ClaudeMessage {
-    switch (msg.type) {
-      case 'tool_use':
-        if (msg.toolName && msg.toolId) {
-          return {
-            type: 'assistant',
-            message: {
-              role: 'assistant',
-              content: [
-                {
-                  type: 'tool_use',
-                  id: msg.toolId,
-                  name: msg.toolName,
-                  input: msg.toolInput ?? {},
-                },
-              ],
-            },
-          };
-        }
-        break;
-
-      case 'tool_result':
-        if (msg.toolId) {
-          return {
-            type: 'user',
-            message: {
-              role: 'user',
-              content: [
-                {
-                  type: 'tool_result',
-                  tool_use_id: msg.toolId,
-                  content: msg.content,
-                  is_error: msg.isError,
-                },
-              ],
-            },
-          };
-        }
-        break;
-
-      case 'thinking':
-        return {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [
-              {
-                type: 'thinking',
-                thinking: msg.content,
-              },
-            ],
-          },
-        };
-    }
-
-    // Default: assistant text message
-    return {
-      type: 'assistant',
-      message: {
-        role: 'assistant',
-        content: msg.content,
-      },
-    };
   }
 
   /**
    * Check if a message exists in a session.
    */
   hasMessage(sessionId: string, messageId: string): boolean {
-    return this.sessionMessages.get(sessionId)?.has(messageId) ?? false;
+    return this.stateMachine.hasMessage(sessionId, messageId);
   }
 
   /**
    * Get count of messages in a session.
    */
   getMessageCount(sessionId: string): number {
-    return this.sessionMessages.get(sessionId)?.size ?? 0;
+    return this.stateMachine.getMessageCount(sessionId);
   }
 
   /**
@@ -659,7 +364,7 @@ class MessageStateService {
     }
 
     // Check if there are messages waiting to be dispatched
-    const queuedCount = this.getQueuedMessageCount(sessionId);
+    const queuedCount = this.stateMachine.getQueuedMessageCount(sessionId);
     if (queuedCount > 0) {
       return { phase: 'starting' };
     }
