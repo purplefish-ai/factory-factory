@@ -14,16 +14,72 @@ import { workspaceStateMachine } from './workspace-state-machine.service';
 
 const logger = createLogger('worktree-lifecycle');
 const workspaceInitModes = new Map<string, boolean>();
+const RESUME_MODE_FILENAME = '.ff-resume-modes.json';
 
-export function setWorkspaceInitMode(workspaceId: string, useExistingBranch?: boolean): void {
+async function readResumeModes(worktreeBasePath: string): Promise<Record<string, boolean>> {
+  try {
+    const content = await fs.readFile(path.join(worktreeBasePath, RESUME_MODE_FILENAME), 'utf-8');
+    return JSON.parse(content) as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeResumeModes(
+  worktreeBasePath: string,
+  modes: Record<string, boolean>
+): Promise<void> {
+  await fs.mkdir(worktreeBasePath, { recursive: true });
+  await fs.writeFile(
+    path.join(worktreeBasePath, RESUME_MODE_FILENAME),
+    JSON.stringify(modes),
+    'utf-8'
+  );
+}
+
+export async function setWorkspaceInitMode(
+  workspaceId: string,
+  useExistingBranch: boolean | undefined,
+  worktreeBasePath?: string
+): Promise<void> {
   if (useExistingBranch === undefined) {
     return;
   }
   workspaceInitModes.set(workspaceId, useExistingBranch);
+  if (worktreeBasePath) {
+    const modes = await readResumeModes(worktreeBasePath);
+    modes[workspaceId] = useExistingBranch;
+    await writeResumeModes(worktreeBasePath, modes);
+  }
 }
 
-function getWorkspaceInitMode(workspaceId: string): boolean | undefined {
-  return workspaceInitModes.get(workspaceId);
+async function getWorkspaceInitMode(
+  workspaceId: string,
+  worktreeBasePath?: string
+): Promise<boolean | undefined> {
+  if (workspaceInitModes.has(workspaceId)) {
+    return workspaceInitModes.get(workspaceId);
+  }
+  if (!worktreeBasePath) {
+    return undefined;
+  }
+  const modes = await readResumeModes(worktreeBasePath);
+  return modes[workspaceId];
+}
+
+async function clearWorkspaceInitMode(
+  workspaceId: string,
+  worktreeBasePath?: string
+): Promise<void> {
+  workspaceInitModes.delete(workspaceId);
+  if (!worktreeBasePath) {
+    return;
+  }
+  const modes = await readResumeModes(worktreeBasePath);
+  if (workspaceId in modes) {
+    delete modes[workspaceId];
+    await writeResumeModes(worktreeBasePath, modes);
+  }
 }
 
 // Cache the authenticated GitHub username (fetched once per server lifetime)
@@ -247,14 +303,18 @@ class WorktreeLifecycleService {
       return;
     }
 
+    let project: WorkspaceWithProject['project'] | undefined;
+
     try {
       const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
-      const project = workspaceWithProject.project;
+      project = workspaceWithProject.project;
 
       const worktreeName = `workspace-${workspaceId}`;
       const baseBranch = options?.branchName ?? project.defaultBranch;
       const useExistingBranch =
-        options?.useExistingBranch ?? getWorkspaceInitMode(workspaceId) ?? false;
+        options?.useExistingBranch ??
+        (await getWorkspaceInitMode(workspaceId, project.worktreeBasePath)) ??
+        false;
 
       await gitOpsService.ensureBaseBranchExists(project, baseBranch, project.defaultBranch);
 
@@ -303,7 +363,7 @@ class WorktreeLifecycleService {
       });
       await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
     } finally {
-      workspaceInitModes.delete(workspaceId);
+      await clearWorkspaceInitMode(workspaceId, project?.worktreeBasePath);
     }
   }
 }

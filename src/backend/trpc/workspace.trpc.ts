@@ -1,5 +1,7 @@
 import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { DEFAULT_FIRST_SESSION } from '../prompts/workflows';
+import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { gitOpsService } from '../services/git-ops.service';
@@ -88,6 +90,7 @@ export const workspaceRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
+      const { configService } = ctx.appContext.services;
       if (input.useExistingBranch) {
         const project = await projectAccessor.findById(input.projectId);
         if (!project) {
@@ -103,7 +106,30 @@ export const workspaceRouter = router({
       // Create the workspace record
       const { useExistingBranch, ...createInput } = input;
       const workspace = await workspaceAccessor.create(createInput);
-      setWorkspaceInitMode(workspace.id, useExistingBranch);
+      const projectForSession = await projectAccessor.findById(input.projectId);
+      await setWorkspaceInitMode(
+        workspace.id,
+        useExistingBranch,
+        projectForSession?.worktreeBasePath
+      );
+
+      // Create a default Claude session so the workspace always has a chat tab.
+      // This prevents users from getting stuck in file view before starting a session.
+      const maxSessions = configService.getMaxSessionsPerWorkspace();
+      if (maxSessions > 0) {
+        try {
+          await claudeSessionAccessor.create({
+            workspaceId: workspace.id,
+            workflow: DEFAULT_FIRST_SESSION,
+            name: 'Chat 1',
+          });
+        } catch (error) {
+          logger.warn('Failed to create default session for workspace', {
+            workspaceId: workspace.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       // Initialize the worktree in the background so the frontend can navigate
       // immediately. The workspace detail page polls for initialization status
