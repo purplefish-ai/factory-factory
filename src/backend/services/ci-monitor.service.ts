@@ -98,7 +98,14 @@ class CIMonitorService {
       return { checked: 0, failures: 0, notified: 0 };
     }
 
-    logger.debug('Checking CI status for workspaces', { count: workspaces.length });
+    logger.info('Checking CI status for workspaces', {
+      count: workspaces.length,
+      workspaces: workspaces.map((w) => ({
+        id: w.id,
+        prUrl: w.prUrl,
+        prCiStatus: w.prCiStatus,
+      })),
+    });
 
     // Process workspaces concurrently with rate limiting
     const results = await Promise.all(
@@ -148,6 +155,15 @@ class CIMonitorService {
       // Detect CI status transitions
       const justFailed = previousStatus !== CIStatus.FAILURE && currentStatus === CIStatus.FAILURE;
       const recovered = previousStatus === CIStatus.FAILURE && currentStatus === CIStatus.SUCCESS;
+
+      logger.info('CI status check for workspace', {
+        workspaceId: workspace.id,
+        previousStatus,
+        currentStatus,
+        justFailed,
+        recovered,
+        prNumber: prResult.prNumber,
+      });
 
       // Update workspace with new CI status
       const updates: {
@@ -249,6 +265,10 @@ class CIMonitorService {
     try {
       // Check if auto-fix is enabled
       const settings = await userSettingsAccessor.get();
+      logger.info('CI auto-fix settings check', {
+        workspaceId,
+        autoFixCiIssues: settings.autoFixCiIssues,
+      });
       if (!settings.autoFixCiIssues) {
         logger.debug('CI auto-fix is disabled', { workspaceId });
         return;
