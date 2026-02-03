@@ -18,6 +18,22 @@ interface InitializationOverlayProps {
   hasStartupScript: boolean;
 }
 
+const RESUME_WORKSPACE_IDS_KEY = 'ff_resume_workspace_ids';
+
+function isResumeWorkspace(workspaceId: string): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(RESUME_WORKSPACE_IDS_KEY);
+    const existing = raw ? (JSON.parse(raw) as string[]) : [];
+    return existing.includes(workspaceId);
+  } catch {
+    return false;
+  }
+}
+
 export function InitializationOverlay({
   workspaceId,
   status,
@@ -93,7 +109,12 @@ export function InitializationOverlay({
 
         {isFailed && (
           <Button
-            onClick={() => retryInit.mutate({ id: workspaceId })}
+            onClick={() =>
+              retryInit.mutate({
+                id: workspaceId,
+                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
+              })
+            }
             disabled={retryInit.isPending}
           >
             {retryInit.isPending ? (

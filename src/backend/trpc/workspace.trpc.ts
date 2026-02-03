@@ -4,7 +4,10 @@ import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { gitOpsService } from '../services/git-ops.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
-import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
+import {
+  setWorkspaceInitMode,
+  worktreeLifecycleService,
+} from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -100,6 +103,7 @@ export const workspaceRouter = router({
       // Create the workspace record
       const { useExistingBranch, ...createInput } = input;
       const workspace = await workspaceAccessor.create(createInput);
+      setWorkspaceInitMode(workspace.id, useExistingBranch);
 
       // Initialize the worktree in the background so the frontend can navigate
       // immediately. The workspace detail page polls for initialization status

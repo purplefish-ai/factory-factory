@@ -136,6 +136,25 @@ type BranchInfo = {
   refType: 'local' | 'remote';
 };
 
+const RESUME_WORKSPACE_IDS_KEY = 'ff_resume_workspace_ids';
+
+function rememberResumeWorkspace(workspaceId: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(RESUME_WORKSPACE_IDS_KEY);
+    const existing = raw ? (JSON.parse(raw) as string[]) : [];
+    if (!existing.includes(workspaceId)) {
+      existing.push(workspaceId);
+      window.localStorage.setItem(RESUME_WORKSPACE_IDS_KEY, JSON.stringify(existing));
+    }
+  } catch {
+    // Non-blocking: ignore localStorage failures.
+  }
+}
+
 function ResumeBranchDialog({
   open,
   onOpenChange,
@@ -426,6 +445,7 @@ export default function WorkspacesListPage() {
         useExistingBranch: true,
       });
 
+      rememberResumeWorkspace(workspace.id);
       utils.workspace.list.invalidate({ projectId: project.id });
       utils.workspace.getProjectSummaryState.invalidate({ projectId: project.id });
       setResumeOpen(false);

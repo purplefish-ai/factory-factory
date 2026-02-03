@@ -157,11 +157,23 @@ export class GitClient {
       ? branchRef.slice('origin/'.length)
       : branchRef;
 
+    const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
+    const fetchSucceeded = fetchResult.code === 0;
+
     const localExists = await this.branchExists(localBranchName);
+    const originBranch = `origin/${localBranchName}`;
+    const originExists = await this.branchExists(originBranch);
+
+    let checkoutRef = branchRef;
+    if (fetchSucceeded && originExists) {
+      checkoutRef = originBranch;
+    } else if (originExists) {
+      checkoutRef = originBranch;
+    }
 
     const args = localExists
       ? ['worktree', 'add', worktreePath, localBranchName]
-      : ['worktree', 'add', '-b', localBranchName, worktreePath, branchRef];
+      : ['worktree', 'add', '-b', localBranchName, worktreePath, checkoutRef];
 
     const result = await gitCommandC(this.baseRepoPath, args);
     if (result.code !== 0) {

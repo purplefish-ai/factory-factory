@@ -13,6 +13,18 @@ import { terminalService } from './terminal.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
 
 const logger = createLogger('worktree-lifecycle');
+const workspaceInitModes = new Map<string, boolean>();
+
+export function setWorkspaceInitMode(workspaceId: string, useExistingBranch?: boolean): void {
+  if (useExistingBranch === undefined) {
+    return;
+  }
+  workspaceInitModes.set(workspaceId, useExistingBranch);
+}
+
+function getWorkspaceInitMode(workspaceId: string): boolean | undefined {
+  return workspaceInitModes.get(workspaceId);
+}
 
 // Cache the authenticated GitHub username (fetched once per server lifetime)
 let cachedGitHubUsername: string | null | undefined;
@@ -241,7 +253,8 @@ class WorktreeLifecycleService {
 
       const worktreeName = `workspace-${workspaceId}`;
       const baseBranch = options?.branchName ?? project.defaultBranch;
-      const useExistingBranch = options?.useExistingBranch ?? false;
+      const useExistingBranch =
+        options?.useExistingBranch ?? getWorkspaceInitMode(workspaceId) ?? false;
 
       await gitOpsService.ensureBaseBranchExists(project, baseBranch, project.defaultBranch);
 
