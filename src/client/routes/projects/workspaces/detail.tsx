@@ -96,30 +96,70 @@ function WorkspaceTitle({
   return <h1 className="text-lg font-semibold">{workspace.name}</h1>;
 }
 
-function WorkspacePrLink({
+function WorkspacePrAction({
   workspace,
+  hasChanges,
+  running,
+  isCreatingSession,
+  handleQuickAction,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  hasChanges?: boolean;
+  running: boolean;
+  isCreatingSession: boolean;
+  handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
 }) {
-  if (!(workspace.prUrl && workspace.prNumber) || workspace.prState === 'NONE') {
-    return null;
+  // Show Create PR button when there are changes and no PR (or PR is closed)
+  if (hasChanges && !running && (workspace.prState === 'NONE' || workspace.prState === 'CLOSED')) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 text-xs px-2"
+            disabled={isCreatingSession}
+            onClick={() =>
+              handleQuickAction(
+                'Create Pull Request',
+                'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.'
+              )
+            }
+          >
+            <GitPullRequest className="h-3 w-3" />
+            Create PR
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Create a pull request for this branch</TooltipContent>
+      </Tooltip>
+    );
   }
 
-  return (
-    <a
-      href={workspace.prUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
-        workspace.prState === 'MERGED'
-          ? 'text-green-500'
-          : 'text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
-      {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-    </a>
-  );
+  // Show PR link when PR exists and is not closed
+  if (
+    workspace.prUrl &&
+    workspace.prNumber &&
+    workspace.prState !== 'NONE' &&
+    workspace.prState !== 'CLOSED'
+  ) {
+    return (
+      <a
+        href={workspace.prUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
+          workspace.prState === 'MERGED'
+            ? 'text-green-500'
+            : 'text-muted-foreground hover:text-foreground'
+        }`}
+      >
+        <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
+        {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+      </a>
+    );
+  }
+
+  return null;
 }
 
 const CI_STATUS_CONFIG = {
@@ -215,50 +255,16 @@ function WorkspaceHeader({
       <div className="flex items-center gap-3">
         <WorkspaceTitle workspace={workspace} />
         <RunScriptPortBadge workspaceId={workspaceId} />
-        <WorkspacePrLink workspace={workspace} />
+        <WorkspacePrAction
+          workspace={workspace}
+          hasChanges={hasChanges}
+          running={running}
+          isCreatingSession={isCreatingSession}
+          handleQuickAction={handleQuickAction}
+        />
         <WorkspaceCiStatus workspace={workspace} />
       </div>
       <div className="flex items-center gap-1">
-        {hasChanges &&
-          !running &&
-          (workspace.prState === 'NONE' || workspace.prState === 'CLOSED') && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  disabled={isCreatingSession}
-                  onClick={() =>
-                    handleQuickAction(
-                      'Create Pull Request',
-                      'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.'
-                    )
-                  }
-                >
-                  <GitPullRequest className="h-3.5 w-3.5" />
-                  Create PR
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Create a pull request for this branch</TooltipContent>
-            </Tooltip>
-          )}
-        {workspace.prUrl &&
-          workspace.prNumber &&
-          workspace.prState !== 'NONE' &&
-          workspace.prState !== 'CLOSED' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" asChild>
-                  <a href={workspace.prUrl} target="_blank" rel="noopener noreferrer">
-                    <GitPullRequest className="h-3.5 w-3.5" />
-                    PR #{workspace.prNumber}
-                  </a>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>View pull request</TooltipContent>
-            </Tooltip>
-          )}
         <QuickActionsMenu
           onExecuteAgent={(action) => {
             if (action.content) {
@@ -612,6 +618,7 @@ function WorkspaceChatContent() {
     recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
+    invalidateWorkspace,
   } = useWorkspaceData({ workspaceId: workspaceId });
 
   const { rightPanelVisible, activeTabId } = useWorkspacePanel();
@@ -681,6 +688,17 @@ function WorkspaceChatContent() {
   const loadingSession = sessionStatus.phase === 'loading';
   // Session is ready when session_loaded has been received (ready or running phase)
   const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
+
+  // Track previous running state to detect when session stops
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    // When session transitions from running to not running, refresh workspace data
+    // This catches PR creation, commits, and other state changes made during the session
+    if (wasRunningRef.current && !running) {
+      invalidateWorkspace();
+    }
+    wasRunningRef.current = running;
+  }, [running, invalidateWorkspace]);
 
   // Session management
   const {
