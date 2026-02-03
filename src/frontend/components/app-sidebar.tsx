@@ -619,6 +619,11 @@ function SortableWorkspaceItem({
               className="w-4 shrink-0 flex justify-center mt-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
               {...attributes}
               {...listeners}
+              onClick={(e) => {
+                // Prevent click from propagating to the Link and triggering navigation
+                e.preventDefault();
+                e.stopPropagation();
+              }}
             >
               <GripVertical className="h-3 w-3" />
             </span>
