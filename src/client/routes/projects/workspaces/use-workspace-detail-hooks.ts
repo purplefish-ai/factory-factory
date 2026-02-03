@@ -86,6 +86,62 @@ export function useAutoFocusChatInput({
   }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace, inputRef]);
 }
 
+/** Default workflow for auto-created sessions */
+const DEFAULT_WORKFLOW = 'feature';
+
+/**
+ * Hook to auto-create a session when a workspace has no sessions.
+ * This handles the case where old workspaces (created before auto-session-creation)
+ * are opened and need a session to be created.
+ */
+export function useAutoCreateSession({
+  workspaceId,
+  claudeSessions,
+  hasWorktreePath,
+  createSession,
+  setSelectedDbSessionId,
+}: {
+  workspaceId: string;
+  claudeSessions: Array<{ id: string }> | undefined;
+  hasWorktreePath: boolean;
+  createSession: {
+    mutate: (
+      input: { workspaceId: string; workflow: string; model: string; name: string },
+      options?: { onSuccess?: (data: { id: string }) => void }
+    ) => void;
+    isPending: boolean;
+  };
+  setSelectedDbSessionId: (id: string | null) => void;
+}) {
+  const hasAutoCreatedRef = useRef(false);
+
+  useEffect(() => {
+    // Only auto-create once per workspace, when:
+    // 1. Sessions have loaded (claudeSessions is defined)
+    // 2. No sessions exist
+    // 3. Workspace has a worktree path (ready for sessions)
+    // 4. Not already creating
+    // 5. Haven't already auto-created
+    if (
+      claudeSessions !== undefined &&
+      claudeSessions.length === 0 &&
+      hasWorktreePath &&
+      !createSession.isPending &&
+      !hasAutoCreatedRef.current
+    ) {
+      hasAutoCreatedRef.current = true;
+      createSession.mutate(
+        { workspaceId, workflow: DEFAULT_WORKFLOW, model: '', name: 'Chat 1' },
+        {
+          onSuccess: (session) => {
+            setSelectedDbSessionId(session.id);
+          },
+        }
+      );
+    }
+  }, [claudeSessions, hasWorktreePath, createSession, workspaceId, setSelectedDbSessionId]);
+}
+
 /**
  * Hook to handle pending prompts stored in sessionStorage.
  * Used when creating a workspace with a default prompt that should be sent

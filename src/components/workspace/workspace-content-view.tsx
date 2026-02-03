@@ -1,12 +1,10 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { ReactNode } from 'react';
 
-import type { GitHubIssue } from '@/backend/services/github-cli.service';
 import type { AppRouter } from '@/frontend/lib/trpc';
 
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
-import { WorkflowSelector } from './workflow-selector';
 
 // =============================================================================
 // Types
@@ -14,26 +12,20 @@ import { WorkflowSelector } from './workflow-selector';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type ClaudeSession = RouterOutputs['session']['listClaudeSessions'][number];
-type Workflow = RouterOutputs['session']['listWorkflows'][number];
 
 interface WorkspaceContentViewProps {
   workspaceId: string;
   claudeSessions: ClaudeSession[] | undefined;
-  workflows: Workflow[] | undefined;
-  recommendedWorkflow: string | undefined;
   selectedSessionId: string | null;
   runningSessionId: string | undefined;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
-  onWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
   children: ReactNode;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
-  /** Whether the workspace has a worktree path (required for sessions) */
-  hasWorktreePath: boolean;
 }
 
 // =============================================================================
@@ -41,51 +33,30 @@ interface WorkspaceContentViewProps {
 // =============================================================================
 
 /**
- * WorkspaceContentView handles the conditional rendering between:
- * - Workflow selector (when no sessions exist yet)
+ * WorkspaceContentView handles the rendering of:
+ * - Loading state (when no sessions exist yet - auto-creation in progress)
  * - Session tab bar + chat content (when sessions exist)
- *
- * This extraction reduces cognitive complexity in the main page component.
  */
 export function WorkspaceContentView({
   workspaceId,
   claudeSessions,
-  workflows,
-  recommendedWorkflow,
   selectedSessionId,
   runningSessionId,
   isCreatingSession,
   isDeletingSession,
-  onWorkflowSelect,
   onSelectSession,
   onCreateSession,
   onCloseSession,
   children,
   maxSessions,
-  hasWorktreePath,
 }: WorkspaceContentViewProps) {
-  // Show workflow selector when no sessions exist
-  if (claudeSessions && claudeSessions.length === 0) {
+  // Show loading state when no sessions exist (auto-creation should be in progress)
+  if (!claudeSessions || claudeSessions.length === 0) {
     return (
       <MainViewContent workspaceId={workspaceId} className="flex-1">
-        {workflows && recommendedWorkflow ? (
-          <WorkflowSelector
-            workflows={workflows}
-            recommendedWorkflow={recommendedWorkflow}
-            onSelect={onWorkflowSelect}
-            disabled={isCreatingSession || !hasWorktreePath}
-            warningMessage={
-              !hasWorktreePath
-                ? 'Workspace is initializing... Please wait for the worktree to be created.'
-                : undefined
-            }
-            workspaceId={workspaceId}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
-        )}
+        <div className="flex items-center justify-center h-full">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
       </MainViewContent>
     );
   }

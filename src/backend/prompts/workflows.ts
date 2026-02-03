@@ -28,16 +28,6 @@ export interface Workflow {
   content: string;
 }
 
-// =============================================================================
-// Constants
-// =============================================================================
-
-/** Default workflow for first session in a workspace */
-export const DEFAULT_FIRST_SESSION = 'feature';
-
-/** Default workflow for subsequent sessions */
-export const DEFAULT_FOLLOWUP = 'followup';
-
 // Path to workflows directory (relative to this file's location)
 // From src/backend/prompts/ → src/backend → src → project root
 const WORKFLOWS_DIR = resolve(import.meta.dirname, '../../..', 'prompts/workflows');
@@ -158,13 +148,6 @@ function loadWorkflows(): Workflow[] {
 // =============================================================================
 
 /**
- * List all available workflows.
- */
-export function listWorkflows(): Workflow[] {
-  return loadWorkflows();
-}
-
-/**
  * Get a workflow by ID.
  */
 export function getWorkflow(id: string): Workflow | null {
@@ -177,11 +160,4 @@ export function getWorkflow(id: string): Workflow | null {
  */
 export function getWorkflowContent(id: string): string | null {
   return getWorkflow(id)?.content ?? null;
-}
-
-/**
- * Clear the workflow cache (useful for testing or hot reloading).
- */
-export function clearWorkflowCache(): void {
-  cachedWorkflows = null;
 }

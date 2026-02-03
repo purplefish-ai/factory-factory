@@ -15,6 +15,7 @@ import { trpc } from '@/frontend/lib/trpc';
 
 import { useAutoScroll, useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
+  useAutoCreateSession,
   useAutoFocusChatInput,
   usePendingPrompt,
   useSelectedSessionId,
@@ -33,8 +34,6 @@ export function WorkspaceDetailContainer() {
     workspace,
     workspaceLoading,
     claudeSessions,
-    workflows,
-    recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
     invalidateWorkspace,
@@ -121,7 +120,6 @@ export function WorkspaceDetailContainer() {
     preferredIde,
     handleSelectSession,
     handleCloseSession,
-    handleWorkflowSelect,
     handleNewChat,
     handleQuickAction,
   } = useSessionManagement({
@@ -134,6 +132,15 @@ export function WorkspaceDetailContainer() {
     setSelectedDbSessionId,
     selectedModel: chatSettings.selectedModel,
     isSessionReady,
+  });
+
+  // Auto-create a session for workspaces that don't have one yet
+  useAutoCreateSession({
+    workspaceId,
+    claudeSessions,
+    hasWorktreePath: !!workspace?.worktreePath,
+    createSession,
+    setSelectedDbSessionId,
   });
 
   const handleArchiveError = useCallback((error: unknown) => {
@@ -237,18 +244,14 @@ export function WorkspaceDetailContainer() {
             <WorkspaceContentView
               workspaceId={workspaceId}
               claudeSessions={claudeSessions}
-              workflows={workflows}
-              recommendedWorkflow={recommendedWorkflow}
               selectedSessionId={selectedDbSessionId}
               runningSessionId={runningSessionId}
               isCreatingSession={createSession.isPending}
               isDeletingSession={deleteSession.isPending}
-              onWorkflowSelect={handleWorkflowSelect}
               onSelectSession={handleSelectSession}
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}
               maxSessions={maxSessions}
-              hasWorktreePath={!!workspace?.worktreePath}
             >
               <ChatContent
                 messages={messages}

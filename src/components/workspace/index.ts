@@ -18,6 +18,5 @@ export * from './terminal-tab-bar';
 export * from './todo-panel-container';
 export * from './use-create-workspace';
 export * from './use-terminal-websocket';
-export * from './workflow-selector';
 export * from './workspace-content-view';
 export * from './workspace-panel-context';

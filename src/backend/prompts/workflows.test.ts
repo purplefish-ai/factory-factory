@@ -1,76 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  clearWorkflowCache,
-  DEFAULT_FIRST_SESSION,
-  DEFAULT_FOLLOWUP,
-  getWorkflow,
-  getWorkflowContent,
-  listWorkflows,
-} from './workflows';
+import { describe, expect, it } from 'vitest';
+import { getWorkflow, getWorkflowContent } from './workflows';
 
 // =============================================================================
 // Test Setup
 // =============================================================================
 
 describe('workflows', () => {
-  afterEach(() => {
-    // Clear the cache between tests to ensure isolation
-    clearWorkflowCache();
-  });
-
-  // ===========================================================================
-  // listWorkflows Tests
-  // ===========================================================================
-
-  describe('listWorkflows', () => {
-    it('should return an array of workflows', () => {
-      const workflows = listWorkflows();
-      expect(Array.isArray(workflows)).toBe(true);
-    });
-
-    it('should load all workflow files from prompts/workflows/', () => {
-      const workflows = listWorkflows();
-      // We know there are at least 4 workflow files: bugfix, explore, feature, followup
-      expect(workflows.length).toBeGreaterThanOrEqual(4);
-    });
-
-    it('should include expected workflow IDs', () => {
-      const workflows = listWorkflows();
-      const ids = workflows.map((w) => w.id);
-
-      expect(ids).toContain('feature');
-      expect(ids).toContain('bugfix');
-      expect(ids).toContain('explore');
-      expect(ids).toContain('followup');
-    });
-
-    it('should parse workflow metadata correctly', () => {
-      const workflows = listWorkflows();
-      const feature = workflows.find((w) => w.id === 'feature');
-
-      expect(feature).toBeDefined();
-      expect(feature?.name).toBe('Feature');
-      expect(feature?.description).toBe('End-to-end feature implementation with PR creation');
-      expect(feature?.expectsPR).toBe(true);
-    });
-
-    it('should parse expectsPR as false when specified', () => {
-      const workflows = listWorkflows();
-      const explore = workflows.find((w) => w.id === 'explore');
-
-      expect(explore).toBeDefined();
-      expect(explore?.expectsPR).toBe(false);
-    });
-
-    it('should cache results after first call', () => {
-      const workflows1 = listWorkflows();
-      const workflows2 = listWorkflows();
-
-      // Should return the same array instance (cached)
-      expect(workflows1).toBe(workflows2);
-    });
-  });
-
   // ===========================================================================
   // getWorkflow Tests
   // ===========================================================================
@@ -104,6 +39,22 @@ describe('workflows', () => {
       expect(workflow?.content).not.toContain('---');
       expect(workflow?.content).not.toContain('expectsPR:');
     });
+
+    it('should parse workflow metadata correctly', () => {
+      const feature = getWorkflow('feature');
+
+      expect(feature).toBeDefined();
+      expect(feature?.name).toBe('Feature');
+      expect(feature?.description).toBe('End-to-end feature implementation with PR creation');
+      expect(feature?.expectsPR).toBe(true);
+    });
+
+    it('should parse expectsPR as false when specified', () => {
+      const explore = getWorkflow('explore');
+
+      expect(explore).toBeDefined();
+      expect(explore?.expectsPR).toBe(false);
+    });
   });
 
   // ===========================================================================
@@ -133,69 +84,39 @@ describe('workflows', () => {
   });
 
   // ===========================================================================
-  // Constants Tests
-  // ===========================================================================
-
-  describe('constants', () => {
-    it('should have valid DEFAULT_FIRST_SESSION workflow', () => {
-      const workflow = getWorkflow(DEFAULT_FIRST_SESSION);
-      expect(workflow).toBeDefined();
-      expect(workflow?.id).toBe('feature');
-    });
-
-    it('should have valid DEFAULT_FOLLOWUP workflow', () => {
-      const workflow = getWorkflow(DEFAULT_FOLLOWUP);
-      expect(workflow).toBeDefined();
-      expect(workflow?.id).toBe('followup');
-    });
-  });
-
-  // ===========================================================================
-  // clearWorkflowCache Tests
-  // ===========================================================================
-
-  describe('clearWorkflowCache', () => {
-    it('should clear the cache and allow fresh reload', () => {
-      const workflows1 = listWorkflows();
-      clearWorkflowCache();
-      const workflows2 = listWorkflows();
-
-      // After clearing cache, should be a new array instance
-      expect(workflows1).not.toBe(workflows2);
-
-      // But should have the same content
-      expect(workflows1.length).toBe(workflows2.length);
-    });
-  });
-
-  // ===========================================================================
   // Workflow Content Tests
   // ===========================================================================
 
   describe('workflow content', () => {
-    it('should have meaningful content for all workflows', () => {
-      const workflows = listWorkflows();
+    it('should have meaningful content for known workflows', () => {
+      const knownWorkflows = ['feature', 'bugfix', 'explore', 'followup'];
 
-      for (const workflow of workflows) {
-        expect(workflow.content.length).toBeGreaterThan(100);
-        expect(workflow.content).toContain('#'); // Should have markdown headers
+      for (const id of knownWorkflows) {
+        const workflow = getWorkflow(id);
+        expect(workflow).toBeDefined();
+        expect(workflow?.content.length).toBeGreaterThan(100);
+        expect(workflow?.content).toContain('#'); // Should have markdown headers
       }
     });
 
-    it('should have descriptions for all workflows', () => {
-      const workflows = listWorkflows();
+    it('should have descriptions for known workflows', () => {
+      const knownWorkflows = ['feature', 'bugfix', 'explore', 'followup'];
 
-      for (const workflow of workflows) {
-        expect(workflow.description.length).toBeGreaterThan(10);
+      for (const id of knownWorkflows) {
+        const workflow = getWorkflow(id);
+        expect(workflow).toBeDefined();
+        expect(workflow?.description.length).toBeGreaterThan(10);
       }
     });
 
-    it('should have proper names for all workflows', () => {
-      const workflows = listWorkflows();
+    it('should have proper names for known workflows', () => {
+      const knownWorkflows = ['feature', 'bugfix', 'explore', 'followup'];
 
-      for (const workflow of workflows) {
+      for (const id of knownWorkflows) {
+        const workflow = getWorkflow(id);
+        expect(workflow).toBeDefined();
         // Name should be capitalized (first letter uppercase)
-        expect(workflow.name[0]).toBe(workflow.name[0].toUpperCase());
+        expect(workflow?.name[0]).toBe(workflow?.name[0].toUpperCase());
       }
     });
   });
