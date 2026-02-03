@@ -5,9 +5,9 @@
  * shared constants, and message state machine types.
  */
 
-import type { PendingInteractiveRequest } from './pending-request-types';
+import type { PendingInteractiveRequest } from '../pending-request-types';
 
-export type { PendingInteractiveRequest } from './pending-request-types';
+export type { PendingInteractiveRequest } from '../pending-request-types';
 
 // =============================================================================
 // Slash Command Types

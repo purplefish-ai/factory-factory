@@ -3,20 +3,10 @@
  *
  * Tests the message state machine that manages unified message state for chat sessions.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HistoryMessage, QueuedMessage } from '@/shared/claude-protocol';
-import { isClaudeMessage, isUserMessage, MessageState } from '@/shared/claude-protocol';
-import { messageStateService } from './message-state.service';
-
-// Mock the chatConnectionService to prevent actual WebSocket broadcasts
-vi.mock('./chat-connection.service', () => ({
-  chatConnectionService: {
-    forwardToSession: vi.fn(),
-  },
-}));
-
-// Import the mock after setup
-import { chatConnectionService } from './chat-connection.service';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { HistoryMessage, QueuedMessage } from '@/shared/claude';
+import { isClaudeMessage, isUserMessage, MessageState } from '@/shared/claude';
+import { type MessageStateEvent, messageStateService } from './message-state.service';
 
 // =============================================================================
 // Test Helpers
@@ -56,8 +46,15 @@ describe('MessageStateService', () => {
   // Clear ALL sessions between tests to ensure isolation
   beforeEach(() => {
     messageStateService.clearAllSessions();
-    vi.clearAllMocks();
   });
+
+  function collectEvents(): { events: MessageStateEvent[]; unsubscribe: () => void } {
+    const events: MessageStateEvent[] = [];
+    const unsubscribe = messageStateService.onEvent((event) => {
+      events.push(event);
+    });
+    return { events, unsubscribe };
+  }
 
   // ---------------------------------------------------------------------------
   // createUserMessage
@@ -126,24 +123,31 @@ describe('MessageStateService', () => {
     });
 
     it('should emit state change event with full message content', () => {
+      const { events, unsubscribe } = collectEvents();
       const msg = createTestQueuedMessage('msg-1');
       messageStateService.createUserMessage('session-1', msg);
+      unsubscribe();
 
-      expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
-        type: 'message_state_changed',
-        id: 'msg-1',
-        newState: MessageState.ACCEPTED,
-        queuePosition: 0,
-        errorMessage: undefined,
-        // For ACCEPTED state, includes full user message content
-        userMessage: {
-          text: msg.text,
-          timestamp: msg.timestamp,
-          attachments: msg.attachments,
-          settings: msg.settings,
-          order: 0,
+      expect(events).toEqual([
+        {
+          type: 'message_state_changed',
+          sessionId: 'session-1',
+          data: {
+            id: 'msg-1',
+            newState: MessageState.ACCEPTED,
+            queuePosition: 0,
+            errorMessage: undefined,
+            // For ACCEPTED state, includes full user message content
+            userMessage: {
+              text: msg.text,
+              timestamp: msg.timestamp,
+              attachments: msg.attachments,
+              settings: msg.settings,
+              order: 0,
+            },
+          },
         },
-      });
+      ]);
     });
   });
 
@@ -227,17 +231,24 @@ describe('MessageStateService', () => {
     it('should emit state change event on success', () => {
       const msg = createTestQueuedMessage('msg-1');
       messageStateService.createUserMessage('session-1', msg);
-      vi.clearAllMocks();
+      const { events, unsubscribe } = collectEvents();
 
       messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
+      unsubscribe();
 
-      expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
-        type: 'message_state_changed',
-        id: 'msg-1',
-        newState: MessageState.DISPATCHED,
-        queuePosition: 0,
-        errorMessage: undefined,
-      });
+      expect(events).toEqual([
+        {
+          type: 'message_state_changed',
+          sessionId: 'session-1',
+          data: {
+            id: 'msg-1',
+            newState: MessageState.DISPATCHED,
+            queuePosition: 0,
+            errorMessage: undefined,
+            userMessage: undefined,
+          },
+        },
+      ]);
     });
   });
 
@@ -510,17 +521,17 @@ describe('MessageStateService', () => {
     });
 
     it('should not emit state change events (for cold load)', () => {
-      vi.clearAllMocks();
-
+      const { events, unsubscribe } = collectEvents();
       const history: HistoryMessage[] = [
         createTestHistoryMessage('user', 'Hello', 'uuid-1'),
         createTestHistoryMessage('assistant', 'Hi!', 'uuid-2'),
       ];
 
       messageStateService.loadFromHistory('session-1', history);
+      unsubscribe();
 
       // No state change events should be emitted during history load
-      expect(chatConnectionService.forwardToSession).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
     });
 
     it('should generate IDs for messages without UUIDs', () => {
@@ -605,20 +616,24 @@ describe('MessageStateService', () => {
 
   describe('sendSnapshot', () => {
     it('should send messages_snapshot event', () => {
+      const { events, unsubscribe } = collectEvents();
       messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
-      vi.clearAllMocks();
 
       messageStateService.sendSnapshot('session-1', { phase: 'ready' });
+      unsubscribe();
 
-      expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
-        type: 'messages_snapshot',
-        messages: expect.any(Array),
-        sessionStatus: { phase: 'ready' },
-        pendingInteractiveRequest: undefined,
-      });
+      expect(
+        events.some(
+          (event) =>
+            event.type === 'messages_snapshot' &&
+            event.sessionId === 'session-1' &&
+            event.data.sessionStatus.phase === 'ready'
+        )
+      ).toBe(true);
     });
 
     it('should include pending interactive request if provided', () => {
+      const { events, unsubscribe } = collectEvents();
       const pendingRequest = {
         requestId: 'req-1',
         toolName: 'AskUserQuestion',
@@ -627,28 +642,35 @@ describe('MessageStateService', () => {
       };
 
       messageStateService.sendSnapshot('session-1', { phase: 'running' }, pendingRequest);
+      unsubscribe();
 
-      expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
-        type: 'messages_snapshot',
-        messages: expect.any(Array),
-        sessionStatus: { phase: 'running' },
-        pendingInteractiveRequest: pendingRequest,
-      });
+      expect(
+        events.some(
+          (event) =>
+            event.type === 'messages_snapshot' &&
+            event.sessionId === 'session-1' &&
+            event.data.sessionStatus.phase === 'running' &&
+            event.data.pendingInteractiveRequest === pendingRequest
+        )
+      ).toBe(true);
     });
 
     it('should return messages sorted by order in snapshot', () => {
+      const { events, unsubscribe } = collectEvents();
       const msg1 = createTestQueuedMessage('msg-1');
       const msg2 = createTestQueuedMessage('msg-2');
 
       // Add in specific order - messages will be sorted by order (creation order)
       messageStateService.createUserMessage('session-1', msg1);
       messageStateService.createUserMessage('session-1', msg2);
-      vi.clearAllMocks();
-
       messageStateService.sendSnapshot('session-1', { phase: 'ready' });
+      unsubscribe();
 
-      const call = vi.mocked(chatConnectionService.forwardToSession).mock.calls[0];
-      const payload = call[1] as { messages: Array<{ id: string; order?: number }> };
+      const snapshot = events.find((event) => event.type === 'messages_snapshot');
+      if (!snapshot || snapshot.type !== 'messages_snapshot') {
+        expect.fail('Expected messages_snapshot event');
+      }
+      const payload = snapshot.data as { messages: Array<{ id: string; order?: number }> };
       expect(payload.messages[0].id).toBe('msg-1');
       expect(payload.messages[0].order).toBe(0);
       expect(payload.messages[1].id).toBe('msg-2');
@@ -656,6 +678,7 @@ describe('MessageStateService', () => {
     });
 
     it('should include planContent in pendingInteractiveRequest', () => {
+      const { events, unsubscribe } = collectEvents();
       const pendingRequest = {
         requestId: 'req-plan-123',
         toolName: 'EnterPlanMode',
@@ -665,13 +688,17 @@ describe('MessageStateService', () => {
       };
 
       messageStateService.sendSnapshot('session-1', { phase: 'running' }, pendingRequest);
+      unsubscribe();
 
-      expect(chatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
-        type: 'messages_snapshot',
-        messages: [],
-        sessionStatus: { phase: 'running' },
-        pendingInteractiveRequest: pendingRequest,
-      });
+      expect(
+        events.some(
+          (event) =>
+            event.type === 'messages_snapshot' &&
+            event.sessionId === 'session-1' &&
+            event.data.sessionStatus.phase === 'running' &&
+            event.data.pendingInteractiveRequest === pendingRequest
+        )
+      ).toBe(true);
     });
   });
 

@@ -1,11 +1,11 @@
 /**
  * Frontend helper utilities and UI-specific types for the Claude chat protocol.
  *
- * Core protocol types/constants are defined in src/shared/claude-protocol.ts
+ * Core protocol types/constants are defined in src/shared/claude/protocol.ts
  * and re-exported here for convenience.
  */
 
-export * from '@/shared/claude-protocol';
+export * from '@/shared/claude';
 
 import type {
   ChatMessage,
@@ -21,7 +21,7 @@ import type {
   ToolResultContentValue,
   ToolUseContent,
   WebSocketMessage,
-} from '@/shared/claude-protocol';
+} from '@/shared/claude';
 
 // =============================================================================
 // UI Chat Message Group Types

@@ -196,6 +196,9 @@ model UserSettings {
   playSoundOnComplete   Boolean  @default(true)   // Play sound when workspace completes
   notificationSoundPath String?                   // Path to custom notification sound file
 
+  // Sidebar Settings
+  workspaceOrder      Json?    // { [projectId]: string[] } - ordered workspace IDs per project
+
   // Cached slash commands (from Claude CLI initialize response)
   cachedSlashCommands   Json?
 

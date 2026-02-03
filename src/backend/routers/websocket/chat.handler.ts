@@ -21,6 +21,7 @@ import type { ClaudeClient } from '../../claude/index';
 import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
 import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import type { ConnectionInfo } from '../../services/chat-connection.service';
+import { chatTransportAdapterService } from '../../services/chat-transport-adapter.service';
 import { toMessageString } from './message-utils';
 
 function sendBadRequest(socket: Duplex, message: string): void {
@@ -239,6 +240,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
     ensureInitialized();
+    // Ensure message state events are forwarded over WebSocket transport.
+    chatTransportAdapterService.setup();
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
     const dbSessionId = url.searchParams.get('sessionId') || null;
     const rawWorkingDir = url.searchParams.get('workingDir');

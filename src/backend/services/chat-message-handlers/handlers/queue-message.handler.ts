@@ -5,6 +5,30 @@ import { tryHandleAsInteractiveResponse } from '../interactive-response';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
 import { buildQueuedMessage, notifyMessageAccepted } from '../utils';
 
+/**
+ * Extract text content from text attachments.
+ * Used to provide content for interactive responses when user pastes large text
+ * that becomes an attachment instead of inline text.
+ */
+function extractTextFromAttachments(
+  attachments: QueueMessageInput['attachments']
+): string | undefined {
+  if (!attachments || attachments.length === 0) {
+    return undefined;
+  }
+
+  // Collect text from all text attachments
+  const textParts: string[] = [];
+  for (const attachment of attachments) {
+    if (attachment.contentType === 'text' && attachment.data) {
+      textParts.push(attachment.data);
+    }
+  }
+
+  // Return combined text if any text attachments found
+  return textParts.length > 0 ? textParts.join('\n\n') : undefined;
+}
+
 export function createQueueMessageHandler(deps: HandlerRegistryDependencies): ChatMessageHandler {
   return async ({ ws, sessionId, message }) => {
     const typedMessage = message as QueueMessageInput;
@@ -22,8 +46,11 @@ export function createQueueMessageHandler(deps: HandlerRegistryDependencies): Ch
     }
 
     // Check if there's a pending interactive request - if so, treat this message as a response
+    // Use inline text if available, otherwise extract text from text attachments
+    // This handles the case where user pastes large text that becomes an attachment
     const messageId = typedMessage.id;
-    if (text && tryHandleAsInteractiveResponse(ws, sessionId, messageId, text)) {
+    const responseText = text || extractTextFromAttachments(typedMessage.attachments);
+    if (responseText && tryHandleAsInteractiveResponse(ws, sessionId, messageId, responseText)) {
       return;
     }
 
