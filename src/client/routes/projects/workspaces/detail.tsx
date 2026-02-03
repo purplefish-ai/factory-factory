@@ -22,21 +22,11 @@ import {
   useChatWebSocket,
   VirtualizedMessageList,
 } from '@/components/chat';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
+  ArchiveWorkspaceDialog,
   QuickActionsMenu,
   RightPanel,
   RunScriptButton,
@@ -334,19 +324,12 @@ function WorkspaceChatContent() {
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
-  const [commitChangesChecked, setCommitChangesChecked] = useState(true);
 
   const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
     { enabled: !!workspace?.worktreePath, refetchInterval: 15_000, staleTime: 10_000 }
   );
   const hasUncommitted = gitStatus?.hasUncommitted === true;
-
-  useEffect(() => {
-    if (archiveDialogOpen) {
-      setCommitChangesChecked(true);
-    }
-  }, [archiveDialogOpen]);
 
   // Initialize selectedDbSessionId when sessions first load
   useEffect(() => {
@@ -431,14 +414,17 @@ function WorkspaceChatContent() {
     toast.error(typedError.message ?? 'Failed to archive workspace');
   }, []);
 
-  const handleArchive = useCallback(() => {
-    archiveWorkspace.mutate(
-      { id: workspaceId, commitUncommitted: commitChangesChecked },
-      {
-        onError: handleArchiveError,
-      }
-    );
-  }, [archiveWorkspace, commitChangesChecked, handleArchiveError, workspaceId]);
+  const handleArchive = useCallback(
+    (commitUncommitted: boolean) => {
+      archiveWorkspace.mutate(
+        { id: workspaceId, commitUncommitted },
+        {
+          onError: handleArchiveError,
+        }
+      );
+    },
+    [archiveWorkspace, handleArchiveError, workspaceId]
+  );
 
   const handleArchiveRequest = useCallback(() => {
     setArchiveDialogOpen(true);
@@ -733,45 +719,13 @@ function WorkspaceChatContent() {
         )}
       </ResizablePanelGroup>
 
-      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Archive Workspace</AlertDialogTitle>
-            <AlertDialogDescription>
-              Archiving will remove the workspace worktree from disk.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-3">
-            {hasUncommitted && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Warning: This workspace has uncommitted changes and they will be committed before
-                archiving.
-              </div>
-            )}
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={commitChangesChecked}
-                onCheckedChange={(checked) => setCommitChangesChecked(checked === true)}
-              />
-              Commit uncommitted changes before archiving
-            </label>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={archiveWorkspace.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleArchive();
-                setArchiveDialogOpen(false);
-              }}
-              disabled={archiveWorkspace.isPending || (hasUncommitted && !commitChangesChecked)}
-              className={buttonVariants({ variant: 'destructive' })}
-            >
-              Archive
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ArchiveWorkspaceDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        hasUncommitted={hasUncommitted}
+        isPending={archiveWorkspace.isPending}
+        onConfirm={handleArchive}
+      />
     </div>
   );
 }
