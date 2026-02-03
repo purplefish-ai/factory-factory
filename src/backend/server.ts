@@ -14,6 +14,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import type { Server as HttpServer } from 'node:http';
 import { createServer as createHttpServer } from 'node:http';
 import { join } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
@@ -21,7 +22,6 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
 import { type AppContext, createAppContext } from './app-context';
-import type { ServerInstance } from './types/server-instance';
 import { prisma } from './db';
 import { registerInterceptors } from './interceptors';
 import {
@@ -40,6 +40,7 @@ import {
 } from './routers/websocket';
 import { reconciliationService } from './services/reconciliation.service';
 import { appRouter, createContext } from './trpc/index';
+import type { ServerInstance } from './types/server-instance';
 
 export type { ServerInstance };
 
