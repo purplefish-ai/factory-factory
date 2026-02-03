@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
-import type { ClaudeClient } from '../../claude/index';
 import type { ChatMessageInput } from '@/shared/websocket';
+import type { ClaudeClient } from '../../claude/index';
 
 export interface ClientCreator {
   getOrCreate(

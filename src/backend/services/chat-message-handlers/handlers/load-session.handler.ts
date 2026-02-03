@@ -7,9 +7,9 @@ import {
 } from '../../../schemas/tool-inputs.schema';
 import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import { eventCompressionService } from '../../event-compression.service';
+import { createLogger } from '../../logger.service';
 import { messageStateService } from '../../message-state.service';
 import { sessionService } from '../../session.service';
-import { createLogger } from '../../logger.service';
 import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');

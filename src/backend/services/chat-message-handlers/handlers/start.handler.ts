@@ -1,6 +1,6 @@
 import type { StartMessageInput } from '@/shared/websocket';
-import { sessionService } from '../../session.service';
 import { createLogger } from '../../logger.service';
+import { sessionService } from '../../session.service';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
 import { getValidModel } from '../utils';
 

@@ -17,10 +17,10 @@ import { chatConnectionService } from './chat-connection.service';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
 import type { ClientCreator } from './chat-message-handlers/types';
+import { createLogger } from './logger.service';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
 import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
-import { createLogger } from './logger.service';
 
 const logger = createLogger('chat-message-handlers');
 

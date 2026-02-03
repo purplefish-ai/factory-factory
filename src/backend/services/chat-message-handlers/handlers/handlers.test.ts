@@ -112,7 +112,9 @@ describe('chat message handlers', () => {
     const handler = createListSessionsHandler();
     const ws = createWs();
 
-    (mockedSessionManager.listSessions as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: 's1' }]);
+    (mockedSessionManager.listSessions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 's1' },
+    ]);
 
     await handler({ ws, sessionId: '', workingDir: '/tmp', message: { type: 'list_sessions' } });
 
@@ -220,7 +222,9 @@ describe('chat message handlers', () => {
     mockedSessionService.getClient.mockReturnValue({
       getClaudeSessionId: () => 'claude-1',
     } as unknown as ClaudeClient);
-    (mockedSessionManager.getHistory as ReturnType<typeof vi.fn>).mockResolvedValue([{ role: 'user' }]);
+    (mockedSessionManager.getHistory as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { role: 'user' },
+    ]);
 
     const handler = createGetHistoryHandler();
     const ws = createWs();
