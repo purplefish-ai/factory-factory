@@ -7,7 +7,7 @@ CREATE TABLE "new_UserSettings" (
     "preferredIde" TEXT NOT NULL DEFAULT 'cursor',
     "customIdeCommand" TEXT,
     "playSoundOnComplete" BOOLEAN NOT NULL DEFAULT true,
-    "cachedSlashCommands" JSONB,
+    "cachedSlashCommands" TEXT,
     "cachedSlashCommandsUpdatedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
