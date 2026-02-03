@@ -185,21 +185,25 @@ model TerminalSession {
 }
 
 model UserSettings {
-  id                String   @id @default(cuid())
-  userId            String   @default("default") @unique  // Single user for now, expandable later
+  id                    String   @id @default(cuid())
+  userId                String   @default("default") @unique  // Single user for now, expandable later
 
   // IDE Settings
-  preferredIde      String   @default("cursor")  // "cursor" | "vscode" | "custom"
-  customIdeCommand  String?  // For custom IDE, supports placeholders like {workspace}
+  preferredIde          String   @default("cursor")  // "cursor" | "vscode" | "custom"
+  customIdeCommand      String?  // For custom IDE, supports placeholders like {workspace}
 
   // Notification Settings
-  playSoundOnComplete Boolean @default(true)  // Play sound when workspace completes
+  playSoundOnComplete   Boolean  @default(true)   // Play sound when workspace completes
+  notificationSoundPath String?                   // Path to custom notification sound file
 
   // Cached slash commands (from Claude CLI initialize response)
-  cachedSlashCommands Json?
+  cachedSlashCommands   Json?
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  // CI Settings
+  autoFixCiIssues       Boolean  @default(false)  // Global toggle for CI auto-fixing
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([userId])
 }

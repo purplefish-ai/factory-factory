@@ -88,6 +88,14 @@ chatMessageHandlerService.setClientCreator({
   getOrCreate: getOrCreateChatClient,
 });
 
+// Register callback for event forwarding when clients are created
+// This ensures event forwarding is set up even for sessions started without WebSocket
+sessionService.setOnClientCreated((sessionId, client, context) => {
+  chatEventForwarderService.setupClientEvents(sessionId, client, context, () =>
+    chatMessageHandlerService.tryDispatchNextMessage(sessionId)
+  );
+});
+
 // ============================================================================
 // Security Validation
 // ============================================================================

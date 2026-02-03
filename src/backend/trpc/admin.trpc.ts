@@ -13,6 +13,7 @@ import {
   workspaceAccessor,
 } from '../resource_accessors/index';
 import {
+  ciMonitorService,
   cliHealthService,
   configService,
   createLogger,
@@ -262,6 +263,19 @@ export const adminRouter = router({
         totalTerminal: terminalProcesses.length,
         total: claudeProcesses.length + terminalProcesses.length,
       },
+    };
+  }),
+
+  /**
+   * Manually trigger CI checks for all workspaces with PRs.
+   * Useful for testing CI auto-fix functionality.
+   */
+  triggerCICheck: publicProcedure.mutation(async () => {
+    logger.info('Manually triggering CI check for all workspaces');
+    const result = await ciMonitorService.checkAllWorkspaces();
+    return {
+      success: true,
+      ...result,
     };
   }),
 });
