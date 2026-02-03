@@ -82,6 +82,10 @@ class MessageStateService {
     };
   }
 
+  hasEventListener(listener: (event: MessageStateEvent) => void): boolean {
+    return this.emitter.listeners('event').includes(listener);
+  }
+
   /**
    * Allocate and return the next order number for a session.
    * Used for messages created outside the normal message state flow

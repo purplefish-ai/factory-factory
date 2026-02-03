@@ -13,36 +13,38 @@ const logger = createLogger('chat-transport-adapter');
 class ChatTransportAdapterService {
   private isSetup = false;
   private unsubscribe: (() => void) | null = null;
+  private listener = (event: MessageStateEvent) => {
+    switch (event.type) {
+      case 'message_state_changed': {
+        chatConnectionService.forwardToSession(event.sessionId, {
+          type: 'message_state_changed',
+          ...event.data,
+        });
+        break;
+      }
+      case 'messages_snapshot': {
+        chatConnectionService.forwardToSession(event.sessionId, {
+          type: 'messages_snapshot',
+          ...event.data,
+        });
+        break;
+      }
+      default: {
+        logger.warn('Unhandled message state event', {
+          eventType: (event as MessageStateEvent).type,
+        });
+      }
+    }
+  };
 
   setup(): void {
-    if (this.isSetup) {
+    if (this.isSetup && messageStateService.hasEventListener(this.listener)) {
       return;
     }
-    this.isSetup = true;
+    this.unsubscribe?.();
 
-    this.unsubscribe = messageStateService.onEvent((event: MessageStateEvent) => {
-      switch (event.type) {
-        case 'message_state_changed': {
-          chatConnectionService.forwardToSession(event.sessionId, {
-            type: 'message_state_changed',
-            ...event.data,
-          });
-          break;
-        }
-        case 'messages_snapshot': {
-          chatConnectionService.forwardToSession(event.sessionId, {
-            type: 'messages_snapshot',
-            ...event.data,
-          });
-          break;
-        }
-        default: {
-          logger.warn('Unhandled message state event', {
-            eventType: (event as MessageStateEvent).type,
-          });
-        }
-      }
-    });
+    this.unsubscribe = messageStateService.onEvent(this.listener);
+    this.isSetup = true;
   }
 
   teardown(): void {
