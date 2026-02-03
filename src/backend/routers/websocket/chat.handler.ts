@@ -231,6 +231,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   // Chat Upgrade Handler
   // ==========================================================================
 
+  ensureInitialized();
+
   return function handleChatUpgrade(
     request: IncomingMessage,
     socket: Duplex,
@@ -239,7 +241,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    ensureInitialized();
     // Ensure message state events are forwarded over WebSocket transport.
     chatTransportAdapterService.setup();
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;

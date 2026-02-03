@@ -255,6 +255,90 @@ export function createProjectRouter(appContext: AppContext): Router {
     }
   });
 
+  /**
+   * DELETE /api/projects/:projectId
+   * Archive a project (soft delete)
+   */
+  router.delete('/:projectId', async (req, res) => {
+    try {
+      const projectId = req.params.projectId;
+
+      // Check project exists
+      const existingProject = await projectAccessor.findById(projectId);
+      if (!existingProject) {
+        return res.status(HTTP_STATUS.NOT_FOUND).json({
+          success: false,
+          error: {
+            code: 'PROJECT_NOT_FOUND',
+            message: `Project with ID '${projectId}' not found`,
+          },
+        });
+      }
+
+      // Archive (soft delete)
+      const project = await projectAccessor.archive(projectId);
+
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: {
+          id: project.id,
+          message: 'Project archived successfully',
+        },
+      });
+    } catch (error) {
+      logger.error('Error archiving project', error as Error);
+      return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
+    }
+  });
+
+  /**
+   * POST /api/projects/:projectId/validate
+   * Validate project repository path
+   */
+  router.post('/:projectId/validate', async (req, res) => {
+    try {
+      const projectId = req.params.projectId;
+
+      const project = await projectAccessor.findById(projectId);
+      if (!project) {
+        return res.status(HTTP_STATUS.NOT_FOUND).json({
+          success: false,
+          error: {
+            code: 'PROJECT_NOT_FOUND',
+            message: `Project with ID '${projectId}' not found`,
+          },
+        });
+      }
+
+      const repoValidation = await projectAccessor.validateRepoPath(project.repoPath);
+
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: {
+          repoPath: {
+            valid: repoValidation.valid,
+            error: repoValidation.error,
+          },
+        },
+      });
+    } catch (error) {
+      logger.error('Error validating project', error as Error);
+      return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
+    }
+  });
+
   return router;
 }
 
