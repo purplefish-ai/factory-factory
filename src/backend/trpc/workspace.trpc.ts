@@ -591,6 +591,26 @@ export const workspaceRouter = router({
       return { synced, failed };
     }),
 
+  // Check if workspace branch has changes relative to the project's default branch
+  hasChanges: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(async ({ input }) => {
+      const workspace = await workspaceAccessor.findByIdWithProject(input.workspaceId);
+      if (!(workspace?.worktreePath && workspace.project)) {
+        return false;
+      }
+
+      try {
+        const stats = await getWorkspaceGitStats(
+          workspace.worktreePath,
+          workspace.project.defaultBranch ?? 'main'
+        );
+        return stats !== null && (stats.total > 0 || stats.hasUncommitted);
+      } catch {
+        return false;
+      }
+    }),
+
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,
   ...workspaceGitRouter._def.procedures,
