@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma-gen/client';
-import type { CommandInfo } from '@/shared/claude-protocol';
+import type { CommandInfo } from '@/shared/claude';
 import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { createLogger } from './logger.service';
 

@@ -6,13 +6,13 @@
  * Claude when the session becomes idle.
  */
 
-import type { QueuedMessage } from '@/shared/claude-protocol';
+import type { QueuedMessage } from '@/shared/claude';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('message-queue-service');
 
 // Re-export for backwards compatibility
-export type { QueuedMessage } from '@/shared/claude-protocol';
+export type { QueuedMessage } from '@/shared/claude';
 
 // Max queue size to prevent runaway queueing
 const MAX_QUEUE_SIZE = 100;
