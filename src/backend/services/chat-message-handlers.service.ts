@@ -14,6 +14,7 @@ import type { ChatMessageInput } from '@/shared/websocket';
 import type { ClaudeClient } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
 import { chatConnectionService } from './chat-connection.service';
+import { resolveAttachmentContentType } from './chat-message-handlers/attachment-utils';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
 import type { ClientCreator } from './chat-message-handlers/types';
@@ -285,7 +286,8 @@ class ChatMessageHandlerService {
       throw new Error(`Attachment "${attachment.name}" is missing data`);
     }
 
-    if (attachment.contentType === 'image' || attachment.contentType === undefined) {
+    const resolvedType = resolveAttachmentContentType(attachment);
+    if (resolvedType === 'image') {
       // Validate base64 for image attachments (basic check - alphanumeric, +, /, =)
       if (!/^[A-Za-z0-9+/=]+$/.test(attachment.data)) {
         logger.error('[Chat WS] Invalid base64 data in attachment', {
@@ -323,8 +325,16 @@ class ChatMessageHandlerService {
         this.validateAttachment(attachment);
       }
 
-      const textAttachments = msg.attachments.filter((a) => a.contentType === 'text');
-      const imageAttachments = msg.attachments.filter((a) => a.contentType !== 'text');
+      const resolvedAttachments = msg.attachments.map((attachment) => ({
+        attachment,
+        contentType: resolveAttachmentContentType(attachment),
+      }));
+      const textAttachments = resolvedAttachments
+        .filter((entry) => entry.contentType === 'text')
+        .map((entry) => entry.attachment);
+      const imageAttachments = resolvedAttachments
+        .filter((entry) => entry.contentType === 'image')
+        .map((entry) => entry.attachment);
 
       // Build the combined text content (user message + text attachments)
       let combinedText = msg.text || '';
