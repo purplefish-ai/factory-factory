@@ -68,12 +68,18 @@ export const workspaceRouter = router({
   // Create a new workspace
   create: publicProcedure
     .input(
-      z.object({
-        projectId: z.string(),
-        name: z.string().min(1),
-        description: z.string().optional(),
-        branchName: z.string().optional(),
-      })
+      z
+        .object({
+          projectId: z.string(),
+          name: z.string().min(1),
+          description: z.string().optional(),
+          branchName: z.string().optional(),
+          useExistingBranch: z.boolean().optional(),
+        })
+        .refine((data) => !(data.useExistingBranch && !data.branchName), {
+          message: 'branchName is required when useExistingBranch is true',
+          path: ['branchName'],
+        })
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
@@ -85,7 +91,10 @@ export const workspaceRouter = router({
       // and shows an overlay spinner until the workspace is fully ready.
       // The function has internal error handling but we add a catch here to handle
       // any unexpected errors (e.g., if markFailed throws due to DB issues).
-      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
+      initializeWorkspaceWorktree(workspace.id, {
+        branchName: input.branchName,
+        useExistingBranch: input.useExistingBranch,
+      }).catch((error) => {
         logger.error(
           'Unexpected error during background workspace initialization',
           error as Error,

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { prisma } from '../db';
+import { gitCommandC } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { publicProcedure, router } from './trpc';
 
@@ -36,6 +37,65 @@ export const projectRouter = router({
     }
     return project;
   }),
+
+  // List local + remote branches for a project
+  listBranches: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input }) => {
+      const project = await projectAccessor.findById(input.projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${input.projectId}`);
+      }
+
+      const localResult = await gitCommandC(project.repoPath, [
+        'for-each-ref',
+        '--format=%(refname:short)',
+        'refs/heads',
+      ]);
+      if (localResult.code !== 0) {
+        throw new Error(
+          `Failed to list local branches: ${localResult.stderr || localResult.stdout}`
+        );
+      }
+
+      const remoteResult = await gitCommandC(project.repoPath, [
+        'for-each-ref',
+        '--format=%(refname:short)',
+        'refs/remotes/origin',
+      ]);
+      if (remoteResult.code !== 0) {
+        throw new Error(
+          `Failed to list remote branches: ${remoteResult.stderr || remoteResult.stdout}`
+        );
+      }
+
+      const localBranches = localResult.stdout.split('\n').filter(Boolean);
+      const localSet = new Set(localBranches);
+
+      const remoteBranches = remoteResult.stdout
+        .split('\n')
+        .filter(Boolean)
+        .filter((branch) => branch !== 'origin/HEAD')
+        .filter((branch) => {
+          const shortName = branch.replace(/^origin\//, '');
+          return !localSet.has(shortName);
+        });
+
+      const branches = [
+        ...localBranches.map((branch) => ({
+          name: branch,
+          displayName: branch,
+          refType: 'local' as const,
+        })),
+        ...remoteBranches.map((branch) => ({
+          name: branch,
+          displayName: branch.replace(/^origin\//, ''),
+          refType: 'remote' as const,
+        })),
+      ].sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+      return { branches };
+    }),
 
   // Create a new project (only repoPath required - name/slug/worktree derived)
   create: publicProcedure

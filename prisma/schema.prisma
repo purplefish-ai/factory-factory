@@ -104,6 +104,7 @@ model Workspace {
   status              WorkspaceStatus   @default(NEW)
   worktreePath        String?
   branchName          String?
+  useExistingBranch   Boolean           @default(false)
 
   // Initialization tracking (used by NEW, PROVISIONING, FAILED states)
   initErrorMessage    String?

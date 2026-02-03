@@ -16,9 +16,9 @@ import { publicProcedure, router } from '../trpc';
  */
 export function initializeWorkspaceWorktree(
   workspaceId: string,
-  requestedBranchName?: string
+  options?: { branchName?: string; useExistingBranch?: boolean }
 ): Promise<void> {
-  return worktreeLifecycleService.initializeWorkspaceWorktree(workspaceId, requestedBranchName);
+  return worktreeLifecycleService.initializeWorkspaceWorktree(workspaceId, options);
 }
 
 // =============================================================================
@@ -79,7 +79,10 @@ export const workspaceInitRouter = router({
         });
       }
       // Run full initialization (creates worktree + runs startup script)
-      initializeWorkspaceWorktree(workspace.id, workspace.branchName ?? undefined);
+      initializeWorkspaceWorktree(workspace.id, {
+        branchName: workspace.branchName ?? undefined,
+        useExistingBranch: workspace.useExistingBranch ?? false,
+      });
       return workspaceAccessor.findById(input.id);
     }
 

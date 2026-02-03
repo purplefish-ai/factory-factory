@@ -112,6 +112,35 @@ export class GitClient {
     };
   }
 
+  async createWorktreeFromExistingBranch(
+    name: string,
+    branchRef: string
+  ): Promise<GitWorktreeInfo> {
+    const worktreePath = this.getWorktreePath(name);
+    await fs.mkdir(this.worktreeBase, { recursive: true });
+
+    const localBranchName = branchRef.startsWith('origin/')
+      ? branchRef.slice('origin/'.length)
+      : branchRef;
+
+    const localExists = await this.branchExists(localBranchName);
+
+    const args = localExists
+      ? ['worktree', 'add', worktreePath, localBranchName]
+      : ['worktree', 'add', '-b', localBranchName, worktreePath, branchRef];
+
+    const result = await gitCommandC(this.baseRepoPath, args);
+    if (result.code !== 0) {
+      throw new Error(`Failed to create worktree from branch: ${result.stderr || result.stdout}`);
+    }
+
+    return {
+      name,
+      path: worktreePath,
+      branchName: localBranchName,
+    };
+  }
+
   /**
    * Check if a branch exists in the repository
    */

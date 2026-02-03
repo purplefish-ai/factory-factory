@@ -110,12 +110,16 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const branchExists = await gitClient.branchExists(baseBranch);
+    const normalizedBranch = baseBranch.startsWith('origin/')
+      ? baseBranch.slice('origin/'.length)
+      : baseBranch;
+
+    const branchExists = await gitClient.branchExists(normalizedBranch);
     if (branchExists) {
       return;
     }
 
-    const remoteBranchExists = await gitClient.branchExists(`origin/${baseBranch}`);
+    const remoteBranchExists = await gitClient.branchExists(`origin/${normalizedBranch}`);
     if (!remoteBranchExists) {
       throw new Error(
         `Branch '${baseBranch}' does not exist. Please specify an existing branch or leave empty to use the default branch '${defaultBranch}'.`
@@ -135,6 +139,22 @@ class GitOpsService {
     });
 
     const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, options);
+    const worktreePath = gitClient.getWorktreePath(worktreeName);
+
+    return { worktreePath, branchName: worktreeInfo.branchName };
+  }
+
+  async createWorktreeFromExistingBranch(
+    project: ProjectPaths,
+    worktreeName: string,
+    branchRef: string
+  ): Promise<{ worktreePath: string; branchName: string }> {
+    const gitClient = GitClientFactory.forProject({
+      repoPath: project.repoPath,
+      worktreeBasePath: project.worktreeBasePath,
+    });
+
+    const worktreeInfo = await gitClient.createWorktreeFromExistingBranch(worktreeName, branchRef);
     const worktreePath = gitClient.getWorktreePath(worktreeName);
 
     return { worktreePath, branchName: worktreeInfo.branchName };

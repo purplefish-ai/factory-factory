@@ -1,10 +1,18 @@
 import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
-import { Kanban, List, Loader2, Plus } from 'lucide-react';
+import { GitBranch, Kanban, List, Loader2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import {
   Select,
@@ -78,7 +86,27 @@ function useCreateWorkspace(projectId: string | undefined, slug: string) {
     }
   };
 
-  return { handleCreate, isCreating };
+  return { handleCreate, isCreating, existingNames };
+}
+
+function makeUniqueWorkspaceName(baseName: string, existingNames: string[]): string {
+  const trimmedName = baseName.trim();
+  if (!trimmedName) {
+    return generateUniqueWorkspaceName(existingNames);
+  }
+
+  if (!existingNames.includes(trimmedName)) {
+    return trimmedName;
+  }
+
+  let suffix = 1;
+  let candidate = `${trimmedName}-${suffix}`;
+  while (existingNames.includes(candidate)) {
+    suffix += 1;
+    candidate = `${trimmedName}-${suffix}`;
+  }
+
+  return candidate;
 }
 
 function NewWorkspaceButton({
@@ -102,61 +130,137 @@ function NewWorkspaceButton({
   );
 }
 
-export default function WorkspacesListPage() {
-  const { slug = '' } = useParams<{ slug: string }>();
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('board');
+type BranchInfo = {
+  name: string;
+  displayName: string;
+  refType: 'local' | 'remote';
+};
 
-  const { data: project } = trpc.project.getBySlug.useQuery({ slug });
-  const { handleCreate, isCreating } = useCreateWorkspace(project?.id, slug);
-
-  // Only fetch list data when in list view
-  const { data: workspaces, isLoading } = trpc.workspace.list.useQuery(
-    {
-      projectId: project?.id ?? '',
-      status: statusFilter !== 'all' ? (statusFilter as WorkspaceStatus) : undefined,
-    },
-    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 15_000, staleTime: 10_000 }
+function ResumeBranchDialog({
+  open,
+  onOpenChange,
+  branches,
+  isLoading,
+  isSubmitting,
+  onSelectBranch,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  branches: BranchInfo[];
+  isLoading: boolean;
+  isSubmitting: boolean;
+  onSelectBranch: (branch: BranchInfo) => void;
+}) {
+  return (
+    <CommandDialog open={open} onOpenChange={onOpenChange}>
+      <CommandInput placeholder="Search branches..." />
+      <CommandList>
+        {isLoading && <CommandEmpty>Loading branches...</CommandEmpty>}
+        {!isLoading && branches.length === 0 && <CommandEmpty>No branches found.</CommandEmpty>}
+        {!isLoading && branches.length > 0 && (
+          <CommandGroup heading="Branches">
+            {branches.map((branch) => (
+              <CommandItem
+                key={branch.name}
+                value={branch.displayName}
+                onSelect={() => onSelectBranch(branch)}
+                disabled={isSubmitting}
+              >
+                <span className="font-mono text-sm">{branch.displayName}</span>
+                {branch.refType === 'remote' && (
+                  <span className="ml-auto text-xs text-muted-foreground">remote</span>
+                )}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+      </CommandList>
+    </CommandDialog>
   );
+}
 
-  if (!project) {
-    return <Loading message="Loading project..." />;
-  }
+function WorkspacesBoardView({
+  projectId,
+  slug,
+  viewMode,
+  onViewModeChange,
+  onResumeOpen,
+  onCreateWorkspace,
+  isCreatingWorkspace,
+  resumeDialog,
+}: {
+  projectId: string;
+  slug: string;
+  viewMode: ViewMode;
+  onViewModeChange: (value: ViewMode) => void;
+  onResumeOpen: () => void;
+  onCreateWorkspace: () => void;
+  isCreatingWorkspace: boolean;
+  resumeDialog: React.ReactNode;
+}) {
+  return (
+    <KanbanProvider projectId={projectId} projectSlug={slug}>
+      <div className="flex flex-col h-screen p-6 gap-4">
+        <PageHeader title="Workspaces">
+          <KanbanControls />
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => value && onViewModeChange(value as ViewMode)}
+            size="sm"
+          >
+            <ToggleGroupItem value="board" aria-label="Board view">
+              <Kanban className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Button variant="outline" size="sm" onClick={onResumeOpen}>
+            <GitBranch className="h-4 w-4 mr-2" />
+            Resume branch
+          </Button>
+          <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
+        </PageHeader>
 
-  if (viewMode === 'board') {
-    return (
-      <KanbanProvider projectId={project.id} projectSlug={slug}>
-        <div className="flex flex-col h-screen p-6 gap-4">
-          <PageHeader title="Workspaces">
-            <KanbanControls />
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(value) => value && setViewMode(value as ViewMode)}
-              size="sm"
-            >
-              <ToggleGroupItem value="board" aria-label="Board view">
-                <Kanban className="h-4 w-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="list" aria-label="List view">
-                <List className="h-4 w-4" />
-              </ToggleGroupItem>
-            </ToggleGroup>
-            <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating} />
-          </PageHeader>
-
-          <div className="flex-1 min-h-0">
-            <KanbanBoard />
-          </div>
+        <div className="flex-1 min-h-0">
+          <KanbanBoard />
         </div>
-      </KanbanProvider>
-    );
-  }
+        {resumeDialog}
+      </div>
+    </KanbanProvider>
+  );
+}
 
+function WorkspacesTableView({
+  workspaces,
+  isLoading,
+  slug,
+  statusFilter,
+  onStatusFilterChange,
+  viewMode,
+  onViewModeChange,
+  onResumeOpen,
+  onCreateWorkspace,
+  isCreatingWorkspace,
+  resumeDialog,
+}: {
+  workspaces?: WorkspaceWithSessions[];
+  isLoading: boolean;
+  slug: string;
+  statusFilter: string;
+  onStatusFilterChange: (value: string) => void;
+  viewMode: ViewMode;
+  onViewModeChange: (value: ViewMode) => void;
+  onResumeOpen: () => void;
+  onCreateWorkspace: () => void;
+  isCreatingWorkspace: boolean;
+  resumeDialog: React.ReactNode;
+}) {
   return (
     <div className="space-y-4 p-6">
       <PageHeader title="Workspaces">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={onStatusFilterChange}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
@@ -172,7 +276,7 @@ export default function WorkspacesListPage() {
         <ToggleGroup
           type="single"
           value={viewMode}
-          onValueChange={(value) => value && setViewMode(value as ViewMode)}
+          onValueChange={(value) => value && onViewModeChange(value as ViewMode)}
           size="sm"
         >
           <ToggleGroupItem value="board" aria-label="Board view">
@@ -182,7 +286,11 @@ export default function WorkspacesListPage() {
             <List className="h-4 w-4" />
           </ToggleGroupItem>
         </ToggleGroup>
-        <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating} />
+        <Button variant="outline" size="sm" onClick={onResumeOpen}>
+          <GitBranch className="h-4 w-4 mr-2" />
+          Resume branch
+        </Button>
+        <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
       </PageHeader>
 
       <Card>
@@ -194,7 +302,7 @@ export default function WorkspacesListPage() {
               <EmptyTitle>No workspaces found</EmptyTitle>
               <EmptyDescription>Get started by creating your first workspace.</EmptyDescription>
             </EmptyHeader>
-            <NewWorkspaceButton onClick={handleCreate} isCreating={isCreating}>
+            <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace}>
               Create your first workspace
             </NewWorkspaceButton>
           </Empty>
@@ -267,6 +375,106 @@ export default function WorkspacesListPage() {
           </Table>
         )}
       </Card>
+      {resumeDialog}
     </div>
+  );
+}
+
+export default function WorkspacesListPage() {
+  const { slug = '' } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('board');
+  const [resumeOpen, setResumeOpen] = useState(false);
+
+  const { data: project } = trpc.project.getBySlug.useQuery({ slug });
+  const { handleCreate, isCreating, existingNames } = useCreateWorkspace(project?.id, slug);
+  const utils = trpc.useUtils();
+  const resumeWorkspace = trpc.workspace.create.useMutation();
+  const { data: branchData, isLoading: branchesLoading } = trpc.project.listBranches.useQuery(
+    { projectId: project?.id ?? '' },
+    { enabled: resumeOpen && !!project?.id }
+  );
+
+  // Only fetch list data when in list view
+  const { data: workspaces, isLoading } = trpc.workspace.list.useQuery(
+    {
+      projectId: project?.id ?? '',
+      status: statusFilter !== 'all' ? (statusFilter as WorkspaceStatus) : undefined,
+    },
+    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 15_000, staleTime: 10_000 }
+  );
+
+  if (!project) {
+    return <Loading message="Loading project..." />;
+  }
+
+  const branches = branchData?.branches ?? [];
+
+  const handleResumeBranch = async (branch: (typeof branches)[number]) => {
+    if (!project?.id || resumeWorkspace.isPending) {
+      return;
+    }
+
+    const workspaceName = makeUniqueWorkspaceName(branch.displayName, existingNames);
+
+    try {
+      const workspace = await resumeWorkspace.mutateAsync({
+        projectId: project.id,
+        name: workspaceName,
+        branchName: branch.name,
+        useExistingBranch: true,
+      });
+
+      utils.workspace.list.invalidate({ projectId: project.id });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: project.id });
+      setResumeOpen(false);
+      navigate(`/projects/${slug}/workspaces/${workspace.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to resume branch: ${message}`);
+    }
+  };
+
+  const resumeDialog = (
+    <ResumeBranchDialog
+      open={resumeOpen}
+      onOpenChange={setResumeOpen}
+      branches={branches}
+      isLoading={branchesLoading}
+      isSubmitting={resumeWorkspace.isPending}
+      onSelectBranch={handleResumeBranch}
+    />
+  );
+
+  if (viewMode === 'board') {
+    return (
+      <WorkspacesBoardView
+        projectId={project.id}
+        slug={slug}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onResumeOpen={() => setResumeOpen(true)}
+        onCreateWorkspace={handleCreate}
+        isCreatingWorkspace={isCreating}
+        resumeDialog={resumeDialog}
+      />
+    );
+  }
+
+  return (
+    <WorkspacesTableView
+      workspaces={workspaces}
+      isLoading={isLoading}
+      slug={slug}
+      statusFilter={statusFilter}
+      onStatusFilterChange={setStatusFilter}
+      viewMode={viewMode}
+      onViewModeChange={setViewMode}
+      onResumeOpen={() => setResumeOpen(true)}
+      onCreateWorkspace={handleCreate}
+      isCreatingWorkspace={isCreating}
+      resumeDialog={resumeDialog}
+    />
   );
 }

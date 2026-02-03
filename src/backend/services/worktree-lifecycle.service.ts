@@ -228,7 +228,7 @@ class WorktreeLifecycleService {
 
   async initializeWorkspaceWorktree(
     workspaceId: string,
-    requestedBranchName?: string
+    options?: { branchName?: string; useExistingBranch?: boolean }
   ): Promise<void> {
     const startedProvisioning = await startProvisioningOrLog(workspaceId);
     if (!startedProvisioning) {
@@ -240,22 +240,27 @@ class WorktreeLifecycleService {
       const project = workspaceWithProject.project;
 
       const worktreeName = `workspace-${workspaceId}`;
-      const baseBranch = requestedBranchName ?? project.defaultBranch;
+      const baseBranch = options?.branchName ?? project.defaultBranch;
+      const useExistingBranch = options?.useExistingBranch ?? false;
 
       await gitOpsService.ensureBaseBranchExists(project, baseBranch, project.defaultBranch);
 
-      const gitHubUsername = await getCachedGitHubUsername();
-
-      const worktreeInfo = await gitOpsService.createWorktree(project, worktreeName, baseBranch, {
-        branchPrefix: gitHubUsername ?? undefined,
-        workspaceName: workspaceWithProject.name,
-      });
+      const worktreeInfo = useExistingBranch
+        ? await gitOpsService.createWorktreeFromExistingBranch(project, worktreeName, baseBranch)
+        : await (async () => {
+            const gitHubUsername = await getCachedGitHubUsername();
+            return gitOpsService.createWorktree(project, worktreeName, baseBranch, {
+              branchPrefix: gitHubUsername ?? undefined,
+              workspaceName: workspaceWithProject.name,
+            });
+          })();
 
       const factoryConfig = await readFactoryConfigSafe(worktreeInfo.worktreePath, workspaceId);
 
       await workspaceAccessor.update(workspaceId, {
         worktreePath: worktreeInfo.worktreePath,
         branchName: worktreeInfo.branchName,
+        useExistingBranch,
         runScriptCommand: factoryConfig?.scripts.run ?? null,
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });

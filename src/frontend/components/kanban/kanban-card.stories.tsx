@@ -29,6 +29,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   name: 'Add user authentication',
   description: 'Implement OAuth2 login flow',
   branchName: 'feature/auth',
+  useExistingBranch: false,
   projectId: 'proj-1',
   worktreePath: '/path/to/worktree',
   prUrl: null,

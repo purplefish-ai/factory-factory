@@ -102,7 +102,10 @@ class ReconciliationService {
       } else {
         // NEW workspace - initialize normally
         try {
-          await initializeWorkspaceWorktree(workspace.id, workspace.branchName ?? undefined);
+          await initializeWorkspaceWorktree(workspace.id, {
+            branchName: workspace.branchName ?? undefined,
+            useExistingBranch: workspace.useExistingBranch ?? false,
+          });
           logger.info('Initialized workspace via reconciliation', {
             workspaceId: workspace.id,
           });
