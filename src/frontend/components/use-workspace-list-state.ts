@@ -154,6 +154,18 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
     [serverWorkspaces]
   );
 
+  const cancelArchiving = useCallback(
+    (id?: string) => {
+      if (!archivingWorkspace) {
+        return;
+      }
+      if (!id || archivingWorkspace.id === id) {
+        setArchivingWorkspace(null);
+      }
+    },
+    [archivingWorkspace]
+  );
+
   return {
     workspaceList,
     existingNames,
@@ -161,5 +173,6 @@ export function useWorkspaceListState(serverWorkspaces: ServerWorkspace[] | unde
     startCreating,
     cancelCreating,
     startArchiving,
+    cancelArchiving,
   };
 }

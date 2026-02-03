@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { toast } from 'sonner';
 
 import {
   ChatInput,
@@ -21,8 +22,18 @@ import {
   useChatWebSocket,
   VirtualizedMessageList,
 } from '@/components/chat';
-import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -323,6 +334,19 @@ function WorkspaceChatContent() {
   // Manage selected session state here so it's available for useChatWebSocket
   const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [commitChangesChecked, setCommitChangesChecked] = useState(true);
+
+  const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
+    { workspaceId },
+    { enabled: !!workspace?.worktreePath, refetchInterval: 15_000, staleTime: 10_000 }
+  );
+  const hasUncommitted = gitStatus?.hasUncommitted === true;
+
+  useEffect(() => {
+    if (archiveDialogOpen) {
+      setCommitChangesChecked(true);
+    }
+  }, [archiveDialogOpen]);
 
   // Initialize selectedDbSessionId when sessions first load
   useEffect(() => {
@@ -397,6 +421,28 @@ function WorkspaceChatContent() {
     selectedModel: chatSettings.selectedModel,
     isSessionReady,
   });
+
+  const handleArchiveError = useCallback((error: unknown) => {
+    const typedError = error as { data?: { code?: string }; message?: string };
+    if (typedError.data?.code === 'PRECONDITION_FAILED') {
+      toast.error('Archiving blocked: enable commit before archiving to proceed.');
+      return;
+    }
+    toast.error(typedError.message ?? 'Failed to archive workspace');
+  }, []);
+
+  const handleArchive = useCallback(() => {
+    archiveWorkspace.mutate(
+      { id: workspaceId, commitUncommitted: commitChangesChecked },
+      {
+        onError: handleArchiveError,
+      }
+    );
+  }, [archiveWorkspace, commitChangesChecked, handleArchiveError, workspaceId]);
+
+  const handleArchiveRequest = useCallback(() => {
+    setArchiveDialogOpen(true);
+  }, []);
 
   // Ref for scroll handling (virtualized list manages its own content)
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -588,14 +634,7 @@ function WorkspaceChatContent() {
                     ? ''
                     : 'hover:bg-destructive/10 hover:text-destructive'
                 )}
-                onClick={() => {
-                  // Skip confirmation if PR is already merged
-                  if (workspace.prState === 'MERGED') {
-                    archiveWorkspace.mutate({ id: workspaceId });
-                  } else {
-                    setArchiveDialogOpen(true);
-                  }
-                }}
+                onClick={handleArchiveRequest}
                 disabled={archiveWorkspace.isPending}
               >
                 {archiveWorkspace.isPending ? (
@@ -694,19 +733,45 @@ function WorkspaceChatContent() {
         )}
       </ResizablePanelGroup>
 
-      <ConfirmDialog
-        open={archiveDialogOpen}
-        onOpenChange={setArchiveDialogOpen}
-        title="Archive Workspace"
-        description="Are you sure you want to archive this workspace?"
-        confirmText="Archive"
-        variant="destructive"
-        onConfirm={() => {
-          archiveWorkspace.mutate({ id: workspaceId });
-          setArchiveDialogOpen(false);
-        }}
-        isPending={archiveWorkspace.isPending}
-      />
+      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Workspace</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archiving will remove the workspace worktree from disk.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            {hasUncommitted && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                Warning: This workspace has uncommitted changes and they will be committed before
+                archiving.
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={commitChangesChecked}
+                onCheckedChange={(checked) => setCommitChangesChecked(checked === true)}
+              />
+              Commit uncommitted changes before archiving
+            </label>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiveWorkspace.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleArchive();
+                setArchiveDialogOpen(false);
+              }}
+              disabled={archiveWorkspace.isPending || (hasUncommitted && !commitChangesChecked)}
+              className={buttonVariants({ variant: 'destructive' })}
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

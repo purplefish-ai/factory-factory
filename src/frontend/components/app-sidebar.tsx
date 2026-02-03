@@ -11,8 +11,19 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { buttonVariants } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -178,9 +189,11 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     startCreating,
     cancelCreating,
     startArchiving,
+    cancelArchiving,
   } = useWorkspaceListState(serverWorkspaces);
 
   const createWorkspace = trpc.workspace.create.useMutation();
+  const [commitChangesChecked, setCommitChangesChecked] = useState(true);
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
@@ -190,6 +203,10 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       if (archivedId === currentId) {
         navigate(`/projects/${selectedProjectSlug}/workspaces`);
       }
+    },
+    onError: (error, variables) => {
+      cancelArchiving(variables.id);
+      toast.error(error.message);
     },
   });
 
@@ -221,6 +238,22 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       toast.error(`Failed to create workspace: ${message}`);
     }
   };
+
+  const handleArchiveRequest = (workspace: WorkspaceListItem) => {
+    setWorkspaceToArchive(workspace.id);
+    setArchiveDialogOpen(true);
+  };
+
+  const workspacePendingArchive = workspaceToArchive
+    ? serverWorkspaces?.find((workspace) => workspace.id === workspaceToArchive)
+    : null;
+  const archiveHasUncommitted = workspacePendingArchive?.gitStats?.hasUncommitted === true;
+
+  useEffect(() => {
+    if (archiveDialogOpen) {
+      setCommitChangesChecked(true);
+    }
+  }, [archiveDialogOpen]);
 
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
@@ -422,8 +455,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          setWorkspaceToArchive(workspace.id);
-                                          setArchiveDialogOpen(true);
+                                          handleArchiveRequest(workspace);
                                         }}
                                         className={cn(
                                           'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
@@ -516,23 +548,54 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         </div>
       </SidebarFooter>
 
-      <ConfirmDialog
-        open={archiveDialogOpen}
-        onOpenChange={setArchiveDialogOpen}
-        title="Archive Workspace"
-        description="Are you sure you want to archive this workspace?"
-        confirmText="Archive"
-        variant="destructive"
-        onConfirm={() => {
-          if (workspaceToArchive) {
-            // Start archiving state management (optimistic UI)
-            startArchiving(workspaceToArchive);
-            archiveWorkspace.mutate({ id: workspaceToArchive });
-          }
-          setArchiveDialogOpen(false);
-        }}
-        isPending={archiveWorkspace.isPending}
-      />
+      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Workspace</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archiving will remove the workspace worktree from disk.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            {archiveHasUncommitted && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                Warning: This workspace has uncommitted changes and they will be committed before
+                archiving.
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={commitChangesChecked}
+                onCheckedChange={(checked) => setCommitChangesChecked(checked === true)}
+              />
+              Commit uncommitted changes before archiving
+            </label>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiveWorkspace.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (workspaceToArchive) {
+                  // Start archiving state management (optimistic UI)
+                  startArchiving(workspaceToArchive);
+                  archiveWorkspace.mutate({
+                    id: workspaceToArchive,
+                    commitUncommitted: commitChangesChecked,
+                  });
+                }
+                setArchiveDialogOpen(false);
+              }}
+              disabled={
+                archiveWorkspace.isPending || (archiveHasUncommitted && !commitChangesChecked)
+              }
+              className={buttonVariants({ variant: 'destructive' })}
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   );
 }
