@@ -64,7 +64,9 @@ class StartupScriptService {
     await workspaceAccessor.clearInitOutput(workspace.id);
 
     // Create output streaming callback with debouncing
-    const outputCallback = this.createDebouncedOutputCallback(workspace.id);
+    const { callback: outputCallback, flush: flushOutput } = this.createDebouncedOutputCallback(
+      workspace.id
+    );
 
     try {
       const result = await this.executeScript(
@@ -75,6 +77,9 @@ class StartupScriptService {
         5000,
         outputCallback
       );
+
+      // Flush any remaining buffered output
+      await flushOutput();
 
       const durationMs = Date.now() - startTime;
 
@@ -100,6 +105,9 @@ class StartupScriptService {
 
       return { ...result, durationMs };
     } catch (error) {
+      // Flush any remaining buffered output before handling error
+      await flushOutput();
+
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -308,12 +316,21 @@ class StartupScriptService {
   /**
    * Create a debounced callback that batches output writes to the database.
    * Flushes every 500ms or when buffer exceeds 4KB, whichever comes first.
+   * Returns both the callback and a flush function to call when script completes.
    */
-  private createDebouncedOutputCallback(workspaceId: string): OutputCallback {
+  private createDebouncedOutputCallback(workspaceId: string): {
+    callback: OutputCallback;
+    flush: () => Promise<void>;
+  } {
     let buffer = '';
     let flushTimeout: NodeJS.Timeout | null = null;
 
-    const flush = (): void => {
+    const flush = async (): Promise<void> => {
+      if (flushTimeout) {
+        clearTimeout(flushTimeout);
+        flushTimeout = null;
+      }
+
       if (buffer.length === 0) {
         return;
       }
@@ -321,18 +338,15 @@ class StartupScriptService {
       const output = buffer;
       buffer = '';
 
-      if (flushTimeout) {
-        clearTimeout(flushTimeout);
-        flushTimeout = null;
-      }
-
-      // Write to database asynchronously (fire-and-forget for performance)
-      workspaceAccessor.appendInitOutput(workspaceId, output).catch((error) => {
+      // Write to database and wait for completion
+      try {
+        await workspaceAccessor.appendInitOutput(workspaceId, output);
+      } catch (error) {
         logger.warn('Failed to append init output', { workspaceId, error });
-      });
+      }
     };
 
-    return (output: string): void => {
+    const callback = (output: string): void => {
       buffer += output;
 
       // Flush immediately if buffer is large enough
@@ -346,6 +360,8 @@ class StartupScriptService {
         flushTimeout = setTimeout(flush, 500);
       }
     };
+
+    return { callback, flush };
   }
 }
 

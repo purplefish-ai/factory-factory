@@ -82,7 +82,7 @@ export function InitializationOverlay({
         {showLogs && (
           <div className="w-full mt-4">
             <ScrollArea
-              ref={scrollRef}
+              viewportRef={scrollRef}
               className="h-48 w-full rounded-md border bg-zinc-950 text-left"
             >
               <pre className="p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">

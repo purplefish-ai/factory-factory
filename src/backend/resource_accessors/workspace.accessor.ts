@@ -311,8 +311,9 @@ class WorkspaceAccessor {
 
     // Truncate from the beginning if too large
     if (newOutput.length > maxSize) {
-      const keepSize = maxSize - 20; // Leave room for truncation marker
-      newOutput = `[...truncated...]\n${newOutput.slice(-keepSize)}`;
+      const truncationMarker = '[...truncated...]\n';
+      const keepSize = maxSize - truncationMarker.length;
+      newOutput = `${truncationMarker}${newOutput.slice(-keepSize)}`;
     }
 
     await prisma.workspace.update({
