@@ -1,11 +1,12 @@
 import { AlertCircle, Eye, FileCode, Loader2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
+import { usePersistentScroll } from './use-persistent-scroll';
 
 // =============================================================================
 // Types
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils';
 interface DiffViewerProps {
   workspaceId: string;
   filePath: string;
+  tabId: string;
 }
 
 interface DiffLine {
@@ -194,7 +196,7 @@ function DiffLineComponent({ line, lineNumberWidth }: DiffLineProps) {
 // Main Component
 // =============================================================================
 
-export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
+export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   const { data, isLoading, error } = trpc.workspace.getFileDiff.useQuery({
     workspaceId,
     filePath,
@@ -204,6 +206,8 @@ export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
   const isMarkdown = filePath.endsWith('.md') || filePath.endsWith('.markdown');
 
   const [showPreview, setShowPreview] = useState(false);
+  const diffViewportRef = useRef<HTMLDivElement>(null);
+  const markdownViewportRef = useRef<HTMLDivElement>(null);
 
   const parsedDiff = useMemo(() => {
     if (!data?.diff) {
@@ -225,6 +229,22 @@ export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
     }
     return Math.max(3, String(maxLineNumber).length);
   }, [parsedDiff]);
+
+  const { handleScroll: handleDiffScroll } = usePersistentScroll({
+    tabId,
+    mode: 'code',
+    viewportRef: diffViewportRef,
+    enabled: !showPreview,
+    restoreDeps: [showPreview, filePath, data?.diff?.length],
+  });
+
+  const { handleScroll: handleMarkdownScroll } = usePersistentScroll({
+    tabId,
+    mode: 'markdown',
+    viewportRef: markdownViewportRef,
+    enabled: showPreview && isMarkdown,
+    restoreDeps: [showPreview, filePath, data?.diff?.length],
+  });
 
   if (isLoading) {
     return (
@@ -277,11 +297,15 @@ export function DiffViewer({ workspaceId, filePath }: DiffViewerProps) {
 
       {/* Content */}
       {isMarkdown && showPreview ? (
-        <ScrollArea className="flex-1">
+        <ScrollArea
+          className="flex-1"
+          onScroll={handleMarkdownScroll}
+          viewportRef={markdownViewportRef}
+        >
           <MarkdownPreview workspaceId={workspaceId} filePath={filePath} />
         </ScrollArea>
       ) : (
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1" onScroll={handleDiffScroll} viewportRef={diffViewportRef}>
           <div className="min-w-fit">
             {parsedDiff.map((line, index) => (
               <DiffLineComponent

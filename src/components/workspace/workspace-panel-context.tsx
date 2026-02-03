@@ -8,6 +8,16 @@ import {
   useState,
 } from 'react';
 
+import {
+  getScrollStateFromRecord,
+  loadScrollStateRecord,
+  removeScrollStatesForTab,
+  type ScrollMode,
+  type ScrollState,
+  saveScrollStateRecord,
+  upsertScrollState,
+} from './scroll-state';
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -31,6 +41,9 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
   selectTab: (id: string) => void;
   toggleRightPanel: () => void;
   setRightPanelVisible: (visible: boolean) => void;
+  getScrollState: (tabId: string, mode: ScrollMode) => ScrollState | null;
+  setScrollState: (tabId: string, mode: ScrollMode, state: ScrollState) => void;
+  clearScrollState: (tabId: string) => void;
 }
 
 // =============================================================================
@@ -152,6 +165,7 @@ interface WorkspacePanelProviderProps {
 export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanelProviderProps) {
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
+  const scrollStatesRef = useRef<Record<string, ScrollState>>({});
 
   const [tabs, setTabs] = useState<MainViewTab[]>([CHAT_TAB]);
   const [activeTabId, setActiveTabId] = useState<string>('chat');
@@ -180,6 +194,13 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
       }
     }
 
+    // Load scroll states (workspace-scoped)
+    if (typeof window !== 'undefined') {
+      scrollStatesRef.current = loadScrollStateRecord(window.localStorage, workspaceId);
+    } else {
+      scrollStatesRef.current = {};
+    }
+
     // Mark as loaded at the end of this effect, so persist effect skips the
     // re-render triggered by the setState calls above
     loadedForWorkspaceRef.current = workspaceId;
@@ -203,6 +224,42 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   const toggleRightPanel = useCallback(() => {
     setRightPanelVisible(!rightPanelVisible);
   }, [rightPanelVisible, setRightPanelVisible]);
+
+  const getScrollState = useCallback(
+    (tabId: string, mode: ScrollMode) =>
+      getScrollStateFromRecord(scrollStatesRef.current, tabId, mode),
+    []
+  );
+
+  const setScrollState = useCallback(
+    (tabId: string, mode: ScrollMode, state: ScrollState) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+      scrollStatesRef.current = upsertScrollState(scrollStatesRef.current, tabId, mode, state);
+      try {
+        saveScrollStateRecord(window.localStorage, workspaceId, scrollStatesRef.current);
+      } catch {
+        // Ignore storage errors
+      }
+    },
+    [workspaceId]
+  );
+
+  const clearScrollState = useCallback(
+    (tabId: string) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+      scrollStatesRef.current = removeScrollStatesForTab(scrollStatesRef.current, tabId);
+      try {
+        saveScrollStateRecord(window.localStorage, workspaceId, scrollStatesRef.current);
+      } catch {
+        // Ignore storage errors
+      }
+    },
+    [workspaceId]
+  );
 
   const openTab = useCallback(
     (type: MainViewTab['type'], path?: string, label?: string) => {
@@ -241,6 +298,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         return;
       }
 
+      clearScrollState(id);
       setTabs((prev) => {
         const newTabs = prev.filter((tab) => tab.id !== id);
 
@@ -255,7 +313,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         return newTabs;
       });
     },
-    [activeTabId]
+    [activeTabId, clearScrollState]
   );
 
   const selectTab = useCallback((id: string) => {
@@ -272,6 +330,9 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
       selectTab,
       toggleRightPanel,
       setRightPanelVisible,
+      getScrollState,
+      setScrollState,
+      clearScrollState,
     }),
     [
       tabs,
@@ -282,6 +343,9 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
       selectTab,
       toggleRightPanel,
       setRightPanelVisible,
+      getScrollState,
+      setScrollState,
+      clearScrollState,
     ]
   );
 

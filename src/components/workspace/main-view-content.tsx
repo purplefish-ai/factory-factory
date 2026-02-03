@@ -23,14 +23,19 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
   const showChat = !activeTab || activeTab.type === 'chat';
   const filePath = activeTab?.type === 'file' ? activeTab.path : undefined;
   const diffPath = activeTab?.type === 'diff' ? activeTab.path : undefined;
+  const activeTabKey = activeTab?.id;
 
   return (
     <div className={cn('h-full', className)}>
       {/* Always render chat children but hide when not active.
           This prevents unmounting/remounting which causes state loss. */}
       <div className={cn('h-full', !showChat && 'hidden')}>{children}</div>
-      {filePath && <FileViewer workspaceId={workspaceId} filePath={filePath} />}
-      {diffPath && <DiffViewer workspaceId={workspaceId} filePath={diffPath} />}
+      {filePath && activeTabKey && (
+        <FileViewer workspaceId={workspaceId} filePath={filePath} tabId={activeTabKey} />
+      )}
+      {diffPath && activeTabKey && (
+        <DiffViewer workspaceId={workspaceId} filePath={diffPath} tabId={activeTabKey} />
+      )}
     </div>
   );
 }
