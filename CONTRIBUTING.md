@@ -88,7 +88,7 @@ pnpm storybook
 4. **Write or update tests** for your changes
 5. **Add or update Storybook stories** for UI changes
 6. **Update documentation** if needed
-6. **Submit a pull request** with a clear description
+7. **Submit a pull request** with a clear description
 
 ### Commit Messages
 

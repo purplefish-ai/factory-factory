@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useRef } from 'react';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import type {
@@ -41,6 +39,8 @@ export interface UseChatWebSocketReturn {
   connected: boolean;
   // Session lifecycle status (replaces running, stopping, loadingSession, startingSession)
   sessionStatus: SessionStatus;
+  // Claude process status (alive vs stopped)
+  processStatus: ReturnType<typeof useChatState>['processStatus'];
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
@@ -65,6 +65,8 @@ export interface UseChatWebSocketReturn {
   permissionMode: string | null;
   // Slash commands from CLI initialize response
   slashCommands: CommandInfo[];
+  // Whether slash commands have finished loading for this session
+  slashCommandsLoaded: boolean;
   // Accumulated token usage stats for the session
   tokenStats: TokenStats;
   // Rewind preview state (for confirmation dialog)
@@ -168,6 +170,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     messages: chat.messages,
     connected: transport.connected,
     sessionStatus: chat.sessionStatus,
+    processStatus: chat.processStatus,
     gitBranch: chat.gitBranch,
     availableSessions: chat.availableSessions,
     pendingRequest: chat.pendingRequest,
@@ -181,6 +184,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     taskNotifications: chat.taskNotifications,
     permissionMode: chat.permissionMode,
     slashCommands: chat.slashCommands,
+    slashCommandsLoaded: chat.slashCommandsLoaded,
     tokenStats: chat.tokenStats,
     rewindPreview: chat.rewindPreview,
     // Actions from chat

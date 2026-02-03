@@ -1,7 +1,8 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
+import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
@@ -255,7 +256,7 @@ export function PRDetailPanel({
       </div>
 
       {/* Tab bar */}
-      <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0 bg-muted/20">
+      <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0 bg-muted">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)}>
           <TabsList className="h-8">
             <TabsTrigger value="info">Info</TabsTrigger>
@@ -301,7 +302,7 @@ export function PRDetailPanel({
             {/* Comments */}
             {pr.comments && pr.comments.length > 0 && (
               <div className="divide-y">
-                <div className="px-4 py-2 bg-muted/30 sticky top-0">
+                <div className="px-4 py-2 bg-muted sticky top-0 border-b">
                   <span className="text-xs text-muted-foreground font-medium">
                     COMMENTS ({pr.comments.length})
                   </span>
@@ -318,7 +319,12 @@ export function PRDetailPanel({
                         </span>
                       </div>
                       <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-muted-foreground overflow-hidden break-words [&_table]:text-xs [&_table]:border-collapse [&_table]:w-full [&_table]:overflow-x-auto [&_table]:block [&_th]:border [&_th]:px-1 [&_th]:py-0.5 [&_td]:border [&_td]:px-1 [&_td]:py-0.5 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-1 [&_h2]:mb-0.5 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:overflow-x-auto [&_pre]:text-xs [&_code]:text-xs [&_code]:break-all">
-                        <ReactMarkdown>{comment.body}</ReactMarkdown>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                        >
+                          {comment.body}
+                        </ReactMarkdown>
                       </div>
                     </div>
                   ))}
@@ -335,7 +341,7 @@ export function PRDetailPanel({
       </div>
 
       {/* Action buttons */}
-      <div className="px-4 py-2 border-t bg-muted/30 flex gap-2 flex-shrink-0">
+      <div className="px-4 py-2 border-t bg-muted flex gap-2 flex-shrink-0">
         <Button variant="outline" size="sm" onClick={onOpenGitHub} className="flex-1 h-8 min-w-0">
           <span className="truncate">GitHub</span>
           <span className="ml-2 flex items-center gap-1">

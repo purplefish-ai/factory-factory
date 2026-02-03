@@ -1,5 +1,3 @@
-'use client';
-
 import { ExternalLink } from 'lucide-react';
 import mermaid from 'mermaid';
 import { type ComponentPropsWithoutRef, memo, useEffect, useMemo, useRef, useState } from 'react';
@@ -96,7 +94,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           return <>{children}</>;
         }
         return (
-          <pre className="bg-muted p-3 rounded-md overflow-x-auto" {...props}>
+          <pre
+            className="bg-muted text-foreground border border-border/70 p-3 rounded-md overflow-x-auto shadow-sm"
+            {...props}
+          >
             {children}
           </pre>
         );

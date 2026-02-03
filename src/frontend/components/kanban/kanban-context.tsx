@@ -1,5 +1,3 @@
-'use client';
-
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import { trpc } from '@/frontend/lib/trpc';

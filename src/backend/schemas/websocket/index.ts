@@ -14,7 +14,7 @@ export {
   type SetThinkingBudgetMessage,
   type StartMessageInput,
   type UserInputMessage,
-} from './chat-message.schema';
+} from '@/shared/websocket';
 
 export {
   type TerminalMessageInput,

@@ -1,5 +1,3 @@
-'use client';
-
 import { Bell, X } from 'lucide-react';
 import { memo, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';

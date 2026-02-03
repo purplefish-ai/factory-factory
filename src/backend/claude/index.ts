@@ -137,7 +137,7 @@ export class ClaudeClient extends EventEmitter {
   private protocolToToolRequestId: Map<string, string> = new Map();
   /** Track cancelled protocol request IDs to avoid sending deny response */
   private cancelledProtocolRequests: Set<string> = new Set();
-  /** Track whether context compaction is in progress (toggle-based detection) */
+  /** Track whether context compaction is in progress */
   private isCompacting = false;
 
   private constructor(workingDir: string, permissionHandler: PermissionHandler) {
@@ -362,6 +362,35 @@ export class ClaudeClient extends EventEmitter {
     return this.process?.getStatus() === 'running';
   }
 
+  /**
+   * Check if context compaction is in progress.
+   */
+  isCompactingActive(): boolean {
+    return this.isCompacting;
+  }
+
+  /**
+   * Mark compaction as started and emit an event if needed.
+   */
+  startCompaction(): void {
+    if (this.isCompacting) {
+      return;
+    }
+    this.isCompacting = true;
+    this.emit('compacting_start');
+  }
+
+  /**
+   * Mark compaction as ended and emit an event if needed.
+   */
+  endCompaction(): void {
+    if (!this.isCompacting) {
+      return;
+    }
+    this.isCompacting = false;
+    this.emit('compacting_end');
+  }
+
   // ===========================================================================
   // Interactive Tool Responses
   // ===========================================================================
@@ -579,10 +608,7 @@ export class ClaudeClient extends EventEmitter {
     switch (msg.type) {
       case 'assistant':
         // End compaction if in progress (fallback for single-boundary case)
-        if (this.isCompacting) {
-          this.isCompacting = false;
-          this.emit('compacting_end');
-        }
+        this.endCompaction();
         this.emit('message', msg);
         this.extractToolUseEvents(msg);
         break;
@@ -621,14 +647,7 @@ export class ClaudeClient extends EventEmitter {
         break;
       case 'compact_boundary':
         this.emit('compact_boundary', msg as SystemCompactBoundaryMessage);
-        // Toggle-based compaction detection for start/end events
-        if (!this.isCompacting) {
-          this.isCompacting = true;
-          this.emit('compacting_start');
-        } else {
-          this.isCompacting = false;
-          this.emit('compacting_end');
-        }
+        this.endCompaction();
         break;
       case 'hook_started':
         this.emit('hook_started', msg as SystemHookStartedMessage);

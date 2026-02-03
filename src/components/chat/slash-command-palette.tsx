@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   Command,
@@ -34,6 +32,8 @@ export interface SlashCommandPaletteProps {
   commands: CommandInfo[];
   /** Whether the palette is open */
   isOpen: boolean;
+  /** Whether the commands are still loading */
+  isLoading?: boolean;
   /** Called when the palette should close */
   onClose: () => void;
   /** Called when a command is selected */
@@ -63,6 +63,7 @@ export interface SlashCommandPaletteProps {
 export function SlashCommandPalette({
   commands,
   isOpen,
+  isLoading = false,
   onClose,
   onSelect,
   filter,
@@ -187,7 +188,13 @@ export function SlashCommandPalette({
         className="[&_[cmdk-list]]:max-h-[200px]"
       >
         <CommandList>
-          <CommandEmpty>No commands found</CommandEmpty>
+          <CommandEmpty>
+            {isLoading ? (
+              <span className="text-xs text-muted-foreground">Loading commands...</span>
+            ) : (
+              'No commands found'
+            )}
+          </CommandEmpty>
           <CommandGroup>
             {filteredCommands.map((command, index) => (
               <CommandItem

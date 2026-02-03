@@ -1,5 +1,3 @@
-'use client';
-
 import { Scissors } from 'lucide-react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';

@@ -9,7 +9,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import { DEFAULT_THINKING_BUDGET, MessageState } from '@/lib/claude-types';
+import { DEFAULT_THINKING_BUDGET, MessageState } from '@/shared/claude-protocol';
 import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { SessionManager } from '../claude/index';
@@ -126,19 +126,9 @@ class ChatMessageHandlerService {
         client = newClient;
       }
 
-      // Check if Claude is busy
-      if (client.isWorking()) {
-        if (DEBUG_CHAT_WS) {
-          logger.info('[Chat WS] Claude is working, re-queueing message', { dbSessionId });
-        }
-        messageQueueService.requeue(dbSessionId, msg);
-        return;
-      }
-
-      // Check if Claude process is still alive
-      if (!client.isRunning()) {
-        logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
-        messageQueueService.requeue(dbSessionId, msg);
+      const shouldRequeueReason = this.getRequeueReason(client);
+      if (shouldRequeueReason) {
+        this.requeueWithReason(dbSessionId, msg, shouldRequeueReason);
         return;
       }
 
@@ -271,6 +261,8 @@ class ChatMessageHandlerService {
     client: ClaudeClient,
     msg: QueuedMessage
   ): Promise<void> {
+    const isCompactCommand = this.isCompactCommand(msg.text);
+
     // Set thinking budget first - this can throw and must complete before we
     // change any state. If it fails, the message remains in ACCEPTED state
     // and can be safely requeued by the caller.
@@ -286,7 +278,18 @@ class ChatMessageHandlerService {
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
-    client.sendMessage(content);
+    if (isCompactCommand) {
+      client.startCompaction();
+    }
+
+    try {
+      client.sendMessage(content);
+    } catch (error) {
+      if (isCompactCommand) {
+        client.endCompaction();
+      }
+      throw error;
+    }
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
@@ -295,6 +298,37 @@ class ChatMessageHandlerService {
         remainingInQueue: messageQueueService.getQueueLength(dbSessionId),
       });
     }
+  }
+
+  private getRequeueReason(client: ClaudeClient): 'working' | 'compacting' | 'stopped' | null {
+    if (client.isWorking()) {
+      return 'working';
+    }
+    if (!client.isRunning()) {
+      return 'stopped';
+    }
+    if (client.isCompactingActive()) {
+      return 'compacting';
+    }
+    return null;
+  }
+
+  private requeueWithReason(
+    dbSessionId: string,
+    msg: QueuedMessage,
+    reason: 'working' | 'compacting' | 'stopped'
+  ): void {
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Re-queueing message', { dbSessionId, reason });
+    } else if (reason === 'stopped') {
+      logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
+    }
+    messageQueueService.requeue(dbSessionId, msg);
+  }
+
+  private isCompactCommand(text: string): boolean {
+    const trimmed = text.trim();
+    return trimmed === '/compact' || trimmed.startsWith('/compact ');
   }
 
   /**
@@ -335,6 +369,54 @@ class ChatMessageHandlerService {
     return name.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 255);
   }
 
+  private getValidatedAttachments(attachments: NonNullable<QueuedMessage['attachments']>) {
+    for (const attachment of attachments) {
+      this.validateAttachment(attachment);
+    }
+
+    return {
+      textAttachments: attachments.filter((a) => a.contentType === 'text'),
+      imageAttachments: attachments.filter((a) => a.contentType !== 'text'),
+    };
+  }
+
+  private buildCombinedText(
+    baseText: string,
+    textAttachments: NonNullable<QueuedMessage['attachments']>
+  ): string {
+    let combinedText = baseText;
+    for (const attachment of textAttachments) {
+      const prefix = combinedText ? '\n\n' : '';
+      const safeName = this.sanitizeAttachmentName(attachment.name);
+      combinedText += `${prefix}[Pasted content: ${safeName}]\n${attachment.data}`;
+    }
+    return combinedText;
+  }
+
+  private buildImageContent(
+    combinedText: string,
+    imageAttachments: NonNullable<QueuedMessage['attachments']>
+  ): ClaudeContentItem[] {
+    const content: ClaudeContentItem[] = [];
+
+    if (combinedText) {
+      content.push({ type: 'text', text: combinedText });
+    }
+
+    for (const attachment of imageAttachments) {
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: attachment.type,
+          data: attachment.data,
+        },
+      } as unknown as ClaudeContentItem);
+    }
+
+    return content;
+  }
+
   /**
    * Build message content for sending to Claude.
    * Note: Thinking is now controlled via setMaxThinkingTokens, not message suffix.
@@ -342,55 +424,19 @@ class ChatMessageHandlerService {
    * Text attachments are combined into the main text content with a prefix.
    * Image attachments are sent as separate image content blocks.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: attachment validation and branching logic is inherently complex
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-    // If there are attachments, process them
-    if (msg.attachments && msg.attachments.length > 0) {
-      // Validate all attachments before processing
-      for (const attachment of msg.attachments) {
-        this.validateAttachment(attachment);
-      }
-
-      const textAttachments = msg.attachments.filter((a) => a.contentType === 'text');
-      const imageAttachments = msg.attachments.filter((a) => a.contentType !== 'text');
-
-      // Build the combined text content (user message + text attachments)
-      let combinedText = msg.text || '';
-
-      // Append text attachments with a prefix for context
-      for (const attachment of textAttachments) {
-        const prefix = combinedText ? '\n\n' : '';
-        const safeName = this.sanitizeAttachmentName(attachment.name);
-        combinedText += `${prefix}[Pasted content: ${safeName}]\n${attachment.data}`;
-      }
-
-      // If we only have text (no images), return as string
-      if (imageAttachments.length === 0) {
-        return combinedText;
-      }
-
-      // If we have images, build content array
-      const content: ClaudeContentItem[] = [];
-
-      if (combinedText) {
-        content.push({ type: 'text', text: combinedText });
-      }
-
-      for (const attachment of imageAttachments) {
-        content.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: attachment.type,
-            data: attachment.data,
-          },
-        } as unknown as ClaudeContentItem);
-      }
-
-      return content;
+    if (!msg.attachments || msg.attachments.length === 0) {
+      return msg.text;
     }
 
-    return msg.text;
+    const { textAttachments, imageAttachments } = this.getValidatedAttachments(msg.attachments);
+    const combinedText = this.buildCombinedText(msg.text || '', textAttachments);
+
+    if (imageAttachments.length === 0) {
+      return combinedText;
+    }
+
+    return this.buildImageContent(combinedText, imageAttachments);
   }
 
   // ============================================================================

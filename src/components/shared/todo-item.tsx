@@ -1,5 +1,3 @@
-'use client';
-
 import { CheckSquare, Circle, Square } from 'lucide-react';
 import { memo } from 'react';
 import type { Todo } from '@/components/chat/use-todo-tracker';

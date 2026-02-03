@@ -233,6 +233,24 @@ describe('chatReducer', () => {
 
       expect(newState.sessionStatus).toEqual({ phase: 'ready' });
     });
+
+    it('should preserve lastExit info when stopping after a process exit', () => {
+      const state = {
+        ...initialState,
+        processStatus: {
+          state: 'stopped' as const,
+          lastExit: {
+            code: 1,
+            exitedAt: '2026-02-03T12:00:00.000Z',
+            unexpected: true,
+          },
+        },
+      };
+      const action: ChatAction = { type: 'WS_STOPPED' };
+      const newState = chatReducer(state, action);
+
+      expect(newState.processStatus).toEqual(state.processStatus);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1773,14 +1791,20 @@ describe('createActionFromWebSocketMessage', () => {
     const wsMessage: WebSocketMessage = { type: 'status', running: true };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STATUS', payload: { running: true } });
+    expect(action).toEqual({
+      type: 'WS_STATUS',
+      payload: { running: true, processAlive: undefined },
+    });
   });
 
   it('should default running to false if not provided in status message', () => {
     const wsMessage: WebSocketMessage = { type: 'status' };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STATUS', payload: { running: false } });
+    expect(action).toEqual({
+      type: 'WS_STATUS',
+      payload: { running: false, processAlive: undefined },
+    });
   });
 
   it('should convert starting message to WS_STARTING action', () => {
@@ -1804,11 +1828,11 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toEqual({ type: 'WS_STOPPED' });
   });
 
-  it('should convert process_exit message to WS_STOPPED action', () => {
+  it('should convert process_exit message to WS_PROCESS_EXIT action', () => {
     const wsMessage: WebSocketMessage = { type: 'process_exit', code: 0 };
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({ type: 'WS_STOPPED' });
+    expect(action).toEqual({ type: 'WS_PROCESS_EXIT', payload: { code: 0 } });
   });
 
   it('should convert claude_message to WS_CLAUDE_MESSAGE action', () => {
@@ -2530,5 +2554,93 @@ describe('Token Stats Accumulation', () => {
     expect(newState.tokenStats.inputTokens).toBe(0);
     expect(newState.tokenStats.outputTokens).toBe(0);
     expect(newState.tokenStats.contextWindow).toBeNull();
+  });
+
+  describe('reducer slices', () => {
+    it('updates sessionStatus without touching messages for WS_STATUS', () => {
+      const message: ChatMessage = {
+        id: 'msg-1',
+        source: 'user',
+        text: 'hello',
+        timestamp: new Date().toISOString(),
+        order: 1,
+      };
+      const state = createInitialChatState({
+        messages: [message],
+        sessionStatus: { phase: 'ready' },
+      });
+
+      const action: ChatAction = { type: 'WS_STATUS', payload: { running: true } };
+      const newState = chatReducer(state, action);
+
+      expect(newState.sessionStatus.phase).toBe('running');
+      expect(newState.messages).toEqual([message]);
+    });
+
+    it('merges settings updates', () => {
+      const state = createInitialChatState({
+        chatSettings: { selectedModel: 'opus', thinkingEnabled: false, planModeEnabled: false },
+      });
+      const action: ChatAction = {
+        type: 'UPDATE_SETTINGS',
+        payload: { planModeEnabled: true },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.chatSettings.planModeEnabled).toBe(true);
+      expect(newState.chatSettings.selectedModel).toBe('opus');
+    });
+
+    it('records tool progress updates', () => {
+      const state = createInitialChatState();
+      const action: ChatAction = {
+        type: 'SDK_TOOL_PROGRESS',
+        payload: { toolUseId: 'tool-1', toolName: 'TestTool', elapsedSeconds: 5 },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.toolProgress.get('tool-1')).toEqual({
+        toolName: 'TestTool',
+        elapsedSeconds: 5,
+      });
+    });
+
+    it('sets rewind preview state', () => {
+      const state = createInitialChatState();
+      const action: ChatAction = {
+        type: 'REWIND_PREVIEW_START',
+        payload: { userMessageId: 'msg-1', requestNonce: 'nonce-1' },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.rewindPreview).toEqual({
+        userMessageId: 'msg-1',
+        requestNonce: 'nonce-1',
+        isLoading: true,
+      });
+    });
+
+    it('adds interactive response message and clears pending request', () => {
+      const state = createInitialChatState({
+        pendingRequest: {
+          type: 'question',
+          request: {
+            requestId: 'req-1',
+            questions: [],
+            timestamp: new Date().toISOString(),
+          },
+        },
+        pendingMessages: new Map([['msg-1', { text: 'hi' }]]),
+      });
+
+      const action: ChatAction = {
+        type: 'MESSAGE_USED_AS_RESPONSE',
+        payload: { id: 'msg-1', text: 'hi', order: 1 },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.pendingRequest).toEqual({ type: 'none' });
+      expect(newState.messages[0]?.id).toBe('msg-1');
+    });
   });
 });

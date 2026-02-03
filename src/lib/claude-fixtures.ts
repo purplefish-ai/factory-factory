@@ -475,7 +475,7 @@ export function createTokenStats(overrides: Partial<TokenStats> = {}): TokenStat
     totalDurationApiMs: overrides.totalDurationApiMs ?? 2800,
     turnCount: overrides.turnCount ?? 3,
     webSearchRequests: overrides.webSearchRequests ?? 0,
-    contextWindow: overrides.contextWindow ?? 200_000,
+    contextWindow: overrides.contextWindow === undefined ? 200_000 : overrides.contextWindow,
     maxOutputTokens: overrides.maxOutputTokens ?? 16_384,
     serviceTier: overrides.serviceTier ?? null,
   };

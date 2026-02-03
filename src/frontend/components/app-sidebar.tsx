@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Select,
   SelectContent,
@@ -34,13 +33,18 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
-import { useWorkspaceListState, type WorkspaceListItem } from './use-workspace-list-state';
+import {
+  type ServerWorkspace,
+  useWorkspaceListState,
+  type WorkspaceListItem,
+} from './use-workspace-list-state';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
@@ -101,11 +105,24 @@ function getStatusTooltip(workspace: WorkspaceListItem): string {
   return 'Ready';
 }
 
-export function AppSidebar() {
+type AppSidebarMockData = {
+  projects: { id: string; slug: string; name: string }[];
+  selectedProjectSlug?: string;
+  projectState: {
+    workspaces: ServerWorkspace[];
+    reviewCount: number;
+  };
+};
+
+export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const location = useLocation();
   const pathname = location.pathname;
   const navigate = useNavigate();
+  const isMocked = Boolean(mockData);
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(() => {
+    if (mockData?.selectedProjectSlug) {
+      return mockData.selectedProjectSlug;
+    }
     const slugFromPath = getProjectSlugFromPath(window.location.pathname);
     if (slugFromPath && slugFromPath !== 'new') {
       return slugFromPath;
@@ -116,17 +133,20 @@ export function AppSidebar() {
   const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
   const { setProjectContext } = useProjectContext();
 
-  const { data: projects } = trpc.project.list.useQuery({
-    isArchived: false,
-  });
+  const { data: projectsData } = trpc.project.list.useQuery(
+    { isArchived: false },
+    { enabled: !isMocked }
+  );
+  const projects = mockData?.projects ?? projectsData;
 
   const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
 
   // Fetch unified project summary state (workspaces + working status + git stats + review count)
-  const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
+  const { data: projectStateData } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
-    { enabled: !!selectedProjectId, refetchInterval: 2000 }
+    { enabled: !!selectedProjectId && !isMocked, refetchInterval: isMocked ? false : 2000 }
   );
+  const projectState = mockData?.projectState ?? projectStateData;
 
   const serverWorkspaces = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
@@ -141,11 +161,14 @@ export function AppSidebar() {
   });
   const lastSyncedProjectRef = useRef<string | null>(null);
   useEffect(() => {
+    if (isMocked) {
+      return;
+    }
     if (selectedProjectId && selectedProjectId !== lastSyncedProjectRef.current) {
       lastSyncedProjectRef.current = selectedProjectId;
       syncAllPRStatuses.mutate({ projectId: selectedProjectId });
     }
-  }, [selectedProjectId, syncAllPRStatuses]);
+  }, [isMocked, selectedProjectId, syncAllPRStatuses]);
 
   // Use the workspace list state management hook
   const {
@@ -155,6 +178,7 @@ export function AppSidebar() {
     startCreating,
     cancelCreating,
     startArchiving,
+    cancelArchiving,
   } = useWorkspaceListState(serverWorkspaces);
 
   const createWorkspace = trpc.workspace.create.useMutation();
@@ -167,6 +191,10 @@ export function AppSidebar() {
       if (archivedId === currentId) {
         navigate(`/projects/${selectedProjectSlug}/workspaces`);
       }
+    },
+    onError: (error, variables) => {
+      cancelArchiving(variables.id);
+      toast.error(error.message);
     },
   });
 
@@ -199,6 +227,16 @@ export function AppSidebar() {
     }
   };
 
+  const handleArchiveRequest = (workspace: WorkspaceListItem) => {
+    setWorkspaceToArchive(workspace.id);
+    setArchiveDialogOpen(true);
+  };
+
+  const workspacePendingArchive = workspaceToArchive
+    ? serverWorkspaces?.find((workspace) => workspace.id === workspaceToArchive)
+    : null;
+  const archiveHasUncommitted = workspacePendingArchive?.gitStats?.hasUncommitted === true;
+
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
 
@@ -209,6 +247,9 @@ export function AppSidebar() {
   }, [selectedProjectId, setProjectContext]);
 
   useEffect(() => {
+    if (isMocked) {
+      return;
+    }
     const slugFromPath = getProjectSlugFromPath(pathname);
     if (slugFromPath && slugFromPath !== 'new') {
       setSelectedProjectSlug(slugFromPath);
@@ -219,16 +260,19 @@ export function AppSidebar() {
         setSelectedProjectSlug(stored);
       }
     }
-  }, [pathname]);
+  }, [isMocked, pathname]);
 
   // Select first project if none selected
   useEffect(() => {
+    if (isMocked) {
+      return;
+    }
     if (projects && projects.length > 0 && !selectedProjectSlug) {
       const firstSlug = projects[0].slug;
       setSelectedProjectSlug(firstSlug);
       localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
     }
-  }, [projects, selectedProjectSlug]);
+  }, [isMocked, projects, selectedProjectSlug]);
 
   const handleProjectChange = (value: string) => {
     if (value === '__manage__') {
@@ -317,8 +361,7 @@ export function AppSidebar() {
               </button>
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
-              <SidebarMenu>
-                {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conditional rendering for workspace states */}
+              <SidebarMenu className="gap-0 divide-y divide-sidebar-border/60">
                 {workspaceList.map((workspace) => {
                   const isCreatingItem = workspace.uiState === 'creating';
                   const isArchivingItem = workspace.uiState === 'archiving';
@@ -329,7 +372,7 @@ export function AppSidebar() {
                   if (isCreatingItem) {
                     return (
                       <SidebarMenuItem key={workspace.id}>
-                        <SidebarMenuButton className="h-8 px-2 cursor-default">
+                        <SidebarMenuButton size="lg" className="px-2 cursor-default">
                           <div className="flex items-center gap-2 w-full min-w-0">
                             <Loader2 className="h-2 w-2 shrink-0 text-muted-foreground animate-spin" />
                             <span className="truncate text-sm text-muted-foreground">
@@ -347,14 +390,14 @@ export function AppSidebar() {
                         asChild
                         isActive={isActive}
                         className={cn(
-                          'h-8 px-2',
+                          'h-auto px-2 py-2.5',
                           isArchivingItem && 'opacity-50 pointer-events-none'
                         )}
                       >
                         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
-                          <div className="flex items-center w-full min-w-0">
+                          <div className="flex w-full min-w-0 items-start gap-2">
                             {/* Status dot */}
-                            <span className="w-3 shrink-0 flex justify-center">
+                            <span className="w-4 shrink-0 flex justify-center mt-2">
                               {isArchivingItem ? (
                                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
                               ) : (
@@ -374,37 +417,19 @@ export function AppSidebar() {
                               )}
                             </span>
 
-                            {/* Name (truncates) */}
-                            <span className="truncate font-medium text-sm flex-1 min-w-0 ml-1">
-                              {isArchivingItem
-                                ? 'Archiving...'
-                                : workspace.branchName || workspace.name}
-                            </span>
-
-                            {/* Diff stats */}
-                            <span className="flex text-xs tabular-nums shrink-0 gap-0.5">
-                              {stats &&
-                              (stats.additions > 0 || stats.deletions > 0 || stats.total > 0) ? (
-                                stats.additions > 0 || stats.deletions > 0 ? (
-                                  <>
-                                    <span className="text-green-600 dark:text-green-400">
-                                      +{stats.additions}
-                                    </span>
-                                    <span className="text-red-600 dark:text-red-400">
-                                      -{stats.deletions}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className="text-muted-foreground">{stats.total} files</span>
-                                )
-                              ) : null}
-                            </span>
-
-                            {/* PR number - fixed width */}
-                            <span className="w-14 shrink-0 text-right">
-                              {workspace.prNumber &&
-                                workspace.prState !== 'NONE' &&
-                                workspace.prUrl && (
+                            <div className="min-w-0 flex-1 space-y-0">
+                              {/* Row 1: name + timestamp + archive */}
+                              <div className="flex items-center gap-2">
+                                <span className="truncate font-medium text-sm leading-tight flex-1">
+                                  {isArchivingItem ? 'Archiving...' : workspace.name}
+                                </span>
+                                {workspace.lastActivityAt && (
+                                  <span className="shrink-0 text-xs text-muted-foreground">
+                                    {formatRelativeTime(workspace.lastActivityAt)}
+                                  </span>
+                                )}
+                                {/* Archive button (hover for non-merged, always visible for merged PRs) */}
+                                {!isArchivingItem && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <button
@@ -412,85 +437,35 @@ export function AppSidebar() {
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          if (workspace.prUrl) {
-                                            window.open(
-                                              workspace.prUrl,
-                                              '_blank',
-                                              'noopener,noreferrer'
-                                            );
-                                          }
+                                          handleArchiveRequest(workspace);
                                         }}
                                         className={cn(
-                                          'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity p-0',
+                                          'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
                                           workspace.prState === 'MERGED'
-                                            ? 'text-green-500'
-                                            : 'text-muted-foreground hover:text-foreground'
+                                            ? 'opacity-100 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25'
+                                            : workspace.prState === 'CLOSED'
+                                              ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
+                                              : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent'
                                         )}
                                       >
-                                        <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
-                                        <span className="inline-block w-3.5 ml-0.5">
-                                          {workspace.prState === 'MERGED' && (
-                                            <CheckCircle2 className="h-3 w-3 inline text-green-500" />
-                                          )}
-                                        </span>
+                                        <Archive className="h-3 w-3" />
                                       </button>
                                     </TooltipTrigger>
-                                    <TooltipContent side="right">
-                                      <p>
-                                        PR #{workspace.prNumber}
-                                        {workspace.prState === 'MERGED'
-                                          ? ' · Merged'
-                                          : workspace.prState === 'CLOSED'
-                                            ? ' · Closed'
-                                            : workspace.prCiStatus === 'SUCCESS'
-                                              ? ' · CI passed'
-                                              : workspace.prCiStatus === 'FAILURE'
-                                                ? ' · CI failed'
-                                                : workspace.prCiStatus === 'PENDING'
-                                                  ? ' · CI running'
-                                                  : ''}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        Click to open on GitHub
-                                      </p>
-                                    </TooltipContent>
+                                    <TooltipContent side="right">Archive</TooltipContent>
                                   </Tooltip>
                                 )}
-                            </span>
+                              </div>
 
-                            {/* Timestamp - fixed width */}
-                            <span className="w-10 text-right text-muted-foreground text-xs shrink-0">
-                              {workspace.lastActivityAt &&
-                                formatRelativeTime(workspace.lastActivityAt)}
-                            </span>
+                              {/* Row 2: branch name */}
+                              {!isArchivingItem && workspace.branchName && (
+                                <div className="truncate text-[11px] leading-tight text-muted-foreground font-mono">
+                                  {workspace.branchName}
+                                </div>
+                              )}
 
-                            {/* Archive button (hover for non-merged, always visible for merged PRs) */}
-                            {!isArchivingItem && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setWorkspaceToArchive(workspace.id);
-                                      setArchiveDialogOpen(true);
-                                    }}
-                                    className={cn(
-                                      'shrink-0 ml-1 p-0.5 rounded transition-opacity',
-                                      workspace.prState === 'MERGED'
-                                        ? 'opacity-100 text-foreground bg-primary hover:bg-primary/90'
-                                        : workspace.prState === 'CLOSED'
-                                          ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
-                                          : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-muted'
-                                    )}
-                                  >
-                                    <Archive className="h-3 w-3" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="right">Archive</TooltipContent>
-                              </Tooltip>
-                            )}
+                              {/* Row 3: files changed + deltas + PR */}
+                              <WorkspaceMetaRow workspace={workspace} stats={stats} />
+                            </div>
                           </div>
                         </Link>
                       </SidebarMenuButton>
@@ -540,7 +515,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border px-4 py-2">
-        <ServerPortInfo />
+        {!isMocked && <ServerPortInfo />}
         <div className="flex items-center justify-between">
           <a
             href="https://github.com/purplefish-ai/factory-factory"
@@ -555,25 +530,121 @@ export function AppSidebar() {
         </div>
       </SidebarFooter>
 
-      <ConfirmDialog
+      <ArchiveWorkspaceDialog
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}
-        title="Archive Workspace"
-        description="Are you sure you want to archive this workspace?"
-        confirmText="Archive"
-        variant="destructive"
-        onConfirm={() => {
+        hasUncommitted={archiveHasUncommitted}
+        isPending={archiveWorkspace.isPending}
+        onConfirm={(commitUncommitted) => {
           if (workspaceToArchive) {
             // Start archiving state management (optimistic UI)
             startArchiving(workspaceToArchive);
-            archiveWorkspace.mutate({ id: workspaceToArchive });
+            archiveWorkspace.mutate({
+              id: workspaceToArchive,
+              commitUncommitted,
+            });
           }
-          setArchiveDialogOpen(false);
         }}
-        isPending={archiveWorkspace.isPending}
       />
     </Sidebar>
   );
+}
+
+function WorkspaceMetaRow({
+  workspace,
+  stats,
+}: {
+  workspace: WorkspaceListItem;
+  stats: WorkspaceListItem['gitStats'];
+}) {
+  const hasStats = Boolean(
+    stats && (stats.additions > 0 || stats.deletions > 0 || stats.total > 0)
+  );
+  const showPR = Boolean(workspace.prNumber && workspace.prState !== 'NONE' && workspace.prUrl);
+  if (!(hasStats || showPR)) {
+    return null;
+  }
+
+  const filesText = hasStats && stats?.total ? `${stats.total} files` : '';
+  const additionsText = hasStats && stats?.additions ? `+${stats.additions}` : '';
+  const deletionsText = hasStats && stats?.deletions ? `-${stats.deletions}` : '';
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_40px_40px_72px] items-center gap-x-2 text-xs text-muted-foreground">
+      <span className="truncate">{filesText}</span>
+      <span className="w-10 text-right tabular-nums text-green-600 dark:text-green-400">
+        {additionsText}
+      </span>
+      <span className="w-10 text-left tabular-nums text-red-600 dark:text-red-400">
+        {deletionsText}
+      </span>
+      {showPR ? <WorkspacePrButton workspace={workspace} /> : <WorkspacePrSpacer />}
+    </div>
+  );
+}
+
+function WorkspacePrSpacer() {
+  return <span className="w-[72px]" aria-hidden="true" />;
+}
+
+function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
+  const tooltipSuffix = getPrTooltipSuffix(workspace);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (workspace.prUrl) {
+              window.open(workspace.prUrl, '_blank', 'noopener,noreferrer');
+            }
+          }}
+          className={cn(
+            'flex w-[72px] items-center justify-end gap-1 text-xs hover:opacity-80 transition-opacity p-0',
+            workspace.prState === 'MERGED'
+              ? 'text-green-500'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <GitPullRequest className="h-3 w-3" />
+          <span>#{workspace.prNumber}</span>
+          {workspace.prState === 'MERGED' ? (
+            <CheckCircle2 className="h-3 w-3 text-green-500" />
+          ) : (
+            <CheckCircle2 className="h-3 w-3 opacity-0" aria-hidden="true" />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">
+        <p>
+          PR #{workspace.prNumber}
+          {tooltipSuffix}
+        </p>
+        <p className="text-xs text-muted-foreground">Click to open on GitHub</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function getPrTooltipSuffix(workspace: WorkspaceListItem) {
+  if (workspace.prState === 'MERGED') {
+    return ' · Merged';
+  }
+  if (workspace.prState === 'CLOSED') {
+    return ' · Closed';
+  }
+  if (workspace.prCiStatus === 'SUCCESS') {
+    return ' · CI passed';
+  }
+  if (workspace.prCiStatus === 'FAILURE') {
+    return ' · CI failed';
+  }
+  if (workspace.prCiStatus === 'PENDING') {
+    return ' · CI running';
+  }
+  return '';
 }
 
 /**

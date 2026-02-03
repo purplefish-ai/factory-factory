@@ -1,5 +1,3 @@
-'use client';
-
 import { FileCode, FileDiff, MessageSquare, Plus, X } from 'lucide-react';
 import { useCallback } from 'react';
 

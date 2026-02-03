@@ -391,23 +391,6 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
     refreshConfigs.mutate({ projectId });
   };
 
-  if (!factoryConfig) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileJson className="w-5 h-5" />
-            Factory Configuration
-          </CardTitle>
-          <CardDescription>
-            No factory-factory.json found in this repository. Create one to configure workspace
-            setup and run scripts.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -417,7 +400,9 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
             Factory Configuration
           </CardTitle>
           <CardDescription>
-            Configuration for workspace setup and run scripts (factory-factory.json)
+            {factoryConfig
+              ? 'Configuration for workspace setup and run scripts (factory-factory.json)'
+              : 'No factory-factory.json found in this repository. Create one to configure workspace setup and run scripts.'}
           </CardDescription>
         </div>
         <Button
@@ -431,70 +416,72 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
           Refresh All Workspaces
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-md border bg-muted/50 p-4 space-y-3">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />
-            <div className="space-y-1 flex-1">
-              <p className="font-medium text-sm">Configuration Found</p>
-              <p className="text-xs text-muted-foreground">
-                factory-factory.json is configured in this repository
-              </p>
+      {factoryConfig && (
+        <CardContent className="space-y-4">
+          <div className="rounded-md border bg-muted/50 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />
+              <div className="space-y-1 flex-1">
+                <p className="font-medium text-sm">Configuration Found</p>
+                <p className="text-xs text-muted-foreground">
+                  factory-factory.json is configured in this repository
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pl-8">
+              {factoryConfig.scripts.setup && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
+                  <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                    {factoryConfig.scripts.setup}
+                  </code>
+                  <p className="text-xs text-muted-foreground">
+                    Runs automatically when a new workspace is created
+                  </p>
+                </div>
+              )}
+
+              {factoryConfig.scripts.run && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Run Script</p>
+                  <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                    {factoryConfig.scripts.run}
+                  </code>
+                  <p className="text-xs text-muted-foreground">
+                    Available via the play button in each workspace
+                  </p>
+                </div>
+              )}
+
+              {factoryConfig.scripts.cleanup && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Cleanup Script</p>
+                  <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+                    {factoryConfig.scripts.cleanup}
+                  </code>
+                  <p className="text-xs text-muted-foreground">Runs when stopping the dev server</p>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="space-y-2 pl-8">
-            {factoryConfig.scripts.setup && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
-                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-                  {factoryConfig.scripts.setup}
-                </code>
-                <p className="text-xs text-muted-foreground">
-                  Runs automatically when a new workspace is created
-                </p>
-              </div>
-            )}
-
-            {factoryConfig.scripts.run && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Run Script</p>
-                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-                  {factoryConfig.scripts.run}
-                </code>
-                <p className="text-xs text-muted-foreground">
-                  Available via the play button in each workspace
-                </p>
-              </div>
-            )}
-
-            {factoryConfig.scripts.cleanup && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Cleanup Script</p>
-                <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-                  {factoryConfig.scripts.cleanup}
-                </code>
-                <p className="text-xs text-muted-foreground">Runs when stopping the dev server</p>
-              </div>
-            )}
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>
+              <strong>Location:</strong> factory-factory.json in repository root
+            </p>
+            <p>
+              <strong>Port Allocation:</strong> Use{' '}
+              <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for automatic
+              port allocation
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              <strong>Note:</strong> Click "Refresh All Workspaces" to update existing workspaces
+              after changing factory-factory.json
+            </p>
           </div>
-        </div>
-
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p>
-            <strong>Location:</strong> factory-factory.json in repository root
-          </p>
-          <p>
-            <strong>Port Allocation:</strong> Use{' '}
-            <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for automatic
-            port allocation
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            <strong>Note:</strong> Click "Refresh All Workspaces" to update existing workspaces
-            after changing factory-factory.json
-          </p>
-        </div>
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   );
 }

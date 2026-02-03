@@ -1,5 +1,3 @@
-'use client';
-
 import { Clock, Coins, Database, Globe, Layers, Zap } from 'lucide-react';
 
 import { Progress } from '@/components/ui/progress';
@@ -74,7 +72,7 @@ function getUsageColorClass(percentage: number): string {
   if (percentage >= CONTEXT_WARNING_THRESHOLD * 100) {
     return 'text-yellow-500';
   }
-  return 'text-green-500';
+  return 'text-muted-foreground';
 }
 
 /**

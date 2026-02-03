@@ -9,7 +9,7 @@ import { z } from 'zod';
 // Attachment Schema
 // ============================================================================
 
-const AttachmentSchema = z.object({
+export const AttachmentSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: z.string(),
@@ -21,7 +21,7 @@ const AttachmentSchema = z.object({
 // Chat Settings Schema
 // ============================================================================
 
-const ChatSettingsSchema = z.object({
+export const ChatSettingsSchema = z.object({
   selectedModel: z.string().nullable(),
   thinkingEnabled: z.boolean(),
   planModeEnabled: z.boolean(),
@@ -128,3 +128,4 @@ export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
 export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;
 export type RewindFilesMessage = Extract<ChatMessageInput, { type: 'rewind_files' }>;
+export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;

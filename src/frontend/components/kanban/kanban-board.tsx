@@ -1,5 +1,3 @@
-'use client';
-
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { RefreshCw, Settings } from 'lucide-react';
 import { useMemo } from 'react';
@@ -44,8 +42,12 @@ export function KanbanControls() {
                 id={`col-${column.id}`}
                 checked={!hiddenColumns.includes(column.id)}
                 onCheckedChange={() => toggleColumnVisibility(column.id)}
+                className="mt-px"
               />
-              <label htmlFor={`col-${column.id}`} className="text-sm cursor-pointer flex-1">
+              <label
+                htmlFor={`col-${column.id}`}
+                className="text-sm leading-none cursor-pointer flex-1"
+              >
                 {column.label}
               </label>
             </div>

@@ -76,12 +76,13 @@ export class SessionFileLogger {
     stream.on('error', (err) => {
       logger.error('Write stream error', { sessionId, logFile, error: err });
       const state = this.sessionLogs.get(sessionId);
-      if (state) {
+      // Verify this error is for the current session's stream, not a stale one
+      if (state && state.stream === stream) {
         state.errored = true;
         this.sessionLogs.delete(sessionId);
-        // Destroy stream to release file descriptor
-        stream.destroy();
       }
+      // Always destroy this stream to release file descriptor
+      stream.destroy();
     });
 
     this.sessionLogs.set(sessionId, {

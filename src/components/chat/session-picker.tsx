@@ -1,5 +1,3 @@
-'use client';
-
 import { Calendar, HardDrive, History } from 'lucide-react';
 
 import {

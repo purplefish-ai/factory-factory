@@ -1,5 +1,3 @@
-'use client';
-
 import { Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';

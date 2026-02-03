@@ -7,6 +7,7 @@ import type { SlashCommandPaletteHandle, SlashKeyResult } from '../../slash-comm
 
 interface UseSlashCommandsOptions {
   slashCommands: CommandInfo[];
+  commandsLoaded?: boolean;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   onChange?: (value: string) => void;
 }
@@ -14,6 +15,7 @@ interface UseSlashCommandsOptions {
 interface UseSlashCommandsReturn {
   slashMenuOpen: boolean;
   slashFilter: string;
+  commandsReady: boolean;
   paletteRef: React.RefObject<SlashCommandPaletteHandle | null>;
   handleInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   handleSlashCommandSelect: (command: CommandInfo) => void;
@@ -27,28 +29,32 @@ interface UseSlashCommandsReturn {
  */
 export function useSlashCommands({
   slashCommands,
+  commandsLoaded = false,
   inputRef,
   onChange,
 }: UseSlashCommandsOptions): UseSlashCommandsReturn {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const paletteRef = useRef<SlashCommandPaletteHandle>(null);
+  const commandsReady = commandsLoaded || slashCommands.length > 0;
 
   // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
   useEffect(() => {
-    if (slashCommands.length > 0 && inputRef?.current) {
-      const currentValue = inputRef.current.value;
-      if (currentValue.startsWith('/')) {
-        const afterSlash = currentValue.slice(1);
-        const spaceIndex = afterSlash.indexOf(' ');
-        // Only open if still completing command name (no space yet)
-        if (spaceIndex === -1) {
-          setSlashFilter(afterSlash);
-          setSlashMenuOpen(true);
-        }
-      }
+    if (slashCommands.length === 0 || !inputRef?.current) {
+      return;
     }
-  }, [slashCommands, inputRef]);
+    const currentValue = inputRef.current.value;
+    if (!currentValue.startsWith('/')) {
+      return;
+    }
+    const afterSlash = currentValue.slice(1);
+    const spaceIndex = afterSlash.indexOf(' ');
+    // Only open if still completing command name (no space yet)
+    if (spaceIndex === -1) {
+      setSlashFilter(afterSlash);
+      setSlashMenuOpen(true);
+    }
+  }, [slashCommands.length, inputRef]);
 
   const handleInputChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -56,7 +62,7 @@ export function useSlashCommands({
       onChange?.(newValue);
 
       // Detect slash command at start of input
-      if (newValue.startsWith('/') && slashCommands.length > 0) {
+      if (newValue.startsWith('/')) {
         // Extract the text after / (before any space)
         const afterSlash = newValue.slice(1);
         const spaceIndex = afterSlash.indexOf(' ');
@@ -74,7 +80,7 @@ export function useSlashCommands({
         setSlashFilter('');
       }
     },
-    [onChange, slashCommands]
+    [onChange]
   );
 
   const handleSlashCommandSelect = useCallback(
@@ -116,6 +122,7 @@ export function useSlashCommands({
   return {
     slashMenuOpen,
     slashFilter,
+    commandsReady,
     paletteRef,
     handleInputChange,
     handleSlashCommandSelect,

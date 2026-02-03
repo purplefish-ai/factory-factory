@@ -60,6 +60,8 @@ class ChatEventForwarderService {
 
   /** Guard to prevent multiple workspace notification setups */
   private workspaceNotificationsSetup = false;
+  /** Track last compact boundary per session to avoid duplicate indicators */
+  private lastCompactBoundaryAt = new Map<string, number>();
 
   /**
    * Check if event forwarding is already set up for a session.
@@ -206,7 +208,7 @@ class ChatEventForwarderService {
       workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
 
       // Store-then-forward: store event for replay before forwarding
-      const statusMsg = { type: 'status', running: true };
+      const statusMsg = { type: 'status', running: true, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);
       chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
@@ -326,8 +328,15 @@ class ChatEventForwarderService {
         eventType: 'compact_boundary',
         data: event,
       });
-      // Note: We don't forward compact_boundary directly - visual indicator is sent
-      // via compacting_end to avoid duplicate indicators (CLI sends two boundary markers)
+      const now = Date.now();
+      const lastBoundary = this.lastCompactBoundaryAt.get(dbSessionId) ?? 0;
+      if (now - lastBoundary < 1000) {
+        return;
+      }
+      this.lastCompactBoundaryAt.set(dbSessionId, now);
+      const boundaryMsg = { type: 'compact_boundary' };
+      messageStateService.storeEvent(dbSessionId, boundaryMsg);
+      chatConnectionService.forwardToSession(dbSessionId, boundaryMsg);
     });
 
     client.on('hook_started', (event) => {
@@ -402,10 +411,6 @@ class ChatEventForwarderService {
       const event = { type: 'compacting_end' };
       messageStateService.storeEvent(dbSessionId, event);
       chatConnectionService.forwardToSession(dbSessionId, event);
-      // Send compact_boundary to create visual indicator (only once per compaction cycle)
-      const boundaryMsg = { type: 'compact_boundary' };
-      messageStateService.storeEvent(dbSessionId, boundaryMsg);
-      chatConnectionService.forwardToSession(dbSessionId, boundaryMsg);
     });
 
     client.on('message', (msg) => {
@@ -494,7 +499,7 @@ class ChatEventForwarderService {
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
 
-      const statusMsg = { type: 'status', running: false };
+      const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);
       chatConnectionService.forwardToSession(dbSessionId, statusMsg);
     });
@@ -520,9 +525,11 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, {
         type: 'process_exit',
         code: result.code,
+        processAlive: false,
       });
       client.removeAllListeners();
       this.clientEventSetup.delete(dbSessionId);
+      this.lastCompactBoundaryAt.delete(dbSessionId);
       // Note: We intentionally do NOT clear the message queue on exit
       // Queue is preserved so messages can be sent when user starts next interaction
       // Clear any pending interactive requests when process exits
