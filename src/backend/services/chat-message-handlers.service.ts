@@ -369,6 +369,54 @@ class ChatMessageHandlerService {
     return name.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 255);
   }
 
+  private getValidatedAttachments(attachments: NonNullable<QueuedMessage['attachments']>) {
+    for (const attachment of attachments) {
+      this.validateAttachment(attachment);
+    }
+
+    return {
+      textAttachments: attachments.filter((a) => a.contentType === 'text'),
+      imageAttachments: attachments.filter((a) => a.contentType !== 'text'),
+    };
+  }
+
+  private buildCombinedText(
+    baseText: string,
+    textAttachments: NonNullable<QueuedMessage['attachments']>
+  ): string {
+    let combinedText = baseText;
+    for (const attachment of textAttachments) {
+      const prefix = combinedText ? '\n\n' : '';
+      const safeName = this.sanitizeAttachmentName(attachment.name);
+      combinedText += `${prefix}[Pasted content: ${safeName}]\n${attachment.data}`;
+    }
+    return combinedText;
+  }
+
+  private buildImageContent(
+    combinedText: string,
+    imageAttachments: NonNullable<QueuedMessage['attachments']>
+  ): ClaudeContentItem[] {
+    const content: ClaudeContentItem[] = [];
+
+    if (combinedText) {
+      content.push({ type: 'text', text: combinedText });
+    }
+
+    for (const attachment of imageAttachments) {
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: attachment.type,
+          data: attachment.data,
+        },
+      } as unknown as ClaudeContentItem);
+    }
+
+    return content;
+  }
+
   /**
    * Build message content for sending to Claude.
    * Note: Thinking is now controlled via setMaxThinkingTokens, not message suffix.
@@ -376,55 +424,19 @@ class ChatMessageHandlerService {
    * Text attachments are combined into the main text content with a prefix.
    * Image attachments are sent as separate image content blocks.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: attachment validation and branching logic is inherently complex
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-    // If there are attachments, process them
-    if (msg.attachments && msg.attachments.length > 0) {
-      // Validate all attachments before processing
-      for (const attachment of msg.attachments) {
-        this.validateAttachment(attachment);
-      }
-
-      const textAttachments = msg.attachments.filter((a) => a.contentType === 'text');
-      const imageAttachments = msg.attachments.filter((a) => a.contentType !== 'text');
-
-      // Build the combined text content (user message + text attachments)
-      let combinedText = msg.text || '';
-
-      // Append text attachments with a prefix for context
-      for (const attachment of textAttachments) {
-        const prefix = combinedText ? '\n\n' : '';
-        const safeName = this.sanitizeAttachmentName(attachment.name);
-        combinedText += `${prefix}[Pasted content: ${safeName}]\n${attachment.data}`;
-      }
-
-      // If we only have text (no images), return as string
-      if (imageAttachments.length === 0) {
-        return combinedText;
-      }
-
-      // If we have images, build content array
-      const content: ClaudeContentItem[] = [];
-
-      if (combinedText) {
-        content.push({ type: 'text', text: combinedText });
-      }
-
-      for (const attachment of imageAttachments) {
-        content.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: attachment.type,
-            data: attachment.data,
-          },
-        } as unknown as ClaudeContentItem);
-      }
-
-      return content;
+    if (!msg.attachments || msg.attachments.length === 0) {
+      return msg.text;
     }
 
-    return msg.text;
+    const { textAttachments, imageAttachments } = this.getValidatedAttachments(msg.attachments);
+    const combinedText = this.buildCombinedText(msg.text || '', textAttachments);
+
+    if (imageAttachments.length === 0) {
+      return combinedText;
+    }
+
+    return this.buildImageContent(combinedText, imageAttachments);
   }
 
   // ============================================================================
