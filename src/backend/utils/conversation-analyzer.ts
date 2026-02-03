@@ -141,6 +141,3 @@ export function extractKeyTopics(history: HistoryMessage[]): string {
 export function countUserMessages(history: HistoryMessage[]): number {
   return history.filter((m) => m.type === 'user').length;
 }
-
-// Deliberate type error to fail CI
-const _deliberateTypeError: number = 'this is not a number';
