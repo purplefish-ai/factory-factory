@@ -45,6 +45,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   kanbanColumn: 'IN_PROGRESS',
   isWorking: false,
   initErrorMessage: null,
+  initOutput: null,
   initStartedAt: null,
   initCompletedAt: null,
   initRetryCount: 0,
