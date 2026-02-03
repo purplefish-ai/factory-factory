@@ -81,7 +81,6 @@ export const workspaceInitRouter = router({
       // Run full initialization (creates worktree + runs startup script)
       initializeWorkspaceWorktree(workspace.id, {
         branchName: workspace.branchName ?? undefined,
-        useExistingBranch: workspace.useExistingBranch ?? false,
       });
       return workspaceAccessor.findById(input.id);
     }

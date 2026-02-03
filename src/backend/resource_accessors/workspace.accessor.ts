@@ -21,7 +21,6 @@ interface CreateWorkspaceInput {
   name: string;
   description?: string;
   branchName?: string;
-  useExistingBranch?: boolean;
 }
 
 interface UpdateWorkspaceInput {
@@ -30,7 +29,6 @@ interface UpdateWorkspaceInput {
   // Note: status changes must go through workspaceStateMachine, not direct updates
   worktreePath?: string | null;
   branchName?: string | null;
-  useExistingBranch?: boolean;
   prUrl?: string | null;
   githubIssueNumber?: number | null;
   githubIssueUrl?: string | null;
@@ -83,7 +81,6 @@ class WorkspaceAccessor {
         name: data.name,
         description: data.description,
         branchName: data.branchName,
-        useExistingBranch: data.useExistingBranch ?? false,
       },
     });
   }

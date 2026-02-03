@@ -60,7 +60,6 @@ describe('ReconciliationService', () => {
 
       expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', {
         branchName: 'feature/test',
-        useExistingBranch: false,
       });
     });
 
@@ -125,7 +124,6 @@ describe('ReconciliationService', () => {
       // NEW workspace should be initialized
       expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', {
         branchName: 'feature/new',
-        useExistingBranch: false,
       });
 
       // Stale PROVISIONING should be marked as FAILED

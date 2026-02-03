@@ -98,7 +98,8 @@ export const workspaceRouter = router({
         }
       }
       // Create the workspace record
-      const workspace = await workspaceAccessor.create(input);
+      const { useExistingBranch, ...createInput } = input;
+      const workspace = await workspaceAccessor.create(createInput);
 
       // Initialize the worktree in the background so the frontend can navigate
       // immediately. The workspace detail page polls for initialization status
@@ -107,7 +108,7 @@ export const workspaceRouter = router({
       // any unexpected errors (e.g., if markFailed throws due to DB issues).
       initializeWorkspaceWorktree(workspace.id, {
         branchName: input.branchName,
-        useExistingBranch: input.useExistingBranch,
+        useExistingBranch,
       }).catch((error) => {
         logger.error(
           'Unexpected error during background workspace initialization',

@@ -260,7 +260,6 @@ class WorktreeLifecycleService {
       await workspaceAccessor.update(workspaceId, {
         worktreePath: worktreeInfo.worktreePath,
         branchName: worktreeInfo.branchName,
-        useExistingBranch,
         runScriptCommand: factoryConfig?.scripts.run ?? null,
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });
