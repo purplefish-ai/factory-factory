@@ -1,17 +1,35 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getLanguageFromPath, isBinaryContent, isPathSafe } from './file-helpers';
+import { getLanguageFromPath, isBinaryContent, isPathSafe, pathExists } from './file-helpers';
 
 // Mock fs/promises
 vi.mock('node:fs/promises', () => ({
   realpath: vi.fn(),
+  stat: vi.fn(),
 }));
 
-import { realpath } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 
 const mockedRealpath = vi.mocked(realpath);
+const mockedStat = vi.mocked(stat);
 
 describe('file-helpers', () => {
+  describe('pathExists', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('returns true when stat succeeds', async () => {
+      mockedStat.mockResolvedValue({} as Awaited<ReturnType<typeof stat>>);
+      await expect(pathExists('/tmp/example')).resolves.toBe(true);
+    });
+
+    it('returns false when stat throws', async () => {
+      mockedStat.mockRejectedValue(new Error('ENOENT'));
+      await expect(pathExists('/tmp/missing')).resolves.toBe(false);
+    });
+  });
+
   describe('isPathSafe', () => {
     const worktreePath = '/home/user/project';
 
