@@ -36,7 +36,7 @@ jobs:
 
       - name: Check Prisma migrations are committed
         run: pnpm exec prisma migrate diff \
-          --from-schema-datamodel prisma/schema.prisma \
+          --from-schema prisma/schema.prisma \
           --to-migrations prisma/migrations \
           --exit-code
 
