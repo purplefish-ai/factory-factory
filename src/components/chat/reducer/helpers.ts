@@ -246,6 +246,52 @@ export function handleToolInputUpdate(
 }
 
 /**
+ * Append a thinking delta to the most recent thinking content_block_start message.
+ */
+export function handleThinkingDeltaUpdate(state: ChatState, delta: string): ChatState {
+  if (!delta) {
+    return state;
+  }
+
+  const messages = state.messages;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.source !== 'claude' || !msg.message) {
+      continue;
+    }
+    const claudeMsg = msg.message;
+    if (claudeMsg.type !== 'stream_event' || !claudeMsg.event) {
+      continue;
+    }
+    const event = claudeMsg.event;
+    if (event.type !== 'content_block_start' || event.content_block.type !== 'thinking') {
+      continue;
+    }
+
+    const currentThinking =
+      typeof event.content_block.thinking === 'string' ? event.content_block.thinking : '';
+    const updatedEvent = {
+      ...event,
+      content_block: {
+        ...event.content_block,
+        thinking: currentThinking + delta,
+      },
+    };
+
+    const updatedChatMessage: ChatMessage = {
+      ...msg,
+      message: { ...claudeMsg, event: updatedEvent } as ClaudeMessage,
+    };
+
+    const newMessages = [...messages];
+    newMessages[i] = updatedChatMessage;
+    return { ...state, messages: newMessages };
+  }
+
+  return state;
+}
+
+/**
  * Convert a PendingInteractiveRequest from the backend to a PendingRequest for UI state.
  */
 export function convertPendingRequest(

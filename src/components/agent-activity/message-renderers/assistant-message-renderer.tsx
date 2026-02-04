@@ -2,7 +2,12 @@ import { Loader2 } from 'lucide-react';
 import { memo } from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ClaudeMessage } from '@/lib/claude-types';
-import { extractTextFromMessage, isToolResultMessage, isToolUseMessage } from '@/lib/claude-types';
+import {
+  extractTextFromMessage,
+  isThinkingContent,
+  isToolResultMessage,
+  isToolUseMessage,
+} from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import { ToolInfoRenderer } from '../tool-renderers';
 import {
@@ -51,6 +56,18 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
     return (
       <StreamEventRenderer event={message.event} messageId={messageId} className={className} />
     );
+  }
+
+  if (message.message && Array.isArray(message.message.content)) {
+    const contentItems = message.message.content;
+    if (contentItems.length === 1 && isThinkingContent(contentItems[0])) {
+      return (
+        <ThinkingBlockRenderer
+          text={contentItems[0].thinking}
+          className={className}
+        />
+      );
+    }
   }
 
   // Handle regular assistant/user messages with content
@@ -109,6 +126,35 @@ interface TextRendererProps {
  */
 const TextRenderer = memo(function TextRenderer({ text }: TextRendererProps) {
   return <MarkdownRenderer content={text} />;
+});
+
+// =============================================================================
+// Thinking Block Renderer
+// =============================================================================
+
+interface ThinkingBlockRendererProps {
+  text: string;
+  className?: string;
+}
+
+const ThinkingBlockRenderer = memo(function ThinkingBlockRenderer({
+  text,
+  className,
+}: ThinkingBlockRendererProps) {
+  return (
+    <div
+      className={cn(
+        'rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-2',
+        className
+      )}
+    >
+      <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+        <Loader2 className="h-3 w-3" />
+        <span>Thinking</span>
+      </div>
+      <div className="text-sm text-muted-foreground italic whitespace-pre-wrap">{text}</div>
+    </div>
+  );
 });
 
 // =============================================================================
