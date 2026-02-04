@@ -1,8 +1,8 @@
 /**
  * Format bytes to human-readable string (B, KB, MB, GB)
  */
-export function formatBytes(bytes: number | null): string {
-  if (bytes === null) {
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) {
     return '-';
   }
   if (bytes < 1024) {
