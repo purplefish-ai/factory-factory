@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 
@@ -139,8 +140,11 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
   // State for current question index (pagination)
   const [currentIndex, setCurrentIndex] = useState(0);
+  // Inline freeform response (acts as "Other" for all questions)
+  const [freeformText, setFreeformText] = useState('');
   // Ref for focusing the question container
   const containerRef = useRef<HTMLDivElement>(null);
+  const freeformRef = useRef<HTMLTextAreaElement>(null);
 
   // Current request ID for key generation
   const currentRequestId = question?.requestId;
@@ -152,6 +156,17 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     }
     setAnswers({});
     setCurrentIndex(0);
+    setFreeformText('');
+  }, [currentRequestId]);
+
+  useEffect(() => {
+    if (!currentRequestId) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      freeformRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timeoutId);
   }, [currentRequestId]);
 
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
@@ -166,11 +181,17 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
       return;
     }
 
+    const trimmedFreeform = freeformText.trim();
     // Convert indexed answers to the format expected by the hook
     // The hook expects answers keyed by question text
     const formattedAnswers: Record<string, string | string[]> = {};
 
     question.questions.forEach((q, index) => {
+      if (trimmedFreeform.length > 0) {
+        formattedAnswers[q.question] = trimmedFreeform;
+        return;
+      }
+
       const answer = answers[index];
       if (answer !== undefined) {
         formattedAnswers[q.question] = answer;
@@ -186,21 +207,28 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     // Reset answers and pagination after submit
     setAnswers({});
     setCurrentIndex(0);
-  }, [question, answers, onAnswer]);
+    setFreeformText('');
+  }, [question, answers, onAnswer, freeformText]);
 
   // Check if all questions have been answered
-  const isComplete = question?.questions.every((q, index) => {
-    const answer = answers[index];
-    if (q.multiSelect) {
-      return Array.isArray(answer) && answer.length > 0;
-    }
-    return typeof answer === 'string' && answer.length > 0;
-  });
+  const hasFreeform = freeformText.trim().length > 0;
+  const isComplete = hasFreeform
+    ? true
+    : question?.questions.every((q, index) => {
+        const answer = answers[index];
+        if (q.multiSelect) {
+          return Array.isArray(answer) && answer.length > 0;
+        }
+        return typeof answer === 'string' && answer.length > 0;
+      });
 
   // Check if current question has been answered
   const isCurrentAnswered = (() => {
     if (!question) {
       return false;
+    }
+    if (hasFreeform) {
+      return true;
     }
     const q = question.questions[currentIndex];
     const answer = answers[currentIndex];
@@ -231,7 +259,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
       >
         <div className="flex items-start gap-3">
           <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
-          <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex-1 min-w-0 space-y-3">
             {currentQuestion.multiSelect ? (
               <MultiSelectQuestion
                 question={currentQuestion}
@@ -247,9 +275,19 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
                 onChange={(value) => handleAnswerChange(0, value)}
               />
             )}
-            <p className="text-[11px] text-muted-foreground">
-              You can also type a custom response in the chat input below and send it.
-            </p>
+            <div className="space-y-1.5">
+              <div className="text-xs text-muted-foreground">Other response</div>
+              <Textarea
+                ref={freeformRef}
+                value={freeformText}
+                onChange={(event) => setFreeformText(event.target.value)}
+                placeholder="Type a custom response..."
+                className="min-h-[56px] text-sm"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                If you type here, it will be used for the response instead of the choices above.
+              </p>
+            </div>
           </div>
           <div className="shrink-0 self-end">
             <Button size="sm" onClick={handleSubmit} disabled={!isComplete}>
@@ -315,9 +353,19 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
             />
           )}
 
-          <p className="text-[11px] text-muted-foreground mt-2">
-            You can also type a custom response in the chat input below and send it.
-          </p>
+          <div className="space-y-1.5 mt-3">
+            <div className="text-xs text-muted-foreground">Other response</div>
+            <Textarea
+              ref={freeformRef}
+              value={freeformText}
+              onChange={(event) => setFreeformText(event.target.value)}
+              placeholder="Type a custom response..."
+              className="min-h-[56px] text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              If you type here, it will be used for the response instead of the choices above.
+            </p>
+          </div>
         </div>
 
         {/* Navigation and submit */}

@@ -105,7 +105,7 @@ export const ChatContent = memo(function ChatContent({
   const loadingSession = sessionStatus.phase === 'loading';
 
   useEffect(() => {
-    if (pendingRequest.type === 'question' || pendingRequest.type === 'permission') {
+    if (pendingRequest.type === 'permission') {
       inputRef?.current?.focus();
     }
   }, [pendingRequest.type, inputRef]);
@@ -113,9 +113,6 @@ export const ChatContent = memo(function ChatContent({
   const placeholder = (() => {
     if (stopping) {
       return 'Stopping...';
-    }
-    if (pendingRequest.type === 'question') {
-      return 'Type your answer...';
     }
     if (
       pendingRequest.type === 'permission' &&
