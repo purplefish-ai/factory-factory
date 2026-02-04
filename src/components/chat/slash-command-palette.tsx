@@ -71,6 +71,7 @@ export function SlashCommandPalette({
   paletteRef,
 }: SlashCommandPaletteProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Filter commands based on the filter text (case-insensitive)
@@ -87,6 +88,23 @@ export function SlashCommandPalette({
       setSelectedIndex(0);
     }
   }, [filter, isOpen, filteredCommands.length]);
+
+  // Keep refs array in sync with filtered list length
+  useEffect(() => {
+    itemRefs.current = itemRefs.current.slice(0, filteredCommands.length);
+  }, [filteredCommands.length]);
+
+  // Ensure the selected item stays visible when navigating with the keyboard
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const selectedItem = itemRefs.current[selectedIndex];
+    if (selectedItem) {
+      selectedItem.scrollIntoView({ block: 'nearest' });
+    }
+  }, [isOpen, selectedIndex]);
 
   // Click outside to close
   useEffect(() => {
@@ -203,6 +221,9 @@ export function SlashCommandPalette({
                 onSelect={() => onSelect(command)}
                 className="cursor-pointer"
                 onMouseEnter={() => setSelectedIndex(index)}
+                ref={(node) => {
+                  itemRefs.current[index] = node;
+                }}
               >
                 <div className="flex flex-col gap-0.5 w-full">
                   <div className="flex items-center gap-2">
