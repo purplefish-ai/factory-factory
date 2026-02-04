@@ -1,5 +1,15 @@
 import type { SessionStatus } from '@prisma-gen/client';
-import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import {
+  Activity,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  PauseCircle,
+  Plus,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -41,6 +51,38 @@ function getSessionDisplayName(session: SessionData, index: number): string {
   return `Session ${index + 1}`;
 }
 
+function getStatusIcon(status: SessionStatus, isRunning: boolean) {
+  if (isRunning || status === 'RUNNING') {
+    return Activity;
+  }
+  if (status === 'IDLE') {
+    return Circle;
+  }
+  if (status === 'PAUSED') {
+    return PauseCircle;
+  }
+  if (status === 'COMPLETED') {
+    return CheckCircle2;
+  }
+  return XCircle;
+}
+
+function getStatusIconClass(status: SessionStatus, isRunning: boolean) {
+  if (isRunning || status === 'RUNNING') {
+    return 'text-brand animate-pulse';
+  }
+  if (status === 'IDLE') {
+    return 'text-emerald-500';
+  }
+  if (status === 'PAUSED') {
+    return 'text-muted-foreground';
+  }
+  if (status === 'COMPLETED') {
+    return 'text-blue-500';
+  }
+  return 'text-destructive';
+}
+
 // =============================================================================
 // Sub-Components
 // =============================================================================
@@ -64,6 +106,8 @@ function SessionTab({
   onClose,
   disabled,
 }: SessionTabProps) {
+  const StatusIcon = getStatusIcon(session.status, isRunning);
+
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -105,16 +149,8 @@ function SessionTab({
       )}
     >
       {/* Status indicator */}
-      <div
-        className={cn(
-          'h-2 w-2 rounded-full shrink-0',
-          isRunning && 'bg-brand animate-pulse',
-          !isRunning && session.status === 'RUNNING' && 'bg-brand animate-pulse',
-          !isRunning && session.status === 'IDLE' && 'bg-green-500',
-          !isRunning && session.status === 'PAUSED' && 'bg-gray-400',
-          !isRunning && session.status === 'COMPLETED' && 'bg-blue-500',
-          !isRunning && session.status === 'FAILED' && 'bg-red-500'
-        )}
+      <StatusIcon
+        className={cn('h-3.5 w-3.5 shrink-0', getStatusIconClass(session.status, isRunning))}
       />
 
       <span className="truncate max-w-[120px]">{displayName}</span>
