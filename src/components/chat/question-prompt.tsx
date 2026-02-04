@@ -150,6 +150,11 @@ function SingleSelectQuestion({
                   onChange(OTHER_OPTION_VALUE);
                 }
               }}
+              onBlur={() => {
+                if (selectedValue === OTHER_OPTION_VALUE && otherText.trim().length === 0) {
+                  onChange('');
+                }
+              }}
               onChange={(event) => {
                 const nextValue = event.target.value;
                 onOtherTextChange(nextValue);
@@ -262,6 +267,11 @@ function MultiSelectQuestion({
               onClick={() => {
                 if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
                   onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                }
+              }}
+              onBlur={() => {
+                if (otherText.trim().length === 0 && selectedValues.includes(OTHER_OPTION_VALUE)) {
+                  onChange(selectedValues.filter((value) => value !== OTHER_OPTION_VALUE));
                 }
               }}
               onChange={(event) => {
