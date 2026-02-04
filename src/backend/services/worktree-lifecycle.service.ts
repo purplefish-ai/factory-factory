@@ -1,6 +1,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
 import { gitOpsService } from './git-ops.service';
@@ -292,6 +294,30 @@ async function runProjectStartupScriptIfConfigured(
   return true;
 }
 
+async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
+  try {
+    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+      status: SessionStatus.IDLE,
+      limit: 1,
+    });
+    const session = sessions[0];
+    if (!session) {
+      return;
+    }
+
+    await sessionService.startClaudeSession(session.id, { initialPrompt: '' });
+    logger.debug('Auto-started default Claude session for workspace', {
+      workspaceId,
+      sessionId: session.id,
+    });
+  } catch (error) {
+    logger.warn('Failed to auto-start default Claude session for workspace', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 class WorktreeLifecycleService {
   async cleanupWorkspaceWorktree(
     workspace: WorkspaceWithProject,
@@ -390,6 +416,8 @@ class WorktreeLifecycleService {
         runScriptCommand: factoryConfig?.scripts.run ?? null,
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });
+
+      void startDefaultClaudeSession(workspaceId);
 
       const ranFactorySetup = await runFactorySetupScriptIfConfigured(
         workspaceId,
