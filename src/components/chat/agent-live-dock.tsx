@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import type { ToolSequence } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
@@ -6,6 +6,7 @@ import { ToolSequenceGroup } from '../agent-activity/tool-renderers';
 import { LatestThinking } from './latest-thinking';
 
 interface AgentLiveDockProps {
+  workspaceId: string;
   running: boolean;
   starting: boolean;
   stopping: boolean;
@@ -39,7 +40,30 @@ function getPhaseLabel({
   return { label: 'Idle', tone: 'outline' };
 }
 
+const TOOL_WINDOW_OPEN_KEY_PREFIX = 'agent-live-dock-tool-open-';
+
+function readToolWindowOpen(workspaceId: string): boolean | null {
+  try {
+    const stored = window.localStorage.getItem(`${TOOL_WINDOW_OPEN_KEY_PREFIX}${workspaceId}`);
+    if (stored === null) {
+      return null;
+    }
+    return stored === 'true';
+  } catch {
+    return null;
+  }
+}
+
+function saveToolWindowOpen(workspaceId: string, open: boolean): void {
+  try {
+    window.localStorage.setItem(`${TOOL_WINDOW_OPEN_KEY_PREFIX}${workspaceId}`, String(open));
+  } catch {
+    // Ignore localStorage failures.
+  }
+}
+
 export const AgentLiveDock = memo(function AgentLiveDock({
+  workspaceId,
   running,
   starting,
   stopping,
@@ -48,6 +72,25 @@ export const AgentLiveDock = memo(function AgentLiveDock({
   latestToolSequence,
   className,
 }: AgentLiveDockProps) {
+  const loadedForWorkspaceRef = useRef<string | null>(null);
+  const [toolWindowOpen, setToolWindowOpen] = useState(true);
+
+  useEffect(() => {
+    if (loadedForWorkspaceRef.current === workspaceId) {
+      return;
+    }
+    const storedOpen = readToolWindowOpen(workspaceId);
+    setToolWindowOpen(storedOpen ?? true);
+    loadedForWorkspaceRef.current = workspaceId;
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (loadedForWorkspaceRef.current !== workspaceId) {
+      return;
+    }
+    saveToolWindowOpen(workspaceId, toolWindowOpen);
+  }, [workspaceId, toolWindowOpen]);
+
   const hasThinking = Boolean(latestThinking) && (running || stopping || Boolean(permissionMode));
   const hasContent = hasThinking || Boolean(latestToolSequence);
   const { label, tone } = getPhaseLabel({ running, starting, stopping, permissionMode });
@@ -67,13 +110,13 @@ export const AgentLiveDock = memo(function AgentLiveDock({
         </div>
 
         {latestToolSequence && (
-          <div className="space-y-1">
-            <div className="text-[10px] font-medium text-muted-foreground">Latest tool</div>
+          <div>
             <ToolSequenceGroup
-              key={latestToolSequence.id}
               sequence={latestToolSequence}
               defaultOpen
               summaryOrder="latest-first"
+              open={toolWindowOpen}
+              onOpenChange={setToolWindowOpen}
             />
           </div>
         )}
@@ -81,7 +124,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
         {hasThinking && latestThinking && (
           <div className="space-y-1">
             <div className="text-[10px] font-medium text-muted-foreground">Latest thinking</div>
-            <LatestThinking thinking={latestThinking} running={running || starting} />
+            <LatestThinking thinking={latestThinking} running={hasThinking} />
           </div>
         )}
       </div>

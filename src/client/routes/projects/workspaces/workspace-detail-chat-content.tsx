@@ -14,6 +14,7 @@ import type { CommandInfo, TokenStats } from '@/lib/claude-types';
 import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
 
 interface ChatContentProps {
+  workspaceId: string;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -51,6 +52,7 @@ interface ChatContentProps {
 }
 
 export const ChatContent = memo(function ChatContent({
+  workspaceId,
   messages,
   sessionStatus,
   messagesEndRef,
@@ -184,6 +186,7 @@ export const ChatContent = memo(function ChatContent({
 
       <div className="border-t">
         <AgentLiveDock
+          workspaceId={workspaceId}
           running={running}
           starting={startingSession}
           stopping={stopping}

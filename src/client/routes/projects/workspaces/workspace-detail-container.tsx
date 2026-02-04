@@ -505,6 +505,7 @@ function renderWorkspaceBody({
               hasWorktreePath={hasWorktreePath}
             >
               <ChatContent
+                workspaceId={workspaceId}
                 messages={messages}
                 sessionStatus={sessionStatus}
                 messagesEndRef={messagesEndRef}

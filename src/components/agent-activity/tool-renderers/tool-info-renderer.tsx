@@ -147,6 +147,8 @@ export interface ToolSequenceGroupProps {
   sequence: ToolSequence;
   defaultOpen?: boolean;
   summaryOrder?: 'oldest-first' | 'latest-first';
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -159,8 +161,12 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   sequence,
   defaultOpen = false,
   summaryOrder = 'oldest-first',
+  open,
+  onOpenChange,
 }: ToolSequenceGroupProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+  const isOpen = open ?? internalOpen;
+  const setIsOpen = onOpenChange ?? setInternalOpen;
 
   const { pairedCalls } = sequence;
   const summaryCalls = summaryOrder === 'latest-first' ? [...pairedCalls].reverse() : pairedCalls;
@@ -171,7 +177,14 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
 
   // Single tool call - render inline without grouping wrapper
   if (pairedCalls.length === 1) {
-    return <PairedToolCallRenderer call={summaryCalls[0]} defaultOpen={defaultOpen} />;
+    return (
+      <PairedToolCallRenderer
+        call={summaryCalls[0]}
+        defaultOpen={defaultOpen}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+      />
+    );
   }
 
   // Multiple tool calls - render as collapsible group
@@ -298,6 +311,8 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
 interface PairedToolCallRendererProps {
   call: PairedToolCall;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -307,8 +322,12 @@ interface PairedToolCallRendererProps {
 const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
   call,
   defaultOpen = false,
+  open,
+  onOpenChange,
 }: PairedToolCallRendererProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+  const isOpen = open ?? internalOpen;
+  const setIsOpen = onOpenChange ?? setInternalOpen;
 
   const isPending = call.status === 'pending';
   const isError = call.status === 'error';
