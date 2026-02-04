@@ -268,115 +268,112 @@ function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
   return { type: 'HOOK_RESPONSE', payload: { hookId: hookRespData.hookId } };
 }
 
+function handlePermissionCancelledMessage(data: WebSocketMessage): ChatAction {
+  if (!data.requestId) {
+    // biome-ignore lint/suspicious/noConsole: Error logging for debugging malformed WebSocket messages
+    console.error('[Chat Reducer] Received permission_cancelled without requestId', data);
+  }
+  return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId ?? '' } };
+}
+
+function handleMessageUsedAsResponseMessage(data: WebSocketMessage): ChatAction | null {
+  if (!(data.id && data.text && data.order !== undefined)) {
+    return null;
+  }
+  return {
+    type: 'MESSAGE_USED_AS_RESPONSE',
+    payload: { id: data.id, text: data.text, order: data.order },
+  };
+}
+
+function handleStatusUpdateMessage(data: WebSocketMessage): ChatAction {
+  return {
+    type: 'SDK_STATUS_UPDATE',
+    payload: { permissionMode: data.permissionMode },
+  };
+}
+
+function handleTaskNotificationMessage(data: WebSocketMessage): ChatAction | null {
+  return data.message
+    ? { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } }
+    : null;
+}
+
+function handleSlashCommandsMessage(data: WebSocketMessage): ChatAction | null {
+  return data.slashCommands
+    ? { type: 'WS_SLASH_COMMANDS', payload: { commands: data.slashCommands } }
+    : null;
+}
+
+function handleUserMessageUuidMessage(data: WebSocketMessage): ChatAction | null {
+  return data.uuid ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } } : null;
+}
+
+function handleRewindFilesPreviewMessage(data: WebSocketMessage): ChatAction {
+  // If dryRun is false, this is the actual rewind completion
+  if (data.dryRun === false) {
+    return { type: 'REWIND_SUCCESS', payload: { userMessageId: data.userMessageId } };
+  }
+  // Otherwise, this is a preview (dry run) response
+  return {
+    type: 'REWIND_PREVIEW_SUCCESS',
+    payload: {
+      affectedFiles: data.affectedFiles ?? [],
+      userMessageId: data.userMessageId,
+    },
+  };
+}
+
+function handleRewindFilesErrorMessage(data: WebSocketMessage): ChatAction | null {
+  return data.rewindError
+    ? {
+        type: 'REWIND_PREVIEW_ERROR',
+        payload: { error: data.rewindError, userMessageId: data.userMessageId },
+      }
+    : null;
+}
+
+// Handler map for WebSocket message types
+type MessageHandler = (data: WebSocketMessage) => ChatAction | null;
+
+const messageHandlers: Record<string, MessageHandler> = {
+  status: handleStatusMessage,
+  starting: () => ({ type: 'WS_STARTING' }),
+  started: () => ({ type: 'WS_STARTED' }),
+  stopped: () => ({ type: 'WS_STOPPED' }),
+  process_exit: (data) => ({ type: 'WS_PROCESS_EXIT', payload: { code: data.code ?? null } }),
+  claude_message: handleClaudeMessageAction,
+  error: handleErrorMessageAction,
+  sessions: handleSessionsMessage,
+  permission_request: handlePermissionRequestMessage,
+  user_question: handleUserQuestionMessage,
+  permission_cancelled: handlePermissionCancelledMessage,
+  message_used_as_response: handleMessageUsedAsResponseMessage,
+  messages_snapshot: handleMessagesSnapshot,
+  message_state_changed: handleMessageStateChanged,
+  tool_progress: handleToolProgressMessage,
+  tool_use_summary: handleToolUseSummaryMessage,
+  status_update: handleStatusUpdateMessage,
+  task_notification: handleTaskNotificationMessage,
+  system_init: handleSystemInitMessage,
+  compact_boundary: () => ({ type: 'COMPACT_BOUNDARY' }),
+  hook_started: handleHookStartedMessage,
+  hook_response: handleHookResponseMessage,
+  compacting_start: () => ({ type: 'SDK_COMPACTING_START' }),
+  compacting_end: () => ({ type: 'SDK_COMPACTING_END' }),
+  slash_commands: handleSlashCommandsMessage,
+  user_message_uuid: handleUserMessageUuidMessage,
+  rewind_files_preview: handleRewindFilesPreviewMessage,
+  rewind_files_error: handleRewindFilesErrorMessage,
+};
+
 /**
  * Creates a ChatAction from a WebSocketMessage.
  * Returns null if the message type is not handled.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: switch statement complexity is inherent to message type dispatch
 export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAction | null {
-  switch (data.type) {
-    case 'status':
-      return handleStatusMessage(data);
-    case 'starting':
-      return { type: 'WS_STARTING' };
-    case 'started':
-      return { type: 'WS_STARTED' };
-    case 'stopped':
-      return { type: 'WS_STOPPED' };
-    case 'process_exit':
-      return { type: 'WS_PROCESS_EXIT', payload: { code: data.code ?? null } };
-    case 'claude_message':
-      return handleClaudeMessageAction(data);
-    case 'error':
-      return handleErrorMessageAction(data);
-    case 'sessions':
-      return handleSessionsMessage(data);
-    case 'permission_request':
-      return handlePermissionRequestMessage(data);
-    case 'user_question':
-      return handleUserQuestionMessage(data);
-    // Request cancelled by CLI (e.g., Ctrl+C during permission or question prompt)
-    case 'permission_cancelled':
-      if (!data.requestId) {
-        // biome-ignore lint/suspicious/noConsole: Error logging for debugging malformed WebSocket messages
-        console.error('[Chat Reducer] Received permission_cancelled without requestId', data);
-      }
-      return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId ?? '' } };
-    // Interactive response handling
-    case 'message_used_as_response':
-      return data.id && data.text && data.order !== undefined
-        ? {
-            type: 'MESSAGE_USED_AS_RESPONSE',
-            payload: { id: data.id, text: data.text, order: data.order },
-          }
-        : null;
-    // Message state machine events (primary protocol)
-    case 'messages_snapshot':
-      return handleMessagesSnapshot(data);
-    case 'message_state_changed':
-      return handleMessageStateChanged(data);
-    // SDK message type events
-    case 'tool_progress':
-      return handleToolProgressMessage(data);
-    case 'tool_use_summary':
-      return handleToolUseSummaryMessage(data);
-    case 'status_update':
-      return {
-        type: 'SDK_STATUS_UPDATE',
-        payload: { permissionMode: data.permissionMode },
-      };
-    case 'task_notification':
-      return data.message
-        ? { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } }
-        : null;
-    // System subtype events
-    case 'system_init':
-      return handleSystemInitMessage(data);
-    case 'compact_boundary':
-      return { type: 'COMPACT_BOUNDARY' };
-    case 'hook_started':
-      return handleHookStartedMessage(data);
-    case 'hook_response':
-      return handleHookResponseMessage(data);
-    // Context compaction events
-    case 'compacting_start':
-      return { type: 'SDK_COMPACTING_START' };
-    case 'compacting_end':
-      return { type: 'SDK_COMPACTING_END' };
-    // Slash commands discovery
-    case 'slash_commands':
-      return data.slashCommands
-        ? { type: 'WS_SLASH_COMMANDS', payload: { commands: data.slashCommands } }
-        : null;
-    // User message UUID tracking (for rewind functionality)
-    case 'user_message_uuid':
-      return data.uuid
-        ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } }
-        : null;
-    // Rewind files response events
-    case 'rewind_files_preview':
-      // If dryRun is false, this is the actual rewind completion
-      if (data.dryRun === false) {
-        return { type: 'REWIND_SUCCESS', payload: { userMessageId: data.userMessageId } };
-      }
-      // Otherwise, this is a preview (dry run) response
-      return {
-        type: 'REWIND_PREVIEW_SUCCESS',
-        payload: {
-          affectedFiles: data.affectedFiles ?? [],
-          userMessageId: data.userMessageId,
-        },
-      };
-    case 'rewind_files_error':
-      return data.rewindError
-        ? {
-            type: 'REWIND_PREVIEW_ERROR',
-            payload: { error: data.rewindError, userMessageId: data.userMessageId },
-          }
-        : null;
-    default:
-      return null;
-  }
+  const handler = messageHandlers[data.type];
+  return handler ? handler(data) : null;
 }
 
 /**
