@@ -236,6 +236,51 @@ class MessageStateService {
     this.eventStore.clearSession(sessionId);
   }
 
+  /**
+   * Inject a synthetic user message that appears as already committed.
+   * Used for auto-generated prompts (e.g., GitHub issue content) that should
+   * appear in the chat history as if the user sent them.
+   */
+  injectCommittedUserMessage(
+    sessionId: string,
+    text: string,
+    options?: { messageId?: string }
+  ): void {
+    const messageId = options?.messageId ?? `injected-${Date.now()}`;
+    const timestamp = new Date().toISOString();
+
+    // Create a QueuedMessage structure
+    const queuedMessage: QueuedMessage = {
+      id: messageId,
+      text,
+      timestamp,
+      settings: {
+        selectedModel: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    };
+
+    // Create the user message (starts in ACCEPTED state)
+    const message = this.stateMachine.createUserMessage(sessionId, queuedMessage);
+
+    // Transition through states to COMMITTED
+    this.stateMachine.updateState(sessionId, messageId, MessageState.DISPATCHED);
+    this.stateMachine.updateState(sessionId, messageId, MessageState.COMMITTED);
+
+    logger.info('Injected committed user message', {
+      sessionId,
+      messageId,
+      textLength: text.length,
+    });
+
+    // Emit state change so the UI knows about this message
+    this.emitStateChange(sessionId, {
+      ...message,
+      state: MessageState.COMMITTED,
+    });
+  }
+
   // =============================================================================
   // Event Storage for Replay
   // =============================================================================
