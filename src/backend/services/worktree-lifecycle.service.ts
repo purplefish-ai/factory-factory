@@ -343,6 +343,29 @@ class WorktreeLifecycleService {
       throw error;
     }
 
+    // Close associated GitHub issue if one exists
+    const project = workspace.project;
+    if (workspace.githubIssueNumber && project?.githubOwner && project?.githubRepo) {
+      try {
+        await githubCLIService.closeIssue(
+          project.githubOwner,
+          project.githubRepo,
+          workspace.githubIssueNumber
+        );
+        logger.info('Closed GitHub issue on workspace archive', {
+          workspaceId: workspace.id,
+          issueNumber: workspace.githubIssueNumber,
+        });
+      } catch (error) {
+        // Log but don't fail the archive if issue closing fails
+        logger.warn('Failed to close GitHub issue on workspace archive', {
+          workspaceId: workspace.id,
+          issueNumber: workspace.githubIssueNumber,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     return workspaceStateMachine.archive(workspace.id);
   }
 
