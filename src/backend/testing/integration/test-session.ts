@@ -18,7 +18,7 @@ import type {
  * Options for creating a test session.
  */
 export interface TestSessionOptions {
-  /** Model to use (default: claude-sonnet-4-20250514 for cost efficiency) */
+  /** Model to use (default: sonnet) */
   model?: 'haiku' | 'sonnet' | 'opus' | string;
   /** Working directory for the session */
   workspacePath: string;
@@ -156,13 +156,15 @@ export class TestSession {
    */
   private async initialize(): Promise<void> {
     const modelMap: Record<string, string> = {
-      haiku: 'claude-haiku-4-20250514',
-      sonnet: 'claude-sonnet-4-20250514',
-      opus: 'claude-opus-4-20250514',
+      haiku: 'claude-3-5-haiku-20241022',
+      sonnet: 'claude-sonnet-4-5-20250929',
+      opus: 'claude-opus-4-5-20251101',
     };
 
     const model =
-      modelMap[this.options.model || 'sonnet'] || this.options.model || 'claude-sonnet-4-20250514';
+      modelMap[this.options.model || 'sonnet'] ||
+      this.options.model ||
+      'claude-sonnet-4-5-20250929';
 
     const processOptions: ClaudeProcessOptions = {
       workingDir: this.options.workspacePath,
