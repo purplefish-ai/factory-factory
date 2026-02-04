@@ -179,6 +179,29 @@ export class GitClient {
     const localBranchName = branchRef.startsWith('origin/')
       ? branchRef.slice('origin/'.length)
       : branchRef;
+    const wantsRemote = branchRef.startsWith('origin/');
+
+    const normalizeBranchName = (value: string) =>
+      value.replace(/^refs\/heads\//, '').replace(/^origin\//, '');
+    const normalizedTarget = normalizeBranchName(localBranchName);
+    const resolvedBaseRepoPath = path.resolve(this.baseRepoPath);
+    const resolvedWorktreePath = path.resolve(worktreePath);
+    const worktrees = await this.listWorktreesWithBranches();
+    const alreadyCheckedOut = worktrees.some((worktree) => {
+      if (!worktree.branchName) {
+        return false;
+      }
+      const resolvedPath = path.resolve(worktree.path);
+      if (resolvedPath === resolvedBaseRepoPath || resolvedPath === resolvedWorktreePath) {
+        return false;
+      }
+      return normalizeBranchName(worktree.branchName) === normalizedTarget;
+    });
+    if (alreadyCheckedOut) {
+      throw new Error(
+        `Branch ${localBranchName} is already checked out in another workspace worktree.`
+      );
+    }
 
     const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
     const fetchSucceeded = fetchResult.code === 0;
@@ -189,8 +212,11 @@ export class GitClient {
 
     const checkoutRef = originExists ? originBranch : branchRef;
     const shouldResetToOrigin =
-      localExists && fetchSucceeded && originExists
-        ? await isLocalBehindOrigin(this.baseRepoPath, localBranchName, originBranch)
+      localExists && originExists
+        ? wantsRemote ||
+          (fetchSucceeded
+            ? await isLocalBehindOrigin(this.baseRepoPath, localBranchName, originBranch)
+            : false)
         : false;
 
     const args = shouldResetToOrigin
