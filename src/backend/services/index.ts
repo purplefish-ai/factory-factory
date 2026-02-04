@@ -20,6 +20,14 @@ export { ciMonitorService } from './ci-monitor.service';
 export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
 export { configService, type SessionProfile } from './config.service';
+// Data backup service
+export {
+  dataBackupService,
+  type ExportData,
+  exportDataSchema,
+  type ImportCounter,
+  type ImportResults,
+} from './data-backup.service';
 // GitHub CLI service
 export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.service';
 // Kanban state service
