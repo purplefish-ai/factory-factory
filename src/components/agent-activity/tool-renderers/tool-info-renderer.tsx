@@ -279,7 +279,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="border-t space-y-1 p-1.5 overflow-x-auto">
-            {pairedCalls.map((call) => (
+            {summaryCalls.map((call) => (
               <div key={call.id} className="pl-2">
                 <PairedToolCallRenderer call={call} defaultOpen={false} />
               </div>

@@ -148,7 +148,9 @@ describe('worktreeLifecycleService initialization', () => {
       status: SessionStatus.IDLE,
       limit: 1,
     });
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
+      initialPrompt: '',
+    });
 
     if (!resolveScript) {
       throw new Error('Expected startup script resolver to be defined');
@@ -194,7 +196,9 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
+      initialPrompt: '',
+    });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
   });
@@ -215,7 +219,9 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
+      initialPrompt: '',
+    });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
   });
 });

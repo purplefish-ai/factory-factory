@@ -48,7 +48,8 @@ export const AgentLiveDock = memo(function AgentLiveDock({
   latestToolSequence,
   className,
 }: AgentLiveDockProps) {
-  const hasContent = Boolean(latestThinking) || Boolean(latestToolSequence);
+  const hasThinking = Boolean(latestThinking) && running;
+  const hasContent = hasThinking || Boolean(latestToolSequence);
   const { label, tone } = getPhaseLabel({ running, starting, stopping, permissionMode });
 
   if (!(hasContent || running || starting || stopping || permissionMode)) {
