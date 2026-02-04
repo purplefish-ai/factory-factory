@@ -1,10 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
+import { buildWebSocketUrl } from '@/lib/websocket-config';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+interface DevLogsMessage {
+  type: 'output' | 'status';
+  data?: string;
+}
 
 interface UseDevLogsResult {
   connected: boolean;
   output: string;
   outputEndRef: React.RefObject<HTMLDivElement | null>;
 }
+
+// =============================================================================
+// Hook
+// =============================================================================
 
 /**
  * Hook to manage the dev logs WebSocket connection.
@@ -15,64 +30,48 @@ interface UseDevLogsResult {
  * is not visible. This is intentional to:
  * 1. Show the connection status indicator in the tab bar
  * 2. Buffer log output so users don't miss messages while viewing Terminal
+ *
+ * Uses useWebSocketTransport for automatic reconnection with exponential backoff.
  */
 export function useDevLogs(workspaceId: string): UseDevLogsResult {
-  const [connected, setConnected] = useState(false);
   const [output, setOutput] = useState<string>('');
-  const wsRef = useRef<WebSocket | null>(null);
   const outputEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom
+  const url = buildWebSocketUrl('/dev-logs', { workspaceId });
+
   const scrollToBottom = useCallback(() => {
     outputEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  // Connect to dev logs WebSocket
-  useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/dev-logs?workspaceId=${workspaceId}`;
+  const handleMessage = useCallback(
+    (data: unknown) => {
+      const message = data as DevLogsMessage;
 
-    // Add debug output to help diagnose connection issues
-    setOutput(`Connecting to ${wsUrl}...\n`);
-
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setConnected(true);
-      setOutput((prev) => `${prev}Connected!\n\n`);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.type === 'output') {
-          setOutput((prev) => prev + message.data);
-          // Scroll to bottom after a short delay to allow render
-          setTimeout(scrollToBottom, 10);
-        } else if (message.type === 'status') {
-          setOutput((prev) => `${prev}Status: ${JSON.stringify(message)}\n`);
-        }
-      } catch {
-        // Ignore parse errors
+      if (message.type === 'output' && message.data) {
+        setOutput((prev) => prev + message.data);
+        // Scroll to bottom after a short delay to allow render
+        setTimeout(scrollToBottom, 10);
+      } else if (message.type === 'status') {
+        setOutput((prev) => `${prev}Status: ${JSON.stringify(message)}\n`);
       }
-    };
+    },
+    [scrollToBottom]
+  );
 
-    ws.onerror = () => {
-      setOutput((prev) => `${prev}WebSocket error occurred\n`);
-    };
+  const handleConnected = useCallback(() => {
+    setOutput((prev) => (prev ? `${prev}Reconnected!\n\n` : 'Connected!\n\n'));
+  }, []);
 
-    ws.onclose = (event) => {
-      setConnected(false);
-      setOutput((prev) => `${prev}Disconnected (code: ${event.code})\n`);
-    };
+  const handleDisconnected = useCallback(() => {
+    setOutput((prev) => `${prev}Disconnected. Reconnecting...\n`);
+  }, []);
 
-    return () => {
-      ws.close();
-    };
-  }, [workspaceId, scrollToBottom]);
+  const { connected } = useWebSocketTransport({
+    url,
+    onMessage: handleMessage,
+    onConnected: handleConnected,
+    onDisconnected: handleDisconnected,
+  });
 
   return { connected, output, outputEndRef };
 }
