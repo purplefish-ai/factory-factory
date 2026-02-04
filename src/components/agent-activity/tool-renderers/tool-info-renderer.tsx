@@ -164,6 +164,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   open,
   onOpenChange,
 }: ToolSequenceGroupProps) {
+  const isControlled = open !== undefined;
   const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
   const isOpen = open ?? internalOpen;
   const setIsOpen = onOpenChange ?? setInternalOpen;
@@ -180,7 +181,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
     return (
       <PairedToolCallRenderer
         call={summaryCalls[0]}
-        defaultOpen={defaultOpen}
+        defaultOpen={isControlled ? undefined : defaultOpen}
         open={isOpen}
         onOpenChange={setIsOpen}
       />

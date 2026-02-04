@@ -72,26 +72,24 @@ export const AgentLiveDock = memo(function AgentLiveDock({
   latestToolSequence,
   className,
 }: AgentLiveDockProps) {
-  const loadedForWorkspaceRef = useRef<string | null>(null);
+  const skipNextPersistRef = useRef(false);
   const [toolWindowOpen, setToolWindowOpen] = useState(true);
 
   useEffect(() => {
-    if (loadedForWorkspaceRef.current === workspaceId) {
-      return;
-    }
+    skipNextPersistRef.current = true;
     const storedOpen = readToolWindowOpen(workspaceId);
     setToolWindowOpen(storedOpen ?? true);
-    loadedForWorkspaceRef.current = workspaceId;
   }, [workspaceId]);
 
   useEffect(() => {
-    if (loadedForWorkspaceRef.current !== workspaceId) {
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
       return;
     }
     saveToolWindowOpen(workspaceId, toolWindowOpen);
   }, [workspaceId, toolWindowOpen]);
 
-  const hasThinking = Boolean(latestThinking) && (running || stopping || Boolean(permissionMode));
+  const hasThinking = latestThinking !== null && (running || stopping || Boolean(permissionMode));
   const hasContent = hasThinking || Boolean(latestToolSequence);
   const { label, tone } = getPhaseLabel({ running, starting, stopping, permissionMode });
 
@@ -113,7 +111,6 @@ export const AgentLiveDock = memo(function AgentLiveDock({
           <div>
             <ToolSequenceGroup
               sequence={latestToolSequence}
-              defaultOpen
               summaryOrder="latest-first"
               open={toolWindowOpen}
               onOpenChange={setToolWindowOpen}
@@ -121,10 +118,10 @@ export const AgentLiveDock = memo(function AgentLiveDock({
           </div>
         )}
 
-        {hasThinking && latestThinking && (
+        {hasThinking && (
           <div className="space-y-1">
             <div className="text-[10px] font-medium text-muted-foreground">Latest thinking</div>
-            <LatestThinking thinking={latestThinking} running={hasThinking} />
+            <LatestThinking thinking={latestThinking} running={running || starting} />
           </div>
         )}
       </div>
