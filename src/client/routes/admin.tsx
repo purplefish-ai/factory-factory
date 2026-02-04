@@ -952,6 +952,230 @@ function PrReviewSettingsSection() {
   );
 }
 
+function RatchetSettingsSection() {
+  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const utils = trpc.useUtils();
+  const updateSettings = trpc.userSettings.update.useMutation({
+    onSuccess: () => {
+      toast.success('Ratchet settings updated');
+      utils.userSettings.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to update settings: ${error.message}`);
+    },
+  });
+
+  const triggerRatchetCheck = trpc.admin.triggerRatchetCheck.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `Ratchet check completed: ${result.checked} checked, ${result.stateChanges} state changes, ${result.actionsTriggered} actions triggered`
+      );
+    },
+    onError: (error) => {
+      toast.error(`Failed to trigger ratchet check: ${error.message}`);
+    },
+  });
+
+  const [allowedReviewers, setAllowedReviewers] = useState<string>('');
+
+  // Update local state when settings load
+  useEffect(() => {
+    if (settings) {
+      const reviewers = (settings.ratchetAllowedReviewers as string[]) ?? [];
+      setAllowedReviewers(reviewers.join(', '));
+    }
+  }, [settings]);
+
+  const handleSaveAllowedReviewers = () => {
+    const reviewers = allowedReviewers
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    updateSettings.mutate({
+      ratchetAllowedReviewers: reviewers.length > 0 ? reviewers : null,
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="w-5 h-5" />
+            Ratchet (PR Auto-Progression)
+          </CardTitle>
+          <CardDescription>
+            Automatically progress PRs toward merge by fixing issues
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wrench className="w-5 h-5" />
+          Ratchet (PR Auto-Progression)
+        </CardTitle>
+        <CardDescription>
+          Automatically progress PRs toward merge by fixing CI, resolving conflicts, and addressing
+          review comments
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Master toggle */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="ratchet-enabled">Enable Ratchet</Label>
+            <p className="text-sm text-muted-foreground">
+              Master toggle for automatic PR progression
+            </p>
+          </div>
+          <Switch
+            id="ratchet-enabled"
+            checked={settings?.ratchetEnabled ?? false}
+            onCheckedChange={(checked) => {
+              updateSettings.mutate({ ratchetEnabled: checked });
+            }}
+            disabled={updateSettings.isPending}
+          />
+        </div>
+
+        {/* Individual toggles */}
+        <div className="space-y-4 border-t pt-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="ratchet-ci">Auto-fix CI failures</Label>
+              <p className="text-sm text-muted-foreground">
+                Automatically investigate and fix failing CI checks
+              </p>
+            </div>
+            <Switch
+              id="ratchet-ci"
+              checked={settings?.ratchetAutoFixCi ?? true}
+              onCheckedChange={(checked) => {
+                updateSettings.mutate({ ratchetAutoFixCi: checked });
+              }}
+              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="ratchet-conflicts">Auto-resolve merge conflicts</Label>
+              <p className="text-sm text-muted-foreground">
+                Automatically merge main branch and resolve conflicts
+              </p>
+            </div>
+            <Switch
+              id="ratchet-conflicts"
+              checked={settings?.ratchetAutoFixConflicts ?? true}
+              onCheckedChange={(checked) => {
+                updateSettings.mutate({ ratchetAutoFixConflicts: checked });
+              }}
+              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="ratchet-reviews">Auto-address review comments</Label>
+              <p className="text-sm text-muted-foreground">
+                Automatically implement changes requested by reviewers
+              </p>
+            </div>
+            <Switch
+              id="ratchet-reviews"
+              checked={settings?.ratchetAutoFixReviews ?? true}
+              onCheckedChange={(checked) => {
+                updateSettings.mutate({ ratchetAutoFixReviews: checked });
+              }}
+              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="ratchet-merge">Auto-merge when ready</Label>
+              <p className="text-sm text-muted-foreground">
+                Automatically merge PRs when all checks pass and reviews are approved
+              </p>
+            </div>
+            <Switch
+              id="ratchet-merge"
+              checked={settings?.ratchetAutoMerge ?? false}
+              onCheckedChange={(checked) => {
+                updateSettings.mutate({ ratchetAutoMerge: checked });
+              }}
+              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+            />
+          </div>
+        </div>
+
+        {/* Allowed reviewers input */}
+        <div className="space-y-2 border-t pt-4">
+          <Label htmlFor="ratchet-reviewers">Allowed Reviewers (GitHub usernames)</Label>
+          <p className="text-sm text-muted-foreground">
+            Only auto-fix comments from these reviewers. Leave empty to process all reviewers.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              id="ratchet-reviewers"
+              placeholder="reviewer1, reviewer2"
+              value={allowedReviewers}
+              onChange={(e) => setAllowedReviewers(e.target.value)}
+              className="flex-1"
+              disabled={!settings?.ratchetEnabled}
+            />
+            <Button
+              variant="outline"
+              onClick={handleSaveAllowedReviewers}
+              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+
+        {/* Manual trigger button */}
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Manual Ratchet Check</Label>
+              <p className="text-sm text-muted-foreground">
+                Manually trigger ratchet check for all workspaces with PRs
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => triggerRatchetCheck.mutate()}
+              disabled={triggerRatchetCheck.isPending}
+            >
+              {triggerRatchetCheck.isPending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Trigger Ratchet Check
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboardPage() {
   const {
     data: stats,
@@ -1017,10 +1241,13 @@ export default function AdminDashboardPage() {
         <NotificationSettingsSection />
         <IdeSettingsSection />
 
-        {/* CI Settings */}
+        {/* Ratchet Settings (new unified system) */}
+        <RatchetSettingsSection />
+
+        {/* Legacy CI Settings (deprecated - use Ratchet instead) */}
         <CiSettingsSection />
 
-        {/* PR Review Settings */}
+        {/* Legacy PR Review Settings (deprecated - use Ratchet instead) */}
         <PrReviewSettingsSection />
       </div>
     </div>

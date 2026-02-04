@@ -55,6 +55,11 @@ const baseWorkspace: WorkspaceWithKanban = {
   runScriptPort: null,
   runScriptStartedAt: null,
   runScriptStatus: 'IDLE',
+  ratchetState: 'IDLE',
+  ratchetLastCheckedAt: null,
+  ratchetActiveSessionId: null,
+  ratchetLastCiRunId: null,
+  ratchetLastNotifiedState: null,
 };
 
 const mockWorkspaces: WorkspaceWithKanban[] = [

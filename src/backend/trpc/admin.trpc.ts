@@ -299,4 +299,22 @@ export const adminRouter = router({
       ...result,
     };
   }),
+
+  /**
+   * Manually trigger ratchet check for all workspaces with PRs.
+   * Useful for testing ratchet functionality.
+   */
+  triggerRatchetCheck: publicProcedure.mutation(async ({ ctx }) => {
+    const { ratchetService } = ctx.appContext.services;
+    const logger = getLogger(ctx);
+
+    logger.info('Manually triggering ratchet check for all workspaces');
+    const result = await ratchetService.checkAllWorkspaces();
+    return {
+      success: true,
+      checked: result.checked,
+      stateChanges: result.stateChanges,
+      actionsTriggered: result.actionsTriggered,
+    };
+  }),
 });

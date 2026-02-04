@@ -3,6 +3,7 @@ import type {
   KanbanColumn,
   PRState,
   Prisma,
+  RatchetState,
   SessionStatus,
   Workspace,
   WorkspaceStatus,
@@ -44,6 +45,12 @@ interface UpdateWorkspaceInput {
   // PR Review tracking
   prReviewLastCheckedAt?: Date | null;
   prReviewLastCommentId?: string | null;
+  // Ratchet tracking
+  ratchetState?: RatchetState;
+  ratchetLastCheckedAt?: Date | null;
+  ratchetActiveSessionId?: string | null;
+  ratchetLastCiRunId?: string | null;
+  ratchetLastNotifiedState?: RatchetState | null;
   // Activity tracking
   hasHadSessions?: boolean;
   // Cached kanban column
@@ -404,6 +411,47 @@ class WorkspaceAccessor {
         project: true,
       },
     });
+  }
+
+  /**
+   * Find READY workspaces with PR URLs for ratchet monitoring.
+   * Returns workspaces that have PRs to monitor for progression.
+   */
+  findWithPRsForRatchet(): Promise<
+    Array<{
+      id: string;
+      prUrl: string;
+      prNumber: number;
+      ratchetState: RatchetState;
+      ratchetActiveSessionId: string | null;
+      ratchetLastNotifiedState: RatchetState | null;
+    }>
+  > {
+    return prisma.workspace.findMany({
+      where: {
+        status: 'READY',
+        prUrl: { not: null },
+        prNumber: { not: null },
+      },
+      select: {
+        id: true,
+        prUrl: true,
+        prNumber: true,
+        ratchetState: true,
+        ratchetActiveSessionId: true,
+        ratchetLastNotifiedState: true,
+      },
+      orderBy: { ratchetLastCheckedAt: 'asc' }, // Check oldest first
+    }) as Promise<
+      Array<{
+        id: string;
+        prUrl: string;
+        prNumber: number;
+        ratchetState: RatchetState;
+        ratchetActiveSessionId: string | null;
+        ratchetLastNotifiedState: RatchetState | null;
+      }>
+    >;
   }
 }
 

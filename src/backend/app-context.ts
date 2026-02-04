@@ -11,6 +11,7 @@ import { messageQueueService } from './services/message-queue.service';
 import { messageStateService } from './services/message-state.service';
 import { findAvailablePort } from './services/port.service';
 import { prReviewMonitorService } from './services/pr-review-monitor.service';
+import { ratchetService } from './services/ratchet.service';
 import { rateLimiter } from './services/rate-limiter.service';
 import { RunScriptService } from './services/run-script.service';
 import { schedulerService } from './services/scheduler.service';
@@ -35,6 +36,7 @@ export type AppServices = {
   messageQueueService: typeof messageQueueService;
   messageStateService: typeof messageStateService;
   prReviewMonitorService: typeof prReviewMonitorService;
+  ratchetService: typeof ratchetService;
   rateLimiter: typeof rateLimiter;
   runScriptService: typeof RunScriptService;
   schedulerService: typeof schedulerService;
@@ -68,6 +70,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     messageQueueService,
     messageStateService,
     prReviewMonitorService,
+    ratchetService,
     rateLimiter,
     runScriptService: RunScriptService,
     schedulerService,
