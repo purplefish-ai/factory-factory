@@ -12,7 +12,7 @@ export interface ColumnConfig {
 }
 
 export const KANBAN_COLUMNS: ColumnConfig[] = [
-  { id: 'ISSUES', label: 'Issues', description: 'GitHub issues to work on' },
+  { id: 'ISSUES', label: 'GitHub Issues', description: 'Issues assigned to you' },
   { id: 'WORKING', label: 'Working', description: 'Agent is working' },
   { id: 'WAITING', label: 'Waiting', description: 'Waiting for input' },
   { id: 'DONE', label: 'Done', description: 'PR merged' },
