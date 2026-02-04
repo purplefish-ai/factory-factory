@@ -3,9 +3,10 @@ import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
 import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
-import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
+import { SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 
 import type { SlashKeyResult } from '../../slash-command-palette';
+import { processFiles } from './file-processing';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
@@ -276,25 +277,20 @@ export function useChatInputActions({
 
   // Handle file selection
   const handleFileSelect = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: File handling requires multiple checks
     async (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) {
         return;
       }
 
-      const newAttachments: MessageAttachment[] = [];
+      const { attachments: newAttachments, errors } = await processFiles(Array.from(files));
 
-      for (const file of Array.from(files)) {
-        try {
-          const attachment = await fileToAttachment(file);
-          newAttachments.push(attachment);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          toast.error(`Failed to upload ${file.name}: ${message}`);
-        }
+      // Show error toasts for failed files
+      for (const { fileName, message } of errors) {
+        toast.error(`Failed to upload ${fileName}: ${message}`);
       }
 
+      // Add successful attachments to state
       if (newAttachments.length > 0) {
         setAttachments((prev) => [...prev, ...newAttachments]);
       }
