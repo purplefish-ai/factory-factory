@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
+import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
 import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import {
@@ -8,6 +9,8 @@ import {
   worktreeLifecycleService,
 } from '../../services/worktree-lifecycle.service';
 import { publicProcedure, router } from '../trpc';
+
+const logger = createLogger('workspace-init-trpc');
 // =============================================================================
 // Background Initialization
 // =============================================================================
@@ -94,6 +97,14 @@ export const workspaceInitRouter = router({
         initializeWorkspaceWorktree(workspace.id, {
           branchName: workspace.branchName ?? undefined,
           useExistingBranch: input.useExistingBranch,
+        }).catch((error) => {
+          logger.error(
+            'Unexpected error during background workspace initialization',
+            error as Error,
+            {
+              workspaceId: workspace.id,
+            }
+          );
         });
         return workspaceAccessor.findById(input.id);
       }
