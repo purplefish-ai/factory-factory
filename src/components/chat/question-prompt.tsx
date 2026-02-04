@@ -70,13 +70,19 @@ function formatAnswer(
     return question.multiSelect ? [] : '';
   }
   if (question.multiSelect && Array.isArray(answer)) {
-    if (answer.includes(OTHER_OPTION_VALUE) && normalizedOther) {
-      return answer.map((value) => (value === OTHER_OPTION_VALUE ? normalizedOther : value));
+    if (answer.includes(OTHER_OPTION_VALUE)) {
+      if (normalizedOther) {
+        return answer.map((value) => (value === OTHER_OPTION_VALUE ? normalizedOther : value));
+      }
+      return answer.filter((value) => value !== OTHER_OPTION_VALUE);
     }
     return answer;
   }
   if (!question.multiSelect && answer === OTHER_OPTION_VALUE && normalizedOther) {
     return normalizedOther;
+  }
+  if (!question.multiSelect && answer === OTHER_OPTION_VALUE) {
+    return '';
   }
   return answer as string;
 }
