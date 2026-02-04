@@ -104,11 +104,16 @@ export const ChatContent = memo(function ChatContent({
   const startingSession = sessionStatus.phase === 'starting';
   const loadingSession = sessionStatus.phase === 'loading';
 
+  const permissionRequestId =
+    pendingRequest.type === 'permission' ? pendingRequest.request.requestId : null;
+  const isPlanApproval =
+    pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode';
+
   useEffect(() => {
-    if (pendingRequest.type === 'permission') {
+    if (isPlanApproval && permissionRequestId) {
       inputRef?.current?.focus();
     }
-  }, [pendingRequest.type, inputRef]);
+  }, [isPlanApproval, permissionRequestId, inputRef]);
 
   const placeholder = (() => {
     if (stopping) {
