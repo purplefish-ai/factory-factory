@@ -71,7 +71,8 @@ function getStatusIconClass(status: SessionStatus, isRunning: boolean) {
   if (isRunning || status === 'RUNNING') {
     return 'text-brand animate-pulse';
   }
-    return 'text-green-500';
+  if (status === 'IDLE') {
+    return 'text-emerald-500';
   }
   if (status === 'PAUSED') {
     return 'text-muted-foreground';
