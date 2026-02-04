@@ -70,6 +70,7 @@ enum RatchetState {
 model Project {
   id                String      @id @default(cuid())
   name              String
+  description       String?
   slug              String      @unique
   repoPath          String
   worktreeBasePath  String
