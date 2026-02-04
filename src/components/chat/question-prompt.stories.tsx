@@ -10,6 +10,12 @@ const meta = {
   component: QuestionPrompt,
   parameters: {
     layout: 'padded',
+    docs: {
+      description: {
+        component:
+          'Use the option list to answer quickly, or type a custom response in the main chat input and send it.',
+      },
+    },
   },
   tags: ['autodocs'],
   decorators: [
