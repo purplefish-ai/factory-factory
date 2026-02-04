@@ -1,11 +1,21 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, CheckCircle2, FileJson, RefreshCw, Terminal, Wrench } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  Bot,
+  CheckCircle2,
+  Download,
+  FileJson,
+  RefreshCw,
+  Terminal,
+  Upload,
+  Wrench,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -765,6 +775,242 @@ function CiSettingsSection() {
   );
 }
 
+interface ImportConfirmState {
+  open: boolean;
+  data: unknown;
+  summary: string;
+}
+
+function DataBackupSection() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [confirmState, setConfirmState] = useState<ImportConfirmState>({
+    open: false,
+    data: null,
+    summary: '',
+  });
+  const utils = trpc.useUtils();
+
+  const importData = trpc.admin.importData.useMutation({
+    onSuccess: (result) => {
+      const { results } = result;
+      const summary = [
+        `Projects: ${results.projects.imported} imported, ${results.projects.skipped} skipped`,
+        `Workspaces: ${results.workspaces.imported} imported, ${results.workspaces.skipped} skipped`,
+        `Claude Sessions: ${results.claudeSessions.imported} imported, ${results.claudeSessions.skipped} skipped`,
+        `Terminal Sessions: ${results.terminalSessions.imported} imported, ${results.terminalSessions.skipped} skipped`,
+        `User Settings: ${results.userSettings.imported ? 'imported' : results.userSettings.skipped ? 'skipped (exists)' : 'none'}`,
+      ].join('\n');
+
+      toast.success('Import completed', { description: summary, duration: 10_000 });
+      setConfirmState({ open: false, data: null, summary: '' });
+
+      // Invalidate all queries to refresh data
+      utils.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Import failed: ${error.message}`);
+      setConfirmState({ open: false, data: null, summary: '' });
+    },
+  });
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const data = await utils.admin.exportData.fetch();
+
+      // Create blob and trigger download
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      link.download = `factory-factory-backup-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success('Export completed', {
+        description: `Exported ${data.data.projects.length} projects, ${data.data.workspaces.length} workspaces`,
+      });
+    } catch (error) {
+      toast.error(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const validateAndParseFile = async (file: File) => {
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    if (!data.meta?.schemaVersion) {
+      throw new Error('Invalid backup file: missing schema version');
+    }
+
+    if (data.meta.schemaVersion !== 1) {
+      throw new Error(`Unsupported schema version: ${data.meta.schemaVersion}`);
+    }
+
+    return data;
+  };
+
+  const buildImportSummary = (data: {
+    meta: { exportedAt: string };
+    data: Record<string, unknown[]>;
+  }) => {
+    const projectCount = data.data?.projects?.length ?? 0;
+    const workspaceCount = data.data?.workspaces?.length ?? 0;
+    const claudeSessionCount = data.data?.claudeSessions?.length ?? 0;
+    const terminalSessionCount = data.data?.terminalSessions?.length ?? 0;
+
+    return (
+      `Import backup from ${data.meta.exportedAt}?\n\n` +
+      `This will import:\n` +
+      `- ${projectCount} projects\n` +
+      `- ${workspaceCount} workspaces\n` +
+      `- ${claudeSessionCount} Claude sessions\n` +
+      `- ${terminalSessionCount} terminal sessions\n\n` +
+      `Existing records with the same IDs will be skipped.`
+    );
+  };
+
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof SyntaxError) {
+      return 'Invalid JSON file';
+    }
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return 'Unknown error';
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const data = await validateAndParseFile(file);
+      const summary = buildImportSummary(data);
+      setConfirmState({ open: true, data, summary });
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      resetFileInput();
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (confirmState.data) {
+      importData.mutate(confirmState.data as Parameters<typeof importData.mutate>[0]);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Download className="w-5 h-5" />
+          Data Backup
+        </CardTitle>
+        <CardDescription>
+          Export your data before a database reset, then import it after to restore your projects
+          and workspaces
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label>Export Data</Label>
+            <p className="text-sm text-muted-foreground">
+              Download all projects, workspaces, and sessions as JSON
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="gap-2"
+          >
+            <Download className={`w-4 h-4 ${isExporting ? 'animate-pulse' : ''}`} />
+            {isExporting ? 'Exporting...' : 'Export'}
+          </Button>
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Import Data</Label>
+              <p className="text-sm text-muted-foreground">
+                Restore from a previously exported backup file
+              </p>
+            </div>
+            <div>
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleFileSelect}
+                ref={fileInputRef}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importData.isPending}
+                className="gap-2"
+              >
+                <Upload className={`w-4 h-4 ${importData.isPending ? 'animate-pulse' : ''}`} />
+                {importData.isPending ? 'Importing...' : 'Import'}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+          <p className="font-medium mb-1">What gets exported:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li>Projects and their configuration</li>
+            <li>Workspaces with status, PR info, and paths</li>
+            <li>Claude and terminal session metadata</li>
+            <li>User preferences (IDE, notifications, CI settings)</li>
+          </ul>
+          <p className="mt-2">
+            <strong>Note:</strong> Chat message history is stored in Claude and will be restored
+            automatically when sessions resume.
+          </p>
+        </div>
+      </CardContent>
+
+      <ConfirmDialog
+        open={confirmState.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmState({ open: false, data: null, summary: '' });
+          }
+        }}
+        title="Import Backup Data"
+        description={confirmState.summary}
+        confirmText="Import"
+        onConfirm={handleConfirmImport}
+        isPending={importData.isPending}
+      />
+    </Card>
+  );
+}
+
 export default function AdminDashboardPage() {
   const {
     data: stats,
@@ -832,6 +1078,9 @@ export default function AdminDashboardPage() {
 
         {/* CI Settings */}
         <CiSettingsSection />
+
+        {/* Data Backup */}
+        <DataBackupSection />
       </div>
     </div>
   );

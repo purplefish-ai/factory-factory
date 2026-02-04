@@ -12,6 +12,7 @@ import {
   terminalSessionAccessor,
   workspaceAccessor,
 } from '../resource_accessors/index';
+import { dataBackupService, exportDataSchema } from '../services';
 import { type Context, publicProcedure, router } from './trpc';
 
 const loggerName = 'admin-trpc';
@@ -281,6 +282,29 @@ export const adminRouter = router({
     return {
       success: true,
       ...result,
+    };
+  }),
+
+  /**
+   * Export all data for backup/migration.
+   * Exports projects, workspaces, sessions, and user preferences.
+   * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
+   */
+  exportData: publicProcedure.query(({ ctx }) => {
+    const { configService } = ctx.appContext.services;
+    return dataBackupService.exportData(configService.getAppVersion());
+  }),
+
+  /**
+   * Import data from a backup file.
+   * Skips records that already exist (by ID).
+   * Returns counts of imported/skipped records.
+   */
+  importData: publicProcedure.input(exportDataSchema).mutation(async ({ input }) => {
+    const results = await dataBackupService.importData(input);
+    return {
+      success: true,
+      results,
     };
   }),
 });
