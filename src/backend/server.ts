@@ -58,6 +58,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     configService,
     createLogger,
     findAvailablePort,
+    prReviewMonitorService,
+    ratchetService,
     rateLimiter,
     schedulerService,
     sessionFileLogger,
@@ -252,7 +254,10 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     await rateLimiter.stop();
 
     await schedulerService.stop();
+    await ratchetService.stop();
+    // Legacy monitors (deprecated, will be removed after migration to ratchet)
     await ciMonitorService.stop();
+    await prReviewMonitorService.stop();
     await reconciliationService.stopPeriodicCleanup();
     await prisma.$disconnect();
 
@@ -302,7 +307,10 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           reconciliationService.startPeriodicCleanup();
           rateLimiter.start();
           schedulerService.start();
+          ratchetService.start();
+          // Legacy monitors (deprecated, will be removed after migration to ratchet)
           ciMonitorService.start();
+          prReviewMonitorService.start();
 
           logger.info('Server endpoints available', {
             server: `http://localhost:${actualPort}`,

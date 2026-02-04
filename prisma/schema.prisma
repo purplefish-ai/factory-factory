@@ -55,6 +55,16 @@ enum KanbanColumn {
   DONE
 }
 
+enum RatchetState {
+  IDLE              // No PR or ratchet not active for this workspace
+  CI_RUNNING        // CI checks in progress
+  CI_FAILED         // CI checks failed
+  MERGE_CONFLICT    // Has merge conflicts with base branch
+  REVIEW_PENDING    // Has unaddressed review comments
+  READY             // Ready to merge (CI green, no conflicts, no pending reviews)
+  MERGED            // PR has been merged
+}
+
 
 // Models
 model Project {
@@ -139,6 +149,17 @@ model Workspace {
   prCiFailedAt        DateTime?         // When CI first failed (cleared on success)
   prCiLastNotifiedAt  DateTime?         // Last time we notified about CI failure
 
+  // PR Review tracking
+  prReviewLastCheckedAt   DateTime?     // When PR review comments were last checked
+  prReviewLastCommentId   String?       // ID of the last processed review comment
+
+  // Ratchet tracking (centralized PR progression)
+  ratchetState            RatchetState  @default(IDLE)    // Current state in the ratchet progression
+  ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
+  ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
+  ratchetLastCiRunId      String?                         // Track which CI run we processed
+  ratchetLastNotifiedState RatchetState?                  // Last state we notified the fixer about
+
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
 
@@ -203,8 +224,21 @@ model UserSettings {
   // Cached slash commands (from Claude CLI initialize response)
   cachedSlashCommands   Json?
 
-  // CI Settings
+  // CI Settings (deprecated - use ratchet settings)
   autoFixCiIssues       Boolean  @default(false)  // Global toggle for CI auto-fixing
+
+  // PR Review Auto-Fix Settings (deprecated - use ratchet settings)
+  autoFixPrReviewComments   Boolean  @default(false)  // Global toggle for PR review auto-fixing
+  prReviewFixAllowedUsers   Json?    // Array of GitHub usernames whose comments trigger auto-fix
+  prReviewFixPrompt         String?  // Custom instructions for the PR review fixing session
+
+  // Ratchet Settings (unified PR progression)
+  ratchetEnabled            Boolean  @default(false)  // Master toggle for ratchet
+  ratchetAutoFixCi          Boolean  @default(true)   // Auto-fix CI failures
+  ratchetAutoFixConflicts   Boolean  @default(true)   // Auto-resolve merge conflicts
+  ratchetAutoFixReviews     Boolean  @default(true)   // Auto-address review comments
+  ratchetAutoMerge          Boolean  @default(false)  // Auto-merge when ready
+  ratchetAllowedReviewers   Json?                     // GitHub usernames whose reviews trigger auto-fix
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

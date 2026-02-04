@@ -32,6 +32,8 @@ const baseWorkspace: WorkspaceWithKanban = {
   prUpdatedAt: null,
   prCiFailedAt: null,
   prCiLastNotifiedAt: null,
+  prReviewLastCheckedAt: null,
+  prReviewLastCommentId: null,
   status: 'READY',
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -53,6 +55,11 @@ const baseWorkspace: WorkspaceWithKanban = {
   runScriptPort: null,
   runScriptStartedAt: null,
   runScriptStatus: 'IDLE',
+  ratchetState: 'IDLE',
+  ratchetLastCheckedAt: null,
+  ratchetActiveSessionId: null,
+  ratchetLastCiRunId: null,
+  ratchetLastNotifiedState: null,
 };
 
 const mockWorkspaces: WorkspaceWithKanban[] = [

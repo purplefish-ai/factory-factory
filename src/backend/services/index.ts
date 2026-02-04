@@ -32,6 +32,14 @@ export { messageStateService } from './message-state.service';
 export { notificationService } from './notification.service';
 // Port service
 export { findAvailablePort, isPortAvailable } from './port.service';
+// PR Review fixer service
+export {
+  type PRReviewFixResult,
+  prReviewFixerService,
+  type ReviewCommentDetails,
+} from './pr-review-fixer.service';
+// PR Review monitor service
+export { prReviewMonitorService } from './pr-review-monitor.service';
 // Rate limiter service
 export { rateLimiter } from './rate-limiter.service';
 // Reconciliation service
