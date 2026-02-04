@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
+import { forgetResumeWorkspace, isResumeWorkspace } from './resume-workspace-storage';
 
 // =============================================================================
 // Workspace Initialization Overlay
@@ -17,6 +18,8 @@ interface InitializationOverlayProps {
   initOutput: string | null;
   hasStartupScript: boolean;
 }
+
+// resume workspace storage helpers live in resume-workspace-storage.ts
 
 export function InitializationOverlay({
   workspaceId,
@@ -43,6 +46,12 @@ export function InitializationOverlay({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [initOutput]);
+
+  useEffect(() => {
+    if (status === 'READY' || status === 'ARCHIVED') {
+      forgetResumeWorkspace(workspaceId);
+    }
+  }, [status, workspaceId]);
 
   const isFailed = status === 'FAILED';
   const isProvisioning = status === 'PROVISIONING';
@@ -93,7 +102,12 @@ export function InitializationOverlay({
 
         {isFailed && (
           <Button
-            onClick={() => retryInit.mutate({ id: workspaceId })}
+            onClick={() =>
+              retryInit.mutate({
+                id: workspaceId,
+                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
+              })
+            }
             disabled={retryInit.isPending}
           >
             {retryInit.isPending ? (
