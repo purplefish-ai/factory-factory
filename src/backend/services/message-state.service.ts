@@ -311,6 +311,65 @@ class MessageStateService {
   }
 
   /**
+   * Ensure history is loaded, preserving queued (ACCEPTED) messages if present.
+   *
+   * This is used when starting a new cloud process to rebuild ordering from
+   * JSONL history while keeping any queued user messages that haven't been
+   * dispatched yet.
+   *
+   * Returns true when history was reloaded, false when existing non-queued
+   * messages indicate history is already present.
+   */
+  ensureHistoryLoaded(sessionId: string, history: HistoryMessage[]): boolean {
+    const existingMessages = this.getAllMessages(sessionId);
+    const queuedMessages: QueuedMessage[] = [];
+    let hasNonQueuedMessages = false;
+
+    for (const message of existingMessages) {
+      if (isUserMessage(message) && message.state === MessageState.ACCEPTED) {
+        queuedMessages.push({
+          id: message.id,
+          text: message.text,
+          timestamp: message.timestamp,
+          attachments: message.attachments,
+          settings: message.settings ?? {
+            selectedModel: null,
+            thinkingEnabled: false,
+            planModeEnabled: false,
+          },
+        });
+        continue;
+      }
+
+      hasNonQueuedMessages = true;
+      break;
+    }
+
+    if (hasNonQueuedMessages) {
+      logger.info('Skipping history load - session already has non-queued messages', {
+        sessionId,
+        existingCount: existingMessages.length,
+      });
+      return false;
+    }
+
+    this.clearSession(sessionId);
+    this.stateMachine.loadFromHistory(sessionId, history);
+    for (const queuedMessage of queuedMessages) {
+      this.stateMachine.createUserMessage(sessionId, queuedMessage);
+    }
+
+    logger.info('Loaded messages from history with queued preservation', {
+      sessionId,
+      historyCount: history.length,
+      queuedCount: queuedMessages.length,
+      messageCount: this.stateMachine.getMessageCount(sessionId),
+    });
+
+    return true;
+  }
+
+  /**
    * Check if a message exists in a session.
    */
   hasMessage(sessionId: string, messageId: string): boolean {

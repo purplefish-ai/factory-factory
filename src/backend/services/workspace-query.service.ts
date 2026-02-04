@@ -97,6 +97,7 @@ class WorkspaceQueryService {
         return {
           id: w.id,
           name: w.name,
+          createdAt: w.createdAt,
           branchName: w.branchName,
           prUrl: w.prUrl,
           prNumber: w.prNumber,

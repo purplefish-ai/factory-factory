@@ -24,7 +24,7 @@ function ReviewsPageContent() {
   const [prDetails, setPrDetails] = useState<Map<string, PRWithFullDetails>>(new Map());
   const [diffs, setDiffs] = useState<Map<string, string>>(new Map());
   const [diffLoading, setDiffLoading] = useState(false);
-  const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
 
   const utils = trpc.useUtils();
 

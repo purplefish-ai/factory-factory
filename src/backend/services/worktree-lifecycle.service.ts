@@ -13,6 +13,126 @@ import { terminalService } from './terminal.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
 
 const logger = createLogger('worktree-lifecycle');
+const workspaceInitModes = new Map<string, boolean>();
+const RESUME_MODE_FILENAME = '.ff-resume-modes.json';
+const resumeModeLocks = new Map<string, Promise<void>>();
+
+async function withResumeModeLock<T>(
+  worktreeBasePath: string,
+  handler: () => Promise<T>
+): Promise<T> {
+  const previous = resumeModeLocks.get(worktreeBasePath) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const lock = previous.then(() => next);
+  resumeModeLocks.set(worktreeBasePath, lock);
+  await previous;
+  try {
+    return await handler();
+  } finally {
+    release?.();
+    if (resumeModeLocks.get(worktreeBasePath) === lock) {
+      resumeModeLocks.delete(worktreeBasePath);
+    }
+  }
+}
+
+async function readResumeModes(worktreeBasePath: string): Promise<Record<string, boolean>> {
+  const filePath = path.join(worktreeBasePath, RESUME_MODE_FILENAME);
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    try {
+      return JSON.parse(content) as Record<string, boolean>;
+    } catch (error) {
+      logger.warn('Failed to parse resume modes file; falling back to empty', {
+        filePath,
+        worktreeBasePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code && code !== 'ENOENT') {
+      logger.warn('Failed to read resume modes file; falling back to empty', {
+        filePath,
+        worktreeBasePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return {};
+  }
+}
+
+async function writeResumeModes(
+  worktreeBasePath: string,
+  modes: Record<string, boolean>
+): Promise<void> {
+  await fs.mkdir(worktreeBasePath, { recursive: true });
+  await fs.writeFile(
+    path.join(worktreeBasePath, RESUME_MODE_FILENAME),
+    JSON.stringify(modes),
+    'utf-8'
+  );
+}
+
+async function updateResumeModes(
+  worktreeBasePath: string,
+  handler: (modes: Record<string, boolean>) => void
+): Promise<void> {
+  await withResumeModeLock(worktreeBasePath, async () => {
+    const modes = await readResumeModes(worktreeBasePath);
+    handler(modes);
+    await writeResumeModes(worktreeBasePath, modes);
+  });
+}
+
+export async function setWorkspaceInitMode(
+  workspaceId: string,
+  useExistingBranch: boolean | undefined,
+  worktreeBasePath?: string
+): Promise<void> {
+  if (useExistingBranch === undefined) {
+    return;
+  }
+  workspaceInitModes.set(workspaceId, useExistingBranch);
+  if (worktreeBasePath) {
+    await updateResumeModes(worktreeBasePath, (modes) => {
+      modes[workspaceId] = useExistingBranch;
+    });
+  }
+}
+
+export async function getWorkspaceInitMode(
+  workspaceId: string,
+  worktreeBasePath?: string
+): Promise<boolean | undefined> {
+  if (workspaceInitModes.has(workspaceId)) {
+    return workspaceInitModes.get(workspaceId);
+  }
+  if (!worktreeBasePath) {
+    return undefined;
+  }
+  const modes = await readResumeModes(worktreeBasePath);
+  return modes[workspaceId];
+}
+
+async function clearWorkspaceInitMode(
+  workspaceId: string,
+  worktreeBasePath?: string
+): Promise<void> {
+  workspaceInitModes.delete(workspaceId);
+  if (!worktreeBasePath) {
+    return;
+  }
+  await updateResumeModes(worktreeBasePath, (modes) => {
+    if (workspaceId in modes) {
+      delete modes[workspaceId];
+    }
+  });
+}
 
 // Cache the authenticated GitHub username (fetched once per server lifetime)
 let cachedGitHubUsername: string | null | undefined;
@@ -228,28 +348,39 @@ class WorktreeLifecycleService {
 
   async initializeWorkspaceWorktree(
     workspaceId: string,
-    requestedBranchName?: string
+    options?: { branchName?: string; useExistingBranch?: boolean }
   ): Promise<void> {
     const startedProvisioning = await startProvisioningOrLog(workspaceId);
     if (!startedProvisioning) {
       return;
     }
 
+    let project: WorkspaceWithProject['project'] | undefined;
+    let worktreeCreated = false;
+
     try {
       const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
-      const project = workspaceWithProject.project;
+      project = workspaceWithProject.project;
 
       const worktreeName = `workspace-${workspaceId}`;
-      const baseBranch = requestedBranchName ?? project.defaultBranch;
+      const baseBranch = options?.branchName ?? project.defaultBranch;
+      const useExistingBranch =
+        options?.useExistingBranch ??
+        (await getWorkspaceInitMode(workspaceId, project.worktreeBasePath)) ??
+        false;
 
       await gitOpsService.ensureBaseBranchExists(project, baseBranch, project.defaultBranch);
 
-      const gitHubUsername = await getCachedGitHubUsername();
-
-      const worktreeInfo = await gitOpsService.createWorktree(project, worktreeName, baseBranch, {
-        branchPrefix: gitHubUsername ?? undefined,
-        workspaceName: workspaceWithProject.name,
-      });
+      const worktreeInfo = useExistingBranch
+        ? await gitOpsService.createWorktreeFromExistingBranch(project, worktreeName, baseBranch)
+        : await (async () => {
+            const gitHubUsername = await getCachedGitHubUsername();
+            return gitOpsService.createWorktree(project, worktreeName, baseBranch, {
+              branchPrefix: gitHubUsername ?? undefined,
+              workspaceName: workspaceWithProject.name,
+            });
+          })();
+      worktreeCreated = true;
 
       const factoryConfig = await readFactoryConfigSafe(worktreeInfo.worktreePath, workspaceId);
 
@@ -285,6 +416,10 @@ class WorktreeLifecycleService {
         workspaceId,
       });
       await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
+    } finally {
+      if (worktreeCreated) {
+        await clearWorkspaceInitMode(workspaceId, project?.worktreeBasePath);
+      }
     }
   }
 }

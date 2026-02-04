@@ -80,8 +80,8 @@ vi.mock('../../message-state.service', () => ({
     computeSessionStatus: vi.fn(() => ({ messages: [], queue: [] })),
     createRejectedMessage: vi.fn(),
     createUserMessage: vi.fn(),
+    ensureHistoryLoaded: vi.fn(),
     getStoredEvents: vi.fn(() => []),
-    loadFromHistory: vi.fn(),
     storeEvent: vi.fn(),
     sendSnapshot: vi.fn(),
     updateState: vi.fn(),
@@ -287,6 +287,62 @@ describe('chat message handlers', () => {
     });
   });
 
+  it('queue_message treats text/plain attachment without contentType as text', async () => {
+    const answerQuestion = vi.fn();
+    mockedSessionService.getClient.mockReturnValue({
+      answerQuestion,
+      denyInteractiveRequest: vi.fn(),
+    } as unknown as ClaudeClient);
+    mockedChatEventForwarderService.getPendingRequest.mockReturnValue({
+      requestId: 'req-2',
+      toolName: 'AskUserQuestion',
+      toolUseId: 'tool-use-2',
+      input: {
+        questions: [
+          {
+            question: 'What is this?',
+            header: 'Question',
+            options: [{ label: 'A', description: 'A' }],
+            multiSelect: false,
+          },
+        ],
+      },
+      planContent: null,
+      timestamp: new Date().toISOString(),
+    });
+
+    const handler = createQueueMessageHandler({
+      ...deps,
+      tryDispatchNextMessage: vi.fn(),
+    });
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: {
+        type: 'queue_message',
+        id: 'msg-2',
+        text: '',
+        attachments: [
+          {
+            id: 'att-2',
+            name: 'Pasted text (12 lines)',
+            type: 'text/plain',
+            size: 42,
+            data: 'pasted content without contentType',
+          },
+        ],
+      },
+    });
+
+    expect(mockedMessageQueueService.enqueue).not.toHaveBeenCalled();
+    expect(answerQuestion).toHaveBeenCalledWith('req-2', {
+      'What is this?': 'pasted content without contentType',
+    });
+  });
+
   it('remove_queued_message updates state when removed', () => {
     mockedMessageQueueService.remove.mockReturnValue(true);
 
@@ -360,6 +416,31 @@ describe('chat message handlers', () => {
 
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'error', message: 'Session not found' })
+    );
+  });
+
+  it('load_session sends status with processAlive when client running', async () => {
+    mockedClaudeSessionAccessor.findById.mockResolvedValue({
+      id: 'session-1',
+      claudeSessionId: 'claude-1',
+    } as unknown as Awaited<ReturnType<typeof claudeSessionAccessor.findById>>);
+    mockedSessionService.getClient.mockReturnValue({
+      isRunning: () => true,
+      isWorking: () => true,
+    } as unknown as ClaudeClient);
+
+    const handler = createLoadSessionHandler();
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'load_session' },
+    });
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'status', running: true, processAlive: true })
     );
   });
 

@@ -46,8 +46,7 @@ export const workspaceRunScriptRouter = router({
   // Get run script status for a workspace
   getRunScriptStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    // biome-ignore lint/suspicious/useAwait: Service method is async
-    .query(async ({ ctx, input }) => {
-      return ctx.appContext.services.runScriptService.getRunScriptStatus(input.workspaceId);
-    }),
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.runScriptService.getRunScriptStatus(input.workspaceId)
+    ),
 });

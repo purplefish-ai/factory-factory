@@ -1,7 +1,60 @@
 import { z } from 'zod';
 import { prisma } from '../db';
+import { gitCommandC } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { publicProcedure, router } from './trpc';
+
+async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
+  const result = await gitCommandC(repoPath, [
+    'for-each-ref',
+    '--format=%(refname:short) %(objectname)',
+    refPrefix,
+  ]);
+  if (result.code !== 0) {
+    throw new Error(`Failed to list branches: ${result.stderr || result.stdout}`);
+  }
+
+  const branchMap = new Map<string, string>();
+  const lines = result.stdout.split('\n').filter(Boolean);
+  for (const line of lines) {
+    const firstSpace = line.indexOf(' ');
+    if (firstSpace === -1) {
+      continue;
+    }
+    const name = line.slice(0, firstSpace);
+    const sha = line.slice(firstSpace + 1).trim();
+    if (name && sha) {
+      branchMap.set(name, sha);
+    }
+  }
+
+  return branchMap;
+}
+
+function buildRemoteEntries(
+  localMap: Map<string, string>,
+  remoteMap: Map<string, string>
+): Array<{ name: string; displayName: string; refType: 'remote' }> {
+  const entries: Array<{ name: string; displayName: string; refType: 'remote' }> = [];
+
+  for (const [fullName, sha] of remoteMap.entries()) {
+    if (fullName === 'origin/HEAD') {
+      continue;
+    }
+    const shortName = fullName.replace(/^origin\//, '');
+    const localSha = localMap.get(shortName);
+    if (localSha && localSha === sha) {
+      continue;
+    }
+    entries.push({
+      name: fullName,
+      displayName: localSha ? fullName : shortName,
+      refType: 'remote',
+    });
+  }
+
+  return entries;
+}
 
 export const projectRouter = router({
   // List all projects
@@ -36,6 +89,33 @@ export const projectRouter = router({
     }
     return project;
   }),
+
+  // List local + remote branches for a project
+  listBranches: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input }) => {
+      const project = await projectAccessor.findById(input.projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${input.projectId}`);
+      }
+
+      const localMap = await getBranchMap(project.repoPath, 'refs/heads');
+      const remoteMap = await getBranchMap(project.repoPath, 'refs/remotes/origin');
+
+      const remoteEntries = buildRemoteEntries(localMap, remoteMap);
+
+      const localBranches = Array.from(localMap.keys()).map((branch) => ({
+        name: branch,
+        displayName: branch,
+        refType: 'local' as const,
+      }));
+
+      const branches = [...localBranches, ...remoteEntries].sort((a, b) =>
+        a.displayName.localeCompare(b.displayName)
+      );
+
+      return { branches };
+    }),
 
   // Create a new project (only repoPath required - name/slug/worktree derived)
   create: publicProcedure

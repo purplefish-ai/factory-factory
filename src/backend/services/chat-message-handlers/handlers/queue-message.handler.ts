@@ -1,6 +1,7 @@
 import type { QueueMessageInput } from '@/shared/websocket';
 import { messageQueueService } from '../../message-queue.service';
 import { messageStateService } from '../../message-state.service';
+import { resolveAttachmentContentType } from '../attachment-utils';
 import { tryHandleAsInteractiveResponse } from '../interactive-response';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
 import { buildQueuedMessage, notifyMessageAccepted } from '../utils';
@@ -20,7 +21,7 @@ function extractTextFromAttachments(
   // Collect text from all text attachments
   const textParts: string[] = [];
   for (const attachment of attachments) {
-    if (attachment.contentType === 'text' && attachment.data) {
+    if (resolveAttachmentContentType(attachment) === 'text' && attachment.data) {
       textParts.push(attachment.data);
     }
   }

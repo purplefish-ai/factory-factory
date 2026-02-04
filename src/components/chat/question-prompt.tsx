@@ -146,16 +146,17 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   const currentRequestId = question?.requestId;
 
   // Reset state when question changes (new question arrives)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Reset only when request ID changes
   useEffect(() => {
+    if (!currentRequestId) {
+      return;
+    }
     setAnswers({});
     setCurrentIndex(0);
   }, [currentRequestId]);
 
   // Focus the container when a new question appears for keyboard accessibility
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Focus only when request ID changes
   useEffect(() => {
-    if (!question) {
+    if (!currentRequestId) {
       return;
     }
     // Small delay to ensure the element is rendered
@@ -167,7 +168,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
       firstFocusable?.focus();
     }, 100);
     return () => clearTimeout(timeoutId);
-  }, [currentRequestId, question]);
+  }, [currentRequestId]);
 
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
     setAnswers((prev) => ({

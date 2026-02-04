@@ -1,6 +1,7 @@
-import { FileCode, FileDiff, MessageSquare, Plus, Wrench, X } from 'lucide-react';
+import { FileCode, FileDiff, Plus, Wrench, X } from 'lucide-react';
 import { useCallback } from 'react';
 
+import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -25,12 +26,164 @@ interface Session {
 function getTabIcon(type: MainViewTab['type']) {
   switch (type) {
     case 'chat':
-      return MessageSquare;
     case 'file':
       return FileCode;
     case 'diff':
       return FileDiff;
   }
+}
+
+// =============================================================================
+// Status Dot Component
+// =============================================================================
+
+interface StatusInfo {
+  color: string;
+  pulse: boolean;
+  label: string;
+  description: string;
+}
+
+function getStatusInfo(
+  sessionStatus: SessionStatus | undefined,
+  processStatus: ProcessStatus | undefined,
+  isRunning: boolean
+): StatusInfo {
+  // For non-selected sessions, we only know if they're running
+  if (!(sessionStatus && processStatus)) {
+    if (isRunning) {
+      return {
+        color: 'bg-brand',
+        pulse: true,
+        label: 'Running',
+        description: 'Processing a request',
+      };
+    }
+    return {
+      color: 'bg-emerald-500',
+      pulse: false,
+      label: 'Idle',
+      description: 'Ready for input',
+    };
+  }
+
+  // For selected session, use detailed status
+  const phase = sessionStatus.phase;
+
+  if (phase === 'loading' || processStatus.state === 'unknown') {
+    return {
+      color: 'bg-muted-foreground',
+      pulse: true,
+      label: 'Loading',
+      description: 'Loading session...',
+    };
+  }
+
+  if (phase === 'starting') {
+    return {
+      color: 'bg-muted-foreground',
+      pulse: true,
+      label: 'Starting',
+      description: 'Launching Claude...',
+    };
+  }
+
+  if (phase === 'stopping') {
+    return {
+      color: 'bg-brand',
+      pulse: true,
+      label: 'Stopping',
+      description: 'Finishing current request...',
+    };
+  }
+
+  if (processStatus.state === 'stopped') {
+    if (processStatus.lastExit?.unexpected) {
+      return {
+        color: 'bg-destructive',
+        pulse: false,
+        label: 'Error',
+        description: `Exited unexpectedly${processStatus.lastExit.code !== null ? ` (code ${processStatus.lastExit.code})` : ''}`,
+      };
+    }
+    return {
+      color: 'bg-muted-foreground',
+      pulse: false,
+      label: 'Stopped',
+      description: 'Send a message to start',
+    };
+  }
+
+  if (phase === 'running') {
+    return {
+      color: 'bg-brand',
+      pulse: true,
+      label: 'Running',
+      description: 'Processing your request',
+    };
+  }
+
+  // idle or ready
+  return {
+    color: 'bg-emerald-500',
+    pulse: false,
+    label: 'Idle',
+    description: 'Ready for input',
+  };
+}
+
+interface StatusDotProps {
+  sessionStatus?: SessionStatus;
+  processStatus?: ProcessStatus;
+  isRunning: boolean;
+  isCIFix?: boolean;
+}
+
+function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusDotProps) {
+  const status = getStatusInfo(sessionStatus, processStatus, isRunning);
+
+  // CI fix sessions show wrench icon instead of dot
+  if (isCIFix) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex items-center justify-center">
+            <Wrench
+              className={cn(
+                'h-3.5 w-3.5 shrink-0',
+                isRunning && 'animate-pulse text-brand',
+                !isRunning && 'text-warning'
+              )}
+            />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs">
+          <div className="font-medium">CI Fix: {status.label}</div>
+          <div className="text-muted-foreground">{status.description}</div>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex items-center justify-center w-3.5 h-3.5">
+          <span
+            className={cn(
+              'w-2 h-2 rounded-full shrink-0',
+              status.color,
+              status.pulse && 'animate-pulse'
+            )}
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        <div className="font-medium">{status.label}</div>
+        <div className="text-muted-foreground">{status.description}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 // =============================================================================
@@ -131,6 +284,8 @@ interface SessionTabItemProps {
   isActive: boolean;
   isRunning?: boolean;
   isCIFix?: boolean;
+  sessionStatus?: SessionStatus;
+  processStatus?: ProcessStatus;
   onSelect: () => void;
   onClose?: () => void;
 }
@@ -140,21 +295,19 @@ function SessionTabItem({
   isActive,
   isRunning,
   isCIFix,
+  sessionStatus,
+  processStatus,
   onSelect,
   onClose,
 }: SessionTabItemProps) {
-  // Use Wrench icon for CI fix sessions, MessageSquare for regular sessions
-  const Icon = isCIFix ? Wrench : MessageSquare;
-
   return (
     <BaseTabItem
       icon={
-        <Icon
-          className={cn(
-            'h-3.5 w-3.5 shrink-0',
-            isRunning && 'animate-pulse text-brand',
-            isCIFix && !isRunning && 'text-warning'
-          )}
+        <StatusDot
+          sessionStatus={sessionStatus}
+          processStatus={processStatus}
+          isRunning={isRunning ?? false}
+          isCIFix={isCIFix}
         />
       }
       label={label}
@@ -174,6 +327,10 @@ interface MainViewTabBarProps {
   sessions?: Session[];
   currentSessionId?: string | null;
   runningSessionId?: string;
+  /** Session status for the currently selected session */
+  sessionStatus?: SessionStatus;
+  /** Process status for the currently selected session */
+  processStatus?: ProcessStatus;
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: () => void;
   onCloseSession?: (sessionId: string) => void;
@@ -187,6 +344,8 @@ export function MainViewTabBar({
   sessions,
   currentSessionId,
   runningSessionId,
+  sessionStatus,
+  processStatus,
   onSelectSession,
   onCreateSession,
   onCloseSession,
@@ -210,20 +369,25 @@ export function MainViewTabBar({
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
       {/* Session tabs (Chat 1, Chat 2, etc.) */}
-      {sessions?.map((session, index) => (
-        <SessionTabItem
-          key={session.id}
-          label={session.name ?? `Chat ${index + 1}`}
-          isActive={session.id === currentSessionId && activeTabId === 'chat'}
-          isRunning={session.isWorking || session.id === runningSessionId}
-          isCIFix={session.workflow === 'ci-fix'}
-          onSelect={() => {
-            onSelectSession?.(session.id);
-            selectTab('chat');
-          }}
-          onClose={sessions.length > 1 ? () => onCloseSession?.(session.id) : undefined}
-        />
-      ))}
+      {sessions?.map((session, index) => {
+        const isSelected = session.id === currentSessionId;
+        return (
+          <SessionTabItem
+            key={session.id}
+            label={session.name ?? `Chat ${index + 1}`}
+            isActive={isSelected && activeTabId === 'chat'}
+            isRunning={session.isWorking || session.id === runningSessionId}
+            isCIFix={session.workflow === 'ci-fix'}
+            sessionStatus={isSelected ? sessionStatus : undefined}
+            processStatus={isSelected ? processStatus : undefined}
+            onSelect={() => {
+              onSelectSession?.(session.id);
+              selectTab('chat');
+            }}
+            onClose={sessions.length > 1 ? () => onCloseSession?.(session.id) : undefined}
+          />
+        );
+      })}
 
       {/* Add session button */}
       {onCreateSession && (

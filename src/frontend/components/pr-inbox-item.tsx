@@ -18,7 +18,7 @@ export interface PRInboxItemProps {
   onSelect: () => void;
 }
 
-export const PRInboxItem = forwardRef<HTMLDivElement, PRInboxItemProps>(function PRInboxItem(
+export const PRInboxItem = forwardRef<HTMLButtonElement, PRInboxItemProps>(function PRInboxItem(
   { pr, isSelected, onSelect },
   ref
 ) {
@@ -26,24 +26,12 @@ export const PRInboxItem = forwardRef<HTMLDivElement, PRInboxItemProps>(function
   const isApproved = pr.reviewDecision === 'APPROVED';
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: div allows complex nested layout styling
-    <div
+    <button
+      type="button"
       ref={ref}
-      role="button"
-      tabIndex={0}
       onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      className={`cursor-pointer transition-all outline-none border px-3 py-2 rounded-md w-full max-w-full overflow-hidden ${
-        isSelected
-          ? 'bg-muted border-border shadow-sm'
-          : isApproved
-            ? 'border-transparent hover:bg-muted/50'
-            : 'border-transparent hover:bg-muted/50'
+      className={`cursor-pointer transition-all outline-none border px-3 py-2 rounded-md w-full max-w-full overflow-hidden text-left ${
+        isSelected ? 'bg-muted border-border shadow-sm' : 'border-transparent hover:bg-muted/50'
       }`}
     >
       <div className="flex items-start gap-2 w-full">
@@ -96,6 +84,6 @@ export const PRInboxItem = forwardRef<HTMLDivElement, PRInboxItemProps>(function
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 });

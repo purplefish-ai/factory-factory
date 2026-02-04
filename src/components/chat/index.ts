@@ -5,7 +5,6 @@ export type { ChatMessage } from '@/lib/claude-types';
 export type { ChatInputProps } from './chat-input/chat-input';
 export { ChatInput } from './chat-input/chat-input';
 export type { TaskNotification } from './chat-reducer';
-export { ClaudeProcessStatus } from './claude-process-status';
 export { CompactingIndicator } from './compacting-indicator';
 export { LatestThinking } from './latest-thinking';
 export { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
