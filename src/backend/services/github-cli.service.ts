@@ -816,6 +816,38 @@ class GitHubCLIService {
   }
 
   /**
+   * Add a comment to a GitHub issue.
+   */
+  async addIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string
+  ): Promise<void> {
+    try {
+      await execFileAsync(
+        'gh',
+        ['issue', 'comment', String(issueNumber), '--repo', `${owner}/${repo}`, '--body', body],
+        { timeout: 30_000 }
+      );
+      logger.info('Issue comment added successfully', { owner, repo, issueNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to add issue comment via gh CLI', {
+        owner,
+        repo,
+        issueNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to add issue comment: ${errorMessage}`);
+    }
+  }
+
+  /**
    * Close a GitHub issue.
    */
   async closeIssue(owner: string, repo: string, issueNumber: number): Promise<void> {

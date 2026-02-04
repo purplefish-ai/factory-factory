@@ -369,6 +369,54 @@ class WorktreeLifecycleService {
     await gitOpsService.removeWorktree(worktreePath, project);
   }
 
+  /**
+   * Handle GitHub issue after workspace archive.
+   * If there's a merged PR, add a comment referencing it. Otherwise, close the issue.
+   */
+  private async handleGitHubIssueOnArchive(workspace: WorkspaceWithProject): Promise<void> {
+    const project = workspace.project;
+    if (!(workspace.githubIssueNumber && project?.githubOwner && project?.githubRepo)) {
+      return;
+    }
+
+    try {
+      // Check if there's a merged PR associated with this workspace
+      if (workspace.prState === 'MERGED' && workspace.prUrl) {
+        // Add a comment referencing the merged PR instead of closing the issue
+        const comment = `This workspace has been archived. The associated PR was merged: ${workspace.prUrl}`;
+        await githubCLIService.addIssueComment(
+          project.githubOwner,
+          project.githubRepo,
+          workspace.githubIssueNumber,
+          comment
+        );
+        logger.info('Added comment to GitHub issue on workspace archive (PR was merged)', {
+          workspaceId: workspace.id,
+          issueNumber: workspace.githubIssueNumber,
+          prUrl: workspace.prUrl,
+        });
+      } else {
+        // No merged PR, close the issue
+        await githubCLIService.closeIssue(
+          project.githubOwner,
+          project.githubRepo,
+          workspace.githubIssueNumber
+        );
+        logger.info('Closed GitHub issue on workspace archive', {
+          workspaceId: workspace.id,
+          issueNumber: workspace.githubIssueNumber,
+        });
+      }
+    } catch (error) {
+      // Log but don't fail the archive if issue handling fails
+      logger.warn('Failed to handle GitHub issue on workspace archive', {
+        workspaceId: workspace.id,
+        issueNumber: workspace.githubIssueNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async archiveWorkspace(workspace: WorkspaceWithProject, options: WorktreeCleanupOptions) {
     if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVED')) {
       throw new TRPCError({
@@ -400,28 +448,8 @@ class WorktreeLifecycleService {
 
     const archivedWorkspace = await workspaceStateMachine.archive(workspace.id);
 
-    // Close associated GitHub issue after successful archive
-    const project = workspace.project;
-    if (workspace.githubIssueNumber && project?.githubOwner && project?.githubRepo) {
-      try {
-        await githubCLIService.closeIssue(
-          project.githubOwner,
-          project.githubRepo,
-          workspace.githubIssueNumber
-        );
-        logger.info('Closed GitHub issue on workspace archive', {
-          workspaceId: workspace.id,
-          issueNumber: workspace.githubIssueNumber,
-        });
-      } catch (error) {
-        // Log but don't fail the archive if issue closing fails
-        logger.warn('Failed to close GitHub issue on workspace archive', {
-          workspaceId: workspace.id,
-          issueNumber: workspace.githubIssueNumber,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    // Handle associated GitHub issue after successful archive
+    await this.handleGitHubIssueOnArchive(workspace);
 
     return archivedWorkspace;
   }
