@@ -9,12 +9,15 @@ import {
   CIStatus,
   KanbanColumn,
   PRState,
+  type Prisma,
   SessionStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
 import { z } from 'zod';
 import { prisma } from '../db';
 import { createLogger } from './logger.service';
+
+type TransactionClient = Prisma.TransactionClient;
 
 const logger = createLogger('data-backup');
 
@@ -157,24 +160,27 @@ const parseDate = (str: string | null): Date | null => (str ? new Date(str) : nu
 // Import Functions
 // ============================================================================
 
-async function importProjects(projects: ExportedProject[]): Promise<ImportCounter> {
+async function importProjects(
+  projects: ExportedProject[],
+  tx: TransactionClient
+): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const p of projects) {
-    const existing = await prisma.project.findUnique({ where: { id: p.id } });
+    const existing = await tx.project.findUnique({ where: { id: p.id } });
     if (existing) {
       counter.skipped++;
       continue;
     }
 
-    const slugConflict = await prisma.project.findUnique({ where: { slug: p.slug } });
+    const slugConflict = await tx.project.findUnique({ where: { slug: p.slug } });
     if (slugConflict) {
       logger.warn('Skipping project due to slug conflict', { id: p.id, slug: p.slug });
       counter.skipped++;
       continue;
     }
 
-    await prisma.project.create({
+    await tx.project.create({
       data: {
         id: p.id,
         name: p.name,
@@ -198,17 +204,20 @@ async function importProjects(projects: ExportedProject[]): Promise<ImportCounte
   return counter;
 }
 
-async function importWorkspaces(workspaces: ExportedWorkspace[]): Promise<ImportCounter> {
+async function importWorkspaces(
+  workspaces: ExportedWorkspace[],
+  tx: TransactionClient
+): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const w of workspaces) {
-    const existing = await prisma.workspace.findUnique({ where: { id: w.id } });
+    const existing = await tx.workspace.findUnique({ where: { id: w.id } });
     if (existing) {
       counter.skipped++;
       continue;
     }
 
-    const project = await prisma.project.findUnique({ where: { id: w.projectId } });
+    const project = await tx.project.findUnique({ where: { id: w.projectId } });
     if (!project) {
       logger.warn('Skipping workspace due to missing project', {
         workspaceId: w.id,
@@ -218,7 +227,7 @@ async function importWorkspaces(workspaces: ExportedWorkspace[]): Promise<Import
       continue;
     }
 
-    await prisma.workspace.create({
+    await tx.workspace.create({
       data: {
         id: w.id,
         projectId: w.projectId,
@@ -261,17 +270,20 @@ async function importWorkspaces(workspaces: ExportedWorkspace[]): Promise<Import
   return counter;
 }
 
-async function importClaudeSessions(sessions: ExportedClaudeSession[]): Promise<ImportCounter> {
+async function importClaudeSessions(
+  sessions: ExportedClaudeSession[],
+  tx: TransactionClient
+): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const s of sessions) {
-    const existing = await prisma.claudeSession.findUnique({ where: { id: s.id } });
+    const existing = await tx.claudeSession.findUnique({ where: { id: s.id } });
     if (existing) {
       counter.skipped++;
       continue;
     }
 
-    const workspace = await prisma.workspace.findUnique({ where: { id: s.workspaceId } });
+    const workspace = await tx.workspace.findUnique({ where: { id: s.workspaceId } });
     if (!workspace) {
       logger.warn('Skipping claude session due to missing workspace', {
         sessionId: s.id,
@@ -281,7 +293,7 @@ async function importClaudeSessions(sessions: ExportedClaudeSession[]): Promise<
       continue;
     }
 
-    await prisma.claudeSession.create({
+    await tx.claudeSession.create({
       data: {
         id: s.id,
         workspaceId: s.workspaceId,
@@ -301,17 +313,20 @@ async function importClaudeSessions(sessions: ExportedClaudeSession[]): Promise<
   return counter;
 }
 
-async function importTerminalSessions(sessions: ExportedTerminalSession[]): Promise<ImportCounter> {
+async function importTerminalSessions(
+  sessions: ExportedTerminalSession[],
+  tx: TransactionClient
+): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const s of sessions) {
-    const existing = await prisma.terminalSession.findUnique({ where: { id: s.id } });
+    const existing = await tx.terminalSession.findUnique({ where: { id: s.id } });
     if (existing) {
       counter.skipped++;
       continue;
     }
 
-    const workspace = await prisma.workspace.findUnique({ where: { id: s.workspaceId } });
+    const workspace = await tx.workspace.findUnique({ where: { id: s.workspaceId } });
     if (!workspace) {
       logger.warn('Skipping terminal session due to missing workspace', {
         sessionId: s.id,
@@ -321,7 +336,7 @@ async function importTerminalSessions(sessions: ExportedTerminalSession[]): Prom
       continue;
     }
 
-    await prisma.terminalSession.create({
+    await tx.terminalSession.create({
       data: {
         id: s.id,
         workspaceId: s.workspaceId,
@@ -339,18 +354,19 @@ async function importTerminalSessions(sessions: ExportedTerminalSession[]): Prom
 }
 
 async function importUserSettings(
-  settings: ExportedUserSettings | null
+  settings: ExportedUserSettings | null,
+  tx: TransactionClient
 ): Promise<{ imported: boolean; skipped: boolean }> {
   if (!settings) {
     return { imported: false, skipped: false };
   }
 
-  const existing = await prisma.userSettings.findFirst({ where: { userId: 'default' } });
+  const existing = await tx.userSettings.findFirst({ where: { userId: 'default' } });
   if (existing) {
     return { imported: false, skipped: true };
   }
 
-  await prisma.userSettings.create({
+  await tx.userSettings.create({
     data: {
       userId: 'default',
       preferredIde: settings.preferredIde,
@@ -492,6 +508,7 @@ class DataBackupService {
    * Import data from a backup file.
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
+   * All imports are wrapped in a transaction for atomicity.
    */
   async importData(input: ExportData): Promise<ImportResults> {
     logger.info('Starting data import', {
@@ -501,20 +518,22 @@ class DataBackupService {
       workspaceCount: input.data.workspaces.length,
     });
 
-    // Import in dependency order: projects -> workspaces -> sessions
-    const projects = await importProjects(input.data.projects);
-    const workspaces = await importWorkspaces(input.data.workspaces);
-    const claudeSessions = await importClaudeSessions(input.data.claudeSessions);
-    const terminalSessions = await importTerminalSessions(input.data.terminalSessions);
-    const userSettings = await importUserSettings(input.data.userSettings);
+    // Import in dependency order within a transaction for atomicity
+    const results = await prisma.$transaction(async (tx) => {
+      const projects = await importProjects(input.data.projects, tx);
+      const workspaces = await importWorkspaces(input.data.workspaces, tx);
+      const claudeSessions = await importClaudeSessions(input.data.claudeSessions, tx);
+      const terminalSessions = await importTerminalSessions(input.data.terminalSessions, tx);
+      const userSettings = await importUserSettings(input.data.userSettings, tx);
 
-    const results: ImportResults = {
-      projects,
-      workspaces,
-      claudeSessions,
-      terminalSessions,
-      userSettings,
-    };
+      return {
+        projects,
+        workspaces,
+        claudeSessions,
+        terminalSessions,
+        userSettings,
+      };
+    });
 
     logger.info('Import completed', {
       projects: results.projects,
