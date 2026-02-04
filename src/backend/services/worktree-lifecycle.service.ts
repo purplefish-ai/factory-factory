@@ -294,6 +294,19 @@ async function runProjectStartupScriptIfConfigured(
   return true;
 }
 
+async function handleWorkspaceInitFailure(workspaceId: string, error: Error): Promise<void> {
+  logger.error('Failed to initialize workspace worktree', error, { workspaceId });
+  await workspaceStateMachine.markFailed(workspaceId, error.message);
+  try {
+    await sessionService.stopWorkspaceSessions(workspaceId);
+  } catch (stopError) {
+    logger.warn('Failed to stop Claude sessions after init failure', {
+      workspaceId,
+      error: stopError instanceof Error ? stopError.message : String(stopError),
+    });
+  }
+}
+
 async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
   try {
     const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
@@ -440,10 +453,7 @@ class WorktreeLifecycleService {
 
       await workspaceStateMachine.markReady(workspaceId);
     } catch (error) {
-      logger.error('Failed to initialize workspace worktree', error as Error, {
-        workspaceId,
-      });
-      await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
+      await handleWorkspaceInitFailure(workspaceId, error as Error);
     } finally {
       if (worktreeCreated) {
         await clearWorkspaceInitMode(workspaceId, project?.worktreeBasePath);

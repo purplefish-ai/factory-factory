@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   runStartupScript: vi.fn(),
   hasStartupScript: vi.fn(),
   startClaudeSession: vi.fn(),
+  stopWorkspaceSessions: vi.fn(),
   startProvisioning: vi.fn(),
   markReady: vi.fn(),
   markFailed: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock('./startup-script.service', () => ({
 vi.mock('./session.service', () => ({
   sessionService: {
     startClaudeSession: mocks.startClaudeSession,
+    stopWorkspaceSessions: mocks.stopWorkspaceSessions,
   },
 }));
 
@@ -121,6 +123,7 @@ describe('worktreeLifecycleService initialization', () => {
       },
     });
     mocks.startClaudeSession.mockResolvedValue(undefined);
+    mocks.stopWorkspaceSessions.mockResolvedValue(undefined);
   });
 
   it('starts the default Claude session before startup script completes', async () => {
@@ -177,5 +180,19 @@ describe('worktreeLifecycleService initialization', () => {
     });
 
     expect(mocks.startClaudeSession).not.toHaveBeenCalled();
+  });
+
+  it('stops sessions when initialization fails after auto-start', async () => {
+    mocks.runStartupScript.mockRejectedValue(new Error('boom'));
+    mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
+
+    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+      branchName: 'main',
+      useExistingBranch: false,
+    });
+
+    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
+    expect(mocks.markFailed).toHaveBeenCalled();
   });
 });
