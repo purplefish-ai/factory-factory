@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -190,22 +190,25 @@ function MultiQuestionLayout({
               Question {currentIndex + 1} of {totalQuestions}
             </span>
             <div className="flex gap-1">
-              {question.questions.map((item, idx) => (
-                <button
-                  type="button"
-                  key={`dot-${requestId}-${idx}-${item.question}`}
-                  onClick={() => onIndexChange(idx)}
-                  className={cn(
-                    'w-2 h-2 rounded-full transition-colors',
-                    idx === currentIndex
-                      ? 'bg-primary'
-                      : answers[idx] !== undefined
-                        ? 'bg-primary/50'
-                        : 'bg-muted-foreground/30'
-                  )}
-                  aria-label={`Go to question ${idx + 1}`}
-                />
-              ))}
+              {question.questions.map((item, idx) => {
+                const isAnswered = isAnswerComplete(item, answers[idx], otherTexts[idx] ?? '');
+                return (
+                  <button
+                    type="button"
+                    key={`dot-${requestId}-${idx}-${item.question}`}
+                    onClick={() => onIndexChange(idx)}
+                    className={cn(
+                      'w-2 h-2 rounded-full transition-colors',
+                      idx === currentIndex
+                        ? 'bg-primary'
+                        : isAnswered
+                          ? 'bg-primary/50'
+                          : 'bg-muted-foreground/30'
+                    )}
+                    aria-label={`Go to question ${idx + 1}`}
+                  />
+                );
+              })}
             </div>
           </div>
 
@@ -510,6 +513,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   // Inline freeform responses keyed by question index
   const [otherTexts, setOtherTexts] = useState<Record<number, string>>({});
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Current request ID for key generation
   const currentRequestId = question?.requestId;
@@ -522,6 +526,19 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     setAnswers({});
     setCurrentIndex(0);
     setOtherTexts({});
+  }, [currentRequestId]);
+
+  useEffect(() => {
+    if (!currentRequestId) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      const firstFocusable = containerRef.current?.querySelector<HTMLElement>(
+        'input, button, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      firstFocusable?.focus();
+    }, 100);
+    return () => clearTimeout(timeoutId);
   }, [currentRequestId]);
 
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
@@ -582,32 +599,36 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
 
   if (totalQuestions === 1) {
     return (
-      <SingleQuestionLayout
-        question={question.questions[0]}
+      <div ref={containerRef}>
+        <SingleQuestionLayout
+          question={question.questions[0]}
+          requestId={requestId}
+          answers={answers}
+          otherTexts={otherTexts}
+          onAnswerChange={handleAnswerChange}
+          onOtherTextChange={handleOtherTextChange}
+          onSubmit={handleSubmit}
+          isComplete={Boolean(isComplete)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef}>
+      <MultiQuestionLayout
+        question={question}
         requestId={requestId}
+        currentIndex={currentIndex}
         answers={answers}
         otherTexts={otherTexts}
         onAnswerChange={handleAnswerChange}
         onOtherTextChange={handleOtherTextChange}
         onSubmit={handleSubmit}
+        onIndexChange={setCurrentIndex}
         isComplete={Boolean(isComplete)}
+        isCurrentAnswered={isCurrentAnswered}
       />
-    );
-  }
-
-  return (
-    <MultiQuestionLayout
-      question={question}
-      requestId={requestId}
-      currentIndex={currentIndex}
-      answers={answers}
-      otherTexts={otherTexts}
-      onAnswerChange={handleAnswerChange}
-      onOtherTextChange={handleOtherTextChange}
-      onSubmit={handleSubmit}
-      onIndexChange={setCurrentIndex}
-      isComplete={Boolean(isComplete)}
-      isCurrentAnswered={isCurrentAnswered}
-    />
+    </div>
   );
 }
