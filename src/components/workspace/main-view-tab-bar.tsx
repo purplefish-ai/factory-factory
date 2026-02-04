@@ -1,4 +1,15 @@
-import { FileCode, FileDiff, Plus, Wrench } from 'lucide-react';
+import {
+  Activity,
+  Circle,
+  CircleSlash,
+  FileCode,
+  FileDiff,
+  Loader2,
+  type LucideIcon,
+  Plus,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
 
 import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
 import { TabButton } from '@/components/ui/tab-button';
@@ -40,8 +51,10 @@ function getTabIcon(type: MainViewTab['type']) {
 interface StatusInfo {
   color: string;
   pulse: boolean;
+  spin: boolean;
   label: string;
   description: string;
+  icon: LucideIcon;
 }
 
 function getStatusInfo(
@@ -53,17 +66,21 @@ function getStatusInfo(
   if (!(sessionStatus && processStatus)) {
     if (isRunning) {
       return {
-        color: 'bg-brand',
+        color: 'text-brand',
         pulse: true,
+        spin: false,
         label: 'Running',
         description: 'Processing a request',
+        icon: Activity,
       };
     }
     return {
-      color: 'bg-emerald-500',
+      color: 'text-emerald-500',
       pulse: false,
+      spin: false,
       label: 'Idle',
       description: 'Ready for input',
+      icon: Circle,
     };
   }
 
@@ -72,63 +89,77 @@ function getStatusInfo(
 
   if (phase === 'loading' || processStatus.state === 'unknown') {
     return {
-      color: 'bg-muted-foreground',
-      pulse: true,
+      color: 'text-muted-foreground',
+      pulse: false,
+      spin: true,
       label: 'Loading',
       description: 'Loading session...',
+      icon: Loader2,
     };
   }
 
   if (phase === 'starting') {
     return {
-      color: 'bg-muted-foreground',
-      pulse: true,
+      color: 'text-muted-foreground',
+      pulse: false,
+      spin: true,
       label: 'Starting',
       description: 'Launching Claude...',
+      icon: Loader2,
     };
   }
 
   if (phase === 'stopping') {
     return {
-      color: 'bg-brand',
-      pulse: true,
+      color: 'text-brand',
+      pulse: false,
+      spin: true,
       label: 'Stopping',
       description: 'Finishing current request...',
+      icon: Loader2,
     };
   }
 
   if (processStatus.state === 'stopped') {
     if (processStatus.lastExit?.unexpected) {
       return {
-        color: 'bg-destructive',
+        color: 'text-destructive',
         pulse: false,
+        spin: false,
         label: 'Error',
         description: `Exited unexpectedly${processStatus.lastExit.code !== null ? ` (code ${processStatus.lastExit.code})` : ''}`,
+        icon: XCircle,
       };
     }
     return {
-      color: 'bg-muted-foreground',
+      color: 'text-muted-foreground',
       pulse: false,
+      spin: false,
       label: 'Stopped',
       description: 'Send a message to start',
+      icon: CircleSlash,
     };
   }
 
   if (phase === 'running') {
     return {
-      color: 'bg-brand',
+      color: 'text-brand',
       pulse: true,
+      spin: false,
       label: 'Running',
       description: 'Processing your request',
+      icon: Activity,
     };
   }
 
   // idle or ready
   return {
-    color: 'bg-emerald-500',
+    color: 'text-emerald-500',
     pulse: false,
+    spin: false,
     label: 'Idle',
     description: 'Ready for input',
+    icon: Circle,
   };
 }
 
@@ -141,6 +172,7 @@ interface StatusDotProps {
 
 function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusDotProps) {
   const status = getStatusInfo(sessionStatus, processStatus, isRunning);
+  const StatusIcon = status.icon;
 
   // CI fix sessions show wrench icon instead of dot
   if (isCIFix) {
@@ -169,11 +201,12 @@ function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusD
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="flex items-center justify-center w-3.5 h-3.5">
-          <span
+          <StatusIcon
             className={cn(
-              'w-2 h-2 rounded-full shrink-0',
+              'h-3.5 w-3.5 shrink-0',
               status.color,
-              status.pulse && 'animate-pulse'
+              status.pulse && 'animate-pulse',
+              status.spin && 'animate-spin'
             )}
           />
         </span>
