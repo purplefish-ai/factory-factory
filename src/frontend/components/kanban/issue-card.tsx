@@ -31,6 +31,8 @@ export function IssueCard({ issue, projectId, projectSlug }: IssueCardProps) {
     createWorkspaceMutation.mutate({
       projectId,
       name: issue.title,
+      githubIssueNumber: issue.number,
+      githubIssueUrl: issue.url,
     });
   };
 

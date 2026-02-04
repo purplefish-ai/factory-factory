@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext } from 'react';
+import { createContext, type ReactNode, useContext, useMemo } from 'react';
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
@@ -75,13 +75,29 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     refetchIssues();
   };
 
+  // Filter out issues that already have a workspace
+  const filteredIssues = useMemo(() => {
+    if (!issuesData?.issues) {
+      return undefined;
+    }
+    if (!workspaces) {
+      return issuesData.issues;
+    }
+
+    const workspaceIssueNumbers = new Set(
+      workspaces.map((w) => w.githubIssueNumber).filter((n): n is number => n !== null)
+    );
+
+    return issuesData.issues.filter((issue) => !workspaceIssueNumbers.has(issue.number));
+  }, [issuesData?.issues, workspaces]);
+
   return (
     <KanbanContext.Provider
       value={{
         projectId,
         projectSlug,
         workspaces: workspaces as WorkspaceWithKanban[] | undefined,
-        issues: issuesData?.issues,
+        issues: filteredIssues,
         isLoading: isLoadingWorkspaces || isLoadingIssues,
         isError: isErrorWorkspaces,
         error: errorWorkspaces ? { message: errorWorkspaces.message } : null,

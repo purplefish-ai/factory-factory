@@ -1,12 +1,13 @@
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { RefreshCw } from 'lucide-react';
 import { useMemo } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { IssueCard } from './issue-card';
 import type { WorkspaceWithKanban } from './kanban-card';
-import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
+import { type ColumnConfig, KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
 import { type GitHubIssue, useKanban } from './kanban-context';
 
 export function KanbanControls() {
@@ -109,9 +110,6 @@ export function KanbanBoard() {
 }
 
 // Separate component for the Issues column
-import { Badge } from '@/components/ui/badge';
-import type { ColumnConfig } from './kanban-column';
-
 interface IssuesColumnProps {
   column: ColumnConfig;
   issues: GitHubIssue[];

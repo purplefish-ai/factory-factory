@@ -82,6 +82,8 @@ export const workspaceRouter = router({
           description: z.string().optional(),
           branchName: z.string().optional(),
           useExistingBranch: z.boolean().optional(),
+          githubIssueNumber: z.number().optional(),
+          githubIssueUrl: z.string().optional(),
         })
         .refine((data) => !(data.useExistingBranch && !data.branchName), {
           message: 'branchName is required when useExistingBranch is true',
