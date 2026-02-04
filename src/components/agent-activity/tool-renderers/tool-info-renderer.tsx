@@ -146,6 +146,7 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
 export interface ToolSequenceGroupProps {
   sequence: ToolSequence;
   defaultOpen?: boolean;
+  summaryOrder?: 'oldest-first' | 'latest-first';
 }
 
 /**
@@ -157,10 +158,12 @@ export interface ToolSequenceGroupProps {
 export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   sequence,
   defaultOpen = false,
+  summaryOrder = 'oldest-first',
 }: ToolSequenceGroupProps) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   const { pairedCalls } = sequence;
+  const summaryCalls = summaryOrder === 'latest-first' ? [...pairedCalls].reverse() : pairedCalls;
 
   if (pairedCalls.length === 0) {
     return null;
@@ -211,7 +214,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
     }
 
     // Show individual icons for small numbers of tool calls
-    return pairedCalls.map((call) => {
+    return summaryCalls.map((call) => {
       const key = `${sequence.id}-status-${call.id}`;
       switch (call.status) {
         case 'success':
@@ -239,8 +242,8 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   // Format tool names for display (truncate if too many)
   // Returns styled elements where error tools show in red
   const formatToolNames = () => {
-    const displayCalls = pairedCalls.length <= 4 ? pairedCalls : pairedCalls.slice(0, 3);
-    const remaining = pairedCalls.length > 4 ? pairedCalls.length - 3 : 0;
+    const displayCalls = summaryCalls.length <= 4 ? summaryCalls : summaryCalls.slice(0, 3);
+    const remaining = summaryCalls.length > 4 ? summaryCalls.length - 3 : 0;
 
     return (
       <>

@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useRef } from 'react';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import type { GroupedMessageItem } from '@/lib/claude-types';
 import { CompactingIndicator } from './compacting-indicator';
-import { LatestThinking } from './latest-thinking';
 
 // =============================================================================
 // Types
@@ -23,8 +22,6 @@ interface VirtualizedMessageListProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   /** Whether user is near bottom of scroll - used to gate auto-scroll */
   isNearBottom?: boolean;
-  /** Latest accumulated thinking content from extended thinking mode */
-  latestThinking?: string | null;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;
   /** Callback to remove/cancel a queued message */
@@ -103,7 +100,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onScroll,
   messagesEndRef,
   isNearBottom = true,
-  latestThinking,
   queuedMessageIds,
   onRemoveQueuedMessage,
   isCompacting = false,
@@ -234,11 +230,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
           );
         })}
       </div>
-
-      {/* Latest thinking from extended thinking mode */}
-      {latestThinking && running && (
-        <LatestThinking thinking={latestThinking} running={running} className="mb-4" />
-      )}
 
       {/* Context compaction indicator */}
       <CompactingIndicator isCompacting={isCompacting} className="mb-4" />

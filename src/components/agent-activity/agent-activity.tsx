@@ -188,7 +188,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRewindToMessage,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
-    return <ToolSequenceGroup sequence={item} />;
+    return <ToolSequenceGroup sequence={item} summaryOrder="latest-first" />;
   }
   return (
     <MessageItem
