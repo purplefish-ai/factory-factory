@@ -3,6 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  PromptCard,
+  PromptCardActions,
+  PromptCardBody,
+  PromptCardContent,
+  PromptCardIcon,
+} from '@/components/ui/prompt-card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/claude-types';
@@ -124,11 +131,12 @@ function SingleQuestionLayout({
   isComplete,
 }: SingleQuestionLayoutProps) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Using role="form" without form element since we handle submission via callback
-    <div className="border-b bg-muted/50 p-3" role="form" aria-label="Question from Claude">
-      <div className="flex items-start gap-3">
-        <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
-        <div className="flex-1 min-w-0 space-y-3">
+    <PromptCard role="form" aria-label="Question from Claude">
+      <PromptCardContent>
+        <PromptCardIcon>
+          <HelpCircle className="h-5 w-5 text-blue-500" />
+        </PromptCardIcon>
+        <PromptCardBody className="space-y-3">
           {question.multiSelect ? (
             <MultiSelectQuestion
               question={question}
@@ -150,14 +158,14 @@ function SingleQuestionLayout({
               requestId={requestId}
             />
           )}
-        </div>
-        <div className="shrink-0 self-end">
+        </PromptCardBody>
+        <PromptCardActions className="self-end">
           <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
             Submit
           </Button>
-        </div>
-      </div>
-    </div>
+        </PromptCardActions>
+      </PromptCardContent>
+    </PromptCard>
   );
 }
 
@@ -180,11 +188,12 @@ function MultiQuestionLayout({
   const isFirstQuestion = currentIndex === 0;
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Using role="form" without form element since we handle submission via callback
-    <div className="border-b bg-muted/50 p-3" role="form" aria-label="Questions from Claude">
-      <div className="flex items-start gap-3">
-        <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
-        <div className="flex-1 min-w-0">
+    <PromptCard role="form" aria-label="Questions from Claude">
+      <PromptCardContent>
+        <PromptCardIcon>
+          <HelpCircle className="h-5 w-5 text-blue-500" />
+        </PromptCardIcon>
+        <PromptCardBody>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-muted-foreground">
               Question {currentIndex + 1} of {totalQuestions}
@@ -233,9 +242,9 @@ function MultiQuestionLayout({
               requestId={requestId}
             />
           )}
-        </div>
+        </PromptCardBody>
 
-        <div className="shrink-0 self-end flex items-center gap-1">
+        <PromptCardActions className="self-end flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
@@ -272,9 +281,9 @@ function MultiQuestionLayout({
               <ChevronRight className="h-4 w-4" />
             </Button>
           )}
-        </div>
-      </div>
-    </div>
+        </PromptCardActions>
+      </PromptCardContent>
+    </PromptCard>
   );
 }
 

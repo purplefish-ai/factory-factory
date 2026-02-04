@@ -3,6 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
+import {
+  PromptCard,
+  PromptCardActions,
+  PromptCardBody,
+  PromptCardContent,
+  PromptCardIcon,
+} from '@/components/ui/prompt-card';
 import type { PermissionRequest } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import { type PlanViewMode, usePlanViewMode } from './plan-view-preference';
@@ -236,14 +243,12 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
   };
 
   return (
-    <div
-      className="border-b bg-muted/50 p-3"
-      role="alertdialog"
-      aria-label={`Permission request for ${toolName}`}
-    >
-      <div className="flex items-start gap-3">
-        <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" aria-hidden="true" />
-        <div className="flex-1 min-w-0">
+    <PromptCard aria-label={`Permission request for ${toolName}`}>
+      <PromptCardContent>
+        <PromptCardIcon>
+          <Terminal className="h-5 w-5 text-muted-foreground" />
+        </PromptCardIcon>
+        <PromptCardBody>
           <div className="text-sm font-medium">Permission: {toolName}</div>
           <div
             className="text-xs text-muted-foreground mt-1 font-mono truncate"
@@ -251,8 +256,8 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
           >
             {inputPreview}
           </div>
-        </div>
-        <div className="flex gap-2 shrink-0">
+        </PromptCardBody>
+        <PromptCardActions>
           <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">
             <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
             Deny
@@ -261,9 +266,9 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             Allow
           </Button>
-        </div>
-      </div>
-    </div>
+        </PromptCardActions>
+      </PromptCardContent>
+    </PromptCard>
   );
 }
 
@@ -301,22 +306,20 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
   };
 
   return (
-    <div
-      className="border-b bg-muted/50 p-3"
-      role="alertdialog"
-      aria-label={`Permission request for ${toolName}`}
-    >
-      <div className="flex items-start gap-3">
-        <Terminal className="h-5 w-5 shrink-0 text-muted-foreground mt-0.5" aria-hidden="true" />
-        <div className="flex-1 min-w-0 space-y-2">
+    <PromptCard aria-label={`Permission request for ${toolName}`}>
+      <PromptCardContent>
+        <PromptCardIcon>
+          <Terminal className="h-5 w-5 text-muted-foreground" />
+        </PromptCardIcon>
+        <PromptCardBody className="space-y-2">
           <div className="text-sm font-medium">Permission: {toolName}</div>
           <div className="bg-background rounded-md p-2 border">
             <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap font-mono">
               {formatToolInput(toolInput)}
             </pre>
           </div>
-        </div>
-        <div className="flex gap-2 shrink-0">
+        </PromptCardBody>
+        <PromptCardActions>
           <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">
             <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
             Deny
@@ -325,8 +328,8 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             Allow
           </Button>
-        </div>
-      </div>
-    </div>
+        </PromptCardActions>
+      </PromptCardContent>
+    </PromptCard>
   );
 }
