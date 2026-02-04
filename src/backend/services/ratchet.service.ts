@@ -81,6 +81,7 @@ interface WorkspaceWithPR {
   id: string;
   prUrl: string;
   prNumber: number;
+  ratchetEnabled: boolean;
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
   ratchetLastNotifiedState: RatchetState | null;
@@ -239,10 +240,16 @@ class RatchetService {
         });
       }
 
-      // 4. Take action based on state
-      const action = await this.executeRatchetAction(workspace, newState, prStateInfo, settings);
+      // 4. Check workspace-level ratchet setting (master switch is settings.enabled)
+      // Only take action if both global AND workspace-level ratcheting are enabled
+      const shouldTakeAction = settings.enabled && workspace.ratchetEnabled;
 
-      // 5. Update workspace
+      // 5. Take action based on state (only if ratcheting is enabled for this workspace)
+      const action = shouldTakeAction
+        ? await this.executeRatchetAction(workspace, newState, prStateInfo, settings)
+        : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
+
+      // 6. Update workspace
       await workspaceAccessor.update(workspace.id, {
         ratchetState: newState,
         ratchetLastCheckedAt: new Date(),

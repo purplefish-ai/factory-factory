@@ -7,10 +7,12 @@ import {
   GitPullRequest,
   Loader2,
   PanelRight,
+  Wrench,
   XCircle,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   QuickActionsMenu,
@@ -19,6 +21,7 @@ import {
   useWorkspacePanel,
 } from '@/components/workspace';
 import { cn } from '@/lib/utils';
+import { trpc } from '../../../../frontend/lib/trpc';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 
@@ -179,6 +182,64 @@ function WorkspaceCiStatus({
   );
 }
 
+const RATCHET_STATE_LABELS = {
+  IDLE: 'Idle',
+  CI_RUNNING: 'CI Running',
+  CI_FAILED: 'CI Failed',
+  MERGE_CONFLICT: 'Conflicts',
+  REVIEW_PENDING: 'Reviews',
+  READY: 'Ready',
+  MERGED: 'Merged',
+} as const;
+
+function RatchetingToggle({
+  workspace,
+  workspaceId,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspaceId: string;
+}) {
+  const utils = trpc.useUtils();
+  const { data: userSettings } = trpc.userSettings.get.useQuery();
+  const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onSuccess: () => {
+      utils.workspace.get.invalidate({ id: workspaceId });
+    },
+  });
+
+  const globalRatchetEnabled = userSettings?.ratchetEnabled ?? false;
+  const workspaceRatchetEnabled = workspace.ratchetEnabled ?? true;
+  const isDisabled = !globalRatchetEnabled;
+
+  const stateLabel = RATCHET_STATE_LABELS[workspace.ratchetState] ?? workspace.ratchetState;
+
+  const tooltipContent = isDisabled
+    ? 'Ratcheting is disabled globally. Enable it in Admin Settings to use workspace-level controls.'
+    : workspaceRatchetEnabled
+      ? `Ratcheting enabled (${stateLabel}) - Click to disable auto-fixing for this workspace`
+      : `Ratcheting disabled (${stateLabel}) - Click to enable auto-fixing for this workspace`;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-2 px-2 py-0.5 rounded text-xs">
+          <Wrench className="h-3 w-3 text-muted-foreground" />
+          <span className="text-muted-foreground">{stateLabel}</span>
+          <Switch
+            checked={workspaceRatchetEnabled}
+            disabled={isDisabled || toggleRatcheting.isPending}
+            onCheckedChange={(checked) => {
+              toggleRatcheting.mutate({ workspaceId, enabled: checked });
+            }}
+            className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
+          />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{tooltipContent}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 interface WorkspaceHeaderProps {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   workspaceId: string;
@@ -221,6 +282,7 @@ export function WorkspaceHeader({
         <WorkspaceCiStatus workspace={workspace} />
       </div>
       <div className="flex items-center gap-1">
+        <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
         <QuickActionsMenu
           onExecuteAgent={(action) => {
             if (action.content) {

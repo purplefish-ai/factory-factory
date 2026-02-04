@@ -150,6 +150,7 @@ model Workspace {
   prReviewLastCommentId   String?       // ID of the last processed review comment
 
   // Ratchet tracking (centralized PR progression)
+  ratchetEnabled          Boolean       @default(true)    // Workspace-level ratchet toggle (requires global ratchetEnabled)
   ratchetState            RatchetState  @default(IDLE)    // Current state in the ratchet progression
   ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
