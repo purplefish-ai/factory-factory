@@ -70,6 +70,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
           <div className="space-y-1">
             <div className="text-[10px] font-medium text-muted-foreground">Latest tool</div>
             <ToolSequenceGroup
+              key={latestToolSequence.id}
               sequence={latestToolSequence}
               defaultOpen
               summaryOrder="latest-first"

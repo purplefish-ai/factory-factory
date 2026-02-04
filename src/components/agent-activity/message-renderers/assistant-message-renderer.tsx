@@ -15,6 +15,7 @@ import {
   ResultRenderer,
   StreamEventRenderer,
   SystemMessageRenderer,
+  ThinkingRenderer,
 } from './stream-event-renderer';
 
 // =============================================================================
@@ -62,8 +63,9 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
     const contentItems = message.message.content;
     if (contentItems.length === 1 && isThinkingContent(contentItems[0])) {
       return (
-        <ThinkingBlockRenderer
+        <ThinkingRenderer
           text={contentItems[0].thinking}
+          messageId={messageId}
           className={className}
         />
       );
@@ -126,35 +128,6 @@ interface TextRendererProps {
  */
 const TextRenderer = memo(function TextRenderer({ text }: TextRendererProps) {
   return <MarkdownRenderer content={text} />;
-});
-
-// =============================================================================
-// Thinking Block Renderer
-// =============================================================================
-
-interface ThinkingBlockRendererProps {
-  text: string;
-  className?: string;
-}
-
-const ThinkingBlockRenderer = memo(function ThinkingBlockRenderer({
-  text,
-  className,
-}: ThinkingBlockRendererProps) {
-  return (
-    <div
-      className={cn(
-        'rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-2',
-        className
-      )}
-    >
-      <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-        <Loader2 className="h-3 w-3" />
-        <span>Thinking</span>
-      </div>
-      <div className="text-sm text-muted-foreground italic whitespace-pre-wrap">{text}</div>
-    </div>
-  );
 });
 
 // =============================================================================
