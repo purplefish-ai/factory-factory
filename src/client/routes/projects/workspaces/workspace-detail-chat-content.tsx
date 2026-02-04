@@ -10,7 +10,7 @@ import {
   VirtualizedMessageList,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
-import type { CommandInfo, TokenStats, ToolSequence } from '@/lib/claude-types';
+import type { CommandInfo, TokenStats } from '@/lib/claude-types';
 import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
 
 interface ChatContentProps {
@@ -91,7 +91,7 @@ export const ChatContent = memo(function ChatContent({
     for (let i = groupedMessages.length - 1; i >= 0; i -= 1) {
       const item = groupedMessages[i];
       if (isToolSequence(item)) {
-        return item as ToolSequence;
+        return item;
       }
     }
     return null;

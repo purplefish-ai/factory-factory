@@ -1,4 +1,4 @@
-import { handleThinkingDeltaUpdate, handleToolInputUpdate } from '../helpers';
+import { handleToolInputUpdate } from '../helpers';
 import type { ChatAction, ChatState } from '../types';
 
 export function reduceToolingSlice(state: ChatState, action: ChatAction): ChatState {
@@ -10,13 +10,11 @@ export function reduceToolingSlice(state: ChatState, action: ChatAction): ChatSt
       newToolUseIdToIndex.set(action.payload.toolUseId, action.payload.index);
       return { ...state, toolUseIdToIndex: newToolUseIdToIndex };
     }
-    case 'THINKING_DELTA': {
-      const updatedState = handleThinkingDeltaUpdate(state, action.payload.thinking);
+    case 'THINKING_DELTA':
       return {
-        ...updatedState,
-        latestThinking: (updatedState.latestThinking ?? '') + action.payload.thinking,
+        ...state,
+        latestThinking: (state.latestThinking ?? '') + action.payload.thinking,
       };
-    }
     case 'THINKING_CLEAR':
       return { ...state, latestThinking: null };
     case 'SDK_TOOL_PROGRESS': {
