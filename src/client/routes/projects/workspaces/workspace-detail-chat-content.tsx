@@ -1,5 +1,5 @@
 import { ArrowDown } from 'lucide-react';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/components/chat';
 import {
   ChatInput,
@@ -104,6 +104,38 @@ export const ChatContent = memo(function ChatContent({
   const startingSession = sessionStatus.phase === 'starting';
   const loadingSession = sessionStatus.phase === 'loading';
 
+  const permissionRequestId =
+    pendingRequest.type === 'permission' ? pendingRequest.request.requestId : null;
+  const isPlanApproval =
+    pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode';
+
+  useEffect(() => {
+    if (!(isPlanApproval && permissionRequestId)) {
+      return;
+    }
+    const activeElement = document.activeElement;
+    if (activeElement && activeElement !== document.body) {
+      return;
+    }
+    inputRef?.current?.focus();
+  }, [isPlanApproval, permissionRequestId, inputRef]);
+
+  const placeholder = (() => {
+    if (stopping) {
+      return 'Stopping...';
+    }
+    if (
+      pendingRequest.type === 'permission' &&
+      pendingRequest.request.toolName === 'ExitPlanMode'
+    ) {
+      return 'Type feedback to revise the plan...';
+    }
+    if (running) {
+      return 'Message will be queued...';
+    }
+    return 'Type a message...';
+  })();
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
@@ -156,9 +188,7 @@ export const ChatContent = memo(function ChatContent({
           running={running}
           stopping={stopping}
           inputRef={inputRef}
-          placeholder={
-            stopping ? 'Stopping...' : running ? 'Message will be queued...' : 'Type a message...'
-          }
+          placeholder={placeholder}
           settings={chatSettings}
           onSettingsChange={updateSettings}
           value={inputDraft}

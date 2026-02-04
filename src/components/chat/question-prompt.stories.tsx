@@ -10,6 +10,12 @@ const meta = {
   component: QuestionPrompt,
   parameters: {
     layout: 'padded',
+    docs: {
+      description: {
+        component:
+          'Use the option list to answer quickly, or select the inline Other option to type a custom response.',
+      },
+    },
   },
   tags: ['autodocs'],
   decorators: [

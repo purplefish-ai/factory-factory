@@ -14,6 +14,12 @@ const meta = {
   component: PermissionPrompt,
   parameters: {
     layout: 'padded',
+    docs: {
+      description: {
+        component:
+          'Permission prompts also support sending feedback via the main chat input when a plan approval is pending.',
+      },
+    },
   },
   tags: ['autodocs'],
   decorators: [
@@ -124,7 +130,7 @@ Modernize the authentication flow to use JWT tokens with refresh token rotation.
     docs: {
       description: {
         story:
-          'Plan approval request when the agent is in plan mode and needs user approval to proceed with implementation.',
+          'Plan approval request when the agent is in plan mode and needs user approval to proceed with implementation. You can also type feedback in the main chat input to request changes.',
       },
     },
   },
