@@ -155,7 +155,7 @@ async function loadHistoryFromJSONL(
 ): Promise<void> {
   if (claudeSessionId) {
     const history = await SessionManager.getHistory(claudeSessionId, workingDir);
-    messageStateService.loadFromHistory(sessionId, history);
+    messageStateService.ensureHistoryLoaded(sessionId, history);
   }
   const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
   messageStateService.sendSnapshot(sessionId, sessionStatus, null);
