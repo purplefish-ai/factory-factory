@@ -146,6 +146,9 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
 export interface ToolSequenceGroupProps {
   sequence: ToolSequence;
   defaultOpen?: boolean;
+  summaryOrder?: 'oldest-first' | 'latest-first';
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -157,10 +160,17 @@ export interface ToolSequenceGroupProps {
 export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   sequence,
   defaultOpen = false,
+  summaryOrder = 'oldest-first',
+  open,
+  onOpenChange,
 }: ToolSequenceGroupProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const isControlled = open !== undefined;
+  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+  const isOpen = open ?? internalOpen;
+  const setIsOpen = onOpenChange ?? setInternalOpen;
 
   const { pairedCalls } = sequence;
+  const summaryCalls = summaryOrder === 'latest-first' ? [...pairedCalls].reverse() : pairedCalls;
 
   if (pairedCalls.length === 0) {
     return null;
@@ -168,7 +178,14 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
 
   // Single tool call - render inline without grouping wrapper
   if (pairedCalls.length === 1) {
-    return <PairedToolCallRenderer call={pairedCalls[0]} defaultOpen={defaultOpen} />;
+    return (
+      <PairedToolCallRenderer
+        call={summaryCalls[0]}
+        defaultOpen={isControlled ? undefined : defaultOpen}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+      />
+    );
   }
 
   // Multiple tool calls - render as collapsible group
@@ -211,7 +228,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
     }
 
     // Show individual icons for small numbers of tool calls
-    return pairedCalls.map((call) => {
+    return summaryCalls.map((call) => {
       const key = `${sequence.id}-status-${call.id}`;
       switch (call.status) {
         case 'success':
@@ -239,8 +256,8 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   // Format tool names for display (truncate if too many)
   // Returns styled elements where error tools show in red
   const formatToolNames = () => {
-    const displayCalls = pairedCalls.length <= 4 ? pairedCalls : pairedCalls.slice(0, 3);
-    const remaining = pairedCalls.length > 4 ? pairedCalls.length - 3 : 0;
+    const displayCalls = summaryCalls.length <= 4 ? summaryCalls : summaryCalls.slice(0, 3);
+    const remaining = summaryCalls.length > 4 ? summaryCalls.length - 3 : 0;
 
     return (
       <>
@@ -276,7 +293,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="border-t space-y-1 p-1.5 overflow-x-auto">
-            {pairedCalls.map((call) => (
+            {summaryCalls.map((call) => (
               <div key={call.id} className="pl-2">
                 <PairedToolCallRenderer call={call} defaultOpen={false} />
               </div>
@@ -295,6 +312,8 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
 interface PairedToolCallRendererProps {
   call: PairedToolCall;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -304,8 +323,12 @@ interface PairedToolCallRendererProps {
 const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
   call,
   defaultOpen = false,
+  open,
+  onOpenChange,
 }: PairedToolCallRendererProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+  const isOpen = open ?? internalOpen;
+  const setIsOpen = onOpenChange ?? setInternalOpen;
 
   const isPending = call.status === 'pending';
   const isError = call.status === 'error';

@@ -79,6 +79,7 @@ export function WorkspaceDetailContainer() {
     latestThinking,
     pendingMessages,
     isCompacting,
+    permissionMode,
     slashCommands,
     slashCommandsLoaded,
     tokenStats,
@@ -271,6 +272,7 @@ export function WorkspaceDetailContainer() {
     latestThinking,
     pendingMessages,
     isCompacting,
+    permissionMode,
     slashCommands,
     slashCommandsLoaded,
     tokenStats,
@@ -348,6 +350,7 @@ interface RenderWorkspaceBodyProps {
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
+  permissionMode: ReturnType<typeof useChatWebSocket>['permissionMode'];
   slashCommands: ReturnType<typeof useChatWebSocket>['slashCommands'];
   slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
   tokenStats: ReturnType<typeof useChatWebSocket>['tokenStats'];
@@ -417,6 +420,7 @@ function renderWorkspaceBody({
   latestThinking,
   pendingMessages,
   isCompacting,
+  permissionMode,
   slashCommands,
   slashCommandsLoaded,
   tokenStats,
@@ -501,6 +505,7 @@ function renderWorkspaceBody({
               hasWorktreePath={hasWorktreePath}
             >
               <ChatContent
+                workspaceId={workspaceId}
                 messages={messages}
                 sessionStatus={sessionStatus}
                 messagesEndRef={messagesEndRef}
@@ -526,6 +531,7 @@ function renderWorkspaceBody({
                 latestThinking={latestThinking}
                 pendingMessages={pendingMessages}
                 isCompacting={isCompacting}
+                permissionMode={permissionMode}
                 slashCommands={slashCommands}
                 slashCommandsLoaded={slashCommandsLoaded}
                 tokenStats={tokenStats}

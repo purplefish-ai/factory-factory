@@ -2,6 +2,7 @@
 
 // Types
 export type { ChatMessage } from '@/lib/claude-types';
+export { AgentLiveDock } from './agent-live-dock';
 export type { ChatInputProps } from './chat-input/chat-input';
 export { ChatInput } from './chat-input/chat-input';
 export type { TaskNotification } from './chat-reducer';
