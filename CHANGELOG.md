@@ -5,6 +5,63 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-02-03
+
+### Added
+
+- Resume existing branch flow (#583)
+- GitHub Issues integration to workflow selector (#559)
+- Drag-and-drop workspace reordering (#540)
+- Automatic CI fixing sessions when CI fails (#495)
+- Create PR button to workspace detail view (#500)
+- Claude process status indicator (#536)
+- Auto-detect GitHub owner/repo from git remote when creating projects (#582)
+- Default workspace session creation (#584)
+- Show startup script logs during workspace setup (#556)
+
+### Changed
+
+- Replace chat status bar with subtle tab status dot (#591)
+- Persist tab scroll state across navigation (#585)
+- Cache slash commands for offline palette (#535)
+- Always play workspace completion sound regardless of focus or active workspace (#508)
+- Move Create PR button inline with workspace title (#538)
+- Always show refresh button in factory config section (#527)
+- Use small button size for new workspace button (#507)
+- Stop dev process and close terminals when archiving workspace (#537)
+- Commit on archive cleanup (#526)
+- Update deps and polish reviews UI (#516)
+
+### Fixed
+
+- Fix session resume ordering (#593)
+- Fix slash menu keyboard scroll (#592)
+- Fix Claude status on reconnect (#588)
+- Fix paste attachments without contentType (#587)
+- Fix workspace archive failing when worktree is not a valid git repo (#557)
+- Fix pasted text attachments not responding to interactive requests (#549)
+- Fix migrations (add_auto_fix_ci_issues_setting) (#539)
+
+### Refactored
+
+- Split session service modules (#564)
+- Refactor paste handling complexity (#566)
+- Introduce AppContext wiring (#554)
+- Refactor workspace services (#555)
+- Decouple message state transport (#551)
+- Decompose Claude client/process concerns (#553)
+- Split workspace detail route (#550)
+- Consolidate Claude protocol types (#552)
+- Refactor chat message handlers into registry (#534)
+- Consolidate chat protocol types (#533)
+- Extract chat transport handling (#531)
+- Split chat reducer slices into files (#530)
+- Refactor message state machine (#529)
+- Refactor chat reducer into slices (#524)
+- Refactor cognitive complexity (#528)
+- Remove addressable Biome ignores (#563)
+- Remove Next directives and relax chunk warning (#532)
+
 ## [0.1.5] - 2026-02-02
 
 ### Added
