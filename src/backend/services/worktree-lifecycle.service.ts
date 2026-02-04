@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import { pathExists } from '../lib/file-helpers';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
@@ -174,13 +175,6 @@ function getProjectOrThrow(workspace: WorkspaceWithProject) {
     throw new Error('Workspace project paths are missing');
   }
   return project;
-}
-
-function pathExists(targetPath: string): Promise<boolean> {
-  return fs
-    .stat(targetPath)
-    .then(() => true)
-    .catch(() => false);
 }
 
 async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
