@@ -36,7 +36,16 @@ async function isLocalBehindOrigin(
     localBranch,
     originBranch,
   ]);
-  return result.code === 0;
+  if (result.code !== 0) {
+    return false;
+  }
+
+  const localSha = await gitCommandC(repoPath, ['rev-parse', localBranch]);
+  const originSha = await gitCommandC(repoPath, ['rev-parse', originBranch]);
+  if (localSha.code !== 0 || originSha.code !== 0) {
+    return false;
+  }
+  return localSha.stdout.trim() !== originSha.stdout.trim();
 }
 
 function parseWorktreeEntries(output: string): GitWorktreeEntry[] {

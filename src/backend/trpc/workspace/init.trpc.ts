@@ -5,6 +5,7 @@ import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
 import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import {
+  getWorkspaceInitMode,
   setWorkspaceInitMode,
   worktreeLifecycleService,
 } from '../../services/worktree-lifecycle.service';
@@ -86,17 +87,16 @@ export const workspaceInitRouter = router({
             message: `Maximum retry attempts (${maxRetries}) exceeded`,
           });
         }
-        if (input.useExistingBranch !== undefined) {
-          await setWorkspaceInitMode(
-            workspace.id,
-            input.useExistingBranch,
-            workspace.project.worktreeBasePath
-          );
+        const resumeMode =
+          input.useExistingBranch ??
+          (await getWorkspaceInitMode(workspace.id, workspace.project.worktreeBasePath));
+        if (resumeMode !== undefined) {
+          await setWorkspaceInitMode(workspace.id, resumeMode, workspace.project.worktreeBasePath);
         }
         // Run full initialization (creates worktree + runs startup script)
         initializeWorkspaceWorktree(workspace.id, {
           branchName: workspace.branchName ?? undefined,
-          useExistingBranch: input.useExistingBranch,
+          useExistingBranch: resumeMode,
         }).catch((error) => {
           logger.error(
             'Unexpected error during background workspace initialization',

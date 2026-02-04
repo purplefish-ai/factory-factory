@@ -105,7 +105,7 @@ export async function setWorkspaceInitMode(
   }
 }
 
-async function getWorkspaceInitMode(
+export async function getWorkspaceInitMode(
   workspaceId: string,
   worktreeBasePath?: string
 ): Promise<boolean | undefined> {
@@ -356,6 +356,7 @@ class WorktreeLifecycleService {
     }
 
     let project: WorkspaceWithProject['project'] | undefined;
+    let worktreeCreated = false;
 
     try {
       const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
@@ -379,6 +380,7 @@ class WorktreeLifecycleService {
               workspaceName: workspaceWithProject.name,
             });
           })();
+      worktreeCreated = true;
 
       const factoryConfig = await readFactoryConfigSafe(worktreeInfo.worktreePath, workspaceId);
 
@@ -415,7 +417,9 @@ class WorktreeLifecycleService {
       });
       await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
     } finally {
-      await clearWorkspaceInitMode(workspaceId, project?.worktreeBasePath);
+      if (worktreeCreated) {
+        await clearWorkspaceInitMode(workspaceId, project?.worktreeBasePath);
+      }
     }
   }
 }

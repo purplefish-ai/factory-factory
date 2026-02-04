@@ -176,10 +176,14 @@ class GitOpsService {
 
     const normalizedBranch = this.normalizeBranchName(branchName);
     const worktrees = await gitClient.listWorktreesWithBranches();
+    const worktreeBasePath = path.resolve(project.worktreeBasePath);
+    const basePrefix = `${worktreeBasePath}${path.sep}`;
 
     return worktrees.some(
       (worktree) =>
-        worktree.branchName && this.normalizeBranchName(worktree.branchName) === normalizedBranch
+        worktree.branchName &&
+        this.normalizeBranchName(worktree.branchName) === normalizedBranch &&
+        path.resolve(worktree.path).startsWith(basePrefix)
     );
   }
 }
