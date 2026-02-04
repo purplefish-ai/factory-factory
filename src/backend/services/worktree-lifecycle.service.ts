@@ -371,7 +371,7 @@ class WorktreeLifecycleService {
 
   /**
    * Handle GitHub issue after workspace archive.
-   * If there's a merged PR, add a comment referencing it. Otherwise, close the issue.
+   * If there's a merged PR, add a comment referencing it.
    */
   private async handleGitHubIssueOnArchive(workspace: WorkspaceWithProject): Promise<void> {
     const project = workspace.project;
@@ -379,37 +379,27 @@ class WorktreeLifecycleService {
       return;
     }
 
+    // Only add a comment if there's a merged PR
+    if (!(workspace.prState === 'MERGED' && workspace.prUrl)) {
+      return;
+    }
+
     try {
-      // Check if there's a merged PR associated with this workspace
-      if (workspace.prState === 'MERGED' && workspace.prUrl) {
-        // Add a comment referencing the merged PR instead of closing the issue
-        const comment = `This workspace has been archived. The associated PR was merged: ${workspace.prUrl}`;
-        await githubCLIService.addIssueComment(
-          project.githubOwner,
-          project.githubRepo,
-          workspace.githubIssueNumber,
-          comment
-        );
-        logger.info('Added comment to GitHub issue on workspace archive (PR was merged)', {
-          workspaceId: workspace.id,
-          issueNumber: workspace.githubIssueNumber,
-          prUrl: workspace.prUrl,
-        });
-      } else {
-        // No merged PR, close the issue
-        await githubCLIService.closeIssue(
-          project.githubOwner,
-          project.githubRepo,
-          workspace.githubIssueNumber
-        );
-        logger.info('Closed GitHub issue on workspace archive', {
-          workspaceId: workspace.id,
-          issueNumber: workspace.githubIssueNumber,
-        });
-      }
+      const comment = `This workspace has been archived. The associated PR was merged: ${workspace.prUrl}`;
+      await githubCLIService.addIssueComment(
+        project.githubOwner,
+        project.githubRepo,
+        workspace.githubIssueNumber,
+        comment
+      );
+      logger.info('Added comment to GitHub issue on workspace archive', {
+        workspaceId: workspace.id,
+        issueNumber: workspace.githubIssueNumber,
+        prUrl: workspace.prUrl,
+      });
     } catch (error) {
-      // Log but don't fail the archive if issue handling fails
-      logger.warn('Failed to handle GitHub issue on workspace archive', {
+      // Log but don't fail the archive if comment fails
+      logger.warn('Failed to add comment to GitHub issue on workspace archive', {
         workspaceId: workspace.id,
         issueNumber: workspace.githubIssueNumber,
         error: error instanceof Error ? error.message : String(error),
