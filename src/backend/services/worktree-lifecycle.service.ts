@@ -343,7 +343,9 @@ class WorktreeLifecycleService {
       throw error;
     }
 
-    // Close associated GitHub issue if one exists
+    const archivedWorkspace = await workspaceStateMachine.archive(workspace.id);
+
+    // Close associated GitHub issue after successful archive
     const project = workspace.project;
     if (workspace.githubIssueNumber && project?.githubOwner && project?.githubRepo) {
       try {
@@ -366,7 +368,7 @@ class WorktreeLifecycleService {
       }
     }
 
-    return workspaceStateMachine.archive(workspace.id);
+    return archivedWorkspace;
   }
 
   async initializeWorkspaceWorktree(
