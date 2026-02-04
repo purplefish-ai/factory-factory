@@ -856,6 +856,43 @@ class GitHubCLIService {
   }
 
   /**
+   * Get a single GitHub issue by number.
+   */
+  async getIssue(owner: string, repo: string, issueNumber: number): Promise<GitHubIssue | null> {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        [
+          'issue',
+          'view',
+          String(issueNumber),
+          '--repo',
+          `${owner}/${repo}`,
+          '--json',
+          'number,title,body,url,state,createdAt,author',
+        ],
+        { timeout: 30_000 }
+      );
+
+      return JSON.parse(stdout) as GitHubIssue;
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to get issue via gh CLI', {
+        owner,
+        repo,
+        issueNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      // Return null instead of throwing - issue might not exist or be inaccessible
+      return null;
+    }
+  }
+
+  /**
    * Close a GitHub issue.
    */
   async closeIssue(owner: string, repo: string, issueNumber: number): Promise<void> {

@@ -8,6 +8,7 @@ import { FactoryConfigService } from './factory-config.service';
 import { gitOpsService } from './git-ops.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
+import { messageStateService } from './message-state.service';
 import { RunScriptService } from './run-script.service';
 import { sessionService } from './session.service';
 import { startupScriptService } from './startup-script.service';
@@ -323,6 +324,77 @@ async function handleWorkspaceInitFailure(workspaceId: string, error: Error): Pr
   }
 }
 
+async function buildInitialPromptFromGitHubIssue(workspaceId: string): Promise<string> {
+  try {
+    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+    if (!workspace?.githubIssueNumber) {
+      return '';
+    }
+
+    const project = workspace.project;
+    if (!(project?.githubOwner && project?.githubRepo)) {
+      return '';
+    }
+
+    const issue = await githubCLIService.getIssue(
+      project.githubOwner,
+      project.githubRepo,
+      workspace.githubIssueNumber
+    );
+
+    if (!issue) {
+      logger.warn('Failed to fetch GitHub issue for initial prompt', {
+        workspaceId,
+        issueNumber: workspace.githubIssueNumber,
+      });
+      return '';
+    }
+
+    logger.info('Built initial prompt from GitHub issue', {
+      workspaceId,
+      issueNumber: issue.number,
+      issueTitle: issue.title,
+    });
+
+    return `Please work on the following GitHub issue and take it through the full development pipeline:
+
+## Issue #${issue.number}: ${issue.title}
+
+${issue.body || '(No description provided)'}
+
+---
+
+GitHub Issue URL: ${issue.url}
+
+## Instructions
+
+Please complete the following steps:
+
+1. **Plan**: Analyze the issue and come up with a plan to implement it. Consider the codebase structure, existing patterns, and any edge cases.
+
+2. **Implement**: If the requirements are clear and no clarification is needed, proceed to implement the plan. Write clean, well-tested code that follows the project's conventions.
+
+3. **Review**: After implementation, review your own code for:
+   - Correctness and completeness
+   - Code quality and adherence to project patterns
+   - Potential bugs or edge cases
+   - Test coverage
+
+4. **Create PR**: Once you're satisfied with the implementation, create a pull request with:
+   - A clear title and description
+   - Reference to this issue
+   - Summary of changes made
+
+If you need clarification on any requirements before proceeding, ask for clarification first.`;
+  } catch (error) {
+    logger.warn('Error building initial prompt from GitHub issue', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return '';
+  }
+}
+
 async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
   try {
     const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
@@ -334,10 +406,41 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
       return;
     }
 
+    // Build the initial prompt - use GitHub issue content if available
+    const issuePrompt = await buildInitialPromptFromGitHubIssue(workspaceId);
+
+    // If we have a GitHub issue prompt, inject it into the message state
+    // so it appears in the chat UI as a user message
+    if (issuePrompt) {
+      messageStateService.injectCommittedUserMessage(session.id, issuePrompt);
+    }
+
+    // Start the session - pass empty string to start without any initial prompt
+    // (undefined would default to 'Continue with the task.')
     await sessionService.startClaudeSession(session.id, { initialPrompt: '' });
+
+    // If we have a GitHub issue prompt, send it via sendMessage so it goes through
+    // the normal event pipeline and responses are properly captured
+    if (issuePrompt) {
+      const client = sessionService.getClient(session.id);
+      if (client) {
+        client.sendMessage(issuePrompt);
+        logger.info('Sent GitHub issue prompt to session via sendMessage', {
+          workspaceId,
+          sessionId: session.id,
+        });
+      } else {
+        logger.warn('Could not get client to send GitHub issue prompt', {
+          workspaceId,
+          sessionId: session.id,
+        });
+      }
+    }
+
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
       sessionId: session.id,
+      hasGitHubIssuePrompt: !!issuePrompt,
     });
   } catch (error) {
     logger.warn('Failed to auto-start default Claude session for workspace', {
