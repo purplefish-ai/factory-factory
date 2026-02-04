@@ -24,6 +24,47 @@ export function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function appendThinkingDelta(state: ChatState, index: number, deltaText: string): ChatState {
+  if (!deltaText) {
+    return state;
+  }
+
+  for (let i = state.messages.length - 1; i >= 0; i -= 1) {
+    const msg = state.messages[i];
+    if (msg.source !== 'claude' || !msg.message || !isStreamEventMessage(msg.message)) {
+      continue;
+    }
+
+    const event = msg.message.event;
+    if (
+      event?.type !== 'content_block_start' ||
+      event.content_block.type !== 'thinking' ||
+      event.index !== index
+    ) {
+      continue;
+    }
+
+    const nextMessages = [...state.messages];
+    nextMessages[i] = {
+      ...msg,
+      message: {
+        ...msg.message,
+        event: {
+          ...event,
+          content_block: {
+            ...event.content_block,
+            thinking: (event.content_block.thinking ?? '') + deltaText,
+          },
+        },
+      },
+    };
+
+    return { ...state, messages: nextMessages };
+  }
+
+  return state;
+}
+
 function createClaudeMessage(message: ClaudeMessage, order: number): ChatMessage {
   return {
     id: generateMessageId(),
@@ -153,6 +194,19 @@ export function handleClaudeMessage(
       sessionStatus: { phase: 'ready' },
       tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
     };
+  }
+
+  // Append thinking deltas to the most recent thinking content block
+  if (
+    isStreamEventMessage(claudeMsg) &&
+    claudeMsg.event.type === 'content_block_delta' &&
+    claudeMsg.event.delta.type === 'thinking_delta'
+  ) {
+    baseState = appendThinkingDelta(
+      baseState,
+      claudeMsg.event.index,
+      claudeMsg.event.delta.thinking
+    );
   }
 
   // Check if message should be stored
