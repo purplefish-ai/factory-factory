@@ -336,6 +336,7 @@ function SingleSelectQuestion({
             <span className="text-sm font-medium">Other</span>
             <Textarea
               value={otherText}
+              aria-label="Other response"
               onFocus={() => {
                 if (selectedValue !== OTHER_OPTION_VALUE) {
                   onChange(OTHER_OPTION_VALUE);
@@ -457,6 +458,7 @@ function MultiSelectQuestion({
             <span className="text-sm font-medium">Other</span>
             <Textarea
               value={otherText}
+              aria-label="Other response"
               onFocus={() => {
                 if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
                   onChange([...selectedValues, OTHER_OPTION_VALUE]);
