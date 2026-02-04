@@ -122,16 +122,6 @@ export const MultipleWorkspaces: Story = {
   },
 };
 
-export const Hidden: Story = {
-  name: 'Hidden (renders null)',
-  args: {
-    column: workingColumn,
-    workspaces: mockWorkspaces,
-    projectSlug: 'my-project',
-    isHidden: true,
-  },
-};
-
 export const WaitingColumn: Story = {
   args: {
     column: waitingColumn,

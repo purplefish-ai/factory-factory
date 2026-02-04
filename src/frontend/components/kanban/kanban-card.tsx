@@ -31,7 +31,7 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
           isArchived && 'opacity-60 border-dashed'
         )}
       >
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
               {workspace.name}

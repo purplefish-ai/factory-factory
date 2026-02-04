@@ -67,7 +67,7 @@ export const githubRouter = router({
       }
 
       try {
-        const issues = await githubCLIService.listIssues(githubOwner, githubRepo);
+        const issues = await githubCLIService.listIssues(githubOwner, githubRepo, {});
         return { issues, health, error: null, authenticatedUser };
       } catch (err) {
         return {
@@ -80,7 +80,7 @@ export const githubRouter = router({
     }),
 
   /**
-   * List open issues for a project's repository.
+   * List open issues assigned to the current user for a project's repository.
    * Used by the Kanban board to populate the Issues column.
    */
   listIssuesForProject: publicProcedure
@@ -108,7 +108,10 @@ export const githubRouter = router({
       }
 
       try {
-        const issues = await githubCLIService.listIssues(githubOwner, githubRepo);
+        // Only fetch issues assigned to the current user (@me)
+        const issues = await githubCLIService.listIssues(githubOwner, githubRepo, {
+          assignee: '@me',
+        });
         return { issues, health, error: null };
       } catch (err) {
         return {

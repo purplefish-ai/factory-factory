@@ -1,59 +1,6 @@
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useContext } from 'react';
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
-import type { UIKanbanColumnId } from './kanban-column';
-
-const STORAGE_KEY_PREFIX = 'kanban-hidden-columns-';
-const SHOW_ARCHIVED_KEY_PREFIX = 'kanban-show-archived-';
-
-function getHiddenColumnsFromStorage(projectId: string): UIKanbanColumnId[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-  try {
-    const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${projectId}`);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-    // biome-ignore lint/suspicious/noConsole: Intentional error logging for debugging localStorage issues
-    console.warn('Failed to parse hidden columns from localStorage:', error);
-    return [];
-  }
-}
-
-function saveHiddenColumnsToStorage(projectId: string, columns: UIKanbanColumnId[]) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${projectId}`, JSON.stringify(columns));
-  } catch (error) {
-    // biome-ignore lint/suspicious/noConsole: Intentional error logging for debugging localStorage issues
-    console.warn('Failed to save hidden columns to localStorage:', error);
-  }
-}
-
-function getShowArchivedFromStorage(projectId: string): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  try {
-    const stored = localStorage.getItem(`${SHOW_ARCHIVED_KEY_PREFIX}${projectId}`);
-    return stored === 'true';
-  } catch {
-    return false;
-  }
-}
-
-function saveShowArchivedToStorage(projectId: string, value: boolean) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    localStorage.setItem(`${SHOW_ARCHIVED_KEY_PREFIX}${projectId}`, String(value));
-  } catch {
-    // Ignore storage errors
-  }
-}
 
 export interface GitHubIssue {
   number: number;
@@ -76,10 +23,6 @@ interface KanbanContextValue {
   refetch: () => void;
   syncAndRefetch: () => Promise<void>;
   isSyncing: boolean;
-  hiddenColumns: UIKanbanColumnId[];
-  toggleColumnVisibility: (columnId: UIKanbanColumnId) => void;
-  showArchived: boolean;
-  toggleShowArchived: () => void;
 }
 
 const KanbanContext = createContext<KanbanContextValue | null>(null);
@@ -99,14 +42,6 @@ interface KanbanProviderProps {
 }
 
 export function KanbanProvider({ projectId, projectSlug, children }: KanbanProviderProps) {
-  const [hiddenColumns, setHiddenColumns] = useState<UIKanbanColumnId[]>([]);
-  const [showArchived, setShowArchived] = useState(false);
-
-  useEffect(() => {
-    setHiddenColumns(getHiddenColumnsFromStorage(projectId));
-    setShowArchived(getShowArchivedFromStorage(projectId));
-  }, [projectId]);
-
   const {
     data: workspaces,
     isLoading: isLoadingWorkspaces,
@@ -114,7 +49,7 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     error: errorWorkspaces,
     refetch: refetchWorkspaces,
   } = trpc.workspace.listWithKanbanState.useQuery(
-    { projectId, includeArchived: showArchived },
+    { projectId },
     { refetchInterval: 15_000, staleTime: 10_000 }
   );
 
@@ -140,24 +75,6 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     refetchIssues();
   };
 
-  const toggleColumnVisibility = (columnId: UIKanbanColumnId) => {
-    setHiddenColumns((prev) => {
-      const newHidden = prev.includes(columnId)
-        ? prev.filter((id) => id !== columnId)
-        : [...prev, columnId];
-      saveHiddenColumnsToStorage(projectId, newHidden);
-      return newHidden;
-    });
-  };
-
-  const toggleShowArchived = () => {
-    setShowArchived((prev) => {
-      const newValue = !prev;
-      saveShowArchivedToStorage(projectId, newValue);
-      return newValue;
-    });
-  };
-
   return (
     <KanbanContext.Provider
       value={{
@@ -171,10 +88,6 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
         refetch,
         syncAndRefetch,
         isSyncing: syncMutation.isPending,
-        hiddenColumns,
-        toggleColumnVisibility,
-        showArchived,
-        toggleShowArchived,
       }}
     >
       {children}

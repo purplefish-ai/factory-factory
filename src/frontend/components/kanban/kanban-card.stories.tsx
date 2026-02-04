@@ -14,7 +14,7 @@ const meta = {
   tags: ['autodocs'],
   decorators: [
     (Story) => (
-      <div className="w-[280px]">
+      <div className="w-[380px]">
         <Story />
       </div>
     ),
@@ -220,19 +220,19 @@ export const AllPRStates: Story = {
   decorators: [
     () => (
       <div className="flex flex-wrap gap-4">
-        <div className="w-[280px]">
+        <div className="w-[380px]">
           <KanbanCard
             workspace={{ ...baseWorkspace, prState: 'DRAFT', prNumber: 1, prUrl: '#' }}
             projectSlug="demo"
           />
         </div>
-        <div className="w-[280px]">
+        <div className="w-[380px]">
           <KanbanCard
             workspace={{ ...baseWorkspace, prState: 'OPEN', prNumber: 2, prUrl: '#' }}
             projectSlug="demo"
           />
         </div>
-        <div className="w-[280px]">
+        <div className="w-[380px]">
           <KanbanCard
             workspace={{
               ...baseWorkspace,
@@ -243,19 +243,19 @@ export const AllPRStates: Story = {
             projectSlug="demo"
           />
         </div>
-        <div className="w-[280px]">
+        <div className="w-[380px]">
           <KanbanCard
             workspace={{ ...baseWorkspace, prState: 'APPROVED', prNumber: 4, prUrl: '#' }}
             projectSlug="demo"
           />
         </div>
-        <div className="w-[280px]">
+        <div className="w-[380px]">
           <KanbanCard
             workspace={{ ...baseWorkspace, prState: 'MERGED', prNumber: 5, prUrl: '#' }}
             projectSlug="demo"
           />
         </div>
-        <div className="w-[280px]">
+        <div className="w-[380px]">
           <KanbanCard
             workspace={{ ...baseWorkspace, prState: 'CLOSED', prNumber: 6, prUrl: '#' }}
             projectSlug="demo"

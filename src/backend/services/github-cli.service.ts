@@ -687,25 +687,33 @@ class GitHubCLIService {
   /**
    * List open issues for a repository.
    * Fetches fresh on every call (no caching).
+   * @param assignee - Filter by assignee. Use '@me' for issues assigned to the authenticated user.
    */
-  async listIssues(owner: string, repo: string, limit = 50): Promise<GitHubIssue[]> {
+  async listIssues(
+    owner: string,
+    repo: string,
+    options: { limit?: number; assignee?: string } = {}
+  ): Promise<GitHubIssue[]> {
+    const { limit = 50, assignee } = options;
     try {
-      const { stdout } = await execFileAsync(
-        'gh',
-        [
-          'issue',
-          'list',
-          '--repo',
-          `${owner}/${repo}`,
-          '--state',
-          'open',
-          '--json',
-          'number,title,body,url,state,createdAt,author',
-          '--limit',
-          String(limit),
-        ],
-        { timeout: 30_000 }
-      );
+      const args = [
+        'issue',
+        'list',
+        '--repo',
+        `${owner}/${repo}`,
+        '--state',
+        'open',
+        '--json',
+        'number,title,body,url,state,createdAt,author',
+        '--limit',
+        String(limit),
+      ];
+
+      if (assignee) {
+        args.push('--assignee', assignee);
+      }
+
+      const { stdout } = await execFileAsync('gh', args, { timeout: 30_000 });
 
       return JSON.parse(stdout) as GitHubIssue[];
     } catch (error) {

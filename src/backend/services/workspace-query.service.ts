@@ -118,29 +118,18 @@ class WorkspaceQueryService {
     kanbanColumn?: KanbanColumn;
     limit?: number;
     offset?: number;
-    includeArchived?: boolean;
   }) {
-    const { projectId, includeArchived, ...filters } = input;
+    const { projectId, ...filters } = input;
 
     const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
       ...filters,
-      excludeStatuses: includeArchived ? [] : [WorkspaceStatus.ARCHIVED],
+      excludeStatuses: [WorkspaceStatus.ARCHIVED],
     });
 
     return workspaces
       .map((workspace) => {
         const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
         const isWorking = sessionService.isAnySessionWorking(sessionIds);
-
-        // For archived workspaces, use their cached column from before archiving
-        if (workspace.status === WorkspaceStatus.ARCHIVED) {
-          return {
-            ...workspace,
-            kanbanColumn: workspace.cachedKanbanColumn,
-            isWorking: false,
-            isArchived: true,
-          };
-        }
 
         const kanbanColumn = computeKanbanColumn({
           lifecycle: workspace.status,
@@ -158,10 +147,6 @@ class WorkspaceQueryService {
       })
       .filter((workspace) => {
         // Filter out workspaces with null kanbanColumn (hidden: READY + no sessions)
-        // Unless they are archived (which we want to show when includeArchived is true)
-        if (workspace.isArchived) {
-          return true;
-        }
         return workspace.kanbanColumn !== null;
       });
   }

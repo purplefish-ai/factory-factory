@@ -1,7 +1,7 @@
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import type { Meta, StoryObj } from '@storybook/react';
 import type { WorkspaceWithKanban } from './kanban-card';
-import { KANBAN_COLUMNS, KanbanColumn, type UIKanbanColumnId } from './kanban-column';
+import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
 
 /**
  * Note: The actual KanbanBoard component cannot be fully tested in Storybook
@@ -217,30 +217,5 @@ export const WithArchivedWorkspaces: Story = {
         prState: 'MERGED',
       },
     ],
-  },
-};
-
-export const WithHiddenColumns: Story = {
-  render: () => {
-    const grouped = groupByColumn(mockWorkspaces);
-    const hiddenColumns: UIKanbanColumnId[] = ['DONE'];
-    return (
-      <div className="p-4">
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {WORKSPACE_COLUMNS.map((column) => (
-            <KanbanColumn
-              key={column.id}
-              column={column}
-              workspaces={grouped[column.id as KanbanColumnType] ?? []}
-              projectSlug="demo"
-              isHidden={hiddenColumns.includes(column.id)}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  },
-  args: {
-    workspaces: mockWorkspaces,
   },
 };

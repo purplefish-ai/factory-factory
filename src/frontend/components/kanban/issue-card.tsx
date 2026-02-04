@@ -31,7 +31,6 @@ export function IssueCard({ issue, projectId, projectSlug }: IssueCardProps) {
     createWorkspaceMutation.mutate({
       projectId,
       name: issue.title,
-      description: `GitHub Issue #${issue.number}\n\n${issue.body?.slice(0, 500) ?? ''}`,
     });
   };
 
@@ -43,40 +42,38 @@ export function IssueCard({ issue, projectId, projectSlug }: IssueCardProps) {
 
   return (
     <Card className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden border-dashed">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
-            {issue.title}
-          </CardTitle>
-        </div>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
+          {issue.title}
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <button
-            type="button"
-            onClick={handleOpenIssue}
-            className="inline-flex items-center gap-1 hover:text-foreground"
+      <CardContent className="pt-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+            <button
+              type="button"
+              onClick={handleOpenIssue}
+              className="inline-flex items-center gap-1 hover:text-foreground shrink-0"
+            >
+              <CircleDot className="h-3 w-3 text-green-500" />
+              <span>#{issue.number}</span>
+            </button>
+            <span className="inline-flex items-center gap-1 truncate">
+              <User className="h-3 w-3 shrink-0" />
+              {issue.author.login}
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs shrink-0"
+            onClick={handleStart}
+            disabled={createWorkspaceMutation.isPending}
           >
-            <CircleDot className="h-3 w-3 text-green-500" />
-            <span>#{issue.number}</span>
-          </button>
-          <span className="text-muted-foreground/50">|</span>
-          <span className="inline-flex items-center gap-1">
-            <User className="h-3 w-3" />
-            {issue.author.login}
-          </span>
+            <Play className="h-3 w-3 mr-1" />
+            {createWorkspaceMutation.isPending ? '...' : 'Start'}
+          </Button>
         </div>
-
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full"
-          onClick={handleStart}
-          disabled={createWorkspaceMutation.isPending}
-        >
-          <Play className="h-3 w-3 mr-1" />
-          {createWorkspaceMutation.isPending ? 'Starting...' : 'Start'}
-        </Button>
       </CardContent>
     </Card>
   );
