@@ -98,20 +98,7 @@ class SessionService {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
 
     for (const session of sessions) {
-      if (
-        session.status === SessionStatus.RUNNING ||
-        this.processManager.getClaudeProcess(session.id)
-      ) {
-        try {
-          await this.stopClaudeSession(session.id);
-        } catch (error) {
-          logger.error('Failed to stop workspace session', {
-            sessionId: session.id,
-            workspaceId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+      await this.stopWorkspaceSession(session, workspaceId);
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
@@ -319,6 +306,60 @@ class SessionService {
    */
   async stopAllClients(timeoutMs = 5000): Promise<void> {
     await this.processManager.stopAllClients(timeoutMs);
+  }
+
+  private shouldStopWorkspaceSession(session: { id: string; status: SessionStatus }): {
+    shouldStop: boolean;
+    pendingClient: ReturnType<SessionProcessManager['getPendingClient']>;
+  } {
+    const pendingClient = this.processManager.getPendingClient(session.id);
+    const shouldStop = Boolean(
+      session.status === SessionStatus.RUNNING ||
+        this.processManager.getClaudeProcess(session.id) ||
+        pendingClient
+    );
+    return { shouldStop, pendingClient };
+  }
+
+  private async waitForPendingClient(
+    workspaceId: string,
+    sessionId: string,
+    pendingClient: ReturnType<SessionProcessManager['getPendingClient']>
+  ): Promise<void> {
+    if (!pendingClient) {
+      return;
+    }
+    try {
+      await pendingClient;
+    } catch (error) {
+      logger.warn('Pending Claude session failed to start before stop', {
+        sessionId,
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async stopWorkspaceSession(
+    session: { id: string; status: SessionStatus },
+    workspaceId: string
+  ): Promise<void> {
+    const { shouldStop, pendingClient } = this.shouldStopWorkspaceSession(session);
+    if (!shouldStop) {
+      return;
+    }
+
+    await this.waitForPendingClient(workspaceId, session.id, pendingClient);
+
+    try {
+      await this.stopClaudeSession(session.id);
+    } catch (error) {
+      logger.error('Failed to stop workspace session', {
+        sessionId: session.id,
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async buildClientOptions(

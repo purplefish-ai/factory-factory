@@ -1,6 +1,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
 import { gitOpsService } from './git-ops.service';
@@ -255,6 +257,14 @@ async function runFactorySetupScriptIfConfigured(
       workspaceId,
       error: finalWorkspace?.initErrorMessage,
     });
+    try {
+      await sessionService.stopWorkspaceSessions(workspaceId);
+    } catch (error) {
+      logger.warn('Failed to stop Claude sessions after setup script failure', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return true;
@@ -287,9 +297,54 @@ async function runProjectStartupScriptIfConfigured(
       workspaceId,
       error: finalWorkspace?.initErrorMessage,
     });
+    try {
+      await sessionService.stopWorkspaceSessions(workspaceId);
+    } catch (error) {
+      logger.warn('Failed to stop Claude sessions after startup script failure', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return true;
+}
+
+async function handleWorkspaceInitFailure(workspaceId: string, error: Error): Promise<void> {
+  logger.error('Failed to initialize workspace worktree', error, { workspaceId });
+  await workspaceStateMachine.markFailed(workspaceId, error.message);
+  try {
+    await sessionService.stopWorkspaceSessions(workspaceId);
+  } catch (stopError) {
+    logger.warn('Failed to stop Claude sessions after init failure', {
+      workspaceId,
+      error: stopError instanceof Error ? stopError.message : String(stopError),
+    });
+  }
+}
+
+async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
+  try {
+    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+      status: SessionStatus.IDLE,
+      limit: 1,
+    });
+    const session = sessions[0];
+    if (!session) {
+      return;
+    }
+
+    await sessionService.startClaudeSession(session.id, { initialPrompt: '' });
+    logger.debug('Auto-started default Claude session for workspace', {
+      workspaceId,
+      sessionId: session.id,
+    });
+  } catch (error) {
+    logger.warn('Failed to auto-start default Claude session for workspace', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 class WorktreeLifecycleService {
@@ -391,6 +446,8 @@ class WorktreeLifecycleService {
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });
 
+      void startDefaultClaudeSession(workspaceId);
+
       const ranFactorySetup = await runFactorySetupScriptIfConfigured(
         workspaceId,
         workspaceWithProject,
@@ -412,10 +469,7 @@ class WorktreeLifecycleService {
 
       await workspaceStateMachine.markReady(workspaceId);
     } catch (error) {
-      logger.error('Failed to initialize workspace worktree', error as Error, {
-        workspaceId,
-      });
-      await workspaceStateMachine.markFailed(workspaceId, (error as Error).message);
+      await handleWorkspaceInitFailure(workspaceId, error as Error);
     } finally {
       if (worktreeCreated) {
         await clearWorkspaceInitMode(workspaceId, project?.worktreeBasePath);
