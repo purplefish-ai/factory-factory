@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PromptCard } from '@/components/ui/prompt-card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/claude-types';
@@ -124,40 +125,42 @@ function SingleQuestionLayout({
   isComplete,
 }: SingleQuestionLayoutProps) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Using role="form" without form element since we handle submission via callback
-    <div className="border-b bg-muted/50 p-3" role="form" aria-label="Question from Claude">
-      <div className="flex items-start gap-3">
-        <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
-        <div className="flex-1 min-w-0 space-y-3">
-          {question.multiSelect ? (
-            <MultiSelectQuestion
-              question={question}
-              index={0}
-              value={answers[0] ?? []}
-              onChange={(value) => onAnswerChange(0, value)}
-              otherText={otherTexts[0] ?? ''}
-              onOtherTextChange={(value) => onOtherTextChange(0, value)}
-              requestId={requestId}
-            />
-          ) : (
-            <SingleSelectQuestion
-              question={question}
-              index={0}
-              value={answers[0] ?? ''}
-              onChange={(value) => onAnswerChange(0, value)}
-              otherText={otherTexts[0] ?? ''}
-              onOtherTextChange={(value) => onOtherTextChange(0, value)}
-              requestId={requestId}
-            />
-          )}
-        </div>
-        <div className="shrink-0 self-end">
+    <PromptCard
+      icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
+      role="form"
+      aria-label="Question from Claude"
+      actions={
+        <div className="self-end">
           <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
             Submit
           </Button>
         </div>
+      }
+    >
+      <div className="space-y-3">
+        {question.multiSelect ? (
+          <MultiSelectQuestion
+            question={question}
+            index={0}
+            value={answers[0] ?? []}
+            onChange={(value) => onAnswerChange(0, value)}
+            otherText={otherTexts[0] ?? ''}
+            onOtherTextChange={(value) => onOtherTextChange(0, value)}
+            requestId={requestId}
+          />
+        ) : (
+          <SingleSelectQuestion
+            question={question}
+            index={0}
+            value={answers[0] ?? ''}
+            onChange={(value) => onAnswerChange(0, value)}
+            otherText={otherTexts[0] ?? ''}
+            onOtherTextChange={(value) => onOtherTextChange(0, value)}
+            requestId={requestId}
+          />
+        )}
       </div>
-    </div>
+    </PromptCard>
   );
 }
 
@@ -180,62 +183,12 @@ function MultiQuestionLayout({
   const isFirstQuestion = currentIndex === 0;
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Using role="form" without form element since we handle submission via callback
-    <div className="border-b bg-muted/50 p-3" role="form" aria-label="Questions from Claude">
-      <div className="flex items-start gap-3">
-        <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">
-              Question {currentIndex + 1} of {totalQuestions}
-            </span>
-            <div className="flex gap-1">
-              {question.questions.map((item, idx) => {
-                const isAnswered = isAnswerComplete(item, answers[idx], otherTexts[idx] ?? '');
-                return (
-                  <button
-                    type="button"
-                    key={`dot-${requestId}-${idx}-${item.question}`}
-                    onClick={() => onIndexChange(idx)}
-                    className={cn(
-                      'w-2 h-2 rounded-full transition-colors',
-                      idx === currentIndex
-                        ? 'bg-primary'
-                        : isAnswered
-                          ? 'bg-primary/50'
-                          : 'bg-muted-foreground/30'
-                    )}
-                    aria-label={`Go to question ${idx + 1}`}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          {currentQuestion.multiSelect ? (
-            <MultiSelectQuestion
-              question={currentQuestion}
-              index={currentIndex}
-              value={answers[currentIndex] ?? []}
-              onChange={(value) => onAnswerChange(currentIndex, value)}
-              otherText={otherTexts[currentIndex] ?? ''}
-              onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
-              requestId={requestId}
-            />
-          ) : (
-            <SingleSelectQuestion
-              question={currentQuestion}
-              index={currentIndex}
-              value={answers[currentIndex] ?? ''}
-              onChange={(value) => onAnswerChange(currentIndex, value)}
-              otherText={otherTexts[currentIndex] ?? ''}
-              onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
-              requestId={requestId}
-            />
-          )}
-        </div>
-
-        <div className="shrink-0 self-end flex items-center gap-1">
+    <PromptCard
+      icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
+      role="form"
+      aria-label="Questions from Claude"
+      actions={
+        <div className="self-end flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
@@ -273,8 +226,57 @@ function MultiQuestionLayout({
             </Button>
           )}
         </div>
+      }
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-muted-foreground">
+          Question {currentIndex + 1} of {totalQuestions}
+        </span>
+        <div className="flex gap-1">
+          {question.questions.map((item, idx) => {
+            const isAnswered = isAnswerComplete(item, answers[idx], otherTexts[idx] ?? '');
+            return (
+              <button
+                type="button"
+                key={`dot-${requestId}-${idx}-${item.question}`}
+                onClick={() => onIndexChange(idx)}
+                className={cn(
+                  'w-2 h-2 rounded-full transition-colors',
+                  idx === currentIndex
+                    ? 'bg-primary'
+                    : isAnswered
+                      ? 'bg-primary/50'
+                      : 'bg-muted-foreground/30'
+                )}
+                aria-label={`Go to question ${idx + 1}`}
+              />
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      {currentQuestion.multiSelect ? (
+        <MultiSelectQuestion
+          question={currentQuestion}
+          index={currentIndex}
+          value={answers[currentIndex] ?? []}
+          onChange={(value) => onAnswerChange(currentIndex, value)}
+          otherText={otherTexts[currentIndex] ?? ''}
+          onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
+          requestId={requestId}
+        />
+      ) : (
+        <SingleSelectQuestion
+          question={currentQuestion}
+          index={currentIndex}
+          value={answers[currentIndex] ?? ''}
+          onChange={(value) => onAnswerChange(currentIndex, value)}
+          otherText={otherTexts[currentIndex] ?? ''}
+          onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
+          requestId={requestId}
+        />
+      )}
+    </PromptCard>
   );
 }
 

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -27,35 +28,6 @@ const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-right-panel-bottom-tab-';
 
 type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
 type BottomPanelTab = 'terminal' | 'dev-logs';
-
-// =============================================================================
-// Sub-Components
-// =============================================================================
-
-interface PanelTabProps {
-  label: string;
-  icon: React.ReactNode;
-  isActive: boolean;
-  onClick: () => void;
-}
-
-function PanelTab({ label, icon, isActive, onClick }: PanelTabProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-1 px-2 py-1 text-sm font-medium rounded-md transition-colors border',
-        isActive
-          ? 'bg-background text-foreground shadow-sm border-border'
-          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent'
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
 
 // =============================================================================
 // Main Component
@@ -149,29 +121,29 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
         <div className="flex flex-col h-full min-h-0">
           {/* Tab bar */}
           <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
-            <PanelTab
+            <TabButton
               label="Unstaged"
               icon={<FileQuestion className="h-3.5 w-3.5" />}
               isActive={activeTopTab === 'unstaged'}
-              onClick={() => handleTabChange('unstaged')}
+              onSelect={() => handleTabChange('unstaged')}
             />
-            <PanelTab
+            <TabButton
               label="Diff vs Main"
               icon={<GitCompare className="h-3.5 w-3.5" />}
               isActive={activeTopTab === 'diff-vs-main'}
-              onClick={() => handleTabChange('diff-vs-main')}
+              onSelect={() => handleTabChange('diff-vs-main')}
             />
-            <PanelTab
+            <TabButton
               label="Files"
               icon={<Files className="h-3.5 w-3.5" />}
               isActive={activeTopTab === 'files'}
-              onClick={() => handleTabChange('files')}
+              onSelect={() => handleTabChange('files')}
             />
-            <PanelTab
+            <TabButton
               label="Tasks"
               icon={<ListTodo className="h-3.5 w-3.5" />}
               isActive={activeTopTab === 'tasks'}
-              onClick={() => handleTabChange('tasks')}
+              onSelect={() => handleTabChange('tasks')}
             />
           </div>
 
@@ -199,11 +171,11 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
               <TerminalTabsInline terminalTabState={terminalTabState} />
             ) : (
               <>
-                <PanelTab
+                <TabButton
                   label="Terminal"
                   icon={<Terminal className="h-3.5 w-3.5" />}
                   isActive={activeBottomTab === 'terminal'}
-                  onClick={() => handleBottomTabChange('terminal')}
+                  onSelect={() => handleBottomTabChange('terminal')}
                 />
                 {/* Show + button when Terminal tab is active but no terminals exist */}
                 {activeBottomTab === 'terminal' && (
@@ -216,7 +188,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 )}
               </>
             )}
-            <PanelTab
+            <TabButton
               label="Dev Logs"
               icon={
                 <span
@@ -227,7 +199,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 />
               }
               isActive={activeBottomTab === 'dev-logs'}
-              onClick={() => handleBottomTabChange('dev-logs')}
+              onSelect={() => handleBottomTabChange('dev-logs')}
             />
           </div>
 
