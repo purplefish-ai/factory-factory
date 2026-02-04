@@ -28,7 +28,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../frontend/lib/trpc';
-import { ApiUsageSection, ProcessesSection, ProcessesSectionSkeleton } from './admin/index.js';
+import { ApiUsageSection, ProcessesSection, ProcessesSectionSkeleton } from './admin/index';
 
 function getEnabledFeatures(features?: Record<string, boolean>): string {
   if (!features) {
