@@ -193,7 +193,7 @@ function MultiQuestionLayout({
               {question.questions.map((item, idx) => (
                 <button
                   type="button"
-                  key={`dot-${requestId}-${item.question}`}
+                  key={`dot-${requestId}-${idx}-${item.question}`}
                   onClick={() => onIndexChange(idx)}
                   className={cn(
                     'w-2 h-2 rounded-full transition-colors',

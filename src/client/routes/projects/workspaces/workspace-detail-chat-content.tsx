@@ -110,9 +110,14 @@ export const ChatContent = memo(function ChatContent({
     pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode';
 
   useEffect(() => {
-    if (isPlanApproval && permissionRequestId) {
-      inputRef?.current?.focus();
+    if (!(isPlanApproval && permissionRequestId)) {
+      return;
     }
+    const activeElement = document.activeElement;
+    if (activeElement && activeElement !== document.body) {
+      return;
+    }
+    inputRef?.current?.focus();
   }, [isPlanApproval, permissionRequestId, inputRef]);
 
   const placeholder = (() => {
