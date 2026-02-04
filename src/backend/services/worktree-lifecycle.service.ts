@@ -257,6 +257,14 @@ async function runFactorySetupScriptIfConfigured(
       workspaceId,
       error: finalWorkspace?.initErrorMessage,
     });
+    try {
+      await sessionService.stopWorkspaceSessions(workspaceId);
+    } catch (error) {
+      logger.warn('Failed to stop Claude sessions after setup script failure', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return true;
@@ -289,6 +297,14 @@ async function runProjectStartupScriptIfConfigured(
       workspaceId,
       error: finalWorkspace?.initErrorMessage,
     });
+    try {
+      await sessionService.stopWorkspaceSessions(workspaceId);
+    } catch (error) {
+      logger.warn('Failed to stop Claude sessions after startup script failure', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return true;

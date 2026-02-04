@@ -6,6 +6,7 @@ import type { StartupScriptResult } from './startup-script.service';
 import { worktreeLifecycleService } from './worktree-lifecycle.service';
 
 const mocks = vi.hoisted(() => ({
+  findById: vi.fn(),
   findByIdWithProject: vi.fn(),
   updateWorkspace: vi.fn(),
   findByWorkspaceId: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
+    findById: mocks.findById,
     findByIdWithProject: mocks.findByIdWithProject,
     update: mocks.updateWorkspace,
   },
@@ -102,6 +104,7 @@ describe('worktreeLifecycleService initialization', () => {
         startupScriptTimeout: 300,
       },
     });
+    mocks.findById.mockResolvedValue({ initErrorMessage: 'failed' });
 
     mocks.ensureBaseBranchExists.mockResolvedValue(undefined);
     mocks.createWorktree.mockResolvedValue({
@@ -194,5 +197,25 @@ describe('worktreeLifecycleService initialization', () => {
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
+  });
+
+  it('stops sessions when startup script reports failure', async () => {
+    mocks.runStartupScript.mockResolvedValue({
+      success: false,
+      exitCode: 1,
+      stdout: '',
+      stderr: 'fail',
+      timedOut: false,
+      durationMs: 10,
+    });
+    mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
+
+    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+      branchName: 'main',
+      useExistingBranch: false,
+    });
+
+    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
   });
 });
