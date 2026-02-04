@@ -1,5 +1,5 @@
 import { ArrowDown } from 'lucide-react';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/components/chat';
 import {
   ChatInput,
@@ -104,6 +104,31 @@ export const ChatContent = memo(function ChatContent({
   const startingSession = sessionStatus.phase === 'starting';
   const loadingSession = sessionStatus.phase === 'loading';
 
+  useEffect(() => {
+    if (pendingRequest.type === 'question' || pendingRequest.type === 'permission') {
+      inputRef?.current?.focus();
+    }
+  }, [pendingRequest.type, inputRef]);
+
+  const placeholder = (() => {
+    if (stopping) {
+      return 'Stopping...';
+    }
+    if (running) {
+      return 'Message will be queued...';
+    }
+    if (pendingRequest.type === 'question') {
+      return 'Type your answer...';
+    }
+    if (
+      pendingRequest.type === 'permission' &&
+      pendingRequest.request.toolName === 'ExitPlanMode'
+    ) {
+      return 'Type feedback to revise the plan...';
+    }
+    return 'Type a message...';
+  })();
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
@@ -156,9 +181,7 @@ export const ChatContent = memo(function ChatContent({
           running={running}
           stopping={stopping}
           inputRef={inputRef}
-          placeholder={
-            stopping ? 'Stopping...' : running ? 'Message will be queued...' : 'Type a message...'
-          }
+          placeholder={placeholder}
           settings={chatSettings}
           onSettingsChange={updateSettings}
           value={inputDraft}

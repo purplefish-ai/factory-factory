@@ -154,22 +154,6 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     setCurrentIndex(0);
   }, [currentRequestId]);
 
-  // Focus the container when a new question appears for keyboard accessibility
-  useEffect(() => {
-    if (!currentRequestId) {
-      return;
-    }
-    // Small delay to ensure the element is rendered
-    const timeoutId = setTimeout(() => {
-      // Focus the first focusable element within the container
-      const firstFocusable = containerRef.current?.querySelector<HTMLElement>(
-        'input, button, [tabindex]:not([tabindex="-1"])'
-      );
-      firstFocusable?.focus();
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [currentRequestId]);
-
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
     setAnswers((prev) => ({
       ...prev,
@@ -190,10 +174,11 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
       const answer = answers[index];
       if (answer !== undefined) {
         formattedAnswers[q.question] = answer;
-      } else {
-        // Default to empty string/array based on multiSelect
-        formattedAnswers[q.question] = q.multiSelect ? [] : '';
+        return;
       }
+
+      // Default to empty string/array based on multiSelect
+      formattedAnswers[q.question] = q.multiSelect ? [] : '';
     });
 
     onAnswer(question.requestId, formattedAnswers);
@@ -246,7 +231,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
       >
         <div className="flex items-start gap-3">
           <HelpCircle className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" aria-hidden="true" />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 space-y-2">
             {currentQuestion.multiSelect ? (
               <MultiSelectQuestion
                 question={currentQuestion}
@@ -262,6 +247,9 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
                 onChange={(value) => handleAnswerChange(0, value)}
               />
             )}
+            <p className="text-[11px] text-muted-foreground">
+              You can also type a custom response in the chat input below and send it.
+            </p>
           </div>
           <div className="shrink-0 self-end">
             <Button size="sm" onClick={handleSubmit} disabled={!isComplete}>
@@ -326,6 +314,10 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
               onChange={(value) => handleAnswerChange(currentIndex, value)}
             />
           )}
+
+          <p className="text-[11px] text-muted-foreground mt-2">
+            You can also type a custom response in the chat input below and send it.
+          </p>
         </div>
 
         {/* Navigation and submit */}

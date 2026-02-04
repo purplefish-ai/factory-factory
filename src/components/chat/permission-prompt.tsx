@@ -131,6 +131,10 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
           <div className="text-xs text-muted-foreground italic">No plan content available</div>
         )}
 
+        <p className="text-[11px] text-muted-foreground">
+          You can also type feedback in the chat input below to request changes.
+        </p>
+
         {/* Actions */}
         <div className="flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={handleReject} className="gap-1.5">
