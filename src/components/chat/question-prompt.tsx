@@ -22,16 +22,76 @@ interface SingleQuestionProps {
   index: number;
   value: string | string[];
   onChange: (value: string | string[]) => void;
+  otherText: string;
+  onOtherTextChange: (value: string) => void;
 }
 
 // =============================================================================
 // Helper Components
 // =============================================================================
 
+const OTHER_OPTION_VALUE = '__other__';
+
+function normalizeOtherText(value: string | undefined): string {
+  return value?.trim() ?? '';
+}
+
+function isAnswerComplete(
+  question: AskUserQuestion,
+  answer: string | string[] | undefined,
+  otherText: string
+): boolean {
+  const normalizedOther = normalizeOtherText(otherText);
+  if (question.multiSelect) {
+    if (!Array.isArray(answer) || answer.length === 0) {
+      return false;
+    }
+    if (answer.includes(OTHER_OPTION_VALUE)) {
+      return normalizedOther.length > 0;
+    }
+    return true;
+  }
+  if (typeof answer !== 'string' || answer.length === 0) {
+    return false;
+  }
+  if (answer === OTHER_OPTION_VALUE) {
+    return normalizedOther.length > 0;
+  }
+  return true;
+}
+
+function formatAnswer(
+  question: AskUserQuestion,
+  answer: string | string[] | undefined,
+  otherText: string
+): string | string[] {
+  const normalizedOther = normalizeOtherText(otherText);
+  if (answer === undefined) {
+    return question.multiSelect ? [] : '';
+  }
+  if (question.multiSelect && Array.isArray(answer)) {
+    if (answer.includes(OTHER_OPTION_VALUE) && normalizedOther) {
+      return answer.map((value) => (value === OTHER_OPTION_VALUE ? normalizedOther : value));
+    }
+    return answer;
+  }
+  if (!question.multiSelect && answer === OTHER_OPTION_VALUE && normalizedOther) {
+    return normalizedOther;
+  }
+  return answer as string;
+}
+
 /**
  * Renders a single question with radio buttons (single select).
  */
-function SingleSelectQuestion({ question, index, value, onChange }: SingleQuestionProps) {
+function SingleSelectQuestion({
+  question,
+  index,
+  value,
+  onChange,
+  otherText,
+  onOtherTextChange,
+}: SingleQuestionProps) {
   const selectedValue = typeof value === 'string' ? value : '';
 
   return (
@@ -64,6 +124,37 @@ function SingleSelectQuestion({ question, index, value, onChange }: SingleQuesti
             </div>
           </label>
         ))}
+        <label
+          htmlFor={`question-${index}-option-other`}
+          className={cn(
+            'flex items-start gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
+            selectedValue === OTHER_OPTION_VALUE && 'border-primary bg-primary/5'
+          )}
+        >
+          <RadioGroupItem
+            value={OTHER_OPTION_VALUE}
+            id={`question-${index}-option-other`}
+            className="shrink-0 mt-1"
+          />
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <span className="text-sm font-medium">Other</span>
+            <Textarea
+              value={otherText}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                onOtherTextChange(nextValue);
+                if (nextValue.trim().length > 0 && selectedValue !== OTHER_OPTION_VALUE) {
+                  onChange(OTHER_OPTION_VALUE);
+                }
+                if (nextValue.trim().length === 0 && selectedValue === OTHER_OPTION_VALUE) {
+                  onChange('');
+                }
+              }}
+              placeholder="Type your response..."
+              className="min-h-[56px] text-sm"
+            />
+          </div>
+        </label>
       </RadioGroup>
     </div>
   );
@@ -72,7 +163,14 @@ function SingleSelectQuestion({ question, index, value, onChange }: SingleQuesti
 /**
  * Renders a single question with checkboxes (multi select).
  */
-function MultiSelectQuestion({ question, index, value, onChange }: SingleQuestionProps) {
+function MultiSelectQuestion({
+  question,
+  index,
+  value,
+  onChange,
+  otherText,
+  onOtherTextChange,
+}: SingleQuestionProps) {
   const selectedValues = Array.isArray(value) ? value : [];
 
   const handleCheckboxChange = useCallback(
@@ -121,6 +219,46 @@ function MultiSelectQuestion({ question, index, value, onChange }: SingleQuestio
             </label>
           );
         })}
+        <label
+          htmlFor={`question-${index}-option-other`}
+          className={cn(
+            'flex items-start gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
+            selectedValues.includes(OTHER_OPTION_VALUE) && 'border-primary bg-primary/5'
+          )}
+        >
+          <Checkbox
+            id={`question-${index}-option-other`}
+            checked={selectedValues.includes(OTHER_OPTION_VALUE)}
+            onCheckedChange={(checked) => {
+              const shouldSelect = checked === true;
+              if (shouldSelect) {
+                onChange([...selectedValues, OTHER_OPTION_VALUE]);
+              } else {
+                onOtherTextChange('');
+                onChange(selectedValues.filter((v) => v !== OTHER_OPTION_VALUE));
+              }
+            }}
+            className="shrink-0 mt-1"
+          />
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <span className="text-sm font-medium">Other</span>
+            <Textarea
+              value={otherText}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                onOtherTextChange(nextValue);
+                if (nextValue.trim().length > 0 && !selectedValues.includes(OTHER_OPTION_VALUE)) {
+                  onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                }
+                if (nextValue.trim().length === 0 && selectedValues.includes(OTHER_OPTION_VALUE)) {
+                  onChange(selectedValues.filter((v) => v !== OTHER_OPTION_VALUE));
+                }
+              }}
+              placeholder="Type your response..."
+              className="min-h-[56px] text-sm"
+            />
+          </div>
+        </label>
       </div>
     </div>
   );
@@ -140,11 +278,10 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
   // State for current question index (pagination)
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Inline freeform response (acts as "Other" for all questions)
-  const [freeformText, setFreeformText] = useState('');
+  // Inline freeform responses keyed by question index
+  const [otherTexts, setOtherTexts] = useState<Record<number, string>>({});
   // Ref for focusing the question container
   const containerRef = useRef<HTMLDivElement>(null);
-  const freeformRef = useRef<HTMLTextAreaElement>(null);
 
   // Current request ID for key generation
   const currentRequestId = question?.requestId;
@@ -156,21 +293,18 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     }
     setAnswers({});
     setCurrentIndex(0);
-    setFreeformText('');
-  }, [currentRequestId]);
-
-  useEffect(() => {
-    if (!currentRequestId) {
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      freeformRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timeoutId);
+    setOtherTexts({});
   }, [currentRequestId]);
 
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
     setAnswers((prev) => ({
+      ...prev,
+      [index]: value,
+    }));
+  }, []);
+
+  const handleOtherTextChange = useCallback((index: number, value: string) => {
+    setOtherTexts((prev) => ({
       ...prev,
       [index]: value,
     }));
@@ -181,25 +315,12 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
       return;
     }
 
-    const trimmedFreeform = freeformText.trim();
     // Convert indexed answers to the format expected by the hook
     // The hook expects answers keyed by question text
     const formattedAnswers: Record<string, string | string[]> = {};
 
     question.questions.forEach((q, index) => {
-      if (trimmedFreeform.length > 0) {
-        formattedAnswers[q.question] = trimmedFreeform;
-        return;
-      }
-
-      const answer = answers[index];
-      if (answer !== undefined) {
-        formattedAnswers[q.question] = answer;
-        return;
-      }
-
-      // Default to empty string/array based on multiSelect
-      formattedAnswers[q.question] = q.multiSelect ? [] : '';
+      formattedAnswers[q.question] = formatAnswer(q, answers[index], otherTexts[index]);
     });
 
     onAnswer(question.requestId, formattedAnswers);
@@ -207,35 +328,21 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     // Reset answers and pagination after submit
     setAnswers({});
     setCurrentIndex(0);
-    setFreeformText('');
-  }, [question, answers, onAnswer, freeformText]);
+    setOtherTexts({});
+  }, [question, answers, otherTexts, onAnswer]);
 
   // Check if all questions have been answered
-  const hasFreeform = freeformText.trim().length > 0;
-  const isComplete = hasFreeform
-    ? true
-    : question?.questions.every((q, index) => {
-        const answer = answers[index];
-        if (q.multiSelect) {
-          return Array.isArray(answer) && answer.length > 0;
-        }
-        return typeof answer === 'string' && answer.length > 0;
-      });
+  const isComplete = question?.questions.every((q, index) =>
+    isAnswerComplete(q, answers[index], otherTexts[index] ?? '')
+  );
 
   // Check if current question has been answered
   const isCurrentAnswered = (() => {
     if (!question) {
       return false;
     }
-    if (hasFreeform) {
-      return true;
-    }
     const q = question.questions[currentIndex];
-    const answer = answers[currentIndex];
-    if (q.multiSelect) {
-      return Array.isArray(answer) && answer.length > 0;
-    }
-    return typeof answer === 'string' && answer.length > 0;
+    return isAnswerComplete(q, answers[currentIndex], otherTexts[currentIndex] ?? '');
   })();
 
   if (!question) {
@@ -266,6 +373,8 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
                 index={0}
                 value={answers[0] ?? []}
                 onChange={(value) => handleAnswerChange(0, value)}
+                otherText={otherTexts[0] ?? ''}
+                onOtherTextChange={(value) => handleOtherTextChange(0, value)}
               />
             ) : (
               <SingleSelectQuestion
@@ -273,21 +382,10 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
                 index={0}
                 value={answers[0] ?? ''}
                 onChange={(value) => handleAnswerChange(0, value)}
+                otherText={otherTexts[0] ?? ''}
+                onOtherTextChange={(value) => handleOtherTextChange(0, value)}
               />
             )}
-            <div className="space-y-1.5">
-              <div className="text-xs text-muted-foreground">Other response</div>
-              <Textarea
-                ref={freeformRef}
-                value={freeformText}
-                onChange={(event) => setFreeformText(event.target.value)}
-                placeholder="Type a custom response..."
-                className="min-h-[56px] text-sm"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                If you type here, it will be used for the response instead of the choices above.
-              </p>
-            </div>
           </div>
           <div className="shrink-0 self-end">
             <Button size="sm" onClick={handleSubmit} disabled={!isComplete}>
@@ -343,6 +441,8 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
               index={currentIndex}
               value={answers[currentIndex] ?? []}
               onChange={(value) => handleAnswerChange(currentIndex, value)}
+              otherText={otherTexts[currentIndex] ?? ''}
+              onOtherTextChange={(value) => handleOtherTextChange(currentIndex, value)}
             />
           ) : (
             <SingleSelectQuestion
@@ -350,22 +450,10 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
               index={currentIndex}
               value={answers[currentIndex] ?? ''}
               onChange={(value) => handleAnswerChange(currentIndex, value)}
+              otherText={otherTexts[currentIndex] ?? ''}
+              onOtherTextChange={(value) => handleOtherTextChange(currentIndex, value)}
             />
           )}
-
-          <div className="space-y-1.5 mt-3">
-            <div className="text-xs text-muted-foreground">Other response</div>
-            <Textarea
-              ref={freeformRef}
-              value={freeformText}
-              onChange={(event) => setFreeformText(event.target.value)}
-              placeholder="Type a custom response..."
-              className="min-h-[56px] text-sm"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              If you type here, it will be used for the response instead of the choices above.
-            </p>
-          </div>
         </div>
 
         {/* Navigation and submit */}

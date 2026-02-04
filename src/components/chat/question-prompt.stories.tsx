@@ -13,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Use the option list to answer quickly, or type a custom response in the inline prompt.',
+          'Use the option list to answer quickly, or select the inline Other option to type a custom response.',
       },
     },
   },
