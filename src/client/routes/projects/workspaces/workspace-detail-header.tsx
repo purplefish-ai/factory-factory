@@ -200,7 +200,7 @@ function RatchetingToggle({
   workspaceId: string;
 }) {
   const utils = trpc.useUtils();
-  const { data: userSettings } = trpc.userSettings.get.useQuery();
+  const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
     onSuccess: () => {
       utils.workspace.get.invalidate({ id: workspaceId });
@@ -209,15 +209,17 @@ function RatchetingToggle({
 
   const globalRatchetEnabled = userSettings?.ratchetEnabled ?? false;
   const workspaceRatchetEnabled = workspace.ratchetEnabled ?? true;
-  const isDisabled = !globalRatchetEnabled;
+  const isGloballyDisabled = !(isLoadingSettings || globalRatchetEnabled);
 
   const stateLabel = RATCHET_STATE_LABELS[workspace.ratchetState] ?? workspace.ratchetState;
 
-  const tooltipContent = isDisabled
-    ? 'Ratcheting is disabled globally. Enable it in Admin Settings to use workspace-level controls.'
-    : workspaceRatchetEnabled
-      ? `Ratcheting enabled (${stateLabel}) - Click to disable auto-fixing for this workspace`
-      : `Ratcheting disabled (${stateLabel}) - Click to enable auto-fixing for this workspace`;
+  const tooltipContent = isLoadingSettings
+    ? 'Loading settings...'
+    : isGloballyDisabled
+      ? 'Ratcheting is disabled globally. Enable it in Admin Settings to use workspace-level controls.'
+      : workspaceRatchetEnabled
+        ? `Ratcheting enabled (${stateLabel}) - Click to disable auto-fixing for this workspace`
+        : `Ratcheting disabled (${stateLabel}) - Click to enable auto-fixing for this workspace`;
 
   return (
     <Tooltip>
@@ -227,7 +229,7 @@ function RatchetingToggle({
           <span className="text-muted-foreground">{stateLabel}</span>
           <Switch
             checked={workspaceRatchetEnabled}
-            disabled={isDisabled || toggleRatcheting.isPending}
+            disabled={isLoadingSettings || isGloballyDisabled || toggleRatcheting.isPending}
             onCheckedChange={(checked) => {
               toggleRatcheting.mutate({ workspaceId, enabled: checked });
             }}
