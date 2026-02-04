@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { SessionInfo } from '@/lib/claude-types';
+import { formatBytes } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -59,19 +60,6 @@ function formatDate(dateString: string): string {
     // Invalid date string - return as-is rather than crashing
     return dateString;
   }
-}
-
-/**
- * Formats bytes to a human-readable size.
- */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
