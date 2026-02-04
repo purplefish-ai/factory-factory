@@ -35,10 +35,11 @@ jobs:
         run: pnpm db:generate
 
       - name: Check Prisma migrations are committed
-        run: pnpm exec prisma migrate diff \
-          --from-schema prisma/schema.prisma \
-          --to-migrations prisma/migrations \
-          --exit-code
+        run: |
+          pnpm exec prisma migrate diff \
+            --from-schema prisma/schema.prisma \
+            --to-migrations prisma/migrations \
+            --exit-code
 
       - name: Run Biome check
         run: pnpm check
