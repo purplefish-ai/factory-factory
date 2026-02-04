@@ -20,6 +20,63 @@ export interface GitWorktreeInfo {
   branchName: string;
 }
 
+export interface GitWorktreeEntry {
+  path: string;
+  branchName?: string;
+}
+
+async function isLocalBehindOrigin(
+  repoPath: string,
+  localBranch: string,
+  originBranch: string
+): Promise<boolean> {
+  const result = await gitCommandC(repoPath, [
+    'merge-base',
+    '--is-ancestor',
+    localBranch,
+    originBranch,
+  ]);
+  if (result.code !== 0) {
+    return false;
+  }
+
+  const localSha = await gitCommandC(repoPath, ['rev-parse', localBranch]);
+  const originSha = await gitCommandC(repoPath, ['rev-parse', originBranch]);
+  if (localSha.code !== 0 || originSha.code !== 0) {
+    return false;
+  }
+  return localSha.stdout.trim() !== originSha.stdout.trim();
+}
+
+function parseWorktreeEntries(output: string): GitWorktreeEntry[] {
+  const entries: GitWorktreeEntry[] = [];
+  const lines = output.split('\n');
+  let current: GitWorktreeEntry | null = null;
+
+  const pushCurrent = () => {
+    if (current) {
+      entries.push(current);
+    }
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('worktree ')) {
+      pushCurrent();
+      current = { path: line.substring('worktree '.length) };
+      continue;
+    }
+
+    if (current && line.startsWith('branch ')) {
+      const ref = line.substring('branch '.length);
+      current.branchName = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+    }
+  }
+
+  pushCurrent();
+
+  return entries;
+}
+
 export interface CreateWorktreeOptions {
   /** GitHub username or org for branch prefix (e.g., 'martin-purplefish') */
   branchPrefix?: string;
@@ -109,6 +166,74 @@ export class GitClient {
       name,
       path: worktreePath,
       branchName,
+    };
+  }
+
+  async createWorktreeFromExistingBranch(
+    name: string,
+    branchRef: string
+  ): Promise<GitWorktreeInfo> {
+    const worktreePath = this.getWorktreePath(name);
+    await fs.mkdir(this.worktreeBase, { recursive: true });
+
+    const localBranchName = branchRef.startsWith('origin/')
+      ? branchRef.slice('origin/'.length)
+      : branchRef;
+    const wantsRemote = branchRef.startsWith('origin/');
+
+    const normalizeBranchName = (value: string) =>
+      value.replace(/^refs\/heads\//, '').replace(/^origin\//, '');
+    const normalizedTarget = normalizeBranchName(localBranchName);
+    const resolvedBaseRepoPath = path.resolve(this.baseRepoPath);
+    const resolvedWorktreePath = path.resolve(worktreePath);
+    const worktrees = await this.listWorktreesWithBranches();
+    const alreadyCheckedOut = worktrees.some((worktree) => {
+      if (!worktree.branchName) {
+        return false;
+      }
+      const resolvedPath = path.resolve(worktree.path);
+      if (resolvedPath === resolvedBaseRepoPath || resolvedPath === resolvedWorktreePath) {
+        return false;
+      }
+      return normalizeBranchName(worktree.branchName) === normalizedTarget;
+    });
+    if (alreadyCheckedOut) {
+      throw new Error(
+        `Branch ${localBranchName} is already checked out in another workspace worktree.`
+      );
+    }
+
+    const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
+    const fetchSucceeded = fetchResult.code === 0;
+
+    const localExists = await this.branchExists(localBranchName);
+    const originBranch = `origin/${localBranchName}`;
+    const originExists = await this.branchExists(originBranch);
+
+    const checkoutRef = originExists ? originBranch : branchRef;
+    const shouldResetToOrigin =
+      localExists && originExists
+        ? wantsRemote ||
+          (fetchSucceeded
+            ? await isLocalBehindOrigin(this.baseRepoPath, localBranchName, originBranch)
+            : false)
+        : false;
+
+    const args = shouldResetToOrigin
+      ? ['worktree', 'add', '-B', localBranchName, worktreePath, checkoutRef]
+      : localExists
+        ? ['worktree', 'add', worktreePath, localBranchName]
+        : ['worktree', 'add', '-b', localBranchName, worktreePath, checkoutRef];
+
+    const result = await gitCommandC(this.baseRepoPath, args);
+    if (result.code !== 0) {
+      throw new Error(`Failed to create worktree from branch: ${result.stderr || result.stdout}`);
+    }
+
+    return {
+      name,
+      path: worktreePath,
+      branchName: localBranchName,
     };
   }
 
@@ -208,6 +333,14 @@ export class GitClient {
     }
 
     return worktrees;
+  }
+
+  async listWorktreesWithBranches(): Promise<GitWorktreeEntry[]> {
+    const result = await gitCommandC(this.baseRepoPath, ['worktree', 'list', '--porcelain']);
+    if (result.code !== 0) {
+      throw new Error(`Failed to list worktrees: ${result.stderr || result.stdout}`);
+    }
+    return parseWorktreeEntries(result.stdout);
   }
 
   /**

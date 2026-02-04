@@ -2,6 +2,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { ReactNode } from 'react';
 
 import type { GitHubIssue } from '@/backend/services/github-cli.service';
+import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
 import type { AppRouter } from '@/frontend/lib/trpc';
 
 import { MainViewContent } from './main-view-content';
@@ -23,6 +24,10 @@ interface WorkspaceContentViewProps {
   recommendedWorkflow: string | undefined;
   selectedSessionId: string | null;
   runningSessionId: string | undefined;
+  /** Session status for the currently selected session */
+  sessionStatus?: SessionStatus;
+  /** Process status for the currently selected session */
+  processStatus?: ProcessStatus;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
   onWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
@@ -54,6 +59,8 @@ export function WorkspaceContentView({
   recommendedWorkflow,
   selectedSessionId,
   runningSessionId,
+  sessionStatus,
+  processStatus,
   isCreatingSession,
   isDeletingSession,
   onWorkflowSelect,
@@ -101,6 +108,8 @@ export function WorkspaceContentView({
           sessions={claudeSessions}
           currentSessionId={selectedSessionId}
           runningSessionId={runningSessionId}
+          sessionStatus={sessionStatus}
+          processStatus={processStatus}
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}

@@ -489,6 +489,8 @@ function renderWorkspaceBody({
               recommendedWorkflow={recommendedWorkflow}
               selectedSessionId={selectedDbSessionId}
               runningSessionId={runningSessionId}
+              sessionStatus={sessionStatus}
+              processStatus={processStatus}
               isCreatingSession={isCreatingSession}
               isDeletingSession={isDeletingSession}
               onWorkflowSelect={handleWorkflowSelect}
@@ -501,7 +503,6 @@ function renderWorkspaceBody({
               <ChatContent
                 messages={messages}
                 sessionStatus={sessionStatus}
-                processStatus={processStatus}
                 messagesEndRef={messagesEndRef}
                 viewportRef={viewportRef}
                 isNearBottom={isNearBottom}

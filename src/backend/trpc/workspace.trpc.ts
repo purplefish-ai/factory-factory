@@ -2,9 +2,14 @@ import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { DEFAULT_FIRST_SESSION } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { gitOpsService } from '../services/git-ops.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
-import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
+import {
+  setWorkspaceInitMode,
+  worktreeLifecycleService,
+} from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -70,18 +75,45 @@ export const workspaceRouter = router({
   // Create a new workspace
   create: publicProcedure
     .input(
-      z.object({
-        projectId: z.string(),
-        name: z.string().min(1),
-        description: z.string().optional(),
-        branchName: z.string().optional(),
-      })
+      z
+        .object({
+          projectId: z.string(),
+          name: z.string().min(1),
+          description: z.string().optional(),
+          branchName: z.string().optional(),
+          useExistingBranch: z.boolean().optional(),
+        })
+        .refine((data) => !(data.useExistingBranch && !data.branchName), {
+          message: 'branchName is required when useExistingBranch is true',
+          path: ['branchName'],
+        })
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
       const { configService } = ctx.appContext.services;
+      let projectForResume: Awaited<ReturnType<typeof projectAccessor.findById>> | null = null;
+      if (input.useExistingBranch) {
+        projectForResume = await projectAccessor.findById(input.projectId);
+        if (!projectForResume) {
+          throw new Error(`Project not found: ${input.projectId}`);
+        }
+
+        const branchName = input.branchName ?? '';
+        const isCheckedOut = await gitOpsService.isBranchCheckedOut(projectForResume, branchName);
+        if (isCheckedOut) {
+          throw new Error(`Branch '${branchName}' is already checked out in another worktree.`);
+        }
+      }
       // Create the workspace record
-      const workspace = await workspaceAccessor.create(input);
+      const { useExistingBranch, ...createInput } = input;
+      const workspace = await workspaceAccessor.create(createInput);
+      if (useExistingBranch) {
+        await setWorkspaceInitMode(
+          workspace.id,
+          useExistingBranch,
+          projectForResume?.worktreeBasePath
+        );
+      }
 
       // Create a default Claude session so the workspace always has a chat tab.
       // This prevents users from getting stuck in file view before starting a session.
@@ -106,7 +138,10 @@ export const workspaceRouter = router({
       // and shows an overlay spinner until the workspace is fully ready.
       // The function has internal error handling but we add a catch here to handle
       // any unexpected errors (e.g., if markFailed throws due to DB issues).
-      initializeWorkspaceWorktree(workspace.id, input.branchName).catch((error) => {
+      initializeWorkspaceWorktree(workspace.id, {
+        branchName: input.branchName,
+        useExistingBranch,
+      }).catch((error) => {
         logger.error(
           'Unexpected error during background workspace initialization',
           error as Error,
