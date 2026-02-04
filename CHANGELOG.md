@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Resume existing branch flow (#583)
 - GitHub Issues integration to workflow selector (#559)
 - Drag-and-drop workspace reordering (#540)
 - Automatic CI fixing sessions when CI fails (#495)
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Replace chat status bar with subtle tab status dot (#591)
 - Persist tab scroll state across navigation (#585)
 - Cache slash commands for offline palette (#535)
 - Always play workspace completion sound regardless of focus or active workspace (#508)
@@ -32,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix session resume ordering (#593)
+- Fix slash menu keyboard scroll (#592)
 - Fix Claude status on reconnect (#588)
 - Fix paste attachments without contentType (#587)
 - Fix workspace archive failing when worktree is not a valid git repo (#557)
