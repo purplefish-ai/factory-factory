@@ -2,8 +2,10 @@ import { FileText, ShieldCheck, ShieldX, Terminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { PermissionRequest } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
+import { type PlanViewMode, usePlanViewMode } from './plan-view-preference';
 
 // =============================================================================
 // Types
@@ -59,6 +61,38 @@ function formatToolInput(input: Record<string, unknown>): string {
 }
 
 // =============================================================================
+// Plan View Toggle
+// =============================================================================
+
+interface PlanViewToggleProps {
+  value: PlanViewMode;
+  onChange: (mode: PlanViewMode) => void;
+}
+
+function PlanViewToggle({ value, onChange }: PlanViewToggleProps) {
+  return (
+    <div className="flex items-center rounded-md border bg-background p-0.5">
+      {(['rendered', 'raw'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          aria-pressed={value === mode}
+          onClick={() => onChange(mode)}
+          className={cn(
+            'text-[11px] px-2 py-1 rounded-sm transition-colors',
+            value === mode
+              ? 'bg-muted text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          {mode === 'rendered' ? 'Rendered' : 'Raw'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// =============================================================================
 // Plan Approval Component
 // =============================================================================
 
@@ -69,6 +103,7 @@ function formatToolInput(input: Record<string, unknown>): string {
 function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
   const approveButtonRef = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(true);
+  const [viewMode, setViewMode] = usePlanViewMode();
   const permissionRequestId = permission?.requestId;
 
   useEffect(() => {
@@ -104,26 +139,30 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
             <FileText className="h-5 w-5 shrink-0 text-blue-500" aria-hidden="true" />
             <span className="text-sm font-medium">Review Plan</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {expanded ? 'Collapse' : 'Expand'}
-          </button>
+          <div className="flex items-center gap-2">
+            {planContent && <PlanViewToggle value={viewMode} onChange={setViewMode} />}
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {expanded ? 'Collapse' : 'Expand'}
+            </button>
+          </div>
         </div>
 
         {/* Plan Content */}
         {expanded && planContent && (
           <div className="bg-background rounded-md border overflow-hidden">
-            <pre
-              className={cn(
-                'text-xs p-3 overflow-auto whitespace-pre-wrap font-mono',
-                'max-h-64' // Limit height with scroll
+            <div className="max-h-[70vh] overflow-auto">
+              {viewMode === 'rendered' ? (
+                <div className="p-3">
+                  <MarkdownRenderer content={planContent} />
+                </div>
+              ) : (
+                <pre className="text-xs p-3 whitespace-pre-wrap font-mono">{planContent}</pre>
               )}
-            >
-              {planContent}
-            </pre>
+            </div>
           </div>
         )}
 
