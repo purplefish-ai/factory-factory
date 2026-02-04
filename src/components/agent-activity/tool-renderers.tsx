@@ -561,7 +561,7 @@ const ToolInputRenderer = memo(function ToolInputRenderer({ name, input }: ToolI
           <FilePathDisplay path={input.file_path as string} />
           <div className="rounded bg-muted px-1.5 py-1">
             <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto">
-              {truncateContent((input.content as string) ?? '', 500)}
+              {truncateContent((input.content as string) ?? '', TOOL_INPUT_CONTENT_TRUNCATE)}
             </pre>
           </div>
         </div>
@@ -575,13 +575,13 @@ const ToolInputRenderer = memo(function ToolInputRenderer({ name, input }: ToolI
             <div className="rounded bg-destructive/10 px-1.5 py-1 min-w-0">
               <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
               <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                {truncateContent((input.old_string as string) ?? '', 200)}
+                {truncateContent((input.old_string as string) ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
               </pre>
             </div>
             <div className="rounded bg-success/10 px-1.5 py-1 min-w-0">
               <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
               <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                {truncateContent((input.new_string as string) ?? '', 200)}
+                {truncateContent((input.new_string as string) ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
               </pre>
             </div>
           </div>
@@ -645,7 +645,7 @@ const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
             isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
           )}
         >
-          {truncateContent(content, 2000)}
+          {truncateContent(content, TOOL_RESULT_CONTENT_TRUNCATE)}
         </pre>
       </div>
     );
@@ -666,7 +666,7 @@ const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
                 isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
               )}
             >
-              {truncateContent(item.text ?? '', 2000)}
+              {truncateContent(item.text ?? '', TOOL_RESULT_ITEM_TEXT_TRUNCATE)}
             </pre>
           );
         }
@@ -823,6 +823,11 @@ const FilePathDisplay = memo(function FilePathDisplay({ path }: { path: string }
 // =============================================================================
 // Utility Functions
 // =============================================================================
+
+const TOOL_INPUT_CONTENT_TRUNCATE = 5000;
+const TOOL_INPUT_DIFF_TRUNCATE = 2000;
+const TOOL_RESULT_CONTENT_TRUNCATE = 20_000;
+const TOOL_RESULT_ITEM_TEXT_TRUNCATE = 20_000;
 
 function truncateContent(content: string, maxLength: number): string {
   if (content.length <= maxLength) {
