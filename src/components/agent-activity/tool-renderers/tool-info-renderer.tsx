@@ -10,7 +10,12 @@ import * as React from 'react';
 import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { ClaudeMessage, PairedToolCall, ToolSequence } from '@/lib/claude-types';
+import type {
+  ClaudeMessage,
+  PairedToolCall,
+  ToolResultInfo,
+  ToolSequence,
+} from '@/lib/claude-types';
 import {
   extractToolInfo,
   extractToolResultInfo,
@@ -33,58 +38,117 @@ export interface ToolInfoRendererProps {
 }
 
 /**
+ * Renders tool use information with collapsible input display.
+ */
+const ToolUseRenderer = memo(function ToolUseRenderer({
+  toolInfo,
+  isPending,
+  defaultOpen,
+}: {
+  toolInfo: { name: string; input: Record<string, unknown> };
+  isPending: boolean;
+  defaultOpen: boolean;
+}) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
+  const ChevronIcon = isOpen ? ChevronDown : ChevronRight;
+  const StatusIcon = isPending ? Loader2 : Terminal;
+  const statusIconClass = isPending
+    ? 'h-4 w-4 shrink-0 animate-spin text-muted-foreground'
+    : 'h-4 w-4 shrink-0 text-muted-foreground';
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded border bg-muted/30 min-w-0">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
+            <ChevronIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <StatusIcon className={statusIconClass} />
+            <span className="font-mono text-xs">{toolInfo.name}</span>
+            {isPending ? (
+              <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
+                Running...
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0">
+                Tool Call
+              </Badge>
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-2 py-1.5 overflow-x-auto">
+            <ToolInputRenderer name={toolInfo.name} input={toolInfo.input} />
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+});
+
+/**
+ * Renders tool result information with collapsible content display.
+ */
+const ToolResultRendererComponent = memo(function ToolResultRendererComponent({
+  resultInfo,
+  defaultOpen,
+}: {
+  resultInfo: ToolResultInfo;
+  defaultOpen: boolean;
+}) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
+  const ChevronIcon = isOpen ? ChevronDown : ChevronRight;
+  const StatusIcon = resultInfo.isError ? AlertCircle : CheckCircle;
+  const statusIconClass = resultInfo.isError
+    ? 'h-4 w-4 shrink-0 text-destructive'
+    : 'h-4 w-4 shrink-0 text-success';
+  const badgeVariant = resultInfo.isError ? 'destructive' : 'success';
+  const badgeLabel = resultInfo.isError ? 'Error' : 'Success';
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div
+        className={cn(
+          'rounded border min-w-0',
+          resultInfo.isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
+        )}
+      >
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
+            <ChevronIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <StatusIcon className={statusIconClass} />
+            <span className="text-xs text-muted-foreground">Tool Result</span>
+            <Badge variant={badgeVariant} className="ml-auto text-[10px] px-1 py-0">
+              {badgeLabel}
+            </Badge>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-2 py-1.5 overflow-x-auto">
+            <ToolResultContentRenderer content={resultInfo.content} isError={resultInfo.isError} />
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+});
+
+/**
  * Renders tool use or tool result information.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but readable conditional rendering
 export const ToolInfoRenderer = memo(function ToolInfoRenderer({
   message,
   defaultOpen = false,
   isPending = false,
 }: ToolInfoRendererProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-
   // Check if this is a tool use message
   if (isToolUseMessage(message)) {
     const toolInfo = extractToolInfo(message);
     if (!toolInfo) {
       return null;
     }
-
-    return (
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="rounded border bg-muted/30 min-w-0">
-          <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-              {isPending ? (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-              ) : (
-                <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-              <span className="font-mono text-xs">{toolInfo.name}</span>
-              {isPending ? (
-                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
-                  Running...
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0">
-                  Tool Call
-                </Badge>
-              )}
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="border-t px-2 py-1.5 overflow-x-auto">
-              <ToolInputRenderer name={toolInfo.name} input={toolInfo.input} />
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-    );
+    return <ToolUseRenderer toolInfo={toolInfo} isPending={isPending} defaultOpen={defaultOpen} />;
   }
 
   // Check if this is a tool result message
@@ -93,47 +157,7 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
     if (!resultInfo) {
       return null;
     }
-
-    return (
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div
-          className={cn(
-            'rounded border min-w-0',
-            resultInfo.isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
-          )}
-        >
-          <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-              {resultInfo.isError ? (
-                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
-              ) : (
-                <CheckCircle className="h-4 w-4 shrink-0 text-success" />
-              )}
-              <span className="text-xs text-muted-foreground">Tool Result</span>
-              <Badge
-                variant={resultInfo.isError ? 'destructive' : 'success'}
-                className="ml-auto text-[10px] px-1 py-0"
-              >
-                {resultInfo.isError ? 'Error' : 'Success'}
-              </Badge>
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="border-t px-2 py-1.5 overflow-x-auto">
-              <ToolResultContentRenderer
-                content={resultInfo.content}
-                isError={resultInfo.isError}
-              />
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-    );
+    return <ToolResultRendererComponent resultInfo={resultInfo} defaultOpen={defaultOpen} />;
   }
 
   return null;
