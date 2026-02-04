@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { GitClientFactory } from '../clients/git.client';
+import { pathExists } from '../lib/file-helpers';
 import { getWorkspaceGitStats } from '../lib/git-helpers';
 import { gitCommand } from '../lib/shell';
 
@@ -10,13 +11,6 @@ export type WorkspaceGitStats = Awaited<ReturnType<typeof getWorkspaceGitStats>>
 interface ProjectPaths {
   repoPath: string;
   worktreeBasePath: string;
-}
-
-function pathExists(targetPath: string): Promise<boolean> {
-  return fs
-    .stat(targetPath)
-    .then(() => true)
-    .catch(() => false);
 }
 
 class GitOpsService {
