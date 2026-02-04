@@ -419,6 +419,31 @@ describe('chat message handlers', () => {
     );
   });
 
+  it('load_session sends status with processAlive when client running', async () => {
+    mockedClaudeSessionAccessor.findById.mockResolvedValue({
+      id: 'session-1',
+      claudeSessionId: 'claude-1',
+    } as unknown as Awaited<ReturnType<typeof claudeSessionAccessor.findById>>);
+    mockedSessionService.getClient.mockReturnValue({
+      isRunning: () => true,
+      isWorking: () => true,
+    } as unknown as ClaudeClient);
+
+    const handler = createLoadSessionHandler();
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'load_session' },
+    });
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'status', running: true, processAlive: true })
+    );
+  });
+
   it('load_session sends cached slash commands when missing', async () => {
     mockedClaudeSessionAccessor.findById.mockResolvedValue({
       id: 'session-1',

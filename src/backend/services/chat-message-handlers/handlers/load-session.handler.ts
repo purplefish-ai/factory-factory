@@ -43,7 +43,7 @@ export function createLoadSessionHandler(): ChatMessageHandler {
 function replayEventsForRunningClient(
   ws: WebSocket,
   sessionId: string,
-  client: { isWorking: () => boolean }
+  client: { isWorking: () => boolean; isRunning: () => boolean }
 ): void {
   // Get stored events and compress for efficient replay
   const events = messageStateService.getStoredEvents(sessionId);
@@ -61,7 +61,13 @@ function replayEventsForRunningClient(
 
   // Send current status
   const isClientWorking = client.isWorking();
-  ws.send(JSON.stringify({ type: 'status', running: isClientWorking }));
+  ws.send(
+    JSON.stringify({
+      type: 'status',
+      running: isClientWorking,
+      processAlive: client.isRunning(),
+    })
+  );
 
   // Send pending interactive request if any
   const pendingRequest = chatEventForwarderService.getPendingRequest(sessionId);
