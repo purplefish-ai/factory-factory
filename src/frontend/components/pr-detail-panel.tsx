@@ -48,6 +48,37 @@ interface DiffLine {
   content: string;
 }
 
+function getDiffLineClassName(type: DiffLine['type']): string {
+  switch (type) {
+    case 'add':
+      return 'bg-green-500/15 text-green-700 dark:text-green-400';
+    case 'del':
+      return 'bg-red-500/15 text-red-700 dark:text-red-400';
+    default:
+      return '';
+  }
+}
+
+function getDiffLinePrefix(type: DiffLine['type']): string {
+  switch (type) {
+    case 'add':
+      return '+';
+    case 'del':
+      return '-';
+    default:
+      return ' ';
+  }
+}
+
+function DiffLineRow({ line }: { line: DiffLine }) {
+  return (
+    <div className={`px-3 whitespace-pre ${getDiffLineClassName(line.type)}`}>
+      <span className="select-none opacity-50 mr-2">{getDiffLinePrefix(line.type)}</span>
+      {line.content}
+    </div>
+  );
+}
+
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diff parsing requires multiple conditions
 function parseDiff(diff: string): DiffFile[] {
   const files: DiffFile[] = [];
@@ -109,23 +140,8 @@ function DiffViewer({ diff }: { diff: string }) {
             {file.hunks.map((hunk) => (
               <div key={hunk.header}>
                 <div className="px-3 py-1 bg-blue-500/10 text-blue-600 text-xs">{hunk.header}</div>
-                {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diff line rendering */}
                 {hunk.lines.map((line, lineIdx) => (
-                  <div
-                    key={`${hunk.header}-${lineIdx}`}
-                    className={`px-3 whitespace-pre ${
-                      line.type === 'add'
-                        ? 'bg-green-500/15 text-green-700 dark:text-green-400'
-                        : line.type === 'del'
-                          ? 'bg-red-500/15 text-red-700 dark:text-red-400'
-                          : ''
-                    }`}
-                  >
-                    <span className="select-none opacity-50 mr-2">
-                      {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
-                    </span>
-                    {line.content}
-                  </div>
+                  <DiffLineRow key={`${hunk.header}-${lineIdx}`} line={line} />
                 ))}
               </div>
             ))}
