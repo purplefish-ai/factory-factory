@@ -361,9 +361,6 @@ function SingleSelectQuestion({
                 if (nextValue.trim().length > 0 && selectedValue !== OTHER_OPTION_VALUE) {
                   onChange(OTHER_OPTION_VALUE);
                 }
-                if (nextValue.trim().length === 0 && selectedValue === OTHER_OPTION_VALUE) {
-                  onChange('');
-                }
               }}
               placeholder="Type your response..."
               className="min-h-[42px] text-sm py-1.5"
@@ -482,9 +479,6 @@ function MultiSelectQuestion({
                 onOtherTextChange(nextValue);
                 if (nextValue.trim().length > 0 && !selectedValues.includes(OTHER_OPTION_VALUE)) {
                   onChange([...selectedValues, OTHER_OPTION_VALUE]);
-                }
-                if (nextValue.trim().length === 0 && selectedValues.includes(OTHER_OPTION_VALUE)) {
-                  onChange(selectedValues.filter((v) => v !== OTHER_OPTION_VALUE));
                 }
               }}
               placeholder="Type your response..."
