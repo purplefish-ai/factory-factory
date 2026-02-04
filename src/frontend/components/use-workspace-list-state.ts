@@ -9,6 +9,7 @@ export type WorkspaceUIState = 'normal' | 'creating' | 'archiving';
 export interface ServerWorkspace {
   id: string;
   name: string;
+  createdAt: string | Date;
   branchName?: string | null;
   prUrl?: string | null;
   prNumber?: number | null;
@@ -34,33 +35,54 @@ export interface WorkspaceListItem extends ServerWorkspace {
 
 /**
  * Creates a comparator function for sorting workspaces.
- * Uses custom order if provided, otherwise sorts alphabetically by name.
+ * Uses custom order if provided, otherwise sorts by createdAt (newest first).
+ * Workspaces missing from the custom order are treated as newly created and
+ * are placed at the top (newest first), keeping existing order stable.
  */
-function createWorkspaceComparator(customOrder: string[] | undefined) {
-  return (a: ServerWorkspace, b: ServerWorkspace): number => {
-    // If no custom order, sort alphabetically
-    if (!customOrder || customOrder.length === 0) {
-      return a.name.localeCompare(b.name);
-    }
+function getCreatedAtMs(value: string | Date): number {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 
-    const indexA = customOrder.indexOf(a.id);
-    const indexB = customOrder.indexOf(b.id);
+function compareByCreatedAtDesc(a: ServerWorkspace, b: ServerWorkspace): number {
+  const createdDiff = getCreatedAtMs(b.createdAt) - getCreatedAtMs(a.createdAt);
+  if (createdDiff !== 0) {
+    return createdDiff;
+  }
+  const nameDiff = a.name.localeCompare(b.name);
+  if (nameDiff !== 0) {
+    return nameDiff;
+  }
+  return a.id.localeCompare(b.id);
+}
 
-    // Both in custom order: sort by position
-    if (indexA !== -1 && indexB !== -1) {
-      return indexA - indexB;
+export function sortWorkspaces(
+  workspaces: ServerWorkspace[],
+  customOrder: string[] | undefined
+): ServerWorkspace[] {
+  if (!customOrder || customOrder.length === 0) {
+    return [...workspaces].sort(compareByCreatedAtDesc);
+  }
+
+  const indexById = new Map(customOrder.map((id, index) => [id, index]));
+  const ordered: ServerWorkspace[] = [];
+  const unordered: ServerWorkspace[] = [];
+
+  for (const workspace of workspaces) {
+    if (indexById.has(workspace.id)) {
+      ordered.push(workspace);
+    } else {
+      unordered.push(workspace);
     }
-    // Only A in custom order: A comes first
-    if (indexA !== -1) {
-      return -1;
-    }
-    // Only B in custom order: B comes first
-    if (indexB !== -1) {
-      return 1;
-    }
-    // Neither in custom order: sort by name
-    return a.name.localeCompare(b.name);
-  };
+  }
+
+  ordered.sort((a, b) => (indexById.get(a.id) ?? 0) - (indexById.get(b.id) ?? 0));
+  unordered.sort(compareByCreatedAtDesc);
+
+  return [...unordered, ...ordered];
 }
 
 // =============================================================================
@@ -68,7 +90,7 @@ function createWorkspaceComparator(customOrder: string[] | undefined) {
 // =============================================================================
 
 interface UseWorkspaceListStateOptions {
-  /** Custom order of workspace IDs. Workspaces not in this list appear at the end sorted by name. */
+  /** Custom order of workspace IDs. Workspaces not in this list appear at the top (newest first). */
   customOrder?: string[];
 }
 
@@ -80,7 +102,8 @@ interface UseWorkspaceListStateOptions {
  * - Creating placeholder appears at the top of the list
  * - Archiving workspaces stay in their original position (no jumping)
  * - Automatically clears optimistic states when server data reflects changes
- * - Workspaces are ordered by customOrder if provided, otherwise alphabetically by name
+ * - Workspaces are ordered by customOrder if provided, otherwise by createdAt (newest first)
+ * - Workspaces missing from customOrder appear at the top (newest first)
  */
 export function useWorkspaceListState(
   serverWorkspaces: ServerWorkspace[] | undefined,
@@ -113,6 +136,7 @@ export function useWorkspaceListState(
       items.push({
         id: `creating-${creatingWorkspace.name}`,
         name: creatingWorkspace.name,
+        createdAt: new Date().toISOString(),
         branchName: null,
         prUrl: null,
         prNumber: null,
@@ -126,8 +150,7 @@ export function useWorkspaceListState(
 
     // Add server workspaces with appropriate UI states
     if (serverWorkspaces) {
-      const comparator = createWorkspaceComparator(customOrder);
-      const sortedWorkspaces = [...serverWorkspaces].sort(comparator);
+      const sortedWorkspaces = sortWorkspaces(serverWorkspaces, customOrder);
 
       for (const workspace of sortedWorkspaces) {
         const isArchiving = archivingWorkspace?.id === workspace.id;
