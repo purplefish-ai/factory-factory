@@ -171,7 +171,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
 
   // Single tool call - render inline without grouping wrapper
   if (pairedCalls.length === 1) {
-    return <PairedToolCallRenderer call={pairedCalls[0]} defaultOpen={defaultOpen} />;
+    return <PairedToolCallRenderer call={summaryCalls[0]} defaultOpen={defaultOpen} />;
   }
 
   // Multiple tool calls - render as collapsible group

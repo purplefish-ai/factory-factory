@@ -48,7 +48,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
   latestToolSequence,
   className,
 }: AgentLiveDockProps) {
-  const hasThinking = Boolean(latestThinking) && running;
+  const hasThinking = Boolean(latestThinking) && (running || stopping || Boolean(permissionMode));
   const hasContent = hasThinking || Boolean(latestToolSequence);
   const { label, tone } = getPhaseLabel({ running, starting, stopping, permissionMode });
 
@@ -78,10 +78,10 @@ export const AgentLiveDock = memo(function AgentLiveDock({
           </div>
         )}
 
-        {latestThinking && running && (
+        {hasThinking && latestThinking && (
           <div className="space-y-1">
             <div className="text-[10px] font-medium text-muted-foreground">Latest thinking</div>
-            <LatestThinking thinking={latestThinking} running={running} />
+            <LatestThinking thinking={latestThinking} running={running || starting} />
           </div>
         )}
       </div>
