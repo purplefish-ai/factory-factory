@@ -140,6 +140,16 @@ function SingleSelectQuestion({
             <span className="text-sm font-medium">Other</span>
             <Textarea
               value={otherText}
+              onFocus={() => {
+                if (selectedValue !== OTHER_OPTION_VALUE) {
+                  onChange(OTHER_OPTION_VALUE);
+                }
+              }}
+              onClick={() => {
+                if (selectedValue !== OTHER_OPTION_VALUE) {
+                  onChange(OTHER_OPTION_VALUE);
+                }
+              }}
               onChange={(event) => {
                 const nextValue = event.target.value;
                 onOtherTextChange(nextValue);
@@ -244,6 +254,16 @@ function MultiSelectQuestion({
             <span className="text-sm font-medium">Other</span>
             <Textarea
               value={otherText}
+              onFocus={() => {
+                if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
+                  onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                }
+              }}
+              onClick={() => {
+                if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
+                  onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                }
+              }}
               onChange={(event) => {
                 const nextValue = event.target.value;
                 onOtherTextChange(nextValue);
