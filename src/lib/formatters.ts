@@ -1,0 +1,44 @@
+/**
+ * Format bytes to human-readable string (B, KB, MB, GB)
+ */
+export function formatBytes(bytes: number | null): string {
+  if (bytes === null) {
+    return '-';
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/**
+ * Format CPU percentage
+ */
+export function formatCpu(cpu: number | null): string {
+  if (cpu === null) {
+    return '-';
+  }
+  return `${cpu.toFixed(1)}%`;
+}
+
+/**
+ * Format idle time in milliseconds to human-readable string (ms, s, m)
+ */
+export function formatIdleTime(ms: number | null): string {
+  if (ms === null) {
+    return '-';
+  }
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  if (ms < 60_000) {
+    return `${(ms / 1000).toFixed(0)}s`;
+  }
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
