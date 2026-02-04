@@ -1,5 +1,4 @@
 import { CircleDot, Play, User } from 'lucide-react';
-import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { trpc } from '@/frontend/lib/trpc';
@@ -8,19 +7,15 @@ import type { GitHubIssue } from './kanban-context';
 interface IssueCardProps {
   issue: GitHubIssue;
   projectId: string;
-  projectSlug: string;
 }
 
-export function IssueCard({ issue, projectId, projectSlug }: IssueCardProps) {
-  const navigate = useNavigate();
+export function IssueCard({ issue, projectId }: IssueCardProps) {
   const utils = trpc.useUtils();
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
-    onSuccess: (workspace) => {
+    onSuccess: () => {
       // Invalidate workspace queries to refresh the board
       utils.workspace.listWithKanbanState.invalidate({ projectId });
-      // Navigate to the new workspace
-      navigate(`/projects/${projectSlug}/workspaces/${workspace.id}`);
     },
   });
 
