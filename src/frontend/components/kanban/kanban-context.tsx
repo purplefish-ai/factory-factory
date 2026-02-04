@@ -1,48 +1,28 @@
-import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useContext, useMemo } from 'react';
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
-const STORAGE_KEY_PREFIX = 'kanban-hidden-columns-';
-
-function getHiddenColumnsFromStorage(projectId: string): KanbanColumnType[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-  try {
-    const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${projectId}`);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-    // biome-ignore lint/suspicious/noConsole: Intentional error logging for debugging localStorage issues
-    console.warn('Failed to parse hidden columns from localStorage:', error);
-    return [];
-  }
-}
-
-function saveHiddenColumnsToStorage(projectId: string, columns: KanbanColumnType[]) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${projectId}`, JSON.stringify(columns));
-  } catch (error) {
-    // biome-ignore lint/suspicious/noConsole: Intentional error logging for debugging localStorage issues
-    console.warn('Failed to save hidden columns to localStorage:', error);
-  }
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+  state: 'OPEN' | 'CLOSED';
+  createdAt: string;
+  author: { login: string };
 }
 
 interface KanbanContextValue {
   projectId: string;
   projectSlug: string;
   workspaces: WorkspaceWithKanban[] | undefined;
+  issues: GitHubIssue[] | undefined;
   isLoading: boolean;
   isError: boolean;
   error: { message: string } | null;
   refetch: () => void;
   syncAndRefetch: () => Promise<void>;
   isSyncing: boolean;
-  hiddenColumns: KanbanColumnType[];
-  toggleColumnVisibility: (columnId: KanbanColumnType) => void;
 }
 
 const KanbanContext = createContext<KanbanContextValue | null>(null);
@@ -62,39 +42,54 @@ interface KanbanProviderProps {
 }
 
 export function KanbanProvider({ projectId, projectSlug, children }: KanbanProviderProps) {
-  const [hiddenColumns, setHiddenColumns] = useState<KanbanColumnType[]>([]);
-
-  useEffect(() => {
-    setHiddenColumns(getHiddenColumnsFromStorage(projectId));
-  }, [projectId]);
-
   const {
     data: workspaces,
-    isLoading,
-    isError,
-    error,
-    refetch,
+    isLoading: isLoadingWorkspaces,
+    isError: isErrorWorkspaces,
+    error: errorWorkspaces,
+    refetch: refetchWorkspaces,
   } = trpc.workspace.listWithKanbanState.useQuery(
     { projectId },
     { refetchInterval: 15_000, staleTime: 10_000 }
+  );
+
+  const {
+    data: issuesData,
+    isLoading: isLoadingIssues,
+    refetch: refetchIssues,
+  } = trpc.github.listIssuesForProject.useQuery(
+    { projectId },
+    { refetchInterval: 60_000, staleTime: 30_000 }
   );
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
 
   const syncAndRefetch = async () => {
     await syncMutation.mutateAsync({ projectId });
-    refetch();
+    refetchWorkspaces();
+    refetchIssues();
   };
 
-  const toggleColumnVisibility = (columnId: KanbanColumnType) => {
-    setHiddenColumns((prev) => {
-      const newHidden = prev.includes(columnId)
-        ? prev.filter((id) => id !== columnId)
-        : [...prev, columnId];
-      saveHiddenColumnsToStorage(projectId, newHidden);
-      return newHidden;
-    });
+  const refetch = () => {
+    refetchWorkspaces();
+    refetchIssues();
   };
+
+  // Filter out issues that already have a workspace
+  const filteredIssues = useMemo(() => {
+    if (!issuesData?.issues) {
+      return undefined;
+    }
+    if (!workspaces) {
+      return issuesData.issues;
+    }
+
+    const workspaceIssueNumbers = new Set(
+      workspaces.map((w) => w.githubIssueNumber).filter((n): n is number => n !== null)
+    );
+
+    return issuesData.issues.filter((issue) => !workspaceIssueNumbers.has(issue.number));
+  }, [issuesData?.issues, workspaces]);
 
   return (
     <KanbanContext.Provider
@@ -102,14 +97,13 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
         projectId,
         projectSlug,
         workspaces: workspaces as WorkspaceWithKanban[] | undefined,
-        isLoading,
-        isError,
-        error: error ? { message: error.message } : null,
+        issues: filteredIssues,
+        isLoading: isLoadingWorkspaces || isLoadingIssues,
+        isError: isErrorWorkspaces,
+        error: errorWorkspaces ? { message: errorWorkspaces.message } : null,
         refetch,
         syncAndRefetch,
         isSyncing: syncMutation.isPending,
-        hiddenColumns,
-        toggleColumnVisibility,
       }}
     >
       {children}

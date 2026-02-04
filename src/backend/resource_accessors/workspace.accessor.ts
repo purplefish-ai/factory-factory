@@ -22,6 +22,8 @@ interface CreateWorkspaceInput {
   name: string;
   description?: string;
   branchName?: string;
+  githubIssueNumber?: number;
+  githubIssueUrl?: string;
 }
 
 interface UpdateWorkspaceInput {
@@ -91,6 +93,8 @@ class WorkspaceAccessor {
         name: data.name,
         description: data.description,
         branchName: data.branchName,
+        githubIssueNumber: data.githubIssueNumber,
+        githubIssueUrl: data.githubIssueUrl,
       },
     });
   }

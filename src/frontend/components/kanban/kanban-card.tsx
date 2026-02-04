@@ -1,14 +1,16 @@
 import type { CIStatus, KanbanColumn, Workspace } from '@prisma-gen/browser';
-import { GitBranch, GitPullRequest } from 'lucide-react';
+import { Archive, GitBranch, GitPullRequest } from 'lucide-react';
 import { Link } from 'react-router';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { cn } from '@/lib/utils';
 
 export interface WorkspaceWithKanban extends Workspace {
-  kanbanColumn: KanbanColumn;
+  kanbanColumn: KanbanColumn | null;
   isWorking: boolean;
+  isArchived?: boolean;
 }
 
 interface KanbanCardProps {
@@ -18,27 +20,35 @@ interface KanbanCardProps {
 
 export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
   const showPR = workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl;
+  const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
         className={cn(
           'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
-          workspace.isWorking && 'border-brand/50 bg-brand/5'
+          workspace.isWorking && 'border-brand/50 bg-brand/5',
+          isArchived && 'opacity-60 border-dashed'
         )}
       >
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
               {workspace.name}
             </CardTitle>
-            {workspace.isWorking && (
+            {isArchived && (
+              <Badge variant="outline" className="shrink-0 text-[10px] gap-1">
+                <Archive className="h-2.5 w-2.5" />
+                Archived
+              </Badge>
+            )}
+            {!isArchived && workspace.isWorking && (
               <span className="flex items-center gap-1 text-xs text-brand shrink-0">
                 <span className="h-2 w-2 rounded-full bg-brand animate-pulse" />
                 Working
               </span>
             )}
-            {!workspace.isWorking && (
+            {!(isArchived || workspace.isWorking) && (
               <WorkspaceStatusBadge
                 status={workspace.status}
                 errorMessage={workspace.initErrorMessage}

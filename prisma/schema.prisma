@@ -46,12 +46,8 @@ enum CIStatus {
 }
 
 enum KanbanColumn {
-  BACKLOG
-  IN_PROGRESS
+  WORKING
   WAITING
-  PR_OPEN
-  APPROVED
-  MERGED
   DONE
 }
 
@@ -164,7 +160,7 @@ model Workspace {
   hasHadSessions      Boolean           @default(false)
 
   // Cached kanban column (for list performance)
-  cachedKanbanColumn  KanbanColumn      @default(BACKLOG)
+  cachedKanbanColumn  KanbanColumn      @default(WAITING)
   stateComputedAt     DateTime?         // Last kanban column computation
 
   @@index([projectId])

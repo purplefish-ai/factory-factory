@@ -14,7 +14,7 @@ export interface KanbanStateInput {
 
 export interface WorkspaceWithKanbanState {
   workspace: Workspace;
-  kanbanColumn: KanbanColumn;
+  kanbanColumn: KanbanColumn | null;
   isWorking: boolean;
 }
 
@@ -22,63 +22,51 @@ export interface WorkspaceWithKanbanState {
  * Pure function to compute kanban column from workspace state.
  * This is the core derivation logic for the kanban board.
  *
- * Status handling:
- * - NEW, PROVISIONING, FAILED → BACKLOG (workspace not ready for work)
- * - READY → normal PR-based logic
- * - ARCHIVED → DONE
+ * Simplified 3-column model:
+ * - WORKING: Initializing states (NEW/PROVISIONING/FAILED) or actively working
+ * - WAITING: Idle workspaces with hasHadSessions=true (includes PR states)
+ * - DONE: PR merged
+ *
+ * Note: Workspaces with hasHadSessions=false AND status=READY are hidden from view.
+ * Archived workspaces retain their pre-archive cachedKanbanColumn and are hidden
+ * unless "Show Archived" toggle is enabled.
+ *
+ * Returns null for workspaces that should be hidden (READY + no sessions).
  */
-export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn {
+export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | null {
   const { lifecycle, isWorking, prState, hasHadSessions } = input;
 
-  // Done: Workspace archived
+  // Archived workspaces: return null - they use cachedKanbanColumn from before archiving
+  // The caller should handle archived workspaces separately
   if (lifecycle === WorkspaceStatus.ARCHIVED) {
-    return KanbanColumn.DONE;
+    return null;
   }
 
-  // Backlog: Workspace still initializing or failed (not ready for work)
+  // WORKING: Initializing states (not ready for work yet) or actively working
   if (
     lifecycle === WorkspaceStatus.NEW ||
     lifecycle === WorkspaceStatus.PROVISIONING ||
-    lifecycle === WorkspaceStatus.FAILED
+    lifecycle === WorkspaceStatus.FAILED ||
+    isWorking
   ) {
-    return KanbanColumn.BACKLOG;
+    return KanbanColumn.WORKING;
   }
 
-  // From here, lifecycle === READY
+  // From here, lifecycle === READY and not working
 
-  // In Progress: Any active work (overrides PR state)
-  if (isWorking) {
-    return KanbanColumn.IN_PROGRESS;
-  }
-
-  // Merged: PR merged but not archived yet
+  // DONE: PR merged
   if (prState === PRState.MERGED) {
-    return KanbanColumn.MERGED;
+    return KanbanColumn.DONE;
   }
 
-  // Approved: PR approved, waiting to merge
-  if (prState === PRState.APPROVED) {
-    return KanbanColumn.APPROVED;
-  }
-
-  // PR Open: PR exists in review state
-  if (
-    prState === PRState.DRAFT ||
-    prState === PRState.OPEN ||
-    prState === PRState.CHANGES_REQUESTED
-  ) {
-    return KanbanColumn.PR_OPEN;
-  }
-
-  // Closed PRs without merge go back to waiting/backlog
-  // (prState === CLOSED or NONE at this point)
-
-  // Backlog: Never had any sessions
+  // Hide workspaces that never had sessions (old BACKLOG items)
+  // These are filtered out from the kanban view
   if (!hasHadSessions) {
-    return KanbanColumn.BACKLOG;
+    return null;
   }
 
-  // Waiting: Had sessions but idle with no active PR
+  // WAITING: Everything else - idle workspaces with sessions
+  // (includes PR states: NONE, DRAFT, OPEN, CHANGES_REQUESTED, APPROVED, CLOSED)
   return KanbanColumn.WAITING;
 }
 
@@ -140,11 +128,19 @@ class KanbanStateService {
   /**
    * Update the cached kanban column for a workspace.
    * Called after PR state changes or other relevant updates.
+   *
+   * Note: For archived workspaces, the cachedKanbanColumn is preserved
+   * to show the column it was in before archiving.
    */
   async updateCachedKanbanColumn(workspaceId: string): Promise<void> {
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (!workspace) {
       logger.warn('Cannot update cached kanban column: workspace not found', { workspaceId });
+      return;
+    }
+
+    // Don't update cached column for archived workspaces - preserve pre-archive state
+    if (workspace.status === WorkspaceStatus.ARCHIVED) {
       return;
     }
 
@@ -156,8 +152,9 @@ class KanbanStateService {
       hasHadSessions: workspace.hasHadSessions,
     });
 
+    // If column is null (hidden workspace), default to WAITING for the cache
     await workspaceAccessor.update(workspaceId, {
-      cachedKanbanColumn: cachedColumn,
+      cachedKanbanColumn: cachedColumn ?? KanbanColumn.WAITING,
       stateComputedAt: new Date(),
     });
 

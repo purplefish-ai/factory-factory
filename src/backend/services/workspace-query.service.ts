@@ -126,23 +126,29 @@ class WorkspaceQueryService {
       excludeStatuses: [WorkspaceStatus.ARCHIVED],
     });
 
-    return workspaces.map((workspace) => {
-      const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-      const isWorking = sessionService.isAnySessionWorking(sessionIds);
+    return workspaces
+      .map((workspace) => {
+        const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+        const isWorking = sessionService.isAnySessionWorking(sessionIds);
 
-      const kanbanColumn = computeKanbanColumn({
-        lifecycle: workspace.status,
-        isWorking,
-        prState: workspace.prState,
-        hasHadSessions: workspace.hasHadSessions,
+        const kanbanColumn = computeKanbanColumn({
+          lifecycle: workspace.status,
+          isWorking,
+          prState: workspace.prState,
+          hasHadSessions: workspace.hasHadSessions,
+        });
+
+        return {
+          ...workspace,
+          kanbanColumn,
+          isWorking,
+          isArchived: false,
+        };
+      })
+      .filter((workspace) => {
+        // Filter out workspaces with null kanbanColumn (hidden: READY + no sessions)
+        return workspace.kanbanColumn !== null;
       });
-
-      return {
-        ...workspace,
-        kanbanColumn,
-        isWorking,
-      };
-    });
   }
 
   async refreshFactoryConfigs(projectId: string) {

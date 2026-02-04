@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { githubCLIService } from '../services/github-cli.service';
 import { publicProcedure, router } from './trpc';
@@ -66,7 +67,7 @@ export const githubRouter = router({
       }
 
       try {
-        const issues = await githubCLIService.listIssues(githubOwner, githubRepo);
+        const issues = await githubCLIService.listIssues(githubOwner, githubRepo, {});
         return { issues, health, error: null, authenticatedUser };
       } catch (err) {
         return {
@@ -74,6 +75,49 @@ export const githubRouter = router({
           health,
           error: err instanceof Error ? err.message : 'Failed to fetch issues',
           authenticatedUser,
+        };
+      }
+    }),
+
+  /**
+   * List open issues assigned to the current user for a project's repository.
+   * Used by the Kanban board to populate the Issues column.
+   */
+  listIssuesForProject: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input }) => {
+      // Check GitHub health first
+      const health = await githubCLIService.checkHealth();
+      if (!(health.isInstalled && health.isAuthenticated)) {
+        return { issues: [], health, error: null };
+      }
+
+      // Get project to access githubOwner/githubRepo
+      const project = await projectAccessor.findById(input.projectId);
+      if (!project) {
+        return { issues: [], health, error: 'Project not found' };
+      }
+
+      const { githubOwner, githubRepo } = project;
+      if (!(githubOwner && githubRepo)) {
+        return {
+          issues: [],
+          health,
+          error: 'Project is not linked to a GitHub repository',
+        };
+      }
+
+      try {
+        // Only fetch issues assigned to the current user (@me)
+        const issues = await githubCLIService.listIssues(githubOwner, githubRepo, {
+          assignee: '@me',
+        });
+        return { issues, health, error: null };
+      } catch (err) {
+        return {
+          issues: [],
+          health,
+          error: err instanceof Error ? err.message : 'Failed to fetch issues',
         };
       }
     }),

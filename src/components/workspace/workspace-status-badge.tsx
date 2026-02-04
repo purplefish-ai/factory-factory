@@ -52,7 +52,10 @@ export function WorkspaceStatusBadge({
   const Icon = config.icon;
 
   const badge = (
-    <Badge variant={config.variant} className={cn('gap-1 text-xs', className)}>
+    <Badge
+      variant={config.variant}
+      className={cn('gap-1 text-xs whitespace-nowrap shrink-0', className)}
+    >
       <Icon className={cn('h-3 w-3', config.iconClassName)} />
       {config.label}
     </Badge>

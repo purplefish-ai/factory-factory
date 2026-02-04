@@ -264,14 +264,43 @@ export class GitClient {
   }
 
   /**
+   * Sanitize a string to be a valid git branch name.
+   * - Converts to lowercase
+   * - Replaces spaces and invalid characters with hyphens
+   * - Removes consecutive hyphens
+   * - Removes leading/trailing hyphens
+   * - Truncates to reasonable length
+   */
+  sanitizeBranchName(name: string): string {
+    return (
+      name
+        .toLowerCase()
+        // Replace spaces and common separators with hyphens
+        .replace(/[\s_]+/g, '-')
+        // Remove characters that are invalid in branch names
+        .replace(/[^a-z0-9-]/g, '')
+        // Remove consecutive hyphens
+        .replace(/-+/g, '-')
+        // Remove leading/trailing hyphens
+        .replace(/^-+|-+$/g, '')
+        // Truncate to reasonable length (git has limits, keep it readable)
+        .slice(0, 50)
+    );
+  }
+
+  /**
    * Generate a branch name with optional prefix.
    * Format: {prefix}/{workspaceName} or just {workspaceName}
    * If no workspaceName, falls back to random hex for uniqueness.
    * Example: martin-purplefish/flux-1
    */
   generateBranchName(prefix?: string, workspaceName?: string): string {
-    const suffix = workspaceName ?? crypto.randomBytes(3).toString('hex');
-    return prefix ? `${prefix}/${suffix}` : suffix;
+    const suffix = workspaceName
+      ? this.sanitizeBranchName(workspaceName)
+      : crypto.randomBytes(3).toString('hex');
+    // If sanitization resulted in empty string, fall back to random hex
+    const finalSuffix = suffix || crypto.randomBytes(3).toString('hex');
+    return prefix ? `${prefix}/${finalSuffix}` : finalSuffix;
   }
 
   /**
