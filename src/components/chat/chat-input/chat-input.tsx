@@ -59,6 +59,183 @@ export interface ChatInputProps {
 }
 
 // =============================================================================
+// Helper Components
+// =============================================================================
+
+interface LeftControlsProps {
+  settings?: ChatSettings;
+  running: boolean;
+  isDisabled: boolean;
+  modifierHeld: boolean;
+  modLabel: string;
+  tokenStats?: TokenStats;
+  onModelChange: (model: string) => void;
+  onThinkingChange: (enabled: boolean) => void;
+  onPlanModeChange: (enabled: boolean) => void;
+  onFileUploadClick: () => void;
+  onQuickAction: (action: string) => void;
+  quickActionsOpen: boolean;
+  onQuickActionsOpenChange: (open: boolean) => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  supportedImageTypes: readonly string[];
+  onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+const LeftControls = memo(function LeftControls({
+  settings,
+  running,
+  isDisabled,
+  modifierHeld,
+  modLabel,
+  tokenStats,
+  onModelChange,
+  onThinkingChange,
+  onPlanModeChange,
+  onFileUploadClick,
+  onQuickAction,
+  quickActionsOpen,
+  onQuickActionsOpenChange,
+  fileInputRef,
+  supportedImageTypes,
+  onFileSelect,
+}: LeftControlsProps) {
+  return (
+    <div className="flex items-center gap-1">
+      <ModelSelector
+        selectedModel={settings?.selectedModel ?? 'opus'}
+        onChange={onModelChange}
+        disabled={running}
+      />
+      <div className="h-4 w-px bg-border" />
+      <SettingsToggle
+        pressed={settings?.thinkingEnabled ?? false}
+        onPressedChange={onThinkingChange}
+        disabled={running}
+        icon={Brain}
+        label="Extended thinking mode"
+        ariaLabel="Toggle thinking mode"
+        shortcut={`${modLabel}+Shift+T`}
+        showShortcut={modifierHeld}
+      />
+      <SettingsToggle
+        pressed={settings?.planModeEnabled ?? false}
+        onPressedChange={onPlanModeChange}
+        disabled={running}
+        icon={MapIcon}
+        label="Plan mode"
+        ariaLabel="Toggle plan mode"
+        shortcut={`${modLabel}+Shift+P`}
+        showShortcut={modifierHeld}
+      />
+      <div className="h-4 w-px bg-border" />
+      {/* File upload button */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onFileUploadClick}
+              disabled={running || isDisabled}
+              className="h-6 w-6 p-0"
+              aria-label="Upload image"
+            >
+              <ImagePlus className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p>
+              Upload image
+              {modifierHeld ? ` (${modLabel}+Shift+U)` : ''}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <QuickActionsDropdown
+        onAction={onQuickAction}
+        disabled={isDisabled}
+        open={quickActionsOpen}
+        onOpenChange={onQuickActionsOpenChange}
+        shortcut={`${modLabel}+Shift+A`}
+        showShortcut={modifierHeld}
+      />
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={supportedImageTypes.join(',')}
+        multiple
+        onChange={onFileSelect}
+        className="hidden"
+        aria-label="File upload input"
+      />
+      {/* Context window indicator */}
+      {tokenStats && (
+        <>
+          <div className="h-4 w-px bg-border" />
+          <ContextWindowIndicator tokenStats={tokenStats} />
+        </>
+      )}
+    </div>
+  );
+});
+
+interface RightControlsProps {
+  running: boolean;
+  stopping: boolean;
+  isDisabled: boolean;
+  pendingMessageCount: number;
+  onStop?: () => void;
+  onSend: () => void;
+}
+
+const RightControls = memo(function RightControls({
+  running,
+  stopping,
+  isDisabled,
+  pendingMessageCount,
+  onStop,
+  onSend,
+}: RightControlsProps) {
+  return (
+    <div className="flex items-center gap-1">
+      {/* Show sending indicator when messages are pending backend confirmation */}
+      {pendingMessageCount > 0 && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Sending...</span>
+        </div>
+      )}
+      {running && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onStop}
+          disabled={stopping}
+          className="h-7 w-7"
+          aria-label={stopping ? 'Stopping...' : 'Stop agent'}
+        >
+          {stopping ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : (
+            <Square className="h-3 w-3 fill-current" />
+          )}
+        </Button>
+      )}
+      {/* Send button - always enabled (except when disconnected), queues when running */}
+      <InputGroupButton
+        onClick={onSend}
+        disabled={isDisabled}
+        size="icon-sm"
+        aria-label={running ? 'Queue message' : 'Send message'}
+      >
+        <Send className="h-4 w-4" />
+      </InputGroupButton>
+    </div>
+  );
+});
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -68,7 +245,6 @@ export interface ChatInputProps {
  * Supports Enter to send and Shift+Enter for new line.
  * Memoized to prevent unnecessary re-renders from parent state changes.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: UI composition requires conditional rendering
 export const ChatInput = memo(function ChatInput({
   onSend,
   onStop,
@@ -246,120 +422,32 @@ export const ChatInput = memo(function ChatInput({
           align="block-end"
           className="flex items-center justify-between border-t !pt-1 !pb-1"
         >
-          {/* Left side: Model selector and toggles */}
-          <div className="flex items-center gap-1">
-            <ModelSelector
-              selectedModel={settings?.selectedModel ?? 'opus'}
-              onChange={actions.handleModelChange}
-              disabled={running}
-            />
-            <div className="h-4 w-px bg-border" />
-            <SettingsToggle
-              pressed={settings?.thinkingEnabled ?? false}
-              onPressedChange={actions.handleThinkingChange}
-              disabled={running}
-              icon={Brain}
-              label="Extended thinking mode"
-              ariaLabel="Toggle thinking mode"
-              shortcut={`${modLabel}+Shift+T`}
-              showShortcut={modifierHeld}
-            />
-            <SettingsToggle
-              pressed={settings?.planModeEnabled ?? false}
-              onPressedChange={actions.handlePlanModeChange}
-              disabled={running}
-              icon={MapIcon}
-              label="Plan mode"
-              ariaLabel="Toggle plan mode"
-              shortcut={`${modLabel}+Shift+P`}
-              showShortcut={modifierHeld}
-            />
-            <div className="h-4 w-px bg-border" />
-            {/* File upload button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => actions.fileInputRef.current?.click()}
-                    disabled={running || isDisabled}
-                    className="h-6 w-6 p-0"
-                    aria-label="Upload image"
-                  >
-                    <ImagePlus className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>
-                    Upload image
-                    {modifierHeld ? ` (${modLabel}+Shift+U)` : ''}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <QuickActionsDropdown
-              onAction={actions.handleQuickAction}
-              disabled={isDisabled}
-              open={quickActionsOpen}
-              onOpenChange={setQuickActionsOpen}
-              shortcut={`${modLabel}+Shift+A`}
-              showShortcut={modifierHeld}
-            />
-            {/* Hidden file input */}
-            <input
-              ref={actions.fileInputRef}
-              type="file"
-              accept={actions.supportedImageTypes.join(',')}
-              multiple
-              onChange={actions.handleFileSelect}
-              className="hidden"
-              aria-label="File upload input"
-            />
-            {/* Context window indicator */}
-            {tokenStats && (
-              <>
-                <div className="h-4 w-px bg-border" />
-                <ContextWindowIndicator tokenStats={tokenStats} />
-              </>
-            )}
-          </div>
-
-          {/* Right side: Sending indicator + Stop button (when running) + Send button */}
-          <div className="flex items-center gap-1">
-            {/* Show sending indicator when messages are pending backend confirmation */}
-            {pendingMessageCount > 0 && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Sending...</span>
-              </div>
-            )}
-            {running && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onStop}
-                disabled={stopping}
-                className="h-7 w-7"
-                aria-label={stopping ? 'Stopping...' : 'Stop agent'}
-              >
-                {stopping ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <Square className="h-3 w-3 fill-current" />
-                )}
-              </Button>
-            )}
-            {/* Send button - always enabled (except when disconnected), queues when running */}
-            <InputGroupButton
-              onClick={() => actions.handleSendClick(resolvedInputRef)}
-              disabled={isDisabled}
-              size="icon-sm"
-              aria-label={running ? 'Queue message' : 'Send message'}
-            >
-              <Send className="h-4 w-4" />
-            </InputGroupButton>
-          </div>
+          <LeftControls
+            settings={settings}
+            running={running}
+            isDisabled={isDisabled}
+            modifierHeld={modifierHeld}
+            modLabel={modLabel}
+            tokenStats={tokenStats}
+            onModelChange={actions.handleModelChange}
+            onThinkingChange={actions.handleThinkingChange}
+            onPlanModeChange={actions.handlePlanModeChange}
+            onFileUploadClick={() => actions.fileInputRef.current?.click()}
+            onQuickAction={actions.handleQuickAction}
+            quickActionsOpen={quickActionsOpen}
+            onQuickActionsOpenChange={setQuickActionsOpen}
+            fileInputRef={actions.fileInputRef}
+            supportedImageTypes={actions.supportedImageTypes}
+            onFileSelect={actions.handleFileSelect}
+          />
+          <RightControls
+            running={running}
+            stopping={stopping}
+            isDisabled={isDisabled}
+            pendingMessageCount={pendingMessageCount}
+            onStop={onStop}
+            onSend={() => actions.handleSendClick(resolvedInputRef)}
+          />
         </InputGroupAddon>
       </InputGroup>
     </div>
