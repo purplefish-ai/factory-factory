@@ -437,45 +437,71 @@ export function isToolSequence(item: GroupedMessageItem): item is ToolSequence {
 }
 
 /**
+ * Tries to create a PairedToolCall from a ChatMessage.
+ * Returns null if the message is not a tool_use message.
+ */
+function tryCreatePairedToolCall(msg: ChatMessage): PairedToolCall | null {
+  if (!(msg.message && isToolUseMessage(msg.message))) {
+    return null;
+  }
+  const toolInfo = extractToolInfo(msg.message);
+  if (!toolInfo) {
+    return null;
+  }
+  return {
+    id: toolInfo.id,
+    name: toolInfo.name,
+    input: toolInfo.input,
+    status: 'pending',
+  };
+}
+
+/**
+ * Updates a PairedToolCall with result info if the message contains a matching tool result.
+ */
+function applyToolResultToCall(
+  msg: ChatMessage,
+  pairedCalls: PairedToolCall[],
+  toolUseIdToIndex: Map<string, number>
+): void {
+  if (!(msg.message && isToolResultMessage(msg.message))) {
+    return;
+  }
+  const resultInfo = extractToolResultInfo(msg.message);
+  if (!resultInfo) {
+    return;
+  }
+  const callIndex = toolUseIdToIndex.get(resultInfo.toolUseId);
+  if (callIndex === undefined) {
+    return;
+  }
+  pairedCalls[callIndex].status = resultInfo.isError ? 'error' : 'success';
+  pairedCalls[callIndex].result = {
+    content: resultInfo.content,
+    isError: resultInfo.isError,
+  };
+}
+
+/**
  * Processes a sequence of tool messages and extracts paired tool calls.
  * Each tool_use is paired with its corresponding tool_result.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but necessary nested conditions for message type checking
 function extractPairedToolCalls(toolMessages: ChatMessage[]): PairedToolCall[] {
   const pairedCalls: PairedToolCall[] = [];
-  const toolUseIdToIndex = new Map<string, number>(); // Maps tool_use_id to pairedCalls index
+  const toolUseIdToIndex = new Map<string, number>();
 
   // First pass: collect all tool_use messages
   for (const msg of toolMessages) {
-    if (msg.message && isToolUseMessage(msg.message)) {
-      const toolInfo = extractToolInfo(msg.message);
-      if (toolInfo) {
-        toolUseIdToIndex.set(toolInfo.id, pairedCalls.length);
-        pairedCalls.push({
-          id: toolInfo.id,
-          name: toolInfo.name,
-          input: toolInfo.input,
-          status: 'pending',
-        });
-      }
+    const pairedCall = tryCreatePairedToolCall(msg);
+    if (pairedCall) {
+      toolUseIdToIndex.set(pairedCall.id, pairedCalls.length);
+      pairedCalls.push(pairedCall);
     }
   }
 
   // Second pass: match tool_result messages to their tool_use
   for (const msg of toolMessages) {
-    if (msg.message && isToolResultMessage(msg.message)) {
-      const resultInfo = extractToolResultInfo(msg.message);
-      if (resultInfo) {
-        const callIndex = toolUseIdToIndex.get(resultInfo.toolUseId);
-        if (callIndex !== undefined) {
-          pairedCalls[callIndex].status = resultInfo.isError ? 'error' : 'success';
-          pairedCalls[callIndex].result = {
-            content: resultInfo.content,
-            isError: resultInfo.isError,
-          };
-        }
-      }
-    }
+    applyToolResultToCall(msg, pairedCalls, toolUseIdToIndex);
   }
 
   return pairedCalls;
