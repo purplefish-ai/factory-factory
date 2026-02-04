@@ -95,7 +95,7 @@ function SingleSelectQuestion({
   const selectedValue = typeof value === 'string' ? value : '';
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {question.header && (
         <h4 className="text-xs font-medium text-muted-foreground">{question.header}</h4>
       )}
@@ -107,7 +107,7 @@ function SingleSelectQuestion({
             key={`${index}-${option.label}`}
             htmlFor={`question-${index}-option-${option.label}`}
             className={cn(
-              'flex items-center gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
+              'flex items-center gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
               selectedValue === option.label && 'border-primary bg-primary/5'
             )}
           >
@@ -127,7 +127,7 @@ function SingleSelectQuestion({
         <label
           htmlFor={`question-${index}-option-other`}
           className={cn(
-            'flex items-start gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
+            'flex items-start gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
             selectedValue === OTHER_OPTION_VALUE && 'border-primary bg-primary/5'
           )}
         >
@@ -136,7 +136,7 @@ function SingleSelectQuestion({
             id={`question-${index}-option-other`}
             className="shrink-0 mt-1"
           />
-          <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex-1 min-w-0 space-y-1">
             <span className="text-sm font-medium">Other</span>
             <Textarea
               value={otherText}
@@ -166,7 +166,7 @@ function SingleSelectQuestion({
                 }
               }}
               placeholder="Type your response..."
-              className="min-h-[56px] text-sm"
+              className="min-h-[42px] text-sm py-1.5"
             />
           </div>
         </label>
@@ -200,7 +200,7 @@ function MultiSelectQuestion({
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {question.header && (
         <h4 className="text-xs font-medium text-muted-foreground">{question.header}</h4>
       )}
@@ -215,7 +215,7 @@ function MultiSelectQuestion({
               key={`${index}-${option.label}`}
               htmlFor={`question-${index}-option-${option.label}`}
               className={cn(
-                'flex items-center gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
+                'flex items-center gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
                 isSelected && 'border-primary bg-primary/5'
               )}
             >
@@ -237,7 +237,7 @@ function MultiSelectQuestion({
         <label
           htmlFor={`question-${index}-option-other`}
           className={cn(
-            'flex items-start gap-2.5 p-2 rounded-md border transition-colors cursor-pointer hover:bg-background',
+            'flex items-start gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
             selectedValues.includes(OTHER_OPTION_VALUE) && 'border-primary bg-primary/5'
           )}
         >
@@ -255,7 +255,7 @@ function MultiSelectQuestion({
             }}
             className="shrink-0 mt-1"
           />
-          <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex-1 min-w-0 space-y-1">
             <span className="text-sm font-medium">Other</span>
             <Textarea
               value={otherText}
@@ -285,7 +285,7 @@ function MultiSelectQuestion({
                 }
               }}
               placeholder="Type your response..."
-              className="min-h-[56px] text-sm"
+              className="min-h-[42px] text-sm py-1.5"
             />
           </div>
         </label>
