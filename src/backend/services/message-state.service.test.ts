@@ -567,6 +567,47 @@ describe('MessageStateService', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // ensureHistoryLoaded
+  // ---------------------------------------------------------------------------
+
+  describe('ensureHistoryLoaded', () => {
+    it('should reload history and preserve queued messages', () => {
+      messageStateService.createUserMessage('session-1', createTestQueuedMessage('queued-1'));
+
+      const history: HistoryMessage[] = [
+        createTestHistoryMessage('user', 'From history', 'uuid-1'),
+      ];
+
+      const didLoad = messageStateService.ensureHistoryLoaded('session-1', history);
+
+      expect(didLoad).toBe(true);
+
+      const messages = messageStateService.getAllMessages('session-1');
+      expect(messages).toHaveLength(2);
+      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('From history');
+      expect(isUserMessage(messages[1]) ? messages[1].text : undefined).toBe('Test message');
+    });
+
+    it('should skip reload if non-queued messages already exist', () => {
+      const history: HistoryMessage[] = [
+        createTestHistoryMessage('user', 'Existing history', 'uuid-1'),
+      ];
+
+      messageStateService.loadFromHistory('session-1', history);
+
+      const didLoad = messageStateService.ensureHistoryLoaded('session-1', [
+        createTestHistoryMessage('user', 'New history', 'uuid-2'),
+      ]);
+
+      expect(didLoad).toBe(false);
+
+      const messages = messageStateService.getAllMessages('session-1');
+      expect(messages).toHaveLength(1);
+      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('Existing history');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // hasMessage
   // ---------------------------------------------------------------------------
 
