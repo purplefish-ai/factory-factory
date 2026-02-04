@@ -161,6 +161,7 @@
       "sharp"
     ],
     "overrides": {
+      "@isaacs/brace-expansion": ">=5.0.1",
       "braces": ">=3.0.3",
       "micromatch": ">=4.0.8",
       "tar": ">=7.5.0",
