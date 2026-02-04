@@ -814,6 +814,33 @@ class GitHubCLIService {
       throw new Error(`Failed to add PR comment: ${errorMessage}`);
     }
   }
+
+  /**
+   * Close a GitHub issue.
+   */
+  async closeIssue(owner: string, repo: string, issueNumber: number): Promise<void> {
+    try {
+      await execFileAsync(
+        'gh',
+        ['issue', 'close', String(issueNumber), '--repo', `${owner}/${repo}`],
+        { timeout: 30_000 }
+      );
+      logger.info('Issue closed successfully', { owner, repo, issueNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to close issue via gh CLI', {
+        owner,
+        repo,
+        issueNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to close issue: ${errorMessage}`);
+    }
+  }
 }
 
 export const githubCLIService = new GitHubCLIService();
