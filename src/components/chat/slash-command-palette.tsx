@@ -127,52 +127,59 @@ export function SlashCommandPalette({
   }, [isOpen, onClose, anchorRef]);
 
   /**
+   * Helper to select the current command if there are any filtered matches.
+   * Returns the appropriate SlashKeyResult.
+   */
+  const selectCurrentCommand = useCallback(
+    (fallbackResult: SlashKeyResult): SlashKeyResult => {
+      const hasMatches = filteredCommands.length > 0;
+      if (hasMatches && filteredCommands[selectedIndex]) {
+        onSelect(filteredCommands[selectedIndex]);
+        return 'handled';
+      }
+      return fallbackResult;
+    },
+    [filteredCommands, selectedIndex, onSelect]
+  );
+
+  /**
+   * Key handler map for keyboard navigation.
+   * Each handler returns a SlashKeyResult indicating how the event should be processed.
+   */
+  const keyHandlers = useMemo<Record<string, () => SlashKeyResult>>(
+    () => ({
+      ArrowDown: () => {
+        if (filteredCommands.length > 0) {
+          setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
+        }
+        return 'handled';
+      },
+      ArrowUp: () => {
+        if (filteredCommands.length > 0) {
+          setSelectedIndex((prev) => Math.max(prev - 1, 0));
+        }
+        return 'handled';
+      },
+      Enter: () => selectCurrentCommand('close-and-passthrough'),
+      Tab: () => selectCurrentCommand('passthrough'),
+      Escape: () => {
+        onClose();
+        return 'handled';
+      },
+    }),
+    [filteredCommands.length, selectCurrentCommand, onClose]
+  );
+
+  /**
    * Handle a keyboard event. Called by parent via paletteRef.
    * Returns the result indicating how the event should be handled.
    */
   const handleKeyDown = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: switch handles multiple key types
     (key: string): SlashKeyResult => {
-      const hasMatches = filteredCommands.length > 0;
-
-      switch (key) {
-        case 'ArrowDown':
-          if (hasMatches) {
-            setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
-          }
-          return 'handled';
-
-        case 'ArrowUp':
-          if (hasMatches) {
-            setSelectedIndex((prev) => Math.max(prev - 1, 0));
-          }
-          return 'handled';
-
-        case 'Enter':
-          if (hasMatches && filteredCommands[selectedIndex]) {
-            onSelect(filteredCommands[selectedIndex]);
-            return 'handled';
-          }
-          // No matches - close menu and let message be sent
-          return 'close-and-passthrough';
-
-        case 'Tab':
-          if (hasMatches && filteredCommands[selectedIndex]) {
-            onSelect(filteredCommands[selectedIndex]);
-            return 'handled';
-          }
-          // No matches - let Tab work normally (focus next element)
-          return 'passthrough';
-
-        case 'Escape':
-          onClose();
-          return 'handled';
-
-        default:
-          return 'passthrough';
-      }
+      const handler = keyHandlers[key];
+      return handler ? handler() : 'passthrough';
     },
-    [filteredCommands, selectedIndex, onSelect, onClose]
+    [keyHandlers]
   );
 
   // Expose handleKeyDown via imperative handle
