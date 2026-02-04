@@ -1,13 +1,14 @@
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import type { Meta, StoryObj } from '@storybook/react';
 import type { WorkspaceWithKanban } from './kanban-card';
-import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
+import { KANBAN_COLUMNS, KanbanColumn, type UIKanbanColumnId } from './kanban-column';
 
 /**
  * Note: The actual KanbanBoard component cannot be fully tested in Storybook
  * because it depends on the KanbanProvider context with tRPC hooks.
  *
  * These stories demonstrate the visual layout using KanbanColumn components directly.
+ * The ISSUES column requires tRPC and is not shown in these stories.
  */
 
 // =============================================================================
@@ -34,7 +35,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   status: 'READY',
   createdAt: new Date(),
   updatedAt: new Date(),
-  kanbanColumn: 'IN_PROGRESS',
+  kanbanColumn: 'WORKING',
   isWorking: false,
   initErrorMessage: null,
   initOutput: null,
@@ -44,7 +45,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   githubIssueNumber: null,
   githubIssueUrl: null,
   hasHadSessions: true,
-  cachedKanbanColumn: 'IN_PROGRESS',
+  cachedKanbanColumn: 'WORKING',
   stateComputedAt: new Date(),
   runScriptCommand: null,
   runScriptCleanupCommand: null,
@@ -57,22 +58,22 @@ const baseWorkspace: WorkspaceWithKanban = {
   ratchetActiveSessionId: null,
   ratchetLastCiRunId: null,
   ratchetLastNotifiedState: null,
+  isArchived: false,
 };
 
 const mockWorkspaces: WorkspaceWithKanban[] = [
-  { ...baseWorkspace, id: 'ws-1', kanbanColumn: 'BACKLOG', name: 'Research API design' },
   {
     ...baseWorkspace,
-    id: 'ws-2',
-    kanbanColumn: 'IN_PROGRESS',
+    id: 'ws-1',
+    kanbanColumn: 'WORKING',
     name: 'Add authentication',
     isWorking: true,
   },
-  { ...baseWorkspace, id: 'ws-3', kanbanColumn: 'IN_PROGRESS', name: 'Fix login bug' },
+  { ...baseWorkspace, id: 'ws-2', kanbanColumn: 'WORKING', name: 'Fix login bug', status: 'NEW' },
   {
     ...baseWorkspace,
-    id: 'ws-4',
-    kanbanColumn: 'PR_OPEN',
+    id: 'ws-3',
+    kanbanColumn: 'WAITING',
     name: 'Update dependencies',
     prNumber: 42,
     prUrl: '#',
@@ -80,8 +81,8 @@ const mockWorkspaces: WorkspaceWithKanban[] = [
   },
   {
     ...baseWorkspace,
-    id: 'ws-5',
-    kanbanColumn: 'APPROVED',
+    id: 'ws-4',
+    kanbanColumn: 'WAITING',
     name: 'Add dark mode',
     prNumber: 43,
     prUrl: '#',
@@ -89,8 +90,8 @@ const mockWorkspaces: WorkspaceWithKanban[] = [
   },
   {
     ...baseWorkspace,
-    id: 'ws-6',
-    kanbanColumn: 'MERGED',
+    id: 'ws-5',
+    kanbanColumn: 'DONE',
     name: 'Fix typo',
     prNumber: 40,
     prUrl: '#',
@@ -98,18 +99,20 @@ const mockWorkspaces: WorkspaceWithKanban[] = [
   },
 ];
 
+// Only workspace columns (not ISSUES which requires tRPC)
+const WORKSPACE_COLUMNS = KANBAN_COLUMNS.filter((col) => col.id !== 'ISSUES');
+
 function groupByColumn(workspaces: WorkspaceWithKanban[]) {
   const grouped: Record<KanbanColumnType, WorkspaceWithKanban[]> = {
-    BACKLOG: [],
-    IN_PROGRESS: [],
+    WORKING: [],
     WAITING: [],
-    PR_OPEN: [],
-    APPROVED: [],
-    MERGED: [],
     DONE: [],
   };
   for (const ws of workspaces) {
-    grouped[ws.kanbanColumn].push(ws);
+    const col = ws.kanbanColumn as KanbanColumnType;
+    if (col in grouped) {
+      grouped[col].push(ws);
+    }
   }
   return grouped;
 }
@@ -122,11 +125,11 @@ function MockKanbanBoard({ workspaces }: { workspaces: WorkspaceWithKanban[] }) 
   const grouped = groupByColumn(workspaces);
   return (
     <div className="flex gap-4 overflow-x-auto pb-4">
-      {KANBAN_COLUMNS.map((column) => (
+      {WORKSPACE_COLUMNS.map((column) => (
         <KanbanColumn
           key={column.id}
           column={column}
-          workspaces={grouped[column.id]}
+          workspaces={grouped[column.id as KanbanColumnType] ?? []}
           projectSlug="demo"
         />
       ))}
@@ -175,13 +178,44 @@ export const FewWorkspaces: Story = {
   },
 };
 
-export const AllInProgress: Story = {
+export const AllWorking: Story = {
   args: {
     workspaces: [
-      { ...baseWorkspace, id: 'ws-1', name: 'Task 1', kanbanColumn: 'IN_PROGRESS' },
-      { ...baseWorkspace, id: 'ws-2', name: 'Task 2', kanbanColumn: 'IN_PROGRESS' },
-      { ...baseWorkspace, id: 'ws-3', name: 'Task 3', kanbanColumn: 'IN_PROGRESS' },
-      { ...baseWorkspace, id: 'ws-4', name: 'Task 4', kanbanColumn: 'IN_PROGRESS' },
+      { ...baseWorkspace, id: 'ws-1', name: 'Task 1', kanbanColumn: 'WORKING', isWorking: true },
+      { ...baseWorkspace, id: 'ws-2', name: 'Task 2', kanbanColumn: 'WORKING', isWorking: true },
+      { ...baseWorkspace, id: 'ws-3', name: 'Task 3', kanbanColumn: 'WORKING', status: 'NEW' },
+      {
+        ...baseWorkspace,
+        id: 'ws-4',
+        name: 'Task 4',
+        kanbanColumn: 'WORKING',
+        status: 'PROVISIONING',
+      },
+    ],
+  },
+};
+
+export const WithArchivedWorkspaces: Story = {
+  args: {
+    workspaces: [
+      ...mockWorkspaces,
+      {
+        ...baseWorkspace,
+        id: 'ws-archived-1',
+        name: 'Archived task',
+        kanbanColumn: 'WAITING',
+        status: 'ARCHIVED',
+        isArchived: true,
+      },
+      {
+        ...baseWorkspace,
+        id: 'ws-archived-2',
+        name: 'Another archived',
+        kanbanColumn: 'DONE',
+        status: 'ARCHIVED',
+        isArchived: true,
+        prState: 'MERGED',
+      },
     ],
   },
 };
@@ -189,15 +223,15 @@ export const AllInProgress: Story = {
 export const WithHiddenColumns: Story = {
   render: () => {
     const grouped = groupByColumn(mockWorkspaces);
-    const hiddenColumns: KanbanColumnType[] = ['DONE', 'MERGED', 'WAITING'];
+    const hiddenColumns: UIKanbanColumnId[] = ['DONE'];
     return (
       <div className="p-4">
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {KANBAN_COLUMNS.map((column) => (
+          {WORKSPACE_COLUMNS.map((column) => (
             <KanbanColumn
               key={column.id}
               column={column}
-              workspaces={grouped[column.id]}
+              workspaces={grouped[column.id as KanbanColumnType] ?? []}
               projectSlug="demo"
               isHidden={hiddenColumns.includes(column.id)}
             />

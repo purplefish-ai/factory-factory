@@ -2,173 +2,147 @@ import { describe, expect, it } from 'vitest';
 import { computeKanbanColumn } from './kanban-state.service';
 
 describe('computeKanbanColumn', () => {
-  describe('status-based routing (before PR logic)', () => {
-    it('should return DONE for ARCHIVED status', () => {
+  describe('archived workspaces', () => {
+    it('should return null for ARCHIVED status (use cachedKanbanColumn instead)', () => {
       const result = computeKanbanColumn({
         lifecycle: 'ARCHIVED',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: false,
       });
-      expect(result).toBe('DONE');
+      expect(result).toBeNull();
     });
 
-    it('should return DONE for ARCHIVED even with open PR', () => {
+    it('should return null for ARCHIVED even with open PR', () => {
       const result = computeKanbanColumn({
         lifecycle: 'ARCHIVED',
         isWorking: false,
         prState: 'OPEN',
         hasHadSessions: true,
       });
-      expect(result).toBe('DONE');
+      expect(result).toBeNull();
     });
+  });
 
-    it('should return BACKLOG for NEW status', () => {
+  describe('WORKING column - initializing states', () => {
+    it('should return WORKING for NEW status', () => {
       const result = computeKanbanColumn({
         lifecycle: 'NEW',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: false,
       });
-      expect(result).toBe('BACKLOG');
+      expect(result).toBe('WORKING');
     });
 
-    it('should return BACKLOG for PROVISIONING status', () => {
+    it('should return WORKING for PROVISIONING status', () => {
       const result = computeKanbanColumn({
         lifecycle: 'PROVISIONING',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: false,
       });
-      expect(result).toBe('BACKLOG');
+      expect(result).toBe('WORKING');
     });
 
-    it('should return BACKLOG for FAILED status', () => {
+    it('should return WORKING for FAILED status', () => {
       const result = computeKanbanColumn({
         lifecycle: 'FAILED',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: false,
       });
-      expect(result).toBe('BACKLOG');
+      expect(result).toBe('WORKING');
     });
 
-    it('should return BACKLOG for FAILED even if had sessions', () => {
+    it('should return WORKING for FAILED even if had sessions', () => {
       const result = computeKanbanColumn({
         lifecycle: 'FAILED',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: true,
       });
-      expect(result).toBe('BACKLOG');
+      expect(result).toBe('WORKING');
     });
   });
 
-  describe('READY status - activity-based routing', () => {
-    it('should return IN_PROGRESS when isWorking is true', () => {
+  describe('WORKING column - actively working', () => {
+    it('should return WORKING when isWorking is true', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: true,
         prState: 'NONE',
         hasHadSessions: false,
       });
-      expect(result).toBe('IN_PROGRESS');
+      expect(result).toBe('WORKING');
     });
 
-    it('should return IN_PROGRESS when working, even with open PR', () => {
+    it('should return WORKING when working, even with open PR', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: true,
         prState: 'OPEN',
         hasHadSessions: true,
       });
-      expect(result).toBe('IN_PROGRESS');
+      expect(result).toBe('WORKING');
     });
 
-    it('should return IN_PROGRESS when working, even with approved PR', () => {
+    it('should return WORKING when working, even with approved PR', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: true,
         prState: 'APPROVED',
         hasHadSessions: true,
       });
-      expect(result).toBe('IN_PROGRESS');
+      expect(result).toBe('WORKING');
     });
   });
 
-  describe('READY status - PR-based routing', () => {
-    it('should return MERGED for merged PR', () => {
+  describe('DONE column - merged PRs', () => {
+    it('should return DONE for merged PR', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'MERGED',
         hasHadSessions: true,
       });
-      expect(result).toBe('MERGED');
+      expect(result).toBe('DONE');
     });
 
-    it('should return APPROVED for approved PR', () => {
+    it('should return DONE for merged PR even without prior sessions', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
-        prState: 'APPROVED',
-        hasHadSessions: true,
+        prState: 'MERGED',
+        hasHadSessions: false,
       });
-      expect(result).toBe('APPROVED');
-    });
-
-    it('should return PR_OPEN for draft PR', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'DRAFT',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('PR_OPEN');
-    });
-
-    it('should return PR_OPEN for open PR', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'OPEN',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('PR_OPEN');
-    });
-
-    it('should return PR_OPEN for PR with changes requested', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'CHANGES_REQUESTED',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('PR_OPEN');
+      expect(result).toBe('DONE');
     });
   });
 
-  describe('READY status - idle routing (no PR)', () => {
-    it('should return BACKLOG if never had sessions', () => {
+  describe('hidden workspaces (return null)', () => {
+    it('should return null if never had sessions (hidden from view)', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: false,
       });
-      expect(result).toBe('BACKLOG');
+      expect(result).toBeNull();
     });
 
-    it('should return BACKLOG if had sessions but PR was closed', () => {
+    it('should return null if no sessions even with closed PR', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'CLOSED',
         hasHadSessions: false,
       });
-      expect(result).toBe('BACKLOG');
+      expect(result).toBeNull();
     });
+  });
 
+  describe('WAITING column - idle workspaces with sessions', () => {
     it('should return WAITING if had sessions but no PR', () => {
       const result = computeKanbanColumn({
         lifecycle: 'READY',
@@ -188,6 +162,46 @@ describe('computeKanbanColumn', () => {
       });
       expect(result).toBe('WAITING');
     });
+
+    it('should return WAITING for approved PR (waiting for merge)', () => {
+      const result = computeKanbanColumn({
+        lifecycle: 'READY',
+        isWorking: false,
+        prState: 'APPROVED',
+        hasHadSessions: true,
+      });
+      expect(result).toBe('WAITING');
+    });
+
+    it('should return WAITING for draft PR', () => {
+      const result = computeKanbanColumn({
+        lifecycle: 'READY',
+        isWorking: false,
+        prState: 'DRAFT',
+        hasHadSessions: true,
+      });
+      expect(result).toBe('WAITING');
+    });
+
+    it('should return WAITING for open PR', () => {
+      const result = computeKanbanColumn({
+        lifecycle: 'READY',
+        isWorking: false,
+        prState: 'OPEN',
+        hasHadSessions: true,
+      });
+      expect(result).toBe('WAITING');
+    });
+
+    it('should return WAITING for PR with changes requested', () => {
+      const result = computeKanbanColumn({
+        lifecycle: 'READY',
+        isWorking: false,
+        prState: 'CHANGES_REQUESTED',
+        hasHadSessions: true,
+      });
+      expect(result).toBe('WAITING');
+    });
   });
 
   describe('edge cases', () => {
@@ -198,19 +212,17 @@ describe('computeKanbanColumn', () => {
         prState: 'OPEN',
         hasHadSessions: true,
       });
-      expect(result).toBe('DONE');
+      expect(result).toBeNull();
     });
 
-    it('should prioritize NEW/PROVISIONING/FAILED over isWorking', () => {
-      // Even if isWorking is true for a NEW workspace (shouldn't happen in practice),
-      // it should still be in BACKLOG
+    it('should return WORKING for NEW even if isWorking flag is set', () => {
       const result = computeKanbanColumn({
         lifecycle: 'NEW',
         isWorking: true,
         prState: 'NONE',
         hasHadSessions: false,
       });
-      expect(result).toBe('BACKLOG');
+      expect(result).toBe('WORKING');
     });
 
     it('should prioritize isWorking over PR state for READY', () => {
@@ -220,7 +232,7 @@ describe('computeKanbanColumn', () => {
         prState: 'MERGED', // Even with merged PR
         hasHadSessions: true,
       });
-      expect(result).toBe('IN_PROGRESS');
+      expect(result).toBe('WORKING');
     });
   });
 });

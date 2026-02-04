@@ -59,6 +59,7 @@ export const workspaceRouter = router({
         kanbanColumn: z.nativeEnum(KanbanColumn).optional(),
         limit: z.number().min(1).max(100).optional(),
         offset: z.number().min(0).optional(),
+        includeArchived: z.boolean().optional(),
       })
     )
     .query(({ input }) => workspaceQueryService.listWithKanbanState(input)),

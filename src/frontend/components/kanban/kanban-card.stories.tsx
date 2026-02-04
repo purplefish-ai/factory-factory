@@ -44,7 +44,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   status: 'READY',
   createdAt: new Date(),
   updatedAt: new Date(),
-  kanbanColumn: 'IN_PROGRESS',
+  kanbanColumn: 'WORKING',
   isWorking: false,
   initErrorMessage: null,
   initOutput: null,
@@ -54,7 +54,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   githubIssueNumber: null,
   githubIssueUrl: null,
   hasHadSessions: true,
-  cachedKanbanColumn: 'IN_PROGRESS',
+  cachedKanbanColumn: 'WORKING',
   stateComputedAt: new Date(),
   runScriptCommand: null,
   runScriptCleanupCommand: null,
@@ -67,6 +67,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   ratchetActiveSessionId: null,
   ratchetLastCiRunId: null,
   ratchetLastNotifiedState: null,
+  isArchived: false,
 };
 
 export const NoPR: Story = {
@@ -137,7 +138,7 @@ export const Merged: Story = {
       prUrl: 'https://github.com/example/repo/pull/46',
       prNumber: 46,
       prState: 'MERGED',
-      kanbanColumn: 'MERGED',
+      kanbanColumn: 'DONE',
     },
     projectSlug: 'my-project',
   },
@@ -151,7 +152,39 @@ export const Closed: Story = {
       prUrl: 'https://github.com/example/repo/pull/47',
       prNumber: 47,
       prState: 'CLOSED',
+      kanbanColumn: 'WAITING',
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const Archived: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Archived workspace',
+      prUrl: 'https://github.com/example/repo/pull/50',
+      prNumber: 50,
+      prState: 'MERGED',
+      status: 'ARCHIVED',
       kanbanColumn: 'DONE',
+      isArchived: true,
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const ArchivedInWaiting: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Archived with open PR',
+      prUrl: 'https://github.com/example/repo/pull/51',
+      prNumber: 51,
+      prState: 'OPEN',
+      status: 'ARCHIVED',
+      kanbanColumn: 'WAITING',
+      isArchived: true,
     },
     projectSlug: 'my-project',
   },

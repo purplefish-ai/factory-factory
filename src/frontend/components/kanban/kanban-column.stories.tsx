@@ -37,7 +37,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   status: 'READY',
   createdAt: new Date(),
   updatedAt: new Date(),
-  kanbanColumn: 'IN_PROGRESS',
+  kanbanColumn: 'WORKING',
   isWorking: false,
   initErrorMessage: null,
   initOutput: null,
@@ -47,7 +47,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   githubIssueNumber: null,
   githubIssueUrl: null,
   hasHadSessions: true,
-  cachedKanbanColumn: 'IN_PROGRESS',
+  cachedKanbanColumn: 'WORKING',
   stateComputedAt: new Date(),
   runScriptCommand: null,
   runScriptCleanupCommand: null,
@@ -60,6 +60,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   ratchetActiveSessionId: null,
   ratchetLastCiRunId: null,
   ratchetLastNotifiedState: null,
+  isArchived: false,
 };
 
 const mockWorkspaces: WorkspaceWithKanban[] = [
@@ -72,6 +73,7 @@ const mockWorkspaces: WorkspaceWithKanban[] = [
     prUrl: 'https://github.com/example/repo/pull/42',
     prNumber: 42,
     prState: 'OPEN',
+    kanbanColumn: 'WAITING',
   },
   {
     ...baseWorkspace,
@@ -79,21 +81,26 @@ const mockWorkspaces: WorkspaceWithKanban[] = [
     name: 'Update dependencies',
     branchName: 'chore/deps',
     isWorking: true,
+    kanbanColumn: 'WORKING',
   },
 ];
 
 // Define columns directly to avoid non-null assertions
-const inProgressColumn = {
-  id: 'IN_PROGRESS' as const,
-  label: 'In Progress',
-  description: 'Actively working',
+const workingColumn = {
+  id: 'WORKING' as const,
+  label: 'Working',
+  description: 'Agent is working',
 };
-const backlogColumn = { id: 'BACKLOG' as const, label: 'Backlog', description: 'Not started yet' };
-const prOpenColumn = { id: 'PR_OPEN' as const, label: 'PR Open', description: 'Under review' };
+const waitingColumn = {
+  id: 'WAITING' as const,
+  label: 'Waiting',
+  description: 'Waiting for input',
+};
+const doneColumn = { id: 'DONE' as const, label: 'Done', description: 'PR merged' };
 
 export const Empty: Story = {
   args: {
-    column: backlogColumn,
+    column: waitingColumn,
     workspaces: [],
     projectSlug: 'my-project',
   },
@@ -101,7 +108,7 @@ export const Empty: Story = {
 
 export const SingleWorkspace: Story = {
   args: {
-    column: inProgressColumn,
+    column: workingColumn,
     workspaces: [baseWorkspace],
     projectSlug: 'my-project',
   },
@@ -109,8 +116,8 @@ export const SingleWorkspace: Story = {
 
 export const MultipleWorkspaces: Story = {
   args: {
-    column: inProgressColumn,
-    workspaces: mockWorkspaces,
+    column: workingColumn,
+    workspaces: mockWorkspaces.filter((w) => w.kanbanColumn === 'WORKING'),
     projectSlug: 'my-project',
   },
 };
@@ -118,55 +125,77 @@ export const MultipleWorkspaces: Story = {
 export const Hidden: Story = {
   name: 'Hidden (renders null)',
   args: {
-    column: inProgressColumn,
+    column: workingColumn,
     workspaces: mockWorkspaces,
     projectSlug: 'my-project',
     isHidden: true,
   },
 };
 
-export const PROpenColumn: Story = {
+export const WaitingColumn: Story = {
   args: {
-    column: prOpenColumn,
+    column: waitingColumn,
     workspaces: [
       {
         ...baseWorkspace,
-        id: 'ws-pr-1',
+        id: 'ws-wait-1',
         name: 'Feature A',
         prUrl: 'https://github.com/example/repo/pull/100',
         prNumber: 100,
         prState: 'OPEN',
         prCiStatus: 'PENDING',
-        kanbanColumn: 'PR_OPEN',
+        kanbanColumn: 'WAITING',
       },
       {
         ...baseWorkspace,
-        id: 'ws-pr-2',
+        id: 'ws-wait-2',
         name: 'Feature B',
         prUrl: 'https://github.com/example/repo/pull/101',
         prNumber: 101,
-        prState: 'OPEN',
+        prState: 'APPROVED',
         prCiStatus: 'SUCCESS',
-        kanbanColumn: 'PR_OPEN',
+        kanbanColumn: 'WAITING',
       },
     ],
     projectSlug: 'my-project',
   },
 };
 
+export const DoneColumn: Story = {
+  args: {
+    column: doneColumn,
+    workspaces: [
+      {
+        ...baseWorkspace,
+        id: 'ws-done-1',
+        name: 'Completed feature',
+        prUrl: 'https://github.com/example/repo/pull/99',
+        prNumber: 99,
+        prState: 'MERGED',
+        prCiStatus: 'SUCCESS',
+        kanbanColumn: 'DONE',
+      },
+    ],
+    projectSlug: 'my-project',
+  },
+};
+
+// Workspace columns only (ISSUES requires tRPC)
+const WORKSPACE_COLUMNS = KANBAN_COLUMNS.filter((col) => col.id !== 'ISSUES');
+
 export const AllColumns: Story = {
   decorators: [
     () => (
       <div className="flex gap-4 overflow-x-auto p-4">
-        {KANBAN_COLUMNS.slice(0, 4).map((column) => (
+        {WORKSPACE_COLUMNS.map((column) => (
           <KanbanColumn
             key={column.id}
             column={column}
             workspaces={
-              column.id === 'IN_PROGRESS'
-                ? mockWorkspaces.slice(0, 2)
-                : column.id === 'BACKLOG'
-                  ? [mockWorkspaces[2]]
+              column.id === 'WORKING'
+                ? mockWorkspaces.filter((w) => w.kanbanColumn === 'WORKING')
+                : column.id === 'WAITING'
+                  ? mockWorkspaces.filter((w) => w.kanbanColumn === 'WAITING')
                   : []
             }
             projectSlug="demo"
@@ -176,7 +205,7 @@ export const AllColumns: Story = {
     ),
   ],
   args: {
-    column: inProgressColumn,
+    column: workingColumn,
     workspaces: [],
     projectSlug: 'demo',
   },
