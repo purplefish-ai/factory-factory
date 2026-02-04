@@ -3,7 +3,6 @@ import { memo, useCallback, useMemo } from 'react';
 import type { useChatWebSocket } from '@/components/chat';
 import {
   ChatInput,
-  ClaudeProcessStatus,
   PermissionPrompt,
   QuestionPrompt,
   RewindConfirmationDialog,
@@ -16,7 +15,6 @@ import { groupAdjacentToolCalls } from '@/lib/claude-types';
 interface ChatContentProps {
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
-  processStatus: ReturnType<typeof useChatWebSocket>['processStatus'];
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   viewportRef: React.RefObject<HTMLDivElement | null>;
   isNearBottom: boolean;
@@ -53,7 +51,6 @@ interface ChatContentProps {
 export const ChatContent = memo(function ChatContent({
   messages,
   sessionStatus,
-  processStatus,
   messagesEndRef,
   viewportRef,
   isNearBottom,
@@ -151,7 +148,6 @@ export const ChatContent = memo(function ChatContent({
           question={pendingRequest.type === 'question' ? pendingRequest.request : null}
           onAnswer={answerQuestion}
         />
-        <ClaudeProcessStatus processStatus={processStatus} sessionStatus={sessionStatus} />
 
         <ChatInput
           onSend={sendMessage}
