@@ -12,6 +12,7 @@ const mockWorkspaces: ServerWorkspace[] = [
   {
     id: 'ws-1',
     name: 'Refactor auth flows',
+    createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
     branchName: 'feature/refactor-auth-flow',
     prUrl: 'https://github.com/example/repo/pull/42',
     prNumber: 42,
@@ -24,6 +25,7 @@ const mockWorkspaces: ServerWorkspace[] = [
   {
     id: 'ws-2',
     name: 'Polish Kanban layout',
+    createdAt: new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(),
     branchName: 'chore/kanban-layout-alignments',
     prUrl: 'https://github.com/example/repo/pull/57',
     prNumber: 57,
@@ -36,6 +38,7 @@ const mockWorkspaces: ServerWorkspace[] = [
   {
     id: 'ws-3',
     name: 'Debug CI flake',
+    createdAt: new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString(),
     branchName: 'fix/ci-flake-runs-forever',
     prUrl: 'https://github.com/example/repo/pull/63',
     prNumber: 63,
@@ -48,6 +51,7 @@ const mockWorkspaces: ServerWorkspace[] = [
   {
     id: 'ws-4',
     name: 'Research indexing approach',
+    createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
     branchName: 'research/semantic-indexing',
     prUrl: null,
     prNumber: null,
@@ -60,6 +64,7 @@ const mockWorkspaces: ServerWorkspace[] = [
   {
     id: 'ws-5',
     name: 'Archive onboarding cleanup',
+    createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     branchName: 'cleanup/onboarding',
     prUrl: 'https://github.com/example/repo/pull/71',
     prNumber: 71,
