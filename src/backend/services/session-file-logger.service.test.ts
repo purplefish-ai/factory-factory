@@ -37,7 +37,7 @@ vi.mock('node:fs', () => ({
 
 // Import after mocks are set up
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
-import { SessionFileLogger } from './session-file-logger.service';
+import { extractLogSummary, SessionFileLogger } from './session-file-logger.service';
 
 // Helper to create a mock WriteStream
 function createMockStream() {
@@ -521,5 +521,136 @@ describe('SessionFileLogger', () => {
 
       expect(readdirSync).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('extractLogSummary', () => {
+  it('should return empty string for non-object data', () => {
+    expect(extractLogSummary(null)).toBe('');
+    expect(extractLogSummary(undefined)).toBe('');
+    expect(extractLogSummary('string')).toBe('');
+    expect(extractLogSummary(123)).toBe('');
+  });
+
+  it('should extract basic type from object', () => {
+    expect(extractLogSummary({ type: 'test' })).toBe('type=test');
+    expect(extractLogSummary({ type: 'message' })).toBe('type=message');
+  });
+
+  it('should handle missing type', () => {
+    expect(extractLogSummary({ data: 'hello' })).toBe('type=unknown');
+  });
+
+  it('should extract inner type for claude_message', () => {
+    const data = {
+      type: 'claude_message',
+      data: { type: 'assistant' },
+    };
+    expect(extractLogSummary(data)).toBe('type=claude_message inner_type=assistant');
+  });
+
+  it('should extract stream event details', () => {
+    const data = {
+      type: 'claude_message',
+      data: {
+        type: 'stream_event',
+        event: { type: 'content_block_start' },
+      },
+    };
+    expect(extractLogSummary(data)).toBe(
+      'type=claude_message inner_type=stream_event event_type=content_block_start'
+    );
+  });
+
+  it('should extract content block details with tool name', () => {
+    const data = {
+      type: 'claude_message',
+      data: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          content_block: {
+            type: 'tool_use',
+            name: 'read_file',
+          },
+        },
+      },
+    };
+    expect(extractLogSummary(data)).toBe(
+      'type=claude_message inner_type=stream_event event_type=content_block_start block_type=tool_use tool=read_file'
+    );
+  });
+
+  it('should extract content block without tool name', () => {
+    const data = {
+      type: 'claude_message',
+      data: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_delta',
+          content_block: { type: 'text' },
+        },
+      },
+    };
+    expect(extractLogSummary(data)).toBe(
+      'type=claude_message inner_type=stream_event event_type=content_block_delta block_type=text'
+    );
+  });
+
+  it('should extract user message content types', () => {
+    const data = {
+      type: 'claude_message',
+      data: {
+        type: 'user',
+        message: {
+          content: [{ type: 'text' }, { type: 'tool_result' }],
+        },
+      },
+    };
+    expect(extractLogSummary(data)).toBe(
+      'type=claude_message inner_type=user content_types=[text,tool_result]'
+    );
+  });
+
+  it('should handle user message without content array', () => {
+    const data = {
+      type: 'claude_message',
+      data: {
+        type: 'user',
+        message: {},
+      },
+    };
+    expect(extractLogSummary(data)).toBe('type=claude_message inner_type=user');
+  });
+
+  it('should extract result presence', () => {
+    const dataWithResult = {
+      type: 'claude_message',
+      data: { type: 'result', result: { success: true } },
+    };
+    expect(extractLogSummary(dataWithResult)).toBe(
+      'type=claude_message inner_type=result result_present=true'
+    );
+
+    const dataWithoutResult = {
+      type: 'claude_message',
+      data: { type: 'result', result: null },
+    };
+    expect(extractLogSummary(dataWithoutResult)).toBe(
+      'type=claude_message inner_type=result result_present=false'
+    );
+  });
+
+  it('should handle stream event without event object', () => {
+    const data = {
+      type: 'claude_message',
+      data: { type: 'stream_event' },
+    };
+    expect(extractLogSummary(data)).toBe('type=claude_message inner_type=stream_event');
+  });
+
+  it('should handle claude_message without data', () => {
+    const data = { type: 'claude_message' };
+    expect(extractLogSummary(data)).toBe('type=claude_message');
   });
 });

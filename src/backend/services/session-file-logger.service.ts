@@ -21,6 +21,96 @@ import { createLogger } from './logger.service';
 const logger = createLogger('session-file-logger');
 
 /**
+ * Direction icons for log formatting
+ */
+const DIRECTION_ICONS: Record<string, string> = {
+  OUT_TO_CLIENT: '>>> OUT->CLIENT',
+  IN_FROM_CLIENT: '<<< IN<-CLIENT',
+  FROM_CLAUDE_CLI: '### FROM_CLI',
+  INFO: '*** INFO',
+};
+
+/**
+ * Extracts summary info from a stream event's content block
+ */
+function extractContentBlockSummary(event: Record<string, unknown>): string {
+  const block = event.content_block as Record<string, unknown> | undefined;
+  if (!block) {
+    return '';
+  }
+  let summary = ` block_type=${String(block.type ?? 'unknown')}`;
+  if (block.name) {
+    summary += ` tool=${String(block.name)}`;
+  }
+  return summary;
+}
+
+/**
+ * Extracts summary info from a stream event within claude_message data
+ */
+function extractStreamEventSummary(innerData: Record<string, unknown>): string {
+  const event = innerData.event as Record<string, unknown> | undefined;
+  if (!event) {
+    return '';
+  }
+  let summary = ` event_type=${String(event.type ?? 'unknown')}`;
+  summary += extractContentBlockSummary(event);
+  return summary;
+}
+
+/**
+ * Extracts summary info from a user message with tool_result content
+ */
+function extractUserMessageSummary(innerData: Record<string, unknown>): string {
+  const msg = innerData.message as { content?: Array<{ type?: string }> } | undefined;
+  if (!(msg?.content && Array.isArray(msg.content))) {
+    return '';
+  }
+  const types = msg.content.map((c) => c.type).join(',');
+  return ` content_types=[${types}]`;
+}
+
+/**
+ * Extracts summary info from claude_message data based on inner type
+ */
+function extractClaudeMessageSummary(innerData: Record<string, unknown>): string {
+  let summary = ` inner_type=${String(innerData.type ?? 'unknown')}`;
+
+  switch (innerData.type) {
+    case 'stream_event':
+      summary += extractStreamEventSummary(innerData);
+      break;
+    case 'user':
+      summary += extractUserMessageSummary(innerData);
+      break;
+    case 'result':
+      summary += ` result_present=${innerData.result != null}`;
+      break;
+  }
+
+  return summary;
+}
+
+/**
+ * Extracts a summary string from log data for quick scanning
+ */
+export function extractLogSummary(data: unknown): string {
+  if (typeof data !== 'object' || data === null) {
+    return '';
+  }
+
+  const obj = data as Record<string, unknown>;
+  let summary = `type=${String(obj.type ?? 'unknown')}`;
+
+  if (obj.type === 'claude_message' && obj.data) {
+    const innerData = obj.data as Record<string, unknown>;
+    summary += extractClaudeMessageSummary(innerData);
+  }
+
+  return summary;
+}
+
+/**
  * State for an active session log
  */
 interface SessionLogState {
@@ -113,7 +203,6 @@ export class SessionFileLogger {
   /**
    * Log a message to the session's log file
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: debug logging with intentional branching for summary extraction
   log(
     sessionId: string,
     direction: 'OUT_TO_CLIENT' | 'IN_FROM_CLIENT' | 'FROM_CLAUDE_CLI' | 'INFO',
@@ -129,54 +218,8 @@ export class SessionFileLogger {
     }
 
     const timestamp = new Date().toISOString();
-    const directionIcon =
-      direction === 'OUT_TO_CLIENT'
-        ? '>>> OUT->CLIENT'
-        : direction === 'IN_FROM_CLIENT'
-          ? '<<< IN<-CLIENT'
-          : direction === 'FROM_CLAUDE_CLI'
-            ? '### FROM_CLI'
-            : '*** INFO';
-
-    // Extract summary info for quick scanning
-    let summary = '';
-    if (typeof data === 'object' && data !== null) {
-      const obj = data as Record<string, unknown>;
-      summary = `type=${String(obj.type ?? 'unknown')}`;
-
-      // For claude_message, extract inner type
-      if (obj.type === 'claude_message' && obj.data) {
-        const innerData = obj.data as Record<string, unknown>;
-        summary += ` inner_type=${String(innerData.type ?? 'unknown')}`;
-
-        // For stream events, extract event type
-        if (innerData.type === 'stream_event' && innerData.event) {
-          const event = innerData.event as Record<string, unknown>;
-          summary += ` event_type=${String(event.type ?? 'unknown')}`;
-          if (event.content_block) {
-            const block = event.content_block as Record<string, unknown>;
-            summary += ` block_type=${String(block.type ?? 'unknown')}`;
-            if (block.name) {
-              summary += ` tool=${String(block.name)}`;
-            }
-          }
-        }
-
-        // For user messages with tool_result
-        if (innerData.type === 'user' && innerData.message) {
-          const msg = innerData.message as { content?: Array<{ type?: string }> };
-          if (Array.isArray(msg.content)) {
-            const types = msg.content.map((c) => c.type).join(',');
-            summary += ` content_types=[${types}]`;
-          }
-        }
-
-        // For result messages
-        if (innerData.type === 'result') {
-          summary += ` result_present=${innerData.result != null}`;
-        }
-      }
-    }
+    const directionIcon = DIRECTION_ICONS[direction] ?? '*** INFO';
+    const summary = extractLogSummary(data);
 
     const logEntry = [
       '-'.repeat(80),
