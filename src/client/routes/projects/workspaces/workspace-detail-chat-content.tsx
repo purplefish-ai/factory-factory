@@ -114,9 +114,6 @@ export const ChatContent = memo(function ChatContent({
     if (stopping) {
       return 'Stopping...';
     }
-    if (running) {
-      return 'Message will be queued...';
-    }
     if (pendingRequest.type === 'question') {
       return 'Type your answer...';
     }
@@ -125,6 +122,9 @@ export const ChatContent = memo(function ChatContent({
       pendingRequest.request.toolName === 'ExitPlanMode'
     ) {
       return 'Type feedback to revise the plan...';
+    }
+    if (running) {
+      return 'Message will be queued...';
     }
     return 'Type a message...';
   })();
