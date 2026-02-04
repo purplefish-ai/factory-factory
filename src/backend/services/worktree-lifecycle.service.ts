@@ -40,10 +40,28 @@ async function withResumeModeLock<T>(
 }
 
 async function readResumeModes(worktreeBasePath: string): Promise<Record<string, boolean>> {
+  const filePath = path.join(worktreeBasePath, RESUME_MODE_FILENAME);
   try {
-    const content = await fs.readFile(path.join(worktreeBasePath, RESUME_MODE_FILENAME), 'utf-8');
-    return JSON.parse(content) as Record<string, boolean>;
-  } catch {
+    const content = await fs.readFile(filePath, 'utf-8');
+    try {
+      return JSON.parse(content) as Record<string, boolean>;
+    } catch (error) {
+      logger.warn('Failed to parse resume modes file; falling back to empty', {
+        filePath,
+        worktreeBasePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code && code !== 'ENOENT') {
+      logger.warn('Failed to read resume modes file; falling back to empty', {
+        filePath,
+        worktreeBasePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return {};
   }
 }

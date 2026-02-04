@@ -17,7 +17,12 @@ async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<st
   const branchMap = new Map<string, string>();
   const lines = result.stdout.split('\n').filter(Boolean);
   for (const line of lines) {
-    const [name, sha] = line.split(' ');
+    const firstSpace = line.indexOf(' ');
+    if (firstSpace === -1) {
+      continue;
+    }
+    const name = line.slice(0, firstSpace);
+    const sha = line.slice(firstSpace + 1).trim();
     if (name && sha) {
       branchMap.set(name, sha);
     }

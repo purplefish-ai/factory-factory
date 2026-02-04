@@ -37,6 +37,7 @@ import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { trpc } from '../../../../frontend/lib/trpc';
+import { rememberResumeWorkspace } from './resume-workspace-storage';
 
 const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
 
@@ -136,46 +137,7 @@ type BranchInfo = {
   refType: 'local' | 'remote';
 };
 
-const RESUME_WORKSPACE_IDS_KEY = 'ff_resume_workspace_ids';
-
-function readResumeWorkspaceIds(): string[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(RESUME_WORKSPACE_IDS_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeResumeWorkspaceIds(ids: string[]) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(RESUME_WORKSPACE_IDS_KEY, JSON.stringify(ids));
-  } catch {
-    // Non-blocking: ignore localStorage failures.
-  }
-}
-
-function rememberResumeWorkspace(workspaceId: string) {
-  const existing = readResumeWorkspaceIds();
-  if (!existing.includes(workspaceId)) {
-    existing.push(workspaceId);
-  }
-  const trimmed = existing.slice(-200);
-  writeResumeWorkspaceIds(trimmed);
-}
-
-export function forgetResumeWorkspace(workspaceId: string) {
-  const existing = readResumeWorkspaceIds().filter((id) => id !== workspaceId);
-  writeResumeWorkspaceIds(existing);
-}
+// resume workspace storage helpers live in resume-workspace-storage.ts
 
 function ResumeBranchDialog({
   open,

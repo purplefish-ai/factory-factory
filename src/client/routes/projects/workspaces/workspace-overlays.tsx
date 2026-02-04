@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
-import { forgetResumeWorkspace } from './list';
+import { forgetResumeWorkspace, isResumeWorkspace } from './resume-workspace-storage';
 
 // =============================================================================
 // Workspace Initialization Overlay
@@ -19,21 +19,7 @@ interface InitializationOverlayProps {
   hasStartupScript: boolean;
 }
 
-const RESUME_WORKSPACE_IDS_KEY = 'ff_resume_workspace_ids';
-
-function isResumeWorkspace(workspaceId: string): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(RESUME_WORKSPACE_IDS_KEY);
-    const existing = raw ? (JSON.parse(raw) as string[]) : [];
-    return existing.includes(workspaceId);
-  } catch {
-    return false;
-  }
-}
+// resume workspace storage helpers live in resume-workspace-storage.ts
 
 export function InitializationOverlay({
   workspaceId,
