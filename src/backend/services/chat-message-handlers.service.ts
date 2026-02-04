@@ -213,7 +213,11 @@ class ChatMessageHandlerService {
 
     // Notify frontend that agent is working - this ensures the spinner shows
     // for subsequent messages when client is already running
-    chatConnectionService.forwardToSession(dbSessionId, { type: 'status', running: true });
+    chatConnectionService.forwardToSession(dbSessionId, {
+      type: 'status',
+      running: true,
+      processAlive: client.isRunning(),
+    });
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
