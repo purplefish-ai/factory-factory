@@ -1,5 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClaudeClient } from '../claude';
 
 vi.mock('./logger.service', () => ({
   createLogger: () => ({
@@ -182,5 +183,34 @@ describe('SessionService', () => {
     const options = await sessionService.getSessionOptions('session-1');
 
     expect(options).toBeNull();
+  });
+
+  it('stops sessions that are still starting when stopping a workspace', async () => {
+    const session = {
+      id: 'session-1',
+      workspaceId: 'workspace-1',
+      status: SessionStatus.IDLE,
+    } as unknown as NonNullable<
+      Awaited<ReturnType<typeof sessionRepository.getSessionsByWorkspaceId>>
+    >[number];
+
+    const client = { isRunning: vi.fn().mockReturnValue(true) };
+    const pendingClient = Promise.resolve(client as unknown as ClaudeClient);
+
+    vi.mocked(sessionRepository.getSessionsByWorkspaceId).mockResolvedValue([session]);
+    vi.mocked(sessionProcessManager.getPendingClient).mockReturnValue(pendingClient);
+    vi.mocked(sessionProcessManager.getClaudeProcess).mockReturnValue(undefined);
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(sessionProcessManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
+
+    await sessionService.stopWorkspaceSessions('workspace-1');
+
+    expect(sessionProcessManager.getPendingClient).toHaveBeenCalledWith('session-1');
+    expect(sessionProcessManager.stopClient).toHaveBeenCalledWith('session-1');
+    expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.IDLE,
+      claudeProcessPid: null,
+    });
   });
 });
