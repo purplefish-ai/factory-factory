@@ -113,3 +113,38 @@ jobs:
       - name: Report Coverage
         if: always() && github.event_name == 'pull_request'
         uses: davelosert/vitest-coverage-report-action@v2
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    # Only run if ANTHROPIC_API_KEY secret is available
+    if: ${{ vars.RUN_INTEGRATION_TESTS == 'true' || github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: "file:./test.db"
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Install Claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run integration tests
+        run: pnpm test:integration
+        timeout-minutes: 10
