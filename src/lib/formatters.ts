@@ -20,8 +20,8 @@ export function formatBytes(bytes: number | null | undefined): string {
 /**
  * Format CPU percentage
  */
-export function formatCpu(cpu: number | null): string {
-  if (cpu === null) {
+export function formatCpu(cpu: number | null | undefined): string {
+  if (cpu === null || cpu === undefined) {
     return '-';
   }
   return `${cpu.toFixed(1)}%`;
@@ -30,8 +30,8 @@ export function formatCpu(cpu: number | null): string {
 /**
  * Format idle time in milliseconds to human-readable string (ms, s, m)
  */
-export function formatIdleTime(ms: number | null): string {
-  if (ms === null) {
+export function formatIdleTime(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined) {
     return '-';
   }
   if (ms < 1000) {
