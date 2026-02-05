@@ -2,6 +2,7 @@ import { withThemeByClassName } from '@storybook/addon-themes';
 import type { Preview } from '@storybook/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 import '../src/client/globals.css';
 
@@ -16,7 +17,12 @@ const preview: Preview = {
     layout: 'centered',
   },
   decorators: [
-    (Story) => React.createElement(MemoryRouter, null, React.createElement(Story)),
+    (Story) =>
+      React.createElement(
+        MemoryRouter,
+        null,
+        React.createElement(TooltipProvider, null, React.createElement(Story))
+      ),
     withThemeByClassName({
       themes: {
         light: '',
