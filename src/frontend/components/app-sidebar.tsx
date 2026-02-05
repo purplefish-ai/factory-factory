@@ -52,6 +52,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog, RatchetToggleButton } from '@/components/workspace';
 import { cn, formatRelativeTime, shouldShowRatchetAnimation } from '@/lib/utils';
+import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useCreateWorkspace } from '../hooks/use-create-workspace';
 import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
 import { useProjectContext } from '../lib/providers';
@@ -290,14 +291,13 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     if (!selectedProjectId || isCreating || isCreatingWorkspace) {
       return;
     }
-    // Generate unique name and show optimistic placeholder
+    // Generate unique name once and use it for both optimistic UI and actual creation
     // Use existingNames from useWorkspaceListState
-    const { generateUniqueWorkspaceName } = require('@/shared/workspace-words');
     const name = generateUniqueWorkspaceName(existingNames);
     startCreating(name);
 
-    // Use shared creation logic (handles success navigation and error toasts)
-    createWorkspace();
+    // Use shared creation logic with the same name (handles success navigation and error toasts)
+    createWorkspace(name);
   };
 
   // Clean up optimistic placeholder if creation fails

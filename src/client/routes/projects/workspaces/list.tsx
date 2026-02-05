@@ -6,10 +6,13 @@ import { Loading } from '@/frontend/components/loading';
 import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { trpc } from '../../../../frontend/lib/trpc';
-import { ResumeBranchDialog, WorkspacesBoardView, WorkspacesTableView } from './components';
+import {
+  ResumeBranchDialog,
+  type ViewMode,
+  WorkspacesBoardView,
+  WorkspacesTableView,
+} from './components';
 import { rememberResumeWorkspace } from './resume-workspace-storage';
-
-type ViewMode = 'list' | 'board';
 
 function makeUniqueWorkspaceName(baseName: string, existingNames: string[]): string {
   const trimmedName = baseName.trim();

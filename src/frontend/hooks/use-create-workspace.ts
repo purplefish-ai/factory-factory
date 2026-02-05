@@ -21,11 +21,11 @@ export function useCreateWorkspace(projectId: string | undefined, projectSlug: s
   );
   const existingNames = allWorkspaces?.map((w) => w.name) ?? [];
 
-  const handleCreate = async () => {
+  const handleCreate = async (nameOverride?: string) => {
     if (!projectId || isCreating) {
       return;
     }
-    const name = generateUniqueWorkspaceName(existingNames);
+    const name = nameOverride ?? generateUniqueWorkspaceName(existingNames);
     setIsCreating(true);
 
     try {

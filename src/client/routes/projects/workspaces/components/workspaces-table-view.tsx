@@ -1,5 +1,5 @@
 import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
-import { Kanban, List } from 'lucide-react';
+import { GitBranch, Kanban, List } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -25,10 +25,9 @@ import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { NewWorkspaceButton } from './new-workspace-button';
+import type { ViewMode } from './types';
 
 const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
-
-type ViewMode = 'list' | 'board';
 
 type WorkspaceWithSessions = Workspace & {
   claudeSessions?: unknown[];
@@ -89,23 +88,7 @@ export function WorkspacesTableView({
           </ToggleGroupItem>
         </ToggleGroup>
         <Button variant="outline" size="sm" onClick={onResumeOpen}>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4 mr-2"
-          >
-            <line x1="6" x2="6" y1="3" y2="15" />
-            <circle cx="18" cy="6" r="3" />
-            <circle cx="6" cy="18" r="3" />
-            <path d="M18 9a9 9 0 0 1-9 9" />
-          </svg>
+          <GitBranch className="h-4 w-4 mr-2" />
           Resume branch
         </Button>
         <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />

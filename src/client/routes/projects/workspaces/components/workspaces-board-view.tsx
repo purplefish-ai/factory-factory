@@ -4,8 +4,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 import { PageHeader } from '@/frontend/components/page-header';
 import { NewWorkspaceButton } from './new-workspace-button';
-
-type ViewMode = 'list' | 'board';
+import type { ViewMode } from './types';
 
 export function WorkspacesBoardView({
   projectId,
