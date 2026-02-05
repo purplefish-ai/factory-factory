@@ -538,6 +538,11 @@ export class ClaudeProcess extends EventEmitter {
       this.setStatus('running');
     });
 
+    // Keep-alive indicates the CLI is still alive, so treat it as activity.
+    this.protocol.on('keep_alive', () => {
+      this.updateActivity();
+    });
+
     // Forward all messages
     this.protocol.on('message', (msg: ClaudeJson) => {
       this.emit('message', msg);
