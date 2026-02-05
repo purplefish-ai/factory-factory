@@ -38,6 +38,7 @@ export function useCreateWorkspace(
 
     try {
       const workspace = await createWorkspace.mutateAsync({
+        type: 'MANUAL',
         projectId,
         name,
       });
