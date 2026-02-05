@@ -36,6 +36,7 @@ import { initializeMcpTools } from './routers/mcp/index';
 import {
   createChatUpgradeHandler,
   createDevLogsUpgradeHandler,
+  createInitLogsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
 import { reconciliationService } from './services/reconciliation.service';
@@ -77,6 +78,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const chatUpgradeHandler = createChatUpgradeHandler(context);
   const terminalUpgradeHandler = createTerminalUpgradeHandler(context);
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
+  const initLogsUpgradeHandler = createInitLogsUpgradeHandler(context);
 
   // ============================================================================
   // WebSocket Heartbeat - Detect zombie connections
@@ -166,7 +168,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         req.path.startsWith('/health') ||
         req.path === '/chat' ||
         req.path === '/terminal' ||
-        req.path === '/dev-logs'
+        req.path === '/dev-logs' ||
+        req.path === '/init-logs'
       ) {
         return next();
       }
@@ -223,6 +226,11 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
     if (url.pathname === '/dev-logs') {
       devLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
+      return;
+    }
+
+    if (url.pathname === '/init-logs') {
+      initLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 

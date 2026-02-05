@@ -1,14 +1,21 @@
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
 import { forgetResumeWorkspace, isResumeWorkspace } from './resume-workspace-storage';
 
 // =============================================================================
 // Workspace Initialization Overlay
+// =============================================================================
+//
+// NOTE: This overlay is now only shown during the very brief NEW state before
+// PROVISIONING begins. Once PROVISIONING starts, the Init Logs tab shows
+// progress and the UI is fully interactive.
+//
+// For FAILED state, a non-blocking error banner is shown instead (see
+// InitFailedBanner component).
 // =============================================================================
 
 interface InitializationOverlayProps {
@@ -21,15 +28,47 @@ interface InitializationOverlayProps {
 
 // resume workspace storage helpers live in resume-workspace-storage.ts
 
-export function InitializationOverlay({
-  workspaceId,
-  status,
-  initErrorMessage,
-  initOutput,
-  hasStartupScript,
-}: InitializationOverlayProps) {
+export function InitializationOverlay({ workspaceId, status }: InitializationOverlayProps) {
+  useEffect(() => {
+    if (status === 'READY' || status === 'ARCHIVED') {
+      forgetResumeWorkspace(workspaceId);
+    }
+  }, [status, workspaceId]);
+
+  // Only show overlay during the brief NEW state before provisioning starts
+  // PROVISIONING: handled by Init Logs tab (non-blocking)
+  // FAILED: handled by InitFailedBanner (non-blocking)
+  // READY/ARCHIVED: no overlay needed
+  if (status !== 'NEW') {
+    return null;
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4 p-8 max-w-2xl w-full text-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">Creating workspace...</h2>
+          <p className="text-sm text-muted-foreground">
+            Preparing your workspace. This will only take a moment.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Init Failed Banner (Non-blocking)
+// =============================================================================
+
+interface InitFailedBannerProps {
+  workspaceId: string;
+  errorMessage: string | null;
+}
+
+export function InitFailedBanner({ workspaceId, errorMessage }: InitFailedBannerProps) {
   const utils = trpc.useUtils();
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const retryInit = trpc.workspace.retryInit.useMutation({
     onSuccess: () => {
@@ -40,90 +79,38 @@ export function InitializationOverlay({
     },
   });
 
-  // Auto-scroll to bottom when new output arrives
-  useEffect(() => {
-    if (scrollRef.current && initOutput !== null) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [initOutput]);
-
-  useEffect(() => {
-    if (status === 'READY' || status === 'ARCHIVED') {
-      forgetResumeWorkspace(workspaceId);
-    }
-  }, [status, workspaceId]);
-
-  const isFailed = status === 'FAILED';
-  const isProvisioning = status === 'PROVISIONING';
-  const showLogs = hasStartupScript && (isProvisioning || isFailed);
-
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-4 p-8 max-w-2xl w-full text-center">
-        {isFailed ? (
+    <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+        <span className="text-sm text-red-400 truncate">
+          Setup failed{errorMessage ? `: ${errorMessage}` : ''}. You can still use this workspace.
+        </span>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          retryInit.mutate({
+            id: workspaceId,
+            useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
+          })
+        }
+        disabled={retryInit.isPending}
+        className="flex-shrink-0"
+      >
+        {retryInit.isPending ? (
           <>
-            <div className="rounded-full bg-destructive/10 p-3">
-              <AlertTriangle className="h-8 w-8 text-destructive" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold">Workspace Setup Failed</h2>
-              <p className="text-sm text-muted-foreground">
-                {initErrorMessage || 'An error occurred while setting up this workspace.'}
-              </p>
-            </div>
+            <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+            Retrying...
           </>
         ) : (
           <>
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold">Setting up workspace...</h2>
-              <p className="text-sm text-muted-foreground">
-                {isProvisioning && hasStartupScript
-                  ? 'Running startup script. This may take a few minutes.'
-                  : 'Creating git worktree and preparing your workspace.'}
-              </p>
-            </div>
+            <RefreshCw className="h-3 w-3 mr-1.5" />
+            Retry
           </>
         )}
-
-        {/* Startup Script Output */}
-        {showLogs && (
-          <div className="w-full mt-4">
-            <ScrollArea
-              viewportRef={scrollRef}
-              className="h-48 w-full rounded-md border bg-zinc-950 text-left"
-            >
-              <pre className="p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
-                {initOutput || <span className="text-zinc-500 italic">Waiting for output...</span>}
-              </pre>
-            </ScrollArea>
-          </div>
-        )}
-
-        {isFailed && (
-          <Button
-            onClick={() =>
-              retryInit.mutate({
-                id: workspaceId,
-                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
-              })
-            }
-            disabled={retryInit.isPending}
-          >
-            {retryInit.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Retrying...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry Setup
-              </>
-            )}
-          </Button>
-        )}
-      </div>
+      </Button>
     </div>
   );
 }

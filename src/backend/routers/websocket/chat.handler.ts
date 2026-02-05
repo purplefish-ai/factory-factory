@@ -22,6 +22,7 @@ import { claudeSessionAccessor } from '../../resource_accessors/claude-session.a
 import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import type { ConnectionInfo } from '../../services/chat-connection.service';
 import { chatTransportAdapterService } from '../../services/chat-transport-adapter.service';
+import { sessionRepository } from '../../services/session.repository';
 import { toMessageString } from './message-utils';
 
 function sendBadRequest(socket: Duplex, message: string): void {
@@ -40,9 +41,11 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     chatMessageHandlerService,
     configService,
     createLogger,
+    messageQueueService,
     messageStateService,
     sessionFileLogger,
     sessionService,
+    workspaceStateMachine,
   } = appContext.services;
 
   const logger = createLogger('chat-handler');
@@ -109,6 +112,24 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       chatEventForwarderService.setupClientEvents(sessionId, client, context, () =>
         chatMessageHandlerService.tryDispatchNextMessage(sessionId)
       );
+    });
+
+    // Register callback to dispatch queued messages when workspace becomes READY
+    // This handles the case where messages were queued while workspace was initializing
+    workspaceStateMachine.onWorkspaceReady(async (workspaceId) => {
+      // Find all sessions for this workspace and dispatch any queued messages
+      const sessions = await sessionRepository.getSessionsByWorkspaceId(workspaceId);
+      for (const session of sessions) {
+        if (messageQueueService.hasMessages(session.id)) {
+          logger.info('Dispatching queued messages after workspace ready', {
+            workspaceId,
+            sessionId: session.id,
+            queueLength: messageQueueService.getQueueLength(session.id),
+          });
+          // Don't await - let dispatch happen asynchronously
+          chatMessageHandlerService.tryDispatchNextMessage(session.id);
+        }
+      }
     });
   }
 

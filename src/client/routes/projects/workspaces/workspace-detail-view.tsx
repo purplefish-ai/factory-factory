@@ -9,7 +9,7 @@ import type { useSessionManagement, useWorkspaceData } from './use-workspace-det
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
-import { ArchivingOverlay, InitializationOverlay } from './workspace-overlays';
+import { ArchivingOverlay, InitFailedBanner, InitializationOverlay } from './workspace-overlays';
 
 export interface WorkspaceDetailViewProps {
   workspaceLoading: boolean;
@@ -192,6 +192,13 @@ export function WorkspaceDetailView({
         isCreatingSession={isCreatingSession}
         hasChanges={hasChanges}
       />
+
+      {workspaceInitStatus?.status === 'FAILED' && (
+        <InitFailedBanner
+          workspaceId={workspaceId}
+          errorMessage={workspaceInitStatus.initErrorMessage ?? null}
+        />
+      )}
 
       <ResizablePanelGroup
         direction="horizontal"

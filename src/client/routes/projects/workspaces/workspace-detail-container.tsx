@@ -30,7 +30,8 @@ export function WorkspaceDetailContainer() {
     invalidateWorkspace,
   } = useWorkspaceData({ workspaceId: workspaceId });
 
-  const { rightPanelVisible, activeTabId, clearScrollState } = useWorkspacePanel();
+  const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState } =
+    useWorkspacePanel();
 
   const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
     { workspaceId },
@@ -42,6 +43,15 @@ export function WorkspaceDetailContainer() {
     workspace,
     utils
   );
+
+  // Force right panel open when workspace starts provisioning so init logs are visible
+  const hasOpenedForInitRef = useRef(false);
+  useEffect(() => {
+    if (workspaceInitStatus?.status === 'PROVISIONING' && !hasOpenedForInitRef.current) {
+      hasOpenedForInitRef.current = true;
+      setRightPanelVisible(true);
+    }
+  }, [workspaceInitStatus?.status, setRightPanelVisible]);
 
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     initialDbSessionId ?? null
