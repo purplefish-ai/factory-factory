@@ -97,6 +97,8 @@ export class ClaudeProtocol extends EventEmitter {
   private drainReject: ((error: Error) => void) | null;
   private drainErrorHandler: ((error: Error) => void) | null;
   private drainHandler: (() => void) | null;
+  private stdinErrorHandler: ((error: Error) => void) | null;
+  private stdoutErrorHandler: ((error: Error) => void) | null;
 
   constructor(stdin: Writable, stdout: Readable, options?: ClaudeProtocolOptions) {
     super();
@@ -111,6 +113,8 @@ export class ClaudeProtocol extends EventEmitter {
     this.drainReject = null;
     this.drainErrorHandler = null;
     this.drainHandler = null;
+    this.stdinErrorHandler = null;
+    this.stdoutErrorHandler = null;
   }
 
   // ===========================================================================
@@ -341,13 +345,16 @@ export class ClaudeProtocol extends EventEmitter {
       this.handleClose();
     });
 
-    this.stdin.on('error', (error: Error) => {
+    // Store references to error handlers for targeted cleanup
+    this.stdinErrorHandler = (error: Error) => {
       this.emit('error', error);
-    });
+    };
+    this.stdin.on('error', this.stdinErrorHandler);
 
-    this.stdout.on('error', (error: Error) => {
+    this.stdoutErrorHandler = (error: Error) => {
       this.emit('error', error);
-    });
+    };
+    this.stdout.on('error', this.stdoutErrorHandler);
   }
 
   /**
@@ -380,9 +387,15 @@ export class ClaudeProtocol extends EventEmitter {
       reject(new Error('Protocol stopped'));
     }
 
-    // Remove event listeners to prevent memory leaks
-    this.stdin.removeAllListeners('error');
-    this.stdout.removeAllListeners('error');
+    // Remove only our error listeners to avoid affecting other listeners
+    if (this.stdinErrorHandler) {
+      this.stdin.removeListener('error', this.stdinErrorHandler);
+      this.stdinErrorHandler = null;
+    }
+    if (this.stdoutErrorHandler) {
+      this.stdout.removeListener('error', this.stdoutErrorHandler);
+      this.stdoutErrorHandler = null;
+    }
   }
 
   // ===========================================================================
