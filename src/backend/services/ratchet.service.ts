@@ -30,7 +30,6 @@ const MAX_CONCURRENT_CHECKS = 5;
 const RATCHET_WORKFLOW = 'ratchet';
 
 export interface RatchetSettings {
-  enabled: boolean;
   autoFixCi: boolean;
   autoFixConflicts: boolean;
   autoFixReviews: boolean;
@@ -176,18 +175,12 @@ class RatchetService {
     // Fetch settings once for all workspaces
     const userSettings = await userSettingsAccessor.get();
     const settings: RatchetSettings = {
-      enabled: userSettings.ratchetEnabled,
       autoFixCi: userSettings.ratchetAutoFixCi,
       autoFixConflicts: userSettings.ratchetAutoFixConflicts,
       autoFixReviews: userSettings.ratchetAutoFixReviews,
       autoMerge: userSettings.ratchetAutoMerge,
       allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
     };
-
-    if (!settings.enabled) {
-      logger.debug('Ratchet is disabled, skipping check');
-      return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
-    }
 
     // Find all READY workspaces with PRs
     const workspaces = await workspaceAccessor.findWithPRsForRatchet();
@@ -263,9 +256,8 @@ class RatchetService {
         });
       }
 
-      // 4. Check workspace-level ratchet setting (master switch is settings.enabled)
-      // Only take action if both global AND workspace-level ratcheting are enabled
-      const shouldTakeAction = settings.enabled && workspace.ratchetEnabled;
+      // 4. Check workspace-level ratchet setting
+      const shouldTakeAction = workspace.ratchetEnabled;
 
       // 5. Take action based on state (only if ratcheting is enabled for this workspace)
       const action = shouldTakeAction

@@ -50,13 +50,8 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ArchiveWorkspaceDialog } from '@/components/workspace';
-import {
-  cn,
-  formatRelativeTime,
-  isWithinWaitingWindow,
-  shouldShowRatchetAnimation,
-} from '@/lib/utils';
+import { ArchiveWorkspaceDialog, RatchetToggleButton } from '@/components/workspace';
+import { cn, formatRelativeTime } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
@@ -340,9 +335,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
 
-  // Check if we're on the kanban view (workspaces list page without a specific workspace)
-  const isKanbanView = pathname.endsWith('/workspaces') || pathname.endsWith('/workspaces/');
-
   useEffect(() => {
     if (selectedProjectId) {
       setProjectContext(selectedProjectId);
@@ -473,7 +465,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                   items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {/* gap-2 p-1: Provides spacing for ratchet animated borders (instead of divide-y) */}
                   <SidebarMenu className="gap-2 p-1">
                     {workspaceList.map((workspace) => {
                       const isCreatingItem = workspace.uiState === 'creating';
@@ -499,9 +490,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                           key={workspace.id}
                           workspace={workspace}
                           isActive={currentWorkspaceId === workspace.id}
+                          selectedProjectId={selectedProjectId}
                           selectedProjectSlug={selectedProjectSlug}
                           onArchiveRequest={handleArchiveRequest}
-                          disableRatchetAnimation={isKanbanView}
                         />
                       );
                     })}
@@ -591,16 +582,27 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 function SortableWorkspaceItem({
   workspace,
   isActive,
+  selectedProjectId,
   selectedProjectSlug,
   onArchiveRequest,
-  disableRatchetAnimation,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
+  selectedProjectId?: string;
   selectedProjectSlug: string;
   onArchiveRequest: (workspace: WorkspaceListItem) => void;
-  disableRatchetAnimation?: boolean;
 }) {
+  const utils = trpc.useUtils();
+  const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onSuccess: () => {
+      if (selectedProjectId) {
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+        utils.workspace.listWithKanbanState.invalidate({ projectId: selectedProjectId });
+      }
+      utils.workspace.get.invalidate({ id: workspace.id });
+    },
+  });
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
   });
@@ -612,18 +614,7 @@ function SortableWorkspaceItem({
 
   const isArchivingItem = workspace.uiState === 'archiving';
   const { gitStats: stats } = workspace;
-  // Check if workspace is in DONE column (merged PR). Uses cachedKanbanColumn since
-  // sidebar doesn't have access to the computed kanbanColumn field from kanban queries.
-  // This is semantically equivalent to KanbanCard's `workspace.kanbanColumn === 'DONE'`.
-  const isDone = workspace.cachedKanbanColumn === 'DONE';
-  // Show ratcheting animation if state is active OR if a push happened recently
-  const isRatchetActive =
-    !(disableRatchetAnimation || isDone) &&
-    shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
-
-  // Check if workspace entered WAITING state within the last 30 seconds (for pulse animation)
-  const isRecentlyWaiting =
-    workspace.cachedKanbanColumn === 'WAITING' && isWithinWaitingWindow(workspace.stateComputedAt);
+  const ratchetEnabled = workspace.ratchetEnabled ?? true;
 
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
@@ -633,8 +624,7 @@ function SortableWorkspaceItem({
         className={cn(
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
-          isDragging && 'opacity-50 bg-sidebar-accent',
-          isRecentlyWaiting && !isRatchetActive && 'waiting-pulse'
+          isDragging && 'opacity-50 bg-sidebar-accent'
         )}
       >
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
@@ -673,13 +663,17 @@ function SortableWorkspaceItem({
               {/* Row 1: name + timestamp + archive */}
               <div className="flex items-center gap-2">
                 <span className="truncate font-medium text-sm leading-tight flex-1 flex items-center gap-1.5">
-                  {isRatchetActive && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-yellow-500" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">Ratchet active</TooltipContent>
-                    </Tooltip>
+                  {!isArchivingItem && (
+                    <RatchetToggleButton
+                      enabled={ratchetEnabled}
+                      state={workspace.ratchetState}
+                      className="h-5 w-5 shrink-0"
+                      disabled={toggleRatcheting.isPending}
+                      stopPropagation
+                      onToggle={(enabled) => {
+                        toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
+                      }}
+                    />
                   )}
                   {isArchivingItem ? 'Archiving...' : workspace.name}
                 </span>

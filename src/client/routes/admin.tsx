@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FileJson, RefreshCw, Upload, Wrench } from 'lucide-react';
+import { CheckCircle2, Download, FileJson, Hammer, RefreshCw, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -374,7 +374,7 @@ function RatchetSettingsSection() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Wrench className="w-5 h-5" />
+            <Hammer className="w-5 h-5" />
             Ratchet (PR Auto-Progression)
           </CardTitle>
           <CardDescription>
@@ -392,21 +392,20 @@ function RatchetSettingsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Wrench className="w-5 h-5" />
+          <Hammer className="w-5 h-5" />
           Ratchet (PR Auto-Progression)
         </CardTitle>
         <CardDescription>
-          Automatically progress PRs toward merge by fixing CI, resolving conflicts, and addressing
-          review comments
+          Configure ratchet defaults and automation behavior for PR progression
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Master toggle */}
+        {/* Default for GitHub-issue workspaces */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label htmlFor="ratchet-enabled">Enable Ratchet</Label>
+            <Label htmlFor="ratchet-enabled">Default for new GitHub issue workspaces</Label>
             <p className="text-sm text-muted-foreground">
-              Master toggle for automatic PR progression
+              Sets the initial ratchet state when creating a workspace from a GitHub issue
             </p>
           </div>
           <Switch
@@ -434,7 +433,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixCi: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
 
@@ -451,7 +450,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixConflicts: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
 
@@ -468,7 +467,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixReviews: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
 
@@ -485,7 +484,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoMerge: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
         </div>
@@ -503,12 +502,11 @@ function RatchetSettingsSection() {
               value={allowedReviewers}
               onChange={(e) => setAllowedReviewers(e.target.value)}
               className="flex-1"
-              disabled={!settings?.ratchetEnabled}
             />
             <Button
               variant="outline"
               onClick={handleSaveAllowedReviewers}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             >
               Save
             </Button>

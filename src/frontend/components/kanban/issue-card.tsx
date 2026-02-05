@@ -14,6 +14,7 @@ interface IssueCardProps {
 export function IssueCard({ issue, projectId, projectSlug }: IssueCardProps) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
+  const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onSuccess: (workspace) => {
@@ -33,6 +34,7 @@ export function IssueCard({ issue, projectId, projectSlug }: IssueCardProps) {
       name: issue.title,
       githubIssueNumber: issue.number,
       githubIssueUrl: issue.url,
+      ratchetEnabled: userSettings?.ratchetEnabled ?? false,
     });
   };
 
@@ -70,7 +72,7 @@ export function IssueCard({ issue, projectId, projectSlug }: IssueCardProps) {
             variant="outline"
             className="h-6 px-2 text-xs shrink-0"
             onClick={handleStart}
-            disabled={createWorkspaceMutation.isPending}
+            disabled={createWorkspaceMutation.isPending || isLoadingSettings}
           >
             <Play className="h-3 w-3 mr-1" />
             {createWorkspaceMutation.isPending ? '...' : 'Start'}

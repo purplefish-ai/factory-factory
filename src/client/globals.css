@@ -208,42 +208,35 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
-/* Waiting workspace pulse animation - subtle red glow */
-.waiting-pulse {
-  position: relative;
-  overflow: visible !important;
-}
-
-.waiting-pulse::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: transparent;
-  box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.2);
-  animation: waiting-pulse 3s ease-in-out infinite;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.waiting-pulse > * {
-  position: relative;
-  z-index: 1;
-}
-
-@keyframes waiting-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.2);
+@keyframes ratchet-ants {
+  to {
+    background-position:
+      0 0,
+      24px 0;
   }
-  50% {
-    box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.35);
-  }
+}
+
+.ratchet-toggle[data-ratchet-state='idle'],
+.ratchet-toggle[data-ratchet-state='processing'] {
+  border: 1px dashed color-mix(in oklab, var(--foreground) 45%, transparent);
+}
+
+.ratchet-toggle[data-ratchet-state='processing'] {
+  border-color: transparent;
+  background-image:
+    linear-gradient(var(--background), var(--background)),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--foreground) 80%, transparent) 0 6px,
+      transparent 6px 12px
+    );
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  animation: ratchet-ants 0.8s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .waiting-pulse::before {
+  .ratchet-toggle[data-ratchet-state='processing'] {
     animation: none;
-    box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.25);
   }
 }

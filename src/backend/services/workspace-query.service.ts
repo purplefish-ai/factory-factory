@@ -106,6 +106,7 @@ class WorkspaceQueryService {
           isWorking: workingStatusByWorkspace.get(w.id) ?? false,
           gitStats: gitStatsResults[w.id] ?? null,
           lastActivityAt,
+          ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
           ratchetLastPushAt: w.ratchetLastPushAt,
           cachedKanbanColumn: w.cachedKanbanColumn,
