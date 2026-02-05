@@ -215,6 +215,7 @@ function RatchetingToggle({
     workspaceRatchetEnabled &&
     workspace.ratchetState &&
     workspace.ratchetState !== 'IDLE' &&
+    workspace.ratchetState !== 'READY' &&
     workspace.ratchetState !== 'MERGED';
 
   const tooltipContent = isLoadingSettings
