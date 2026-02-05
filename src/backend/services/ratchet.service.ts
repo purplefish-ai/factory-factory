@@ -41,6 +41,7 @@ export interface PRStateInfo {
   ciStatus: CIStatus;
   mergeStateStatus: string;
   hasChangesRequested: boolean;
+  hasNewReviewComments: boolean;
   failedChecks: Array<{
     name: string;
     conclusion: string;
@@ -48,6 +49,15 @@ export interface PRStateInfo {
   }>;
   reviews: PRWithFullDetails['reviews'];
   comments: PRWithFullDetails['comments'];
+  reviewComments: Array<{
+    id: number;
+    author: { login: string };
+    body: string;
+    path: string;
+    line: number | null;
+    createdAt: string;
+    url: string;
+  }>;
   prState: string;
   prNumber: number;
 }
@@ -85,6 +95,7 @@ interface WorkspaceWithPR {
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
   ratchetLastNotifiedState: RatchetState | null;
+  prReviewLastCheckedAt: Date | null;
 }
 
 class RatchetService {
@@ -249,10 +260,13 @@ class RatchetService {
         ? await this.executeRatchetAction(workspace, newState, prStateInfo, settings)
         : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
 
-      // 6. Update workspace
+      // 6. Update workspace (including review check timestamp if we found review comments)
+      const now = new Date();
       await workspaceAccessor.update(workspace.id, {
         ratchetState: newState,
-        ratchetLastCheckedAt: new Date(),
+        ratchetLastCheckedAt: now,
+        // Update review timestamp if we detected review comments
+        ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
       });
 
       return { workspaceId: workspace.id, previousState, newState, action };
@@ -283,7 +297,10 @@ class RatchetService {
     const repo = `${prInfo.owner}/${prInfo.repo}`;
 
     try {
-      const prDetails = await githubCLIService.getPRFullDetails(repo, workspace.prNumber);
+      const [prDetails, reviewComments] = await Promise.all([
+        githubCLIService.getPRFullDetails(repo, workspace.prNumber),
+        githubCLIService.getReviewComments(repo, workspace.prNumber),
+      ]);
 
       // Convert statusCheckRollup to the format expected by computeCIStatus
       const statusCheckRollup =
@@ -312,13 +329,22 @@ class RatchetService {
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
 
+      // Check for new review comments since last check
+      const lastCheckedAt = workspace.prReviewLastCheckedAt?.getTime() ?? 0;
+      const hasNewReviewComments = reviewComments.some((comment) => {
+        const commentTime = new Date(comment.createdAt).getTime();
+        return commentTime > lastCheckedAt;
+      });
+
       return {
         ciStatus,
         mergeStateStatus: prDetails.mergeStateStatus,
         hasChangesRequested,
+        hasNewReviewComments,
         failedChecks,
         reviews: prDetails.reviews,
         comments: prDetails.comments,
+        reviewComments,
         prState: prDetails.state,
         prNumber: prDetails.number,
       };
@@ -357,8 +383,8 @@ class RatchetService {
       return RatchetState.MERGE_CONFLICT;
     }
 
-    // Check for unaddressed review comments
-    if (pr.hasChangesRequested) {
+    // Check for unaddressed review comments (either formal changes requested OR new review comments)
+    if (pr.hasChangesRequested || pr.hasNewReviewComments) {
       return RatchetState.REVIEW_PENDING;
     }
 
@@ -777,8 +803,31 @@ New review comments have been received on PR #${prNumber}.
       }
     }
 
+    // Add line-level review comments
+    const filteredComments =
+      settings.allowedReviewers.length > 0
+        ? prStateInfo.reviewComments.filter((c) =>
+            settings.allowedReviewers.includes(c.author.login)
+          )
+        : prStateInfo.reviewComments;
+
+    if (filteredComments.length > 0) {
+      parts.push('### Review Comments on Code\n\n');
+      for (const comment of filteredComments) {
+        parts.push(
+          `**${comment.author.login}** on \`${comment.path}\`${comment.line ? `:${comment.line}` : ''}:\n`
+        );
+        parts.push(`> ${comment.body.split('\n').join('\n> ')}\n`);
+        parts.push(`> [View comment](${comment.url})\n\n`);
+      }
+    }
+
     // Get reviewer usernames for re-review request
-    const reviewers = [...new Set(filteredReviews.map((r) => r.author.login))];
+    const reviewerSet = new Set([
+      ...filteredReviews.map((r) => r.author.login),
+      ...filteredComments.map((c) => c.author.login),
+    ]);
+    const reviewers = Array.from(reviewerSet);
     const reviewerMentions = reviewers.map((r) => `@${r}`).join(' ');
 
     parts.push(`### Next Steps

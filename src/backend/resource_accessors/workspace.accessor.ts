@@ -434,6 +434,7 @@ class WorkspaceAccessor {
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
       ratchetLastNotifiedState: RatchetState | null;
+      prReviewLastCheckedAt: Date | null;
     }>
   > {
     return prisma.workspace.findMany({
@@ -450,6 +451,7 @@ class WorkspaceAccessor {
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastNotifiedState: true,
+        prReviewLastCheckedAt: true,
       },
       orderBy: { ratchetLastCheckedAt: 'asc' }, // Check oldest first
     }) as Promise<
@@ -461,6 +463,7 @@ class WorkspaceAccessor {
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
         ratchetLastNotifiedState: RatchetState | null;
+        prReviewLastCheckedAt: Date | null;
       }>
     >;
   }
