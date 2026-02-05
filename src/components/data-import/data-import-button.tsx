@@ -33,7 +33,7 @@ export function DataImportButton({
   const utils = trpc.useUtils();
 
   const importData = trpc.admin.importData.useMutation({
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       const { results } = result;
       const summary = [
         `Projects: ${results.projects.imported} imported, ${results.projects.skipped} skipped`,
@@ -47,7 +47,7 @@ export function DataImportButton({
       setConfirmState({ open: false, data: null, summary: '' });
 
       // Invalidate all queries to refresh data
-      utils.invalidate();
+      await utils.invalidate();
 
       // Call success callback if provided
       onImportSuccess?.();
