@@ -273,3 +273,9 @@
       16px 0;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .ratchet-active::before {
+    animation: none;
+  }
+}
