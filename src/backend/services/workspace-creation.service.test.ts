@@ -491,7 +491,7 @@ describe('WorkspaceCreationService', () => {
       expect(result.type).toBe('RESUME_BRANCH');
     });
 
-    it('should treat GitHub issue with useExistingBranch=false as manual', () => {
+    it('should treat GitHub issue with useExistingBranch=false as GitHub issue', () => {
       const input = {
         projectId: 'proj-1',
         name: 'Test',

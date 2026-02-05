@@ -31,6 +31,7 @@ export type WorkspaceCreationSource =
       projectId: string;
       branchName: string;
       name?: string;
+      description?: string;
       ratchetEnabled?: boolean;
     }
   | {
@@ -39,6 +40,7 @@ export type WorkspaceCreationSource =
       issueNumber: number;
       issueUrl: string;
       name?: string;
+      description?: string;
       ratchetEnabled?: boolean;
     };
 
@@ -68,6 +70,7 @@ export function adaptLegacyCreateInput(input: LegacyCreateWorkspaceInput): Works
       projectId: input.projectId,
       branchName: input.branchName,
       name: input.name,
+      description: input.description,
       ratchetEnabled: input.ratchetEnabled,
     };
   }
@@ -80,6 +83,7 @@ export function adaptLegacyCreateInput(input: LegacyCreateWorkspaceInput): Works
       issueNumber: input.githubIssueNumber,
       issueUrl: input.githubIssueUrl,
       name: input.name,
+      description: input.description,
       ratchetEnabled: input.ratchetEnabled,
     };
   }
@@ -218,6 +222,7 @@ export class WorkspaceCreationService {
           preparedInput: {
             projectId: source.projectId,
             name: source.name || source.branchName,
+            description: source.description,
             branchName: source.branchName,
           },
           initMode: {
@@ -232,6 +237,7 @@ export class WorkspaceCreationService {
           preparedInput: {
             projectId: source.projectId,
             name: source.name || `Issue #${source.issueNumber}`,
+            description: source.description,
             githubIssueNumber: source.issueNumber,
             githubIssueUrl: source.issueUrl,
           },
