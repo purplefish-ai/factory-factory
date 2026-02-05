@@ -260,3 +260,12 @@
     animation: none;
   }
 }
+
+/* Enable text selection in toast notifications */
+[data-sonner-toast] {
+  user-select: text !important;
+}
+
+[data-sonner-toast] * {
+  user-select: text !important;
+}
