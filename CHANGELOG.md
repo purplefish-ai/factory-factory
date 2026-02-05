@@ -5,6 +5,29 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-02-05
+
+### Added
+
+- Data import option to initial project setup screen (#665)
+- Domain model consolidation design documentation (#695)
+
+### Changed
+
+- Bump process memory limit from 2GB to 10GB to reduce OOM kills (#696)
+- Make ratchet review fixer fully autonomous - no longer asks for user input (#690)
+
+### Fixed
+
+- Fix sendMessage unhandled promise rejections when protocol stream breaks (#696)
+- Fix ratchet state update to only occur after confirmed message delivery (#696)
+- Fix placeholder PR number in pr-review-fix prompt to dynamically resolve from current branch (#690)
+
+### Refactored
+
+- Refactor slash command palette key handling to reduce complexity (#649)
+- Refactor GitHub CLI error classification to reduce complexity (#652)
+
 ## [0.2.0] - 2026-02-05
 
 ### Added
