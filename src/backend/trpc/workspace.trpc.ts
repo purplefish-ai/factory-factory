@@ -1,10 +1,7 @@
 import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import {
-  adaptLegacyCreateInput,
-  WorkspaceCreationService,
-} from '../services/workspace-creation.service';
+import { WorkspaceCreationService } from '../services/workspace-creation.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
 import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
@@ -21,6 +18,35 @@ export { parseGitStatusOutput } from '../lib/git-helpers';
 
 const loggerName = 'workspace-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
+
+// Zod schema for workspace creation source discriminated union
+const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('MANUAL'),
+    projectId: z.string(),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    branchName: z.string().optional(),
+    ratchetEnabled: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal('RESUME_BRANCH'),
+    projectId: z.string(),
+    branchName: z.string().min(1),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    ratchetEnabled: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal('GITHUB_ISSUE'),
+    projectId: z.string(),
+    issueNumber: z.number(),
+    issueUrl: z.string(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    ratchetEnabled: z.boolean().optional(),
+  }),
+]);
 
 // =============================================================================
 // Router
@@ -70,39 +96,20 @@ export const workspaceRouter = router({
   }),
 
   // Create a new workspace
-  create: publicProcedure
-    .input(
-      z
-        .object({
-          projectId: z.string(),
-          name: z.string().min(1),
-          description: z.string().optional(),
-          branchName: z.string().optional(),
-          useExistingBranch: z.boolean().optional(),
-          githubIssueNumber: z.number().optional(),
-          githubIssueUrl: z.string().optional(),
-          ratchetEnabled: z.boolean().optional(),
-        })
-        .refine((data) => !(data.useExistingBranch && !data.branchName), {
-          message: 'branchName is required when useExistingBranch is true',
-          path: ['branchName'],
-        })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const logger = getLogger(ctx);
-      const { configService } = ctx.appContext.services;
+  create: publicProcedure.input(workspaceCreationSourceSchema).mutation(async ({ ctx, input }) => {
+    const logger = getLogger(ctx);
+    const { configService } = ctx.appContext.services;
 
-      // Use the canonical workspace creation service via legacy adapter
-      const workspaceCreationService = new WorkspaceCreationService({
-        logger,
-        configService,
-      });
+    // Use the canonical workspace creation service
+    const workspaceCreationService = new WorkspaceCreationService({
+      logger,
+      configService,
+    });
 
-      const source = adaptLegacyCreateInput(input);
-      const { workspace } = await workspaceCreationService.create(source);
+    const { workspace } = await workspaceCreationService.create(input);
 
-      return workspace;
-    }),
+    return workspace;
+  }),
 
   // Update a workspace
   // Note: status changes should go through dedicated endpoints (archive, retryInit, etc.)

@@ -45,10 +45,11 @@ export function IssueCard({ issue, projectId }: IssueCardProps) {
     e.stopPropagation();
 
     createWorkspaceMutation.mutate({
+      type: 'GITHUB_ISSUE',
       projectId,
+      issueNumber: issue.number,
+      issueUrl: issue.url,
       name: issue.title,
-      githubIssueNumber: issue.number,
-      githubIssueUrl: issue.url,
       ratchetEnabled,
     });
   };

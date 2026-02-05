@@ -85,10 +85,10 @@ export default function WorkspacesListPage() {
 
     try {
       const workspace = await resumeWorkspace.mutateAsync({
+        type: 'RESUME_BRANCH',
         projectId: project.id,
-        name: workspaceName,
         branchName: branch.name,
-        useExistingBranch: true,
+        name: workspaceName,
       });
 
       rememberResumeWorkspace(workspace.id);

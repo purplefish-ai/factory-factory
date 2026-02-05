@@ -52,6 +52,7 @@ export default function NewWorkspacePage() {
     }
 
     createWorkspace.mutate({
+      type: 'MANUAL',
       projectId: project.id,
       name,
       description: description || undefined,

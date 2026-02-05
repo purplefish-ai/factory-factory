@@ -8,7 +8,6 @@ import type { configService } from './config.service';
 import * as gitOpsServiceModule from './git-ops.service';
 import type { createLogger } from './logger.service';
 import {
-  adaptLegacyCreateInput,
   WorkspaceCreationService,
   type WorkspaceCreationSource,
 } from './workspace-creation.service';
@@ -412,120 +411,6 @@ describe('WorkspaceCreationService', () => {
           })
         );
       });
-    });
-  });
-
-  describe('adaptLegacyCreateInput', () => {
-    it('should adapt manual creation input', () => {
-      const input = {
-        projectId: 'proj-1',
-        name: 'My Workspace',
-        description: 'Test description',
-        branchName: 'feature/test',
-      };
-
-      const result = adaptLegacyCreateInput(input);
-
-      expect(result).toEqual({
-        type: 'MANUAL',
-        projectId: 'proj-1',
-        name: 'My Workspace',
-        description: 'Test description',
-        branchName: 'feature/test',
-        ratchetEnabled: undefined,
-        githubIssueNumber: undefined,
-        githubIssueUrl: undefined,
-      });
-    });
-
-    it('should preserve partial GitHub issue data in manual fallback', () => {
-      const input = {
-        projectId: 'proj-1',
-        name: 'Test',
-        githubIssueNumber: 42,
-        // missing githubIssueUrl
-      };
-
-      const result = adaptLegacyCreateInput(input);
-
-      expect(result.type).toBe('MANUAL');
-      expect(result).toEqual(
-        expect.objectContaining({
-          githubIssueNumber: 42,
-          githubIssueUrl: undefined,
-        })
-      );
-    });
-
-    it('should adapt resume branch input', () => {
-      const input = {
-        projectId: 'proj-1',
-        name: 'Resumed Workspace',
-        branchName: 'existing-branch',
-        useExistingBranch: true,
-      };
-
-      const result = adaptLegacyCreateInput(input);
-
-      expect(result).toEqual({
-        type: 'RESUME_BRANCH',
-        projectId: 'proj-1',
-        branchName: 'existing-branch',
-        name: 'Resumed Workspace',
-        description: undefined,
-        ratchetEnabled: undefined,
-      });
-    });
-
-    it('should adapt GitHub issue input', () => {
-      const input = {
-        projectId: 'proj-1',
-        name: 'Issue Workspace',
-        githubIssueNumber: 42,
-        githubIssueUrl: 'https://github.com/org/repo/issues/42',
-        ratchetEnabled: false,
-      };
-
-      const result = adaptLegacyCreateInput(input);
-
-      expect(result).toEqual({
-        type: 'GITHUB_ISSUE',
-        projectId: 'proj-1',
-        issueNumber: 42,
-        issueUrl: 'https://github.com/org/repo/issues/42',
-        name: 'Issue Workspace',
-        description: undefined,
-        ratchetEnabled: false,
-      });
-    });
-
-    it('should prioritize resume branch over GitHub issue', () => {
-      const input = {
-        projectId: 'proj-1',
-        name: 'Test',
-        branchName: 'branch',
-        useExistingBranch: true,
-        githubIssueNumber: 42,
-        githubIssueUrl: 'https://github.com/org/repo/issues/42',
-      };
-
-      const result = adaptLegacyCreateInput(input);
-
-      expect(result.type).toBe('RESUME_BRANCH');
-    });
-
-    it('should treat GitHub issue with useExistingBranch=false as GitHub issue', () => {
-      const input = {
-        projectId: 'proj-1',
-        name: 'Test',
-        useExistingBranch: false,
-        githubIssueNumber: 42,
-        githubIssueUrl: 'https://github.com/org/repo/issues/42',
-      };
-
-      const result = adaptLegacyCreateInput(input);
-
-      expect(result.type).toBe('GITHUB_ISSUE');
     });
   });
 });

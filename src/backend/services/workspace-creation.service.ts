@@ -25,10 +25,6 @@ export type WorkspaceCreationSource =
       description?: string;
       branchName?: string;
       ratchetEnabled?: boolean;
-      /** Preserved from legacy input for backward compatibility */
-      githubIssueNumber?: number;
-      /** Preserved from legacy input for backward compatibility */
-      githubIssueUrl?: string;
     }
   | {
       type: 'RESUME_BRANCH';
@@ -47,64 +43,6 @@ export type WorkspaceCreationSource =
       description?: string;
       ratchetEnabled?: boolean;
     };
-
-/**
- * Compatibility adapter for old workspace create input format.
- * Supports migration from existing tRPC procedure input shape.
- */
-export interface LegacyCreateWorkspaceInput {
-  projectId: string;
-  name: string;
-  description?: string;
-  branchName?: string;
-  useExistingBranch?: boolean;
-  githubIssueNumber?: number;
-  githubIssueUrl?: string;
-  ratchetEnabled?: boolean;
-}
-
-/**
- * Converts legacy input format to source-discriminated format.
- */
-export function adaptLegacyCreateInput(input: LegacyCreateWorkspaceInput): WorkspaceCreationSource {
-  // Resume branch takes precedence
-  if (input.useExistingBranch && input.branchName) {
-    return {
-      type: 'RESUME_BRANCH',
-      projectId: input.projectId,
-      branchName: input.branchName,
-      name: input.name,
-      description: input.description,
-      ratchetEnabled: input.ratchetEnabled,
-    };
-  }
-
-  // GitHub issue creation
-  if (input.githubIssueNumber !== undefined && input.githubIssueUrl) {
-    return {
-      type: 'GITHUB_ISSUE',
-      projectId: input.projectId,
-      issueNumber: input.githubIssueNumber,
-      issueUrl: input.githubIssueUrl,
-      name: input.name,
-      description: input.description,
-      ratchetEnabled: input.ratchetEnabled,
-    };
-  }
-
-  // Default to manual creation, preserving any partial GitHub issue data
-  // to maintain backward compatibility with old code that passed all fields through.
-  return {
-    type: 'MANUAL',
-    projectId: input.projectId,
-    name: input.name,
-    description: input.description,
-    branchName: input.branchName,
-    ratchetEnabled: input.ratchetEnabled,
-    githubIssueNumber: input.githubIssueNumber,
-    githubIssueUrl: input.githubIssueUrl,
-  };
-}
 
 /**
  * Result of workspace creation operation.
@@ -203,8 +141,6 @@ export class WorkspaceCreationService {
             name: source.name,
             description: source.description,
             branchName: source.branchName,
-            githubIssueNumber: source.githubIssueNumber,
-            githubIssueUrl: source.githubIssueUrl,
           },
         };
       }
