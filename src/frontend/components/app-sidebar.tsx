@@ -611,6 +611,7 @@ function SortableWorkspaceItem({
   // sidebar doesn't have access to the computed kanbanColumn field from kanban queries.
   // This is semantically equivalent to KanbanCard's `workspace.kanbanColumn === 'DONE'`.
   const isDone = workspace.cachedKanbanColumn === 'DONE';
+  const isWaiting = workspace.cachedKanbanColumn === 'WAITING';
   const isRatchetActive =
     !(disableRatchetAnimation || isDone) &&
     workspace.ratchetState &&
@@ -626,7 +627,8 @@ function SortableWorkspaceItem({
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
           isDragging && 'opacity-50 bg-sidebar-accent',
-          isRatchetActive && 'ratchet-active'
+          isRatchetActive && 'ratchet-active',
+          isWaiting && !isRatchetActive && 'waiting-pulse'
         )}
       >
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
