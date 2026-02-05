@@ -58,6 +58,17 @@ export interface PRStateInfo {
     createdAt: string;
     url: string;
   }>;
+  // Filtered to only NEW comments (since last check) and allowed reviewers
+  newReviewComments: Array<{
+    id: number;
+    author: { login: string };
+    body: string;
+    path: string;
+    line: number | null;
+    createdAt: string;
+    url: string;
+  }>;
+  newPRComments: PRWithFullDetails['comments'];
   prState: string;
   prNumber: number;
 }
@@ -226,8 +237,8 @@ class RatchetService {
     }
 
     try {
-      // 1. Fetch current PR state from GitHub
-      const prStateInfo = await this.fetchPRState(workspace);
+      // 1. Fetch current PR state from GitHub (pass allowedReviewers for filtering)
+      const prStateInfo = await this.fetchPRState(workspace, settings.allowedReviewers);
       if (!prStateInfo) {
         return {
           workspaceId: workspace.id,
@@ -287,7 +298,10 @@ class RatchetService {
   /**
    * Fetch current PR state from GitHub
    */
-  private async fetchPRState(workspace: WorkspaceWithPR): Promise<PRStateInfo | null> {
+  private async fetchPRState(
+    workspace: WorkspaceWithPR,
+    allowedReviewers: string[]
+  ): Promise<PRStateInfo | null> {
     const prInfo = githubCLIService.extractPRInfo(workspace.prUrl);
     if (!prInfo) {
       logger.warn('Could not parse PR URL', { prUrl: workspace.prUrl });
@@ -329,17 +343,30 @@ class RatchetService {
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
 
-      // Check for new review comments since last check (both line-level and regular PR comments)
+      // Filter comments by allowed reviewers (if configured) and by timestamp (new since last check)
       const lastCheckedAt = workspace.prReviewLastCheckedAt?.getTime() ?? 0;
-      const hasNewReviewComments =
-        reviewComments.some((comment) => {
-          const commentTime = new Date(comment.createdAt).getTime();
-          return commentTime > lastCheckedAt;
-        }) ||
-        prDetails.comments.some((comment) => {
-          const commentTime = new Date(comment.createdAt).getTime();
-          return commentTime > lastCheckedAt;
-        });
+      const filterByReviewer = allowedReviewers.length > 0;
+
+      // Filter new review comments (line-level code comments)
+      const newReviewComments = reviewComments.filter((comment) => {
+        const commentTime = new Date(comment.createdAt).getTime();
+        const isNew = commentTime > lastCheckedAt;
+        const isAllowedReviewer =
+          !filterByReviewer || allowedReviewers.includes(comment.author.login);
+        return isNew && isAllowedReviewer;
+      });
+
+      // Filter new PR comments (regular conversation comments)
+      const newPRComments = prDetails.comments.filter((comment) => {
+        const commentTime = new Date(comment.createdAt).getTime();
+        const isNew = commentTime > lastCheckedAt;
+        const isAllowedReviewer =
+          !filterByReviewer || allowedReviewers.includes(comment.author.login);
+        return isNew && isAllowedReviewer;
+      });
+
+      // Check if there are any new comments from allowed reviewers
+      const hasNewReviewComments = newReviewComments.length > 0 || newPRComments.length > 0;
 
       return {
         ciStatus,
@@ -350,6 +377,8 @@ class RatchetService {
         reviews: prDetails.reviews,
         comments: prDetails.comments,
         reviewComments,
+        newReviewComments,
+        newPRComments,
         prState: prDetails.state,
         prNumber: prDetails.number,
       };
@@ -851,7 +880,7 @@ New review comments have been received on PR #${prNumber}.
 `,
     ];
 
-    // Filter and format reviews requesting changes
+    // Filter and format reviews requesting changes (by allowed reviewers)
     const changesRequestedReviews = prStateInfo.reviews.filter(
       (r) => r.state === 'CHANGES_REQUESTED'
     );
@@ -861,25 +890,17 @@ New review comments have been received on PR #${prNumber}.
     );
     parts.push(this.formatReviewsSection(filteredReviews));
 
-    // Filter and format line-level code comments
-    const filteredCodeComments = this.filterByAllowedReviewers(
-      prStateInfo.reviewComments,
-      settings.allowedReviewers
-    );
-    parts.push(this.formatCodeCommentsSection(filteredCodeComments));
+    // Format NEW line-level code comments (already filtered by timestamp and allowed reviewers)
+    parts.push(this.formatCodeCommentsSection(prStateInfo.newReviewComments));
 
-    // Filter and format regular PR comments
-    const filteredPRComments = this.filterByAllowedReviewers(
-      prStateInfo.comments,
-      settings.allowedReviewers
-    );
-    parts.push(this.formatPRCommentsSection(filteredPRComments));
+    // Format NEW regular PR comments (already filtered by timestamp and allowed reviewers)
+    parts.push(this.formatPRCommentsSection(prStateInfo.newPRComments));
 
     // Get reviewer usernames for re-review request
     const reviewerSet = new Set([
       ...filteredReviews.map((r) => r.author.login),
-      ...filteredCodeComments.map((c) => c.author.login),
-      ...filteredPRComments.map((c) => c.author.login),
+      ...prStateInfo.newReviewComments.map((c) => c.author.login),
+      ...prStateInfo.newPRComments.map((c) => c.author.login),
     ]);
     const reviewerMentions = Array.from(reviewerSet)
       .map((r) => `@${r}`)
