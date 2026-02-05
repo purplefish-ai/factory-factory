@@ -3,24 +3,9 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { MessageAttachment } from '@/lib/claude-types';
-import { formatFileSize } from '@/lib/image-utils';
+import { formatFileSize, formatLineCount, isTextAttachment } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 import { AttachmentViewerDialog } from './attachment-viewer-dialog';
-
-/**
- * Format line count for display.
- */
-function formatLineCount(text: string): string {
-  const lines = text.split('\n').length;
-  return `${lines} line${lines === 1 ? '' : 's'}`;
-}
-
-/**
- * Check if an attachment is a text attachment.
- */
-function isTextAttachment(attachment: MessageAttachment): boolean {
-  return attachment.contentType === 'text';
-}
 
 interface AttachmentPreviewProps {
   attachments: MessageAttachment[];

@@ -178,3 +178,18 @@ export async function textFileToAttachment(file: File): Promise<MessageAttachmen
     contentType: 'text',
   };
 }
+
+/**
+ * Format line count for display.
+ */
+export function formatLineCount(text: string): string {
+  const lines = text.split('\n').length;
+  return `${lines} line${lines === 1 ? '' : 's'}`;
+}
+
+/**
+ * Check if an attachment is a text attachment.
+ */
+export function isTextAttachment(attachment: MessageAttachment): boolean {
+  return attachment.contentType === 'text';
+}

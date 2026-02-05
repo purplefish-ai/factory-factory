@@ -8,22 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { MessageAttachment } from '@/lib/claude-types';
-import { formatFileSize } from '@/lib/image-utils';
-
-/**
- * Format line count for display.
- */
-function formatLineCount(text: string): string {
-  const lines = text.split('\n').length;
-  return `${lines} line${lines === 1 ? '' : 's'}`;
-}
-
-/**
- * Check if an attachment is a text attachment.
- */
-function isTextAttachment(attachment: MessageAttachment): boolean {
-  return attachment.contentType === 'text';
-}
+import { formatFileSize, formatLineCount, isTextAttachment } from '@/lib/image-utils';
 
 interface AttachmentViewerDialogProps {
   attachment: MessageAttachment | null;
