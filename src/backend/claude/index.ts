@@ -186,12 +186,12 @@ export class ClaudeClient extends EventEmitter {
    *
    * @param content - The message content to send (string or content array with images)
    */
-  sendMessage(content: string | ClaudeContentItem[]): void {
+  async sendMessage(content: string | ClaudeContentItem[]): Promise<void> {
     if (!this.process) {
       throw new Error('ClaudeClient not initialized');
     }
     // Status is automatically set to 'running' by the protocol's 'sending' event
-    this.process.protocol.sendUserMessage(content);
+    await this.process.protocol.sendUserMessage(content);
   }
 
   /**

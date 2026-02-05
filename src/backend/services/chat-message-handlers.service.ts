@@ -226,7 +226,7 @@ class ChatMessageHandlerService {
     }
 
     try {
-      client.sendMessage(content);
+      await client.sendMessage(content);
     } catch (error) {
       if (isCompactCommand) {
         client.endCompaction();

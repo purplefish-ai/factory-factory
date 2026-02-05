@@ -197,7 +197,13 @@ class CIFixerService {
         // Send new message to existing running session
         const client = sessionService.getClient(result.sessionId);
         if (client) {
-          client.sendMessage(initialPrompt);
+          client.sendMessage(initialPrompt).catch((error) => {
+            logger.warn('Failed to send CI failure notification', {
+              workspaceId,
+              sessionId: result.sessionId,
+              error,
+            });
+          });
           logger.info('Sent CI failure notification to existing session', {
             workspaceId,
             sessionId: result.sessionId,
@@ -265,9 +271,13 @@ class CIFixerService {
       return false;
     }
 
-    client.sendMessage(
-      '✅ **CI Passed** - The CI checks are now passing. You can wrap up your current work.'
-    );
+    client
+      .sendMessage(
+        '✅ **CI Passed** - The CI checks are now passing. You can wrap up your current work.'
+      )
+      .catch((error) => {
+        logger.warn('Failed to notify CI fixer session', { workspaceId, error });
+      });
 
     logger.info('Notified CI fixing session that CI passed', {
       workspaceId,

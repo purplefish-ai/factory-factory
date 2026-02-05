@@ -567,17 +567,25 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     }
 
     if (message) {
-      client.sendMessage(message);
-      logger.info('Notified active fixer about state change', {
-        workspaceId: workspace.id,
-        sessionId: workspace.ratchetActiveSessionId,
-        state,
-      });
+      try {
+        await client.sendMessage(message);
+        logger.info('Notified active fixer about state change', {
+          workspaceId: workspace.id,
+          sessionId: workspace.ratchetActiveSessionId,
+          state,
+        });
 
-      // Update last notified state
-      await workspaceAccessor.update(workspace.id, {
-        ratchetLastNotifiedState: state,
-      });
+        // Only update last notified state after confirmed delivery
+        await workspaceAccessor.update(workspace.id, {
+          ratchetLastNotifiedState: state,
+        });
+      } catch (error) {
+        logger.warn('Failed to notify fixer about state change', {
+          workspaceId: workspace.id,
+          state,
+          error,
+        });
+      }
     }
   }
 
@@ -687,13 +695,23 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       // Send the initial prompt via sendMessage so it goes through the normal event
       // pipeline and the agent actually processes it
       const client = sessionService.getClient(result.sessionId);
+      let promptSent = false;
       if (client) {
-        client.sendMessage(initialPrompt);
-        logger.info('Sent ratchet fixer prompt to session via sendMessage', {
-          workspaceId: workspace.id,
-          sessionId: result.sessionId,
-          fixerType,
-        });
+        try {
+          await client.sendMessage(initialPrompt);
+          promptSent = true;
+          logger.info('Sent ratchet fixer prompt to session via sendMessage', {
+            workspaceId: workspace.id,
+            sessionId: result.sessionId,
+            fixerType,
+          });
+        } catch (error) {
+          logger.warn('Failed to send ratchet fixer prompt', {
+            workspaceId: workspace.id,
+            sessionId: result.sessionId,
+            error,
+          });
+        }
       } else {
         logger.warn('Could not get client to send ratchet fixer prompt', {
           workspaceId: workspace.id,
@@ -702,10 +720,10 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
         });
       }
 
-      // Update workspace with active session
+      // Update workspace with active session; only mark as notified if prompt was delivered
       await workspaceAccessor.update(workspace.id, {
         ratchetActiveSessionId: result.sessionId,
-        ratchetLastNotifiedState: this.determineRatchetState(prStateInfo),
+        ...(promptSent && { ratchetLastNotifiedState: this.determineRatchetState(prStateInfo) }),
       });
 
       logger.info('Ratchet fixer session started', {
