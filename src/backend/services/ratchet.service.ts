@@ -329,12 +329,17 @@ class RatchetService {
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
 
-      // Check for new review comments since last check
+      // Check for new review comments since last check (both line-level and regular PR comments)
       const lastCheckedAt = workspace.prReviewLastCheckedAt?.getTime() ?? 0;
-      const hasNewReviewComments = reviewComments.some((comment) => {
-        const commentTime = new Date(comment.createdAt).getTime();
-        return commentTime > lastCheckedAt;
-      });
+      const hasNewReviewComments =
+        reviewComments.some((comment) => {
+          const commentTime = new Date(comment.createdAt).getTime();
+          return commentTime > lastCheckedAt;
+        }) ||
+        prDetails.comments.some((comment) => {
+          const commentTime = new Date(comment.createdAt).getTime();
+          return commentTime > lastCheckedAt;
+        });
 
       return {
         ciStatus,
@@ -763,6 +768,76 @@ PR #${prNumber} has merge conflicts with the base branch.
 Please resolve these merge conflicts.`;
   }
 
+  /**
+   * Filter items by allowed reviewers if configured
+   */
+  private filterByAllowedReviewers<T extends { author: { login: string } }>(
+    items: T[],
+    allowedReviewers: string[]
+  ): T[] {
+    if (allowedReviewers.length === 0) {
+      return items;
+    }
+    return items.filter((item) => allowedReviewers.includes(item.author.login));
+  }
+
+  /**
+   * Format reviews requesting changes for the prompt
+   */
+  private formatReviewsSection(reviews: PRStateInfo['reviews']): string {
+    if (reviews.length === 0) {
+      return '';
+    }
+
+    const lines = ['### Reviews Requesting Changes\n\n'];
+    for (const review of reviews) {
+      lines.push(
+        `**${review.author.login}** (${new Date(review.submittedAt).toLocaleDateString()}):\n`
+      );
+      if (review.body) {
+        lines.push(`> ${review.body.split('\n').join('\n> ')}\n`);
+      }
+      lines.push('\n');
+    }
+    return lines.join('');
+  }
+
+  /**
+   * Format line-level code comments for the prompt
+   */
+  private formatCodeCommentsSection(comments: PRStateInfo['reviewComments']): string {
+    if (comments.length === 0) {
+      return '';
+    }
+
+    const lines = ['### Review Comments on Code\n\n'];
+    for (const comment of comments) {
+      const location = comment.line ? `:${comment.line}` : '';
+      lines.push(`**${comment.author.login}** on \`${comment.path}\`${location}:\n`);
+      lines.push(`> ${comment.body.split('\n').join('\n> ')}\n`);
+      lines.push(`> [View comment](${comment.url})\n\n`);
+    }
+    return lines.join('');
+  }
+
+  /**
+   * Format regular PR comments for the prompt
+   */
+  private formatPRCommentsSection(comments: PRStateInfo['comments']): string {
+    if (comments.length === 0) {
+      return '';
+    }
+
+    const lines = ['### PR Comments\n\n'];
+    for (const comment of comments) {
+      lines.push(
+        `**${comment.author.login}** (${new Date(comment.createdAt).toLocaleDateString()}):\n`
+      );
+      lines.push(`> ${comment.body.split('\n').join('\n> ')}\n\n`);
+    }
+    return lines.join('');
+  }
+
   private buildReviewFixPrompt(
     prNumber: number,
     prUrl: string,
@@ -779,56 +854,39 @@ New review comments have been received on PR #${prNumber}.
 `,
     ];
 
-    // Add reviews that request changes
+    // Filter and format reviews requesting changes
     const changesRequestedReviews = prStateInfo.reviews.filter(
       (r) => r.state === 'CHANGES_REQUESTED'
     );
+    const filteredReviews = this.filterByAllowedReviewers(
+      changesRequestedReviews,
+      settings.allowedReviewers
+    );
+    parts.push(this.formatReviewsSection(filteredReviews));
 
-    // Filter by allowed reviewers if configured
-    const filteredReviews =
-      settings.allowedReviewers.length > 0
-        ? changesRequestedReviews.filter((r) => settings.allowedReviewers.includes(r.author.login))
-        : changesRequestedReviews;
+    // Filter and format line-level code comments
+    const filteredCodeComments = this.filterByAllowedReviewers(
+      prStateInfo.reviewComments,
+      settings.allowedReviewers
+    );
+    parts.push(this.formatCodeCommentsSection(filteredCodeComments));
 
-    if (filteredReviews.length > 0) {
-      parts.push('### Reviews Requesting Changes\n\n');
-      for (const review of filteredReviews) {
-        parts.push(
-          `**${review.author.login}** (${new Date(review.submittedAt).toLocaleDateString()}):\n`
-        );
-        if (review.body) {
-          parts.push(`> ${review.body.split('\n').join('\n> ')}\n`);
-        }
-        parts.push('\n');
-      }
-    }
-
-    // Add line-level review comments
-    const filteredComments =
-      settings.allowedReviewers.length > 0
-        ? prStateInfo.reviewComments.filter((c) =>
-            settings.allowedReviewers.includes(c.author.login)
-          )
-        : prStateInfo.reviewComments;
-
-    if (filteredComments.length > 0) {
-      parts.push('### Review Comments on Code\n\n');
-      for (const comment of filteredComments) {
-        parts.push(
-          `**${comment.author.login}** on \`${comment.path}\`${comment.line ? `:${comment.line}` : ''}:\n`
-        );
-        parts.push(`> ${comment.body.split('\n').join('\n> ')}\n`);
-        parts.push(`> [View comment](${comment.url})\n\n`);
-      }
-    }
+    // Filter and format regular PR comments
+    const filteredPRComments = this.filterByAllowedReviewers(
+      prStateInfo.comments,
+      settings.allowedReviewers
+    );
+    parts.push(this.formatPRCommentsSection(filteredPRComments));
 
     // Get reviewer usernames for re-review request
     const reviewerSet = new Set([
       ...filteredReviews.map((r) => r.author.login),
-      ...filteredComments.map((c) => c.author.login),
+      ...filteredCodeComments.map((c) => c.author.login),
+      ...filteredPRComments.map((c) => c.author.login),
     ]);
-    const reviewers = Array.from(reviewerSet);
-    const reviewerMentions = reviewers.map((r) => `@${r}`).join(' ');
+    const reviewerMentions = Array.from(reviewerSet)
+      .map((r) => `@${r}`)
+      .join(' ');
 
     parts.push(`### Next Steps
 
