@@ -72,9 +72,9 @@ export default function NewProjectPage() {
     });
   };
 
-  const handleImportSuccess = () => {
-    // Invalidate projects list and navigate directly to projects kanban view
-    utils.project.list.invalidate();
+  const handleImportSuccess = async () => {
+    // Invalidate projects list and wait for refetch before navigating
+    await utils.project.list.invalidate();
     navigate('/projects');
   };
 
