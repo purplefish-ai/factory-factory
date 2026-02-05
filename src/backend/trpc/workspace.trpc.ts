@@ -1,4 +1,4 @@
-import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
+import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { DEFAULT_FIRST_SESSION } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
@@ -208,9 +208,19 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const updatedWorkspace = await workspaceAccessor.update(input.workspaceId, {
-        ratchetEnabled: input.enabled,
-      });
+      const updatedWorkspace = await workspaceAccessor.update(
+        input.workspaceId,
+        input.enabled
+          ? {
+              ratchetEnabled: true,
+            }
+          : {
+              ratchetEnabled: false,
+              ratchetState: RatchetState.IDLE,
+              ratchetActiveSessionId: null,
+              ratchetLastNotifiedState: null,
+            }
+      );
       if (input.enabled) {
         await ratchetService.checkWorkspaceById(input.workspaceId);
       }

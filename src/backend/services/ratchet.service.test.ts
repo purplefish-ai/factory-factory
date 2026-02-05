@@ -182,8 +182,12 @@ describe('ratchet service', () => {
     expect(result).toMatchObject({
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
       previousState: RatchetState.IDLE,
-      newState: RatchetState.CI_FAILED,
+      newState: RatchetState.IDLE,
     });
+    expect(workspaceAccessor.update).toHaveBeenCalledWith(
+      workspace.id,
+      expect.objectContaining({ ratchetState: RatchetState.IDLE })
+    );
   });
 
   it('does not execute ratchet actions when ratcheting is disabled mid-check', async () => {
@@ -248,8 +252,12 @@ describe('ratchet service', () => {
     expect(executeRatchetActionSpy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
-      newState: RatchetState.CI_FAILED,
+      newState: RatchetState.IDLE,
     });
+    expect(workspaceAccessor.update).toHaveBeenCalledWith(
+      workspace.id,
+      expect.objectContaining({ ratchetState: RatchetState.IDLE })
+    );
   });
 });
 

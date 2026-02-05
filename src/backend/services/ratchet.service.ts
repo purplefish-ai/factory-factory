@@ -293,13 +293,18 @@ class RatchetService {
       // 6. Update workspace (including review check timestamp if we found review comments)
       const now = new Date();
       await workspaceAccessor.update(workspace.id, {
-        ratchetState: newState,
+        ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
         ratchetLastCheckedAt: now,
         // Update review timestamp if we detected review comments
         ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
       });
 
-      return { workspaceId: workspace.id, previousState, newState, action };
+      return {
+        workspaceId: workspace.id,
+        previousState,
+        newState: shouldTakeAction ? newState : RatchetState.IDLE,
+        action,
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error processing workspace in ratchet', error as Error, {
