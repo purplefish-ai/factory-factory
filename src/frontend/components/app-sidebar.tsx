@@ -618,6 +618,12 @@ function SortableWorkspaceItem({
     workspace.ratchetState !== 'IDLE' &&
     workspace.ratchetState !== 'READY';
 
+  // Check if workspace entered WAITING state within the last 30 seconds
+  const isRecentlyWaiting =
+    isWaiting &&
+    workspace.stateComputedAt &&
+    Date.now() - new Date(workspace.stateComputedAt).getTime() < 30_000;
+
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
       <SidebarMenuButton
@@ -627,7 +633,7 @@ function SortableWorkspaceItem({
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
           isDragging && 'opacity-50 bg-sidebar-accent',
-          isWaiting && !isRatchetActive && 'waiting-pulse'
+          isRecentlyWaiting && !isRatchetActive && 'waiting-pulse'
         )}
       >
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
