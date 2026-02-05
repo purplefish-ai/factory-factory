@@ -687,8 +687,26 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       // Inject the initial prompt into the chat UI so it's visible to users
       messageStateService.injectCommittedUserMessage(result.sessionId, initialPrompt);
 
-      // Start or restart the session
-      await sessionService.startClaudeSession(result.sessionId, { initialPrompt });
+      // Start the session with empty initialPrompt (we'll send the message separately)
+      await sessionService.startClaudeSession(result.sessionId, { initialPrompt: '' });
+
+      // Send the initial prompt via sendMessage so it goes through the normal event
+      // pipeline and the agent actually processes it
+      const client = sessionService.getClient(result.sessionId);
+      if (client) {
+        client.sendMessage(initialPrompt);
+        logger.info('Sent ratchet fixer prompt to session via sendMessage', {
+          workspaceId: workspace.id,
+          sessionId: result.sessionId,
+          fixerType,
+        });
+      } else {
+        logger.warn('Could not get client to send ratchet fixer prompt', {
+          workspaceId: workspace.id,
+          sessionId: result.sessionId,
+          fixerType,
+        });
+      }
 
       // Update workspace with active session
       await workspaceAccessor.update(workspace.id, {
