@@ -596,7 +596,12 @@ class WorktreeLifecycleService {
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });
 
-      void startDefaultClaudeSession(workspaceId);
+      void startDefaultClaudeSession(workspaceId).catch((error) => {
+        logger.error('Failed to start default Claude session', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
 
       const ranFactorySetup = await runFactorySetupScriptIfConfigured(
         workspaceId,
