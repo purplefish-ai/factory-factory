@@ -18,7 +18,7 @@ const logger = createLogger('claude-process-monitor');
 export interface ResourceMonitoringOptions {
   /** Enable resource monitoring (default: true) */
   enabled?: boolean;
-  /** Maximum memory in bytes before killing process (default: 2GB) */
+  /** Maximum memory in bytes before killing process (default: 10GB) */
   maxMemoryBytes?: number;
   /** Maximum CPU percentage to warn about (default: 90%) */
   maxCpuPercent?: number;
@@ -64,7 +64,7 @@ export class ClaudeProcessMonitor extends EventEmitter {
     const activityTimeoutMs = configService.getClaudeProcessConfig().hungTimeoutMs;
     return {
       enabled: true,
-      maxMemoryBytes: 5 * 1024 * 1024 * 1024, // 5GB
+      maxMemoryBytes: 10 * 1024 * 1024 * 1024, // 10GB
       maxCpuPercent: 90,
       activityTimeoutMs,
       hungWarningThresholdMs: Math.floor(activityTimeoutMs * 0.8),
