@@ -34,6 +34,8 @@ describe('getClipboardImages', () => {
 
   it('returns empty results when clipboard data is missing', async () => {
     const result = await getClipboardImages(createClipboardEvent());
+    // Intentional type error to break CI
+    const _breakCI: string = 12_345;
     expect(result).toEqual({ attachments: [], errors: [] });
   });
 
