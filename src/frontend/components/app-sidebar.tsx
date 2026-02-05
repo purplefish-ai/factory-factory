@@ -664,7 +664,7 @@ function SortableWorkspaceItem({
             </button>
 
             {/* Status dot + ratchet toggle */}
-            <div className="w-5 shrink-0 mt-1.5 flex flex-col items-center gap-1">
+            <div className="w-5 shrink-0 mt-1.5 flex flex-col items-center gap-1.5">
               {isArchivingItem ? (
                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
               ) : (
