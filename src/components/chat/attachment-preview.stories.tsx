@@ -73,6 +73,10 @@ const meta: Meta<typeof AttachmentPreview> = {
       control: 'boolean',
       description: 'Hide remove button (for display-only mode)',
     },
+    clickable: {
+      control: 'boolean',
+      description: 'Make attachments clickable to view in a dialog',
+    },
   },
   decorators: [
     (Story) => (
@@ -154,6 +158,34 @@ export const Empty: Story = {
   },
 };
 
+export const ManyAttachments: Story = {
+  name: 'Many Attachments (Overflow)',
+  args: {
+    attachments: [
+      imageAttachment,
+      { ...imageAttachment, id: 'img-2', name: 'screenshot-2.png' },
+      textAttachmentShort,
+      { ...imageAttachment, id: 'img-3', name: 'diagram.png' },
+      textAttachmentLong,
+      { ...imageAttachment, id: 'img-4', name: 'architecture.png' },
+      { ...textAttachmentLong, id: 'txt-4', name: 'config.json' },
+      { ...imageAttachment, id: 'img-5', name: 'mockup.png' },
+      { ...textAttachmentShort, id: 'txt-5', name: 'snippet.js' },
+      { ...imageAttachment, id: 'img-6', name: 'final-design.png' },
+    ],
+    onRemove: onRemoveAction,
+  },
+};
+
+export const NotClickable: Story = {
+  name: 'Not Clickable',
+  args: {
+    attachments: [imageAttachment, textAttachmentLong],
+    onRemove: onRemoveAction,
+    clickable: false,
+  },
+};
+
 export const AllVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-6">
@@ -170,9 +202,23 @@ export const AllVariants: Story = {
         <AttachmentPreview attachments={[textAttachmentLong]} onRemove={onRemoveAction} />
       </div>
       <div>
-        <h3 className="text-sm font-medium mb-2">Mixed Attachments</h3>
+        <h3 className="text-sm font-medium mb-2">Mixed Attachments (Clickable)</h3>
         <AttachmentPreview
           attachments={[imageAttachment, textAttachmentShort, textAttachmentLong]}
+          onRemove={onRemoveAction}
+        />
+      </div>
+      <div>
+        <h3 className="text-sm font-medium mb-2">Many Attachments (Horizontal Scroll)</h3>
+        <AttachmentPreview
+          attachments={[
+            imageAttachment,
+            { ...imageAttachment, id: 'img-2', name: 'screenshot-2.png' },
+            textAttachmentShort,
+            { ...imageAttachment, id: 'img-3', name: 'diagram.png' },
+            textAttachmentLong,
+            { ...imageAttachment, id: 'img-4', name: 'architecture.png' },
+          ]}
           onRemove={onRemoveAction}
         />
       </div>
