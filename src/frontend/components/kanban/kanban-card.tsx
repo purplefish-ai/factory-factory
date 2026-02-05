@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
-import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
 export interface WorkspaceWithKanban extends Workspace {
@@ -17,6 +16,8 @@ export interface WorkspaceWithKanban extends Workspace {
 interface KanbanCardProps {
   workspace: WorkspaceWithKanban;
   projectSlug: string;
+  onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
+  isTogglePending?: boolean;
 }
 
 function CardStatusIndicator({
@@ -51,16 +52,12 @@ function CardStatusIndicator({
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
 }
 
-export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
-  const utils = trpc.useUtils();
-  const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
-    onSuccess: () => {
-      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
-      utils.workspace.get.invalidate({ id: workspace.id });
-    },
-  });
-
+export function KanbanCard({
+  workspace,
+  projectSlug,
+  onToggleRatcheting,
+  isTogglePending = false,
+}: KanbanCardProps) {
   const showPR = workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl;
   const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
@@ -94,10 +91,10 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
                 enabled={ratchetEnabled}
                 state={workspace.ratchetState}
                 className="h-5 w-5 shrink-0"
-                disabled={toggleRatcheting.isPending || isArchived}
+                disabled={isTogglePending || isArchived || !onToggleRatcheting}
                 stopPropagation
                 onToggle={(enabled) => {
-                  toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
+                  onToggleRatcheting?.(workspace.id, enabled);
                 }}
               />
               {workspace.branchName && (

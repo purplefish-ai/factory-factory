@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useMemo } from 'react';
+import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
@@ -23,6 +23,8 @@ interface KanbanContextValue {
   refetch: () => void;
   syncAndRefetch: () => Promise<void>;
   isSyncing: boolean;
+  toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
+  togglingWorkspaceId: string | null;
 }
 
 const KanbanContext = createContext<KanbanContextValue | null>(null);
@@ -63,11 +65,23 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
   );
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
+  const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
+  const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
 
   const syncAndRefetch = async () => {
     await syncMutation.mutateAsync({ projectId });
     refetchWorkspaces();
     refetchIssues();
+  };
+
+  const toggleWorkspaceRatcheting = async (workspaceId: string, enabled: boolean) => {
+    setTogglingWorkspaceId(workspaceId);
+    try {
+      await toggleRatchetingMutation.mutateAsync({ workspaceId, enabled });
+      refetchWorkspaces();
+    } finally {
+      setTogglingWorkspaceId(null);
+    }
   };
 
   const refetch = () => {
@@ -104,6 +118,8 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
         refetch,
         syncAndRefetch,
         isSyncing: syncMutation.isPending,
+        toggleWorkspaceRatcheting,
+        togglingWorkspaceId,
       }}
     >
       {children}
