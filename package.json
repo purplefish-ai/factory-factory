@@ -151,6 +151,9 @@
     ]
   },
   "pnpm": {
+    "publicHoistPattern": [
+      "@types/*"
+    ],
     "onlyBuiltDependencies": [
       "@prisma/engines",
       "better-sqlite3",
