@@ -168,10 +168,7 @@ export function WorkspaceDetailView({
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {isInitializing && (
-        <InitializationOverlay
-          workspaceId={workspaceId}
-          status={workspaceInitStatus?.status ?? 'PROVISIONING'}
-        />
+        <InitializationOverlay status={workspaceInitStatus?.status ?? 'PROVISIONING'} />
       )}
 
       {archivePending && <ArchivingOverlay />}

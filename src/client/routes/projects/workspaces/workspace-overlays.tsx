@@ -1,10 +1,9 @@
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
-import { useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/frontend/lib/trpc';
-import { forgetResumeWorkspace, isResumeWorkspace } from './resume-workspace-storage';
+import { isResumeWorkspace } from './resume-workspace-storage';
 
 // =============================================================================
 // Workspace Initialization Overlay
@@ -19,19 +18,12 @@ import { forgetResumeWorkspace, isResumeWorkspace } from './resume-workspace-sto
 // =============================================================================
 
 interface InitializationOverlayProps {
-  workspaceId: string;
   status: 'NEW' | 'PROVISIONING' | 'READY' | 'FAILED' | 'ARCHIVED';
 }
 
 // resume workspace storage helpers live in resume-workspace-storage.ts
 
-export function InitializationOverlay({ workspaceId, status }: InitializationOverlayProps) {
-  useEffect(() => {
-    if (status === 'READY' || status === 'ARCHIVED') {
-      forgetResumeWorkspace(workspaceId);
-    }
-  }, [status, workspaceId]);
-
+export function InitializationOverlay({ status }: InitializationOverlayProps) {
   // Only show overlay during the brief NEW state before provisioning starts
   // PROVISIONING: handled by Init Logs tab (non-blocking)
   // FAILED: handled by InitFailedBanner (non-blocking)
