@@ -52,7 +52,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog, RatchetToggleButton } from '@/components/workspace';
 import { cn, formatRelativeTime, shouldShowRatchetAnimation } from '@/lib/utils';
-import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
+import { useCreateWorkspace } from '../hooks/use-create-workspace';
 import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
@@ -280,7 +280,34 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     [workspaceList, selectedProjectId, updateWorkspaceOrder]
   );
 
-  const createWorkspace = trpc.workspace.create.useMutation();
+  // Use shared workspace creation hook
+  const { handleCreate: createWorkspace, isCreating: isCreatingWorkspace } = useCreateWorkspace(
+    selectedProjectId,
+    selectedProjectSlug
+  );
+
+  const handleCreateWorkspace = () => {
+    if (!selectedProjectId || isCreating || isCreatingWorkspace) {
+      return;
+    }
+    // Generate unique name and show optimistic placeholder
+    // Use existingNames from useWorkspaceListState
+    const { generateUniqueWorkspaceName } = require('@/shared/workspace-words');
+    const name = generateUniqueWorkspaceName(existingNames);
+    startCreating(name);
+
+    // Use shared creation logic (handles success navigation and error toasts)
+    createWorkspace();
+  };
+
+  // Clean up optimistic placeholder if creation fails
+  // (on success, the workspace appears in server list and placeholder auto-clears)
+  useEffect(() => {
+    if (!isCreatingWorkspace && isCreating) {
+      cancelCreating();
+    }
+  }, [isCreatingWorkspace, isCreating, cancelCreating]);
+
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
@@ -296,35 +323,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       toast.error(error.message);
     },
   });
-
-  const handleCreateWorkspace = async () => {
-    if (!selectedProjectId || isCreating) {
-      return;
-    }
-    const name = generateUniqueWorkspaceName(existingNames);
-    startCreating(name);
-
-    try {
-      // Create workspace (branchName defaults to project's default branch)
-      // Don't create a session - user will choose workflow in workspace page
-      const workspace = await createWorkspace.mutateAsync({
-        projectId: selectedProjectId,
-        name,
-      });
-
-      // Invalidate caches to trigger immediate refetch
-      utils.workspace.list.invalidate({ projectId: selectedProjectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-
-      // Navigate to workspace (workflow selection will be shown)
-      navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
-    } catch (error) {
-      // Clear the creating state on error so the UI doesn't get stuck
-      cancelCreating();
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Failed to create workspace: ${message}`);
-    }
-  };
 
   const handleArchiveRequest = (workspace: WorkspaceListItem) => {
     setWorkspaceToArchive(workspace.id);
@@ -450,11 +448,11 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
               <button
                 type="button"
                 onClick={handleCreateWorkspace}
-                disabled={isCreating}
+                disabled={isCreatingWorkspace}
                 className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
                 title="New Workspace"
               >
-                {isCreating ? (
+                {isCreatingWorkspace ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Plus className="h-3.5 w-3.5" />
