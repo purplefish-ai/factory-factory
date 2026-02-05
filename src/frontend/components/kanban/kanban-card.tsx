@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
-import { cn } from '@/lib/utils';
+import { cn, shouldShowRatchetAnimation } from '@/lib/utils';
 
 export interface WorkspaceWithKanban extends Workspace {
   kanbanColumn: KanbanColumn | null;
@@ -63,11 +63,10 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
   const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
   // Check if workspace is in DONE column (merged PR). Exclude DONE from ratchet animation.
   const isDone = workspace.kanbanColumn === 'DONE';
+
+  // Show ratcheting animation if state is active OR if a push happened recently
   const isRatchetActive =
-    !isDone &&
-    workspace.ratchetState &&
-    workspace.ratchetState !== 'IDLE' &&
-    workspace.ratchetState !== 'READY';
+    !isDone && shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>

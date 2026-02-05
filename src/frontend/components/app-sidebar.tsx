@@ -51,7 +51,12 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import {
+  cn,
+  formatRelativeTime,
+  isWithinWaitingWindow,
+  shouldShowRatchetAnimation,
+} from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
@@ -611,18 +616,14 @@ function SortableWorkspaceItem({
   // sidebar doesn't have access to the computed kanbanColumn field from kanban queries.
   // This is semantically equivalent to KanbanCard's `workspace.kanbanColumn === 'DONE'`.
   const isDone = workspace.cachedKanbanColumn === 'DONE';
-  const isWaiting = workspace.cachedKanbanColumn === 'WAITING';
+  // Show ratcheting animation if state is active OR if a push happened recently
   const isRatchetActive =
     !(disableRatchetAnimation || isDone) &&
-    workspace.ratchetState &&
-    workspace.ratchetState !== 'IDLE' &&
-    workspace.ratchetState !== 'READY';
+    shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
 
-  // Check if workspace entered WAITING state within the last 30 seconds
+  // Check if workspace entered WAITING state within the last 30 seconds (for pulse animation)
   const isRecentlyWaiting =
-    isWaiting &&
-    workspace.stateComputedAt &&
-    Date.now() - new Date(workspace.stateComputedAt).getTime() < 30_000;
+    workspace.cachedKanbanColumn === 'WAITING' && isWithinWaitingWindow(workspace.stateComputedAt);
 
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
