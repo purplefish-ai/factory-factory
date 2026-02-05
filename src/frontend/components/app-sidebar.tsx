@@ -667,7 +667,12 @@ function SortableWorkspaceItem({
               <div className="flex items-center gap-2">
                 <span className="truncate font-medium text-sm leading-tight flex-1 flex items-center gap-1.5">
                   {isRatchetActive && (
-                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-yellow-500" />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-yellow-500" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Ratchet active</TooltipContent>
+                    </Tooltip>
                   )}
                   {isArchivingItem ? 'Archiving...' : workspace.name}
                 </span>

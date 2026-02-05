@@ -9,6 +9,7 @@ import { Archive, GitBranch, GitPullRequest, Loader2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { cn } from '@/lib/utils';
@@ -79,14 +80,9 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
       >
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              {isRatchetActive && (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-yellow-500" />
-              )}
-              <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
-                {workspace.name}
-              </CardTitle>
-            </div>
+            <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
+              {workspace.name}
+            </CardTitle>
             <CardStatusIndicator
               isArchived={isArchived}
               isWorking={workspace.isWorking}
@@ -96,8 +92,16 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {(workspace.branchName || showPR) && (
+          {(workspace.branchName || showPR || isRatchetActive) && (
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+              {isRatchetActive && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-yellow-500" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Ratchet active</TooltipContent>
+                </Tooltip>
+              )}
               {workspace.branchName && (
                 <>
                   <GitBranch className="h-3 w-3 shrink-0" />
