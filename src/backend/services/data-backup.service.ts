@@ -55,7 +55,7 @@ const exportedWorkspaceSchema = z.object({
   initStartedAt: z.string().nullable(),
   initCompletedAt: z.string().nullable(),
   initRetryCount: z.number(),
-  hasFactoryConfig: z.boolean(),
+  hasFactoryConfig: z.boolean().default(false),
   runScriptCommand: z.string().nullable(),
   runScriptCleanupCommand: z.string().nullable(),
   runScriptPid: z.number().nullable(),
