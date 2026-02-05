@@ -43,10 +43,18 @@ function setupProcessOutput(proc: ChildProcess, name: string): void {
     proc.stdout.on('data', (data: Buffer) => {
       process.stdout.write(data);
     });
+    proc.stdout.on('error', (error) => {
+      // Log but don't crash - this is non-critical output
+      console.error(chalk.yellow(`  [${name}] stdout stream error: ${error.message}`));
+    });
   }
   if (proc.stderr) {
     proc.stderr.on('data', (data: Buffer) => {
       console.error(chalk.red(`  [${name}] ${data.toString().trim()}`));
+    });
+    proc.stderr.on('error', (error) => {
+      // Log but don't crash - this is non-critical output
+      console.error(chalk.yellow(`  [${name}] stderr stream error: ${error.message}`));
     });
   }
 }
