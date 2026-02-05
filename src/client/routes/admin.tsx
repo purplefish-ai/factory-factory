@@ -1,18 +1,10 @@
-import {
-  CheckCircle2,
-  Download,
-  FileJson,
-  MessageSquare,
-  RefreshCw,
-  Upload,
-  Wrench,
-} from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Download, FileJson, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { DataImportButton } from '@/components/data-import/data-import-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -24,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
+import { RatchetWrenchIcon } from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../frontend/lib/trpc';
@@ -334,286 +326,6 @@ function IdeSettingsSection() {
   );
 }
 
-function CiSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
-  const utils = trpc.useUtils();
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
-      toast.success('CI settings updated');
-      utils.userSettings.get.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Failed to update settings: ${error.message}`);
-    },
-  });
-
-  const triggerCICheck = trpc.admin.triggerCICheck.useMutation({
-    onSuccess: (result) => {
-      toast.success(
-        `CI check completed: ${result.checked} checked, ${result.failures} failures, ${result.notified} notified`
-      );
-    },
-    onError: (error) => {
-      toast.error(`Failed to trigger CI check: ${error.message}`);
-    },
-  });
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wrench className="w-5 h-5" />
-            CI Settings
-          </CardTitle>
-          <CardDescription>Configure automatic CI failure handling</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Wrench className="w-5 h-5" />
-          CI Settings
-        </CardTitle>
-        <CardDescription>Configure automatic CI failure handling</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="auto-fix-ci">Automatically fix CI issues</Label>
-            <p className="text-sm text-muted-foreground">
-              When enabled, creates dedicated Claude sessions to investigate and fix CI failures
-              automatically
-            </p>
-          </div>
-          <Switch
-            id="auto-fix-ci"
-            checked={settings?.autoFixCiIssues ?? false}
-            onCheckedChange={(checked) => {
-              updateSettings.mutate({ autoFixCiIssues: checked });
-            }}
-            disabled={updateSettings.isPending}
-          />
-        </div>
-
-        <div className="border-t pt-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Manual CI Check</Label>
-              <p className="text-sm text-muted-foreground">
-                Manually trigger CI status check for all workspaces with PRs
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => triggerCICheck.mutate()}
-              disabled={triggerCICheck.isPending}
-            >
-              {triggerCICheck.isPending ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Checking...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Trigger CI Check
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PrReviewSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
-  const utils = trpc.useUtils();
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
-      toast.success('PR review settings updated');
-      utils.userSettings.get.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Failed to update settings: ${error.message}`);
-    },
-  });
-
-  const triggerReviewCheck = trpc.admin.triggerPRReviewCheck.useMutation({
-    onSuccess: (result) => {
-      toast.success(
-        `Review check completed: ${result.checked} checked, ${result.newComments} with new comments, ${result.triggered} sessions triggered`
-      );
-    },
-    onError: (error) => {
-      toast.error(`Failed to trigger review check: ${error.message}`);
-    },
-  });
-
-  const [allowedUsers, setAllowedUsers] = useState<string>('');
-  const [customPrompt, setCustomPrompt] = useState<string>('');
-
-  // Update local state when settings load
-  useEffect(() => {
-    if (settings) {
-      const users = (settings.prReviewFixAllowedUsers as string[]) ?? [];
-      setAllowedUsers(users.join(', '));
-      setCustomPrompt(settings.prReviewFixPrompt ?? '');
-    }
-  }, [settings]);
-
-  const handleSaveAllowedUsers = () => {
-    const users = allowedUsers
-      .split(',')
-      .map((u) => u.trim())
-      .filter(Boolean);
-    updateSettings.mutate({
-      prReviewFixAllowedUsers: users.length > 0 ? users : null,
-    });
-  };
-
-  const handleSaveCustomPrompt = () => {
-    updateSettings.mutate({
-      prReviewFixPrompt: customPrompt.trim() || null,
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5" />
-            PR Review Auto-Fix Settings
-          </CardTitle>
-          <CardDescription>Configure automatic handling of PR review comments</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MessageSquare className="w-5 h-5" />
-          PR Review Auto-Fix Settings
-        </CardTitle>
-        <CardDescription>Configure automatic handling of PR review comments</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Toggle for enabling/disabling */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="auto-fix-reviews">Automatically address PR review comments</Label>
-            <p className="text-sm text-muted-foreground">
-              When enabled, creates dedicated Claude sessions to address review feedback
-              automatically
-            </p>
-          </div>
-          <Switch
-            id="auto-fix-reviews"
-            checked={settings?.autoFixPrReviewComments ?? false}
-            onCheckedChange={(checked) => {
-              updateSettings.mutate({ autoFixPrReviewComments: checked });
-            }}
-            disabled={updateSettings.isPending}
-          />
-        </div>
-
-        {/* Allowed users input */}
-        <div className="space-y-2 border-t pt-4">
-          <Label htmlFor="allowed-users">Allowed Users (GitHub usernames)</Label>
-          <p className="text-sm text-muted-foreground">
-            Only auto-fix comments from these users. Leave empty to process all users.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              id="allowed-users"
-              placeholder="user1, user2, user3"
-              value={allowedUsers}
-              onChange={(e) => setAllowedUsers(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              variant="outline"
-              onClick={handleSaveAllowedUsers}
-              disabled={updateSettings.isPending}
-            >
-              Save
-            </Button>
-          </div>
-        </div>
-
-        {/* Custom prompt textarea */}
-        <div className="space-y-2 border-t pt-4">
-          <Label htmlFor="custom-prompt">Custom Instructions (Optional)</Label>
-          <p className="text-sm text-muted-foreground">
-            Additional instructions for the Claude session when addressing review comments
-          </p>
-          <Textarea
-            id="custom-prompt"
-            placeholder="Example: Focus on code style issues first. Always run tests before committing..."
-            value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
-            rows={3}
-          />
-          <Button
-            variant="outline"
-            onClick={handleSaveCustomPrompt}
-            disabled={updateSettings.isPending}
-          >
-            Save Instructions
-          </Button>
-        </div>
-
-        {/* Manual trigger button */}
-        <div className="border-t pt-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Manual Review Check</Label>
-              <p className="text-sm text-muted-foreground">
-                Manually trigger review comment check for all workspaces with PRs
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => triggerReviewCheck.mutate()}
-              disabled={triggerReviewCheck.isPending}
-            >
-              {triggerReviewCheck.isPending ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Checking...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Trigger Review Check
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function RatchetSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
@@ -663,7 +375,7 @@ function RatchetSettingsSection() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Wrench className="w-5 h-5" />
+            <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
             Ratchet (PR Auto-Progression)
           </CardTitle>
           <CardDescription>
@@ -681,21 +393,36 @@ function RatchetSettingsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Wrench className="w-5 h-5" />
+          <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
           Ratchet (PR Auto-Progression)
         </CardTitle>
         <CardDescription>
-          Automatically progress PRs toward merge by fixing CI, resolving conflicts, and addressing
-          review comments
+          Configure ratchet defaults and automation behavior for PR progression
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Master toggle */}
+        <div className="rounded-md border bg-muted/40 p-3 space-y-1.5">
+          <p className="text-sm font-medium">How ratcheting works</p>
+          <p className="text-sm text-muted-foreground">
+            Ratchet monitors workspaces that have PRs and reacts to the current PR state.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            If CI fails, conflicts appear, or review comments are left, ratchet can open a fix
+            session, apply changes, and push updates.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            This runs repeatedly until the PR is clean, approved, and ready to merge (or merged
+            automatically if enabled).
+          </p>
+        </div>
+
+        {/* Default for all new workspaces */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label htmlFor="ratchet-enabled">Enable Ratchet</Label>
+            <Label htmlFor="ratchet-enabled">Default for all new workspaces</Label>
             <p className="text-sm text-muted-foreground">
-              Master toggle for automatic PR progression
+              Sets the initial ratchet state for new workspaces created manually, from GitHub
+              issues, or from existing branches
             </p>
           </div>
           <Switch
@@ -723,7 +450,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixCi: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
 
@@ -740,7 +467,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixConflicts: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
 
@@ -757,7 +484,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixReviews: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
 
@@ -774,7 +501,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoMerge: checked });
               }}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             />
           </div>
         </div>
@@ -792,12 +519,11 @@ function RatchetSettingsSection() {
               value={allowedReviewers}
               onChange={(e) => setAllowedReviewers(e.target.value)}
               className="flex-1"
-              disabled={!settings?.ratchetEnabled}
             />
             <Button
               variant="outline"
               onClick={handleSaveAllowedReviewers}
-              disabled={updateSettings.isPending || !settings?.ratchetEnabled}
+              disabled={updateSettings.isPending}
             >
               Save
             </Button>
@@ -842,44 +568,9 @@ function RatchetSettingsSection() {
 // Data Backup Section
 // ============================================================================
 
-interface ImportConfirmState {
-  open: boolean;
-  data: unknown;
-  summary: string;
-}
-
 function DataBackupSection() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [confirmState, setConfirmState] = useState<ImportConfirmState>({
-    open: false,
-    data: null,
-    summary: '',
-  });
   const utils = trpc.useUtils();
-
-  const importData = trpc.admin.importData.useMutation({
-    onSuccess: (result) => {
-      const { results } = result;
-      const summary = [
-        `Projects: ${results.projects.imported} imported, ${results.projects.skipped} skipped`,
-        `Workspaces: ${results.workspaces.imported} imported, ${results.workspaces.skipped} skipped`,
-        `Claude Sessions: ${results.claudeSessions.imported} imported, ${results.claudeSessions.skipped} skipped`,
-        `Terminal Sessions: ${results.terminalSessions.imported} imported, ${results.terminalSessions.skipped} skipped`,
-        `User Settings: ${results.userSettings.imported ? 'imported' : results.userSettings.skipped ? 'skipped (exists)' : 'none'}`,
-      ].join('\n');
-
-      toast.success('Import completed', { description: summary, duration: 10_000 });
-      setConfirmState({ open: false, data: null, summary: '' });
-
-      // Invalidate all queries to refresh data
-      utils.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Import failed: ${error.message}`);
-      setConfirmState({ open: false, data: null, summary: '' });
-    },
-  });
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -903,143 +594,31 @@ function DataBackupSection() {
     }
   };
 
-  const buildImportSummary = (data: {
-    data: {
-      projects: unknown[];
-      workspaces: unknown[];
-      claudeSessions: unknown[];
-      terminalSessions: unknown[];
-      userSettings: unknown;
-    };
-    meta: { exportedAt: string; version: string };
-  }): string => {
-    return [
-      `Exported: ${new Date(data.meta.exportedAt).toLocaleString()}`,
-      `Version: ${data.meta.version}`,
-      '',
-      `Projects: ${data.data.projects.length}`,
-      `Workspaces: ${data.data.workspaces.length}`,
-      `Claude Sessions: ${data.data.claudeSessions.length}`,
-      `Terminal Sessions: ${data.data.terminalSessions.length}`,
-      `User Settings: ${data.data.userSettings ? 'Yes' : 'No'}`,
-    ].join('\n');
-  };
-
-  const getErrorMessage = (error: unknown): string => {
-    if (error instanceof Error) {
-      return error.message;
-    }
-    return 'Unknown error';
-  };
-
-  const validateAndParseFile = async (file: File): Promise<unknown> => {
-    const text = await file.text();
-    const data = JSON.parse(text);
-
-    // Basic validation
-    if (!(data.meta?.exportedAt && data.meta?.version && data.data)) {
-      throw new Error('Invalid backup file format');
-    }
-
-    return data;
-  };
-
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const data = (await validateAndParseFile(file)) as {
-        data: {
-          projects: unknown[];
-          workspaces: unknown[];
-          claudeSessions: unknown[];
-          terminalSessions: unknown[];
-          userSettings: unknown;
-        };
-        meta: { exportedAt: string; version: string };
-      };
-
-      // Show confirmation dialog with summary
-      setConfirmState({
-        open: true,
-        data,
-        summary: buildImportSummary(data),
-      });
-    } catch (error) {
-      toast.error(`Failed to read file: ${getErrorMessage(error)}`);
-    }
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleConfirmImport = () => {
-    if (confirmState.data) {
-      // biome-ignore lint/suspicious/noExplicitAny: Dynamic import data
-      importData.mutate(confirmState.data as any);
-    }
-  };
-
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileJson className="w-5 h-5" />
-            Data Backup
-          </CardTitle>
-          <CardDescription>
-            Export and import database data for backup or migration purposes
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <Button onClick={handleExport} disabled={isExporting} variant="outline">
-              <Download className="w-4 h-4 mr-2" />
-              {isExporting ? 'Exporting...' : 'Export Data'}
-            </Button>
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importData.isPending}
-              variant="outline"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              {importData.isPending ? 'Importing...' : 'Import Data'}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Export includes projects, workspaces, session metadata, and user preferences. Caches
-            will be rebuilt automatically after import.
-          </p>
-        </CardContent>
-      </Card>
-
-      <ConfirmDialog
-        open={confirmState.open}
-        onOpenChange={(open) => {
-          if (!open) {
-            setConfirmState({ open: false, data: null, summary: '' });
-          }
-        }}
-        title="Confirm Import"
-        description={`Review the data to be imported. Existing records will be skipped.\n\n${confirmState.summary}`}
-        confirmText="Import"
-        onConfirm={handleConfirmImport}
-        isPending={importData.isPending}
-      />
-    </>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileJson className="w-5 h-5" />
+          Data Backup
+        </CardTitle>
+        <CardDescription>
+          Export and import database data for backup or migration purposes
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-4">
+          <Button onClick={handleExport} disabled={isExporting} variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            {isExporting ? 'Exporting...' : 'Export Data'}
+          </Button>
+          <DataImportButton variant="outline" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Export includes projects, workspaces, session metadata, and user preferences. Caches will
+          be rebuilt automatically after import.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1108,14 +687,8 @@ export default function AdminDashboardPage() {
         <NotificationSettingsSection />
         <IdeSettingsSection />
 
-        {/* Ratchet Settings (new unified system) */}
+        {/* Ratchet Settings (unified PR auto-progression system) */}
         <RatchetSettingsSection />
-
-        {/* Legacy CI Settings (deprecated - use Ratchet instead) */}
-        <CiSettingsSection />
-
-        {/* Legacy PR Review Settings (deprecated - use Ratchet instead) */}
-        <PrReviewSettingsSection />
 
         {/* Data Backup */}
         <DataBackupSection />

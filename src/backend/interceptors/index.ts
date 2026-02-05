@@ -7,6 +7,7 @@
 
 import { branchRenameInterceptor } from './branch-rename.interceptor';
 import { conversationRenameInterceptor } from './conversation-rename.interceptor';
+import { gitPushInterceptor } from './git-push.interceptor';
 import { prDetectionInterceptor } from './pr-detection.interceptor';
 import { interceptorRegistry } from './registry';
 
@@ -16,6 +17,7 @@ import { interceptorRegistry } from './registry';
 export function registerInterceptors(): void {
   interceptorRegistry.register(branchRenameInterceptor);
   interceptorRegistry.register(conversationRenameInterceptor);
+  interceptorRegistry.register(gitPushInterceptor);
   interceptorRegistry.register(prDetectionInterceptor);
 }
 

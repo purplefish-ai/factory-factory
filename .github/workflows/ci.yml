@@ -81,6 +81,34 @@ jobs:
       - name: Build
         run: pnpm build
 
+  storybook:
+    name: Storybook Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: "file:./test.db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build Storybook
+        run: pnpm build:storybook
+
   test:
     name: Test
     runs-on: ubuntu-latest

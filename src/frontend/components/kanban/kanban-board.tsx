@@ -28,8 +28,18 @@ interface WorkspacesByColumn {
 }
 
 export function KanbanBoard() {
-  const { projectId, projectSlug, workspaces, issues, isLoading, isError, error, refetch } =
-    useKanban();
+  const {
+    projectId,
+    projectSlug,
+    workspaces,
+    issues,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    toggleWorkspaceRatcheting,
+    togglingWorkspaceId,
+  } = useKanban();
 
   // Group workspaces by kanban column (only the 3 database columns)
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
@@ -101,6 +111,8 @@ export function KanbanBoard() {
             column={column}
             workspaces={columnWorkspaces}
             projectSlug={projectSlug}
+            onToggleRatcheting={toggleWorkspaceRatcheting}
+            togglingWorkspaceId={togglingWorkspaceId}
           />
         );
       })}
@@ -119,7 +131,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
   const isEmpty = issues.length === 0;
 
   return (
-    <div className="flex flex-col h-full w-[380px] shrink-0 overflow-hidden">
+    <div className="flex flex-col h-full w-[380px] shrink-0">
       {/* Column Header */}
       <div className="flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
         <div className="flex items-center gap-2">
@@ -131,7 +143,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
       </div>
 
       {/* Column Content */}
-      <div className="flex flex-col gap-2 flex-1 overflow-y-auto p-2 min-h-0 rounded-b-lg bg-muted/30">
+      <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-b-lg bg-muted/30">
         {isEmpty ? (
           <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
             {column.description}

@@ -1,6 +1,6 @@
 {
   "name": "factory-factory",
-  "version": "0.1.6",
+  "version": "0.2.1",
   "description": "Workspace-based coding environment for running multiple Claude Code sessions in parallel",
   "private": false,
   "license": "MIT",
@@ -41,6 +41,7 @@
   "scripts": {
     "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
     "build": "tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && cp -r prompts dist/ && vite build",
+    "build:storybook": "storybook build",
     "start": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -151,9 +152,13 @@
     ]
   },
   "pnpm": {
+    "publicHoistPattern": [
+      "@types/*"
+    ],
     "onlyBuiltDependencies": [
       "@prisma/engines",
       "better-sqlite3",
+      "electron",
       "esbuild",
       "node-pty",
       "prisma",

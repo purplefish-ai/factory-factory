@@ -376,7 +376,9 @@ PR: ${prUrl}
 
 You can check the CI status and logs on GitHub to see what failed.`;
 
-      client.sendMessage(message);
+      client.sendMessage(message).catch((error) => {
+        logger.warn('Failed to send CI failure notification', { workspaceId, error });
+      });
 
       logger.info('Notified active session about CI failure', {
         workspaceId,

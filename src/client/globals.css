@@ -207,3 +207,56 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
+
+@property --ratchet-dash-rotation {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes ratchet-dashes {
+  to {
+    --ratchet-dash-rotation: 1turn;
+  }
+}
+
+.ratchet-toggle[data-ratchet-state='idle'],
+.ratchet-toggle[data-ratchet-state='processing'] {
+  border: 1px dashed color-mix(in oklab, var(--brand) 70%, var(--foreground) 30%);
+}
+
+.ratchet-toggle[data-ratchet-state='processing'] {
+  position: relative;
+  border-color: transparent;
+  background: var(--background);
+}
+
+.ratchet-toggle[data-ratchet-state='processing']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  --ratchet-dash-rotation: 0deg;
+  background: repeating-conic-gradient(
+    from var(--ratchet-dash-rotation),
+    color-mix(in oklab, var(--brand) 85%, var(--foreground) 15%) 0deg 12deg,
+    color-mix(in oklab, var(--brand) 25%, var(--background) 75%) 12deg 24deg
+  );
+  animation: ratchet-dashes 3.85s linear infinite;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ratchet-toggle[data-ratchet-state='processing']::before {
+    animation: none;
+  }
+}

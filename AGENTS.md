@@ -53,3 +53,9 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 ## Security & Configuration Notes
 - Default database path is `~/factory-factory/data.db`, overridden by `DATABASE_PATH` or `BASE_DIR`.
 - The app can run commands without manual approval in some modes; review changes carefully before merging.
+
+## Feature Notes (Keep Docs Current)
+- **Ratchet:** Central PR progression loop (1-minute cadence) that checks READY workspaces with PRs and moves through `CI_RUNNING` / `CI_FAILED` / `MERGE_CONFLICT` / `REVIEW_PENDING` / `READY` / `MERGED`. Fixer sessions use workflow `ratchet` and respect Admin ratchet toggles + allowed reviewers.
+- **GitHub integration:** Uses local `gh` auth; issue fetch supports workspace issue picker (`listIssuesForWorkspace`) and Kanban intake column (`listIssuesForProject`, assigned to `@me`). Starting from an issue should create a linked workspace (`githubIssueNumber`, `githubIssueUrl`).
+- **Kanban model:** UI has `ISSUES` + DB columns `WORKING`, `WAITING`, `DONE`. Column state is derived, not manually set; READY workspaces with no prior sessions are intentionally hidden, and archived workspaces preserve cached pre-archive column.
+- **Quick actions:** Workspace quick actions are markdown-driven from `prompts/quick-actions/` (frontmatter metadata + prompt body). Agent quick actions create follow-up sessions and auto-send prompt content when session is ready.

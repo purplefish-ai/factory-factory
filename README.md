@@ -138,6 +138,49 @@ Project (repository configuration)
 - **Terminal access:** Full PTY terminals per workspace
 - **Session persistence:** Resume previous Claude sessions
 
+## Feature Highlights
+
+### Ratchet (automatic PR progression)
+
+Ratchet is a background monitor that continuously moves open PR workspaces toward merge.
+
+- Runs every minute against READY workspaces with PRs
+- Pulls fresh PR state from GitHub (`gh`) and classifies it into: `CI_RUNNING`, `CI_FAILED`, `MERGE_CONFLICT`, `REVIEW_PENDING`, `READY`, or `MERGED`
+- Triggers (or reuses) a dedicated **ratchet** Claude session to fix CI failures, resolve merge conflicts, or address requested review changes
+- Prevents duplicate fixer sessions per workspace and can notify an active fixer if a priority state changes
+- Configurable in **Admin → Ratchet** with toggles for CI fixes, conflict fixes, review fixes, allowed reviewers, and auto-merge behavior
+
+### GitHub integration (issues + PR state)
+
+Factory Factory integrates with GitHub through the local authenticated `gh` CLI.
+
+- Project-level GitHub linkage (`githubOwner` + `githubRepo`) enables issue/PR workflows
+- Workspace session start supports **Import from GitHub Issues** (picker with filtering/search)
+- Selected issues are converted into an initial prompt and auto-sent when the session is ready
+- Kanban’s **GitHub Issues** column pulls issues assigned to `@me`
+- One-click **Start** on an issue card creates a linked workspace (`githubIssueNumber`/`githubIssueUrl`) and opens it
+
+### Kanban view (status + intake)
+
+The board is a real-time operational view of work and intake.
+
+- UI columns: **GitHub Issues**, **Working**, **Waiting**, **Done**
+- Workspace column derivation is automatic:
+  - `WORKING`: provisioning/new/failed, or actively running
+  - `WAITING`: idle workspaces that have had at least one session
+  - `DONE`: merged PRs
+- READY workspaces with no prior sessions are hidden from the board
+- Issue cards are filtered to avoid duplicates once an issue is already linked to a workspace
+- Refresh syncs PR state and re-fetches board + issues
+
+### Quick Actions
+
+Quick actions provide one-click prompts for common flows.
+
+- Workspace header quick actions are loaded from `prompts/quick-actions/*.md` (frontmatter + prompt body)
+- Executing an agent quick action creates a follow-up session and auto-sends the predefined prompt
+- Current built-ins include flows like review, simplify, fetch/rebase, and branch rename
+
 ## Security Considerations
 
 > **Warning:** Factory Factory runs Claude Code in **bypass permissions mode** by default. This means Claude can execute bash commands, write and modify files, and perform other operations without asking for confirmation.

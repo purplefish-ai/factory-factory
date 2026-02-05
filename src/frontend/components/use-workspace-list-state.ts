@@ -23,6 +23,11 @@ export interface ServerWorkspace {
     hasUncommitted: boolean;
   } | null;
   lastActivityAt?: string | null;
+  ratchetEnabled?: boolean;
+  ratchetState?: string | null;
+  ratchetLastPushAt?: string | Date | null;
+  cachedKanbanColumn?: string | null;
+  stateComputedAt?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {
@@ -142,6 +147,7 @@ export function useWorkspaceListState(
         prNumber: null,
         prState: null,
         prCiStatus: null,
+        ratchetEnabled: false,
         isWorking: false,
         gitStats: null,
         uiState: 'creating',

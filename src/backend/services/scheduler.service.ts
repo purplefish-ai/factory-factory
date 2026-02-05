@@ -8,8 +8,8 @@
 import pLimit from 'p-limit';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { githubCLIService } from './github-cli.service';
-import { kanbanStateService } from './kanban-state.service';
 import { createLogger } from './logger.service';
+import { prSnapshotService } from './pr-snapshot.service';
 
 const logger = createLogger('scheduler');
 
@@ -159,19 +159,11 @@ class SchedulerService {
       );
 
       if (pr) {
-        // Found a PR! Update the workspace
-        const prResult = await githubCLIService.fetchAndComputePRState(pr.url);
-
         await workspaceAccessor.update(workspace.id, {
           prUrl: pr.url,
-          prNumber: pr.number,
-          prState: prResult?.prState,
-          prReviewState: prResult?.prReviewState,
-          prCiStatus: prResult?.prCiStatus,
-          prUpdatedAt: new Date(),
         });
 
-        await kanbanStateService.updateCachedKanbanColumn(workspace.id);
+        await prSnapshotService.refreshWorkspace(workspace.id, pr.url);
 
         logger.info('Discovered PR for workspace', {
           workspaceId: workspace.id,
@@ -211,31 +203,17 @@ class SchedulerService {
     }
 
     try {
-      // Fetch PR status from GitHub
-      const prResult = await githubCLIService.fetchAndComputePRState(prUrl);
-
-      if (!prResult) {
+      const prResult = await prSnapshotService.refreshWorkspace(workspaceId, prUrl);
+      if (!prResult.success) {
         logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
         return { success: false, reason: 'fetch_failed' };
       }
 
-      // Update workspace with new PR status
-      await workspaceAccessor.update(workspaceId, {
-        prNumber: prResult.prNumber,
-        prState: prResult.prState,
-        prReviewState: prResult.prReviewState,
-        prCiStatus: prResult.prCiStatus,
-        prUpdatedAt: new Date(),
-      });
-
-      // Recompute cached kanban column
-      await kanbanStateService.updateCachedKanbanColumn(workspaceId);
-
       logger.debug('PR status synced', {
         workspaceId,
-        prNumber: prResult.prNumber,
-        prState: prResult.prState,
-        prCiStatus: prResult.prCiStatus,
+        prNumber: prResult.snapshot.prNumber,
+        prState: prResult.snapshot.prState,
+        prCiStatus: prResult.snapshot.prCiStatus,
       });
 
       return { success: true };

@@ -154,7 +154,7 @@ describe('chat message handlers', () => {
   });
 
   it('user_input forwards to running client', () => {
-    const sendMessage = vi.fn();
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
     mockedSessionService.getClient.mockReturnValue({
       isRunning: () => true,
       sendMessage,

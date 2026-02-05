@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
 import { trpc } from '@/frontend/lib/trpc';
+import { formatRelativeDateFriendly } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 
 interface GitHubIssuePickerDialogProps {
@@ -23,27 +24,6 @@ interface GitHubIssuePickerDialogProps {
   onOpenChange: (open: boolean) => void;
   onSelect: (issue: GitHubIssue) => void;
   workspaceId: string;
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return 'today';
-  }
-  if (diffDays === 1) {
-    return 'yesterday';
-  }
-  if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  }
-  if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
-  }
-  return date.toLocaleDateString();
 }
 
 interface IssueListContentProps {
@@ -127,7 +107,7 @@ function IssueListContent({
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm">{issue.title}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      opened {formatDate(issue.createdAt)} by {issue.author.login}
+                      opened {formatRelativeDateFriendly(issue.createdAt)} by {issue.author.login}
                     </p>
                   </div>
                 </div>

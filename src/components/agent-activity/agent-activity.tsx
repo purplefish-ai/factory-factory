@@ -2,7 +2,7 @@ import { Copy, RotateCcw, X } from 'lucide-react';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
-import { extractTextFromMessage, isToolSequence } from '@/lib/claude-types';
+import { extractTextFromMessage, isThinkingContent, isToolSequence } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
@@ -17,6 +17,28 @@ import { ToolSequenceGroup } from './tool-renderers';
  */
 function getMessageText(text: string | undefined): string {
   return text ?? '';
+}
+
+function getAssistantCopyText(message: ChatMessage['message']): string | null {
+  if (!message) {
+    return null;
+  }
+
+  const extracted = extractTextFromMessage(message);
+  if (extracted) {
+    return extracted;
+  }
+
+  if (
+    message.message &&
+    Array.isArray(message.message.content) &&
+    message.message.content.length === 1 &&
+    isThinkingContent(message.message.content[0])
+  ) {
+    return message.message.content[0].thinking;
+  }
+
+  return null;
 }
 
 // =============================================================================
@@ -143,10 +165,10 @@ export const MessageItem = memo(function MessageItem({
 
   // Claude messages
   if (message.message) {
-    const assistantText = extractTextFromMessage(message.message);
+    const assistantText = getAssistantCopyText(message.message);
     return (
       <MessageWrapper>
-        {assistantText ? (
+        {assistantText !== null ? (
           <div className="group relative">
             <AssistantMessageRenderer message={message.message} messageId={message.id} />
             <CopyMessageButton textContent={assistantText} />
@@ -188,7 +210,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRewindToMessage,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
-    return <ToolSequenceGroup sequence={item} />;
+    return <ToolSequenceGroup sequence={item} summaryOrder="latest-first" />;
   }
   return (
     <MessageItem

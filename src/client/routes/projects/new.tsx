@@ -1,6 +1,7 @@
 import { ArrowLeftIcon, FolderOpenIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { DataImportButton } from '@/components/data-import/data-import-button';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,12 @@ export default function NewProjectPage() {
     });
   };
 
+  const handleImportSuccess = async () => {
+    // Invalidate projects list and wait for refetch before navigating
+    await utils.project.list.invalidate();
+    navigate('/projects');
+  };
+
   // Onboarding view when no projects exist
   if (!hasExistingProjects) {
     return (
@@ -134,6 +141,23 @@ export default function NewProjectPage() {
                   {createProject.isPending ? 'Adding...' : 'Add Project'}
                 </Button>
               </form>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+
+              <DataImportButton
+                onImportSuccess={handleImportSuccess}
+                variant="outline"
+                className="w-full"
+              >
+                Import from Backup
+              </DataImportButton>
             </CardContent>
           </Card>
         </div>
