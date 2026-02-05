@@ -17,13 +17,20 @@ export function WorkspaceNotificationManager() {
 
   const handleWorkspaceNotification = useCallback(
     (request: NotificationRequest) => {
-      const { workspaceName, sessionCount } = request;
+      const { workspaceId, workspaceName, sessionCount } = request;
 
       // Only play sound if settings have loaded and user has it enabled
       // Default to true once settings are available, but don't play while loading
       // to avoid playing sound when user may have disabled it
       const playSoundOnComplete = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
       sendWorkspaceNotification(workspaceName, sessionCount, playSoundOnComplete);
+
+      // Dispatch attention event for red glow animation
+      window.dispatchEvent(
+        new CustomEvent('workspace-attention-required', {
+          detail: { workspaceId },
+        })
+      );
     },
     [settings?.playSoundOnComplete, isSuccess]
   );

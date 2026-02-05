@@ -51,13 +51,9 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
-import {
-  cn,
-  formatRelativeTime,
-  isWithinWaitingWindow,
-  shouldShowRatchetAnimation,
-} from '@/lib/utils';
+import { cn, formatRelativeTime, shouldShowRatchetAnimation } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
+import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
@@ -197,6 +193,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       syncAllPRStatuses.mutate({ projectId: selectedProjectId });
     }
   }, [isMocked, selectedProjectId, syncAllPRStatuses]);
+
+  // Track workspaces that need user attention (for red glow)
+  const { needsAttention } = useWorkspaceAttention();
 
   // Use the workspace list state management hook
   const {
@@ -502,6 +501,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                           selectedProjectSlug={selectedProjectSlug}
                           onArchiveRequest={handleArchiveRequest}
                           disableRatchetAnimation={isKanbanView}
+                          needsAttention={needsAttention}
                         />
                       );
                     })}
@@ -594,12 +594,14 @@ function SortableWorkspaceItem({
   selectedProjectSlug,
   onArchiveRequest,
   disableRatchetAnimation,
+  needsAttention,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
   selectedProjectSlug: string;
   onArchiveRequest: (workspace: WorkspaceListItem) => void;
   disableRatchetAnimation?: boolean;
+  needsAttention: (workspaceId: string) => boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
@@ -621,9 +623,8 @@ function SortableWorkspaceItem({
     !(disableRatchetAnimation || isDone) &&
     shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
 
-  // Check if workspace entered WAITING state within the last 30 seconds (for pulse animation)
-  const isRecentlyWaiting =
-    workspace.cachedKanbanColumn === 'WAITING' && isWithinWaitingWindow(workspace.stateComputedAt);
+  // Check if workspace needs attention (event-driven, synchronized with notification sound)
+  const showAttentionGlow = needsAttention(workspace.id) && !isRatchetActive;
 
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
@@ -634,7 +635,7 @@ function SortableWorkspaceItem({
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
           isDragging && 'opacity-50 bg-sidebar-accent',
-          isRecentlyWaiting && !isRatchetActive && 'waiting-pulse'
+          showAttentionGlow && 'waiting-pulse'
         )}
       >
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
