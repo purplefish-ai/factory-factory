@@ -341,6 +341,10 @@ export class ClaudeProtocol extends EventEmitter {
       this.handleClose();
     });
 
+    this.stdin.on('error', (error: Error) => {
+      this.emit('error', error);
+    });
+
     this.stdout.on('error', (error: Error) => {
       this.emit('error', error);
     });
@@ -375,6 +379,10 @@ export class ClaudeProtocol extends EventEmitter {
       this.cleanupDrainHandlers();
       reject(new Error('Protocol stopped'));
     }
+
+    // Remove event listeners to prevent memory leaks
+    this.stdin.removeAllListeners('error');
+    this.stdout.removeAllListeners('error');
   }
 
   // ===========================================================================
