@@ -50,6 +50,7 @@ interface UpdateWorkspaceInput {
   prReviewLastCheckedAt?: Date | null;
   prReviewLastCommentId?: string | null;
   // Ratchet tracking
+  ratchetEnabled?: boolean;
   ratchetState?: RatchetState;
   ratchetLastCheckedAt?: Date | null;
   ratchetActiveSessionId?: string | null;
@@ -429,6 +430,7 @@ class WorkspaceAccessor {
       id: string;
       prUrl: string;
       prNumber: number;
+      ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
       ratchetLastNotifiedState: RatchetState | null;
@@ -444,6 +446,7 @@ class WorkspaceAccessor {
         id: true,
         prUrl: true,
         prNumber: true,
+        ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastNotifiedState: true,
@@ -454,6 +457,7 @@ class WorkspaceAccessor {
         id: string;
         prUrl: string;
         prNumber: number;
+        ratchetEnabled: boolean;
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
         ratchetLastNotifiedState: RatchetState | null;

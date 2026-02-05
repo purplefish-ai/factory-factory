@@ -126,7 +126,7 @@ interface ThinkingRendererProps {
  * - If there's subsequent content after this thinking block, it's complete
  * - Only the last thinking block (while agent is running) shows animation
  */
-const ThinkingRenderer = memo(function ThinkingRenderer({
+export const ThinkingRenderer = memo(function ThinkingRenderer({
   text,
   messageId,
   truncateLength = DEFAULT_THINKING_TRUNCATE_LENGTH,
