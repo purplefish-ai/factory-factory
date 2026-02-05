@@ -21,9 +21,6 @@ import { forgetResumeWorkspace, isResumeWorkspace } from './resume-workspace-sto
 interface InitializationOverlayProps {
   workspaceId: string;
   status: 'NEW' | 'PROVISIONING' | 'READY' | 'FAILED' | 'ARCHIVED';
-  initErrorMessage: string | null;
-  initOutput: string | null;
-  hasStartupScript: boolean;
 }
 
 // resume workspace storage helpers live in resume-workspace-storage.ts
