@@ -8,6 +8,9 @@ if (!rootElement) {
   throw new Error('Root element not found');
 }
 
+// Deliberate type error to break CI
+const brokenType: string = 12345;
+
 createRoot(rootElement).render(
   <StrictMode>
     <Router />
