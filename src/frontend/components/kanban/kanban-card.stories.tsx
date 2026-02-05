@@ -218,6 +218,51 @@ export const Provisioning: Story = {
   },
 };
 
+export const RatchetActive: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Ratchet fixing CI',
+      prState: 'OPEN',
+      prUrl: 'https://github.com/example/repo/pull/50',
+      prNumber: 50,
+      prCiStatus: 'FAILURE',
+      ratchetState: 'CI_FAILED',
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const RatchetReviewPending: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Ratchet addressing reviews',
+      prState: 'CHANGES_REQUESTED',
+      prUrl: 'https://github.com/example/repo/pull/51',
+      prNumber: 51,
+      prCiStatus: 'SUCCESS',
+      ratchetState: 'REVIEW_PENDING',
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const RatchetReady: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Ratchet ready to merge',
+      prState: 'APPROVED',
+      prUrl: 'https://github.com/example/repo/pull/52',
+      prNumber: 52,
+      prCiStatus: 'SUCCESS',
+      ratchetState: 'READY',
+    },
+    projectSlug: 'my-project',
+  },
+};
+
 export const AllPRStates: Story = {
   decorators: [
     () => (

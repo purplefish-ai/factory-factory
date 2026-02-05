@@ -207,3 +207,75 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
+
+/* Ratchet active animation - marching ants border */
+.ratchet-active {
+  position: relative;
+  overflow: visible !important;
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+.ratchet-active > * {
+  position: relative;
+  z-index: 2;
+}
+
+.ratchet-active::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      to right,
+      #fbbf24 0,
+      #fbbf24 4px,
+      transparent 4px,
+      transparent calc(100% - 4px),
+      #fbbf24 calc(100% - 4px),
+      #fbbf24 100%
+    ),
+    repeating-linear-gradient(90deg, #000 0px, #000 8px, #fbbf24 8px, #fbbf24 16px);
+  background-size:
+    100% 100%,
+    16px 100%;
+  background-position:
+    0 0,
+    0 0;
+  animation: ratchet-march 0.5s linear infinite;
+  z-index: 0;
+}
+
+.ratchet-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--card);
+  z-index: 1;
+}
+
+/* Sidebar items use sidebar background color */
+[data-sidebar] .ratchet-active::after {
+  background: var(--sidebar);
+}
+
+@keyframes ratchet-march {
+  0% {
+    background-position:
+      0 0,
+      0 0;
+  }
+  100% {
+    background-position:
+      0 0,
+      16px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ratchet-active::before {
+    animation: none;
+  }
+}
