@@ -6,6 +6,8 @@ import { projectAccessor } from '../resource_accessors/project.accessor';
 import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { gitOpsService } from '../services/git-ops.service';
+import { ratchetService } from '../services/ratchet.service';
+import { deriveWorkspaceFlowState } from '../services/workspace-flow-state.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
 import {
   setWorkspaceInitMode,
@@ -70,7 +72,18 @@ export const workspaceRouter = router({
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
     }
-    return workspace;
+    const flowState = deriveWorkspaceFlowState({
+      prUrl: workspace.prUrl,
+      prState: workspace.prState,
+      prCiStatus: workspace.prCiStatus,
+      ratchetEnabled: workspace.ratchetEnabled,
+      ratchetState: workspace.ratchetState,
+    });
+    return {
+      ...workspace,
+      ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
+      flowPhase: flowState.phase,
+    };
   }),
 
   // Create a new workspace
@@ -192,10 +205,14 @@ export const workspaceRouter = router({
         enabled: z.boolean(),
       })
     )
-    .mutation(({ input }) => {
-      return workspaceAccessor.update(input.workspaceId, {
+    .mutation(async ({ input }) => {
+      const updatedWorkspace = await workspaceAccessor.update(input.workspaceId, {
         ratchetEnabled: input.enabled,
       });
+      if (input.enabled) {
+        await ratchetService.checkWorkspaceById(input.workspaceId);
+      }
+      return updatedWorkspace;
     }),
 
   // Archive a workspace

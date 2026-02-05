@@ -35,5 +35,6 @@ export const OnProcessing: Story = {
   args: {
     enabled: true,
     state: 'CI_FAILED',
+    animated: true,
   },
 };

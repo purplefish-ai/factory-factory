@@ -1,21 +1,21 @@
 import { Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getRatchetVisualState, type RatchetStateLike } from './ratchet-state';
+import { getRatchetVisualState } from './ratchet-state';
 
 interface RatchetWrenchIconProps {
   enabled: boolean;
-  state?: RatchetStateLike;
+  animated?: boolean;
   className?: string;
   iconClassName?: string;
 }
 
 export function RatchetWrenchIcon({
   enabled,
-  state = 'IDLE',
+  animated = false,
   className,
   iconClassName,
 }: RatchetWrenchIconProps) {
-  const visualState = getRatchetVisualState(enabled, state);
+  const visualState = getRatchetVisualState(enabled, animated);
 
   return (
     <span

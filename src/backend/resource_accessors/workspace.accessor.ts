@@ -470,6 +470,48 @@ class WorkspaceAccessor {
       }>
     >;
   }
+
+  /**
+   * Find a single READY workspace with PR for ratchet processing.
+   */
+  findForRatchetById(id: string): Promise<{
+    id: string;
+    prUrl: string;
+    prNumber: number;
+    ratchetEnabled: boolean;
+    ratchetState: RatchetState;
+    ratchetActiveSessionId: string | null;
+    ratchetLastNotifiedState: RatchetState | null;
+    prReviewLastCheckedAt: Date | null;
+  } | null> {
+    return prisma.workspace.findFirst({
+      where: {
+        id,
+        status: 'READY',
+        prUrl: { not: null },
+        prNumber: { not: null },
+      },
+      select: {
+        id: true,
+        prUrl: true,
+        prNumber: true,
+        ratchetEnabled: true,
+        ratchetState: true,
+        ratchetActiveSessionId: true,
+        ratchetLastNotifiedState: true,
+        prReviewLastCheckedAt: true,
+      },
+    }) as Promise<{
+      id: string;
+      prUrl: string;
+      prNumber: number;
+      ratchetEnabled: boolean;
+      ratchetState: RatchetState;
+      ratchetActiveSessionId: string | null;
+      ratchetLastNotifiedState: RatchetState | null;
+      prReviewLastCheckedAt: Date | null;
+    } | null>;
+  }
 }
 
 export const workspaceAccessor = new WorkspaceAccessor();

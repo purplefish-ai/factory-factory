@@ -202,6 +202,7 @@ function RatchetingToggle({
     <RatchetToggleButton
       enabled={workspaceRatchetEnabled}
       state={workspace.ratchetState}
+      animated={workspace.ratchetButtonAnimated ?? false}
       disabled={toggleRatcheting.isPending}
       onToggle={(enabled) => {
         toggleRatcheting.mutate({ workspaceId, enabled });

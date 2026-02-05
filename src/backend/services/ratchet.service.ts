@@ -214,6 +214,31 @@ class RatchetService {
   }
 
   /**
+   * Check a single workspace immediately (used when ratcheting is toggled on).
+   */
+  async checkWorkspaceById(workspaceId: string): Promise<WorkspaceRatchetResult | null> {
+    if (this.isShuttingDown) {
+      return null;
+    }
+
+    const workspace = await workspaceAccessor.findForRatchetById(workspaceId);
+    if (!workspace) {
+      return null;
+    }
+
+    const userSettings = await userSettingsAccessor.get();
+    const settings: RatchetSettings = {
+      autoFixCi: userSettings.ratchetAutoFixCi,
+      autoFixConflicts: userSettings.ratchetAutoFixConflicts,
+      autoFixReviews: userSettings.ratchetAutoFixReviews,
+      autoMerge: userSettings.ratchetAutoMerge,
+      allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
+    };
+
+    return this.processWorkspace(workspace, settings);
+  }
+
+  /**
    * Process a single workspace through the ratchet state machine
    */
   private async processWorkspace(

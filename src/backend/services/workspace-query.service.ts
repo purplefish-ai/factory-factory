@@ -9,6 +9,7 @@ import { computeKanbanColumn } from './kanban-state.service';
 import { createLogger } from './logger.service';
 import { prSnapshotService } from './pr-snapshot.service';
 import { sessionService } from './session.service';
+import { deriveWorkspaceFlowState } from './workspace-flow-state.service';
 
 const logger = createLogger('workspace-query');
 
@@ -34,7 +35,15 @@ class WorkspaceQueryService {
     const workingStatusByWorkspace = new Map<string, boolean>();
     for (const workspace of workspaces) {
       const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-      workingStatusByWorkspace.set(workspace.id, sessionService.isAnySessionWorking(sessionIds));
+      const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+      const flowState = deriveWorkspaceFlowState({
+        prUrl: workspace.prUrl,
+        prState: workspace.prState,
+        prCiStatus: workspace.prCiStatus,
+        ratchetEnabled: workspace.ratchetEnabled,
+        ratchetState: workspace.ratchetState,
+      });
+      workingStatusByWorkspace.set(workspace.id, isSessionWorking || flowState.isWorking);
     }
 
     const gitStatsResults: Record<
@@ -86,6 +95,13 @@ class WorkspaceQueryService {
 
     return {
       workspaces: workspaces.map((w) => {
+        const flowState = deriveWorkspaceFlowState({
+          prUrl: w.prUrl,
+          prState: w.prState,
+          prCiStatus: w.prCiStatus,
+          ratchetEnabled: w.ratchetEnabled,
+          ratchetState: w.ratchetState,
+        });
         const sessionDates = [
           ...(w.claudeSessions?.map((s) => s.updatedAt) ?? []),
           ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
@@ -109,7 +125,8 @@ class WorkspaceQueryService {
           lastActivityAt,
           ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
-          ratchetLastPushAt: w.ratchetLastPushAt,
+          ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
+          flowPhase: flowState.phase,
           cachedKanbanColumn: w.cachedKanbanColumn,
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
         };
@@ -135,7 +152,15 @@ class WorkspaceQueryService {
     return workspaces
       .map((workspace) => {
         const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-        const isWorking = sessionService.isAnySessionWorking(sessionIds);
+        const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+        const flowState = deriveWorkspaceFlowState({
+          prUrl: workspace.prUrl,
+          prState: workspace.prState,
+          prCiStatus: workspace.prCiStatus,
+          ratchetEnabled: workspace.ratchetEnabled,
+          ratchetState: workspace.ratchetState,
+        });
+        const isWorking = isSessionWorking || flowState.isWorking;
 
         const kanbanColumn = computeKanbanColumn({
           lifecycle: workspace.status,
@@ -148,6 +173,8 @@ class WorkspaceQueryService {
           ...workspace,
           kanbanColumn,
           isWorking,
+          ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
+          flowPhase: flowState.phase,
           isArchived: false,
         };
       })

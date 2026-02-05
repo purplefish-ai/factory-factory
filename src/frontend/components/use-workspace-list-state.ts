@@ -25,7 +25,8 @@ export interface ServerWorkspace {
   lastActivityAt?: string | null;
   ratchetEnabled?: boolean;
   ratchetState?: string | null;
-  ratchetLastPushAt?: string | Date | null;
+  ratchetButtonAnimated?: boolean;
+  flowPhase?: string | null;
   cachedKanbanColumn?: string | null;
   stateComputedAt?: string | null;
 }

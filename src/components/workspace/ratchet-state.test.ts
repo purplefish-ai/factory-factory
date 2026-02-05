@@ -13,10 +13,9 @@ describe('ratchet-state', () => {
   });
 
   it('computes visual state from enabled and ratchet state', () => {
-    expect(getRatchetVisualState(false, 'CI_FAILED')).toBe('off');
-    expect(getRatchetVisualState(true, 'IDLE')).toBe('idle');
-    expect(getRatchetVisualState(true, 'READY')).toBe('idle');
-    expect(getRatchetVisualState(true, 'CI_FAILED')).toBe('processing');
+    expect(getRatchetVisualState(false, true)).toBe('off');
+    expect(getRatchetVisualState(true, false)).toBe('idle');
+    expect(getRatchetVisualState(true, true)).toBe('processing');
   });
 
   it('returns a safe label for missing state', () => {

@@ -30,19 +30,16 @@ export function getRatchetStateLabel(state: RatchetStateLike): string {
   return state;
 }
 
+export function getRatchetVisualState(enabled: boolean, animate: boolean): RatchetVisualState {
+  if (!enabled) {
+    return 'off';
+  }
+  return animate ? 'processing' : 'idle';
+}
+
 export function isRatchetProcessing(state: RatchetStateLike): boolean {
   if (!state) {
     return false;
   }
   return PROCESSING_STATES.has(state as RatchetState);
-}
-
-export function getRatchetVisualState(
-  enabled: boolean,
-  state: RatchetStateLike
-): RatchetVisualState {
-  if (!enabled) {
-    return 'off';
-  }
-  return isRatchetProcessing(state) ? 'processing' : 'idle';
 }
