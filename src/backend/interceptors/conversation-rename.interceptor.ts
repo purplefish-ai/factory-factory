@@ -144,7 +144,12 @@ export const conversationRenameInterceptor: ToolInterceptor = {
           });
 
           // Send the instruction (contains <system_instruction> XML tags)
-          client.sendMessage(renameInstruction);
+          client.sendMessage(renameInstruction).catch((error) => {
+            logger.warn('Failed to send rename instruction', {
+              sessionId: context.sessionId,
+              error,
+            });
+          });
         } else {
           logger.warn('Could not get Claude client to send rename instruction', {
             sessionId: context.sessionId,

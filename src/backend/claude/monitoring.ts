@@ -64,7 +64,7 @@ export class ClaudeProcessMonitor extends EventEmitter {
     const activityTimeoutMs = configService.getClaudeProcessConfig().hungTimeoutMs;
     return {
       enabled: true,
-      maxMemoryBytes: 2 * 1024 * 1024 * 1024, // 2GB
+      maxMemoryBytes: 5 * 1024 * 1024 * 1024, // 5GB
       maxCpuPercent: 90,
       activityTimeoutMs,
       hungWarningThresholdMs: Math.floor(activityTimeoutMs * 0.8),

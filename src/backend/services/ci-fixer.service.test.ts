@@ -388,7 +388,7 @@ describe('CIFixerService', () => {
       vi.mocked(sessionService.isSessionWorking).mockReturnValue(false); // Running but not actively working
 
       const mockClient = {
-        sendMessage: vi.fn(),
+        sendMessage: vi.fn().mockResolvedValue(undefined),
       };
       // biome-ignore lint/suspicious/noExplicitAny: Mock client for testing
       vi.mocked(sessionService.getClient).mockReturnValue(mockClient as any);
@@ -782,7 +782,7 @@ describe('CIFixerService', () => {
 
       const mockClient = {
         isRunning: vi.fn().mockReturnValue(false),
-        sendMessage: vi.fn(),
+        sendMessage: vi.fn().mockResolvedValue(undefined),
       };
       // biome-ignore lint/suspicious/noExplicitAny: Mock client for testing
       vi.mocked(sessionService.getClient).mockReturnValue(mockClient as any);
@@ -804,7 +804,7 @@ describe('CIFixerService', () => {
 
       const mockClient = {
         isRunning: vi.fn().mockReturnValue(true),
-        sendMessage: vi.fn(),
+        sendMessage: vi.fn().mockResolvedValue(undefined),
       };
       // biome-ignore lint/suspicious/noExplicitAny: Mock client for testing
       vi.mocked(sessionService.getClient).mockReturnValue(mockClient as any);

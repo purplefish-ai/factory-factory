@@ -1,7 +1,10 @@
 import type { UserInputMessage } from '@/shared/websocket';
 import type { ClaudeContentItem } from '../../../claude/types';
+import { createLogger } from '../../logger.service';
 import { sessionService } from '../../session.service';
 import type { ChatMessageHandler } from '../types';
+
+const logger = createLogger('chat-message-handlers');
 
 export function createUserInputHandler(): ChatMessageHandler {
   return ({ ws, sessionId, message }) => {
@@ -21,7 +24,9 @@ export function createUserInputHandler(): ChatMessageHandler {
 
     const existingClient = sessionService.getClient(sessionId);
     if (existingClient?.isRunning()) {
-      existingClient.sendMessage(messageContent);
+      existingClient.sendMessage(messageContent).catch((error) => {
+        logger.error('Failed to send message to Claude', { sessionId, error });
+      });
       return;
     }
 

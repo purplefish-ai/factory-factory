@@ -418,7 +418,15 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
     if (issuePrompt) {
       const client = sessionService.getClient(session.id);
       if (client) {
-        client.sendMessage(issuePrompt);
+        try {
+          await client.sendMessage(issuePrompt);
+        } catch (error) {
+          logger.warn('Failed to send GitHub issue prompt to session', {
+            workspaceId,
+            sessionId: session.id,
+            error,
+          });
+        }
         logger.info('Sent GitHub issue prompt to session via sendMessage', {
           workspaceId,
           sessionId: session.id,

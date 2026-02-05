@@ -567,7 +567,13 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     }
 
     if (message) {
-      client.sendMessage(message);
+      client.sendMessage(message).catch((error) => {
+        logger.warn('Failed to notify fixer about state change', {
+          workspaceId: workspace.id,
+          state,
+          error,
+        });
+      });
       logger.info('Notified active fixer about state change', {
         workspaceId: workspace.id,
         sessionId: workspace.ratchetActiveSessionId,
@@ -688,7 +694,13 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       // pipeline and the agent actually processes it
       const client = sessionService.getClient(result.sessionId);
       if (client) {
-        client.sendMessage(initialPrompt);
+        client.sendMessage(initialPrompt).catch((error) => {
+          logger.warn('Failed to send ratchet fixer prompt', {
+            workspaceId: workspace.id,
+            sessionId: result.sessionId,
+            error,
+          });
+        });
         logger.info('Sent ratchet fixer prompt to session via sendMessage', {
           workspaceId: workspace.id,
           sessionId: result.sessionId,

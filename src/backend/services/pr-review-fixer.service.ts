@@ -209,7 +209,13 @@ class PRReviewFixerService {
         // Send new message to existing running session
         const client = sessionService.getClient(result.sessionId);
         if (client) {
-          client.sendMessage(initialPrompt);
+          client.sendMessage(initialPrompt).catch((error) => {
+            logger.warn('Failed to send PR review notification', {
+              workspaceId,
+              sessionId: result.sessionId,
+              error,
+            });
+          });
           logger.info('Sent PR review comment notification to existing session', {
             workspaceId,
             sessionId: result.sessionId,
@@ -277,9 +283,13 @@ class PRReviewFixerService {
       return false;
     }
 
-    client.sendMessage(
-      '✅ **Reviews Addressed** - The review comments have been addressed. You can wrap up your current work.'
-    );
+    client
+      .sendMessage(
+        '✅ **Reviews Addressed** - The review comments have been addressed. You can wrap up your current work.'
+      )
+      .catch((error) => {
+        logger.warn('Failed to notify PR review session', { workspaceId, error });
+      });
 
     logger.info('Notified PR review fixing session that reviews were addressed', {
       workspaceId,
