@@ -1,6 +1,6 @@
 {
   "name": "factory-factory",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Workspace-based coding environment for running multiple Claude Code sessions in parallel",
   "private": false,
   "license": "MIT",
