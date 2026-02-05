@@ -99,7 +99,6 @@ export function KanbanBoard() {
               column={column}
               issues={issues ?? []}
               projectId={projectId}
-              projectSlug={projectSlug}
             />
           );
         }
@@ -126,10 +125,9 @@ interface IssuesColumnProps {
   column: ColumnConfig;
   issues: GitHubIssue[];
   projectId: string;
-  projectSlug: string;
 }
 
-function IssuesColumn({ column, issues, projectId, projectSlug }: IssuesColumnProps) {
+function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
   const isEmpty = issues.length === 0;
 
   return (
@@ -152,12 +150,7 @@ function IssuesColumn({ column, issues, projectId, projectSlug }: IssuesColumnPr
           </div>
         ) : (
           issues.map((issue) => (
-            <IssueCard
-              key={issue.number}
-              issue={issue}
-              projectId={projectId}
-              projectSlug={projectSlug}
-            />
+            <IssueCard key={issue.number} issue={issue} projectId={projectId} />
           ))
         )}
       </div>
