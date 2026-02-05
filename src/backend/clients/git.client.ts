@@ -524,10 +524,24 @@ export class GitClient {
     if (statusResult.code === 0) {
       const lines = statusResult.stdout.split('\n');
       for (const line of lines) {
+        // All unmerged status codes in git status --porcelain:
         // UU = both modified (conflict)
         // AA = both added (conflict)
         // DD = both deleted (conflict)
-        if (line.startsWith('UU ') || line.startsWith('AA ') || line.startsWith('DD ')) {
+        // AU = added by us (conflict)
+        // UA = added by them (conflict)
+        // DU = deleted by us (conflict)
+        // UD = deleted by them (conflict)
+        const status = line.substring(0, 2);
+        if (
+          status === 'UU' ||
+          status === 'AA' ||
+          status === 'DD' ||
+          status === 'AU' ||
+          status === 'UA' ||
+          status === 'DU' ||
+          status === 'UD'
+        ) {
           conflictedFiles.push(line.substring(3).trim());
         }
       }
