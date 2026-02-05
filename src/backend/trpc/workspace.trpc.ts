@@ -1,23 +1,19 @@
 import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
-import { DEFAULT_FIRST_SESSION } from '../prompts/workflows';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { projectAccessor } from '../resource_accessors/project.accessor';
-import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { gitOpsService } from '../services/git-ops.service';
 import { ratchetService } from '../services/ratchet.service';
+import {
+  adaptLegacyCreateInput,
+  WorkspaceCreationService,
+} from '../services/workspace-creation.service';
 import { deriveWorkspaceFlowState } from '../services/workspace-flow-state.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
-import {
-  setWorkspaceInitMode,
-  worktreeLifecycleService,
-} from '../services/worktree-lifecycle.service';
+import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
 import { workspaceIdeRouter } from './workspace/ide.trpc';
-import { initializeWorkspaceWorktree, workspaceInitRouter } from './workspace/init.trpc';
+import { workspaceInitRouter } from './workspace/init.trpc';
 import { workspaceRunScriptRouter } from './workspace/run-script.trpc';
 import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 
@@ -110,70 +106,15 @@ export const workspaceRouter = router({
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
       const { configService } = ctx.appContext.services;
-      let projectForResume: Awaited<ReturnType<typeof projectAccessor.findById>> | null = null;
-      if (input.useExistingBranch) {
-        projectForResume = await projectAccessor.findById(input.projectId);
-        if (!projectForResume) {
-          throw new Error(`Project not found: ${input.projectId}`);
-        }
 
-        const branchName = input.branchName ?? '';
-        const isCheckedOut = await gitOpsService.isBranchCheckedOut(projectForResume, branchName);
-        if (isCheckedOut) {
-          throw new Error(`Branch '${branchName}' is already checked out in another worktree.`);
-        }
-      }
-      // Create the workspace record
-      const { useExistingBranch, ...createInput } = input;
-      const ratchetEnabled =
-        createInput.ratchetEnabled ?? (await userSettingsAccessor.get()).ratchetEnabled;
-      const workspace = await workspaceAccessor.create({
-        ...createInput,
-        ratchetEnabled,
+      // Use the canonical workspace creation service via legacy adapter
+      const workspaceCreationService = new WorkspaceCreationService({
+        logger,
+        configService,
       });
-      if (useExistingBranch) {
-        await setWorkspaceInitMode(
-          workspace.id,
-          useExistingBranch,
-          projectForResume?.worktreeBasePath
-        );
-      }
 
-      // Create a default Claude session so the workspace always has a chat tab.
-      // This prevents users from getting stuck in file view before starting a session.
-      const maxSessions = configService.getMaxSessionsPerWorkspace();
-      if (maxSessions > 0) {
-        try {
-          await claudeSessionAccessor.create({
-            workspaceId: workspace.id,
-            workflow: DEFAULT_FIRST_SESSION,
-            name: 'Chat 1',
-          });
-        } catch (error) {
-          logger.warn('Failed to create default session for workspace', {
-            workspaceId: workspace.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      // Initialize the worktree in the background so the frontend can navigate
-      // immediately. The workspace detail page polls for initialization status
-      // and shows an overlay spinner until the workspace is fully ready.
-      // The function has internal error handling but we add a catch here to handle
-      // any unexpected errors (e.g., if markFailed throws due to DB issues).
-      initializeWorkspaceWorktree(workspace.id, {
-        branchName: input.branchName,
-        useExistingBranch,
-      }).catch((error) => {
-        logger.error(
-          'Unexpected error during background workspace initialization',
-          error as Error,
-          {
-            workspaceId: workspace.id,
-          }
-        );
-      });
+      const source = adaptLegacyCreateInput(input);
+      const { workspace } = await workspaceCreationService.create(source);
 
       return workspace;
     }),
