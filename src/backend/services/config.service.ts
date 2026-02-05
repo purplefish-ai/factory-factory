@@ -277,7 +277,7 @@ function buildCorsConfig(): CorsConfig {
  * Build Claude process configuration from environment with validation
  */
 function buildClaudeProcessConfig(): ClaudeProcessConfig {
-  const DEFAULT_HUNG_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes (matches original in process.ts)
+  const DEFAULT_HUNG_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
   const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
 
   if (!envValue) {
@@ -286,7 +286,7 @@ function buildClaudeProcessConfig(): ClaudeProcessConfig {
 
   const parsed = Number.parseInt(envValue, 10);
   if (Number.isNaN(parsed) || parsed <= 0) {
-    logger.warn(`Invalid CLAUDE_HUNG_TIMEOUT_MS value: ${envValue}, using default (30 minutes)`);
+    logger.warn(`Invalid CLAUDE_HUNG_TIMEOUT_MS value: ${envValue}, using default (60 minutes)`);
     return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
   }
 
