@@ -53,9 +53,7 @@ function hasActivePr(prUrl: string | null, prState: PRState): boolean {
   return ACTIVE_PR_STATES.has(prState);
 }
 
-export function deriveWorkspaceCiObservation(
-  input: WorkspaceFlowStateInput
-): WorkspaceCiObservation {
+function deriveWorkspaceCiObservation(input: WorkspaceFlowStateInput): WorkspaceCiObservation {
   if (input.prCiStatus === CIStatus.PENDING) {
     return 'CHECKS_PENDING';
   }
