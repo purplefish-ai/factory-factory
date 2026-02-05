@@ -5,6 +5,14 @@ import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
+import {
+  calculateLineNumberWidth,
+  type DiffLine,
+  getDiffLineBackground,
+  getDiffLinePrefix,
+  getDiffLineTextColor,
+  parseDetailedDiff,
+} from '@/lib/diff';
 import { cn } from '@/lib/utils';
 import { usePersistentScroll } from './use-persistent-scroll';
 
@@ -16,69 +24,6 @@ interface DiffViewerProps {
   workspaceId: string;
   filePath: string;
   tabId: string;
-}
-
-interface DiffLine {
-  type: 'header' | 'addition' | 'deletion' | 'context' | 'hunk';
-  content: string;
-  lineNumber?: {
-    old?: number;
-    new?: number;
-  };
-}
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diff parsing requires checking multiple line types
-function parseDiff(diff: string): DiffLine[] {
-  const lines = diff.split('\n');
-  const result: DiffLine[] = [];
-
-  let oldLine = 0;
-  let newLine = 0;
-
-  for (const line of lines) {
-    if (
-      line.startsWith('diff --git') ||
-      line.startsWith('index ') ||
-      line.startsWith('---') ||
-      line.startsWith('+++') ||
-      line.startsWith('new file') ||
-      line.startsWith('deleted file')
-    ) {
-      result.push({ type: 'header', content: line });
-    } else if (line.startsWith('@@')) {
-      // Parse hunk header: @@ -start,count +start,count @@
-      const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      if (match) {
-        oldLine = Number.parseInt(match[1], 10);
-        newLine = Number.parseInt(match[2], 10);
-      }
-      result.push({ type: 'hunk', content: line });
-    } else if (line.startsWith('+')) {
-      result.push({
-        type: 'addition',
-        content: line.slice(1),
-        lineNumber: { new: newLine++ },
-      });
-    } else if (line.startsWith('-')) {
-      result.push({
-        type: 'deletion',
-        content: line.slice(1),
-        lineNumber: { old: oldLine++ },
-      });
-    } else if (line.startsWith(' ') || line === '') {
-      result.push({
-        type: 'context',
-        content: line.slice(1) || '',
-        lineNumber: { old: oldLine++, new: newLine++ },
-      });
-    }
-  }
-
-  return result;
 }
 
 // =============================================================================
@@ -139,29 +84,9 @@ interface DiffLineProps {
 }
 
 function DiffLineComponent({ line, lineNumberWidth }: DiffLineProps) {
-  const bgColor = {
-    header: 'bg-muted/50',
-    hunk: 'bg-blue-500/10',
-    addition: 'bg-green-500/20',
-    deletion: 'bg-red-500/20',
-    context: '',
-  }[line.type];
-
-  const textColor = {
-    header: 'text-muted-foreground',
-    hunk: 'text-blue-400',
-    addition: 'text-green-400',
-    deletion: 'text-red-400',
-    context: 'text-foreground',
-  }[line.type];
-
-  const prefix = {
-    header: '',
-    hunk: '',
-    addition: '+',
-    deletion: '-',
-    context: ' ',
-  }[line.type];
+  const bgColor = getDiffLineBackground(line.type);
+  const textColor = getDiffLineTextColor(line.type);
+  const prefix = getDiffLinePrefix(line.type);
 
   return (
     <div className={cn('flex font-mono text-xs', bgColor)}>
@@ -213,21 +138,12 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
     if (!data?.diff) {
       return [];
     }
-    return parseDiff(data.diff);
+    return parseDetailedDiff(data.diff);
   }, [data?.diff]);
 
   // Calculate the width needed for line numbers (minimum 3 characters)
   const lineNumberWidth = useMemo(() => {
-    let maxLineNumber = 0;
-    for (const line of parsedDiff) {
-      if (line.lineNumber?.old && line.lineNumber.old > maxLineNumber) {
-        maxLineNumber = line.lineNumber.old;
-      }
-      if (line.lineNumber?.new && line.lineNumber.new > maxLineNumber) {
-        maxLineNumber = line.lineNumber.new;
-      }
-    }
-    return Math.max(3, String(maxLineNumber).length);
+    return calculateLineNumberWidth(parsedDiff);
   }, [parsedDiff]);
 
   const { handleScroll: handleDiffScroll } = usePersistentScroll({
