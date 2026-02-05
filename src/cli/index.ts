@@ -97,9 +97,6 @@ function getVersion(): string {
   try {
     const pkgPath = join(PROJECT_ROOT, 'package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    // INTENTIONAL CI ERROR: Assigning number to string variable
-    const _intentionalError: string = 12_345;
-    console.log(_intentionalError); // Use the variable
     return pkg.version || '0.0.0';
   } catch {
     return '0.0.0';
