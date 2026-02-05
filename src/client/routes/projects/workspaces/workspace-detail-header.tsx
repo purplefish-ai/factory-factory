@@ -19,7 +19,7 @@ import {
   RunScriptPortBadge,
   useWorkspacePanel,
 } from '@/components/workspace';
-import { cn } from '@/lib/utils';
+import { cn, shouldShowRatchetAnimation } from '@/lib/utils';
 import { trpc } from '../../../../frontend/lib/trpc';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
@@ -191,6 +191,24 @@ const RATCHET_STATE_LABELS = {
   MERGED: 'Merged',
 } as const;
 
+function getRatchetTooltipContent(
+  isLoadingSettings: boolean,
+  isGloballyDisabled: boolean,
+  workspaceRatchetEnabled: boolean,
+  stateLabel: string
+): string {
+  if (isLoadingSettings) {
+    return 'Loading settings...';
+  }
+  if (isGloballyDisabled) {
+    return 'Ratcheting is disabled globally. Enable it in Admin Settings to use workspace-level controls.';
+  }
+  if (workspaceRatchetEnabled) {
+    return `Ratcheting enabled (${stateLabel}) - Click to disable auto-fixing for this workspace`;
+  }
+  return `Ratcheting disabled (${stateLabel}) - Click to enable auto-fixing for this workspace`;
+}
+
 function RatchetingToggle({
   workspace,
   workspaceId,
@@ -211,20 +229,25 @@ function RatchetingToggle({
   const isGloballyDisabled = !(isLoadingSettings || globalRatchetEnabled);
 
   const stateLabel = RATCHET_STATE_LABELS[workspace.ratchetState] ?? workspace.ratchetState;
-  const isRatchetActive =
+
+  const isRatchetActiveByState =
     workspaceRatchetEnabled &&
     workspace.ratchetState &&
     workspace.ratchetState !== 'IDLE' &&
     workspace.ratchetState !== 'READY' &&
     workspace.ratchetState !== 'MERGED';
 
-  const tooltipContent = isLoadingSettings
-    ? 'Loading settings...'
-    : isGloballyDisabled
-      ? 'Ratcheting is disabled globally. Enable it in Admin Settings to use workspace-level controls.'
-      : workspaceRatchetEnabled
-        ? `Ratcheting enabled (${stateLabel}) - Click to disable auto-fixing for this workspace`
-        : `Ratcheting disabled (${stateLabel}) - Click to enable auto-fixing for this workspace`;
+  // Show ratcheting animation if state is active OR if a push happened recently
+  const isRatchetActive =
+    isRatchetActiveByState ||
+    shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
+
+  const tooltipContent = getRatchetTooltipContent(
+    isLoadingSettings,
+    isGloballyDisabled,
+    workspaceRatchetEnabled,
+    stateLabel
+  );
 
   return (
     <Tooltip>

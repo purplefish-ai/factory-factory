@@ -66,6 +66,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   ratchetEnabled: true,
   ratchetState: 'IDLE',
   ratchetLastCheckedAt: null,
+  ratchetLastPushAt: null,
   ratchetActiveSessionId: null,
   ratchetLastCiRunId: null,
   ratchetLastNotifiedState: null,

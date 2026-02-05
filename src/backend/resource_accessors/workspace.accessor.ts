@@ -53,6 +53,7 @@ interface UpdateWorkspaceInput {
   ratchetEnabled?: boolean;
   ratchetState?: RatchetState;
   ratchetLastCheckedAt?: Date | null;
+  ratchetLastPushAt?: Date | null;
   ratchetActiveSessionId?: string | null;
   ratchetLastCiRunId?: string | null;
   ratchetLastNotifiedState?: RatchetState | null;

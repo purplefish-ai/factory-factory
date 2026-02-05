@@ -154,6 +154,7 @@ model Workspace {
   ratchetEnabled          Boolean       @default(true)    // Workspace-level ratchet toggle (requires global ratchetEnabled)
   ratchetState            RatchetState  @default(IDLE)    // Current state in the ratchet progression
   ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
+  ratchetLastPushAt       DateTime?                       // When a push was last detected (for temporary ratchet animation)
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
   ratchetLastCiRunId      String?                         // Track which CI run we processed
   ratchetLastNotifiedState RatchetState?                  // Last state we notified the fixer about
