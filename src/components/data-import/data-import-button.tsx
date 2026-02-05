@@ -149,7 +149,7 @@ export function DataImportButton({
         className={className}
       >
         <Upload className="w-4 h-4 mr-2" />
-        {children || (importData.isPending ? 'Importing...' : 'Import Data')}
+        {importData.isPending ? 'Importing...' : children || 'Import Data'}
       </Button>
       <input
         ref={fileInputRef}
