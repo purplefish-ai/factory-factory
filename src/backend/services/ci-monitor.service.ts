@@ -8,7 +8,6 @@
 import { CIStatus, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { ciFixerService } from './ci-fixer.service';
 import { githubCLIService } from './github-cli.service';
@@ -98,9 +97,8 @@ class CIMonitorService {
       return { checked: 0, failures: 0, notified: 0 };
     }
 
-    // Fetch settings once for all workspaces (avoid N+1 queries)
-    const settings = await userSettingsAccessor.get();
-    const autoFixEnabled = settings.autoFixCiIssues;
+    // Legacy: This service is deprecated in favor of ratchet. Auto-fix is disabled.
+    const autoFixEnabled = false;
 
     logger.debug('Checking CI status for workspaces', {
       count: workspaces.length,

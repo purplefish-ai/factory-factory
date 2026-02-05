@@ -113,9 +113,18 @@ export async function getWorkspaceInitMode(
   workspaceId: string,
   worktreeBasePath?: string
 ): Promise<boolean | undefined> {
+  // First check in-memory cache (for backward compatibility during transition)
   if (workspaceInitModes.has(workspaceId)) {
     return workspaceInitModes.get(workspaceId);
   }
+
+  // Then check the database creationSource field (canonical source)
+  const workspace = await workspaceAccessor.findById(workspaceId);
+  if (workspace?.creationSource === 'RESUME_BRANCH') {
+    return true;
+  }
+
+  // Fallback to sidecar file (for workspaces created before migration)
   if (!worktreeBasePath) {
     return undefined;
   }

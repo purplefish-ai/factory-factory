@@ -6,7 +6,6 @@
  */
 
 import pLimit from 'p-limit';
-import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
@@ -104,12 +103,11 @@ class PRReviewMonitorService {
       return { checked: 0, newComments: 0, triggered: 0 };
     }
 
-    // Fetch settings once for all workspaces (avoid N+1 queries)
-    const userSettings = await userSettingsAccessor.get();
+    // Legacy: This service is deprecated in favor of ratchet. Auto-fix is disabled.
     const settings: PRReviewSettings = {
-      autoFixEnabled: userSettings.autoFixPrReviewComments,
-      allowedUsers: (userSettings.prReviewFixAllowedUsers as string[]) ?? [],
-      customPrompt: userSettings.prReviewFixPrompt ?? null,
+      autoFixEnabled: false,
+      allowedUsers: [],
+      customPrompt: null,
     };
 
     if (!settings.autoFixEnabled) {

@@ -14,8 +14,6 @@ export { type ChatMessage, chatMessageHandlerService } from './chat-message-hand
 export { chatTransportAdapterService } from './chat-transport-adapter.service';
 // CI fixer service
 export { type CIFailureDetails, type CIFixResult, ciFixerService } from './ci-fixer.service';
-// CI monitor service
-export { ciMonitorService } from './ci-monitor.service';
 // CLI health service
 export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
@@ -48,8 +46,6 @@ export {
   prReviewFixerService,
   type ReviewCommentDetails,
 } from './pr-review-fixer.service';
-// PR Review monitor service
-export { prReviewMonitorService } from './pr-review-monitor.service';
 // PR snapshot service
 export { prSnapshotService } from './pr-snapshot.service';
 // Rate limiter service
