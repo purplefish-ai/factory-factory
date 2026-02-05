@@ -106,6 +106,10 @@ class WorkspaceQueryService {
           isWorking: workingStatusByWorkspace.get(w.id) ?? false,
           gitStats: gitStatsResults[w.id] ?? null,
           lastActivityAt,
+          ratchetState: w.ratchetState,
+          ratchetLastPushAt: w.ratchetLastPushAt,
+          cachedKanbanColumn: w.cachedKanbanColumn,
+          stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
         };
       }),
       reviewCount,

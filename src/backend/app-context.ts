@@ -1,7 +1,6 @@
 import { chatConnectionService } from './services/chat-connection.service';
 import { chatEventForwarderService } from './services/chat-event-forwarder.service';
 import { chatMessageHandlerService } from './services/chat-message-handlers.service';
-import { ciMonitorService } from './services/ci-monitor.service';
 import { cliHealthService } from './services/cli-health.service';
 import { configService } from './services/config.service';
 import { githubCLIService } from './services/github-cli.service';
@@ -10,7 +9,6 @@ import { createLogger } from './services/logger.service';
 import { messageQueueService } from './services/message-queue.service';
 import { messageStateService } from './services/message-state.service';
 import { findAvailablePort } from './services/port.service';
-import { prReviewMonitorService } from './services/pr-review-monitor.service';
 import { ratchetService } from './services/ratchet.service';
 import { rateLimiter } from './services/rate-limiter.service';
 import { RunScriptService } from './services/run-script.service';
@@ -26,7 +24,6 @@ export type AppServices = {
   chatConnectionService: typeof chatConnectionService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
-  ciMonitorService: typeof ciMonitorService;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
   createLogger: typeof createLogger;
@@ -35,7 +32,6 @@ export type AppServices = {
   kanbanStateService: typeof kanbanStateService;
   messageQueueService: typeof messageQueueService;
   messageStateService: typeof messageStateService;
-  prReviewMonitorService: typeof prReviewMonitorService;
   ratchetService: typeof ratchetService;
   rateLimiter: typeof rateLimiter;
   runScriptService: typeof RunScriptService;
@@ -60,7 +56,6 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     chatConnectionService,
     chatEventForwarderService,
     chatMessageHandlerService,
-    ciMonitorService,
     cliHealthService,
     configService,
     createLogger,
@@ -69,7 +64,6 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     kanbanStateService,
     messageQueueService,
     messageStateService,
-    prReviewMonitorService,
     ratchetService,
     rateLimiter,
     runScriptService: RunScriptService,

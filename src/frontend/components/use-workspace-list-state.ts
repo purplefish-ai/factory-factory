@@ -23,6 +23,10 @@ export interface ServerWorkspace {
     hasUncommitted: boolean;
   } | null;
   lastActivityAt?: string | null;
+  ratchetState?: string | null;
+  ratchetLastPushAt?: string | Date | null;
+  cachedKanbanColumn?: string | null;
+  stateComputedAt?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {

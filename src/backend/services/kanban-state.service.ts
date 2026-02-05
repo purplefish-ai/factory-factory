@@ -131,6 +131,7 @@ class KanbanStateService {
    *
    * Note: For archived workspaces, the cachedKanbanColumn is preserved
    * to show the column it was in before archiving.
+   * Only updates stateComputedAt when the column actually changes.
    */
   async updateCachedKanbanColumn(workspaceId: string): Promise<void> {
     const workspace = await workspaceAccessor.findById(workspaceId);
@@ -153,12 +154,16 @@ class KanbanStateService {
     });
 
     // If column is null (hidden workspace), default to WAITING for the cache
+    const newColumn = cachedColumn ?? KanbanColumn.WAITING;
+
+    // Only update stateComputedAt if the column actually changed
+    const columnChanged = workspace.cachedKanbanColumn !== newColumn;
     await workspaceAccessor.update(workspaceId, {
-      cachedKanbanColumn: cachedColumn ?? KanbanColumn.WAITING,
-      stateComputedAt: new Date(),
+      cachedKanbanColumn: newColumn,
+      ...(columnChanged && { stateComputedAt: new Date() }),
     });
 
-    logger.debug('Updated cached kanban column', { workspaceId, cachedColumn });
+    logger.debug('Updated cached kanban column', { workspaceId, cachedColumn, columnChanged });
   }
 
   /**

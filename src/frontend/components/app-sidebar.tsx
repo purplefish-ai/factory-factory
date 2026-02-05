@@ -51,8 +51,9 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import { cn, formatRelativeTime, shouldShowRatchetAnimation } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
+import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
@@ -192,6 +193,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       syncAllPRStatuses.mutate({ projectId: selectedProjectId });
     }
   }, [isMocked, selectedProjectId, syncAllPRStatuses]);
+
+  // Track workspaces that need user attention (for red glow)
+  const { needsAttention } = useWorkspaceAttention();
 
   // Use the workspace list state management hook
   const {
@@ -335,6 +339,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
 
+  // Check if we're on the kanban view (workspaces list page without a specific workspace)
+  const isKanbanView = pathname.endsWith('/workspaces') || pathname.endsWith('/workspaces/');
+
   useEffect(() => {
     if (selectedProjectId) {
       setProjectContext(selectedProjectId);
@@ -465,7 +472,8 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                   items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <SidebarMenu className="gap-0 divide-y divide-sidebar-border/60">
+                  {/* gap-2 p-1: Provides spacing for ratchet animated borders (instead of divide-y) */}
+                  <SidebarMenu className="gap-2 p-1">
                     {workspaceList.map((workspace) => {
                       const isCreatingItem = workspace.uiState === 'creating';
 
@@ -492,6 +500,8 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                           isActive={currentWorkspaceId === workspace.id}
                           selectedProjectSlug={selectedProjectSlug}
                           onArchiveRequest={handleArchiveRequest}
+                          disableRatchetAnimation={isKanbanView}
+                          needsAttention={needsAttention}
                         />
                       );
                     })}
@@ -583,11 +593,15 @@ function SortableWorkspaceItem({
   isActive,
   selectedProjectSlug,
   onArchiveRequest,
+  disableRatchetAnimation,
+  needsAttention,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
   selectedProjectSlug: string;
   onArchiveRequest: (workspace: WorkspaceListItem) => void;
+  disableRatchetAnimation?: boolean;
+  needsAttention: (workspaceId: string) => boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
@@ -600,6 +614,17 @@ function SortableWorkspaceItem({
 
   const isArchivingItem = workspace.uiState === 'archiving';
   const { gitStats: stats } = workspace;
+  // Check if workspace is in DONE column (merged PR). Uses cachedKanbanColumn since
+  // sidebar doesn't have access to the computed kanbanColumn field from kanban queries.
+  // This is semantically equivalent to KanbanCard's `workspace.kanbanColumn === 'DONE'`.
+  const isDone = workspace.cachedKanbanColumn === 'DONE';
+  // Show ratcheting animation if state is active OR if a push happened recently
+  const isRatchetActive =
+    !(disableRatchetAnimation || isDone) &&
+    shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
+
+  // Check if workspace needs attention (event-driven, synchronized with notification sound)
+  const showAttentionGlow = needsAttention(workspace.id) && !isRatchetActive;
 
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
@@ -609,7 +634,8 @@ function SortableWorkspaceItem({
         className={cn(
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
-          isDragging && 'opacity-50 bg-sidebar-accent'
+          isDragging && 'opacity-50 bg-sidebar-accent',
+          showAttentionGlow && 'waiting-pulse'
         )}
       >
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
@@ -647,7 +673,15 @@ function SortableWorkspaceItem({
             <div className="min-w-0 flex-1 space-y-0">
               {/* Row 1: name + timestamp + archive */}
               <div className="flex items-center gap-2">
-                <span className="truncate font-medium text-sm leading-tight flex-1">
+                <span className="truncate font-medium text-sm leading-tight flex-1 flex items-center gap-1.5">
+                  {isRatchetActive && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-yellow-500" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Ratchet active</TooltipContent>
+                    </Tooltip>
+                  )}
                   {isArchivingItem ? 'Archiving...' : workspace.name}
                 </span>
                 {workspace.lastActivityAt && (

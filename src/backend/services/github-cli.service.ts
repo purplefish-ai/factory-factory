@@ -781,6 +781,7 @@ class GitHubCLIService {
       path: string;
       line: number | null;
       createdAt: string;
+      updatedAt: string;
       url: string;
     }>
   > {
@@ -804,6 +805,7 @@ class GitHubCLIService {
           path: string;
           line: number | null;
           created_at: string;
+          updated_at: string;
           html_url: string;
         }) => ({
           id: comment.id,
@@ -812,6 +814,7 @@ class GitHubCLIService {
           path: comment.path,
           line: comment.line,
           createdAt: comment.created_at,
+          updatedAt: comment.updated_at,
           url: comment.html_url,
         })
       );

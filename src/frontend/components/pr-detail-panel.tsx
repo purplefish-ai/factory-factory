@@ -7,6 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  getSimpleDiffLineClassName,
+  getSimpleDiffLinePrefix,
+  parseFileDiff,
+  type SimpleDiffLine,
+} from '@/lib/diff';
+import { formatDateTimeShort } from '@/lib/formatters';
 import type { GitHubComment, PRWithFullDetails } from '@/shared/github-types';
 import { CIChecksSection, CIStatusBadge, ReviewDecisionBadge } from './pr-status-badges';
 
@@ -22,110 +29,17 @@ interface PRDetailPanelProps {
 
 type Tab = 'info' | 'diff';
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-interface DiffFile {
-  name: string;
-  additions: number;
-  deletions: number;
-  hunks: DiffHunk[];
-}
-
-interface DiffHunk {
-  header: string;
-  lines: DiffLine[];
-}
-
-interface DiffLine {
-  type: 'add' | 'del' | 'context';
-  content: string;
-}
-
-function getDiffLineClassName(type: DiffLine['type']): string {
-  switch (type) {
-    case 'add':
-      return 'bg-green-500/15 text-green-700 dark:text-green-400';
-    case 'del':
-      return 'bg-red-500/15 text-red-700 dark:text-red-400';
-    default:
-      return '';
-  }
-}
-
-function getDiffLinePrefix(type: DiffLine['type']): string {
-  switch (type) {
-    case 'add':
-      return '+';
-    case 'del':
-      return '-';
-    default:
-      return ' ';
-  }
-}
-
-function DiffLineRow({ line }: { line: DiffLine }) {
+function DiffLineRow({ line }: { line: SimpleDiffLine }) {
   return (
-    <div className={`px-3 whitespace-pre ${getDiffLineClassName(line.type)}`}>
-      <span className="select-none opacity-50 mr-2">{getDiffLinePrefix(line.type)}</span>
+    <div className={`px-3 whitespace-pre ${getSimpleDiffLineClassName(line.type)}`}>
+      <span className="select-none opacity-50 mr-2">{getSimpleDiffLinePrefix(line.type)}</span>
       {line.content}
     </div>
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diff parsing requires multiple conditions
-function parseDiff(diff: string): DiffFile[] {
-  const files: DiffFile[] = [];
-  const lines = diff.split('\n');
-  let currentFile: DiffFile | null = null;
-  let currentHunk: DiffHunk | null = null;
-
-  for (const line of lines) {
-    if (line.startsWith('diff --git')) {
-      if (currentFile) {
-        files.push(currentFile);
-      }
-      const match = line.match(/b\/(.+)$/);
-      currentFile = {
-        name: match?.[1] || 'unknown',
-        additions: 0,
-        deletions: 0,
-        hunks: [],
-      };
-      currentHunk = null;
-    } else if (line.startsWith('@@') && currentFile) {
-      currentHunk = { header: line, lines: [] };
-      currentFile.hunks.push(currentHunk);
-    } else if (currentHunk && currentFile) {
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        currentHunk.lines.push({ type: 'add', content: line.slice(1) });
-        currentFile.additions++;
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        currentHunk.lines.push({ type: 'del', content: line.slice(1) });
-        currentFile.deletions++;
-      } else if (!line.startsWith('\\')) {
-        currentHunk.lines.push({
-          type: 'context',
-          content: line.slice(1) || '',
-        });
-      }
-    }
-  }
-
-  if (currentFile) {
-    files.push(currentFile);
-  }
-  return files;
-}
-
 function DiffViewer({ diff }: { diff: string }) {
-  const files = parseDiff(diff);
+  const files = parseFileDiff(diff);
 
   return (
     <div className="divide-y">
@@ -331,7 +245,7 @@ export function PRDetailPanel({
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-sm">{comment.author.login}</span>
                         <span className="text-xs text-muted-foreground">
-                          {formatDate(comment.createdAt)}
+                          {formatDateTimeShort(comment.createdAt)}
                         </span>
                       </div>
                       <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-muted-foreground overflow-hidden break-words [&_table]:text-xs [&_table]:border-collapse [&_table]:w-full [&_table]:overflow-x-auto [&_table]:block [&_th]:border [&_th]:px-1 [&_th]:py-0.5 [&_td]:border [&_td]:px-1 [&_td]:py-0.5 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-1 [&_h2]:mb-0.5 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:overflow-x-auto [&_pre]:text-xs [&_code]:text-xs [&_code]:break-all">
