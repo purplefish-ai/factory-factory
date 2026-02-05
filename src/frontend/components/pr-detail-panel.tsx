@@ -7,6 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  getSimpleDiffLineClassName,
+  getSimpleDiffLinePrefix,
+  parseFileDiff,
+  type SimpleDiffLine,
+} from '@/lib/diff';
 import { formatDateTimeShort } from '@/lib/formatters';
 import type { GitHubComment, PRWithFullDetails } from '@/shared/github-types';
 import { CIChecksSection, CIStatusBadge, ReviewDecisionBadge } from './pr-status-badges';
@@ -23,101 +29,17 @@ interface PRDetailPanelProps {
 
 type Tab = 'info' | 'diff';
 
-interface DiffFile {
-  name: string;
-  additions: number;
-  deletions: number;
-  hunks: DiffHunk[];
-}
-
-interface DiffHunk {
-  header: string;
-  lines: DiffLine[];
-}
-
-interface DiffLine {
-  type: 'add' | 'del' | 'context';
-  content: string;
-}
-
-function getDiffLineClassName(type: DiffLine['type']): string {
-  switch (type) {
-    case 'add':
-      return 'bg-green-500/15 text-green-700 dark:text-green-400';
-    case 'del':
-      return 'bg-red-500/15 text-red-700 dark:text-red-400';
-    default:
-      return '';
-  }
-}
-
-function getDiffLinePrefix(type: DiffLine['type']): string {
-  switch (type) {
-    case 'add':
-      return '+';
-    case 'del':
-      return '-';
-    default:
-      return ' ';
-  }
-}
-
-function DiffLineRow({ line }: { line: DiffLine }) {
+function DiffLineRow({ line }: { line: SimpleDiffLine }) {
   return (
-    <div className={`px-3 whitespace-pre ${getDiffLineClassName(line.type)}`}>
-      <span className="select-none opacity-50 mr-2">{getDiffLinePrefix(line.type)}</span>
+    <div className={`px-3 whitespace-pre ${getSimpleDiffLineClassName(line.type)}`}>
+      <span className="select-none opacity-50 mr-2">{getSimpleDiffLinePrefix(line.type)}</span>
       {line.content}
     </div>
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diff parsing requires multiple conditions
-function parseDiff(diff: string): DiffFile[] {
-  const files: DiffFile[] = [];
-  const lines = diff.split('\n');
-  let currentFile: DiffFile | null = null;
-  let currentHunk: DiffHunk | null = null;
-
-  for (const line of lines) {
-    if (line.startsWith('diff --git')) {
-      if (currentFile) {
-        files.push(currentFile);
-      }
-      const match = line.match(/b\/(.+)$/);
-      currentFile = {
-        name: match?.[1] || 'unknown',
-        additions: 0,
-        deletions: 0,
-        hunks: [],
-      };
-      currentHunk = null;
-    } else if (line.startsWith('@@') && currentFile) {
-      currentHunk = { header: line, lines: [] };
-      currentFile.hunks.push(currentHunk);
-    } else if (currentHunk && currentFile) {
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        currentHunk.lines.push({ type: 'add', content: line.slice(1) });
-        currentFile.additions++;
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        currentHunk.lines.push({ type: 'del', content: line.slice(1) });
-        currentFile.deletions++;
-      } else if (!line.startsWith('\\')) {
-        currentHunk.lines.push({
-          type: 'context',
-          content: line.slice(1) || '',
-        });
-      }
-    }
-  }
-
-  if (currentFile) {
-    files.push(currentFile);
-  }
-  return files;
-}
-
 function DiffViewer({ diff }: { diff: string }) {
-  const files = parseDiff(diff);
+  const files = parseFileDiff(diff);
 
   return (
     <div className="divide-y">
