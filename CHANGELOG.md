@@ -5,6 +5,70 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-05
+
+### Added
+
+- Unified Ratchet system for PR automation (#565)
+- Live agent activity dock (#639)
+- Rendered plan view with inline expansion (#597)
+- Data export/import for database backup and restore (#617)
+- Workspace-level ratcheting toggle (#657)
+- Ratchet visual indicators with animated border (#659, #660)
+- Pulsing red glow to waiting workspaces in sidebar (#663)
+- Temporary ratcheting animation after git push (#661)
+- Auto-start agent with GitHub issue prompt when starting from Kanban (#642)
+- Auto-start Claude session during workspace init (#621)
+- Prisma migration drift check (#630)
+- Use icons for session tab status (#640)
+
+### Changed
+
+- Simplify ratchet UX and behavior (#678)
+- Simplify kanban board to 4 columns with GitHub issues (#638)
+- Make workspace attention glow event-driven (#682)
+- Limit waiting workspace pulse animation to 30 seconds (#676)
+- Replace marching ants animation with yellow spinner (#662)
+- Remove deprecated CI and PR Review settings sections (#658)
+- Standardize tab button and prompt card UI (#612, #624)
+- Improve question/plan prompts for chat input (#595)
+- Place new workspaces at top (#594)
+- Add PR reference comment instead of closing issue when PR is merged (#637)
+- Close associated GitHub issue when archiving workspace (#632)
+- Detect workspace worktree branches as auto-generated (#634)
+- Use pnpm exec for lint-staged hook (#650)
+
+### Fixed
+
+- Fix ratchet agent not running after prompt submission (#673)
+- Fix ratchet service to detect line-level review comments (#664)
+- Detect edited PR comments in ratchet system (#683)
+- Fix thinking streaming display (#641)
+- Add missing migration (#629)
+- Override brace-expansion to 5.0.1 (#622)
+
+### Refactored
+
+- Refactor chat input UI composition complexity (#573, #655)
+- Unify diff parsing/rendering utilities (#611, #680)
+- Consolidate date formatting utilities (#675)
+- Simplify chat hooks by extracting sub-hooks (#614, #667)
+- Split workspace detail container + move auto-scroll hook (#600, #671)
+- Refactor chat reducer dispatch complexity (#572, #636)
+- Refactor PR diff line rendering to remove Biome ignore (#570, #635)
+- Refactor chart tooltip rendering complexity (#577, #633)
+- Refactor agent activity renderers into modules (#609, #626)
+- Refactor claude-types message checks complexity (#578, #627)
+- Refactor session file logger summary extraction (#579, #628)
+- Unify dev logs WebSocket hook with shared transport (#613, #619)
+- Split admin route into sections and shared formatters (#620)
+- Extract shared pathExists helper (#656)
+- Extract tool truncation constants (#596)
+
+### Documentation
+
+- Update docs for ratchet, GitHub integration, and kanban (#677)
+
 ## [0.1.6] - 2026-02-03
 
 ### Added
