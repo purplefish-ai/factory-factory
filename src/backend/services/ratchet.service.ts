@@ -18,6 +18,7 @@ import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from './config.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
+import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
 
 const logger = createLogger('ratchet');
@@ -682,6 +683,9 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
 
       // Build initial prompt based on fixer type
       const initialPrompt = this.buildInitialPrompt(fixerType, workspace, prStateInfo, settings);
+
+      // Inject the initial prompt into the chat UI so it's visible to users
+      messageStateService.injectCommittedUserMessage(result.sessionId, initialPrompt);
 
       // Start or restart the session
       await sessionService.startClaudeSession(result.sessionId, { initialPrompt });
