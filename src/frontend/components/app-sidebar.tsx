@@ -614,7 +614,8 @@ function SortableWorkspaceItem({
   const isRatchetActive =
     !(disableRatchetAnimation || isDone) &&
     workspace.ratchetState &&
-    workspace.ratchetState !== 'IDLE';
+    workspace.ratchetState !== 'IDLE' &&
+    workspace.ratchetState !== 'READY';
 
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>

@@ -211,6 +211,12 @@ function RatchetingToggle({
   const isGloballyDisabled = !(isLoadingSettings || globalRatchetEnabled);
 
   const stateLabel = RATCHET_STATE_LABELS[workspace.ratchetState] ?? workspace.ratchetState;
+  const isRatchetActive =
+    workspaceRatchetEnabled &&
+    workspace.ratchetState &&
+    workspace.ratchetState !== 'IDLE' &&
+    workspace.ratchetState !== 'READY' &&
+    workspace.ratchetState !== 'MERGED';
 
   const tooltipContent = isLoadingSettings
     ? 'Loading settings...'
@@ -223,9 +229,20 @@ function RatchetingToggle({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex items-center gap-2 px-2 py-0.5 rounded text-xs">
-          <Wrench className="h-3 w-3 text-muted-foreground" />
-          <span className="text-muted-foreground">{stateLabel}</span>
+        <div
+          className={cn(
+            'flex items-center gap-2 px-2 py-0.5 rounded text-xs',
+            isRatchetActive && 'ratchet-active'
+          )}
+        >
+          <Wrench
+            className={cn('h-3 w-3', isRatchetActive ? 'text-foreground' : 'text-muted-foreground')}
+          />
+          {isRatchetActive ? (
+            <span className="text-foreground font-medium">Ratcheting: {stateLabel}</span>
+          ) : (
+            <span className="text-muted-foreground">{stateLabel}</span>
+          )}
           <Switch
             checked={workspaceRatchetEnabled}
             disabled={isLoadingSettings || isGloballyDisabled || toggleRatcheting.isPending}
