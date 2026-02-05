@@ -210,33 +210,42 @@
 
 @keyframes ratchet-ants {
   to {
-    background-position:
-      0 0,
-      24px 0;
+    background-position: 24px 0;
   }
 }
 
 .ratchet-toggle[data-ratchet-state='idle'],
 .ratchet-toggle[data-ratchet-state='processing'] {
-  border: 1px dashed color-mix(in oklab, var(--foreground) 45%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--brand) 70%, var(--foreground) 30%);
 }
 
 .ratchet-toggle[data-ratchet-state='processing'] {
+  position: relative;
   border-color: transparent;
-  background-image:
-    linear-gradient(var(--background), var(--background)),
-    repeating-linear-gradient(
-      90deg,
-      color-mix(in oklab, var(--foreground) 80%, transparent) 0 6px,
-      transparent 6px 12px
-    );
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-  animation: ratchet-ants 0.8s linear infinite;
+}
+
+.ratchet-toggle[data-ratchet-state='processing'] {
+  background: var(--background);
+}
+
+.ratchet-toggle[data-ratchet-state='processing']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: repeating-linear-gradient(90deg, oklch(0.2 0 0) 0 6px, var(--brand) 6px 12px);
+  animation: ratchet-ants 1s linear infinite;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ratchet-toggle[data-ratchet-state='processing'] {
+  .ratchet-toggle[data-ratchet-state='processing']::before {
     animation: none;
   }
 }
