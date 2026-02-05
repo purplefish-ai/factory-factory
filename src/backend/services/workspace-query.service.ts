@@ -108,6 +108,7 @@ class WorkspaceQueryService {
           lastActivityAt,
           ratchetState: w.ratchetState,
           cachedKanbanColumn: w.cachedKanbanColumn,
+          stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
         };
       }),
       reviewCount,

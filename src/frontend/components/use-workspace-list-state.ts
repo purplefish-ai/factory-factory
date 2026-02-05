@@ -25,6 +25,7 @@ export interface ServerWorkspace {
   lastActivityAt?: string | null;
   ratchetState?: string | null;
   cachedKanbanColumn?: string | null;
+  stateComputedAt?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {
