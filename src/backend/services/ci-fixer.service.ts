@@ -5,11 +5,8 @@
  * Prevents duplicate concurrent CI fixing sessions per workspace.
  */
 
-import { SessionStatus } from '@prisma-gen/client';
-import { prisma } from '../db';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { configService } from './config.service';
+import type { SessionStatus } from '@prisma-gen/client';
+import { fixerSessionService } from './fixer-session.service';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
 
@@ -33,13 +30,8 @@ export type CIFixResult =
   | { status: 'error'; error: string };
 
 class CIFixerService {
-  // Track in-flight fix operations to prevent race conditions
   private readonly pendingFixes = new Map<string, Promise<CIFixResult>>();
 
-  /**
-   * Attempt to start a CI fixing session for a workspace.
-   * Returns early if a CI fixing session is already active.
-   */
   async triggerCIFix(params: {
     workspaceId: string;
     prUrl: string;
@@ -48,14 +40,12 @@ class CIFixerService {
   }): Promise<CIFixResult> {
     const { workspaceId } = params;
 
-    // Check for in-flight operation to prevent concurrent triggers
     const pending = this.pendingFixes.get(workspaceId);
     if (pending) {
       logger.debug('CI fix operation already in progress', { workspaceId });
       return pending;
     }
 
-    // Create and track the operation
     const promise = this.doTriggerCIFix(params);
     this.pendingFixes.set(workspaceId, promise);
 
@@ -66,9 +56,6 @@ class CIFixerService {
     }
   }
 
-  /**
-   * Internal: Perform the CI fix operation with database transaction
-   */
   private async doTriggerCIFix(params: {
     workspaceId: string;
     prUrl: string;
@@ -78,152 +65,32 @@ class CIFixerService {
     const { workspaceId, prUrl, prNumber, failureDetails } = params;
 
     try {
-      // Validate workspace exists and has a worktree
-      const workspace = await workspaceAccessor.findById(workspaceId);
-      if (!workspace?.worktreePath) {
-        logger.warn('Workspace not ready for CI fix', { workspaceId });
-        return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
-      }
-
-      // Use transaction to prevent race conditions when checking/creating session
-      const result = await prisma.$transaction(async (tx) => {
-        // Check for existing CI fixing session
-        const existingSession = await tx.claudeSession.findFirst({
-          where: {
-            workspaceId,
-            workflow: CI_FIX_WORKFLOW,
-            status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (existingSession) {
-          // Check if it's actively working
-          const isWorking = sessionService.isSessionWorking(existingSession.id);
-          if (isWorking) {
-            logger.info('CI fixing session already active and working', {
-              workspaceId,
-              sessionId: existingSession.id,
-            });
-            return {
-              action: 'already_fixing' as const,
-              sessionId: existingSession.id,
-            };
-          }
-
-          // Session exists but is idle - we can send a new message to it
-          if (existingSession.status === SessionStatus.RUNNING) {
-            logger.info('CI fixing session exists and running, will send new prompt', {
-              workspaceId,
-              sessionId: existingSession.id,
-            });
-            return {
-              action: 'send_message' as const,
-              sessionId: existingSession.id,
-            };
-          }
-
-          // Session is IDLE - restart it
-          logger.info('Restarting idle CI fixing session', {
-            workspaceId,
-            sessionId: existingSession.id,
-          });
-          return {
-            action: 'restart' as const,
-            sessionId: existingSession.id,
-          };
-        }
-
-        // Check session limit before creating new session
-        const allSessions = await tx.claudeSession.findMany({
-          where: { workspaceId },
-          select: { id: true },
-        });
-        const maxSessions = configService.getMaxSessionsPerWorkspace();
-        if (allSessions.length >= maxSessions) {
-          logger.warn('Cannot create CI fix session: workspace session limit reached', {
-            workspaceId,
-            currentSessions: allSessions.length,
-            maxSessions,
-          });
-          return {
-            action: 'limit_reached' as const,
-          };
-        }
-
-        // Get model from most recent session in workspace
-        const recentSession = await tx.claudeSession.findFirst({
-          where: { workspaceId, workflow: { not: CI_FIX_WORKFLOW } },
-          orderBy: { updatedAt: 'desc' },
-          select: { model: true },
-        });
-        const model = recentSession?.model ?? 'sonnet';
-
-        // Create new CI fixing session
-        const newSession = await tx.claudeSession.create({
-          data: {
-            workspaceId,
-            workflow: CI_FIX_WORKFLOW,
-            name: 'CI Fixing',
-            model,
-            status: SessionStatus.IDLE,
-          },
-        });
-
-        logger.info('Created new CI fixing session', {
-          workspaceId,
-          sessionId: newSession.id,
-          model,
-        });
-
-        return {
-          action: 'start' as const,
-          sessionId: newSession.id,
-        };
-      });
-
-      // Handle the result outside the transaction
-      if (result.action === 'limit_reached') {
-        return { status: 'skipped', reason: 'Workspace session limit reached' };
-      }
-
-      const initialPrompt = this.buildInitialPrompt(prUrl, prNumber, failureDetails);
-
-      if (result.action === 'already_fixing') {
-        return { status: 'already_fixing', sessionId: result.sessionId };
-      }
-
-      if (result.action === 'send_message') {
-        // Send new message to existing running session
-        const client = sessionService.getClient(result.sessionId);
-        if (client) {
-          client.sendMessage(initialPrompt).catch((error) => {
-            logger.warn('Failed to send CI failure notification', {
-              workspaceId,
-              sessionId: result.sessionId,
-              error,
-            });
-          });
-          logger.info('Sent CI failure notification to existing session', {
-            workspaceId,
-            sessionId: result.sessionId,
-          });
-        }
-        return { status: 'already_fixing', sessionId: result.sessionId };
-      }
-
-      // Start or restart the session
-      await sessionService.startClaudeSession(result.sessionId, {
-        initialPrompt,
-      });
-
-      logger.info('CI fixing session started', {
+      const result = await fixerSessionService.acquireAndDispatch({
         workspaceId,
-        sessionId: result.sessionId,
-        prNumber,
+        workflow: CI_FIX_WORKFLOW,
+        sessionName: 'CI Fixing',
+        runningIdleAction: 'send_message',
+        buildPrompt: () => this.buildInitialPrompt(prUrl, prNumber, failureDetails),
       });
 
-      return { status: 'started', sessionId: result.sessionId };
+      if (result.status === 'started') {
+        logger.info('CI fixing session started', {
+          workspaceId,
+          sessionId: result.sessionId,
+          prNumber,
+        });
+        return { status: 'started', sessionId: result.sessionId };
+      }
+
+      if (result.status === 'already_active') {
+        return { status: 'already_fixing', sessionId: result.sessionId };
+      }
+
+      if (result.status === 'skipped') {
+        return { status: 'skipped', reason: result.reason };
+      }
+
+      return { status: 'error', error: result.error };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to trigger CI fix', error as Error, { workspaceId, prUrl });
@@ -231,9 +98,6 @@ class CIFixerService {
     }
   }
 
-  /**
-   * Check if a CI fixing session is currently active for a workspace.
-   */
   async isFixingInProgress(workspaceId: string): Promise<boolean> {
     const session = await this.getActiveCIFixSession(workspaceId);
     if (!session) {
@@ -242,24 +106,12 @@ class CIFixerService {
     return sessionService.isSessionWorking(session.id);
   }
 
-  /**
-   * Get the active CI fixing session for a workspace, if any.
-   */
   async getActiveCIFixSession(
     workspaceId: string
   ): Promise<{ id: string; status: SessionStatus } | null> {
-    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
-    const ciFixSession = sessions.find(
-      (s) =>
-        s.workflow === CI_FIX_WORKFLOW &&
-        (s.status === SessionStatus.RUNNING || s.status === SessionStatus.IDLE)
-    );
-    return ciFixSession ? { id: ciFixSession.id, status: ciFixSession.status } : null;
+    return await fixerSessionService.getActiveSession(workspaceId, CI_FIX_WORKFLOW);
   }
 
-  /**
-   * Notify an active CI fixing session that CI has passed.
-   */
   async notifyCIPassed(workspaceId: string): Promise<boolean> {
     const session = await this.getActiveCIFixSession(workspaceId);
     if (!session) {
@@ -287,9 +139,6 @@ class CIFixerService {
     return true;
   }
 
-  /**
-   * Build the initial prompt for a CI fixing session.
-   */
   private buildInitialPrompt(
     prUrl: string,
     prNumber: number,

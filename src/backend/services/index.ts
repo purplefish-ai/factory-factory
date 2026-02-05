@@ -28,6 +28,8 @@ export {
   type ImportCounter,
   type ImportResults,
 } from './data-backup.service';
+// Fixer session service
+export { fixerSessionService } from './fixer-session.service';
 // GitHub CLI service
 export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.service';
 // Kanban state service
@@ -48,6 +50,8 @@ export {
 } from './pr-review-fixer.service';
 // PR Review monitor service
 export { prReviewMonitorService } from './pr-review-monitor.service';
+// PR snapshot service
+export { prSnapshotService } from './pr-snapshot.service';
 // Rate limiter service
 export { rateLimiter } from './rate-limiter.service';
 // Reconciliation service

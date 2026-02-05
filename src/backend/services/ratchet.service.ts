@@ -11,11 +11,10 @@
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import type { PRWithFullDetails } from '@/shared/github-types';
-import { prisma } from '../db';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { configService } from './config.service';
+import { fixerSessionService } from './fixer-session.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { messageStateService } from './message-state.service';
@@ -613,127 +612,46 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     settings: RatchetSettings
   ): Promise<RatchetAction> {
     try {
-      // Validate workspace exists and has a worktree
-      const fullWorkspace = await workspaceAccessor.findById(workspace.id);
-      if (!fullWorkspace?.worktreePath) {
-        logger.warn('Workspace not ready for ratchet fix', { workspaceId: workspace.id });
-        return { type: 'ERROR', error: 'Workspace not ready (no worktree path)' };
-      }
-
-      // Use transaction to prevent race conditions
-      const result = await prisma.$transaction(async (tx) => {
-        // Check for existing ratchet session
-        const existingSession = await tx.claudeSession.findFirst({
-          where: {
-            workspaceId: workspace.id,
-            workflow: RATCHET_WORKFLOW,
-            status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (existingSession) {
-          // Check if it's actively working
-          const isWorking = sessionService.isSessionWorking(existingSession.id);
-          if (isWorking) {
-            return { action: 'already_active' as const, sessionId: existingSession.id };
-          }
-
-          // Session exists but idle - we'll restart it
-          return { action: 'restart' as const, sessionId: existingSession.id };
-        }
-
-        // Check session limit
-        const allSessions = await tx.claudeSession.findMany({
-          where: { workspaceId: workspace.id },
-          select: { id: true },
-        });
-        const maxSessions = configService.getMaxSessionsPerWorkspace();
-        if (allSessions.length >= maxSessions) {
-          return { action: 'limit_reached' as const };
-        }
-
-        // Get model from most recent session
-        const recentSession = await tx.claudeSession.findFirst({
-          where: { workspaceId: workspace.id, workflow: { not: RATCHET_WORKFLOW } },
-          orderBy: { updatedAt: 'desc' },
-          select: { model: true },
-        });
-        const model = recentSession?.model ?? 'sonnet';
-
-        // Create new ratchet session
-        const newSession = await tx.claudeSession.create({
-          data: {
-            workspaceId: workspace.id,
-            workflow: RATCHET_WORKFLOW,
-            name: 'Ratchet',
-            model,
-            status: SessionStatus.IDLE,
-          },
-        });
-
-        return { action: 'start' as const, sessionId: newSession.id };
+      const result = await fixerSessionService.acquireAndDispatch({
+        workspaceId: workspace.id,
+        workflow: RATCHET_WORKFLOW,
+        sessionName: 'Ratchet',
+        runningIdleAction: 'restart',
+        dispatchMode: 'start_empty_and_send',
+        buildPrompt: () => this.buildInitialPrompt(fixerType, workspace, prStateInfo, settings),
+        beforeStart: ({ sessionId, prompt }) => {
+          messageStateService.injectCommittedUserMessage(sessionId, prompt);
+        },
       });
 
-      if (result.action === 'limit_reached') {
-        return { type: 'ERROR', error: 'Workspace session limit reached' };
-      }
+      if (result.status === 'started') {
+        const shouldMarkNotified = result.promptSent ?? true;
+        await workspaceAccessor.update(workspace.id, {
+          ratchetActiveSessionId: result.sessionId,
+          ...(shouldMarkNotified && {
+            ratchetLastNotifiedState: this.determineRatchetState(prStateInfo),
+          }),
+        });
 
-      if (result.action === 'already_active') {
-        return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
-      }
-
-      // Build initial prompt based on fixer type
-      const initialPrompt = this.buildInitialPrompt(fixerType, workspace, prStateInfo, settings);
-
-      // Inject the initial prompt into the chat UI so it's visible to users
-      messageStateService.injectCommittedUserMessage(result.sessionId, initialPrompt);
-
-      // Start the session with empty initialPrompt (we'll send the message separately)
-      await sessionService.startClaudeSession(result.sessionId, { initialPrompt: '' });
-
-      // Send the initial prompt via sendMessage so it goes through the normal event
-      // pipeline and the agent actually processes it
-      const client = sessionService.getClient(result.sessionId);
-      let promptSent = false;
-      if (client) {
-        try {
-          await client.sendMessage(initialPrompt);
-          promptSent = true;
-          logger.info('Sent ratchet fixer prompt to session via sendMessage', {
-            workspaceId: workspace.id,
-            sessionId: result.sessionId,
-            fixerType,
-          });
-        } catch (error) {
-          logger.warn('Failed to send ratchet fixer prompt', {
-            workspaceId: workspace.id,
-            sessionId: result.sessionId,
-            error,
-          });
-        }
-      } else {
-        logger.warn('Could not get client to send ratchet fixer prompt', {
+        logger.info('Ratchet fixer session started', {
           workspaceId: workspace.id,
           sessionId: result.sessionId,
           fixerType,
+          prNumber: workspace.prNumber,
         });
+
+        return { type: 'TRIGGERED_FIXER', sessionId: result.sessionId, fixerType };
       }
 
-      // Update workspace with active session; only mark as notified if prompt was delivered
-      await workspaceAccessor.update(workspace.id, {
-        ratchetActiveSessionId: result.sessionId,
-        ...(promptSent && { ratchetLastNotifiedState: this.determineRatchetState(prStateInfo) }),
-      });
+      if (result.status === 'already_active') {
+        return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
+      }
 
-      logger.info('Ratchet fixer session started', {
-        workspaceId: workspace.id,
-        sessionId: result.sessionId,
-        fixerType,
-        prNumber: workspace.prNumber,
-      });
+      if (result.status === 'skipped') {
+        return { type: 'ERROR', error: result.reason };
+      }
 
-      return { type: 'TRIGGERED_FIXER', sessionId: result.sessionId, fixerType };
+      return { type: 'ERROR', error: result.error };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to trigger ratchet fixer', error as Error, {
