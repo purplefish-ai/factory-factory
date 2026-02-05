@@ -10,7 +10,7 @@ import {
   KanbanColumn,
   PRState,
   type Prisma,
-  type RunScriptStatus,
+  RunScriptStatus,
   SessionStatus,
   WorkspaceCreationSource,
   WorkspaceStatus,
@@ -67,7 +67,7 @@ const exportedWorkspaceSchema = z.object({
   runScriptPort: z.number().nullable(),
   runScriptStartedAt: z.string().nullable(),
   // Accept both old SessionStatus and new RunScriptStatus values for backward compatibility
-  runScriptStatus: z.string(),
+  runScriptStatus: z.union([z.nativeEnum(RunScriptStatus), z.literal('PAUSED')]),
   prUrl: z.string().nullable(),
   githubIssueNumber: z.number().nullable(),
   githubIssueUrl: z.string().nullable(),
@@ -159,6 +159,12 @@ type ExportedWorkspace = z.infer<typeof exportedWorkspaceSchema>;
 type ExportedClaudeSession = z.infer<typeof exportedClaudeSessionSchema>;
 type ExportedTerminalSession = z.infer<typeof exportedTerminalSessionSchema>;
 type ExportedUserSettings = z.infer<typeof exportedUserSettingsSchema>;
+
+function normalizeRunScriptStatus(
+  status: z.infer<typeof exportedWorkspaceSchema.shape.runScriptStatus>
+): RunScriptStatus {
+  return status === 'PAUSED' ? RunScriptStatus.IDLE : status;
+}
 
 // ============================================================================
 // Helpers
@@ -262,8 +268,7 @@ async function importWorkspaces(
         runScriptPort: w.runScriptPort,
         runScriptStartedAt: parseDate(w.runScriptStartedAt),
         // Map old SessionStatus values to RunScriptStatus (PAUSED -> IDLE)
-        runScriptStatus:
-          w.runScriptStatus === 'PAUSED' ? 'IDLE' : (w.runScriptStatus as RunScriptStatus),
+        runScriptStatus: normalizeRunScriptStatus(w.runScriptStatus),
         prUrl: w.prUrl,
         githubIssueNumber: w.githubIssueNumber,
         githubIssueUrl: w.githubIssueUrl,
