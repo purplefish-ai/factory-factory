@@ -165,7 +165,14 @@ export class RunScriptService {
       };
 
       childProcess.stdout?.on('data', handleOutput);
+      childProcess.stdout?.on('error', (error) => {
+        logger.warn('Run script stdout stream error', { workspaceId, error, pid });
+      });
+
       childProcess.stderr?.on('data', handleOutput);
+      childProcess.stderr?.on('error', (error) => {
+        logger.warn('Run script stderr stream error', { workspaceId, error, pid });
+      });
 
       // Handle spawn errors
       childProcess.on('error', async (error) => {
@@ -238,6 +245,14 @@ export class RunScriptService {
             cwd: workspace.worktreePath,
             detached: false,
             stdio: ['ignore', 'pipe', 'pipe'],
+          });
+
+          // Add error handlers for stdout/stderr streams to prevent unhandled errors
+          cleanupProcess.stdout?.on('error', (error) => {
+            logger.warn('Cleanup script stdout stream error', { workspaceId, error });
+          });
+          cleanupProcess.stderr?.on('error', (error) => {
+            logger.warn('Cleanup script stderr stream error', { workspaceId, error });
           });
 
           // Wait for cleanup to complete (with timeout)
