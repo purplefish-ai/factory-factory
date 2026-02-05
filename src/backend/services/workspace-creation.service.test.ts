@@ -433,7 +433,28 @@ describe('WorkspaceCreationService', () => {
         description: 'Test description',
         branchName: 'feature/test',
         ratchetEnabled: undefined,
+        githubIssueNumber: undefined,
+        githubIssueUrl: undefined,
       });
+    });
+
+    it('should preserve partial GitHub issue data in manual fallback', () => {
+      const input = {
+        projectId: 'proj-1',
+        name: 'Test',
+        githubIssueNumber: 42,
+        // missing githubIssueUrl
+      };
+
+      const result = adaptLegacyCreateInput(input);
+
+      expect(result.type).toBe('MANUAL');
+      expect(result).toEqual(
+        expect.objectContaining({
+          githubIssueNumber: 42,
+          githubIssueUrl: undefined,
+        })
+      );
     });
 
     it('should adapt resume branch input', () => {
@@ -451,6 +472,7 @@ describe('WorkspaceCreationService', () => {
         projectId: 'proj-1',
         branchName: 'existing-branch',
         name: 'Resumed Workspace',
+        description: undefined,
         ratchetEnabled: undefined,
       });
     });
@@ -472,6 +494,7 @@ describe('WorkspaceCreationService', () => {
         issueNumber: 42,
         issueUrl: 'https://github.com/org/repo/issues/42',
         name: 'Issue Workspace',
+        description: undefined,
         ratchetEnabled: false,
       });
     });

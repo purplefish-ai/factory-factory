@@ -25,6 +25,10 @@ export type WorkspaceCreationSource =
       description?: string;
       branchName?: string;
       ratchetEnabled?: boolean;
+      /** Preserved from legacy input for backward compatibility */
+      githubIssueNumber?: number;
+      /** Preserved from legacy input for backward compatibility */
+      githubIssueUrl?: string;
     }
   | {
       type: 'RESUME_BRANCH';
@@ -88,7 +92,8 @@ export function adaptLegacyCreateInput(input: LegacyCreateWorkspaceInput): Works
     };
   }
 
-  // Default to manual creation
+  // Default to manual creation, preserving any partial GitHub issue data
+  // to maintain backward compatibility with old code that passed all fields through.
   return {
     type: 'MANUAL',
     projectId: input.projectId,
@@ -96,6 +101,8 @@ export function adaptLegacyCreateInput(input: LegacyCreateWorkspaceInput): Works
     description: input.description,
     branchName: input.branchName,
     ratchetEnabled: input.ratchetEnabled,
+    githubIssueNumber: input.githubIssueNumber,
+    githubIssueUrl: input.githubIssueUrl,
   };
 }
 
@@ -196,6 +203,8 @@ export class WorkspaceCreationService {
             name: source.name,
             description: source.description,
             branchName: source.branchName,
+            githubIssueNumber: source.githubIssueNumber,
+            githubIssueUrl: source.githubIssueUrl,
           },
         };
       }
