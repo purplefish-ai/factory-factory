@@ -382,6 +382,93 @@ describe('chatReducer', () => {
 
       expect(newState.messages).toHaveLength(0);
     });
+
+    it('should append thinking_delta to matching thinking block index only', () => {
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 0,
+              content_block: { type: 'thinking', thinking: 'first' },
+            },
+          },
+          order: 0,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 1,
+              content_block: { type: 'thinking', thinking: 'second' },
+            },
+          },
+          order: 1,
+        },
+      });
+
+      state = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'thinking_delta', thinking: '-delta' },
+            },
+          },
+          order: 2,
+        },
+      });
+
+      const firstEvent = state.messages[0]?.message?.event as
+        | { content_block?: { thinking?: string } }
+        | undefined;
+      const secondEvent = state.messages[1]?.message?.event as
+        | { content_block?: { thinking?: string } }
+        | undefined;
+      expect(firstEvent?.content_block?.thinking).toBe('first-delta');
+      expect(secondEvent?.content_block?.thinking).toBe('second');
+    });
+
+    it('should not double-append thinking deltas when THINKING_DELTA and WS_CLAUDE_MESSAGE both run', () => {
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: createTestThinkingMessage(), order: 0 },
+      });
+
+      state = chatReducer(state, {
+        type: 'THINKING_DELTA',
+        payload: { thinking: ' +delta' },
+      });
+      state = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'thinking_delta', thinking: ' +delta' },
+            },
+          },
+          order: 1,
+        },
+      });
+
+      const event = state.messages[0]?.message?.event as
+        | { content_block?: { thinking?: string } }
+        | undefined;
+      expect(event?.content_block?.thinking).toBe('Analyzing the problem... +delta');
+      expect(state.latestThinking).toBe(' +delta');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1178,6 +1265,25 @@ describe('chatReducer', () => {
       const newState = chatReducer(state, action);
 
       expect(newState.latestThinking).toBe('Existing');
+    });
+
+    it('should not mutate stored thinking messages directly', () => {
+      const thinkingStart = createTestThinkingMessage();
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: thinkingStart, order: 0 },
+      });
+
+      state = chatReducer(state, {
+        type: 'THINKING_DELTA',
+        payload: { thinking: ' +delta' },
+      });
+
+      const event = state.messages[0]?.message?.event as
+        | { content_block?: { thinking?: string } }
+        | undefined;
+      expect(event?.content_block?.thinking).toBe('Analyzing the problem...');
+      expect(state.latestThinking).toBe(' +delta');
     });
   });
 

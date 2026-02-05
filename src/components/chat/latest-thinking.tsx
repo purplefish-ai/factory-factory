@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 interface LatestThinkingProps {
   /** Current accumulated thinking content */
   thinking: string | null;
-  /** Whether the agent is actively running */
+  /** Whether the agent is actively running (controls spinner animation) */
   running: boolean;
   /** Optional className for additional styling */
   className?: string;
@@ -38,8 +38,8 @@ export const LatestThinking = memo(function LatestThinking({
     }
   }, [thinking]);
 
-  // Don't render if no thinking or not running
-  if (!(thinking && running)) {
+  // Don't render if no thinking payload has been emitted yet
+  if (thinking === null) {
     return null;
   }
 
@@ -51,7 +51,7 @@ export const LatestThinking = memo(function LatestThinking({
       )}
     >
       <div className="flex items-center gap-2 mb-2">
-        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+        <Loader2 className={cn('h-3 w-3 text-muted-foreground', running && 'animate-spin')} />
         <span className="text-xs font-medium text-muted-foreground">Thinking</span>
       </div>
       <div

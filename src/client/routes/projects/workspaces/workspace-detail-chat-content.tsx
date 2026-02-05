@@ -2,6 +2,7 @@ import { ArrowDown } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/components/chat';
 import {
+  AgentLiveDock,
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
@@ -10,9 +11,10 @@ import {
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import type { CommandInfo, TokenStats } from '@/lib/claude-types';
-import { groupAdjacentToolCalls } from '@/lib/claude-types';
+import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
 
 interface ChatContentProps {
+  workspaceId: string;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -38,6 +40,7 @@ interface ChatContentProps {
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
+  permissionMode: ReturnType<typeof useChatWebSocket>['permissionMode'];
   slashCommands: CommandInfo[];
   slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
   tokenStats: TokenStats;
@@ -49,6 +52,7 @@ interface ChatContentProps {
 }
 
 export const ChatContent = memo(function ChatContent({
+  workspaceId,
   messages,
   sessionStatus,
   messagesEndRef,
@@ -74,6 +78,7 @@ export const ChatContent = memo(function ChatContent({
   latestThinking,
   pendingMessages,
   isCompacting,
+  permissionMode,
   slashCommands,
   slashCommandsLoaded,
   tokenStats,
@@ -84,6 +89,15 @@ export const ChatContent = memo(function ChatContent({
   getUuidForMessageId,
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
+  const latestToolSequence = useMemo(() => {
+    for (let i = groupedMessages.length - 1; i >= 0; i -= 1) {
+      const item = groupedMessages[i];
+      if (isToolSequence(item)) {
+        return item;
+      }
+    }
+    return null;
+  }, [groupedMessages]);
 
   const queuedMessageIds = useMemo(
     () => new Set(queuedMessages.map((msg) => msg.id)),
@@ -148,7 +162,6 @@ export const ChatContent = memo(function ChatContent({
           onScroll={onScroll}
           messagesEndRef={messagesEndRef}
           isNearBottom={isNearBottom}
-          latestThinking={latestThinking}
           queuedMessageIds={queuedMessageIds}
           onRemoveQueuedMessage={removeQueuedMessage}
           isCompacting={isCompacting}
@@ -172,6 +185,15 @@ export const ChatContent = memo(function ChatContent({
       )}
 
       <div className="border-t">
+        <AgentLiveDock
+          workspaceId={workspaceId}
+          running={running}
+          starting={startingSession}
+          stopping={stopping}
+          permissionMode={permissionMode}
+          latestThinking={latestThinking ?? null}
+          latestToolSequence={latestToolSequence}
+        />
         <PermissionPrompt
           permission={pendingRequest.type === 'permission' ? pendingRequest.request : null}
           onApprove={approvePermission}

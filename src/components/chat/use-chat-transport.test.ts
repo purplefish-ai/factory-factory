@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ClaudeMessage } from '@/lib/claude-types';
-import { handleThinkingStreaming, handleToolInputStreaming } from './use-chat-transport';
+import { handleThinkingStreaming, handleToolInputStreaming } from './streaming-utils';
 
 describe('handleToolInputStreaming', () => {
   it('accumulates input_json_delta and returns TOOL_INPUT_UPDATE when JSON is complete', () => {
