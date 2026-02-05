@@ -33,9 +33,8 @@ class WorkspaceQueryService {
     const defaultBranch = project?.defaultBranch ?? 'main';
 
     const workingStatusByWorkspace = new Map<string, boolean>();
+    const flowStateByWorkspace = new Map<string, ReturnType<typeof deriveWorkspaceFlowState>>();
     for (const workspace of workspaces) {
-      const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-      const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
       const flowState = deriveWorkspaceFlowState({
         prUrl: workspace.prUrl,
         prState: workspace.prState,
@@ -44,6 +43,10 @@ class WorkspaceQueryService {
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
       });
+      flowStateByWorkspace.set(workspace.id, flowState);
+
+      const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+      const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
       workingStatusByWorkspace.set(workspace.id, isSessionWorking || flowState.isWorking);
     }
 
@@ -96,14 +99,7 @@ class WorkspaceQueryService {
 
     return {
       workspaces: workspaces.map((w) => {
-        const flowState = deriveWorkspaceFlowState({
-          prUrl: w.prUrl,
-          prState: w.prState,
-          prCiStatus: w.prCiStatus,
-          prUpdatedAt: w.prUpdatedAt,
-          ratchetEnabled: w.ratchetEnabled,
-          ratchetState: w.ratchetState,
-        });
+        const flowState = flowStateByWorkspace.get(w.id);
         const sessionDates = [
           ...(w.claudeSessions?.map((s) => s.updatedAt) ?? []),
           ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
@@ -127,9 +123,9 @@ class WorkspaceQueryService {
           lastActivityAt,
           ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
-          ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
-          flowPhase: flowState.phase,
-          ciObservation: flowState.ciObservation,
+          ratchetButtonAnimated: flowState?.shouldAnimateRatchetButton ?? false,
+          flowPhase: flowState?.phase ?? 'NO_PR',
+          ciObservation: flowState?.ciObservation ?? 'CHECKS_UNKNOWN',
           cachedKanbanColumn: w.cachedKanbanColumn,
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
         };
