@@ -922,21 +922,30 @@ New review comments have been received on PR #${prNumber}.
       .map((r) => `@${r}`)
       .join(' ');
 
-    parts.push(`### Next Steps
+    parts.push(`### Instructions
 
-1. Review the comments above carefully
-2. Understand what changes the reviewer is requesting
-3. Implement the necessary changes to address the feedback
-4. Run tests: \`pnpm test\`
-5. Run type checking: \`pnpm typecheck\`
-6. Run linting: \`pnpm check:fix\`
-7. Commit and push your changes
-8. After pushing, post a comment on the PR asking for re-review:
+**IMPORTANT: Execute autonomously. Do not ask the user for input or confirmation. Complete all steps without waiting.**
+
+1. **Analyze each comment** - Determine what changes are requested. If a comment is purely informational (e.g., automated coverage reports with no action items), note it and move on.
+
+2. **Implement fixes** - Address each actionable comment systematically. Make focused changes that directly address the feedback.
+
+3. **Verify changes**:
+   \`\`\`bash
+   pnpm test && pnpm typecheck && pnpm check:fix
+   \`\`\`
+
+4. **Commit and push**:
+   \`\`\`bash
+   git add -A && git commit -m "Address review comments" && git push
+   \`\`\`
+
+5. **Post re-review request** - After pushing, notify the reviewers:
    \`\`\`bash
    gh pr comment ${prNumber} --body "${reviewerMentions} I've addressed the review comments. Please re-review when you have a chance."
    \`\`\`
 
-Please address these review comments.`);
+**Do not ask the user what to do. Analyze the comments, implement fixes, push, and request re-review.**`);
 
     return parts.join('');
   }
