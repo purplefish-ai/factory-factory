@@ -170,7 +170,10 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   const setIsOpen = onOpenChange ?? setInternalOpen;
 
   const { pairedCalls } = sequence;
+  // For the header summary, use the specified order
   const summaryCalls = summaryOrder === 'latest-first' ? [...pairedCalls].reverse() : pairedCalls;
+  // For the expanded view, always show oldest-first (chronological order)
+  const expandedCalls = pairedCalls;
 
   if (pairedCalls.length === 0) {
     return null;
@@ -293,7 +296,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="border-t space-y-1 p-1.5 overflow-x-auto">
-            {summaryCalls.map((call) => (
+            {expandedCalls.map((call) => (
               <div key={call.id} className="pl-2">
                 <PairedToolCallRenderer call={call} defaultOpen={false} />
               </div>
