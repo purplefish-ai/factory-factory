@@ -17,6 +17,11 @@ export interface WorkspaceFlowStateInput {
   ratchetState: RatchetState;
 }
 
+export type WorkspaceFlowStateSource = Pick<
+  WorkspaceFlowStateInput,
+  'prUrl' | 'prState' | 'prCiStatus' | 'prUpdatedAt' | 'ratchetEnabled' | 'ratchetState'
+>;
+
 export type WorkspaceCiObservation =
   | 'NOT_FETCHED'
   | 'NO_CHECKS'
@@ -148,4 +153,17 @@ export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): Worksp
     shouldAnimateRatchetButton: false,
     hasActivePr: true,
   };
+}
+
+export function deriveWorkspaceFlowStateFromWorkspace(
+  workspace: WorkspaceFlowStateSource
+): WorkspaceFlowState {
+  return deriveWorkspaceFlowState({
+    prUrl: workspace.prUrl,
+    prState: workspace.prState,
+    prCiStatus: workspace.prCiStatus,
+    prUpdatedAt: workspace.prUpdatedAt,
+    ratchetEnabled: workspace.ratchetEnabled,
+    ratchetState: workspace.ratchetState,
+  });
 }

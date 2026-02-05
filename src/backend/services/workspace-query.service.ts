@@ -9,7 +9,7 @@ import { computeKanbanColumn } from './kanban-state.service';
 import { createLogger } from './logger.service';
 import { prSnapshotService } from './pr-snapshot.service';
 import { sessionService } from './session.service';
-import { deriveWorkspaceFlowState } from './workspace-flow-state.service';
+import { deriveWorkspaceFlowStateFromWorkspace } from './workspace-flow-state.service';
 
 const logger = createLogger('workspace-query');
 
@@ -33,16 +33,12 @@ class WorkspaceQueryService {
     const defaultBranch = project?.defaultBranch ?? 'main';
 
     const workingStatusByWorkspace = new Map<string, boolean>();
-    const flowStateByWorkspace = new Map<string, ReturnType<typeof deriveWorkspaceFlowState>>();
+    const flowStateByWorkspace = new Map<
+      string,
+      ReturnType<typeof deriveWorkspaceFlowStateFromWorkspace>
+    >();
     for (const workspace of workspaces) {
-      const flowState = deriveWorkspaceFlowState({
-        prUrl: workspace.prUrl,
-        prState: workspace.prState,
-        prCiStatus: workspace.prCiStatus,
-        prUpdatedAt: workspace.prUpdatedAt,
-        ratchetEnabled: workspace.ratchetEnabled,
-        ratchetState: workspace.ratchetState,
-      });
+      const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
       flowStateByWorkspace.set(workspace.id, flowState);
 
       const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
@@ -152,14 +148,7 @@ class WorkspaceQueryService {
       .map((workspace) => {
         const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
         const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
-        const flowState = deriveWorkspaceFlowState({
-          prUrl: workspace.prUrl,
-          prState: workspace.prState,
-          prCiStatus: workspace.prCiStatus,
-          prUpdatedAt: workspace.prUpdatedAt,
-          ratchetEnabled: workspace.ratchetEnabled,
-          ratchetState: workspace.ratchetState,
-        });
+        const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
         const isWorking = isSessionWorking || flowState.isWorking;
 
         const kanbanColumn = computeKanbanColumn({

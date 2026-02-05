@@ -6,7 +6,7 @@ import {
   adaptLegacyCreateInput,
   WorkspaceCreationService,
 } from '../services/workspace-creation.service';
-import { deriveWorkspaceFlowState } from '../services/workspace-flow-state.service';
+import { deriveWorkspaceFlowStateFromWorkspace } from '../services/workspace-flow-state.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
 import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
@@ -68,14 +68,7 @@ export const workspaceRouter = router({
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
     }
-    const flowState = deriveWorkspaceFlowState({
-      prUrl: workspace.prUrl,
-      prState: workspace.prState,
-      prCiStatus: workspace.prCiStatus,
-      prUpdatedAt: workspace.prUpdatedAt,
-      ratchetEnabled: workspace.ratchetEnabled,
-      ratchetState: workspace.ratchetState,
-    });
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     return {
       ...workspace,
       ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,

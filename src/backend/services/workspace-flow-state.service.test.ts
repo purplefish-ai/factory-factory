@@ -1,6 +1,9 @@
 import { CIStatus, PRState, RatchetState } from '@prisma-gen/client';
 import { describe, expect, it } from 'vitest';
-import { deriveWorkspaceFlowState } from './workspace-flow-state.service';
+import {
+  deriveWorkspaceFlowState,
+  deriveWorkspaceFlowStateFromWorkspace,
+} from './workspace-flow-state.service';
 
 describe('deriveWorkspaceFlowState', () => {
   it('returns CI_WAIT and working when PR CI is pending (ratchet off)', () => {
@@ -119,5 +122,19 @@ describe('deriveWorkspaceFlowState', () => {
 
     expect(result.ciObservation).toBe('NO_CHECKS');
     expect(result.phase).toBe('RATCHET_VERIFY');
+  });
+
+  it('derives flow state directly from a workspace-like object', () => {
+    const result = deriveWorkspaceFlowStateFromWorkspace({
+      prUrl: 'https://github.com/acme/repo/pull/1',
+      prState: PRState.OPEN,
+      prCiStatus: CIStatus.PENDING,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_RUNNING,
+    });
+
+    expect(result.phase).toBe('CI_WAIT');
+    expect(result.shouldAnimateRatchetButton).toBe(true);
   });
 });

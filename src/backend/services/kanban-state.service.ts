@@ -2,7 +2,7 @@ import { KanbanColumn, PRState, type Workspace, WorkspaceStatus } from '@prisma-
 import { workspaceAccessor } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
-import { deriveWorkspaceFlowState } from './workspace-flow-state.service';
+import { deriveWorkspaceFlowStateFromWorkspace } from './workspace-flow-state.service';
 
 const logger = createLogger('kanban-state');
 
@@ -84,14 +84,7 @@ class KanbanStateService {
     // Get real-time working status from session service
     const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
     const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
-    const flowState = deriveWorkspaceFlowState({
-      prUrl: workspace.prUrl,
-      prState: workspace.prState,
-      prCiStatus: workspace.prCiStatus,
-      prUpdatedAt: workspace.prUpdatedAt,
-      ratchetEnabled: workspace.ratchetEnabled,
-      ratchetState: workspace.ratchetState,
-    });
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     const isWorking = isSessionWorking || flowState.isWorking;
 
     const kanbanColumn = computeKanbanColumn({
@@ -118,14 +111,7 @@ class KanbanStateService {
   ): WorkspaceWithKanbanState[] {
     return workspaces.map((workspace) => {
       const isWorking = workingStatusMap.get(workspace.id) ?? false;
-      const flowState = deriveWorkspaceFlowState({
-        prUrl: workspace.prUrl,
-        prState: workspace.prState,
-        prCiStatus: workspace.prCiStatus,
-        prUpdatedAt: workspace.prUpdatedAt,
-        ratchetEnabled: workspace.ratchetEnabled,
-        ratchetState: workspace.ratchetState,
-      });
+      const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
       const effectiveWorking = isWorking || flowState.isWorking;
 
       // Compute live kanban column (real-time activity overlays cached PR state)
@@ -164,14 +150,7 @@ class KanbanStateService {
       return;
     }
 
-    const flowState = deriveWorkspaceFlowState({
-      prUrl: workspace.prUrl,
-      prState: workspace.prState,
-      prCiStatus: workspace.prCiStatus,
-      prUpdatedAt: workspace.prUpdatedAt,
-      ratchetEnabled: workspace.ratchetEnabled,
-      ratchetState: workspace.ratchetState,
-    });
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
 
     // For cached column, include flow-state working but not in-memory session activity.
     const cachedColumn = computeKanbanColumn({
