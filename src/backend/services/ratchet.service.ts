@@ -18,6 +18,7 @@ import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from './config.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
+import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
 
 const logger = createLogger('ratchet');
@@ -41,6 +42,7 @@ export interface PRStateInfo {
   ciStatus: CIStatus;
   mergeStateStatus: string;
   hasChangesRequested: boolean;
+  hasNewReviewComments: boolean;
   failedChecks: Array<{
     name: string;
     conclusion: string;
@@ -48,6 +50,26 @@ export interface PRStateInfo {
   }>;
   reviews: PRWithFullDetails['reviews'];
   comments: PRWithFullDetails['comments'];
+  reviewComments: Array<{
+    id: number;
+    author: { login: string };
+    body: string;
+    path: string;
+    line: number | null;
+    createdAt: string;
+    url: string;
+  }>;
+  // Filtered to only NEW comments (since last check) and allowed reviewers
+  newReviewComments: Array<{
+    id: number;
+    author: { login: string };
+    body: string;
+    path: string;
+    line: number | null;
+    createdAt: string;
+    url: string;
+  }>;
+  newPRComments: PRWithFullDetails['comments'];
   prState: string;
   prNumber: number;
 }
@@ -85,6 +107,7 @@ interface WorkspaceWithPR {
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
   ratchetLastNotifiedState: RatchetState | null;
+  prReviewLastCheckedAt: Date | null;
 }
 
 class RatchetService {
@@ -215,8 +238,8 @@ class RatchetService {
     }
 
     try {
-      // 1. Fetch current PR state from GitHub
-      const prStateInfo = await this.fetchPRState(workspace);
+      // 1. Fetch current PR state from GitHub (pass allowedReviewers for filtering)
+      const prStateInfo = await this.fetchPRState(workspace, settings.allowedReviewers);
       if (!prStateInfo) {
         return {
           workspaceId: workspace.id,
@@ -249,10 +272,13 @@ class RatchetService {
         ? await this.executeRatchetAction(workspace, newState, prStateInfo, settings)
         : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
 
-      // 6. Update workspace
+      // 6. Update workspace (including review check timestamp if we found review comments)
+      const now = new Date();
       await workspaceAccessor.update(workspace.id, {
         ratchetState: newState,
-        ratchetLastCheckedAt: new Date(),
+        ratchetLastCheckedAt: now,
+        // Update review timestamp if we detected review comments
+        ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
       });
 
       return { workspaceId: workspace.id, previousState, newState, action };
@@ -273,7 +299,10 @@ class RatchetService {
   /**
    * Fetch current PR state from GitHub
    */
-  private async fetchPRState(workspace: WorkspaceWithPR): Promise<PRStateInfo | null> {
+  private async fetchPRState(
+    workspace: WorkspaceWithPR,
+    allowedReviewers: string[]
+  ): Promise<PRStateInfo | null> {
     const prInfo = githubCLIService.extractPRInfo(workspace.prUrl);
     if (!prInfo) {
       logger.warn('Could not parse PR URL', { prUrl: workspace.prUrl });
@@ -283,7 +312,10 @@ class RatchetService {
     const repo = `${prInfo.owner}/${prInfo.repo}`;
 
     try {
-      const prDetails = await githubCLIService.getPRFullDetails(repo, workspace.prNumber);
+      const [prDetails, reviewComments] = await Promise.all([
+        githubCLIService.getPRFullDetails(repo, workspace.prNumber),
+        githubCLIService.getReviewComments(repo, workspace.prNumber),
+      ]);
 
       // Convert statusCheckRollup to the format expected by computeCIStatus
       const statusCheckRollup =
@@ -312,13 +344,42 @@ class RatchetService {
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
 
+      // Filter comments by allowed reviewers (if configured) and by timestamp (new since last check)
+      const lastCheckedAt = workspace.prReviewLastCheckedAt?.getTime() ?? 0;
+      const filterByReviewer = allowedReviewers.length > 0;
+
+      // Filter new review comments (line-level code comments)
+      const newReviewComments = reviewComments.filter((comment) => {
+        const commentTime = new Date(comment.createdAt).getTime();
+        const isNew = commentTime > lastCheckedAt;
+        const isAllowedReviewer =
+          !filterByReviewer || allowedReviewers.includes(comment.author.login);
+        return isNew && isAllowedReviewer;
+      });
+
+      // Filter new PR comments (regular conversation comments)
+      const newPRComments = prDetails.comments.filter((comment) => {
+        const commentTime = new Date(comment.createdAt).getTime();
+        const isNew = commentTime > lastCheckedAt;
+        const isAllowedReviewer =
+          !filterByReviewer || allowedReviewers.includes(comment.author.login);
+        return isNew && isAllowedReviewer;
+      });
+
+      // Check if there are any new comments from allowed reviewers
+      const hasNewReviewComments = newReviewComments.length > 0 || newPRComments.length > 0;
+
       return {
         ciStatus,
         mergeStateStatus: prDetails.mergeStateStatus,
         hasChangesRequested,
+        hasNewReviewComments,
         failedChecks,
         reviews: prDetails.reviews,
         comments: prDetails.comments,
+        reviewComments,
+        newReviewComments,
+        newPRComments,
         prState: prDetails.state,
         prNumber: prDetails.number,
       };
@@ -357,8 +418,8 @@ class RatchetService {
       return RatchetState.MERGE_CONFLICT;
     }
 
-    // Check for unaddressed review comments
-    if (pr.hasChangesRequested) {
+    // Check for unaddressed review comments (either formal changes requested OR new review comments)
+    if (pr.hasChangesRequested || pr.hasNewReviewComments) {
       return RatchetState.REVIEW_PENDING;
     }
 
@@ -527,7 +588,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
   }
 
   /**
-   * Check if a fixer session is still active
+   * Check if a fixer session is still active (exists and not completed/errored)
    */
   private async isFixerActive(sessionId: string): Promise<boolean> {
     const session = await claudeSessionAccessor.findById(sessionId);
@@ -535,12 +596,9 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       return false;
     }
 
-    if (session.status !== SessionStatus.RUNNING && session.status !== SessionStatus.IDLE) {
-      return false;
-    }
-
-    // Check if actually running in memory
-    return sessionService.isSessionRunning(sessionId);
+    // Session is active if it's RUNNING or IDLE (not COMPLETED, ERROR, or STOPPED)
+    // IDLE sessions are still considered active because they're dedicated to fixing this workspace
+    return session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE;
   }
 
   /**
@@ -626,8 +684,29 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       // Build initial prompt based on fixer type
       const initialPrompt = this.buildInitialPrompt(fixerType, workspace, prStateInfo, settings);
 
-      // Start or restart the session
-      await sessionService.startClaudeSession(result.sessionId, { initialPrompt });
+      // Inject the initial prompt into the chat UI so it's visible to users
+      messageStateService.injectCommittedUserMessage(result.sessionId, initialPrompt);
+
+      // Start the session with empty initialPrompt (we'll send the message separately)
+      await sessionService.startClaudeSession(result.sessionId, { initialPrompt: '' });
+
+      // Send the initial prompt via sendMessage so it goes through the normal event
+      // pipeline and the agent actually processes it
+      const client = sessionService.getClient(result.sessionId);
+      if (client) {
+        client.sendMessage(initialPrompt);
+        logger.info('Sent ratchet fixer prompt to session via sendMessage', {
+          workspaceId: workspace.id,
+          sessionId: result.sessionId,
+          fixerType,
+        });
+      } else {
+        logger.warn('Could not get client to send ratchet fixer prompt', {
+          workspaceId: workspace.id,
+          sessionId: result.sessionId,
+          fixerType,
+        });
+      }
 
       // Update workspace with active session
       await workspaceAccessor.update(workspace.id, {
@@ -737,6 +816,76 @@ PR #${prNumber} has merge conflicts with the base branch.
 Please resolve these merge conflicts.`;
   }
 
+  /**
+   * Filter items by allowed reviewers if configured
+   */
+  private filterByAllowedReviewers<T extends { author: { login: string } }>(
+    items: T[],
+    allowedReviewers: string[]
+  ): T[] {
+    if (allowedReviewers.length === 0) {
+      return items;
+    }
+    return items.filter((item) => allowedReviewers.includes(item.author.login));
+  }
+
+  /**
+   * Format reviews requesting changes for the prompt
+   */
+  private formatReviewsSection(reviews: PRStateInfo['reviews']): string {
+    if (reviews.length === 0) {
+      return '';
+    }
+
+    const lines = ['### Reviews Requesting Changes\n\n'];
+    for (const review of reviews) {
+      lines.push(
+        `**${review.author.login}** (${new Date(review.submittedAt).toLocaleDateString()}):\n`
+      );
+      if (review.body) {
+        lines.push(`> ${review.body.split('\n').join('\n> ')}\n`);
+      }
+      lines.push('\n');
+    }
+    return lines.join('');
+  }
+
+  /**
+   * Format line-level code comments for the prompt
+   */
+  private formatCodeCommentsSection(comments: PRStateInfo['reviewComments']): string {
+    if (comments.length === 0) {
+      return '';
+    }
+
+    const lines = ['### Review Comments on Code\n\n'];
+    for (const comment of comments) {
+      const location = comment.line ? `:${comment.line}` : '';
+      lines.push(`**${comment.author.login}** on \`${comment.path}\`${location}:\n`);
+      lines.push(`> ${comment.body.split('\n').join('\n> ')}\n`);
+      lines.push(`> [View comment](${comment.url})\n\n`);
+    }
+    return lines.join('');
+  }
+
+  /**
+   * Format regular PR comments for the prompt
+   */
+  private formatPRCommentsSection(comments: PRStateInfo['comments']): string {
+    if (comments.length === 0) {
+      return '';
+    }
+
+    const lines = ['### PR Comments\n\n'];
+    for (const comment of comments) {
+      lines.push(
+        `**${comment.author.login}** (${new Date(comment.createdAt).toLocaleDateString()}):\n`
+      );
+      lines.push(`> ${comment.body.split('\n').join('\n> ')}\n\n`);
+    }
+    return lines.join('');
+  }
+
   private buildReviewFixPrompt(
     prNumber: number,
     prUrl: string,
@@ -753,33 +902,31 @@ New review comments have been received on PR #${prNumber}.
 `,
     ];
 
-    // Add reviews that request changes
+    // Filter and format reviews requesting changes (by allowed reviewers)
     const changesRequestedReviews = prStateInfo.reviews.filter(
       (r) => r.state === 'CHANGES_REQUESTED'
     );
+    const filteredReviews = this.filterByAllowedReviewers(
+      changesRequestedReviews,
+      settings.allowedReviewers
+    );
+    parts.push(this.formatReviewsSection(filteredReviews));
 
-    // Filter by allowed reviewers if configured
-    const filteredReviews =
-      settings.allowedReviewers.length > 0
-        ? changesRequestedReviews.filter((r) => settings.allowedReviewers.includes(r.author.login))
-        : changesRequestedReviews;
+    // Format NEW line-level code comments (already filtered by timestamp and allowed reviewers)
+    parts.push(this.formatCodeCommentsSection(prStateInfo.newReviewComments));
 
-    if (filteredReviews.length > 0) {
-      parts.push('### Reviews Requesting Changes\n\n');
-      for (const review of filteredReviews) {
-        parts.push(
-          `**${review.author.login}** (${new Date(review.submittedAt).toLocaleDateString()}):\n`
-        );
-        if (review.body) {
-          parts.push(`> ${review.body.split('\n').join('\n> ')}\n`);
-        }
-        parts.push('\n');
-      }
-    }
+    // Format NEW regular PR comments (already filtered by timestamp and allowed reviewers)
+    parts.push(this.formatPRCommentsSection(prStateInfo.newPRComments));
 
     // Get reviewer usernames for re-review request
-    const reviewers = [...new Set(filteredReviews.map((r) => r.author.login))];
-    const reviewerMentions = reviewers.map((r) => `@${r}`).join(' ');
+    const reviewerSet = new Set([
+      ...filteredReviews.map((r) => r.author.login),
+      ...prStateInfo.newReviewComments.map((c) => c.author.login),
+      ...prStateInfo.newPRComments.map((c) => c.author.login),
+    ]);
+    const reviewerMentions = Array.from(reviewerSet)
+      .map((r) => `@${r}`)
+      .join(' ');
 
     parts.push(`### Next Steps
 

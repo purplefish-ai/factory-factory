@@ -627,7 +627,6 @@ function SortableWorkspaceItem({
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
           isDragging && 'opacity-50 bg-sidebar-accent',
-          isRatchetActive && 'ratchet-active',
           isWaiting && !isRatchetActive && 'waiting-pulse'
         )}
       >
@@ -666,7 +665,15 @@ function SortableWorkspaceItem({
             <div className="min-w-0 flex-1 space-y-0">
               {/* Row 1: name + timestamp + archive */}
               <div className="flex items-center gap-2">
-                <span className="truncate font-medium text-sm leading-tight flex-1">
+                <span className="truncate font-medium text-sm leading-tight flex-1 flex items-center gap-1.5">
+                  {isRatchetActive && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-yellow-500" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Ratchet active</TooltipContent>
+                    </Tooltip>
+                  )}
                   {isArchivingItem ? 'Archiving...' : workspace.name}
                 </span>
                 {workspace.lastActivityAt && (

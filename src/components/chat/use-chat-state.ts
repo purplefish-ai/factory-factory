@@ -24,28 +24,13 @@
  * ```
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS, DEFAULT_THINKING_BUDGET } from '@/lib/claude-types';
-import { createDebugLogger } from '@/lib/debug';
-import type {
-  PermissionResponseMessage,
-  QuestionResponseMessage,
-  QueueMessageInput,
-  RemoveQueuedMessageInput,
-  RewindFilesMessage,
-  StopMessage,
-} from '@/shared/websocket';
-import { clearDraft, loadAllSessionData, persistDraft, persistSettings } from './chat-persistence';
 import { type ChatState, chatReducer, createInitialChatState } from './chat-reducer';
+import { useChatActions } from './use-chat-actions';
+import { useChatPersistence } from './use-chat-persistence';
+import { useChatSession } from './use-chat-session';
 import { useChatTransport } from './use-chat-transport';
-
-// =============================================================================
-// Debug Logging
-// =============================================================================
-
-const DEBUG_CHAT_STATE = false;
-const debug = createDebugLogger(DEBUG_CHAT_STATE);
 
 // =============================================================================
 // Types
@@ -96,22 +81,6 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
 }
 
 // =============================================================================
-// WebSocket Message Types (outgoing) - used by action callbacks
-// =============================================================================
-
-type QueueMessageRequest = QueueMessageInput;
-type RemoveQueuedMessageRequest = RemoveQueuedMessageInput;
-type RewindFilesRequest = RewindFilesMessage;
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-function generateMessageId(): string {
-  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// =============================================================================
 // Hook Implementation
 // =============================================================================
 
@@ -121,8 +90,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Reducer for chat state
   const [state, dispatch] = useReducer(chatReducer, undefined, createInitialChatState);
 
-  // Local state for input draft (not in reducer since it's UI-specific)
-  const [inputDraft, setInputDraftState] = useState('');
   // Local state for input attachments (for recovery on rejection)
   const [inputAttachments, setInputAttachments] = useState<MessageAttachment[]>([]);
 
@@ -131,8 +98,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   // Track dbSessionId in a ref to use without stale closures
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
-  // Track previous dbSessionId to detect session switches
-  const prevDbSessionIdRef = useRef<string | null>(null);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
   // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
@@ -144,79 +109,33 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track rewind preview timeout for cleanup
   const rewindTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // =============================================================================
-  // Session Switching Effect
-  // =============================================================================
-
-  /**
-   * Session switching and settings loading.
-   *
-   * Settings precedence (highest to lowest):
-   * 1. User-modified settings during the session
-   * 2. Stored session settings from sessionStorage
-   * 3. Application defaults (DEFAULT_CHAT_SETTINGS)
-   *
-   * Note: Backend does not broadcast session-level settings.
-   * Settings are persisted locally per session.
-   */
+  // Update dbSessionId ref
   useEffect(() => {
-    const prevDbSessionId = prevDbSessionIdRef.current;
-    const newDbSessionId = dbSessionId ?? null;
-
-    // Update refs
-    dbSessionIdRef.current = newDbSessionId;
-    prevDbSessionIdRef.current = newDbSessionId;
-
-    // If switching to a different session, reset local state
-    if (prevDbSessionId !== null && prevDbSessionId !== newDbSessionId) {
-      debug.log('Session switch detected', { from: prevDbSessionId, to: newDbSessionId });
-
-      // Dispatch session switch to reset reducer state
-      dispatch({ type: 'SESSION_SWITCH_START' });
-
-      // Clear tool input accumulator
-      toolInputAccumulatorRef.current.clear();
-    }
-
-    // Load persisted data for the new session (queue comes from backend via messages_snapshot)
-    if (newDbSessionId) {
-      const persistedData = loadAllSessionData(newDbSessionId);
-      setInputDraftState(persistedData.draft);
-      dispatch({ type: 'SET_SETTINGS', payload: persistedData.settings });
-      // Queue is loaded from backend via messages_snapshot event, not from frontend persistence
-
-      // Set loading state for initial load (when prevDbSessionId was null)
-      // This prevents "No messages yet" flash while WebSocket connects and loads session
-      // For session switches, SESSION_SWITCH_START already set loadingSession: true
-      if (prevDbSessionId === null) {
-        dispatch({ type: 'SESSION_LOADING_START' });
-      }
-    } else {
-      setInputDraftState('');
-      dispatch({ type: 'SET_SETTINGS', payload: DEFAULT_CHAT_SETTINGS });
-    }
+    dbSessionIdRef.current = dbSessionId;
   }, [dbSessionId]);
 
   // =============================================================================
-  // Rejected Message Recovery Effect
+  // Session Switching Hook
   // =============================================================================
 
-  // When a message is rejected, restore the text and attachments to the input for retry
-  useEffect(() => {
-    if (state.lastRejectedMessage) {
-      const { text, attachments, error } = state.lastRejectedMessage;
-      // Restore the message text to the input so user can retry
-      setInputDraftState(text);
-      // Restore attachments if present
-      if (attachments && attachments.length > 0) {
-        setInputAttachments(attachments);
-      }
-      // Log the error for debugging
-      debug.log('Message rejected, restored to draft:', { text, attachments, error });
-      // Clear the rejected message state after processing
-      dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
-    }
-  }, [state.lastRejectedMessage]);
+  const { loadedDraft } = useChatSession({
+    dbSessionId,
+    dispatch,
+    toolInputAccumulatorRef,
+  });
+
+  // =============================================================================
+  // Persistence Hook
+  // =============================================================================
+
+  const { inputDraft, setInputDraft, clearInputDraft } = useChatPersistence({
+    dbSessionId,
+    initialDraft: loadedDraft,
+  });
+
+  // =============================================================================
+  // Transport Hook
+  // =============================================================================
 
   const { handleMessage } = useChatTransport({
     dispatch,
@@ -226,272 +145,44 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   });
 
   // =============================================================================
-  // Action Callbacks
+  // Rejected Message Recovery Effect
   // =============================================================================
 
-  const sendMessage = useCallback(
-    (text: string) => {
-      const trimmedText = text.trim();
-      const attachments = inputAttachmentsRef.current;
-      if (!trimmedText && attachments.length === 0) {
-        return;
+  // When a message is rejected, restore the text and attachments to the input for retry
+  useEffect(() => {
+    if (state.lastRejectedMessage) {
+      const { text, attachments } = state.lastRejectedMessage;
+      // Restore the message text to the input so user can retry
+      setInputDraft(text);
+      // Restore attachments if present
+      if (attachments && attachments.length > 0) {
+        setInputAttachments(attachments);
       }
+      // Clear the rejected message state after processing
+      dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
+    }
+  }, [state.lastRejectedMessage, setInputDraft]);
 
-      // Generate single ID for tracking
-      const id = generateMessageId();
+  // =============================================================================
+  // Action Callbacks Hook
+  // =============================================================================
 
-      // Mark message as pending backend confirmation (shows "sending..." indicator)
-      // Store text and attachments for recovery if message is rejected
-      dispatch({
-        type: 'MESSAGE_SENDING',
-        payload: {
-          id,
-          text: trimmedText,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        },
-      });
-
-      // Clear draft and attachments when sending a message
-      setInputDraftState('');
+  const actions = useChatActions({
+    send,
+    dispatch,
+    stateRef,
+    dbSessionIdRef,
+    inputAttachmentsRef,
+    rewindTimeoutRef,
+    onClearInput: () => {
+      clearInputDraft();
       setInputAttachments([]);
-      clearDraft(dbSessionIdRef.current);
-
-      // Send to backend for queueing/dispatch
-      // Message will be added to state when MESSAGE_ACCEPTED is received
-      const msg: QueueMessageRequest = {
-        type: 'queue_message',
-        id,
-        text: trimmedText,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        settings: stateRef.current.chatSettings,
-      };
-      send(msg);
     },
-    [send]
-  );
+  });
 
-  const stopChat = useCallback(() => {
-    const { sessionStatus } = stateRef.current;
-    // Only allow stop when running (not already stopping or idle)
-    if (sessionStatus.phase === 'running') {
-      dispatch({ type: 'STOP_REQUESTED' });
-      send({ type: 'stop' } as StopMessage);
-    }
-  }, [send]);
-
-  const clearChat = useCallback(() => {
-    // Stop any running Claude process
-    if (stateRef.current.sessionStatus.phase === 'running') {
-      dispatch({ type: 'STOP_REQUESTED' });
-      send({ type: 'stop' } as StopMessage);
-    }
-
-    // Clear state
-    dispatch({ type: 'CLEAR_CHAT' });
-    toolInputAccumulatorRef.current.clear();
-
-    // The reconnect will be handled by the parent component that owns the transport
-  }, [send]);
-
-  const approvePermission = useCallback(
-    (requestId: string, allow: boolean) => {
-      // Validate requestId matches pending permission to prevent stale responses
-      const { pendingRequest } = stateRef.current;
-      if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
-        return;
-      }
-      const msg: PermissionResponseMessage = { type: 'permission_response', requestId, allow };
-      send(msg);
-      dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
-    },
-    [send]
-  );
-
-  const answerQuestion = useCallback(
-    (requestId: string, answers: Record<string, string | string[]>) => {
-      // Validate requestId matches pending question to prevent stale responses
-      const { pendingRequest } = stateRef.current;
-      if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
-        return;
-      }
-      const msg: QuestionResponseMessage = { type: 'question_response', requestId, answers };
-      send(msg);
-      dispatch({ type: 'QUESTION_RESPONSE' });
-    },
-    [send]
-  );
-
-  const updateSettings = useCallback(
-    (settings: Partial<ChatSettings>) => {
-      dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
-      // Persist updated settings
-      const newSettings = { ...stateRef.current.chatSettings, ...settings };
-      persistSettings(dbSessionIdRef.current, newSettings);
-
-      // Send thinking budget update when thinkingEnabled changes
-      if ('thinkingEnabled' in settings) {
-        const maxTokens = settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-        send({ type: 'set_thinking_budget', max_tokens: maxTokens });
-      }
-    },
-    [send]
-  );
-
-  const removeQueuedMessage = useCallback(
-    (id: string) => {
-      // Send removal request to backend
-      const msg: RemoveQueuedMessageRequest = {
-        type: 'remove_queued_message',
-        messageId: id,
-      };
-      send(msg);
-      // State update will come via message_removed WebSocket event
-    },
-    [send]
-  );
-
-  const dismissTaskNotification = useCallback((id: string) => {
-    dispatch({ type: 'DISMISS_TASK_NOTIFICATION', payload: { id } });
-  }, []);
-
-  const clearTaskNotifications = useCallback(() => {
-    dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
-  }, []);
-
-  // Rewind files actions
-  const startRewindPreview = useCallback(
-    (userMessageUuid: string) => {
-      // Clear any existing timeout
-      if (rewindTimeoutRef.current) {
-        clearTimeout(rewindTimeoutRef.current);
-        rewindTimeoutRef.current = null;
-      }
-
-      // Generate unique nonce for this request (handles retry race conditions)
-      const requestNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-      // Start preview state first - this ensures the reducer can handle error states
-      dispatch({
-        type: 'REWIND_PREVIEW_START',
-        payload: { userMessageId: userMessageUuid, requestNonce },
-      });
-
-      // Send dry run request to get affected files
-      const msg: RewindFilesRequest = {
-        type: 'rewind_files',
-        userMessageId: userMessageUuid,
-        dryRun: true,
-      };
-      const sent = send(msg);
-
-      // Check if message was sent successfully
-      if (!sent) {
-        dispatch({
-          type: 'REWIND_PREVIEW_ERROR',
-          payload: {
-            error: 'Not connected to server. Please check your connection and try again.',
-            requestNonce,
-          },
-        });
-        return;
-      }
-
-      // Set timeout to handle case where response never arrives
-      // Capture nonce in closure to ensure late timeouts are filtered correctly
-      rewindTimeoutRef.current = setTimeout(() => {
-        dispatch({
-          type: 'REWIND_PREVIEW_ERROR',
-          payload: { error: 'Request timed out. Please try again.', requestNonce },
-        });
-        rewindTimeoutRef.current = null;
-      }, 30_000); // 30 second timeout
-    },
-    [send]
-  );
-
-  const confirmRewind = useCallback(() => {
-    // Clear any existing timeout
-    if (rewindTimeoutRef.current) {
-      clearTimeout(rewindTimeoutRef.current);
-      rewindTimeoutRef.current = null;
-    }
-
-    const rewindPreview = stateRef.current.rewindPreview;
-    if (!rewindPreview) {
-      debug.log('[Chat] confirmRewind called but rewindPreview is null - potential race condition');
-      return;
-    }
-
-    // Mark as executing (keep dialog open with loading state for actual rewind)
-    dispatch({ type: 'REWIND_EXECUTING' });
-
-    // Send actual rewind request (not dry run)
-    const msg: RewindFilesRequest = {
-      type: 'rewind_files',
-      userMessageId: rewindPreview.userMessageId,
-      dryRun: false,
-    };
-    const sent = send(msg);
-
-    if (!sent) {
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: {
-          error: 'Not connected to server. Please check your connection and try again.',
-          requestNonce: rewindPreview.requestNonce,
-        },
-      });
-      return;
-    }
-
-    // Set timeout to handle case where response never arrives
-    // Capture nonce in closure to ensure late timeouts are filtered correctly
-    const nonce = rewindPreview.requestNonce;
-    rewindTimeoutRef.current = setTimeout(() => {
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: 'Request timed out. Please try again.', requestNonce: nonce },
-      });
-      rewindTimeoutRef.current = null;
-    }, 30_000); // 30 second timeout
-  }, [send]);
-
-  const cancelRewind = useCallback(() => {
-    // Clear the timeout when canceling
-    if (rewindTimeoutRef.current) {
-      clearTimeout(rewindTimeoutRef.current);
-      rewindTimeoutRef.current = null;
-    }
-    dispatch({ type: 'REWIND_CANCEL' });
-  }, []);
-
-  const getUuidForMessageId = useCallback((messageId: string): string | undefined => {
-    // Look up UUID by message ID (stable identifier)
-    return stateRef.current.messageIdToUuid.get(messageId);
-  }, []);
-
-  // Debounce sessionStorage persistence to avoid blocking on every keystroke
-  const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  // Wrap setInputDraft to persist to sessionStorage (debounced)
-  const setInputDraft = useCallback((draft: string) => {
-    setInputDraftState(draft);
-
-    // Debounce sessionStorage write to avoid blocking main thread on every keystroke
-    if (persistDraftDebounced.current) {
-      clearTimeout(persistDraftDebounced.current);
-    }
-    persistDraftDebounced.current = setTimeout(() => {
-      persistDraft(dbSessionIdRef.current, draft);
-    }, 300);
-  }, []);
-
-  // Clean up pending debounced persist and rewind timeout on unmount
+  // Clean up rewind timeout on unmount
   useEffect(() => {
     return () => {
-      if (persistDraftDebounced.current) {
-        clearTimeout(persistDraftDebounced.current);
-      }
       if (rewindTimeoutRef.current) {
         clearTimeout(rewindTimeoutRef.current);
       }
@@ -512,53 +203,19 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       queuedMessages: Array.from(state.queuedMessages.values()),
       // Connection state from transport
       connected,
-      // Actions (stable - use stateRef internally)
-      sendMessage,
-      stopChat,
-      clearChat,
-      approvePermission,
-      answerQuestion,
-      updateSettings,
+      // Actions from use-chat-actions
+      ...actions,
       // Additional state/actions
       inputDraft,
       setInputDraft,
       inputAttachments,
       setInputAttachments,
-      removeQueuedMessage,
-      dismissTaskNotification,
-      clearTaskNotifications,
-      // Rewind files actions
-      startRewindPreview,
-      confirmRewind,
-      cancelRewind,
-      getUuidForMessageId,
       // Message handler for transport (stable - no deps)
       handleMessage,
       // Refs for UI
       inputRef,
       messagesEndRef,
     }),
-    [
-      state,
-      connected,
-      inputDraft,
-      inputAttachments,
-      // These are stable but included for exhaustive-deps correctness
-      sendMessage,
-      stopChat,
-      clearChat,
-      approvePermission,
-      answerQuestion,
-      updateSettings,
-      setInputDraft,
-      removeQueuedMessage,
-      dismissTaskNotification,
-      clearTaskNotifications,
-      startRewindPreview,
-      confirmRewind,
-      cancelRewind,
-      getUuidForMessageId,
-      handleMessage,
-    ]
+    [state, connected, actions, inputDraft, setInputDraft, inputAttachments, handleMessage]
   );
 }
