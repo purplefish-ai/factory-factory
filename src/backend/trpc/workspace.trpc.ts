@@ -177,6 +177,20 @@ export const workspaceRouter = router({
       return workspaceAccessor.update(id, updates);
     }),
 
+  // Toggle workspace-level ratcheting
+  toggleRatcheting: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        enabled: z.boolean(),
+      })
+    )
+    .mutation(({ input }) => {
+      return workspaceAccessor.update(input.workspaceId, {
+        ratchetEnabled: input.enabled,
+      });
+    }),
+
   // Archive a workspace
   archive: publicProcedure
     .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))

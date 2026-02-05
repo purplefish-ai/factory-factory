@@ -50,6 +50,7 @@ interface UpdateWorkspaceInput {
   prReviewLastCheckedAt?: Date | null;
   prReviewLastCommentId?: string | null;
   // Ratchet tracking
+  ratchetEnabled?: boolean;
   ratchetState?: RatchetState;
   ratchetLastCheckedAt?: Date | null;
   ratchetActiveSessionId?: string | null;
@@ -429,9 +430,11 @@ class WorkspaceAccessor {
       id: string;
       prUrl: string;
       prNumber: number;
+      ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
       ratchetLastNotifiedState: RatchetState | null;
+      prReviewLastCheckedAt: Date | null;
     }>
   > {
     return prisma.workspace.findMany({
@@ -444,9 +447,11 @@ class WorkspaceAccessor {
         id: true,
         prUrl: true,
         prNumber: true,
+        ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastNotifiedState: true,
+        prReviewLastCheckedAt: true,
       },
       orderBy: { ratchetLastCheckedAt: 'asc' }, // Check oldest first
     }) as Promise<
@@ -454,9 +459,11 @@ class WorkspaceAccessor {
         id: string;
         prUrl: string;
         prNumber: number;
+        ratchetEnabled: boolean;
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
         ratchetLastNotifiedState: RatchetState | null;
+        prReviewLastCheckedAt: Date | null;
       }>
     >;
   }

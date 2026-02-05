@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatDateTimeShort } from '@/lib/formatters';
 import type { GitHubComment, PRWithFullDetails } from '@/shared/github-types';
 import { CIChecksSection, CIStatusBadge, ReviewDecisionBadge } from './pr-status-badges';
 
@@ -21,15 +22,6 @@ interface PRDetailPanelProps {
 }
 
 type Tab = 'info' | 'diff';
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 interface DiffFile {
   name: string;
@@ -331,7 +323,7 @@ export function PRDetailPanel({
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-sm">{comment.author.login}</span>
                         <span className="text-xs text-muted-foreground">
-                          {formatDate(comment.createdAt)}
+                          {formatDateTimeShort(comment.createdAt)}
                         </span>
                       </div>
                       <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-muted-foreground overflow-hidden break-words [&_table]:text-xs [&_table]:border-collapse [&_table]:w-full [&_table]:overflow-x-auto [&_table]:block [&_th]:border [&_th]:px-1 [&_th]:py-0.5 [&_td]:border [&_td]:px-1 [&_td]:py-0.5 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-1 [&_h2]:mb-0.5 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:overflow-x-auto [&_pre]:text-xs [&_code]:text-xs [&_code]:break-all">
