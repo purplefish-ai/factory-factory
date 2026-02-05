@@ -89,8 +89,18 @@ export const AgentLiveDock = memo(function AgentLiveDock({
     saveToolWindowOpen(workspaceId, toolWindowOpen);
   }, [workspaceId, toolWindowOpen]);
 
+  // Get only the most recent tool call from the sequence
+  const mostRecentToolCall =
+    latestToolSequence?.pairedCalls[latestToolSequence.pairedCalls.length - 1];
+  const mostRecentToolSequence = mostRecentToolCall
+    ? {
+        ...latestToolSequence,
+        pairedCalls: [mostRecentToolCall],
+      }
+    : null;
+
   const hasThinking = latestThinking !== null && (running || stopping || Boolean(permissionMode));
-  const hasContent = hasThinking || Boolean(latestToolSequence);
+  const hasContent = hasThinking || Boolean(mostRecentToolSequence);
   const { label, tone } = getPhaseLabel({ running, starting, stopping, permissionMode });
 
   if (!(hasContent || running || starting || stopping || permissionMode)) {
@@ -107,10 +117,10 @@ export const AgentLiveDock = memo(function AgentLiveDock({
           </Badge>
         </div>
 
-        {latestToolSequence && (
+        {mostRecentToolSequence && (
           <div>
             <ToolSequenceGroup
-              sequence={latestToolSequence}
+              sequence={mostRecentToolSequence}
               summaryOrder="latest-first"
               open={toolWindowOpen}
               onOpenChange={setToolWindowOpen}
