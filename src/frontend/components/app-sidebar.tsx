@@ -606,9 +606,12 @@ function SortableWorkspaceItem({
 
   const isArchivingItem = workspace.uiState === 'archiving';
   const { gitStats: stats } = workspace;
-  const isMerged = workspace.prState === 'MERGED';
+  // Check if workspace is in DONE column (merged PR). Uses cachedKanbanColumn since
+  // sidebar doesn't have access to the computed kanbanColumn field from kanban queries.
+  // This is semantically equivalent to KanbanCard's `workspace.kanbanColumn === 'DONE'`.
+  const isDone = workspace.cachedKanbanColumn === 'DONE';
   const isRatchetActive =
-    !(disableRatchetAnimation || isMerged) &&
+    !(disableRatchetAnimation || isDone) &&
     workspace.ratchetState &&
     workspace.ratchetState !== 'IDLE';
 

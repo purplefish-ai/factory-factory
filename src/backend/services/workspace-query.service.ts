@@ -107,6 +107,7 @@ class WorkspaceQueryService {
           gitStats: gitStatsResults[w.id] ?? null,
           lastActivityAt,
           ratchetState: w.ratchetState,
+          cachedKanbanColumn: w.cachedKanbanColumn,
         };
       }),
       reviewCount,

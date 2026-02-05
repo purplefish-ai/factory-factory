@@ -1,4 +1,10 @@
-import type { CIStatus, KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import type {
+  CIStatus,
+  KanbanColumn,
+  RatchetState,
+  Workspace,
+  WorkspaceStatus,
+} from '@prisma-gen/browser';
 import { Archive, GitBranch, GitPullRequest } from 'lucide-react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +17,7 @@ export interface WorkspaceWithKanban extends Workspace {
   kanbanColumn: KanbanColumn | null;
   isWorking: boolean;
   isArchived?: boolean;
+  ratchetState: RatchetState;
 }
 
 interface KanbanCardProps {
