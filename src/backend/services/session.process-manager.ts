@@ -264,20 +264,21 @@ export class SessionProcessManager {
     });
 
     client.on('error', async (error) => {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
       if (!handlers.onError) {
         logger.warn('Claude client error (no handler provided)', {
           sessionId,
-          error: error instanceof Error ? error.message : String(error),
+          error: normalizedError.message,
         });
         return;
       }
 
       try {
-        await handlers.onError(sessionId, error);
+        await handlers.onError(sessionId, normalizedError);
       } catch (handlerError) {
         logger.warn('Failed to handle error event', {
           sessionId,
-          originalError: error instanceof Error ? error.message : String(error),
+          originalError: normalizedError.message,
           handlerError: handlerError instanceof Error ? handlerError.message : String(handlerError),
         });
       }
