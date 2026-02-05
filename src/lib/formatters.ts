@@ -86,24 +86,28 @@ export function formatRelativeDateShort(dateString: string): string {
  * Used for issue timestamps where readability is prioritized.
  */
 export function formatRelativeDateFriendly(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) {
-    return 'today';
+    if (diffDays === 0) {
+      return 'today';
+    }
+    if (diffDays === 1) {
+      return 'yesterday';
+    }
+    if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    }
+    if (diffDays < 30) {
+      const weeks = Math.floor(diffDays / 7);
+      return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+    }
+    return date.toLocaleDateString();
+  } catch {
+    return dateString;
   }
-  if (diffDays === 1) {
-    return 'yesterday';
-  }
-  if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  }
-  if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
-  }
-  return date.toLocaleDateString();
 }
 
 /**
@@ -111,10 +115,14 @@ export function formatRelativeDateFriendly(dateString: string): string {
  * Used for comment timestamps and detailed views.
  */
 export function formatDateTimeShort(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return dateStr;
+  }
 }
