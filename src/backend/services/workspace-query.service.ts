@@ -5,8 +5,9 @@ import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
 import { gitOpsService } from './git-ops.service';
 import { githubCLIService } from './github-cli.service';
-import { computeKanbanColumn, kanbanStateService } from './kanban-state.service';
+import { computeKanbanColumn } from './kanban-state.service';
 import { createLogger } from './logger.service';
+import { prSnapshotService } from './pr-snapshot.service';
 import { sessionService } from './session.service';
 
 const logger = createLogger('workspace-query');
@@ -224,28 +225,18 @@ class WorkspaceQueryService {
       return { success: false, reason: 'no_pr_url' as const };
     }
 
-    const prResult = await githubCLIService.fetchAndComputePRState(workspace.prUrl);
-    if (!prResult) {
+    const prResult = await prSnapshotService.refreshWorkspace(workspaceId, workspace.prUrl);
+    if (!prResult.success) {
       return { success: false, reason: 'fetch_failed' as const };
     }
 
-    await workspaceAccessor.update(workspaceId, {
-      prNumber: prResult.prNumber,
-      prState: prResult.prState,
-      prReviewState: prResult.prReviewState,
-      prCiStatus: prResult.prCiStatus,
-      prUpdatedAt: new Date(),
-    });
-
-    await kanbanStateService.updateCachedKanbanColumn(workspaceId);
-
     logger.info('PR status synced manually', {
       workspaceId,
-      prNumber: prResult.prNumber,
-      prState: prResult.prState,
+      prNumber: prResult.snapshot.prNumber,
+      prState: prResult.snapshot.prState,
     });
 
-    return { success: true, prState: prResult.prState };
+    return { success: true, prState: prResult.snapshot.prState };
   }
 
   async syncAllPRStatuses(projectId: string) {
@@ -267,21 +258,11 @@ class WorkspaceQueryService {
     await Promise.all(
       workspacesWithPRs.map((workspace) =>
         gitConcurrencyLimit(async () => {
-          const prResult = await githubCLIService.fetchAndComputePRState(workspace.prUrl);
-          if (!prResult) {
+          const prResult = await prSnapshotService.refreshWorkspace(workspace.id, workspace.prUrl);
+          if (!prResult.success) {
             failed++;
             return;
           }
-
-          await workspaceAccessor.update(workspace.id, {
-            prNumber: prResult.prNumber,
-            prState: prResult.prState,
-            prReviewState: prResult.prReviewState,
-            prCiStatus: prResult.prCiStatus,
-            prUpdatedAt: new Date(),
-          });
-
-          await kanbanStateService.updateCachedKanbanColumn(workspace.id);
           synced++;
         })
       )
