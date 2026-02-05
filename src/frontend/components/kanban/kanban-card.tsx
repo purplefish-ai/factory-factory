@@ -60,6 +60,7 @@ function CardStatusIndicator({
 export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
   const showPR = workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl;
   const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
+  // Check if workspace is in DONE column (merged PR). Exclude DONE from ratchet animation.
   const isDone = workspace.kanbanColumn === 'DONE';
   const isRatchetActive = !isDone && workspace.ratchetState && workspace.ratchetState !== 'IDLE';
 
