@@ -3,6 +3,7 @@ import type { Preview } from '@storybook/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { TRPCProvider } from '@/frontend/lib/providers';
 
 import '../src/client/globals.css';
 
@@ -21,7 +22,11 @@ const preview: Preview = {
       React.createElement(
         MemoryRouter,
         null,
-        React.createElement(TooltipProvider, null, React.createElement(Story))
+        React.createElement(
+          TRPCProvider,
+          null,
+          React.createElement(TooltipProvider, null, React.createElement(Story))
+        )
       ),
     withThemeByClassName({
       themes: {
