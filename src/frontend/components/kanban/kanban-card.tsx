@@ -5,7 +5,7 @@ import type {
   Workspace,
   WorkspaceStatus,
 } from '@prisma-gen/browser';
-import { Archive, GitBranch, GitPullRequest } from 'lucide-react';
+import { Archive, GitBranch, GitPullRequest, Loader2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,15 +74,19 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
         className={cn(
           'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
           workspace.isWorking && 'border-brand/50 bg-brand/5',
-          isArchived && 'opacity-60 border-dashed',
-          isRatchetActive && 'ratchet-active'
+          isArchived && 'opacity-60 border-dashed'
         )}
       >
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
-              {workspace.name}
-            </CardTitle>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {isRatchetActive && (
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-yellow-500" />
+              )}
+              <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
+                {workspace.name}
+              </CardTitle>
+            </div>
             <CardStatusIndicator
               isArchived={isArchived}
               isWorking={workspace.isWorking}
