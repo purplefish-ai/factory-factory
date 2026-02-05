@@ -42,7 +42,18 @@ export default function WorkspacesListPage() {
   const [resumeOpen, setResumeOpen] = useState(false);
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
-  const { handleCreate, isCreating, existingNames } = useCreateWorkspace(project?.id, slug);
+  const {
+    handleCreate: createWorkspace,
+    isCreating,
+    existingNames,
+  } = useCreateWorkspace(project?.id, slug);
+
+  // Swallow the re-thrown error — toast is already shown by the hook
+  const handleCreate = () => {
+    createWorkspace().catch(() => {
+      // Error already handled (toast shown) by the hook
+    });
+  };
   const utils = trpc.useUtils();
   const resumeWorkspace = trpc.workspace.create.useMutation();
   const { data: branchData, isLoading: branchesLoading } = trpc.project.listBranches.useQuery(

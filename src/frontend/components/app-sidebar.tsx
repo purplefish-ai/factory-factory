@@ -281,32 +281,30 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     [workspaceList, selectedProjectId, updateWorkspaceOrder]
   );
 
-  // Use shared workspace creation hook
-  const { handleCreate: createWorkspace, isCreating: isCreatingWorkspace } = useCreateWorkspace(
+  // Use shared workspace creation hook, passing sidebar's existing names to avoid a redundant query
+  const { handleCreate: createWorkspace } = useCreateWorkspace(
     selectedProjectId,
-    selectedProjectSlug
+    selectedProjectSlug,
+    existingNames
   );
 
   const handleCreateWorkspace = () => {
-    if (!selectedProjectId || isCreating || isCreatingWorkspace) {
+    if (!selectedProjectId || isCreating) {
       return;
     }
     // Generate unique name once and use it for both optimistic UI and actual creation
-    // Use existingNames from useWorkspaceListState
     const name = generateUniqueWorkspaceName(existingNames);
     startCreating(name);
 
-    // Use shared creation logic with the same name (handles success navigation and error toasts)
-    createWorkspace(name);
-  };
-
-  // Clean up optimistic placeholder if creation fails
-  // (on success, the workspace appears in server list and placeholder auto-clears)
-  useEffect(() => {
-    if (!isCreatingWorkspace && isCreating) {
+    // Use shared creation logic with the same name (handles navigation and error toasts).
+    // The optimistic placeholder auto-clears when the workspace appears in the server list
+    // (managed by useWorkspaceListState). On error, the hook resets its own state and
+    // cancelCreating below handles the placeholder.
+    createWorkspace(name).catch(() => {
+      // Error toast already shown by the hook; just remove the optimistic placeholder
       cancelCreating();
-    }
-  }, [isCreatingWorkspace, isCreating, cancelCreating]);
+    });
+  };
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
@@ -448,11 +446,11 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
               <button
                 type="button"
                 onClick={handleCreateWorkspace}
-                disabled={isCreatingWorkspace}
+                disabled={isCreating}
                 className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
                 title="New Workspace"
               >
-                {isCreatingWorkspace ? (
+                {isCreating ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Plus className="h-3.5 w-3.5" />

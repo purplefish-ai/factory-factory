@@ -7,19 +7,27 @@ import { trpc } from '../lib/trpc';
 /**
  * Shared hook for creating workspaces with consistent behavior across the app.
  * Handles unique name generation, loading state, error handling, and navigation.
+ *
+ * When `externalNames` is provided the hook skips its own `workspace.list` query
+ * and uses the supplied names for unique-name generation instead. This avoids a
+ * redundant fetch when the caller (e.g. the sidebar) already has workspace data.
  */
-export function useCreateWorkspace(projectId: string | undefined, projectSlug: string) {
+export function useCreateWorkspace(
+  projectId: string | undefined,
+  projectSlug: string,
+  externalNames?: string[]
+) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const [isCreating, setIsCreating] = useState(false);
   const createWorkspace = trpc.workspace.create.useMutation();
 
-  // Get existing workspace names for unique name generation
+  // Only fetch workspace names when the caller hasn't provided them
   const { data: allWorkspaces } = trpc.workspace.list.useQuery(
     { projectId: projectId ?? '' },
-    { enabled: !!projectId }
+    { enabled: !!projectId && externalNames === undefined }
   );
-  const existingNames = allWorkspaces?.map((w) => w.name) ?? [];
+  const existingNames = externalNames ?? allWorkspaces?.map((w) => w.name) ?? [];
 
   const handleCreate = async (nameOverride?: string) => {
     if (!projectId || isCreating) {
@@ -42,6 +50,7 @@ export function useCreateWorkspace(projectId: string | undefined, projectSlug: s
       setIsCreating(false);
       const message = error instanceof Error ? error.message : 'Unknown error';
       toast.error(`Failed to create workspace: ${message}`);
+      throw error;
     }
   };
 
