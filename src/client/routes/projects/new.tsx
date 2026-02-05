@@ -73,9 +73,9 @@ export default function NewProjectPage() {
   };
 
   const handleImportSuccess = () => {
-    // Invalidate projects list and navigate to home (which will redirect to first project)
+    // Invalidate projects list and navigate directly to projects kanban view
     utils.project.list.invalidate();
-    navigate('/');
+    navigate('/projects');
   };
 
   // Onboarding view when no projects exist
