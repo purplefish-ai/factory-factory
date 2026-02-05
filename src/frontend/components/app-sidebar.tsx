@@ -335,6 +335,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
 
+  // Check if we're on the kanban view (workspaces list page without a specific workspace)
+  const isKanbanView = pathname.endsWith('/workspaces') || pathname.endsWith('/workspaces/');
+
   useEffect(() => {
     if (selectedProjectId) {
       setProjectContext(selectedProjectId);
@@ -465,7 +468,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                   items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <SidebarMenu className="gap-0 divide-y divide-sidebar-border/60">
+                  <SidebarMenu className="gap-2 p-1">
                     {workspaceList.map((workspace) => {
                       const isCreatingItem = workspace.uiState === 'creating';
 
@@ -492,6 +495,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                           isActive={currentWorkspaceId === workspace.id}
                           selectedProjectSlug={selectedProjectSlug}
                           onArchiveRequest={handleArchiveRequest}
+                          disableRatchetAnimation={isKanbanView}
                         />
                       );
                     })}
@@ -583,11 +587,13 @@ function SortableWorkspaceItem({
   isActive,
   selectedProjectSlug,
   onArchiveRequest,
+  disableRatchetAnimation,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
   selectedProjectSlug: string;
   onArchiveRequest: (workspace: WorkspaceListItem) => void;
+  disableRatchetAnimation?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
@@ -600,6 +606,11 @@ function SortableWorkspaceItem({
 
   const isArchivingItem = workspace.uiState === 'archiving';
   const { gitStats: stats } = workspace;
+  const isMerged = workspace.prState === 'MERGED';
+  const isRatchetActive =
+    !(disableRatchetAnimation || isMerged) &&
+    workspace.ratchetState &&
+    workspace.ratchetState !== 'IDLE';
 
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
@@ -609,7 +620,8 @@ function SortableWorkspaceItem({
         className={cn(
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
-          isDragging && 'opacity-50 bg-sidebar-accent'
+          isDragging && 'opacity-50 bg-sidebar-accent',
+          isRatchetActive && 'ratchet-active'
         )}
       >
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>

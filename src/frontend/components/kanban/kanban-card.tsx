@@ -1,4 +1,4 @@
-import type { CIStatus, KanbanColumn, Workspace } from '@prisma-gen/browser';
+import type { CIStatus, KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
 import { Archive, GitBranch, GitPullRequest } from 'lucide-react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
@@ -18,17 +18,53 @@ interface KanbanCardProps {
   projectSlug: string;
 }
 
+function CardStatusIndicator({
+  isArchived,
+  isWorking,
+  status,
+  errorMessage,
+}: {
+  isArchived: boolean;
+  isWorking: boolean;
+  status: WorkspaceStatus;
+  errorMessage: string | null;
+}) {
+  if (isArchived) {
+    return (
+      <Badge variant="outline" className="shrink-0 text-[10px] gap-1">
+        <Archive className="h-2.5 w-2.5" />
+        Archived
+      </Badge>
+    );
+  }
+
+  if (isWorking) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-brand shrink-0">
+        <span className="h-2 w-2 rounded-full bg-brand animate-pulse" />
+        Working
+      </span>
+    );
+  }
+
+  return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
+}
+
 export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
   const showPR = workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl;
   const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
+  const isDone = workspace.kanbanColumn === 'DONE';
+  const isRatchetActive = !isDone && workspace.ratchetState && workspace.ratchetState !== 'IDLE';
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
         className={cn(
-          'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
+          'cursor-pointer hover:border-primary/50 transition-colors',
+          !isRatchetActive && 'overflow-hidden',
           workspace.isWorking && 'border-brand/50 bg-brand/5',
-          isArchived && 'opacity-60 border-dashed'
+          isArchived && 'opacity-60 border-dashed',
+          isRatchetActive && 'ratchet-active'
         )}
       >
         <CardHeader className="pb-3">
@@ -36,24 +72,12 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
             <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
               {workspace.name}
             </CardTitle>
-            {isArchived && (
-              <Badge variant="outline" className="shrink-0 text-[10px] gap-1">
-                <Archive className="h-2.5 w-2.5" />
-                Archived
-              </Badge>
-            )}
-            {!isArchived && workspace.isWorking && (
-              <span className="flex items-center gap-1 text-xs text-brand shrink-0">
-                <span className="h-2 w-2 rounded-full bg-brand animate-pulse" />
-                Working
-              </span>
-            )}
-            {!(isArchived || workspace.isWorking) && (
-              <WorkspaceStatusBadge
-                status={workspace.status}
-                errorMessage={workspace.initErrorMessage}
-              />
-            )}
+            <CardStatusIndicator
+              isArchived={isArchived}
+              isWorking={workspace.isWorking}
+              status={workspace.status}
+              errorMessage={workspace.initErrorMessage}
+            />
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

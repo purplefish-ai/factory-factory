@@ -23,6 +23,7 @@ export interface ServerWorkspace {
     hasUncommitted: boolean;
   } | null;
   lastActivityAt?: string | null;
+  ratchetState?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {

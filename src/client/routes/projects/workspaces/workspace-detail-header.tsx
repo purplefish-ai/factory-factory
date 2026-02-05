@@ -10,7 +10,6 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
