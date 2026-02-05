@@ -7,7 +7,6 @@ import {
   Loader2,
   type LucideIcon,
   Plus,
-  Wrench,
   XCircle,
 } from 'lucide-react';
 
@@ -16,6 +15,7 @@ import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
+import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 import type { MainViewTab } from './workspace-panel-context';
 import { useWorkspacePanel } from './workspace-panel-context';
 
@@ -180,9 +180,11 @@ function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusD
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="flex items-center justify-center">
-            <Wrench
-              className={cn(
-                'h-3.5 w-3.5 shrink-0',
+            <RatchetWrenchIcon
+              enabled
+              state={isRunning ? 'CI_RUNNING' : 'IDLE'}
+              className="h-3.5 w-3.5 rounded-[4px] shrink-0"
+              iconClassName={cn(
                 isRunning && 'animate-pulse text-brand',
                 !isRunning && 'text-warning'
               )}

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DEFAULT_FIRST_SESSION } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
+import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { gitOpsService } from '../services/git-ops.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
@@ -84,6 +85,7 @@ export const workspaceRouter = router({
           useExistingBranch: z.boolean().optional(),
           githubIssueNumber: z.number().optional(),
           githubIssueUrl: z.string().optional(),
+          ratchetEnabled: z.boolean().optional(),
         })
         .refine((data) => !(data.useExistingBranch && !data.branchName), {
           message: 'branchName is required when useExistingBranch is true',
@@ -108,7 +110,12 @@ export const workspaceRouter = router({
       }
       // Create the workspace record
       const { useExistingBranch, ...createInput } = input;
-      const workspace = await workspaceAccessor.create(createInput);
+      const ratchetEnabled =
+        createInput.ratchetEnabled ?? (await userSettingsAccessor.get()).ratchetEnabled;
+      const workspace = await workspaceAccessor.create({
+        ...createInput,
+        ratchetEnabled,
+      });
       if (useExistingBranch) {
         await setWorkspaceInitMode(
           workspace.id,

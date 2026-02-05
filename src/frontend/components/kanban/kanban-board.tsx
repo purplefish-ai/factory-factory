@@ -28,8 +28,18 @@ interface WorkspacesByColumn {
 }
 
 export function KanbanBoard() {
-  const { projectId, projectSlug, workspaces, issues, isLoading, isError, error, refetch } =
-    useKanban();
+  const {
+    projectId,
+    projectSlug,
+    workspaces,
+    issues,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    toggleWorkspaceRatcheting,
+    togglingWorkspaceId,
+  } = useKanban();
 
   // Group workspaces by kanban column (only the 3 database columns)
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
@@ -102,6 +112,8 @@ export function KanbanBoard() {
             column={column}
             workspaces={columnWorkspaces}
             projectSlug={projectSlug}
+            onToggleRatcheting={toggleWorkspaceRatcheting}
+            togglingWorkspaceId={togglingWorkspaceId}
           />
         );
       })}

@@ -208,42 +208,55 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
-/* Waiting workspace pulse animation - subtle red glow */
-.waiting-pulse {
-  position: relative;
-  overflow: visible !important;
+@property --ratchet-dash-rotation {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
 }
 
-.waiting-pulse::before {
+@keyframes ratchet-dashes {
+  to {
+    --ratchet-dash-rotation: 1turn;
+  }
+}
+
+.ratchet-toggle[data-ratchet-state='idle'],
+.ratchet-toggle[data-ratchet-state='processing'] {
+  border: 1px dashed color-mix(in oklab, var(--brand) 70%, var(--foreground) 30%);
+}
+
+.ratchet-toggle[data-ratchet-state='processing'] {
+  position: relative;
+  border-color: transparent;
+  background: var(--background);
+}
+
+.ratchet-toggle[data-ratchet-state='processing']::before {
   content: '';
   position: absolute;
-  inset: -1px;
+  inset: 0;
   border-radius: inherit;
-  background: transparent;
-  box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.2);
-  animation: waiting-pulse 3s ease-in-out infinite;
-  z-index: 0;
+  padding: 1px;
+  --ratchet-dash-rotation: 0deg;
+  background: repeating-conic-gradient(
+    from var(--ratchet-dash-rotation),
+    color-mix(in oklab, var(--brand) 85%, var(--foreground) 15%) 0deg 12deg,
+    color-mix(in oklab, var(--brand) 25%, var(--background) 75%) 12deg 24deg
+  );
+  animation: ratchet-dashes 3.85s linear infinite;
   pointer-events: none;
-}
-
-.waiting-pulse > * {
-  position: relative;
-  z-index: 1;
-}
-
-@keyframes waiting-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.35);
-  }
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .waiting-pulse::before {
+  .ratchet-toggle[data-ratchet-state='processing']::before {
     animation: none;
-    box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.25);
   }
 }

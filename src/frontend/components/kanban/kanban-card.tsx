@@ -1,29 +1,23 @@
-import type {
-  CIStatus,
-  KanbanColumn,
-  RatchetState,
-  Workspace,
-  WorkspaceStatus,
-} from '@prisma-gen/browser';
-import { Archive, GitBranch, GitPullRequest, Loader2 } from 'lucide-react';
+import type { CIStatus, KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import { Archive, GitBranch, GitPullRequest } from 'lucide-react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
+import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
-import { cn, shouldShowRatchetAnimation } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 export interface WorkspaceWithKanban extends Workspace {
   kanbanColumn: KanbanColumn | null;
   isWorking: boolean;
   isArchived?: boolean;
-  ratchetState: RatchetState;
 }
 
 interface KanbanCardProps {
   workspace: WorkspaceWithKanban;
   projectSlug: string;
+  onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
+  isTogglePending?: boolean;
 }
 
 function CardStatusIndicator({
@@ -58,15 +52,15 @@ function CardStatusIndicator({
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
 }
 
-export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
+export function KanbanCard({
+  workspace,
+  projectSlug,
+  onToggleRatcheting,
+  isTogglePending = false,
+}: KanbanCardProps) {
   const showPR = workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl;
   const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
-  // Check if workspace is in DONE column (merged PR). Exclude DONE from ratchet animation.
-  const isDone = workspace.kanbanColumn === 'DONE';
-
-  // Show ratcheting animation if state is active OR if a push happened recently
-  const isRatchetActive =
-    !isDone && shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
+  const ratchetEnabled = workspace.ratchetEnabled ?? true;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -91,38 +85,38 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {(workspace.branchName || showPR || isRatchetActive) && (
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-              {isRatchetActive && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-yellow-500" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Ratchet active</TooltipContent>
-                </Tooltip>
-              )}
-              {workspace.branchName && (
-                <>
-                  <GitBranch className="h-3 w-3 shrink-0" />
-                  <span className="font-mono truncate">{workspace.branchName}</span>
-                </>
-              )}
-              {showPR && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-                  }}
-                  className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                >
-                  <GitPullRequest className="h-3 w-3" />
-                  <span>#{workspace.prNumber}</span>
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+            <RatchetToggleButton
+              enabled={ratchetEnabled}
+              state={workspace.ratchetState}
+              className="h-5 w-5 shrink-0"
+              disabled={isTogglePending || isArchived || !onToggleRatcheting}
+              stopPropagation
+              onToggle={(enabled) => {
+                onToggleRatcheting?.(workspace.id, enabled);
+              }}
+            />
+            {workspace.branchName && (
+              <>
+                <GitBranch className="h-3 w-3 shrink-0" />
+                <span className="font-mono truncate">{workspace.branchName}</span>
+              </>
+            )}
+            {showPR && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+                }}
+                className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              >
+                <GitPullRequest className="h-3 w-3" />
+                <span>#{workspace.prNumber}</span>
+              </button>
+            )}
+          </div>
 
           {showPR && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">

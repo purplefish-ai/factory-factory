@@ -219,7 +219,7 @@ export const Provisioning: Story = {
   },
 };
 
-export const RatchetActive: Story = {
+export const RatchetOnProcessing: Story = {
   args: {
     workspace: {
       ...baseWorkspace,
@@ -259,6 +259,21 @@ export const RatchetReady: Story = {
       prNumber: 52,
       prCiStatus: 'SUCCESS',
       ratchetState: 'READY',
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const RatchetOff: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Ratchet disabled',
+      ratchetEnabled: false,
+      ratchetState: 'CI_FAILED',
+      prState: 'OPEN',
+      prUrl: 'https://github.com/example/repo/pull/53',
+      prNumber: 53,
     },
     projectSlug: 'my-project',
   },

@@ -1,6 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { Check, Eye, Play, Zap } from 'lucide-react';
+import type { ComponentType } from 'react';
 import { fn } from 'storybook/test';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Since QuickActionsMenu uses tRPC, we need to create a mock version for stories
 // that doesn't depend on the actual tRPC hook
@@ -44,18 +54,7 @@ function MockQuickActionsMenu({
   actions?: typeof mockQuickActions;
   isLoading?: boolean;
 }) {
-  const { Check, Eye, Play, Zap } = require('lucide-react');
-  const { Button } = require('@/components/ui/button');
-  const {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuTrigger,
-  } = require('@/components/ui/dropdown-menu');
-  const { Tooltip, TooltipContent, TooltipTrigger } = require('@/components/ui/tooltip');
-
-  const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  const iconMap: Record<string, ComponentType<{ className?: string }>> = {
     check: Check,
     eye: Eye,
     play: Play,

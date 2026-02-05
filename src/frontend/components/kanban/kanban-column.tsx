@@ -22,9 +22,17 @@ interface KanbanColumnProps {
   column: ColumnConfig;
   workspaces: WorkspaceWithKanban[];
   projectSlug: string;
+  onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
+  togglingWorkspaceId?: string | null;
 }
 
-export function KanbanColumn({ column, workspaces, projectSlug }: KanbanColumnProps) {
+export function KanbanColumn({
+  column,
+  workspaces,
+  projectSlug,
+  onToggleRatcheting,
+  togglingWorkspaceId,
+}: KanbanColumnProps) {
   const isEmpty = workspaces.length === 0;
 
   return (
@@ -47,7 +55,13 @@ export function KanbanColumn({ column, workspaces, projectSlug }: KanbanColumnPr
           </div>
         ) : (
           workspaces.map((workspace) => (
-            <KanbanCard key={workspace.id} workspace={workspace} projectSlug={projectSlug} />
+            <KanbanCard
+              key={workspace.id}
+              workspace={workspace}
+              projectSlug={projectSlug}
+              onToggleRatcheting={onToggleRatcheting}
+              isTogglePending={togglingWorkspaceId === workspace.id}
+            />
           ))
         )}
       </div>
