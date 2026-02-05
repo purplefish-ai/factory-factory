@@ -70,6 +70,7 @@ const mockPR: PRWithFullDetails = {
       author: { login: 'alice' },
       body: 'Great work! Just a few minor suggestions:\n\n1. Consider adding more tests\n2. The variable naming could be improved\n\n```js\nconst user = getUser();\n```',
       createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
       url: 'https://github.com/example/repo/pull/123#issuecomment-1',
     },
     {
@@ -77,6 +78,7 @@ const mockPR: PRWithFullDetails = {
       author: { login: 'johndoe' },
       body: "Thanks for the feedback! I'll address those in the next commit.",
       createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
       url: 'https://github.com/example/repo/pull/123#issuecomment-2',
     },
   ],

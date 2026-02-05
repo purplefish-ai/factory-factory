@@ -344,26 +344,28 @@ class RatchetService {
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
 
-      // Filter comments by allowed reviewers (if configured) and by timestamp (new since last check)
+      // Filter comments by allowed reviewers (if configured) and by timestamp (new or edited since last check)
       const lastCheckedAt = workspace.prReviewLastCheckedAt?.getTime() ?? 0;
       const filterByReviewer = allowedReviewers.length > 0;
 
-      // Filter new review comments (line-level code comments)
+      // Filter new or edited review comments (line-level code comments)
       const newReviewComments = reviewComments.filter((comment) => {
-        const commentTime = new Date(comment.createdAt).getTime();
-        const isNew = commentTime > lastCheckedAt;
+        const createdTime = new Date(comment.createdAt).getTime();
+        const updatedTime = new Date(comment.updatedAt).getTime();
+        const isNewOrEdited = createdTime > lastCheckedAt || updatedTime > lastCheckedAt;
         const isAllowedReviewer =
           !filterByReviewer || allowedReviewers.includes(comment.author.login);
-        return isNew && isAllowedReviewer;
+        return isNewOrEdited && isAllowedReviewer;
       });
 
-      // Filter new PR comments (regular conversation comments)
+      // Filter new or edited PR comments (regular conversation comments)
       const newPRComments = prDetails.comments.filter((comment) => {
-        const commentTime = new Date(comment.createdAt).getTime();
-        const isNew = commentTime > lastCheckedAt;
+        const createdTime = new Date(comment.createdAt).getTime();
+        const updatedTime = new Date(comment.updatedAt).getTime();
+        const isNewOrEdited = createdTime > lastCheckedAt || updatedTime > lastCheckedAt;
         const isAllowedReviewer =
           !filterByReviewer || allowedReviewers.includes(comment.author.login);
-        return isNew && isAllowedReviewer;
+        return isNewOrEdited && isAllowedReviewer;
       });
 
       // Check if there are any new comments from allowed reviewers
