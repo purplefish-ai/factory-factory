@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FileJson, Hammer, RefreshCw, Upload } from 'lucide-react';
+import { CheckCircle2, Download, FileJson, RefreshCw, Upload, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -374,7 +374,7 @@ function RatchetSettingsSection() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Hammer className="w-5 h-5" />
+            <Wrench className="w-5 h-5" />
             Ratchet (PR Auto-Progression)
           </CardTitle>
           <CardDescription>
@@ -392,7 +392,7 @@ function RatchetSettingsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Hammer className="w-5 h-5" />
+          <Wrench className="w-5 h-5" />
           Ratchet (PR Auto-Progression)
         </CardTitle>
         <CardDescription>

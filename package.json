@@ -158,6 +158,7 @@
     "onlyBuiltDependencies": [
       "@prisma/engines",
       "better-sqlite3",
+      "electron",
       "esbuild",
       "node-pty",
       "prisma",

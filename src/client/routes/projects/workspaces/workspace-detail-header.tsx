@@ -18,7 +18,7 @@ import {
   RunScriptPortBadge,
   useWorkspacePanel,
 } from '@/components/workspace';
-import { cn, shouldShowRatchetAnimation } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { trpc } from '../../../../frontend/lib/trpc';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
