@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 export interface WorkspaceWithKanban extends Workspace {
   kanbanColumn: KanbanColumn | null;
   isWorking: boolean;
+  ratchetButtonAnimated?: boolean;
+  flowPhase?: string | null;
   isArchived?: boolean;
 }
 
@@ -89,6 +91,7 @@ export function KanbanCard({
             <RatchetToggleButton
               enabled={ratchetEnabled}
               state={workspace.ratchetState}
+              animated={workspace.ratchetButtonAnimated ?? false}
               className="h-5 w-5 shrink-0"
               disabled={isTogglePending || isArchived || !onToggleRatcheting}
               stopPropagation

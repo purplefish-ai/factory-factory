@@ -182,7 +182,7 @@ function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusD
           <span className="flex items-center justify-center">
             <RatchetWrenchIcon
               enabled
-              state={isRunning ? 'CI_RUNNING' : 'IDLE'}
+              animated={isRunning}
               className="h-3.5 w-3.5 rounded-[4px] shrink-0"
               iconClassName={cn(
                 isRunning && 'animate-pulse text-brand',

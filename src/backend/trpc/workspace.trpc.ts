@@ -1,7 +1,9 @@
-import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
+import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { ratchetService } from '../services/ratchet.service';
 import { WorkspaceCreationService } from '../services/workspace-creation.service';
+import { deriveWorkspaceFlowStateFromWorkspace } from '../services/workspace-flow-state.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
 import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
@@ -92,7 +94,13 @@ export const workspaceRouter = router({
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
     }
-    return workspace;
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+    return {
+      ...workspace,
+      ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
+      flowPhase: flowState.phase,
+      ciObservation: flowState.ciObservation,
+    };
   }),
 
   // Create a new workspace
@@ -140,10 +148,24 @@ export const workspaceRouter = router({
         enabled: z.boolean(),
       })
     )
-    .mutation(({ input }) => {
-      return workspaceAccessor.update(input.workspaceId, {
-        ratchetEnabled: input.enabled,
-      });
+    .mutation(async ({ input }) => {
+      const updatedWorkspace = await workspaceAccessor.update(
+        input.workspaceId,
+        input.enabled
+          ? {
+              ratchetEnabled: true,
+            }
+          : {
+              ratchetEnabled: false,
+              ratchetState: RatchetState.IDLE,
+              ratchetActiveSessionId: null,
+              ratchetLastNotifiedState: null,
+            }
+      );
+      if (input.enabled) {
+        await ratchetService.checkWorkspaceById(input.workspaceId);
+      }
+      return updatedWorkspace;
     }),
 
   // Archive a workspace

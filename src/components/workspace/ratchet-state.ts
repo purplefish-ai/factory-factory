@@ -3,13 +3,6 @@ import type { RatchetState } from '@prisma-gen/browser';
 export type RatchetVisualState = 'off' | 'idle' | 'processing';
 export type RatchetStateLike = RatchetState | string | null | undefined;
 
-const PROCESSING_STATES = new Set<RatchetState>([
-  'CI_RUNNING',
-  'CI_FAILED',
-  'MERGE_CONFLICT',
-  'REVIEW_PENDING',
-]);
-
 const STATE_LABELS: Record<RatchetState, string> = {
   IDLE: 'Idle',
   CI_RUNNING: 'CI Running',
@@ -30,19 +23,9 @@ export function getRatchetStateLabel(state: RatchetStateLike): string {
   return state;
 }
 
-export function isRatchetProcessing(state: RatchetStateLike): boolean {
-  if (!state) {
-    return false;
-  }
-  return PROCESSING_STATES.has(state as RatchetState);
-}
-
-export function getRatchetVisualState(
-  enabled: boolean,
-  state: RatchetStateLike
-): RatchetVisualState {
+export function getRatchetVisualState(enabled: boolean, animate: boolean): RatchetVisualState {
   if (!enabled) {
     return 'off';
   }
-  return isRatchetProcessing(state) ? 'processing' : 'idle';
+  return animate ? 'processing' : 'idle';
 }

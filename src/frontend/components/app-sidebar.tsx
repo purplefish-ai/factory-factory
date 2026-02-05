@@ -51,7 +51,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog, RatchetToggleButton } from '@/components/workspace';
-import { cn, formatRelativeTime, shouldShowRatchetAnimation } from '@/lib/utils';
+import { cn, formatRelativeTime } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useCreateWorkspace } from '../hooks/use-create-workspace';
 import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
@@ -674,6 +674,7 @@ function SortableWorkspaceItem({
                   <RatchetToggleButton
                     enabled={ratchetEnabled}
                     state={workspace.ratchetState}
+                    animated={workspace.ratchetButtonAnimated ?? false}
                     className="h-5 w-5 shrink-0"
                     disabled={toggleRatcheting.isPending}
                     stopPropagation
@@ -845,8 +846,7 @@ function getSidebarAttentionState(
 ) {
   const isDone = workspace.cachedKanbanColumn === 'DONE';
   const isRatchetActive =
-    !(disableRatchetAnimation || isDone) &&
-    shouldShowRatchetAnimation(workspace.ratchetState, workspace.ratchetLastPushAt);
+    !(disableRatchetAnimation || isDone) && Boolean(workspace.ratchetButtonAnimated);
 
   return {
     showAttentionGlow: needsAttention(workspace.id) && !isRatchetActive,

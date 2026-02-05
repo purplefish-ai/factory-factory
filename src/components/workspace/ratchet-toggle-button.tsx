@@ -7,6 +7,7 @@ import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 interface RatchetToggleButtonProps {
   enabled: boolean;
   state: RatchetStateLike;
+  animated?: boolean;
   onToggle: (enabled: boolean) => void;
   disabled?: boolean;
   stopPropagation?: boolean;
@@ -24,6 +25,7 @@ function getTooltip(enabled: boolean, state: RatchetStateLike): string {
 export function RatchetToggleButton({
   enabled,
   state,
+  animated = false,
   onToggle,
   disabled = false,
   stopPropagation = false,
@@ -53,7 +55,7 @@ export function RatchetToggleButton({
           aria-pressed={enabled}
           className={cn('h-7 w-7 p-0', className)}
         >
-          <RatchetWrenchIcon enabled={enabled} state={state} className="h-full w-full" />
+          <RatchetWrenchIcon enabled={enabled} animated={animated} className="h-full w-full" />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top">{getTooltip(enabled, state)}</TooltipContent>

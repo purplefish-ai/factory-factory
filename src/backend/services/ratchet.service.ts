@@ -100,7 +100,7 @@ export interface RatchetCheckResult {
 interface WorkspaceWithPR {
   id: string;
   prUrl: string;
-  prNumber: number;
+  prNumber: number | null;
   ratchetEnabled: boolean;
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
@@ -214,6 +214,31 @@ class RatchetService {
   }
 
   /**
+   * Check a single workspace immediately (used when ratcheting is toggled on).
+   */
+  async checkWorkspaceById(workspaceId: string): Promise<WorkspaceRatchetResult | null> {
+    if (this.isShuttingDown) {
+      return null;
+    }
+
+    const workspace = await workspaceAccessor.findForRatchetById(workspaceId);
+    if (!workspace) {
+      return null;
+    }
+
+    const userSettings = await userSettingsAccessor.get();
+    const settings: RatchetSettings = {
+      autoFixCi: userSettings.ratchetAutoFixCi,
+      autoFixConflicts: userSettings.ratchetAutoFixConflicts,
+      autoFixReviews: userSettings.ratchetAutoFixReviews,
+      autoMerge: userSettings.ratchetAutoMerge,
+      allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
+    };
+
+    return this.processWorkspace(workspace, settings);
+  }
+
+  /**
    * Process a single workspace through the ratchet state machine
    */
   private async processWorkspace(
@@ -251,12 +276,14 @@ class RatchetService {
           workspaceId: workspace.id,
           from: previousState,
           to: newState,
-          prNumber: workspace.prNumber,
+          prNumber: prStateInfo.prNumber,
         });
       }
 
-      // 4. Check workspace-level ratchet setting
-      const shouldTakeAction = workspace.ratchetEnabled;
+      // 4. Check workspace-level ratchet setting using latest value to avoid
+      // triggering actions after a user disables ratchet during an in-flight check.
+      const latestWorkspace = await workspaceAccessor.findById(workspace.id);
+      const shouldTakeAction = latestWorkspace?.ratchetEnabled ?? workspace.ratchetEnabled;
 
       // 5. Take action based on state (only if ratcheting is enabled for this workspace)
       const action = shouldTakeAction
@@ -266,13 +293,18 @@ class RatchetService {
       // 6. Update workspace (including review check timestamp if we found review comments)
       const now = new Date();
       await workspaceAccessor.update(workspace.id, {
-        ratchetState: newState,
+        ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
         ratchetLastCheckedAt: now,
         // Update review timestamp if we detected review comments
         ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
       });
 
-      return { workspaceId: workspace.id, previousState, newState, action };
+      return {
+        workspaceId: workspace.id,
+        previousState,
+        newState: shouldTakeAction ? newState : RatchetState.IDLE,
+        action,
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error processing workspace in ratchet', error as Error, {
@@ -290,22 +322,46 @@ class RatchetService {
   /**
    * Fetch current PR state from GitHub
    */
-  private async fetchPRState(
-    workspace: WorkspaceWithPR,
-    allowedReviewers: string[]
-  ): Promise<PRStateInfo | null> {
+  private resolveRatchetPrContext(
+    workspace: WorkspaceWithPR
+  ): { repo: string; prNumber: number } | null {
     const prInfo = githubCLIService.extractPRInfo(workspace.prUrl);
     if (!prInfo) {
       logger.warn('Could not parse PR URL', { prUrl: workspace.prUrl });
       return null;
     }
 
-    const repo = `${prInfo.owner}/${prInfo.repo}`;
+    const prNumber = workspace.prNumber ?? prInfo.number;
+    if (!prNumber) {
+      logger.warn('Could not determine PR number for ratchet check', {
+        workspaceId: workspace.id,
+        prUrl: workspace.prUrl,
+      });
+      return null;
+    }
+
+    return {
+      repo: `${prInfo.owner}/${prInfo.repo}`,
+      prNumber,
+    };
+  }
+
+  /**
+   * Fetch current PR state from GitHub
+   */
+  private async fetchPRState(
+    workspace: WorkspaceWithPR,
+    allowedReviewers: string[]
+  ): Promise<PRStateInfo | null> {
+    const prContext = this.resolveRatchetPrContext(workspace);
+    if (!prContext) {
+      return null;
+    }
 
     try {
       const [prDetails, reviewComments] = await Promise.all([
-        githubCLIService.getPRFullDetails(repo, workspace.prNumber),
-        githubCLIService.getReviewComments(repo, workspace.prNumber),
+        githubCLIService.getPRFullDetails(prContext.repo, prContext.prNumber),
+        githubCLIService.getReviewComments(prContext.repo, prContext.prNumber),
       ]);
 
       // Convert statusCheckRollup to the format expected by computeCIStatus
@@ -618,7 +674,8 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
         sessionName: 'Ratchet',
         runningIdleAction: 'restart',
         dispatchMode: 'start_empty_and_send',
-        buildPrompt: () => this.buildInitialPrompt(fixerType, workspace, prStateInfo, settings),
+        buildPrompt: () =>
+          this.buildInitialPrompt(fixerType, workspace.prUrl, prStateInfo, settings),
         beforeStart: ({ sessionId, prompt }) => {
           messageStateService.injectCommittedUserMessage(sessionId, prompt);
         },
@@ -637,7 +694,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
           workspaceId: workspace.id,
           sessionId: result.sessionId,
           fixerType,
-          prNumber: workspace.prNumber,
+          prNumber: prStateInfo.prNumber,
         });
 
         return { type: 'TRIGGERED_FIXER', sessionId: result.sessionId, fixerType };
@@ -667,12 +724,11 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
    */
   private buildInitialPrompt(
     fixerType: 'ci' | 'merge' | 'review',
-    workspace: WorkspaceWithPR,
+    prUrl: string,
     prStateInfo: PRStateInfo,
     settings: RatchetSettings
   ): string {
-    const prNumber = workspace.prNumber;
-    const prUrl = workspace.prUrl;
+    const prNumber = prStateInfo.prNumber;
 
     switch (fixerType) {
       case 'ci':
