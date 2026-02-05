@@ -568,7 +568,7 @@ Use \`gh run view <run-id> --log-failed\` to see detailed logs.`;
 The branch now has merge conflicts with the base branch.
 Please resolve the conflicts before continuing.
 
-Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
+Run \`git fetch origin && git rebase origin/main\` to see the conflicts.`;
     }
 
     if (message) {
