@@ -52,17 +52,21 @@ When notified of CI failures:
 
 ## Merge Conflict Resolution
 
-When notified of merge conflicts:
+**Note:** The Ratchet system automatically attempts to fetch, rebase, and push when conflicts are detected. You will only be notified if there are actual conflicts that require manual resolution.
+
+When notified of merge conflicts, the prompt will include the list of conflicted files. The automatic rebase has already been attempted and aborted, so:
 
 1. Fetch latest: `git fetch origin`
-2. Merge base branch: `git merge origin/main`
+2. Rebase onto base branch: `git rebase origin/main`
 3. Resolve conflicts in each file:
    - Understand both sides of the change
    - Preserve functionality from both when possible
    - If unsure, prefer the main branch changes
-4. Run tests to verify the merge
-5. Commit: `git commit -m "Merge main into feature branch"`
-6. Push: `git push`
+4. Stage resolved files: `git add <file>`
+5. Continue rebase: `git rebase --continue`
+6. Run tests to verify: `pnpm test`
+7. Run type checking: `pnpm typecheck`
+8. Force push rebased branch: `git push --force-with-lease`
 
 ## Review Comment Resolution
 
