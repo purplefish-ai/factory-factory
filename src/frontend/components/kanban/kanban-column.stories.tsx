@@ -50,6 +50,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   hasHadSessions: true,
   cachedKanbanColumn: 'WORKING',
   stateComputedAt: new Date(),
+  hasFactoryConfig: false,
   runScriptCommand: null,
   runScriptCleanupCommand: null,
   runScriptPid: null,

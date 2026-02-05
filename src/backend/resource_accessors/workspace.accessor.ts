@@ -64,6 +64,7 @@ interface UpdateWorkspaceInput {
   cachedKanbanColumn?: KanbanColumn;
   stateComputedAt?: Date | null;
   // Run script tracking
+  hasFactoryConfig?: boolean;
   runScriptCommand?: string | null;
   runScriptCleanupCommand?: string | null;
   runScriptPid?: number | null;

@@ -173,6 +173,7 @@ class WorkspaceQueryService {
         const factoryConfig = await FactoryConfigService.readConfig(workspace.worktreePath);
 
         await workspaceAccessor.update(workspace.id, {
+          hasFactoryConfig: factoryConfig !== null,
           runScriptCommand: factoryConfig?.scripts.run ?? null,
           runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
         });

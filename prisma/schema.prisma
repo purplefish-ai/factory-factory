@@ -120,6 +120,7 @@ model Workspace {
   initRetryCount      Int                 @default(0)
 
   // Run script tracking (from factory-factory.json)
+  hasFactoryConfig        Boolean           @default(false)  // True if workspace has factory-factory.json configuration
   runScriptCommand        String?           // The run script command to execute
   runScriptCleanupCommand String?           // The cleanup script command to execute on stop
   runScriptPid            Int?              // Process ID of running script
