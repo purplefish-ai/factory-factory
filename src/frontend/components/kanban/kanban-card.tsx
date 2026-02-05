@@ -68,8 +68,7 @@ export function KanbanCard({ workspace, projectSlug }: KanbanCardProps) {
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
         className={cn(
-          'cursor-pointer hover:border-primary/50 transition-colors',
-          !isRatchetActive && 'overflow-hidden',
+          'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
           workspace.isWorking && 'border-brand/50 bg-brand/5',
           isArchived && 'opacity-60 border-dashed',
           isRatchetActive && 'ratchet-active'
