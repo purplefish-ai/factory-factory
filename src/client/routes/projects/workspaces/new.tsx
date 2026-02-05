@@ -1,5 +1,5 @@
 import type { Workspace } from '@prisma-gen/browser';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileJson } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -22,6 +22,10 @@ export default function NewWorkspacePage() {
   const [error, setError] = useState('');
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
+  const { data: factoryConfig } = trpc.workspace.getFactoryConfig.useQuery(
+    { projectId: project?.id ?? '' },
+    { enabled: !!project?.id }
+  );
 
   const createWorkspace = trpc.workspace.create.useMutation({
     onSuccess: (workspace: Workspace) => {
@@ -71,6 +75,52 @@ export default function NewWorkspacePage() {
           <p className="text-muted-foreground mt-1">{project.name}</p>
         </div>
       </div>
+
+      {factoryConfig && (
+        <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+          <FileJson className="h-4 w-4 text-green-600 dark:text-green-400" />
+          <AlertDescription>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <span className="font-medium text-green-900 dark:text-green-100">
+                  factory-factory.json detected
+                </span>
+              </div>
+              <p className="text-sm text-green-800 dark:text-green-200">
+                This project has a factory-factory.json configuration file. New workspaces will
+                automatically:
+              </p>
+              <ul className="text-sm text-green-800 dark:text-green-200 space-y-1 ml-4">
+                {factoryConfig.scripts.setup && (
+                  <li className="list-disc">
+                    Run setup script:{' '}
+                    <code className="bg-green-100 dark:bg-green-900 px-1 rounded text-xs">
+                      {factoryConfig.scripts.setup}
+                    </code>
+                  </li>
+                )}
+                {factoryConfig.scripts.run && (
+                  <li className="list-disc">
+                    Have a dev server available via the play button:{' '}
+                    <code className="bg-green-100 dark:bg-green-900 px-1 rounded text-xs">
+                      {factoryConfig.scripts.run}
+                    </code>
+                  </li>
+                )}
+                {factoryConfig.scripts.cleanup && (
+                  <li className="list-disc">
+                    Run cleanup on stop:{' '}
+                    <code className="bg-green-100 dark:bg-green-900 px-1 rounded text-xs">
+                      {factoryConfig.scripts.cleanup}
+                    </code>
+                  </li>
+                )}
+              </ul>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardContent className="pt-6">
