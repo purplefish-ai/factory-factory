@@ -282,40 +282,23 @@
 
 /* Waiting workspace pulse animation - subtle red glow */
 .waiting-pulse {
-  position: relative;
-  overflow: visible !important;
-}
-
-.waiting-pulse::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: transparent;
-  box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.3);
   animation: waiting-pulse 3s ease-in-out infinite;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.waiting-pulse > * {
-  position: relative;
-  z-index: 1;
 }
 
 @keyframes waiting-pulse {
   0%,
   100% {
-    box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.2);
+    box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.3);
   }
   50% {
-    box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.35);
+    box-shadow: inset 0 0 0 1.5px rgba(239, 68, 68, 0.5);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .waiting-pulse::before {
+  .waiting-pulse {
     animation: none;
-    box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.25);
+    box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.35);
   }
 }
