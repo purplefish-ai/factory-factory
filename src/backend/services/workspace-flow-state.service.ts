@@ -12,12 +12,22 @@ export interface WorkspaceFlowStateInput {
   prUrl: string | null;
   prState: PRState;
   prCiStatus: CIStatus;
+  prUpdatedAt: Date | null;
   ratchetEnabled: boolean;
   ratchetState: RatchetState;
 }
 
+export type WorkspaceCiObservation =
+  | 'NOT_FETCHED'
+  | 'NO_CHECKS'
+  | 'CHECKS_PENDING'
+  | 'CHECKS_FAILED'
+  | 'CHECKS_PASSED'
+  | 'CHECKS_UNKNOWN';
+
 export interface WorkspaceFlowState {
   phase: WorkspaceFlowPhase;
+  ciObservation: WorkspaceCiObservation;
   isWorking: boolean;
   shouldAnimateRatchetButton: boolean;
   hasActivePr: boolean;
@@ -43,6 +53,24 @@ function hasActivePr(prUrl: string | null, prState: PRState): boolean {
   return ACTIVE_PR_STATES.has(prState);
 }
 
+export function deriveWorkspaceCiObservation(
+  input: WorkspaceFlowStateInput
+): WorkspaceCiObservation {
+  if (input.prCiStatus === CIStatus.PENDING) {
+    return 'CHECKS_PENDING';
+  }
+  if (input.prCiStatus === CIStatus.FAILURE) {
+    return 'CHECKS_FAILED';
+  }
+  if (input.prCiStatus === CIStatus.SUCCESS) {
+    return 'CHECKS_PASSED';
+  }
+  if (input.prCiStatus === CIStatus.UNKNOWN) {
+    return input.prUpdatedAt ? 'NO_CHECKS' : 'NOT_FETCHED';
+  }
+  return 'CHECKS_UNKNOWN';
+}
+
 /**
  * Derives a single flow phase used by both backend kanban and frontend ratchet visuals.
  *
@@ -53,10 +81,12 @@ function hasActivePr(prUrl: string | null, prState: PRState): boolean {
  */
 export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): WorkspaceFlowState {
   const activePr = hasActivePr(input.prUrl, input.prState);
+  const ciObservation = deriveWorkspaceCiObservation(input);
 
   if (input.prState === PRState.MERGED) {
     return {
       phase: 'MERGED',
+      ciObservation,
       isWorking: false,
       shouldAnimateRatchetButton: false,
       hasActivePr: false,
@@ -66,15 +96,17 @@ export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): Worksp
   if (!activePr) {
     return {
       phase: 'NO_PR',
+      ciObservation,
       isWorking: false,
       shouldAnimateRatchetButton: false,
       hasActivePr: false,
     };
   }
 
-  if (input.prCiStatus === CIStatus.PENDING) {
+  if (ciObservation === 'NOT_FETCHED' || ciObservation === 'CHECKS_PENDING') {
     return {
       phase: 'CI_WAIT',
+      ciObservation,
       isWorking: true,
       shouldAnimateRatchetButton: input.ratchetEnabled,
       hasActivePr: true,
@@ -84,6 +116,7 @@ export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): Worksp
   if (!input.ratchetEnabled) {
     return {
       phase: 'READY',
+      ciObservation,
       isWorking: false,
       shouldAnimateRatchetButton: false,
       hasActivePr: true,
@@ -93,6 +126,7 @@ export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): Worksp
   if (RATCHET_FIXING_STATES.has(input.ratchetState)) {
     return {
       phase: 'RATCHET_FIXING',
+      ciObservation,
       isWorking: true,
       shouldAnimateRatchetButton: false,
       hasActivePr: true,
@@ -102,6 +136,7 @@ export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): Worksp
   if (input.ratchetState === RatchetState.READY || input.ratchetState === RatchetState.MERGED) {
     return {
       phase: 'READY',
+      ciObservation,
       isWorking: false,
       shouldAnimateRatchetButton: false,
       hasActivePr: true,
@@ -110,6 +145,7 @@ export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): Worksp
 
   return {
     phase: 'RATCHET_VERIFY',
+    ciObservation,
     isWorking: true,
     shouldAnimateRatchetButton: false,
     hasActivePr: true,

@@ -15,6 +15,10 @@ Goals:
 - `ratchetEnabled`: workspace-level toggle for automated PR progression
 - `ratchetState`: ratchet machine output (`IDLE`, `CI_RUNNING`, `CI_FAILED`, `MERGE_CONFLICT`, `REVIEW_PENDING`, `READY`, `MERGED`)
 - `flowPhase`: derived workspace flow phase used by UI and kanban logic
+- `ciObservation`: derived CI observation
+  - `NOT_FETCHED`: PR exists but no CI snapshot has been fetched yet
+  - `NO_CHECKS`: PR snapshot exists and reports no checks configured
+  - `CHECKS_PENDING` / `CHECKS_FAILED` / `CHECKS_PASSED` / `CHECKS_UNKNOWN`
 
 ## Source Of Truth
 
@@ -101,6 +105,7 @@ These invariants should always hold:
 3. Ratchet button animation only occurs during CI wait with ratchet enabled.
 4. If ratchet is enabled and PR is active after CI pending clears, workspace remains `WORKING` until ratchet reaches `READY` or `MERGED`.
 5. Enabling ratchet should trigger immediate ratchet evaluation.
+6. `CIStatus.UNKNOWN` must be interpreted through `ciObservation` (`NOT_FETCHED` vs `NO_CHECKS`).
 
 ## Edge Cases And Current Handling
 
@@ -112,10 +117,11 @@ These invariants should always hold:
 - Handling: action result is `ERROR`; previous ratchet state remains.
 - Effect: workspace may temporarily stay in prior flow phase until next successful check.
 
-3. `CIStatus.UNKNOWN` ambiguity.
-- `UNKNOWN` currently means either "no CI configured" or "not yet fetched" (`github-cli.service`).
-- This ambiguity affects whether "CI finished" can be inferred.
-- Recommendation: split into explicit states (`NO_CHECKS_CONFIGURED` vs `NOT_FETCHED`) in a future migration.
+3. `CIStatus.UNKNOWN` ambiguity at storage layer.
+- DB still stores `UNKNOWN`, but flow derivation resolves it into explicit `ciObservation`:
+  - `NOT_FETCHED` when `prUpdatedAt` is null
+  - `NO_CHECKS` when `prUpdatedAt` is set
+- This keeps UI/kanban logic deterministic while avoiding a DB enum migration.
 
 4. PR URL present but PR metadata stale.
 - Handling: sidebar/board projections use latest cached snapshot and ratchet state.
@@ -134,9 +140,9 @@ Key tests:
 
 ## Hardening Checklist (Recommended Next Steps)
 
-1. Add explicit CI unknown-state decomposition.
-2. Add integration tests around toggle-on/off races with mocked delayed GitHub responses.
-3. Add contract tests asserting `flowPhase` and `ratchetButtonAnimated` on all TRPC workspace endpoints.
+1. Add integration tests around toggle-on/off races with mocked delayed GitHub responses.
+2. Add contract tests asserting `flowPhase`, `ciObservation`, and `ratchetButtonAnimated` on all TRPC workspace endpoints.
+3. Consider a future schema-level CI enum split (`NOT_FETCHED` / `NO_CHECKS`) if we want storage and derivation to match exactly.
 4. Add a metrics dashboard for ratchet outcomes:
 - state transition counts
 - fixer trigger counts

@@ -88,6 +88,7 @@ class KanbanStateService {
       prUrl: workspace.prUrl,
       prState: workspace.prState,
       prCiStatus: workspace.prCiStatus,
+      prUpdatedAt: workspace.prUpdatedAt,
       ratchetEnabled: workspace.ratchetEnabled,
       ratchetState: workspace.ratchetState,
     });
@@ -121,6 +122,7 @@ class KanbanStateService {
         prUrl: workspace.prUrl,
         prState: workspace.prState,
         prCiStatus: workspace.prCiStatus,
+        prUpdatedAt: workspace.prUpdatedAt,
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
       });
@@ -166,6 +168,7 @@ class KanbanStateService {
       prUrl: workspace.prUrl,
       prState: workspace.prState,
       prCiStatus: workspace.prCiStatus,
+      prUpdatedAt: workspace.prUpdatedAt,
       ratchetEnabled: workspace.ratchetEnabled,
       ratchetState: workspace.ratchetState,
     });

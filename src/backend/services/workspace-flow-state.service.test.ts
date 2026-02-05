@@ -8,6 +8,7 @@ describe('deriveWorkspaceFlowState', () => {
       prUrl: 'https://github.com/acme/repo/pull/1',
       prState: PRState.OPEN,
       prCiStatus: CIStatus.PENDING,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
       ratchetEnabled: false,
       ratchetState: RatchetState.IDLE,
     });
@@ -22,6 +23,7 @@ describe('deriveWorkspaceFlowState', () => {
       prUrl: 'https://github.com/acme/repo/pull/1',
       prState: PRState.OPEN,
       prCiStatus: CIStatus.PENDING,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_RUNNING,
     });
@@ -36,6 +38,7 @@ describe('deriveWorkspaceFlowState', () => {
       prUrl: 'https://github.com/acme/repo/pull/1',
       prState: PRState.OPEN,
       prCiStatus: CIStatus.SUCCESS,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
     });
@@ -50,6 +53,7 @@ describe('deriveWorkspaceFlowState', () => {
       prUrl: 'https://github.com/acme/repo/pull/1',
       prState: PRState.OPEN,
       prCiStatus: CIStatus.SUCCESS,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
     });
@@ -64,6 +68,7 @@ describe('deriveWorkspaceFlowState', () => {
       prUrl: 'https://github.com/acme/repo/pull/1',
       prState: PRState.OPEN,
       prCiStatus: CIStatus.FAILURE,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
     });
@@ -77,6 +82,7 @@ describe('deriveWorkspaceFlowState', () => {
       prUrl: 'https://github.com/acme/repo/pull/1',
       prState: PRState.MERGED,
       prCiStatus: CIStatus.SUCCESS,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.MERGED,
     });
@@ -84,5 +90,34 @@ describe('deriveWorkspaceFlowState', () => {
     expect(result.phase).toBe('MERGED');
     expect(result.isWorking).toBe(false);
     expect(result.hasActivePr).toBe(false);
+  });
+
+  it('distinguishes unknown CI as not fetched when PR has never been synced', () => {
+    const result = deriveWorkspaceFlowState({
+      prUrl: 'https://github.com/acme/repo/pull/1',
+      prState: PRState.OPEN,
+      prCiStatus: CIStatus.UNKNOWN,
+      prUpdatedAt: null,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+    });
+
+    expect(result.ciObservation).toBe('NOT_FETCHED');
+    expect(result.phase).toBe('CI_WAIT');
+    expect(result.isWorking).toBe(true);
+  });
+
+  it('distinguishes unknown CI as no checks after PR sync', () => {
+    const result = deriveWorkspaceFlowState({
+      prUrl: 'https://github.com/acme/repo/pull/1',
+      prState: PRState.OPEN,
+      prCiStatus: CIStatus.UNKNOWN,
+      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+    });
+
+    expect(result.ciObservation).toBe('NO_CHECKS');
+    expect(result.phase).toBe('RATCHET_VERIFY');
   });
 });

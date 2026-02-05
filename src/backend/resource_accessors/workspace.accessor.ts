@@ -432,7 +432,7 @@ class WorkspaceAccessor {
     Array<{
       id: string;
       prUrl: string;
-      prNumber: number;
+      prNumber: number | null;
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
@@ -444,7 +444,6 @@ class WorkspaceAccessor {
       where: {
         status: 'READY',
         prUrl: { not: null },
-        prNumber: { not: null },
       },
       select: {
         id: true,
@@ -461,7 +460,7 @@ class WorkspaceAccessor {
       Array<{
         id: string;
         prUrl: string;
-        prNumber: number;
+        prNumber: number | null;
         ratchetEnabled: boolean;
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
@@ -477,7 +476,7 @@ class WorkspaceAccessor {
   findForRatchetById(id: string): Promise<{
     id: string;
     prUrl: string;
-    prNumber: number;
+    prNumber: number | null;
     ratchetEnabled: boolean;
     ratchetState: RatchetState;
     ratchetActiveSessionId: string | null;
@@ -489,7 +488,6 @@ class WorkspaceAccessor {
         id,
         status: 'READY',
         prUrl: { not: null },
-        prNumber: { not: null },
       },
       select: {
         id: true,
@@ -504,7 +502,7 @@ class WorkspaceAccessor {
     }) as Promise<{
       id: string;
       prUrl: string;
-      prNumber: number;
+      prNumber: number | null;
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;

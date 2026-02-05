@@ -76,6 +76,7 @@ export const workspaceRouter = router({
       prUrl: workspace.prUrl,
       prState: workspace.prState,
       prCiStatus: workspace.prCiStatus,
+      prUpdatedAt: workspace.prUpdatedAt,
       ratchetEnabled: workspace.ratchetEnabled,
       ratchetState: workspace.ratchetState,
     });
@@ -83,6 +84,7 @@ export const workspaceRouter = router({
       ...workspace,
       ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
       flowPhase: flowState.phase,
+      ciObservation: flowState.ciObservation,
     };
   }),
 

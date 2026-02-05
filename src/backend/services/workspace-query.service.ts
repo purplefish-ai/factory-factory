@@ -40,6 +40,7 @@ class WorkspaceQueryService {
         prUrl: workspace.prUrl,
         prState: workspace.prState,
         prCiStatus: workspace.prCiStatus,
+        prUpdatedAt: workspace.prUpdatedAt,
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
       });
@@ -99,6 +100,7 @@ class WorkspaceQueryService {
           prUrl: w.prUrl,
           prState: w.prState,
           prCiStatus: w.prCiStatus,
+          prUpdatedAt: w.prUpdatedAt,
           ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
         });
@@ -127,6 +129,7 @@ class WorkspaceQueryService {
           ratchetState: w.ratchetState,
           ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
           flowPhase: flowState.phase,
+          ciObservation: flowState.ciObservation,
           cachedKanbanColumn: w.cachedKanbanColumn,
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
         };
@@ -157,6 +160,7 @@ class WorkspaceQueryService {
           prUrl: workspace.prUrl,
           prState: workspace.prState,
           prCiStatus: workspace.prCiStatus,
+          prUpdatedAt: workspace.prUpdatedAt,
           ratchetEnabled: workspace.ratchetEnabled,
           ratchetState: workspace.ratchetState,
         });
@@ -175,6 +179,7 @@ class WorkspaceQueryService {
           isWorking,
           ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
           flowPhase: flowState.phase,
+          ciObservation: flowState.ciObservation,
           isArchived: false,
         };
       })
