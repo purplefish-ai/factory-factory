@@ -701,6 +701,25 @@ describe('ClaudeProtocol', () => {
   // ===========================================================================
 
   describe('error handling', () => {
+    it('should have error event handler registered for stdin', () => {
+      // Verify that the protocol registers an error handler on stdin
+      // This prevents unhandled error exceptions from crashing the process
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      // Before start, no error handler
+      const listenersBefore = stdin2.listenerCount('error');
+
+      protocol2.start();
+
+      // After start, protocol should have added an error handler
+      const listenersAfter = stdin2.listenerCount('error');
+      expect(listenersAfter).toBeGreaterThan(listenersBefore);
+
+      protocol2.stop();
+    });
+
     it('should have error event handler registered for stdout', () => {
       // Verify that the protocol registers an error handler on stdout
       // This prevents unhandled error exceptions from crashing the process
@@ -718,6 +737,18 @@ describe('ClaudeProtocol', () => {
       expect(listenersAfter).toBeGreaterThan(listenersBefore);
 
       protocol2.stop();
+    });
+
+    it('should emit error when stdin emits error', () => {
+      // Test that stdin errors are properly caught and emitted
+      const errorHandler = vi.fn();
+      protocol.on('error', errorHandler);
+
+      // Simulate stdin error
+      const testError = new Error('stdin write error');
+      stdin.emit('error', testError);
+
+      expect(errorHandler).toHaveBeenCalledWith(testError);
     });
 
     it('should forward error events from the protocol to listeners', () => {
