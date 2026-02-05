@@ -53,6 +53,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ArchiveWorkspaceDialog, RatchetToggleButton } from '@/components/workspace';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
+import { useCreateWorkspace } from '../hooks/use-create-workspace';
 import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
@@ -280,7 +281,31 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     [workspaceList, selectedProjectId, updateWorkspaceOrder]
   );
 
-  const createWorkspace = trpc.workspace.create.useMutation();
+  // Use shared workspace creation hook, passing sidebar's existing names to avoid a redundant query
+  const { handleCreate: createWorkspace } = useCreateWorkspace(
+    selectedProjectId,
+    selectedProjectSlug,
+    existingNames
+  );
+
+  const handleCreateWorkspace = () => {
+    if (!selectedProjectId || isCreating) {
+      return;
+    }
+    // Generate unique name once and use it for both optimistic UI and actual creation
+    const name = generateUniqueWorkspaceName(existingNames);
+    startCreating(name);
+
+    // Use shared creation logic with the same name (handles navigation and error toasts).
+    // The optimistic placeholder auto-clears when the workspace appears in the server list
+    // (managed by useWorkspaceListState). On error, the hook resets its own state and
+    // cancelCreating below handles the placeholder.
+    createWorkspace(name).catch(() => {
+      // Error toast already shown by the hook; just remove the optimistic placeholder
+      cancelCreating();
+    });
+  };
+
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
@@ -296,35 +321,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       toast.error(error.message);
     },
   });
-
-  const handleCreateWorkspace = async () => {
-    if (!selectedProjectId || isCreating) {
-      return;
-    }
-    const name = generateUniqueWorkspaceName(existingNames);
-    startCreating(name);
-
-    try {
-      // Create workspace (branchName defaults to project's default branch)
-      // Don't create a session - user will choose workflow in workspace page
-      const workspace = await createWorkspace.mutateAsync({
-        projectId: selectedProjectId,
-        name,
-      });
-
-      // Invalidate caches to trigger immediate refetch
-      utils.workspace.list.invalidate({ projectId: selectedProjectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-
-      // Navigate to workspace (workflow selection will be shown)
-      navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
-    } catch (error) {
-      // Clear the creating state on error so the UI doesn't get stuck
-      cancelCreating();
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Failed to create workspace: ${message}`);
-    }
-  };
 
   const handleArchiveRequest = (workspace: WorkspaceListItem) => {
     setWorkspaceToArchive(workspace.id);
