@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FileJson, RefreshCw, Upload, Wrench } from 'lucide-react';
+import { CheckCircle2, Download, FileJson, RefreshCw, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { RatchetWrenchIcon } from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { trpc } from '../../frontend/lib/trpc';
@@ -374,7 +375,7 @@ function RatchetSettingsSection() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Wrench className="w-5 h-5" />
+            <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
             Ratchet (PR Auto-Progression)
           </CardTitle>
           <CardDescription>
@@ -392,7 +393,7 @@ function RatchetSettingsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Wrench className="w-5 h-5" />
+          <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
           Ratchet (PR Auto-Progression)
         </CardTitle>
         <CardDescription>
@@ -400,12 +401,28 @@ function RatchetSettingsSection() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Default for GitHub-issue workspaces */}
+        <div className="rounded-md border bg-muted/40 p-3 space-y-1.5">
+          <p className="text-sm font-medium">How ratcheting works</p>
+          <p className="text-sm text-muted-foreground">
+            Ratchet monitors workspaces that have PRs and reacts to the current PR state.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            If CI fails, conflicts appear, or review comments are left, ratchet can open a fix
+            session, apply changes, and push updates.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            This runs repeatedly until the PR is clean, approved, and ready to merge (or merged
+            automatically if enabled).
+          </p>
+        </div>
+
+        {/* Default for all new workspaces */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label htmlFor="ratchet-enabled">Default for new GitHub issue workspaces</Label>
+            <Label htmlFor="ratchet-enabled">Default for all new workspaces</Label>
             <p className="text-sm text-muted-foreground">
-              Sets the initial ratchet state when creating a workspace from a GitHub issue
+              Sets the initial ratchet state for new workspaces created manually, from GitHub
+              issues, or from existing branches
             </p>
           </div>
           <Switch

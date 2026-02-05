@@ -1,12 +1,8 @@
-import { Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import {
-  getRatchetStateLabel,
-  getRatchetVisualState,
-  type RatchetStateLike,
-} from './ratchet-state';
+import { getRatchetStateLabel, type RatchetStateLike } from './ratchet-state';
+import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 
 interface RatchetToggleButtonProps {
   enabled: boolean;
@@ -33,8 +29,6 @@ export function RatchetToggleButton({
   stopPropagation = false,
   className,
 }: RatchetToggleButtonProps) {
-  const visualState = getRatchetVisualState(enabled, state);
-
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -42,6 +36,11 @@ export function RatchetToggleButton({
           type="button"
           variant="ghost"
           size="icon"
+          onPointerDown={(event) => {
+            if (stopPropagation) {
+              event.stopPropagation();
+            }
+          }}
           onClick={(event) => {
             if (stopPropagation) {
               event.preventDefault();
@@ -52,12 +51,9 @@ export function RatchetToggleButton({
           disabled={disabled}
           aria-label={enabled ? 'Disable ratcheting' : 'Enable ratcheting'}
           aria-pressed={enabled}
-          data-ratchet-state={visualState}
-          className={cn('ratchet-toggle h-7 w-7', className)}
+          className={cn('h-7 w-7 p-0', className)}
         >
-          <Wrench
-            className={cn('h-3.5 w-3.5', enabled ? 'text-foreground' : 'text-muted-foreground')}
-          />
+          <RatchetWrenchIcon enabled={enabled} state={state} className="h-full w-full" />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top">{getTooltip(enabled, state)}</TooltipContent>

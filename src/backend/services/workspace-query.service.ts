@@ -153,7 +153,8 @@ class WorkspaceQueryService {
       .filter((workspace) => {
         // Filter out workspaces with null kanbanColumn (hidden: READY + no sessions)
         return workspace.kanbanColumn !== null;
-      });
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async refreshFactoryConfigs(projectId: string) {
