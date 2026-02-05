@@ -18,6 +18,7 @@ export function parseDetailedDiff(diff: string): DiffLine[] {
 
   let oldLine = 0;
   let newLine = 0;
+  let inHunk = false;
 
   for (const line of lines) {
     if (
@@ -29,27 +30,29 @@ export function parseDetailedDiff(diff: string): DiffLine[] {
       line.startsWith('deleted file')
     ) {
       result.push({ type: 'header', content: line });
+      inHunk = false;
     } else if (line.startsWith('@@')) {
       // Parse hunk header: @@ -start,count +start,count @@
       const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
       if (match) {
         oldLine = Number.parseInt(match[1], 10);
         newLine = Number.parseInt(match[2], 10);
+        inHunk = true;
       }
       result.push({ type: 'hunk', content: line });
-    } else if (line.startsWith('+')) {
+    } else if (inHunk && line.startsWith('+')) {
       result.push({
         type: 'addition',
         content: line.slice(1),
         lineNumber: { new: newLine++ },
       });
-    } else if (line.startsWith('-')) {
+    } else if (inHunk && line.startsWith('-')) {
       result.push({
         type: 'deletion',
         content: line.slice(1),
         lineNumber: { old: oldLine++ },
       });
-    } else if (line.startsWith(' ') || line === '') {
+    } else if (inHunk && (line.startsWith(' ') || line === '')) {
       result.push({
         type: 'context',
         content: line.slice(1) || '',
@@ -98,12 +101,20 @@ export function parseFileDiff(diff: string): DiffFile[] {
       } else if (line.startsWith('-') && !line.startsWith('---')) {
         currentHunk.lines.push({ type: 'del', content: line.slice(1) });
         currentFile.deletions++;
-      } else if (!line.startsWith('\\')) {
+      } else if (line.startsWith(' ')) {
+        // Only treat space-prefixed lines as context lines
         currentHunk.lines.push({
           type: 'context',
-          content: line.slice(1) || '',
+          content: line.slice(1),
+        });
+      } else if (line === '') {
+        // Empty lines are treated as context
+        currentHunk.lines.push({
+          type: 'context',
+          content: '',
         });
       }
+      // Skip other lines (e.g. "\ No newline", metadata) - they are not rendered
     }
   }
 
