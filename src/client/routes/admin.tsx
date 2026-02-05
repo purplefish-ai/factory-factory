@@ -1,10 +1,10 @@
-import { CheckCircle2, Download, FileJson, RefreshCw, Upload } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Download, FileJson, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { DataImportButton } from '@/components/data-import/data-import-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -568,44 +568,9 @@ function RatchetSettingsSection() {
 // Data Backup Section
 // ============================================================================
 
-interface ImportConfirmState {
-  open: boolean;
-  data: unknown;
-  summary: string;
-}
-
 function DataBackupSection() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [confirmState, setConfirmState] = useState<ImportConfirmState>({
-    open: false,
-    data: null,
-    summary: '',
-  });
   const utils = trpc.useUtils();
-
-  const importData = trpc.admin.importData.useMutation({
-    onSuccess: (result) => {
-      const { results } = result;
-      const summary = [
-        `Projects: ${results.projects.imported} imported, ${results.projects.skipped} skipped`,
-        `Workspaces: ${results.workspaces.imported} imported, ${results.workspaces.skipped} skipped`,
-        `Claude Sessions: ${results.claudeSessions.imported} imported, ${results.claudeSessions.skipped} skipped`,
-        `Terminal Sessions: ${results.terminalSessions.imported} imported, ${results.terminalSessions.skipped} skipped`,
-        `User Settings: ${results.userSettings.imported ? 'imported' : results.userSettings.skipped ? 'skipped (exists)' : 'none'}`,
-      ].join('\n');
-
-      toast.success('Import completed', { description: summary, duration: 10_000 });
-      setConfirmState({ open: false, data: null, summary: '' });
-
-      // Invalidate all queries to refresh data
-      utils.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Import failed: ${error.message}`);
-      setConfirmState({ open: false, data: null, summary: '' });
-    },
-  });
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -629,143 +594,31 @@ function DataBackupSection() {
     }
   };
 
-  const buildImportSummary = (data: {
-    data: {
-      projects: unknown[];
-      workspaces: unknown[];
-      claudeSessions: unknown[];
-      terminalSessions: unknown[];
-      userSettings: unknown;
-    };
-    meta: { exportedAt: string; version: string };
-  }): string => {
-    return [
-      `Exported: ${new Date(data.meta.exportedAt).toLocaleString()}`,
-      `Version: ${data.meta.version}`,
-      '',
-      `Projects: ${data.data.projects.length}`,
-      `Workspaces: ${data.data.workspaces.length}`,
-      `Claude Sessions: ${data.data.claudeSessions.length}`,
-      `Terminal Sessions: ${data.data.terminalSessions.length}`,
-      `User Settings: ${data.data.userSettings ? 'Yes' : 'No'}`,
-    ].join('\n');
-  };
-
-  const getErrorMessage = (error: unknown): string => {
-    if (error instanceof Error) {
-      return error.message;
-    }
-    return 'Unknown error';
-  };
-
-  const validateAndParseFile = async (file: File): Promise<unknown> => {
-    const text = await file.text();
-    const data = JSON.parse(text);
-
-    // Basic validation
-    if (!(data.meta?.exportedAt && data.meta?.version && data.data)) {
-      throw new Error('Invalid backup file format');
-    }
-
-    return data;
-  };
-
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const data = (await validateAndParseFile(file)) as {
-        data: {
-          projects: unknown[];
-          workspaces: unknown[];
-          claudeSessions: unknown[];
-          terminalSessions: unknown[];
-          userSettings: unknown;
-        };
-        meta: { exportedAt: string; version: string };
-      };
-
-      // Show confirmation dialog with summary
-      setConfirmState({
-        open: true,
-        data,
-        summary: buildImportSummary(data),
-      });
-    } catch (error) {
-      toast.error(`Failed to read file: ${getErrorMessage(error)}`);
-    }
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleConfirmImport = () => {
-    if (confirmState.data) {
-      // biome-ignore lint/suspicious/noExplicitAny: Dynamic import data
-      importData.mutate(confirmState.data as any);
-    }
-  };
-
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileJson className="w-5 h-5" />
-            Data Backup
-          </CardTitle>
-          <CardDescription>
-            Export and import database data for backup or migration purposes
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <Button onClick={handleExport} disabled={isExporting} variant="outline">
-              <Download className="w-4 h-4 mr-2" />
-              {isExporting ? 'Exporting...' : 'Export Data'}
-            </Button>
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importData.isPending}
-              variant="outline"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              {importData.isPending ? 'Importing...' : 'Import Data'}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Export includes projects, workspaces, session metadata, and user preferences. Caches
-            will be rebuilt automatically after import.
-          </p>
-        </CardContent>
-      </Card>
-
-      <ConfirmDialog
-        open={confirmState.open}
-        onOpenChange={(open) => {
-          if (!open) {
-            setConfirmState({ open: false, data: null, summary: '' });
-          }
-        }}
-        title="Confirm Import"
-        description={`Review the data to be imported. Existing records will be skipped.\n\n${confirmState.summary}`}
-        confirmText="Import"
-        onConfirm={handleConfirmImport}
-        isPending={importData.isPending}
-      />
-    </>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileJson className="w-5 h-5" />
+          Data Backup
+        </CardTitle>
+        <CardDescription>
+          Export and import database data for backup or migration purposes
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-4">
+          <Button onClick={handleExport} disabled={isExporting} variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            {isExporting ? 'Exporting...' : 'Export Data'}
+          </Button>
+          <DataImportButton variant="outline" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Export includes projects, workspaces, session metadata, and user preferences. Caches will
+          be rebuilt automatically after import.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
