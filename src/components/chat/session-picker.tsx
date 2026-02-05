@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { SessionInfo } from '@/lib/claude-types';
-import { formatBytes } from '@/lib/formatters';
+import { formatBytes, formatRelativeDateShort } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -26,41 +26,6 @@ interface SessionPickerProps {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Formats a date string for display.
- */
-function formatDate(dateString: string): string {
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60_000);
-    const diffHours = Math.floor(diffMs / 3_600_000);
-    const diffDays = Math.floor(diffMs / 86_400_000);
-
-    if (diffMins < 1) {
-      return 'Just now';
-    }
-    if (diffMins < 60) {
-      return `${diffMins}m ago`;
-    }
-    if (diffHours < 24) {
-      return `${diffHours}h ago`;
-    }
-    if (diffDays < 7) {
-      return `${diffDays}d ago`;
-    }
-
-    return date.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    // Invalid date string - return as-is rather than crashing
-    return dateString;
-  }
-}
 
 /**
  * Truncates a Claude session ID for display.
@@ -140,7 +105,7 @@ export function SessionPicker({
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    <span>{formatDate(session.modifiedAt)}</span>
+                    <span>{formatRelativeDateShort(session.modifiedAt)}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <HardDrive className="h-3 w-3" />
