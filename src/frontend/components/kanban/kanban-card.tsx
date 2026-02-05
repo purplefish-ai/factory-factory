@@ -85,40 +85,38 @@ export function KanbanCard({
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {(workspace.branchName || showPR || ratchetEnabled) && (
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-              <RatchetToggleButton
-                enabled={ratchetEnabled}
-                state={workspace.ratchetState}
-                className="h-5 w-5 shrink-0"
-                disabled={isTogglePending || isArchived || !onToggleRatcheting}
-                stopPropagation
-                onToggle={(enabled) => {
-                  onToggleRatcheting?.(workspace.id, enabled);
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+            <RatchetToggleButton
+              enabled={ratchetEnabled}
+              state={workspace.ratchetState}
+              className="h-5 w-5 shrink-0"
+              disabled={isTogglePending || isArchived || !onToggleRatcheting}
+              stopPropagation
+              onToggle={(enabled) => {
+                onToggleRatcheting?.(workspace.id, enabled);
+              }}
+            />
+            {workspace.branchName && (
+              <>
+                <GitBranch className="h-3 w-3 shrink-0" />
+                <span className="font-mono truncate">{workspace.branchName}</span>
+              </>
+            )}
+            {showPR && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
                 }}
-              />
-              {workspace.branchName && (
-                <>
-                  <GitBranch className="h-3 w-3 shrink-0" />
-                  <span className="font-mono truncate">{workspace.branchName}</span>
-                </>
-              )}
-              {showPR && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-                  }}
-                  className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                >
-                  <GitPullRequest className="h-3 w-3" />
-                  <span>#{workspace.prNumber}</span>
-                </button>
-              )}
-            </div>
-          )}
+                className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              >
+                <GitPullRequest className="h-3 w-3" />
+                <span>#{workspace.prNumber}</span>
+              </button>
+            )}
+          </div>
 
           {showPR && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -44,6 +44,7 @@ interface KanbanProviderProps {
 }
 
 export function KanbanProvider({ projectId, projectSlug, children }: KanbanProviderProps) {
+  const utils = trpc.useUtils();
   const {
     data: workspaces,
     isLoading: isLoadingWorkspaces,
@@ -78,7 +79,11 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     setTogglingWorkspaceId(workspaceId);
     try {
       await toggleRatchetingMutation.mutateAsync({ workspaceId, enabled });
-      refetchWorkspaces();
+      await Promise.all([
+        refetchWorkspaces(),
+        utils.workspace.getProjectSummaryState.invalidate({ projectId }),
+        utils.workspace.get.invalidate({ id: workspaceId }),
+      ]);
     } finally {
       setTogglingWorkspaceId(null);
     }

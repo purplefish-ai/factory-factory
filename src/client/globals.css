@@ -208,9 +208,15 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
-@keyframes ratchet-ants {
+@property --ratchet-dash-rotation {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes ratchet-dashes {
   to {
-    background-position: 24px 0;
+    --ratchet-dash-rotation: 1turn;
   }
 }
 
@@ -222,9 +228,6 @@
 .ratchet-toggle[data-ratchet-state='processing'] {
   position: relative;
   border-color: transparent;
-}
-
-.ratchet-toggle[data-ratchet-state='processing'] {
   background: var(--background);
 }
 
@@ -234,10 +237,18 @@
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: repeating-linear-gradient(90deg, oklch(0.2 0 0) 0 6px, var(--brand) 6px 12px);
-  animation: ratchet-ants 1s linear infinite;
+  --ratchet-dash-rotation: 0deg;
+  background: repeating-conic-gradient(
+    from var(--ratchet-dash-rotation),
+    color-mix(in oklab, var(--brand) 85%, var(--foreground) 15%) 0deg 12deg,
+    color-mix(in oklab, var(--brand) 25%, var(--background) 75%) 12deg 24deg
+  );
+  animation: ratchet-dashes 3.85s linear infinite;
   pointer-events: none;
   -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;

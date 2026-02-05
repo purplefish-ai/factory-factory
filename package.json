@@ -41,6 +41,7 @@
   "scripts": {
     "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
     "build": "tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && cp -r prompts dist/ && vite build",
+    "build:storybook": "storybook build",
     "start": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve",
     "test": "vitest run",
     "test:watch": "vitest",

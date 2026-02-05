@@ -645,29 +645,17 @@ function SortableWorkspaceItem({
               <GripVertical className="h-3 w-3" />
             </button>
 
-            {/* Status dot + ratchet toggle */}
-            <div className="w-4 shrink-0 mt-1 flex flex-col items-center gap-1">
+            {/* Status dot */}
+            <div className="w-4 shrink-0 mt-1 flex flex-col items-center">
               {isArchivingItem ? (
                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
               ) : (
-                <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
-                  </Tooltip>
-                  <RatchetToggleButton
-                    enabled={ratchetEnabled}
-                    state={workspace.ratchetState}
-                    className="h-4 w-4 shrink-0"
-                    disabled={toggleRatcheting.isPending}
-                    stopPropagation
-                    onToggle={(enabled) => {
-                      toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
-                    }}
-                  />
-                </>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
+                </Tooltip>
               )}
             </div>
 
@@ -710,10 +698,22 @@ function SortableWorkspaceItem({
                 )}
               </div>
 
-              {/* Row 2: branch name */}
-              {!isArchivingItem && workspace.branchName && (
-                <div className="truncate text-[11px] leading-tight text-muted-foreground font-mono">
-                  {workspace.branchName}
+              {/* Row 2: ratchet toggle + branch name */}
+              {!isArchivingItem && (
+                <div className="flex items-center gap-1.5 text-[11px] leading-tight text-muted-foreground min-w-0">
+                  <RatchetToggleButton
+                    enabled={ratchetEnabled}
+                    state={workspace.ratchetState}
+                    className="h-4 w-4 shrink-0"
+                    disabled={toggleRatcheting.isPending}
+                    stopPropagation
+                    onToggle={(enabled) => {
+                      toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
+                    }}
+                  />
+                  {workspace.branchName && (
+                    <span className="truncate font-mono">{workspace.branchName}</span>
+                  )}
                 </div>
               )}
 

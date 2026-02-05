@@ -1,4 +1,3 @@
-import { withThemeByClassName } from '@storybook/addon-themes';
 import type { Preview } from '@storybook/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
@@ -8,6 +7,21 @@ import { TRPCProvider } from '@/frontend/lib/providers';
 import '../src/client/globals.css';
 
 const preview: Preview = {
+  globalTypes: {
+    theme: {
+      name: 'Theme',
+      description: 'Global theme for all stories',
+      defaultValue: 'light',
+      toolbar: {
+        icon: 'mirror',
+        items: [
+          { value: 'light', title: 'Light' },
+          { value: 'dark', title: 'Dark' },
+        ],
+        dynamicTitle: true,
+      },
+    },
+  },
   parameters: {
     controls: {
       matchers: {
@@ -18,23 +32,25 @@ const preview: Preview = {
     layout: 'centered',
   },
   decorators: [
-    (Story) =>
+    (Story, context) =>
       React.createElement(
-        MemoryRouter,
-        null,
+        'div',
+        {
+          className:
+            context.globals.theme === 'dark'
+              ? 'dark bg-background text-foreground'
+              : 'bg-background text-foreground',
+        },
         React.createElement(
-          TRPCProvider,
+          MemoryRouter,
           null,
-          React.createElement(TooltipProvider, null, React.createElement(Story))
+          React.createElement(
+            TRPCProvider,
+            null,
+            React.createElement(TooltipProvider, null, React.createElement(Story))
+          )
         )
       ),
-    withThemeByClassName({
-      themes: {
-        light: '',
-        dark: 'dark',
-      },
-      defaultTheme: 'light',
-    }),
   ],
   tags: ['autodocs'],
 };

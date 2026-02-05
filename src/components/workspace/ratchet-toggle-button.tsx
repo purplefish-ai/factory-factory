@@ -1,4 +1,4 @@
-import { Hammer } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -55,7 +55,7 @@ export function RatchetToggleButton({
           data-ratchet-state={visualState}
           className={cn('ratchet-toggle h-7 w-7', className)}
         >
-          <Hammer
+          <Wrench
             className={cn('h-3.5 w-3.5', enabled ? 'text-foreground' : 'text-muted-foreground')}
           />
         </Button>
