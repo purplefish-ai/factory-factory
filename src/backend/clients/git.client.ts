@@ -494,6 +494,57 @@ export class GitClient {
     }
     return result.stdout.trim();
   }
+
+  /**
+   * Rebase current branch onto upstream branch
+   * Returns success status, whether conflicts exist, and list of conflicted files
+   */
+  async rebase(
+    worktreePath: string,
+    upstreamBranch: string
+  ): Promise<{ success: boolean; hasConflicts: boolean; conflictedFiles: string[] }> {
+    const result = await gitCommand(['rebase', upstreamBranch], worktreePath);
+
+    // Rebase succeeded
+    if (result.code === 0) {
+      return { success: true, hasConflicts: false, conflictedFiles: [] };
+    }
+
+    // Check if rebase failed due to conflicts
+    const hasConflicts = result.stderr.includes('CONFLICT') || result.stdout.includes('CONFLICT');
+
+    if (!hasConflicts) {
+      // Some other error (not conflicts) - throw
+      throw new Error(`Failed to rebase: ${result.stderr || result.stdout}`);
+    }
+
+    // Get list of conflicted files
+    const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
+    const conflictedFiles: string[] = [];
+    if (statusResult.code === 0) {
+      const lines = statusResult.stdout.split('\n');
+      for (const line of lines) {
+        // UU = both modified (conflict)
+        // AA = both added (conflict)
+        // DD = both deleted (conflict)
+        if (line.startsWith('UU ') || line.startsWith('AA ') || line.startsWith('DD ')) {
+          conflictedFiles.push(line.substring(3).trim());
+        }
+      }
+    }
+
+    return { success: false, hasConflicts: true, conflictedFiles };
+  }
+
+  /**
+   * Abort an in-progress rebase
+   */
+  async abortRebase(worktreePath: string): Promise<void> {
+    const result = await gitCommand(['rebase', '--abort'], worktreePath);
+    if (result.code !== 0) {
+      throw new Error(`Failed to abort rebase: ${result.stderr || result.stdout}`);
+    }
+  }
 }
 
 /**

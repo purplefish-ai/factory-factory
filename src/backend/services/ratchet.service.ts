@@ -11,8 +11,10 @@
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import type { PRWithFullDetails } from '@/shared/github-types';
+import { GitClientFactory } from '../clients/git.client';
 import { prisma } from '../db';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { projectAccessor } from '../resource_accessors/project.accessor';
 import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from './config.service';
@@ -479,10 +481,7 @@ class RatchetService {
         return await this.triggerFixer(workspace, 'ci', prStateInfo, settings);
 
       case RatchetState.MERGE_CONFLICT:
-        if (!settings.autoFixConflicts) {
-          return { type: 'DISABLED', reason: 'Conflict resolution disabled' };
-        }
-        return await this.triggerFixer(workspace, 'merge', prStateInfo, settings);
+        return await this.handleMergeConflict(workspace, prStateInfo, settings);
 
       case RatchetState.REVIEW_PENDING:
         if (!settings.autoFixReviews) {
@@ -602,13 +601,130 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
   }
 
   /**
+   * Handle MERGE_CONFLICT state by attempting auto-rebase first, then triggering fixer if needed
+   */
+  private async handleMergeConflict(
+    workspace: WorkspaceWithPR,
+    prStateInfo: PRStateInfo,
+    settings: RatchetSettings
+  ): Promise<RatchetAction> {
+    if (!settings.autoFixConflicts) {
+      return { type: 'DISABLED', reason: 'Conflict resolution disabled' };
+    }
+
+    // First attempt automatic rebase
+    const autoRebaseResult = await this.attemptAutoRebase(workspace);
+
+    // If auto-rebase succeeded, return waiting - next cycle will detect CI_RUNNING
+    if (autoRebaseResult.success) {
+      logger.info('Auto-rebase succeeded, waiting for CI', {
+        workspaceId: workspace.id,
+        prNumber: workspace.prNumber,
+      });
+      return { type: 'WAITING', reason: 'Auto-rebased, waiting for CI' };
+    }
+
+    // If there are actual conflicts, trigger agent with conflict context
+    if (autoRebaseResult.success === false && 'hasConflicts' in autoRebaseResult) {
+      return await this.triggerFixer(workspace, 'merge', prStateInfo, settings, {
+        conflictedFiles: autoRebaseResult.conflictedFiles,
+      });
+    }
+
+    // If auto-rebase failed for other reasons, trigger agent anyway
+    logger.warn('Auto-rebase failed, triggering agent fixer', {
+      workspaceId: workspace.id,
+      error: 'error' in autoRebaseResult ? autoRebaseResult.error : 'Unknown error',
+    });
+    return await this.triggerFixer(workspace, 'merge', prStateInfo, settings);
+  }
+
+  /**
+   * Attempt automatic fetch, rebase, and push to resolve merge conflicts
+   * Returns success if the rebase succeeded without conflicts
+   * Returns failure with conflict info if manual resolution is needed
+   */
+  private async attemptAutoRebase(
+    workspace: WorkspaceWithPR,
+    baseBranch = 'origin/main'
+  ): Promise<
+    | { success: true }
+    | { success: false; hasConflicts: true; conflictedFiles: string[] }
+    | { success: false; error: string }
+  > {
+    try {
+      // Get workspace details including project
+      const fullWorkspace = await workspaceAccessor.findById(workspace.id);
+      if (!fullWorkspace?.worktreePath) {
+        return { success: false, error: 'Workspace not ready (no worktree path)' };
+      }
+
+      // Get project to access git client
+      const project = await projectAccessor.findById(fullWorkspace.projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const gitClient = GitClientFactory.forProject({
+        repoPath: project.repoPath,
+        worktreeBasePath: project.worktreeBasePath,
+      });
+
+      logger.info('Attempting automatic rebase', {
+        workspaceId: workspace.id,
+        worktreePath: fullWorkspace.worktreePath,
+        baseBranch,
+      });
+
+      // 1. Fetch latest from origin
+      await gitClient.fetch(fullWorkspace.worktreePath);
+      logger.debug('Fetched latest changes from origin', { workspaceId: workspace.id });
+
+      // 2. Attempt rebase
+      const rebaseResult = await gitClient.rebase(fullWorkspace.worktreePath, baseBranch);
+
+      // 3a. Rebase succeeded - push the rebased branch
+      if (rebaseResult.success) {
+        await gitClient.pushBranch(fullWorkspace.worktreePath);
+        logger.info('Automatic rebase and push succeeded', {
+          workspaceId: workspace.id,
+          prNumber: workspace.prNumber,
+        });
+        return { success: true };
+      }
+
+      // 3b. Rebase failed with conflicts - abort and return conflict info
+      if (rebaseResult.hasConflicts) {
+        await gitClient.abortRebase(fullWorkspace.worktreePath);
+        logger.info('Rebase has conflicts, aborting', {
+          workspaceId: workspace.id,
+          conflictedFiles: rebaseResult.conflictedFiles,
+        });
+        return {
+          success: false,
+          hasConflicts: true,
+          conflictedFiles: rebaseResult.conflictedFiles,
+        };
+      }
+
+      // 3c. Some other error
+      return { success: false, error: 'Rebase failed for unknown reason' };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Auto-rebase failed', error as Error, { workspaceId: workspace.id });
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
    * Trigger a fixer session for the given type
    */
   private async triggerFixer(
     workspace: WorkspaceWithPR,
     fixerType: 'ci' | 'merge' | 'review',
     prStateInfo: PRStateInfo,
-    settings: RatchetSettings
+    settings: RatchetSettings,
+    context?: { conflictedFiles?: string[] }
   ): Promise<RatchetAction> {
     try {
       // Validate workspace exists and has a worktree
@@ -682,7 +798,13 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       }
 
       // Build initial prompt based on fixer type
-      const initialPrompt = this.buildInitialPrompt(fixerType, workspace, prStateInfo, settings);
+      const initialPrompt = this.buildInitialPrompt(
+        fixerType,
+        workspace,
+        prStateInfo,
+        settings,
+        context
+      );
 
       // Inject the initial prompt into the chat UI so it's visible to users
       messageStateService.injectCommittedUserMessage(result.sessionId, initialPrompt);
@@ -739,7 +861,8 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     fixerType: 'ci' | 'merge' | 'review',
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
-    settings: RatchetSettings
+    settings: RatchetSettings,
+    context?: { conflictedFiles?: string[] }
   ): string {
     const prNumber = workspace.prNumber;
     const prUrl = workspace.prUrl;
@@ -748,7 +871,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       case 'ci':
         return this.buildCIFixPrompt(prNumber, prUrl, prStateInfo);
       case 'merge':
-        return this.buildMergeFixPrompt(prNumber, prUrl);
+        return this.buildMergeFixPrompt(prNumber, prUrl, context?.conflictedFiles);
       case 'review':
         return this.buildReviewFixPrompt(prNumber, prUrl, prStateInfo, settings);
       default:
@@ -792,28 +915,41 @@ Please investigate and fix these CI failures.`;
     return prompt;
   }
 
-  private buildMergeFixPrompt(prNumber: number, prUrl: string): string {
-    return `## Merge Conflict Alert
+  private buildMergeFixPrompt(prNumber: number, prUrl: string, conflictedFiles?: string[]): string {
+    let prompt = `## Merge Conflict Alert
 
-PR #${prNumber} has merge conflicts with the base branch.
+PR #${prNumber} has merge conflicts with the base branch that require manual resolution.
 
 **PR URL:** ${prUrl}
 
-### Next Steps
+**Note:** An automatic rebase was already attempted but failed due to conflicts that require human judgment.
+`;
+
+    if (conflictedFiles && conflictedFiles.length > 0) {
+      prompt += `\n### Conflicted Files\n\n`;
+      for (const file of conflictedFiles) {
+        prompt += `- \`${file}\`\n`;
+      }
+      prompt += `\n`;
+    }
+
+    prompt += `### Next Steps
 
 1. Fetch the latest changes: \`git fetch origin\`
-2. Merge the base branch: \`git merge origin/main\`
-3. Resolve any conflicts in the affected files
-4. For each conflict:
+2. Rebase onto the base branch: \`git rebase origin/main\`
+3. Resolve conflicts in the affected files:
    - Understand both sides of the change
    - Preserve functionality from both when possible
    - If unsure, prefer the main branch changes
-5. After resolving, run tests: \`pnpm test\`
-6. Run type checking: \`pnpm typecheck\`
-7. Commit the merge: \`git commit -m "Merge main into feature branch"\`
-8. Push your changes: \`git push\`
+4. After resolving each file: \`git add <file>\`
+5. Continue the rebase: \`git rebase --continue\`
+6. Run tests: \`pnpm test\`
+7. Run type checking: \`pnpm typecheck\`
+8. Force push your rebased changes: \`git push --force-with-lease\`
 
 Please resolve these merge conflicts.`;
+
+    return prompt;
   }
 
   /**
