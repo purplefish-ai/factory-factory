@@ -280,8 +280,10 @@ class RatchetService {
         });
       }
 
-      // 4. Check workspace-level ratchet setting
-      const shouldTakeAction = workspace.ratchetEnabled;
+      // 4. Check workspace-level ratchet setting using latest value to avoid
+      // triggering actions after a user disables ratchet during an in-flight check.
+      const latestWorkspace = await workspaceAccessor.findById(workspace.id);
+      const shouldTakeAction = latestWorkspace?.ratchetEnabled ?? workspace.ratchetEnabled;
 
       // 5. Take action based on state (only if ratcheting is enabled for this workspace)
       const action = shouldTakeAction

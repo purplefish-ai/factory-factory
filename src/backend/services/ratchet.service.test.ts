@@ -17,6 +17,7 @@ vi.mock('../resource_accessors/user-settings.accessor', () => ({
 vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findWithPRsForRatchet: vi.fn(),
+    findById: vi.fn(),
     update: vi.fn(),
   },
 }));
@@ -160,6 +161,9 @@ describe('ratchet service', () => {
       'executeRatchetAction'
     );
 
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+      ratchetEnabled: false,
+    } as never);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
     const result = await (
@@ -178,6 +182,72 @@ describe('ratchet service', () => {
     expect(result).toMatchObject({
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
       previousState: RatchetState.IDLE,
+      newState: RatchetState.CI_FAILED,
+    });
+  });
+
+  it('does not execute ratchet actions when ratcheting is disabled mid-check', async () => {
+    const workspace = {
+      id: 'ws-3',
+      prUrl: 'https://github.com/example/repo/pull/3',
+      prNumber: 3,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+      ratchetActiveSessionId: null,
+      ratchetLastNotifiedState: null,
+      prReviewLastCheckedAt: null,
+    };
+
+    const prStateInfo = {
+      ciStatus: 'FAILURE',
+      mergeStateStatus: 'CLEAN',
+      hasChangesRequested: false,
+      hasNewReviewComments: false,
+      failedChecks: [],
+      reviews: [],
+      comments: [],
+      reviewComments: [],
+      newReviewComments: [],
+      newPRComments: [],
+      prState: 'OPEN',
+      prNumber: 3,
+    };
+
+    vi.spyOn(
+      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+      'fetchPRState'
+    ).mockResolvedValue(prStateInfo);
+
+    vi.spyOn(
+      ratchetService as unknown as { determineRatchetState: (...args: unknown[]) => RatchetState },
+      'determineRatchetState'
+    ).mockReturnValue(RatchetState.CI_FAILED);
+
+    const executeRatchetActionSpy = vi.spyOn(
+      ratchetService as unknown as { executeRatchetAction: (...args: unknown[]) => unknown },
+      'executeRatchetAction'
+    );
+
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+      ratchetEnabled: false,
+    } as never);
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    const result = await (
+      ratchetService as unknown as {
+        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+      }
+    ).processWorkspace(workspace, {
+      autoFixCi: true,
+      autoFixConflicts: true,
+      autoFixReviews: true,
+      autoMerge: false,
+      allowedReviewers: [],
+    });
+
+    expect(executeRatchetActionSpy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
       newState: RatchetState.CI_FAILED,
     });
   });
