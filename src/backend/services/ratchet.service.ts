@@ -558,7 +558,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
   }
 
   /**
-   * Check if a fixer session is still active
+   * Check if a fixer session is still active (exists and not completed/errored)
    */
   private async isFixerActive(sessionId: string): Promise<boolean> {
     const session = await claudeSessionAccessor.findById(sessionId);
@@ -566,12 +566,9 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       return false;
     }
 
-    if (session.status !== SessionStatus.RUNNING && session.status !== SessionStatus.IDLE) {
-      return false;
-    }
-
-    // Check if actually running in memory
-    return sessionService.isSessionRunning(sessionId);
+    // Session is active if it's RUNNING or IDLE (not COMPLETED, ERROR, or STOPPED)
+    // IDLE sessions are still considered active because they're dedicated to fixing this workspace
+    return session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE;
   }
 
   /**
