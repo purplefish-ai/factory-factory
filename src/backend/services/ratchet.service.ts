@@ -637,7 +637,13 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
             return { action: 'already_active' as const, sessionId: existingSession.id };
           }
 
-          // Session exists but idle - we'll restart it
+          // Session exists but not actively working
+          if (existingSession.status === SessionStatus.RUNNING) {
+            // Session is RUNNING but idle - send a new message to the existing client
+            return { action: 'send_message' as const, sessionId: existingSession.id };
+          }
+
+          // Session is IDLE - restart it
           return { action: 'restart' as const, sessionId: existingSession.id };
         }
 
@@ -683,6 +689,22 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
 
       // Build initial prompt based on fixer type
       const initialPrompt = this.buildInitialPrompt(fixerType, workspace, prStateInfo, settings);
+
+      if (result.action === 'send_message') {
+        // Session is RUNNING but idle - send new message to existing client
+        const client = sessionService.getClient(result.sessionId);
+        if (client) {
+          // Inject the prompt into the chat UI so it's visible to users
+          messageStateService.injectCommittedUserMessage(result.sessionId, initialPrompt);
+          client.sendMessage(initialPrompt);
+          logger.info('Sent ratchet notification to existing session', {
+            workspaceId: workspace.id,
+            sessionId: result.sessionId,
+            fixerType,
+          });
+        }
+        return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
+      }
 
       // Inject the initial prompt into the chat UI so it's visible to users
       messageStateService.injectCommittedUserMessage(result.sessionId, initialPrompt);
