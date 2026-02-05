@@ -36,10 +36,7 @@ export function useCreateWorkspace(projectId: string | undefined, projectSlug: s
 
       utils.workspace.list.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
-      // Note: We intentionally don't reset isCreating here. On success, navigate()
-      // unmounts this component, making state updates unnecessary. Resetting in a
-      // finally block could trigger React warnings about updating unmounted components.
-      // This matches the sidebar implementation in app-sidebar.tsx.
+      setIsCreating(false);
       navigate(`/projects/${projectSlug}/workspaces/${workspace.id}`);
     } catch (error) {
       setIsCreating(false);

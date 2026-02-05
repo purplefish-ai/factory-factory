@@ -1,5 +1,4 @@
 import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
-import { GitBranch, Kanban, List } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -19,13 +18,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { NewWorkspaceButton } from './new-workspace-button';
+import { ResumeBranchButton } from './resume-branch-button';
 import type { ViewMode } from './types';
+import { ViewModeToggle } from './view-mode-toggle';
 
 const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
 
@@ -74,23 +74,8 @@ export function WorkspacesTableView({
             ))}
           </SelectContent>
         </Select>
-        <ToggleGroup
-          type="single"
-          value={viewMode}
-          onValueChange={(value) => value && onViewModeChange(value as ViewMode)}
-          size="sm"
-        >
-          <ToggleGroupItem value="board" aria-label="Board view">
-            <Kanban className="h-4 w-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" aria-label="List view">
-            <List className="h-4 w-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <Button variant="outline" size="sm" onClick={onResumeOpen}>
-          <GitBranch className="h-4 w-4 mr-2" />
-          Resume branch
-        </Button>
+        <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
+        <ResumeBranchButton onClick={onResumeOpen} />
         <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
       </PageHeader>
 
