@@ -127,52 +127,91 @@ export function SlashCommandPalette({
   }, [isOpen, onClose, anchorRef]);
 
   /**
+   * Handle arrow down key - move selection down
+   */
+  const handleArrowDown = useCallback(() => {
+    if (filteredCommands.length > 0) {
+      setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
+    }
+    return 'handled' as const;
+  }, [filteredCommands.length]);
+
+  /**
+   * Handle arrow up key - move selection up
+   */
+  const handleArrowUp = useCallback(() => {
+    if (filteredCommands.length > 0) {
+      setSelectedIndex((prev) => Math.max(prev - 1, 0));
+    }
+    return 'handled' as const;
+  }, [filteredCommands.length]);
+
+  /**
+   * Select the currently highlighted command if available
+   */
+  const selectCurrentCommand = useCallback(() => {
+    const hasMatches = filteredCommands.length > 0;
+    if (hasMatches && filteredCommands[selectedIndex]) {
+      onSelect(filteredCommands[selectedIndex]);
+      return true;
+    }
+    return false;
+  }, [filteredCommands, selectedIndex, onSelect]);
+
+  /**
+   * Handle Enter key - select command or close and passthrough
+   */
+  const handleEnter = useCallback((): SlashKeyResult => {
+    if (selectCurrentCommand()) {
+      return 'handled';
+    }
+    // No matches - close menu and let message be sent
+    return 'close-and-passthrough';
+  }, [selectCurrentCommand]);
+
+  /**
+   * Handle Tab key - select command or passthrough
+   */
+  const handleTab = useCallback((): SlashKeyResult => {
+    if (selectCurrentCommand()) {
+      return 'handled';
+    }
+    // No matches - let Tab work normally (focus next element)
+    return 'passthrough';
+  }, [selectCurrentCommand]);
+
+  /**
+   * Handle Escape key - close the palette
+   */
+  const handleEscape = useCallback(() => {
+    onClose();
+    return 'handled' as const;
+  }, [onClose]);
+
+  /**
+   * Map of key names to their handler functions
+   */
+  const keyHandlers = useMemo(
+    () => ({
+      ArrowDown: handleArrowDown,
+      ArrowUp: handleArrowUp,
+      Enter: handleEnter,
+      Tab: handleTab,
+      Escape: handleEscape,
+    }),
+    [handleArrowDown, handleArrowUp, handleEnter, handleTab, handleEscape]
+  );
+
+  /**
    * Handle a keyboard event. Called by parent via paletteRef.
    * Returns the result indicating how the event should be handled.
    */
   const handleKeyDown = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: switch handles multiple key types
     (key: string): SlashKeyResult => {
-      const hasMatches = filteredCommands.length > 0;
-
-      switch (key) {
-        case 'ArrowDown':
-          if (hasMatches) {
-            setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
-          }
-          return 'handled';
-
-        case 'ArrowUp':
-          if (hasMatches) {
-            setSelectedIndex((prev) => Math.max(prev - 1, 0));
-          }
-          return 'handled';
-
-        case 'Enter':
-          if (hasMatches && filteredCommands[selectedIndex]) {
-            onSelect(filteredCommands[selectedIndex]);
-            return 'handled';
-          }
-          // No matches - close menu and let message be sent
-          return 'close-and-passthrough';
-
-        case 'Tab':
-          if (hasMatches && filteredCommands[selectedIndex]) {
-            onSelect(filteredCommands[selectedIndex]);
-            return 'handled';
-          }
-          // No matches - let Tab work normally (focus next element)
-          return 'passthrough';
-
-        case 'Escape':
-          onClose();
-          return 'handled';
-
-        default:
-          return 'passthrough';
-      }
+      const handler = keyHandlers[key as keyof typeof keyHandlers];
+      return handler ? handler() : 'passthrough';
     },
-    [filteredCommands, selectedIndex, onSelect, onClose]
+    [keyHandlers]
   );
 
   // Expose handleKeyDown via imperative handle
