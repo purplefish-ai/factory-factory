@@ -190,7 +190,7 @@ class PRReviewMonitorService {
         return true;
       });
 
-      // Filter comments by allowed users and timestamp
+      // Filter comments by allowed users and timestamp (new or edited)
       const lastCheckedAt = workspace.prReviewLastCheckedAt?.getTime() ?? 0;
 
       const newReviewComments = reviewComments.filter((comment) => {
@@ -198,9 +198,10 @@ class PRReviewMonitorService {
         if (filterByAllowedUsers && !settings.allowedUsers.includes(comment.author.login)) {
           return false;
         }
-        // Filter by timestamp (only new comments)
-        const commentTime = new Date(comment.createdAt).getTime();
-        return commentTime > lastCheckedAt;
+        // Filter by timestamp (new or edited comments)
+        const createdTime = new Date(comment.createdAt).getTime();
+        const updatedTime = new Date(comment.updatedAt).getTime();
+        return createdTime > lastCheckedAt || updatedTime > lastCheckedAt;
       });
 
       // Also check regular PR comments
@@ -209,9 +210,10 @@ class PRReviewMonitorService {
         if (filterByAllowedUsers && !settings.allowedUsers.includes(comment.author.login)) {
           return false;
         }
-        // Filter by timestamp (only new comments)
-        const commentTime = new Date(comment.createdAt).getTime();
-        return commentTime > lastCheckedAt;
+        // Filter by timestamp (new or edited comments)
+        const createdTime = new Date(comment.createdAt).getTime();
+        const updatedTime = new Date(comment.updatedAt).getTime();
+        return createdTime > lastCheckedAt || updatedTime > lastCheckedAt;
       });
 
       // Combine new comments

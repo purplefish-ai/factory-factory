@@ -38,7 +38,9 @@ const mockPR: PRWithFullDetails = {
     { __typename: 'CheckRun', name: 'Test', status: 'COMPLETED', conclusion: 'SUCCESS' },
   ],
   reviews: [],
-  comments: [{ id: '1', author: { login: 'reviewer' }, body: 'LGTM', createdAt: '', url: '' }],
+  comments: [
+    { id: '1', author: { login: 'reviewer' }, body: 'LGTM', createdAt: '', updatedAt: '', url: '' },
+  ],
   labels: [{ name: 'feature', color: '0e8a16' }],
   additions: 150,
   deletions: 25,
