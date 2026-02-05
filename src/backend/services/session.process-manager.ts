@@ -20,6 +20,7 @@ export type ClientCreatedCallback = (
 export type ClientEventHandlers = {
   onSessionId?: (sessionId: string, claudeSessionId: string) => Promise<void>;
   onExit?: (sessionId: string) => Promise<void>;
+  onError?: (sessionId: string, error: Error) => Promise<void>;
 };
 
 export class SessionProcessManager {
@@ -258,6 +259,27 @@ export class SessionProcessManager {
         logger.warn('Failed to handle exit event', {
           sessionId,
           error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+
+    client.on('error', async (error) => {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      if (!handlers.onError) {
+        logger.warn('Claude client error (no handler provided)', {
+          sessionId,
+          error: normalizedError.message,
+        });
+        return;
+      }
+
+      try {
+        await handlers.onError(sessionId, normalizedError);
+      } catch (handlerError) {
+        logger.warn('Failed to handle error event', {
+          sessionId,
+          originalError: normalizedError.message,
+          handlerError: handlerError instanceof Error ? handlerError.message : String(handlerError),
         });
       }
     });
