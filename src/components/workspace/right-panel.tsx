@@ -1,4 +1,13 @@
-import { FileQuestion, Files, GitCompare, ListTodo, Plus, Terminal, X } from 'lucide-react';
+import {
+  FileQuestion,
+  Files,
+  GitCompare,
+  History,
+  ListTodo,
+  Plus,
+  Terminal,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
@@ -10,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { DevLogsPanel } from './dev-logs-panel';
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
+import { RatchetLogPanel } from './ratchet-log-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
@@ -27,7 +37,7 @@ const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-right-panel-bottom-tab-';
 // =============================================================================
 
 type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
-type BottomPanelTab = 'terminal' | 'dev-logs';
+type BottomPanelTab = 'terminal' | 'dev-logs' | 'ratchet-log';
 
 // =============================================================================
 // Main Component
@@ -78,7 +88,11 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
       }
 
       const storedBottom = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
-      if (storedBottom === 'terminal' || storedBottom === 'dev-logs') {
+      if (
+        storedBottom === 'terminal' ||
+        storedBottom === 'dev-logs' ||
+        storedBottom === 'ratchet-log'
+      ) {
         setActiveBottomTab(storedBottom);
       }
     } catch {
@@ -201,6 +215,12 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
               isActive={activeBottomTab === 'dev-logs'}
               onSelect={() => handleBottomTabChange('dev-logs')}
             />
+            <TabButton
+              label="Ratchet"
+              icon={<History className="h-3.5 w-3.5" />}
+              isActive={activeBottomTab === 'ratchet-log'}
+              onSelect={() => handleBottomTabChange('ratchet-log')}
+            />
           </div>
 
           {/* Content */}
@@ -220,6 +240,9 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 outputEndRef={devLogs.outputEndRef}
                 className="h-full"
               />
+            )}
+            {activeBottomTab === 'ratchet-log' && (
+              <RatchetLogPanel workspaceId={workspaceId} className="h-full" />
             )}
           </div>
         </div>

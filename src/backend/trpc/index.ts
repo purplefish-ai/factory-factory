@@ -3,6 +3,7 @@ import { decisionLogRouter } from './decision-log.trpc';
 import { githubRouter } from './github.trpc';
 import { prReviewRouter } from './pr-review.trpc';
 import { projectRouter } from './project.trpc';
+import { ratchetAuditLogRouter } from './ratchet-audit-log.trpc';
 import { sessionRouter } from './session.trpc';
 import { router } from './trpc';
 import { userSettingsRouter } from './user-settings.trpc';
@@ -17,6 +18,7 @@ export const appRouter = router({
   prReview: prReviewRouter,
   userSettings: userSettingsRouter,
   github: githubRouter,
+  ratchetAuditLog: ratchetAuditLogRouter,
 });
 
 // Export type for use in frontend
