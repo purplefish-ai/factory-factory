@@ -48,6 +48,33 @@ interface EventForLogging {
 }
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/** Event names that ChatEventForwarderService attaches listeners for. */
+const FORWARDED_EVENT_NAMES = [
+  'tool_use',
+  'session_id',
+  'idle',
+  'stream',
+  'tool_progress',
+  'tool_use_summary',
+  'system_init',
+  'system_status',
+  'compact_boundary',
+  'hook_started',
+  'hook_response',
+  'compacting_start',
+  'compacting_end',
+  'message',
+  'result',
+  'interactive_request',
+  'exit',
+  'permission_cancelled',
+  'error',
+] as const;
+
+// ============================================================================
 // Service
 // ============================================================================
 
@@ -62,6 +89,16 @@ class ChatEventForwarderService {
   private workspaceNotificationsSetup = false;
   /** Track last compact boundary per session to avoid duplicate indicators */
   private lastCompactBoundaryAt = new Map<string, number>();
+
+  /**
+   * Remove only the event listeners that this service attached to a client.
+   * Avoids removing listeners from other services (DB handlers, process manager, etc.).
+   */
+  private removeForwardingListeners(client: ClaudeClient): void {
+    for (const eventName of FORWARDED_EVENT_NAMES) {
+      client.removeAllListeners(eventName);
+    }
+  }
 
   /**
    * Check if event forwarding is already set up for a session.
@@ -157,7 +194,7 @@ class ChatEventForwarderService {
     // This happens when a new Claude process replaces an existing one for the same session
     if (existingClient) {
       logger.info('[Chat WS] Replacing event forwarding with new client', { dbSessionId });
-      existingClient.removeAllListeners();
+      this.removeForwardingListeners(existingClient);
     }
 
     this.clientEventSetup.set(dbSessionId, client);
@@ -534,7 +571,7 @@ class ChatEventForwarderService {
         code: result.code,
         processAlive: false,
       });
-      client.removeAllListeners();
+      this.removeForwardingListeners(client);
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);
       // Note: We intentionally do NOT clear the message queue on exit
