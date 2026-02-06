@@ -196,7 +196,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   }, [isMocked, selectedProjectId, syncAllPRStatuses]);
 
   // Track workspaces that need user attention (for red glow)
-  const { needsAttention } = useWorkspaceAttention();
+  const { needsAttention, clearAttention } = useWorkspaceAttention();
 
   // Use the workspace list state management hook
   const {
@@ -336,6 +336,13 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
   // Check if we're on the kanban view (workspaces list page without a specific workspace)
   const isKanbanView = pathname.endsWith('/workspaces') || pathname.endsWith('/workspaces/');
+
+  // Clear attention glow when viewing a workspace
+  useEffect(() => {
+    if (currentWorkspaceId) {
+      clearAttention(currentWorkspaceId);
+    }
+  }, [currentWorkspaceId, clearAttention]);
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -498,6 +505,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                           onArchiveRequest={handleArchiveRequest}
                           disableRatchetAnimation={isKanbanView}
                           needsAttention={needsAttention}
+                          clearAttention={clearAttention}
                         />
                       );
                     })}
@@ -592,6 +600,7 @@ function SortableWorkspaceItem({
   onArchiveRequest,
   disableRatchetAnimation,
   needsAttention,
+  clearAttention,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
@@ -600,6 +609,7 @@ function SortableWorkspaceItem({
   onArchiveRequest: (workspace: WorkspaceListItem) => void;
   disableRatchetAnimation?: boolean;
   needsAttention: (workspaceId: string) => boolean;
+  clearAttention: (workspaceId: string) => void;
 }) {
   const utils = trpc.useUtils();
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
@@ -642,7 +652,10 @@ function SortableWorkspaceItem({
           showAttentionGlow && 'waiting-pulse'
         )}
       >
-        <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
+        <Link
+          to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
+          onClick={() => clearAttention(workspace.id)}
+        >
           <div className="flex w-full min-w-0 items-start gap-2">
             {/* Drag handle */}
             <button
