@@ -168,11 +168,12 @@ export interface ModelInfo extends SharedModelInfo {
 
 /**
  * Account information returned in initialize response.
+ * All fields are optional per the official Claude Agent SDK spec.
  */
 export interface AccountInfo {
-  email: string;
-  organization: string;
-  subscriptionType: string;
+  email?: string;
+  organization?: string;
+  subscriptionType?: string;
 }
 
 /**
