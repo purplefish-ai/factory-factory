@@ -11,6 +11,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
+import treeKill from 'tree-kill';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 
 const execPromise = promisify(exec);
@@ -76,10 +77,12 @@ async function waitForService(
   }
 }
 
-// Kill all tracked processes
+// Kill all tracked processes and their child process trees
 function killAllProcesses(processes: { name: string; proc: ChildProcess }[]): void {
   for (const { proc } of processes) {
-    proc.kill('SIGTERM');
+    if (proc.pid) {
+      treeKill(proc.pid, 'SIGTERM');
+    }
   }
 }
 
@@ -315,7 +318,9 @@ function createShutdownHandler(
 
     console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
     for (const { proc } of processes) {
-      proc.kill('SIGTERM');
+      if (proc.pid) {
+        treeKill(proc.pid, 'SIGTERM');
+      }
     }
 
     setTimeout(() => {
@@ -325,7 +330,9 @@ function createShutdownHandler(
           chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
         );
         for (const { proc } of alive) {
-          proc.kill('SIGKILL');
+          if (proc.pid) {
+            treeKill(proc.pid, 'SIGKILL');
+          }
         }
       }
       process.exit(1);
