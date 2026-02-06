@@ -304,9 +304,10 @@ export class RunScriptService {
               pid: childProcess.pid,
               error: err.message,
             });
+          } else {
+            RunScriptService.runningProcesses.delete(workspaceId);
           }
         });
-        RunScriptService.runningProcesses.delete(workspaceId);
       } else if (pid) {
         // Fallback: kill by PID if we don't have the process reference
         logger.info('Stopping run script via PID', { workspaceId, pid });
@@ -450,21 +451,16 @@ export class RunScriptService {
     for (const [workspaceId, childProcess] of RunScriptService.runningProcesses.entries()) {
       try {
         if (childProcess.pid) {
-          treeKill(childProcess.pid, 'SIGKILL', (err) => {
-            if (err) {
-              logger.warn('Failed to force kill run script on exit', {
-                workspaceId,
-                pid: childProcess.pid,
-              });
-            }
-          });
+          // Use synchronous process.kill() instead of async treeKill
+          // since 'exit' handler cannot await async callbacks
+          process.kill(childProcess.pid, 'SIGKILL');
         }
         logger.info('Force killed run script on exit', {
           workspaceId,
           pid: childProcess.pid,
         });
       } catch {
-        // Ignore errors during forced shutdown
+        // Ignore errors during forced shutdown (process may already be dead)
       }
     }
     RunScriptService.runningProcesses.clear();
