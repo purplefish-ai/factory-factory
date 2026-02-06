@@ -892,7 +892,7 @@ describe('ClaudeProtocol', () => {
       protocol2.stop();
     });
 
-    it('should reject initialize response with wrong account structure', async () => {
+    it('should reject initialize response with wrong account type', async () => {
       const stdin2 = new PassThrough();
       const stdout2 = new PassThrough();
       const protocol2 = new ClaudeProtocol(stdin2, stdout2, { requestTimeout: 1000 });
@@ -908,7 +908,7 @@ describe('ClaudeProtocol', () => {
       const sentMessage = JSON.parse(chunks2[0]!.trim());
       const requestId = sentMessage.request_id;
 
-      // Send response with invalid account structure
+      // Send response with account as a string instead of an object
       const response = {
         type: 'control_response' as const,
         response: {
@@ -919,10 +919,7 @@ describe('ClaudeProtocol', () => {
             output_style: 'stream-json',
             available_output_styles: ['stream-json'],
             models: [],
-            account: {
-              email: 'test@example.com',
-              // missing organization and subscriptionType
-            },
+            account: 'not-an-object',
           },
         },
       };

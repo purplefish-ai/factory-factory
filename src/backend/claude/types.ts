@@ -201,9 +201,9 @@ export const InitializeResponseDataSchema = z
     ),
     account: z
       .object({
-        email: z.string(),
-        organization: z.string(),
-        subscriptionType: z.string(),
+        email: z.string().optional(),
+        organization: z.string().optional(),
+        subscriptionType: z.string().optional(),
       })
       .passthrough(),
   })
