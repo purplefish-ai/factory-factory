@@ -6,7 +6,6 @@
  */
 
 import pLimit from 'p-limit';
-import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
@@ -104,12 +103,11 @@ class PRReviewMonitorService {
       return { checked: 0, newComments: 0, triggered: 0 };
     }
 
-    // Fetch settings once for all workspaces (avoid N+1 queries)
-    const userSettings = await userSettingsAccessor.get();
+    // Legacy: This service is deprecated in favor of ratchet. Auto-fix is disabled.
     const settings: PRReviewSettings = {
-      autoFixEnabled: userSettings.autoFixPrReviewComments,
-      allowedUsers: (userSettings.prReviewFixAllowedUsers as string[]) ?? [],
-      customPrompt: userSettings.prReviewFixPrompt ?? null,
+      autoFixEnabled: false,
+      allowedUsers: [],
+      customPrompt: null,
     };
 
     if (!settings.autoFixEnabled) {
@@ -190,7 +188,7 @@ class PRReviewMonitorService {
         return true;
       });
 
-      // Filter comments by allowed users and timestamp
+      // Filter comments by allowed users and timestamp (new or edited)
       const lastCheckedAt = workspace.prReviewLastCheckedAt?.getTime() ?? 0;
 
       const newReviewComments = reviewComments.filter((comment) => {
@@ -198,9 +196,10 @@ class PRReviewMonitorService {
         if (filterByAllowedUsers && !settings.allowedUsers.includes(comment.author.login)) {
           return false;
         }
-        // Filter by timestamp (only new comments)
-        const commentTime = new Date(comment.createdAt).getTime();
-        return commentTime > lastCheckedAt;
+        // Filter by timestamp (new or edited comments)
+        const createdTime = new Date(comment.createdAt).getTime();
+        const updatedTime = new Date(comment.updatedAt).getTime();
+        return createdTime > lastCheckedAt || updatedTime > lastCheckedAt;
       });
 
       // Also check regular PR comments
@@ -209,9 +208,10 @@ class PRReviewMonitorService {
         if (filterByAllowedUsers && !settings.allowedUsers.includes(comment.author.login)) {
           return false;
         }
-        // Filter by timestamp (only new comments)
-        const commentTime = new Date(comment.createdAt).getTime();
-        return commentTime > lastCheckedAt;
+        // Filter by timestamp (new or edited comments)
+        const createdTime = new Date(comment.createdAt).getTime();
+        const updatedTime = new Date(comment.updatedAt).getTime();
+        return createdTime > lastCheckedAt || updatedTime > lastCheckedAt;
       });
 
       // Combine new comments
@@ -278,7 +278,7 @@ class PRReviewMonitorService {
 
       // Update last checked timestamp and last comment ID
       const latestCommentId =
-        allNewComments.length > 0 ? String(allNewComments[allNewComments.length - 1].id) : null;
+        allNewComments.length > 0 ? String(allNewComments[allNewComments.length - 1]?.id) : null;
 
       await workspaceAccessor.update(workspace.id, {
         prReviewLastCheckedAt: new Date(),

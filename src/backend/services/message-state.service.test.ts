@@ -119,7 +119,7 @@ describe('MessageStateService', () => {
       const result = messageStateService.createUserMessage('session-1', msg);
 
       expect(result.attachments).toHaveLength(1);
-      expect(result.attachments?.[0].name).toBe('image.png');
+      expect(result.attachments?.[0]?.name).toBe('image.png');
     });
 
     it('should emit state change event with full message content', () => {
@@ -302,12 +302,12 @@ describe('MessageStateService', () => {
       const result = messageStateService.getAllMessages('session-1');
 
       expect(result).toHaveLength(3);
-      expect(result[0].id).toBe('msg-1');
-      expect(result[0].order).toBe(0);
-      expect(result[1].id).toBe('msg-2');
-      expect(result[1].order).toBe(1);
-      expect(result[2].id).toBe('msg-3');
-      expect(result[2].order).toBe(2);
+      expect(result[0]!.id).toBe('msg-1');
+      expect(result[0]!.order).toBe(0);
+      expect(result[1]!.id).toBe('msg-2');
+      expect(result[1]!.order).toBe(1);
+      expect(result[2]!.id).toBe('msg-3');
+      expect(result[2]!.order).toBe(2);
     });
   });
 
@@ -380,9 +380,9 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(messages[0].type).toBe('user');
-      expect(messages[0].state).toBe(MessageState.COMMITTED);
-      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('Hello');
+      expect(messages[0]!.type).toBe('user');
+      expect(messages[0]!.state).toBe(MessageState.COMMITTED);
+      expect(isUserMessage(messages[0]!) ? messages[0]!.text : undefined).toBe('Hello');
     });
 
     it('should load assistant messages from history as COMPLETE', () => {
@@ -394,8 +394,8 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(messages[0].type).toBe('claude');
-      expect(messages[0].state).toBe(MessageState.COMPLETE);
+      expect(messages[0]!.type).toBe('claude');
+      expect(messages[0]!.state).toBe(MessageState.COMPLETE);
     });
 
     it('should handle tool_use messages', () => {
@@ -415,12 +415,12 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(messages[0].type).toBe('claude');
-      const claudeMsg = messages[0];
+      expect(messages[0]!.type).toBe('claude');
+      const claudeMsg = messages[0]!;
       // Now stored as chatMessages (ChatMessage[])
       if (isClaudeMessage(claudeMsg)) {
         expect(claudeMsg.chatMessages).toHaveLength(1);
-        const innerMessage = claudeMsg.chatMessages[0].message?.message;
+        const innerMessage = claudeMsg.chatMessages[0]!.message?.message;
         expect(innerMessage?.content).toEqual([
           { type: 'tool_use', id: 'tool-123', name: 'Read', input: { file_path: '/test.txt' } },
         ]);
@@ -445,12 +445,12 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(messages[0].type).toBe('claude');
-      const claudeMsg = messages[0];
+      expect(messages[0]!.type).toBe('claude');
+      const claudeMsg = messages[0]!;
       // Now stored as chatMessages (ChatMessage[])
       if (isClaudeMessage(claudeMsg)) {
         expect(claudeMsg.chatMessages).toHaveLength(1);
-        const innerMessage = claudeMsg.chatMessages[0].message?.message;
+        const innerMessage = claudeMsg.chatMessages[0]!.message?.message;
         expect(innerMessage?.content).toEqual([
           {
             type: 'tool_result',
@@ -473,12 +473,12 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(messages[0].type).toBe('claude');
-      const claudeMsg = messages[0];
+      expect(messages[0]!.type).toBe('claude');
+      const claudeMsg = messages[0]!;
       // Now stored as chatMessages (ChatMessage[])
       if (isClaudeMessage(claudeMsg)) {
         expect(claudeMsg.chatMessages).toHaveLength(1);
-        const innerMessage = claudeMsg.chatMessages[0].message?.message;
+        const innerMessage = claudeMsg.chatMessages[0]!.message?.message;
         expect(innerMessage?.content).toEqual([
           { type: 'thinking', thinking: 'Let me think about this...' },
         ]);
@@ -505,7 +505,7 @@ describe('MessageStateService', () => {
       // but before history load completes
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('Existing message');
+      expect(isUserMessage(messages[0]!) ? messages[0]!.text : undefined).toBe('Existing message');
     });
 
     it('should load history when session is empty', () => {
@@ -517,7 +517,7 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('From history');
+      expect(isUserMessage(messages[0]!) ? messages[0]!.text : undefined).toBe('From history');
     });
 
     it('should not emit state change events (for cold load)', () => {
@@ -543,7 +543,7 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(messages[0].id).toMatch(/^history-/);
+      expect(messages[0]!.id).toMatch(/^history-/);
     });
 
     it('should handle concurrent loadFromHistory calls safely', async () => {
@@ -562,7 +562,7 @@ describe('MessageStateService', () => {
       // Only one history should have loaded (not 10 duplicates)
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('From history');
+      expect(isUserMessage(messages[0]!) ? messages[0]!.text : undefined).toBe('From history');
     });
   });
 
@@ -584,8 +584,8 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(2);
-      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('From history');
-      expect(isUserMessage(messages[1]) ? messages[1].text : undefined).toBe('Test message');
+      expect(isUserMessage(messages[0]!) ? messages[0]!.text : undefined).toBe('From history');
+      expect(isUserMessage(messages[1]!) ? messages[1]!.text : undefined).toBe('Test message');
     });
 
     it('should skip reload if non-queued messages already exist', () => {
@@ -603,7 +603,7 @@ describe('MessageStateService', () => {
 
       const messages = messageStateService.getAllMessages('session-1');
       expect(messages).toHaveLength(1);
-      expect(isUserMessage(messages[0]) ? messages[0].text : undefined).toBe('Existing history');
+      expect(isUserMessage(messages[0]!) ? messages[0]!.text : undefined).toBe('Existing history');
     });
   });
 
@@ -712,10 +712,10 @@ describe('MessageStateService', () => {
         expect.fail('Expected messages_snapshot event');
       }
       const payload = snapshot.data as { messages: Array<{ id: string; order?: number }> };
-      expect(payload.messages[0].id).toBe('msg-1');
-      expect(payload.messages[0].order).toBe(0);
-      expect(payload.messages[1].id).toBe('msg-2');
-      expect(payload.messages[1].order).toBe(1);
+      expect(payload.messages[0]!.id).toBe('msg-1');
+      expect(payload.messages[0]!.order).toBe(0);
+      expect(payload.messages[1]!.id).toBe('msg-2');
+      expect(payload.messages[1]!.order).toBe(1);
     });
 
     it('should include planContent in pendingInteractiveRequest', () => {

@@ -8,8 +8,8 @@
 import pLimit from 'p-limit';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { githubCLIService } from './github-cli.service';
-import { kanbanStateService } from './kanban-state.service';
 import { createLogger } from './logger.service';
+import { prSnapshotService } from './pr-snapshot.service';
 
 const logger = createLogger('scheduler');
 
@@ -159,28 +159,33 @@ class SchedulerService {
       );
 
       if (pr) {
-        // Found a PR! Update the workspace
-        const prResult = await githubCLIService.fetchAndComputePRState(pr.url);
+        // Route through PRSnapshotService for canonical PR attachment
+        const result = await prSnapshotService.attachAndRefreshPR(workspace.id, pr.url);
 
-        await workspaceAccessor.update(workspace.id, {
-          prUrl: pr.url,
-          prNumber: pr.number,
-          prState: prResult?.prState,
-          prReviewState: prResult?.prReviewState,
-          prCiStatus: prResult?.prCiStatus,
-          prUpdatedAt: new Date(),
-        });
+        if (result.success) {
+          logger.info('Discovered PR for workspace', {
+            workspaceId: workspace.id,
+            branchName,
+            prNumber: result.snapshot.prNumber,
+            prUrl: pr.url,
+          });
+          return { found: true };
+        }
 
-        await kanbanStateService.updateCachedKanbanColumn(workspace.id);
-
-        logger.info('Discovered PR for workspace', {
+        // Log warning but don't count as discovered if attachment failed
+        logger.warn('Discovered PR but failed to attach snapshot', {
           workspaceId: workspace.id,
           branchName,
-          prNumber: pr.number,
           prUrl: pr.url,
+          reason: result.reason,
         });
 
-        return { found: true };
+        // Only count as discovered if attachment succeeded or partially succeeded (fetch_failed still attaches prUrl)
+        if (result.reason === 'fetch_failed') {
+          return { found: true };
+        }
+
+        return { found: false };
       }
 
       return { found: false };
@@ -211,31 +216,17 @@ class SchedulerService {
     }
 
     try {
-      // Fetch PR status from GitHub
-      const prResult = await githubCLIService.fetchAndComputePRState(prUrl);
-
-      if (!prResult) {
+      const prResult = await prSnapshotService.refreshWorkspace(workspaceId, prUrl);
+      if (!prResult.success) {
         logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
         return { success: false, reason: 'fetch_failed' };
       }
 
-      // Update workspace with new PR status
-      await workspaceAccessor.update(workspaceId, {
-        prNumber: prResult.prNumber,
-        prState: prResult.prState,
-        prReviewState: prResult.prReviewState,
-        prCiStatus: prResult.prCiStatus,
-        prUpdatedAt: new Date(),
-      });
-
-      // Recompute cached kanban column
-      await kanbanStateService.updateCachedKanbanColumn(workspaceId);
-
       logger.debug('PR status synced', {
         workspaceId,
-        prNumber: prResult.prNumber,
-        prState: prResult.prState,
-        prCiStatus: prResult.prCiStatus,
+        prNumber: prResult.snapshot.prNumber,
+        prState: prResult.snapshot.prState,
+        prCiStatus: prResult.snapshot.prCiStatus,
       });
 
       return { success: true };

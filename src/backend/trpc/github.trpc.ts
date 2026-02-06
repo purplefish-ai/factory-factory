@@ -121,4 +121,41 @@ export const githubRouter = router({
         };
       }
     }),
+
+  /**
+   * Get detailed information for a specific GitHub issue.
+   * Used by the Kanban board to show issue details in the side panel.
+   */
+  getIssue: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        issueNumber: z.number(),
+      })
+    )
+    .query(async ({ input }) => {
+      // Get project to access githubOwner/githubRepo
+      const project = await projectAccessor.findById(input.projectId);
+      if (!project) {
+        return { issue: null, error: 'Project not found' };
+      }
+
+      const { githubOwner, githubRepo } = project;
+      if (!(githubOwner && githubRepo)) {
+        return {
+          issue: null,
+          error: 'Project is not linked to a GitHub repository',
+        };
+      }
+
+      try {
+        const issue = await githubCLIService.getIssue(githubOwner, githubRepo, input.issueNumber);
+        return { issue, error: null };
+      } catch (err) {
+        return {
+          issue: null,
+          error: err instanceof Error ? err.message : 'Failed to fetch issue',
+        };
+      }
+    }),
 });

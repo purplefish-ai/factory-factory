@@ -93,6 +93,7 @@ vi.mock('../../session.service', () => ({
     getClient: vi.fn(),
     getSessionOptions: vi.fn(),
     stopClaudeSession: vi.fn(),
+    getOrCreateClient: vi.fn(),
   },
 }));
 
@@ -154,7 +155,7 @@ describe('chat message handlers', () => {
   });
 
   it('user_input forwards to running client', () => {
-    const sendMessage = vi.fn();
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
     mockedSessionService.getClient.mockReturnValue({
       isRunning: () => true,
       sendMessage,
@@ -581,6 +582,49 @@ describe('chat message handlers', () => {
         userMessageId: 'msg-1',
         rewindError: 'No active client for session',
       })
+    );
+  });
+
+  it('start handler calls getOrCreateClient which updates DB state', async () => {
+    const mockClient = {
+      getPid: () => 777,
+      isRunning: () => true,
+      isWorking: () => false,
+    } as unknown as ClaudeClient;
+
+    // Mock getOrCreateClient which internally should update DB
+    vi.mocked(sessionService.getOrCreateClient).mockResolvedValue(mockClient);
+    mockedSessionService.getSessionOptions.mockResolvedValue({
+      workingDir: '/tmp/work',
+      resumeClaudeSessionId: undefined,
+      systemPrompt: undefined,
+      model: 'sonnet',
+    });
+
+    const getOrCreate = vi.fn().mockResolvedValue(mockClient);
+    const handler = createStartHandler({
+      ...deps,
+      getClientCreator: () => ({ getOrCreate }),
+    });
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'start', thinkingEnabled: false, planModeEnabled: false },
+    });
+
+    expect(getOrCreate).toHaveBeenCalledWith('session-1', {
+      thinkingEnabled: false,
+      planModeEnabled: false,
+      model: undefined,
+    });
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'starting', dbSessionId: 'session-1' })
+    );
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'started', dbSessionId: 'session-1' })
     );
   });
 });

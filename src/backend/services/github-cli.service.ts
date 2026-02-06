@@ -21,7 +21,8 @@ async function mapWithConcurrencyLimit<T, R>(
   async function worker(): Promise<void> {
     while (nextIndex < items.length) {
       const index = nextIndex++;
-      results[index] = await fn(items[index]);
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by while loop condition
+      results[index] = await fn(items[index]!);
     }
   }
 
@@ -97,41 +98,96 @@ export interface GitHubIssue {
  */
 class GitHubCLIService {
   /**
+   * Check if error indicates CLI is not installed.
+   */
+  private isCliNotInstalledError(message: string): boolean {
+    return message.includes('enoent') || message.includes('not found');
+  }
+
+  /**
+   * Check if error indicates authentication is required.
+   */
+  private isAuthRequiredError(message: string): boolean {
+    return (
+      message.includes('authentication') ||
+      message.includes('not logged in') ||
+      message.includes('gh auth login')
+    );
+  }
+
+  /**
+   * Check if error indicates PR was not found.
+   */
+  private isPRNotFoundError(message: string): boolean {
+    return message.includes('could not resolve') || message.includes('not found');
+  }
+
+  /**
+   * Check if error indicates a network issue.
+   */
+  private isNetworkError(message: string): boolean {
+    return (
+      message.includes('network') || message.includes('timeout') || message.includes('connection')
+    );
+  }
+
+  /**
    * Classify an error from gh CLI execution.
    */
   private classifyError(error: unknown): GitHubCLIErrorType {
     const message = error instanceof Error ? error.message : String(error);
     const lowerMessage = message.toLowerCase();
 
-    // Check for CLI not installed (ENOENT = file not found)
-    if (lowerMessage.includes('enoent') || lowerMessage.includes('not found')) {
+    if (this.isCliNotInstalledError(lowerMessage)) {
       return 'cli_not_installed';
     }
 
-    // Check for auth issues
-    if (
-      lowerMessage.includes('authentication') ||
-      lowerMessage.includes('not logged in') ||
-      lowerMessage.includes('gh auth login')
-    ) {
+    if (this.isAuthRequiredError(lowerMessage)) {
       return 'auth_required';
     }
 
-    // Check for PR not found
-    if (lowerMessage.includes('could not resolve') || lowerMessage.includes('not found')) {
+    if (this.isPRNotFoundError(lowerMessage)) {
       return 'pr_not_found';
     }
 
-    // Check for network issues
-    if (
-      lowerMessage.includes('network') ||
-      lowerMessage.includes('timeout') ||
-      lowerMessage.includes('connection')
-    ) {
+    if (this.isNetworkError(lowerMessage)) {
       return 'network_error';
     }
 
     return 'unknown';
+  }
+
+  /**
+   * Log error with appropriate level and hint based on error type.
+   */
+  private logGitHubCLIError(
+    errorType: GitHubCLIErrorType,
+    errorMessage: string,
+    context: Record<string, unknown>
+  ): void {
+    if (errorType === 'cli_not_installed') {
+      logger.error('GitHub CLI configuration issue', {
+        ...context,
+        errorType,
+        error: errorMessage,
+        hint: 'Install gh CLI from https://cli.github.com/',
+      });
+    } else if (errorType === 'auth_required') {
+      logger.error('GitHub CLI configuration issue', {
+        ...context,
+        errorType,
+        error: errorMessage,
+        hint: 'Run `gh auth login` to authenticate',
+      });
+    } else if (errorType === 'pr_not_found') {
+      logger.warn('PR not found', { ...context, errorType });
+    } else {
+      logger.error('Failed to fetch PR status via gh CLI', {
+        ...context,
+        errorType,
+        error: errorMessage,
+      });
+    }
   }
 
   /**
@@ -199,16 +255,15 @@ class GitHubCLIService {
     }
 
     return {
-      owner: match[1],
-      repo: match[2],
-      number: Number.parseInt(match[3], 10),
+      owner: match[1] as string,
+      repo: match[2] as string,
+      number: Number.parseInt(match[3] as string, 10),
     };
   }
 
   /**
    * Get PR status from GitHub using the gh CLI.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: error classification logic
   async getPRStatus(prUrl: string): Promise<PRStatusFromGitHub | null> {
     const prInfo = this.extractPRInfo(prUrl);
     if (!prInfo) {
@@ -248,26 +303,7 @@ class GitHubCLIService {
       const errorType = this.classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // Log with appropriate level based on error type
-      if (errorType === 'cli_not_installed' || errorType === 'auth_required') {
-        logger.error('GitHub CLI configuration issue', {
-          prUrl,
-          errorType,
-          error: errorMessage,
-          hint:
-            errorType === 'cli_not_installed'
-              ? 'Install gh CLI from https://cli.github.com/'
-              : 'Run `gh auth login` to authenticate',
-        });
-      } else if (errorType === 'pr_not_found') {
-        logger.warn('PR not found', { prUrl, errorType });
-      } else {
-        logger.error('Failed to fetch PR status via gh CLI', {
-          prUrl,
-          errorType,
-          error: errorMessage,
-        });
-      }
+      this.logGitHubCLIError(errorType, errorMessage, { prUrl });
       return null;
     }
   }
@@ -575,7 +611,7 @@ class GitHubCLIService {
       const data = JSON.parse(stdout);
 
       // Extract repository info from the repo string
-      const [, repoName] = repo.split('/');
+      const [, repoName] = repo.split('/') as [string, string];
 
       return {
         number: data.number,
@@ -746,6 +782,7 @@ class GitHubCLIService {
       path: string;
       line: number | null;
       createdAt: string;
+      updatedAt: string;
       url: string;
     }>
   > {
@@ -769,6 +806,7 @@ class GitHubCLIService {
           path: string;
           line: number | null;
           created_at: string;
+          updated_at: string;
           html_url: string;
         }) => ({
           id: comment.id,
@@ -777,6 +815,7 @@ class GitHubCLIService {
           path: comment.path,
           line: comment.line,
           createdAt: comment.created_at,
+          updatedAt: comment.updated_at,
           url: comment.html_url,
         })
       );

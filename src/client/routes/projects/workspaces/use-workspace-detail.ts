@@ -1,29 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
-import type { GitHubIssue } from '@/backend/services/github-cli.service';
 import { trpc } from '@/frontend/lib/trpc';
+
+// Re-export useAutoScroll from shared hooks location
+export { useAutoScroll } from '@/hooks/use-auto-scroll';
 
 // =============================================================================
 // Helpers
 // =============================================================================
-
-/**
- * Generate a prompt from a GitHub issue to send as the first message.
- */
-function generateIssuePrompt(issue: GitHubIssue): string {
-  return `I want to work on the following GitHub issue:
-
-## Issue #${issue.number}: ${issue.title}
-
-${issue.body || 'No description provided.'}
-
----
-Issue URL: ${issue.url}
-
-Please analyze this issue and help me implement a solution.`;
-}
 
 // =============================================================================
 // useWorkspaceData - Fetches workspace and session data
@@ -80,15 +66,6 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
 
-  const { data: workflows } = trpc.session.listWorkflows.useQuery(undefined, {
-    enabled: claudeSessions !== undefined && claudeSessions.length === 0,
-  });
-
-  const { data: recommendedWorkflow } = trpc.session.getRecommendedWorkflow.useQuery(
-    { workspaceId },
-    { enabled: claudeSessions !== undefined && claudeSessions.length === 0 }
-  );
-
   const firstSession = claudeSessions?.[0];
   // Database record ID for the first session
   const initialDbSessionId = firstSession?.id;
@@ -98,8 +75,6 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     workspaceLoading,
     claudeSessions,
     sessionsLoading,
-    workflows,
-    recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
     invalidateWorkspace,
@@ -151,7 +126,6 @@ export interface UseSessionManagementReturn {
   preferredIde: string;
   handleSelectSession: (dbSessionId: string) => void;
   handleCloseSession: (dbSessionId: string) => void;
-  handleWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
   handleNewChat: () => void;
   handleQuickAction: (name: string, prompt: string) => void;
 }
@@ -282,34 +256,12 @@ export function useSessionManagement({
     const existingNumbers = (claudeSessions ?? [])
       .map((s) => {
         const match = s.name?.match(/^Chat (\d+)$/);
-        return match ? Number.parseInt(match[1], 10) : 0;
+        return match ? Number.parseInt(match[1] as string, 10) : 0;
       })
       .filter((n) => n > 0);
     const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
     return `Chat ${nextNumber}`;
   }, [claudeSessions]);
-
-  const handleWorkflowSelect = useCallback(
-    (workflowId: string, linkedIssue?: GitHubIssue) => {
-      const chatName = getNextChatName();
-      createSession.mutate(
-        { workspaceId, workflow: workflowId, model: selectedModel || undefined, name: chatName },
-        {
-          onSuccess: (session) => {
-            // If there's a linked issue, queue the prompt to auto-send once session is ready
-            if (linkedIssue) {
-              const issuePrompt = generateIssuePrompt(linkedIssue);
-              pendingQuickActionRef.current = { dbSessionId: session.id, prompt: issuePrompt };
-            }
-            // Setting the new session ID triggers WebSocket reconnection automatically
-            setSelectedDbSessionId(session.id);
-            setTimeout(() => inputRef.current?.focus(), 0);
-          },
-        }
-      );
-    },
-    [createSession, workspaceId, getNextChatName, setSelectedDbSessionId, inputRef, selectedModel]
-  );
 
   const handleNewChat = useCallback(() => {
     const name = getNextChatName();
@@ -359,83 +311,7 @@ export function useSessionManagement({
     preferredIde,
     handleSelectSession,
     handleCloseSession,
-    handleWorkflowSelect,
     handleNewChat,
     handleQuickAction,
   };
-}
-
-// =============================================================================
-// useAutoScroll - Manages auto-scroll behavior with RAF throttling
-// =============================================================================
-
-/**
- * Hook for managing auto-scroll behavior with RAF throttling.
- * Optimized for virtualized lists - doesn't require contentRef.
- */
-export function useAutoScroll(viewportRef: React.RefObject<HTMLDivElement | null>) {
-  const [isNearBottom, setIsNearBottom] = useState(true);
-  const isNearBottomRef = useRef(true);
-  // Track if we're currently animating a scroll-to-bottom to prevent flicker
-  const isScrollingToBottomRef = useRef(false);
-  // RAF throttle flag
-  const rafPendingRef = useRef(false);
-
-  // Throttled scroll handler using requestAnimationFrame
-  const onScroll = useCallback(() => {
-    // Don't update state while animating scroll-to-bottom (prevents flicker)
-    if (isScrollingToBottomRef.current) {
-      return;
-    }
-
-    // Skip if we already have a pending RAF
-    if (rafPendingRef.current) {
-      return;
-    }
-
-    rafPendingRef.current = true;
-    requestAnimationFrame(() => {
-      rafPendingRef.current = false;
-
-      const viewport = viewportRef.current;
-      if (!viewport) {
-        return;
-      }
-
-      // Increased threshold for better UX - don't hide scroll button too early
-      const scrollThreshold = 150;
-      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      const nearBottom = distanceFromBottom < scrollThreshold;
-
-      // Only update state if it changed
-      if (nearBottom !== isNearBottomRef.current) {
-        isNearBottomRef.current = nearBottom;
-        setIsNearBottom(nearBottom);
-      }
-    });
-  }, [viewportRef]);
-
-  const scrollToBottom = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    // Set flag to prevent onScroll from causing flicker during animation
-    isScrollingToBottomRef.current = true;
-    setIsNearBottom(true);
-    isNearBottomRef.current = true;
-
-    viewport.scrollTo({
-      top: viewport.scrollHeight,
-      behavior: 'smooth',
-    });
-
-    // Clear the flag after animation completes (smooth scroll typically ~300-500ms)
-    setTimeout(() => {
-      isScrollingToBottomRef.current = false;
-    }, 500);
-  }, [viewportRef]);
-
-  return { onScroll, isNearBottom, scrollToBottom };
 }

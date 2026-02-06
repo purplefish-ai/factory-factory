@@ -12,11 +12,13 @@ type SessionAccessor = {
     id: string,
     data: Partial<Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId'>>
   ): Promise<ClaudeSession>;
+  delete(id: string): Promise<ClaudeSession>;
 };
 
 type WorkspaceAccessor = {
   findById(id: string): Promise<Workspace | null>;
   markHasHadSessions(id: string): Promise<void>;
+  clearRatchetActiveSession(workspaceId: string, sessionId: string): Promise<void>;
 };
 
 type ProjectAccessor = {
@@ -50,11 +52,19 @@ export class SessionRepository {
     return this.workspaces.markHasHadSessions(workspaceId);
   }
 
+  clearRatchetActiveSession(workspaceId: string, sessionId: string): Promise<void> {
+    return this.workspaces.clearRatchetActiveSession(workspaceId, sessionId);
+  }
+
   updateSession(
     sessionId: string,
     data: Partial<Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId'>>
   ): Promise<ClaudeSession> {
     return this.sessions.update(sessionId, data);
+  }
+
+  deleteSession(sessionId: string): Promise<ClaudeSession> {
+    return this.sessions.delete(sessionId);
   }
 }
 

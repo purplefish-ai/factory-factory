@@ -47,28 +47,36 @@ class SessionService {
 
   /**
    * Start a Claude session.
-   * Uses createClient() internally for unified lifecycle management.
+   * Uses getOrCreateClient() internally for unified lifecycle management with race protection.
    */
   async startClaudeSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    if (session.status === SessionStatus.RUNNING) {
-      throw new Error('Session is already running');
-    }
     if (this.processManager.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
-    // Use createClient for unified lifecycle - it handles workspace validation,
-    // marking sessions, DB updates, and event handler setup
-    await this.createClient(sessionId, {
-      initialPrompt: options?.initialPrompt ?? 'Continue with the task.',
+    // Check if session is already running to prevent duplicate message sends
+    const existingClient = this.processManager.getClient(sessionId);
+    if (existingClient) {
+      throw new Error('Session is already running');
+    }
+
+    // Use getOrCreateClient for race-protected creation
+    // If concurrent starts happen, one will succeed and others will wait then fail the check above
+    const client = await this.getOrCreateClient(sessionId, {
       permissionMode: 'bypassPermissions',
     });
 
-    logger.info('Claude session started via createClient', { sessionId });
+    // Send initial prompt - defaults to 'Continue with the task.' if not provided
+    const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
+    if (initialPrompt) {
+      await client.sendMessage(initialPrompt);
+    }
+
+    logger.info('Claude session started', { sessionId });
   }
 
   /**
@@ -124,23 +132,35 @@ class SessionService {
       model?: string;
     }
   ): Promise<ClaudeClient> {
+    // Check for existing client first - fast path
     const existing = this.processManager.getClient(sessionId);
     if (existing) {
       return existing;
     }
 
-    const pending = this.processManager.getPendingClient(sessionId);
-    if (pending) {
-      return pending;
-    }
-
+    // Use processManager.getOrCreateClient() for race protection
+    // Build options first, then delegate to processManager
     const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
       thinkingEnabled: options?.thinkingEnabled,
       permissionMode: options?.permissionMode,
       model: options?.model,
     });
 
-    return this.processManager.getOrCreateClient(sessionId, clientOptions, handlers, context);
+    const client = await this.processManager.getOrCreateClient(
+      sessionId,
+      clientOptions,
+      handlers,
+      context
+    );
+
+    // Update DB with running status and PID
+    // This is idempotent and safe even if called by concurrent callers
+    await this.repository.updateSession(sessionId, {
+      status: SessionStatus.RUNNING,
+      claudeProcessPid: client.getPid() ?? null,
+    });
+
+    return client;
   }
 
   /**
@@ -151,40 +171,6 @@ class SessionService {
    */
   getClient(sessionId: string): ClaudeClient | undefined {
     return this.processManager.getClient(sessionId);
-  }
-
-  /**
-   * Internal: Create a new ClaudeClient for a session.
-   */
-  private async createClient(
-    sessionId: string,
-    options?: {
-      thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
-      model?: string;
-      initialPrompt?: string;
-    }
-  ): Promise<ClaudeClient> {
-    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-      thinkingEnabled: options?.thinkingEnabled,
-      permissionMode: options?.permissionMode,
-      model: options?.model,
-      initialPrompt: options?.initialPrompt,
-    });
-
-    const client = await this.processManager.createClient(
-      sessionId,
-      clientOptions,
-      handlers,
-      context
-    );
-
-    await this.repository.updateSession(sessionId, {
-      status: SessionStatus.RUNNING,
-      claudeProcessPid: client.getPid() ?? null,
-    });
-
-    return client;
   }
 
   /**
@@ -206,17 +192,34 @@ class SessionService {
       },
       onExit: async (sessionId: string) => {
         try {
-          await this.repository.updateSession(sessionId, {
+          const session = await this.repository.updateSession(sessionId, {
             status: SessionStatus.COMPLETED,
             claudeProcessPid: null,
           });
           logger.debug('Updated session status to COMPLETED on exit', { sessionId });
+
+          // Eagerly clear stale ratchet fixer reference instead of waiting for next poll.
+          // The conditional update is a no-op if this session isn't the active fixer.
+          await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
+
+          // Ratchet fixer sessions are transient — delete the record to avoid clutter.
+          if (session.workflow === 'ratchet') {
+            await this.repository.deleteSession(sessionId);
+            logger.debug('Deleted transient ratchet session', { sessionId });
+          }
         } catch (error) {
           logger.warn('Failed to update session status on exit', {
             sessionId,
             error: error instanceof Error ? error.message : String(error),
           });
         }
+      },
+      onError: (sessionId: string, error: Error) => {
+        logger.error('Claude client error', {
+          sessionId,
+          error: error.message,
+          stack: error.stack,
+        });
       },
     };
   }
@@ -425,6 +428,7 @@ class SessionService {
 
     const shouldInjectBranchRename = this.promptBuilder.shouldInjectBranchRename({
       branchName: workspace.branchName,
+      isAutoGeneratedBranch: workspace.isAutoGeneratedBranch,
     });
     const project = shouldInjectBranchRename
       ? await this.repository.getProjectById(workspace.projectId)
@@ -441,6 +445,7 @@ class SessionService {
         workflow: session.workflow,
         workspace: {
           branchName: workspace.branchName,
+          isAutoGeneratedBranch: workspace.isAutoGeneratedBranch,
           name: workspace.name,
           description: workspace.description ?? undefined,
         },

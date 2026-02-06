@@ -158,7 +158,7 @@
   --secondary: oklch(0.22 0 0);
   --secondary-foreground: oklch(0.98 0 0);
   --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.5 0 0);
+  --muted-foreground: oklch(0.6 0 0);
   --accent: oklch(0.22 0 0);
   --accent-foreground: oklch(0.98 0 0);
   /* Factory Yellow: #FFE500 */
@@ -206,4 +206,90 @@
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
+}
+
+@property --ratchet-dash-rotation {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes ratchet-dashes {
+  to {
+    --ratchet-dash-rotation: 1turn;
+  }
+}
+
+.ratchet-toggle[data-ratchet-state='idle'],
+.ratchet-toggle[data-ratchet-state='processing'] {
+  border: 1px dashed color-mix(in oklab, var(--brand) 70%, var(--foreground) 30%);
+}
+
+.ratchet-toggle[data-ratchet-state='processing'] {
+  position: relative;
+  border-color: transparent;
+  background: var(--background);
+}
+
+.ratchet-toggle[data-ratchet-state='processing']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  --ratchet-dash-rotation: 0deg;
+  background: repeating-conic-gradient(
+    from var(--ratchet-dash-rotation),
+    color-mix(in oklab, var(--brand) 85%, var(--foreground) 15%) 0deg 12deg,
+    color-mix(in oklab, var(--brand) 25%, var(--background) 75%) 12deg 24deg
+  );
+  animation: ratchet-dashes 3.85s linear infinite;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ratchet-toggle[data-ratchet-state='processing']::before {
+    animation: none;
+  }
+}
+
+/* Workspace attention glow animation */
+@keyframes waiting-pulse-animation {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--destructive) 50%, transparent);
+    border-color: color-mix(in oklab, var(--destructive) 30%, var(--border));
+  }
+  50% {
+    box-shadow: 0 0 12px 2px color-mix(in oklab, var(--destructive) 40%, transparent);
+    border-color: color-mix(in oklab, var(--destructive) 60%, var(--border));
+  }
+}
+
+.waiting-pulse {
+  animation: waiting-pulse-animation 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting-pulse {
+    animation: none;
+    border-color: color-mix(in oklab, var(--destructive) 50%, var(--border));
+  }
+}
+
+/* Enable text selection in toast notifications */
+[data-sonner-toast] {
+  user-select: text !important;
+}
+
+[data-sonner-toast] * {
+  user-select: text !important;
 }

@@ -106,7 +106,7 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
     };
   }
 
-  const [nextMsg] = queueArray;
+  const nextMsg = queueArray[0]!;
   const actions: Array<{ type: string; payload?: unknown }> = [];
   const sentMessages: Array<{ type: string; [key: string]: unknown }> = [];
 
@@ -470,8 +470,8 @@ describe('sendMessage pattern', () => {
     const result = simulateSendMessage('Second', [existingMsg], 'session-123');
 
     expect(result.newQueue).toHaveLength(2);
-    expect(result.newQueue?.[0].id).toBe(existingMsg.id);
-    expect(result.newQueue?.[1].text).toBe('Second');
+    expect(result.newQueue?.[0]?.id).toBe(existingMsg.id);
+    expect(result.newQueue?.[1]?.text).toBe('Second');
   });
 
   it('should generate unique ID for each message', () => {
@@ -513,8 +513,8 @@ describe('removeQueuedMessage pattern', () => {
     const result = simulateRemoveQueuedMessage(msg2.id, [msg1, msg2, msg3]);
 
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe(msg1.id);
-    expect(result[1].id).toBe(msg3.id);
+    expect(result[0]!.id).toBe(msg1.id);
+    expect(result[1]!.id).toBe(msg3.id);
   });
 
   it('should return same array if ID not found', () => {
@@ -540,7 +540,7 @@ describe('removeQueuedMessage pattern', () => {
     const result = simulateRemoveQueuedMessage(msg1.id, [msg1, msg2]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(msg2.id);
+    expect(result[0]!.id).toBe(msg2.id);
   });
 
   it('should remove last message when ID matches', () => {
@@ -550,7 +550,7 @@ describe('removeQueuedMessage pattern', () => {
     const result = simulateRemoveQueuedMessage(msg2.id, [msg1, msg2]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(msg1.id);
+    expect(result[0]!.id).toBe(msg1.id);
   });
 });
 

@@ -2,6 +2,7 @@ import type { Workspace } from '@prisma-gen/browser';
 import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { FactoryConfigScripts } from '@/components/factory-config-scripts';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,6 +23,10 @@ export default function NewWorkspacePage() {
   const [error, setError] = useState('');
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
+  const { data: factoryConfig } = trpc.workspace.getFactoryConfig.useQuery(
+    { projectId: project?.id ?? '' },
+    { enabled: !!project?.id }
+  );
 
   const createWorkspace = trpc.workspace.create.useMutation({
     onSuccess: (workspace: Workspace) => {
@@ -47,6 +52,7 @@ export default function NewWorkspacePage() {
     }
 
     createWorkspace.mutate({
+      type: 'MANUAL',
       projectId: project.id,
       name,
       description: description || undefined,
@@ -71,6 +77,8 @@ export default function NewWorkspacePage() {
           <p className="text-muted-foreground mt-1">{project.name}</p>
         </div>
       </div>
+
+      {factoryConfig && <FactoryConfigScripts factoryConfig={factoryConfig} variant="alert" />}
 
       <Card>
         <CardContent className="pt-6">

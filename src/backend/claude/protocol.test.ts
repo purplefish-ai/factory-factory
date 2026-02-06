@@ -191,8 +191,8 @@ describe('ClaudeProtocol', () => {
 
       const written = Buffer.concat(chunks).toString();
       const lines = written.trim().split('\n');
-      const parsed1 = JSON.parse(lines[0]);
-      const parsed2 = JSON.parse(lines[1]);
+      const parsed1 = JSON.parse(lines[0]!);
+      const parsed2 = JSON.parse(lines[1]!);
 
       expect(parsed1.request_id).not.toBe(parsed2.request_id);
     });
@@ -348,7 +348,7 @@ describe('ClaudeProtocol', () => {
       // Wait for the message to be written
       await new Promise((resolve) => setImmediate(resolve));
 
-      const sentMessage = JSON.parse(chunks2[0].trim());
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
       const requestId = sentMessage.request_id;
 
       // Send the response
@@ -612,7 +612,7 @@ describe('ClaudeProtocol', () => {
 
       await new Promise((resolve) => setImmediate(resolve));
 
-      const sentMessage = JSON.parse(chunks[0].trim());
+      const sentMessage = JSON.parse(chunks[0]!.trim());
       const requestId = sentMessage.request_id;
 
       // Send cancel
@@ -701,6 +701,25 @@ describe('ClaudeProtocol', () => {
   // ===========================================================================
 
   describe('error handling', () => {
+    it('should have error event handler registered for stdin', () => {
+      // Verify that the protocol registers an error handler on stdin
+      // This prevents unhandled error exceptions from crashing the process
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      // Before start, no error handler
+      const listenersBefore = stdin2.listenerCount('error');
+
+      protocol2.start();
+
+      // After start, protocol should have added an error handler
+      const listenersAfter = stdin2.listenerCount('error');
+      expect(listenersAfter).toBeGreaterThan(listenersBefore);
+
+      protocol2.stop();
+    });
+
     it('should have error event handler registered for stdout', () => {
       // Verify that the protocol registers an error handler on stdout
       // This prevents unhandled error exceptions from crashing the process
@@ -718,6 +737,18 @@ describe('ClaudeProtocol', () => {
       expect(listenersAfter).toBeGreaterThan(listenersBefore);
 
       protocol2.stop();
+    });
+
+    it('should emit error when stdin emits error', () => {
+      // Test that stdin errors are properly caught and emitted
+      const errorHandler = vi.fn();
+      protocol.on('error', errorHandler);
+
+      // Simulate stdin error
+      const testError = new Error('stdin write error');
+      stdin.emit('error', testError);
+
+      expect(errorHandler).toHaveBeenCalledWith(testError);
     });
 
     it('should forward error events from the protocol to listeners', () => {
@@ -820,6 +851,235 @@ describe('ClaudeProtocol', () => {
   });
 
   // ===========================================================================
+  // Schema Validation Tests
+  // ===========================================================================
+
+  describe('schema validation', () => {
+    it('should reject initialize response with invalid structure', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2, { requestTimeout: 1000 });
+      protocol2.start();
+
+      const chunks2: string[] = [];
+      stdin2.on('data', (chunk) => chunks2.push(chunk.toString()));
+
+      const initPromise = protocol2.sendInitialize();
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
+      const requestId = sentMessage.request_id;
+
+      // Send invalid response - has required fields but missing nested required fields
+      const response = {
+        type: 'control_response' as const,
+        response: {
+          subtype: 'success' as const,
+          request_id: requestId,
+          response: {
+            commands: [],
+            models: [],
+            account: {}, // Missing email, organization, subscriptionType
+            // missing output_style, available_output_styles
+          },
+        },
+      };
+      stdout2.write(`${JSON.stringify(response)}\n`);
+
+      await expect(initPromise).rejects.toThrow('Invalid initialize response');
+
+      protocol2.stop();
+    });
+
+    it('should reject initialize response with wrong account type', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2, { requestTimeout: 1000 });
+      protocol2.start();
+
+      const chunks2: string[] = [];
+      stdin2.on('data', (chunk) => chunks2.push(chunk.toString()));
+
+      const initPromise = protocol2.sendInitialize();
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
+      const requestId = sentMessage.request_id;
+
+      // Send response with account as a string instead of an object
+      const response = {
+        type: 'control_response' as const,
+        response: {
+          subtype: 'success' as const,
+          request_id: requestId,
+          response: {
+            commands: [],
+            output_style: 'stream-json',
+            available_output_styles: ['stream-json'],
+            models: [],
+            account: 'not-an-object',
+          },
+        },
+      };
+      stdout2.write(`${JSON.stringify(response)}\n`);
+
+      await expect(initPromise).rejects.toThrow('Invalid initialize response');
+
+      protocol2.stop();
+    });
+
+    it('should accept valid initialize response', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2, { requestTimeout: 1000 });
+      protocol2.start();
+
+      const chunks2: string[] = [];
+      stdin2.on('data', (chunk) => chunks2.push(chunk.toString()));
+
+      const initPromise = protocol2.sendInitialize();
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
+      const requestId = sentMessage.request_id;
+
+      const validResponse = {
+        commands: [{ name: 'test', description: 'Test command' }],
+        output_style: 'stream-json',
+        available_output_styles: ['stream-json', 'json'],
+        models: [{ value: 'claude-3', displayName: 'Claude 3', description: 'Latest' }],
+        account: {
+          email: 'test@example.com',
+          organization: 'Test Org',
+          subscriptionType: 'pro',
+        },
+      };
+
+      const response: ControlResponse = {
+        type: 'control_response',
+        response: {
+          subtype: 'success',
+          request_id: requestId,
+          response: validResponse,
+        },
+      };
+      stdout2.write(`${JSON.stringify(response)}\n`);
+
+      const result = await initPromise;
+      expect(result).toEqual(validResponse);
+
+      protocol2.stop();
+    });
+
+    it('should reject rewind files response with invalid affected_files type', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2, { requestTimeout: 1000 });
+      protocol2.start();
+
+      const chunks2: string[] = [];
+      stdin2.on('data', (chunk) => chunks2.push(chunk.toString()));
+
+      const rewindPromise = protocol2.sendRewindFiles('msg-123');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
+      const requestId = sentMessage.request_id;
+
+      // Send invalid response - affected_files should be array of strings, not number
+      const response = {
+        type: 'control_response' as const,
+        response: {
+          subtype: 'success' as const,
+          request_id: requestId,
+          response: {
+            affected_files: 123, // Invalid: should be string[]
+          },
+        },
+      };
+      stdout2.write(`${JSON.stringify(response)}\n`);
+
+      await expect(rewindPromise).rejects.toThrow('Invalid rewind files response');
+
+      protocol2.stop();
+    });
+
+    it('should accept valid rewind files response with affected_files', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2, { requestTimeout: 1000 });
+      protocol2.start();
+
+      const chunks2: string[] = [];
+      stdin2.on('data', (chunk) => chunks2.push(chunk.toString()));
+
+      const rewindPromise = protocol2.sendRewindFiles('msg-123');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
+      const requestId = sentMessage.request_id;
+
+      const validResponse = {
+        affected_files: ['/path/to/file1.txt', '/path/to/file2.txt'],
+      };
+
+      const response = {
+        type: 'control_response' as const,
+        response: {
+          subtype: 'success' as const,
+          request_id: requestId,
+          response: validResponse,
+        },
+      };
+      stdout2.write(`${JSON.stringify(response)}\n`);
+
+      const result = await rewindPromise;
+      expect(result).toEqual(validResponse);
+
+      protocol2.stop();
+    });
+
+    it('should accept valid rewind files response without affected_files', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2, { requestTimeout: 1000 });
+      protocol2.start();
+
+      const chunks2: string[] = [];
+      stdin2.on('data', (chunk) => chunks2.push(chunk.toString()));
+
+      const rewindPromise = protocol2.sendRewindFiles('msg-123');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
+      const requestId = sentMessage.request_id;
+
+      const validResponse = {};
+
+      const response = {
+        type: 'control_response' as const,
+        response: {
+          subtype: 'success' as const,
+          request_id: requestId,
+          response: validResponse,
+        },
+      };
+      stdout2.write(`${JSON.stringify(response)}\n`);
+
+      const result = await rewindPromise;
+      expect(result).toEqual(validResponse);
+
+      protocol2.stop();
+    });
+  });
+
+  // ===========================================================================
   // Edge Cases Tests
   // ===========================================================================
 
@@ -880,7 +1140,7 @@ describe('ClaudeProtocol', () => {
 
       const received = (await messagePromise) as AssistantMessage;
       const content = received.message.content as Array<{ type: string; text: string }>;
-      expect(content[0].text).toBe(longText);
+      expect(content[0]!.text).toBe(longText);
     });
   });
 });

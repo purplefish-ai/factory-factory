@@ -50,9 +50,11 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ArchiveWorkspaceDialog } from '@/components/workspace';
+import { ArchiveWorkspaceDialog, RatchetToggleButton } from '@/components/workspace';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
+import { useCreateWorkspace } from '../hooks/use-create-workspace';
+import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
 import { Logo } from './logo';
@@ -67,7 +69,7 @@ const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
 function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
-  return match ? match[1] : null;
+  return match ? (match[1] as string) : null;
 }
 
 /**
@@ -193,6 +195,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     }
   }, [isMocked, selectedProjectId, syncAllPRStatuses]);
 
+  // Track workspaces that need user attention (for red glow)
+  const { needsAttention, clearAttention } = useWorkspaceAttention();
+
   // Use the workspace list state management hook
   const {
     workspaceList,
@@ -276,7 +281,31 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     [workspaceList, selectedProjectId, updateWorkspaceOrder]
   );
 
-  const createWorkspace = trpc.workspace.create.useMutation();
+  // Use shared workspace creation hook, passing sidebar's existing names to avoid a redundant query
+  const { handleCreate: createWorkspace } = useCreateWorkspace(
+    selectedProjectId,
+    selectedProjectSlug,
+    existingNames
+  );
+
+  const handleCreateWorkspace = () => {
+    if (!selectedProjectId || isCreating) {
+      return;
+    }
+    // Generate unique name once and use it for both optimistic UI and actual creation
+    const name = generateUniqueWorkspaceName(existingNames);
+    startCreating(name);
+
+    // Use shared creation logic with the same name (handles navigation and error toasts).
+    // The optimistic placeholder auto-clears when the workspace appears in the server list
+    // (managed by useWorkspaceListState). On error, the hook resets its own state and
+    // cancelCreating below handles the placeholder.
+    createWorkspace(name).catch(() => {
+      // Error toast already shown by the hook; just remove the optimistic placeholder
+      cancelCreating();
+    });
+  };
+
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
@@ -293,35 +322,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     },
   });
 
-  const handleCreateWorkspace = async () => {
-    if (!selectedProjectId || isCreating) {
-      return;
-    }
-    const name = generateUniqueWorkspaceName(existingNames);
-    startCreating(name);
-
-    try {
-      // Create workspace (branchName defaults to project's default branch)
-      // Don't create a session - user will choose workflow in workspace page
-      const workspace = await createWorkspace.mutateAsync({
-        projectId: selectedProjectId,
-        name,
-      });
-
-      // Invalidate caches to trigger immediate refetch
-      utils.workspace.list.invalidate({ projectId: selectedProjectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-
-      // Navigate to workspace (workflow selection will be shown)
-      navigate(`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`);
-    } catch (error) {
-      // Clear the creating state on error so the UI doesn't get stuck
-      cancelCreating();
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Failed to create workspace: ${message}`);
-    }
-  };
-
   const handleArchiveRequest = (workspace: WorkspaceListItem) => {
     setWorkspaceToArchive(workspace.id);
     setArchiveDialogOpen(true);
@@ -334,6 +334,15 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
+  // Check if we're on the kanban view (workspaces list page without a specific workspace)
+  const isKanbanView = pathname.endsWith('/workspaces') || pathname.endsWith('/workspaces/');
+
+  // Clear attention glow when viewing a workspace
+  useEffect(() => {
+    if (currentWorkspaceId && needsAttention(currentWorkspaceId)) {
+      clearAttention(currentWorkspaceId);
+    }
+  }, [currentWorkspaceId, needsAttention, clearAttention]);
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -363,7 +372,8 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       return;
     }
     if (projects && projects.length > 0 && !selectedProjectSlug) {
-      const firstSlug = projects[0].slug;
+      // biome-ignore lint/style/noNonNullAssertion: length > 0 checked above
+      const firstSlug = projects[0]!.slug;
       setSelectedProjectSlug(firstSlug);
       localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
     }
@@ -465,7 +475,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                   items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <SidebarMenu className="gap-0 divide-y divide-sidebar-border/60">
+                  <SidebarMenu className="gap-2 p-1">
                     {workspaceList.map((workspace) => {
                       const isCreatingItem = workspace.uiState === 'creating';
 
@@ -490,8 +500,12 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                           key={workspace.id}
                           workspace={workspace}
                           isActive={currentWorkspaceId === workspace.id}
+                          selectedProjectId={selectedProjectId}
                           selectedProjectSlug={selectedProjectSlug}
                           onArchiveRequest={handleArchiveRequest}
+                          disableRatchetAnimation={isKanbanView}
+                          needsAttention={needsAttention}
+                          clearAttention={clearAttention}
                         />
                       );
                     })}
@@ -581,14 +595,33 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 function SortableWorkspaceItem({
   workspace,
   isActive,
+  selectedProjectId,
   selectedProjectSlug,
   onArchiveRequest,
+  disableRatchetAnimation,
+  needsAttention,
+  clearAttention,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
+  selectedProjectId?: string;
   selectedProjectSlug: string;
   onArchiveRequest: (workspace: WorkspaceListItem) => void;
+  disableRatchetAnimation?: boolean;
+  needsAttention: (workspaceId: string) => boolean;
+  clearAttention: (workspaceId: string) => void;
 }) {
+  const utils = trpc.useUtils();
+  const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onSuccess: () => {
+      if (selectedProjectId) {
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+        utils.workspace.listWithKanbanState.invalidate({ projectId: selectedProjectId });
+      }
+      utils.workspace.get.invalidate({ id: workspace.id });
+    },
+  });
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
   });
@@ -600,6 +633,12 @@ function SortableWorkspaceItem({
 
   const isArchivingItem = workspace.uiState === 'archiving';
   const { gitStats: stats } = workspace;
+  const ratchetEnabled = workspace.ratchetEnabled ?? true;
+  const { showAttentionGlow } = getSidebarAttentionState(
+    workspace,
+    Boolean(disableRatchetAnimation),
+    needsAttention
+  );
 
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
@@ -609,10 +648,14 @@ function SortableWorkspaceItem({
         className={cn(
           'h-auto px-2 py-2.5',
           isArchivingItem && 'opacity-50 pointer-events-none',
-          isDragging && 'opacity-50 bg-sidebar-accent'
+          isDragging && 'opacity-50 bg-sidebar-accent',
+          showAttentionGlow && 'waiting-pulse'
         )}
       >
-        <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
+        <Link
+          to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
+          onClick={() => clearAttention(workspace.id)}
+        >
           <div className="flex w-full min-w-0 items-start gap-2">
             {/* Drag handle */}
             <button
@@ -630,19 +673,32 @@ function SortableWorkspaceItem({
               <GripVertical className="h-3 w-3" />
             </button>
 
-            {/* Status dot */}
-            <span className="w-4 shrink-0 flex justify-center mt-2">
+            {/* Status dot + ratchet toggle */}
+            <div className="w-5 shrink-0 mt-1.5 flex flex-col items-center gap-1.5">
               {isArchivingItem ? (
                 <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
               ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
-                </Tooltip>
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
+                  </Tooltip>
+                  <RatchetToggleButton
+                    enabled={ratchetEnabled}
+                    state={workspace.ratchetState}
+                    animated={workspace.ratchetButtonAnimated ?? false}
+                    className="h-5 w-5 shrink-0"
+                    disabled={toggleRatcheting.isPending}
+                    stopPropagation
+                    onToggle={(enabled) => {
+                      toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
+                    }}
+                  />
+                </>
               )}
-            </span>
+            </div>
 
             <div className="min-w-0 flex-1 space-y-0">
               {/* Row 1: name + timestamp + archive */}
@@ -795,6 +851,20 @@ function getPrTooltipSuffix(workspace: WorkspaceListItem) {
     return ' · CI running';
   }
   return '';
+}
+
+function getSidebarAttentionState(
+  workspace: WorkspaceListItem,
+  disableRatchetAnimation: boolean,
+  needsAttention: (workspaceId: string) => boolean
+) {
+  const isDone = workspace.cachedKanbanColumn === 'DONE';
+  const isRatchetActive =
+    !(disableRatchetAnimation || isDone) && Boolean(workspace.ratchetButtonAnimated);
+
+  return {
+    showAttentionGlow: needsAttention(workspace.id) && !isRatchetActive,
+  };
 }
 
 /**

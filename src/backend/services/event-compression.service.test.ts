@@ -171,7 +171,7 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(1);
-      const delta = (result[0].data as any).event.delta;
+      const delta = (result[0]!.data as any).event.delta;
       expect(delta.type).toBe('text_delta');
       expect(delta.text).toBe('Hello world!');
     });
@@ -182,8 +182,8 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(2);
-      expect((result[0].data as any).event.delta.text).toBe('Block 0');
-      expect((result[1].data as any).event.delta.text).toBe('Block 1');
+      expect((result[0]!.data as any).event.delta.text).toBe('Block 0');
+      expect((result[1]!.data as any).event.delta.text).toBe('Block 1');
     });
 
     it('should handle interleaved text_delta events', () => {
@@ -199,9 +199,9 @@ describe('EventCompressionService', () => {
 
       // Should be: merged(A1+A2), merged(B1+B2), A3 (separate because index switched)
       expect(result).toHaveLength(3);
-      expect((result[0].data as any).event.delta.text).toBe('A1A2');
-      expect((result[1].data as any).event.delta.text).toBe('B1B2');
-      expect((result[2].data as any).event.delta.text).toBe('A3');
+      expect((result[0]!.data as any).event.delta.text).toBe('A1A2');
+      expect((result[1]!.data as any).event.delta.text).toBe('B1B2');
+      expect((result[2]!.data as any).event.delta.text).toBe('A3');
     });
   });
 
@@ -220,7 +220,7 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(1);
-      const delta = (result[0].data as any).event.delta;
+      const delta = (result[0]!.data as any).event.delta;
       expect(delta.type).toBe('thinking_delta');
       expect(delta.thinking).toBe('Let me think about this...');
     });
@@ -231,8 +231,8 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(2);
-      expect((result[0].data as any).event.delta.type).toBe('thinking_delta');
-      expect((result[1].data as any).event.delta.type).toBe('text_delta');
+      expect((result[0]!.data as any).event.delta.type).toBe('thinking_delta');
+      expect((result[1]!.data as any).event.delta.type).toBe('text_delta');
     });
   });
 
@@ -251,7 +251,7 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(1);
-      const delta = (result[0].data as any).event.delta;
+      const delta = (result[0]!.data as any).event.delta;
       expect(delta.type).toBe('input_json_delta');
       expect(delta.partial_json).toBe('{"file": "test.ts"}');
     });
@@ -268,7 +268,7 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(1);
-      expect(result[0].running).toBe(true);
+      expect(result[0]!.running).toBe(true);
     });
 
     it('should preserve status transitions', () => {
@@ -283,9 +283,9 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(3);
-      expect(result[0].running).toBe(true);
-      expect(result[1].running).toBe(false);
-      expect(result[2].running).toBe(true);
+      expect(result[0]!.running).toBe(true);
+      expect(result[1]!.running).toBe(false);
+      expect(result[2]!.running).toBe(true);
     });
   });
 
@@ -304,9 +304,9 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(3);
-      expect((result[0].data as any).event.type).toBe('content_block_start');
-      expect((result[1].data as any).event.type).toBe('content_block_delta');
-      expect((result[2].data as any).event.type).toBe('content_block_stop');
+      expect((result[0]!.data as any).event.type).toBe('content_block_start');
+      expect((result[1]!.data as any).event.type).toBe('content_block_delta');
+      expect((result[2]!.data as any).event.type).toBe('content_block_stop');
     });
 
     it('should not merge deltas across block boundaries', () => {
@@ -320,8 +320,8 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(4);
-      expect((result[0].data as any).event.delta.text).toBe('First');
-      expect((result[3].data as any).event.delta.text).toBe('Second');
+      expect((result[0]!.data as any).event.delta.text).toBe('First');
+      expect((result[3]!.data as any).event.delta.text).toBe('Second');
     });
 
     it('should preserve message_start events', () => {
@@ -330,7 +330,7 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(2);
-      expect((result[0].data as any).event.type).toBe('message_start');
+      expect((result[0]!.data as any).event.type).toBe('message_start');
     });
 
     it('should preserve result events', () => {
@@ -339,7 +339,7 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(2);
-      expect((result[1].data as any).type).toBe('result');
+      expect((result[1]!.data as any).type).toBe('result');
     });
   });
 
@@ -400,7 +400,7 @@ describe('EventCompressionService', () => {
       const result = eventCompressionService.compressForReplay(events);
 
       expect(result).toHaveLength(3);
-      expect((result[1].data as any).event.delta.partial_json).toBe('{"command": "ls -la"}');
+      expect((result[1]!.data as any).event.delta.partial_json).toBe('{"command": "ls -la"}');
     });
   });
 

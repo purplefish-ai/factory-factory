@@ -42,6 +42,7 @@ export interface GitHubComment {
   author: { login: string };
   body: string;
   createdAt: string;
+  updatedAt: string;
   url: string;
 }
 

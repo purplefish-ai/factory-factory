@@ -81,10 +81,10 @@ export function parseNumstatOutput(output: string): { additions: number; deletio
     const [add, del] = line.split('\t');
     // Binary files show as '-' for add/del
     if (add !== '-') {
-      additions += Number.parseInt(add, 10) || 0;
+      additions += Number.parseInt(add as string, 10) || 0;
     }
     if (del !== '-') {
-      deletions += Number.parseInt(del, 10) || 0;
+      deletions += Number.parseInt(del as string, 10) || 0;
     }
   }
 

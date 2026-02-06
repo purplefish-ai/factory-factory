@@ -168,7 +168,8 @@ export function UnstagedChangesPanel({ workspaceId }: UnstagedChangesPanelProps)
           }}
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
-            const file = files[virtualItem.index];
+            // biome-ignore lint/style/noNonNullAssertion: index provided by virtualizer within bounds
+            const file = files[virtualItem.index]!;
             return (
               <div
                 key={virtualItem.key}

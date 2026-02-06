@@ -334,7 +334,7 @@ export class AgentProcessAdapter extends EventEmitter {
   /**
    * Send a message to an agent
    */
-  sendToAgent(agentId: string, message: string): boolean {
+  async sendToAgent(agentId: string, message: string): Promise<boolean> {
     const client = this.agents.get(agentId);
     if (!client) {
       logger.warn('Cannot send message - agent not found', { agentId });
@@ -342,7 +342,7 @@ export class AgentProcessAdapter extends EventEmitter {
     }
 
     try {
-      client.sendMessage(message);
+      await client.sendMessage(message);
       return true;
     } catch (error) {
       logger.error('Failed to send message to agent', {
@@ -356,7 +356,7 @@ export class AgentProcessAdapter extends EventEmitter {
   /**
    * Send a message to an agent (alias for sendToAgent)
    */
-  sendMessage(agentId: string, message: string): boolean {
+  sendMessage(agentId: string, message: string): Promise<boolean> {
     return this.sendToAgent(agentId, message);
   }
 

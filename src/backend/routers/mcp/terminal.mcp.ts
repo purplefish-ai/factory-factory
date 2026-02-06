@@ -82,7 +82,7 @@ function getActiveOrFirstTerminal(workspaceId: string): TerminalInstance | null 
   }
   // Fall back to first available terminal
   const allTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
-  return allTerminals.length > 0 ? allTerminals[0] : null;
+  return allTerminals.length > 0 ? (allTerminals[0] ?? null) : null;
 }
 
 function formatTerminalOutput(

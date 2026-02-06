@@ -2,6 +2,7 @@ import { KanbanColumn, PRState, type Workspace, WorkspaceStatus } from '@prisma-
 import { workspaceAccessor } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
+import { deriveWorkspaceFlowStateFromWorkspace } from './workspace-flow-state.service';
 
 const logger = createLogger('kanban-state');
 
@@ -82,7 +83,9 @@ class KanbanStateService {
 
     // Get real-time working status from session service
     const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-    const isWorking = sessionService.isAnySessionWorking(sessionIds);
+    const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+    const isWorking = isSessionWorking || flowState.isWorking;
 
     const kanbanColumn = computeKanbanColumn({
       lifecycle: workspace.status,
@@ -108,11 +111,13 @@ class KanbanStateService {
   ): WorkspaceWithKanbanState[] {
     return workspaces.map((workspace) => {
       const isWorking = workingStatusMap.get(workspace.id) ?? false;
+      const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+      const effectiveWorking = isWorking || flowState.isWorking;
 
       // Compute live kanban column (real-time activity overlays cached PR state)
       const kanbanColumn = computeKanbanColumn({
         lifecycle: workspace.status,
-        isWorking,
+        isWorking: effectiveWorking,
         prState: workspace.prState,
         hasHadSessions: workspace.hasHadSessions,
       });
@@ -120,7 +125,7 @@ class KanbanStateService {
       return {
         workspace,
         kanbanColumn,
-        isWorking,
+        isWorking: effectiveWorking,
       };
     });
   }
@@ -131,6 +136,7 @@ class KanbanStateService {
    *
    * Note: For archived workspaces, the cachedKanbanColumn is preserved
    * to show the column it was in before archiving.
+   * Only updates stateComputedAt when the column actually changes.
    */
   async updateCachedKanbanColumn(workspaceId: string): Promise<void> {
     const workspace = await workspaceAccessor.findById(workspaceId);
@@ -144,21 +150,27 @@ class KanbanStateService {
       return;
     }
 
-    // For cached column, assume not working (real-time overlay handles working state)
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+
+    // For cached column, include flow-state working but not in-memory session activity.
     const cachedColumn = computeKanbanColumn({
       lifecycle: workspace.status,
-      isWorking: false,
+      isWorking: flowState.isWorking,
       prState: workspace.prState,
       hasHadSessions: workspace.hasHadSessions,
     });
 
     // If column is null (hidden workspace), default to WAITING for the cache
+    const newColumn = cachedColumn ?? KanbanColumn.WAITING;
+
+    // Only update stateComputedAt if the column actually changed
+    const columnChanged = workspace.cachedKanbanColumn !== newColumn;
     await workspaceAccessor.update(workspaceId, {
-      cachedKanbanColumn: cachedColumn ?? KanbanColumn.WAITING,
-      stateComputedAt: new Date(),
+      cachedKanbanColumn: newColumn,
+      ...(columnChanged && { stateComputedAt: new Date() }),
     });
 
-    logger.debug('Updated cached kanban column', { workspaceId, cachedColumn });
+    logger.debug('Updated cached kanban column', { workspaceId, cachedColumn, columnChanged });
   }
 
   /**

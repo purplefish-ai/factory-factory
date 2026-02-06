@@ -2,7 +2,12 @@ import { Loader2 } from 'lucide-react';
 import { memo } from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ClaudeMessage } from '@/lib/claude-types';
-import { extractTextFromMessage, isToolResultMessage, isToolUseMessage } from '@/lib/claude-types';
+import {
+  extractTextFromMessage,
+  isThinkingContent,
+  isToolResultMessage,
+  isToolUseMessage,
+} from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
 import { ToolInfoRenderer } from '../tool-renderers';
 import {
@@ -10,6 +15,7 @@ import {
   ResultRenderer,
   StreamEventRenderer,
   SystemMessageRenderer,
+  ThinkingRenderer,
 } from './stream-event-renderer';
 
 // =============================================================================
@@ -51,6 +57,21 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
     return (
       <StreamEventRenderer event={message.event} messageId={messageId} className={className} />
     );
+  }
+
+  if (message.message && Array.isArray(message.message.content)) {
+    const contentItems = message.message.content;
+    // biome-ignore lint/style/noNonNullAssertion: length === 1 checked
+    if (contentItems.length === 1 && isThinkingContent(contentItems[0]!)) {
+      return (
+        <ThinkingRenderer
+          // biome-ignore lint/style/noNonNullAssertion: length === 1 checked
+          text={contentItems[0]!.thinking}
+          messageId={messageId}
+          className={className}
+        />
+      );
+    }
   }
 
   // Handle regular assistant/user messages with content

@@ -2,6 +2,7 @@
 
 // Types
 export type { ChatMessage } from '@/lib/claude-types';
+export { AgentLiveDock } from './agent-live-dock';
 export type { ChatInputProps } from './chat-input/chat-input';
 export { ChatInput } from './chat-input/chat-input';
 export type { TaskNotification } from './chat-reducer';
@@ -12,7 +13,6 @@ export { QuestionPrompt } from './question-prompt';
 export { QueuedMessages } from './queued-messages';
 export type { RewindConfirmationDialogProps } from './rewind-confirmation-dialog';
 export { RewindConfirmationDialog } from './rewind-confirmation-dialog';
-export { SessionPicker } from './session-picker';
 export { SessionTabBar } from './session-tab-bar';
 export type { SlashCommandPaletteHandle, SlashKeyResult } from './slash-command-palette';
 export { SlashCommandPalette } from './slash-command-palette';

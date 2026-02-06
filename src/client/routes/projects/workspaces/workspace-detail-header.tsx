@@ -9,16 +9,17 @@ import {
   PanelRight,
   XCircle,
 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   QuickActionsMenu,
+  RatchetToggleButton,
   RunScriptButton,
   RunScriptPortBadge,
   useWorkspacePanel,
 } from '@/components/workspace';
 import { cn } from '@/lib/utils';
+import { trpc } from '../../../../frontend/lib/trpc';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 
@@ -179,6 +180,37 @@ function WorkspaceCiStatus({
   );
 }
 
+function RatchetingToggle({
+  workspace,
+  workspaceId,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspaceId: string;
+}) {
+  const utils = trpc.useUtils();
+  const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onSuccess: () => {
+      utils.workspace.get.invalidate({ id: workspaceId });
+      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
+    },
+  });
+
+  const workspaceRatchetEnabled = workspace.ratchetEnabled ?? true;
+
+  return (
+    <RatchetToggleButton
+      enabled={workspaceRatchetEnabled}
+      state={workspace.ratchetState}
+      animated={workspace.ratchetButtonAnimated ?? false}
+      disabled={toggleRatcheting.isPending}
+      onToggle={(enabled) => {
+        toggleRatcheting.mutate({ workspaceId, enabled });
+      }}
+    />
+  );
+}
+
 interface WorkspaceHeaderProps {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   workspaceId: string;
@@ -221,6 +253,7 @@ export function WorkspaceHeader({
         <WorkspaceCiStatus workspace={workspace} />
       </div>
       <div className="flex items-center gap-1">
+        <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
         <QuickActionsMenu
           onExecuteAgent={(action) => {
             if (action.content) {

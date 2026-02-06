@@ -231,13 +231,13 @@ describe('FileLockService', () => {
       });
       expect(fs.writeFile).toHaveBeenCalled();
 
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]!;
       expect(writeCall[0]).toBe(path.join(mockWorktreePath, '.context', 'advisory-locks.json'));
 
       const persisted = JSON.parse(writeCall[1] as string);
       expect(persisted.version).toBe(1);
       expect(persisted.locks).toHaveLength(1);
-      expect(persisted.locks[0].filePath).toBe('src/index.ts');
+      expect(persisted.locks[0]!.filePath).toBe('src/index.ts');
     });
   });
 
@@ -314,7 +314,7 @@ describe('FileLockService', () => {
       });
 
       expect(fs.writeFile).toHaveBeenCalled();
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]!;
       const persisted = JSON.parse(writeCall[1] as string);
       expect(persisted.locks).toHaveLength(0);
     });
@@ -416,7 +416,7 @@ describe('FileLockService', () => {
       const result = await fileLockService.listLocks(mockAgentId, {});
 
       expect(result.locks).toHaveLength(1);
-      expect(result.locks[0].filePath).toBe('src/utils.ts');
+      expect(result.locks[0]!.filePath).toBe('src/utils.ts');
     });
 
     it('should include expired locks when requested', async () => {
@@ -520,7 +520,7 @@ describe('FileLockService', () => {
       // The expired lock should be cleaned up
       const list = await fileLockService.listLocks(mockAgentId, { includeExpired: true });
       expect(list.locks).toHaveLength(1);
-      expect(list.locks[0].filePath).toBe('src/utils.ts');
+      expect(list.locks[0]!.filePath).toBe('src/utils.ts');
     });
 
     it('should not start interval twice', () => {

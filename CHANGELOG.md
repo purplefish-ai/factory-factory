@@ -5,6 +5,144 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-02-06
+
+### Added
+
+- Add draggable height resize to live activity feed (#757)
+- Show starting state for issue workspace auto-start (#758)
+
+### Changed
+
+- Stabilize live activity dock with internal tool scrolling (#754)
+- Clear ratchetActiveSessionId on session exit (#760)
+
+### Fixed
+
+- Fix chat replay flicker by showing loading state during reconnect (#756)
+- Fix agent messages lost when Claude process is replaced (#752)
+- Fix kanban column scrolling when items overflow (#753)
+- Fix crash when argumentHint is non-string in slash command cache (#743)
+
+## [0.2.2] - 2026-02-06
+
+### Added
+
+- Show factory-factory.json preview on new workspace page (#709)
+- Add missing workspace attention glow animation (#731)
+
+### Changed
+
+- Enable noUncheckedIndexedAccess for safer array/object indexing (#741)
+- Simplify ratchet flow and unify working-state derivation (#711)
+- Improve attachments (#701, #714)
+- Extract workspace list page subcomponents + shared create hook (#703)
+- Stay on kanban view when starting workspace from GitHub issue (#653)
+- Consolidate fixer sessions and PR snapshot writes (#691, #697)
+- Enable text selection in toast notifications (#718)
+
+### Fixed
+
+- Fix ratchet missing repeated CI failures (#736)
+- Fix Claude process timeout during workspace initialization (#729)
+- Fix unhandled promise rejection from ClaudeClient error events (#717, #721)
+- Fix Claude keepalive activity timeout (#712)
+- Fix unhandled promise rejection from stdin stream errors (#702)
+
+### Refactored
+
+- Phase 3: Schema cleanup and legacy surface removal (#693, #719)
+- Phase 2: Unify workspace creation orchestration (#692, #706)
+- Remove workflow/session selectors and default session startup (#720)
+- Remove adaptLegacyCreateInput compatibility path (#713, #715)
+
+## [0.2.1] - 2026-02-05
+
+### Added
+
+- Data import option to initial project setup screen (#665)
+- Domain model consolidation design documentation (#695)
+
+### Changed
+
+- Bump process memory limit from 2GB to 10GB to reduce OOM kills (#696)
+- Make ratchet review fixer fully autonomous - no longer asks for user input (#690)
+
+### Fixed
+
+- Fix sendMessage unhandled promise rejections when protocol stream breaks (#696)
+- Fix ratchet state update to only occur after confirmed message delivery (#696)
+- Fix placeholder PR number in pr-review-fix prompt to dynamically resolve from current branch (#690)
+
+### Refactored
+
+- Refactor slash command palette key handling to reduce complexity (#649)
+- Refactor GitHub CLI error classification to reduce complexity (#652)
+
+## [0.2.0] - 2026-02-05
+
+### Added
+
+- Unified Ratchet system for PR automation (#565)
+- Live agent activity dock (#639)
+- Rendered plan view with inline expansion (#597)
+- Data export/import for database backup and restore (#617)
+- Workspace-level ratcheting toggle (#657)
+- Ratchet visual indicators with animated border (#659, #660)
+- Pulsing red glow to waiting workspaces in sidebar (#663)
+- Temporary ratcheting animation after git push (#661)
+- Auto-start agent with GitHub issue prompt when starting from Kanban (#642)
+- Auto-start Claude session during workspace init (#621)
+- Prisma migration drift check (#630)
+- Use icons for session tab status (#640)
+
+### Changed
+
+- Simplify ratchet UX and behavior (#678)
+- Simplify kanban board to 4 columns with GitHub issues (#638)
+- Make workspace attention glow event-driven (#682)
+- Limit waiting workspace pulse animation to 30 seconds (#676)
+- Replace marching ants animation with yellow spinner (#662)
+- Remove deprecated CI and PR Review settings sections (#658)
+- Standardize tab button and prompt card UI (#612, #624)
+- Improve question/plan prompts for chat input (#595)
+- Place new workspaces at top (#594)
+- Add PR reference comment instead of closing issue when PR is merged (#637)
+- Close associated GitHub issue when archiving workspace (#632)
+- Detect workspace worktree branches as auto-generated (#634)
+- Use pnpm exec for lint-staged hook (#650)
+
+### Fixed
+
+- Fix ratchet agent not running after prompt submission (#673)
+- Fix ratchet service to detect line-level review comments (#664)
+- Detect edited PR comments in ratchet system (#683)
+- Fix thinking streaming display (#641)
+- Add missing migration (#629)
+- Override brace-expansion to 5.0.1 (#622)
+
+### Refactored
+
+- Refactor chat input UI composition complexity (#573, #655)
+- Unify diff parsing/rendering utilities (#611, #680)
+- Consolidate date formatting utilities (#675)
+- Simplify chat hooks by extracting sub-hooks (#614, #667)
+- Split workspace detail container + move auto-scroll hook (#600, #671)
+- Refactor chat reducer dispatch complexity (#572, #636)
+- Refactor PR diff line rendering to remove Biome ignore (#570, #635)
+- Refactor chart tooltip rendering complexity (#577, #633)
+- Refactor agent activity renderers into modules (#609, #626)
+- Refactor claude-types message checks complexity (#578, #627)
+- Refactor session file logger summary extraction (#579, #628)
+- Unify dev logs WebSocket hook with shared transport (#613, #619)
+- Split admin route into sections and shared formatters (#620)
+- Extract shared pathExists helper (#656)
+- Extract tool truncation constants (#596)
+
+### Documentation
+
+- Update docs for ratchet, GitHub integration, and kanban (#677)
+
 ## [0.1.6] - 2026-02-03
 
 ### Added

@@ -6,7 +6,6 @@ import { ThinkingCompletionProvider } from '@/components/agent-activity/message-
 import type { GroupedMessageItem } from '@/lib/claude-types';
 import { isStreamEventMessage, isToolSequence } from '@/lib/claude-types';
 import { CompactingIndicator } from './compacting-indicator';
-import { LatestThinking } from './latest-thinking';
 
 // =============================================================================
 // Types
@@ -25,8 +24,6 @@ interface VirtualizedMessageListProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   /** Whether user is near bottom of scroll - used to gate auto-scroll */
   isNearBottom?: boolean;
-  /** Latest accumulated thinking content from extended thinking mode */
-  latestThinking?: string | null;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;
   /** Callback to remove/cancel a queued message */
@@ -47,8 +44,8 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
       <div className="text-muted-foreground space-y-2">
-        <p className="text-lg font-medium">No messages yet</p>
-        <p className="text-sm">Start a conversation by typing a message below.</p>
+        <p className="text-lg font-medium">Ready to start</p>
+        <p className="text-sm">Send a message to start the agent and begin your conversation.</p>
       </div>
     </div>
   );
@@ -105,7 +102,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onScroll,
   messagesEndRef,
   isNearBottom = true,
-  latestThinking,
   queuedMessageIds,
   onRemoveQueuedMessage,
   isCompacting = false,
@@ -120,7 +116,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   const lastThinkingMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const item = messages[i];
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const item = messages[i]!;
       if (isToolSequence(item)) {
         continue;
       }
@@ -142,7 +139,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => 80, // Estimated average height
     overscan: running ? 3 : 5, // Fewer items when streaming for better performance
-    getItemKey: (index) => messages[index].id,
+    // biome-ignore lint/style/noNonNullAssertion: index provided by virtualizer within bounds
+    getItemKey: (index) => messages[index]!.id,
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -190,21 +188,21 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [scrollContainerRef, handleScroll]);
 
-  // Show empty/loading states
-  if (messages.length === 0) {
-    if (loadingSession) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-8">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span className="text-sm">Loading session...</span>
-          </div>
+  // Show loading state while session is loading (prevents flicker during event replay)
+  if (loadingSession) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-sm">Loading session...</span>
         </div>
-      );
-    }
-    if (!(running || startingSession)) {
-      return <EmptyState />;
-    }
+      </div>
+    );
+  }
+
+  // Show empty state if no messages and not starting
+  if (messages.length === 0 && !(running || startingSession)) {
+    return <EmptyState />;
   }
 
   return (
@@ -220,6 +218,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         >
           {virtualItems.map((virtualRow) => {
             const item = messages[virtualRow.index];
+            if (!item) {
+              return null;
+            }
             const isQueued = queuedMessageIds?.has(item.id) ?? false;
             // Get UUID for user messages to enable rewind functionality
             // Use message ID (stable identifier) instead of array index to avoid issues
@@ -256,11 +257,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
             );
           })}
         </div>
-
-        {/* Latest thinking from extended thinking mode */}
-        {latestThinking && running && (
-          <LatestThinking thinking={latestThinking} running={running} className="mb-4" />
-        )}
 
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />

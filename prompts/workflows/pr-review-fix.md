@@ -8,54 +8,42 @@ expectsPR: false
 
 You are addressing PR review comments for this workspace's pull request. Your goal is to implement the requested changes and satisfy the reviewers.
 
-## Workflow Steps
+**CRITICAL: Execute autonomously. Do not ask the user for input, confirmation, or clarification. Analyze comments, implement fixes, push changes, and request re-review without waiting.**
 
-### 1. Understand the Feedback
-- Review the comments provided in the initial message carefully
-- Pay attention to both inline code comments and general review comments
-- Understand what changes each reviewer is requesting
-- Note any questions or clarifications the reviewer is asking for
+## Workflow
 
-### 2. Plan Your Changes
-- Identify which files need to be modified
-- Determine the scope of changes needed
-- Consider if the requested change impacts other parts of the codebase
-- If a request is unclear, make a reasonable interpretation and document your assumptions
+### 1. Analyze Comments
+- Review all comments in the initial message
+- Categorize each as **actionable** (requires code changes) or **informational** (no action needed)
+- Informational comments include: automated coverage reports, CI status notifications, or comments that just acknowledge/thank without requesting changes
+- For actionable comments, determine what changes are needed
 
-### 3. Implement the Changes
-- Address each review comment systematically
+### 2. Implement Fixes
+- Address each actionable comment systematically
 - Make focused changes that directly address the feedback
-- Avoid scope creep - only fix what was requested
-- If you disagree with a suggestion, implement it anyway but note your reasoning in the commit message
+- If a request is unclear, make a reasonable interpretation and proceed
+- Do not ask for clarification - make your best judgment
 
-### 4. Verify Your Changes
-- Run the test suite: `pnpm test`
-- Run type checking: `pnpm typecheck`
-- Run linting: `pnpm check:fix`
-- Test any affected functionality manually if appropriate
+### 3. Verify Changes
+\`\`\`bash
+pnpm test && pnpm typecheck && pnpm check:fix
+\`\`\`
 
-### 5. Commit and Push
-- Commit your changes with clear messages referencing the review feedback
-- Push to the branch: `git push`
-- The reviewers will be notified of your updates
+### 4. Commit and Push
+\`\`\`bash
+git add -A && git commit -m "Address review comments" && git push
+\`\`\`
 
-### 6. Request Re-review
-- After pushing your changes, post a comment on the PR asking reviewers to re-review
-- Mention the specific reviewers who left comments using @username
+### 5. Request Re-review
+Post a comment mentioning the reviewers. Use `gh pr list --head $(git branch --show-current)` to find the PR number if not already known:
+\`\`\`bash
+gh pr comment $(gh pr list --head $(git branch --show-current) --json number --jq '.[0].number') --body "@reviewer1 @reviewer2 I've addressed the review comments. Please re-review when you have a chance."
+\`\`\`
 
 ## Guidelines
 
-- **Address all comments**: Don't leave any review comment unaddressed
-- **Keep changes focused**: Only change what was requested in the reviews
-- **Test thoroughly**: Make sure your changes don't break existing functionality
-- **Be responsive**: Implement changes promptly to keep the PR moving
-- **Document decisions**: If you make judgment calls, explain your reasoning
-
-## Common Review Comment Types
-
-- **Code style**: Follow the project's coding conventions
-- **Bug fix requests**: Understand the bug and fix it properly
-- **Refactoring suggestions**: Implement the cleaner code pattern suggested
-- **Missing tests**: Add tests for the functionality as requested
-- **Documentation**: Add or improve comments and documentation
-- **Logic changes**: Implement the alternative approach suggested
+- **Operate autonomously**: Never ask the user what to do. Analyze, decide, implement, push.
+- **Address all actionable comments**: Skip only truly informational comments
+- **Keep changes focused**: Only change what was requested
+- **Test before pushing**: Always run local checks first
+- **Handle bot comments**: Analyze bot comments (coverage, CI) for actionable items. If purely informational, move on without code changes.

@@ -78,7 +78,7 @@ export function fileToBase64(file: File): Promise<string> {
     reader.onload = () => {
       const result = reader.result as string;
       // Remove the data URL prefix (e.g., "data:image/png;base64,")
-      const base64 = result.split(',')[1];
+      const base64 = result.split(',')[1] as string;
       resolve(base64);
     };
     reader.onerror = () => {
@@ -177,4 +177,19 @@ export async function textFileToAttachment(file: File): Promise<MessageAttachmen
     data: content,
     contentType: 'text',
   };
+}
+
+/**
+ * Format line count for display.
+ */
+export function formatLineCount(text: string): string {
+  const lines = text.split('\n').length;
+  return `${lines} line${lines === 1 ? '' : 's'}`;
+}
+
+/**
+ * Check if an attachment is a text attachment.
+ */
+export function isTextAttachment(attachment: MessageAttachment): boolean {
+  return attachment.contentType === 'text';
 }

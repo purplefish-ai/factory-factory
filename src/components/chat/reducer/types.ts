@@ -197,6 +197,7 @@ export type ChatAction =
   // Session actions
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
+  | { type: 'SESSION_LOADING_END' }
   // Tool input streaming action
   | { type: 'TOOL_INPUT_UPDATE'; payload: { toolUseId: string; input: Record<string, unknown> } }
   // Track tool use message index
