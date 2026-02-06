@@ -387,6 +387,73 @@ describe('Ratchet CI regression behavior', () => {
 
     expect(shouldNotify).toBe(true);
   });
+
+  it('does not consume CI run id when ratcheting is disabled', async () => {
+    const workspace = {
+      id: 'ws-disabled',
+      prUrl: 'https://github.com/example/repo/pull/77',
+      prNumber: 77,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
+      ratchetLastNotifiedState: null,
+      prReviewLastCheckedAt: null,
+    };
+
+    vi.spyOn(
+      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      mergeStateStatus: 'CLEAN',
+      hasChangesRequested: false,
+      hasNewReviewComments: false,
+      failedChecks: [],
+      ciRunId: '5001',
+      reviews: [],
+      comments: [],
+      reviewComments: [],
+      newReviewComments: [],
+      newPRComments: [],
+      prState: 'OPEN',
+      prNumber: 77,
+    });
+
+    vi.spyOn(
+      ratchetService as unknown as { determineRatchetState: (...args: unknown[]) => RatchetState },
+      'determineRatchetState'
+    ).mockReturnValue(RatchetState.CI_FAILED);
+
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: false } as never);
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    await (
+      ratchetService as unknown as {
+        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+      }
+    ).processWorkspace(workspace, {
+      autoFixCi: true,
+      autoFixConflicts: true,
+      autoFixReviews: true,
+      autoMerge: false,
+      allowedReviewers: [],
+    });
+
+    const updateCalls = vi.mocked(workspaceAccessor.update).mock.calls;
+    const finalUpdatePayload = updateCalls[updateCalls.length - 1]?.[1] as Record<string, unknown>;
+    expect(finalUpdatePayload).not.toHaveProperty('ratchetLastCiRunId');
+  });
+
+  it('returns run id "0" when parsed from details url', () => {
+    const runId = (
+      ratchetService as unknown as {
+        extractLatestCiRunId: (checks: Array<{ detailsUrl?: string }>) => string | null;
+      }
+    ).extractLatestCiRunId([{ detailsUrl: 'https://github.com/acme/repo/actions/runs/0' }]);
+
+    expect(runId).toBe('0');
+  });
 });
 
 /**

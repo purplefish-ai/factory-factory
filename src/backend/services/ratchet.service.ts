@@ -294,10 +294,15 @@ class RatchetService {
 
       // 6. Update workspace (including review check timestamp if we found review comments)
       const now = new Date();
+      const shouldRecordCiRunId =
+        shouldTakeAction &&
+        prStateInfo.ciStatus === CIStatus.FAILURE &&
+        !!prStateInfo.ciRunId &&
+        (action.type === 'TRIGGERED_FIXER' || action.type === 'NOTIFIED_ACTIVE_FIXER');
       await workspaceAccessor.update(workspace.id, {
         ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
         ratchetLastCheckedAt: now,
-        ...(prStateInfo.ciStatus === CIStatus.FAILURE && prStateInfo.ciRunId
+        ...(shouldRecordCiRunId
           ? { ratchetLastCiRunId: prStateInfo.ciRunId }
           : {}),
         // Update review timestamp if we detected review comments
@@ -730,10 +735,11 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
           ratchetActiveSessionId: result.sessionId,
           ...(shouldMarkNotified && {
             ratchetLastNotifiedState: this.determineRatchetState(prStateInfo),
+            ...(prStateInfo.ciStatus === CIStatus.FAILURE &&
+              prStateInfo.ciRunId && {
+                ratchetLastCiRunId: prStateInfo.ciRunId,
+              }),
           }),
-          ...(prStateInfo.ciStatus === CIStatus.FAILURE && prStateInfo.ciRunId
-            ? { ratchetLastCiRunId: prStateInfo.ciRunId }
-            : {}),
         });
 
         logger.info('Ratchet fixer session started', {
@@ -747,12 +753,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       }
 
       if (result.status === 'already_active') {
-        await workspaceAccessor.update(workspace.id, {
-          ratchetActiveSessionId: result.sessionId,
-          ...(prStateInfo.ciStatus === CIStatus.FAILURE && prStateInfo.ciRunId
-            ? { ratchetLastCiRunId: prStateInfo.ciRunId }
-            : {}),
-        });
+        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: result.sessionId });
         return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
       }
 
@@ -1017,7 +1018,7 @@ New review comments have been received on PR #${prNumber}.
       }
     }
 
-    return latestRunId ? String(latestRunId) : null;
+    return latestRunId !== null ? String(latestRunId) : null;
   }
 }
 
