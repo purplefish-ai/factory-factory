@@ -159,18 +159,24 @@ class SchedulerService {
       );
 
       if (pr) {
-        await workspaceAccessor.update(workspace.id, {
-          prUrl: pr.url,
-        });
+        // Route through PRSnapshotService for canonical PR attachment
+        const result = await prSnapshotService.attachAndRefreshPR(workspace.id, pr.url);
 
-        await prSnapshotService.refreshWorkspace(workspace.id, pr.url);
-
-        logger.info('Discovered PR for workspace', {
-          workspaceId: workspace.id,
-          branchName,
-          prNumber: pr.number,
-          prUrl: pr.url,
-        });
+        if (result.success) {
+          logger.info('Discovered PR for workspace', {
+            workspaceId: workspace.id,
+            branchName,
+            prNumber: result.snapshot.prNumber,
+            prUrl: pr.url,
+          });
+        } else {
+          logger.warn('Discovered PR but failed to attach snapshot', {
+            workspaceId: workspace.id,
+            branchName,
+            prUrl: pr.url,
+            reason: result.reason,
+          });
+        }
 
         return { found: true };
       }

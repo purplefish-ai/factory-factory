@@ -5,10 +5,9 @@
  * and updates the workspace with the PR URL when detected.
  */
 
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { extractInputValue, isString } from '../schemas/tool-inputs.schema';
-import { githubCLIService } from '../services/github-cli.service';
 import { createLogger } from '../services/logger.service';
+import { prSnapshotService } from '../services/pr-snapshot.service';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('pr-detection');
@@ -47,37 +46,23 @@ export const prDetectionInterceptor: ToolInterceptor = {
       prUrl,
     });
 
-    // Fetch PR details from GitHub
-    const prResult = await githubCLIService.fetchAndComputePRState(prUrl);
+    // Route through PRSnapshotService for canonical PR attachment
+    const result = await prSnapshotService.attachAndRefreshPR(context.workspaceId, prUrl);
 
-    if (!prResult) {
-      // Still update the URL even if we couldn't fetch details
-      await workspaceAccessor.update(context.workspaceId, {
-        prUrl,
-        prUpdatedAt: new Date(),
-      });
-      logger.warn('Updated workspace with PR URL but could not fetch PR details', {
+    if (!result.success) {
+      logger.warn('Failed to attach PR and refresh snapshot', {
         workspaceId: context.workspaceId,
         prUrl,
+        reason: result.reason,
       });
       return;
     }
 
-    // Update workspace with full PR details
-    await workspaceAccessor.update(context.workspaceId, {
-      prUrl,
-      prNumber: prResult.prNumber,
-      prState: prResult.prState,
-      prReviewState: prResult.prReviewState,
-      prCiStatus: prResult.prCiStatus,
-      prUpdatedAt: new Date(),
-    });
-
-    logger.info('Updated workspace with PR details', {
+    logger.info('Attached PR and updated workspace snapshot', {
       workspaceId: context.workspaceId,
       prUrl,
-      prNumber: prResult.prNumber,
-      prState: prResult.prState,
+      prNumber: result.snapshot.prNumber,
+      prState: result.snapshot.prState,
     });
   },
 };

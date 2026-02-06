@@ -5,6 +5,7 @@ const mockFindNeedingPRDiscovery = vi.fn();
 const mockWorkspaceUpdate = vi.fn();
 const mockFindPRForBranch = vi.fn();
 const mockRefreshWorkspace = vi.fn();
+const mockAttachAndRefreshPR = vi.fn();
 
 vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -23,6 +24,7 @@ vi.mock('./github-cli.service', () => ({
 vi.mock('./pr-snapshot.service', () => ({
   prSnapshotService: {
     refreshWorkspace: (...args: unknown[]) => mockRefreshWorkspace(...args),
+    attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),
   },
 }));
 
@@ -103,8 +105,7 @@ describe('SchedulerService', () => {
         url: 'https://github.com/org/repo/pull/101',
       });
 
-      mockWorkspaceUpdate.mockResolvedValue({});
-      mockRefreshWorkspace.mockResolvedValue({
+      mockAttachAndRefreshPR.mockResolvedValue({
         success: true,
         snapshot: {
           prNumber: 101,
@@ -117,10 +118,7 @@ describe('SchedulerService', () => {
       const result = await schedulerService.discoverNewPRs();
 
       expect(result).toEqual({ discovered: 1, checked: 1 });
-      expect(mockWorkspaceUpdate).toHaveBeenCalledWith('ws-1', {
-        prUrl: 'https://github.com/org/repo/pull/101',
-      });
-      expect(mockRefreshWorkspace).toHaveBeenCalledWith(
+      expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
         'ws-1',
         'https://github.com/org/repo/pull/101'
       );
