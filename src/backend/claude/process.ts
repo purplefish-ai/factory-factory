@@ -175,6 +175,17 @@ export class ClaudeProcess extends EventEmitter {
     const protocol = new ClaudeProtocolIO(childProcess.stdin, childProcess.stdout);
     const claudeProcess = new ClaudeProcess(childProcess, protocol, options.sessionId);
 
+    // Attach error handler immediately to prevent unhandled 'error' events
+    // (The full exit handling is set up later in setupExitHandling())
+    childProcess.on('error', (error) => {
+      logger.error('Claude process error event (early handler)', {
+        pid: childProcess.pid,
+        error: error.message,
+        sessionId: options.sessionId,
+      });
+      claudeProcess.emit('error', error);
+    });
+
     const monitor = new ClaudeProcessMonitor(claudeProcess, options.resourceMonitoring);
     claudeProcess.attachMonitor(monitor);
 
@@ -587,6 +598,8 @@ export class ClaudeProcess extends EventEmitter {
 
   /**
    * Set up process exit handling.
+   * Note: The 'error' handler is attached earlier (immediately after spawn) to prevent
+   * unhandled error events during the initialization window.
    */
   private setupExitHandling(): void {
     this.process.on('exit', (code, signal) => {
@@ -617,14 +630,8 @@ export class ClaudeProcess extends EventEmitter {
       this.emit('exit', result);
     });
 
-    this.process.on('error', (error) => {
-      logger.error('Claude process error event', {
-        pid: this.process.pid,
-        error: error.message,
-        claudeSessionId: this.claudeSessionId,
-      });
-      this.emit('error', error);
-    });
+    // The 'error' handler was already attached immediately after spawn to prevent
+    // unhandled error events. We don't add it again here to avoid duplicate handlers.
   }
 
   /**

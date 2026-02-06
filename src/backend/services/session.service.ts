@@ -218,6 +218,13 @@ class SessionService {
           });
         }
       },
+      onError: (sessionId: string, error: Error) => {
+        logger.error('Claude client error', {
+          sessionId,
+          error: error.message,
+          stack: error.stack,
+        });
+      },
     };
   }
 
