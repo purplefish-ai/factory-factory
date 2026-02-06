@@ -44,8 +44,8 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
       <div className="text-muted-foreground space-y-2">
-        <p className="text-lg font-medium">No messages yet</p>
-        <p className="text-sm">Start a conversation by typing a message below.</p>
+        <p className="text-lg font-medium">Ready to start</p>
+        <p className="text-sm">Send a message to start the agent and begin your conversation.</p>
       </div>
     </div>
   );

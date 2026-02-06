@@ -139,6 +139,9 @@ export const ChatContent = memo(function ChatContent({
   }, [isPlanApproval, permissionRequestId, inputRef]);
 
   const placeholder = (() => {
+    if (loadingSession) {
+      return 'Loading session...';
+    }
     if (stopping) {
       return 'Stopping...';
     }
@@ -153,6 +156,10 @@ export const ChatContent = memo(function ChatContent({
     }
     if (running) {
       return 'Message will be queued...';
+    }
+    // Show helpful text when session is ready but agent hasn't started yet
+    if (sessionStatus.phase === 'ready' && messages.length === 0) {
+      return 'Type a message to start the agent...';
     }
     return 'Type a message...';
   })();
