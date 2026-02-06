@@ -46,6 +46,7 @@ export interface PRStateInfo {
     conclusion: string;
     detailsUrl?: string;
   }>;
+  ciRunId: string | null;
   reviews: PRWithFullDetails['reviews'];
   comments: PRWithFullDetails['comments'];
   reviewComments: Array<{
@@ -104,6 +105,7 @@ interface WorkspaceWithPR {
   ratchetEnabled: boolean;
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
+  ratchetLastCiRunId: string | null;
   ratchetLastNotifiedState: RatchetState | null;
   prReviewLastCheckedAt: Date | null;
 }
@@ -295,6 +297,9 @@ class RatchetService {
       await workspaceAccessor.update(workspace.id, {
         ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
         ratchetLastCheckedAt: now,
+        ...(prStateInfo.ciStatus === CIStatus.FAILURE && prStateInfo.ciRunId
+          ? { ratchetLastCiRunId: prStateInfo.ciRunId }
+          : {}),
         // Update review timestamp if we detected review comments
         ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
       });
@@ -387,6 +392,7 @@ class RatchetService {
           }
         }
       }
+      const ciRunId = this.extractLatestCiRunId(prDetails.statusCheckRollup);
 
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
@@ -424,6 +430,7 @@ class RatchetService {
         hasChangesRequested,
         hasNewReviewComments,
         failedChecks,
+        ciRunId,
         reviews: prDetails.reviews,
         comments: prDetails.comments,
         reviewComments,
@@ -460,6 +467,11 @@ class RatchetService {
       return RatchetState.CI_FAILED;
     }
 
+    // UNKNOWN means CI result isn't complete enough to trust as green.
+    if (pr.ciStatus === CIStatus.UNKNOWN) {
+      return RatchetState.CI_RUNNING;
+    }
+
     // CI is green from here on...
 
     // Check for merge conflicts
@@ -485,35 +497,72 @@ class RatchetService {
     prStateInfo: PRStateInfo,
     settings: RatchetSettings
   ): Promise<RatchetAction> {
-    // Check if a fixer session is already active
-    if (workspace.ratchetActiveSessionId) {
-      const isActive = await this.isFixerActive(workspace.ratchetActiveSessionId);
-
-      if (isActive) {
-        // Check if we need to notify about a state change
-        const shouldNotify = this.shouldNotifyActiveFixer(
-          workspace,
-          state,
-          workspace.ratchetLastNotifiedState
-        );
-
-        if (shouldNotify) {
-          await this.notifyActiveFixer(workspace, state, prStateInfo);
-          return {
-            type: 'NOTIFIED_ACTIVE_FIXER',
-            sessionId: workspace.ratchetActiveSessionId,
-            issue: state,
-          };
-        }
-
-        return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
-      }
-
-      // Clear stale fixer reference
-      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+    const existingFixerResult = await this.handleExistingFixerSession(
+      workspace,
+      state,
+      prStateInfo
+    );
+    if (existingFixerResult) {
+      return existingFixerResult;
     }
 
-    // No active fixer - proceed with state machine
+    return this.handleStateWithoutActiveFixer(workspace, state, prStateInfo, settings);
+  }
+
+  private async handleExistingFixerSession(
+    workspace: WorkspaceWithPR,
+    state: RatchetState,
+    prStateInfo: PRStateInfo
+  ): Promise<RatchetAction | null> {
+    if (!workspace.ratchetActiveSessionId) {
+      return null;
+    }
+
+    const session = await claudeSessionAccessor.findById(workspace.ratchetActiveSessionId);
+    const client = sessionService.getClient(workspace.ratchetActiveSessionId);
+    const hasReachableFixer = session?.status === SessionStatus.RUNNING && !!client;
+
+    if (!hasReachableFixer) {
+      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      return null;
+    }
+
+    const shouldNotify = this.shouldNotifyActiveFixer(
+      state,
+      workspace.ratchetLastNotifiedState,
+      prStateInfo.ciRunId,
+      workspace.ratchetLastCiRunId
+    );
+
+    if (!shouldNotify) {
+      return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
+    }
+
+    const delivered = await this.notifyActiveFixer(workspace, state, prStateInfo, client);
+    if (delivered) {
+      return {
+        type: 'NOTIFIED_ACTIVE_FIXER',
+        sessionId: workspace.ratchetActiveSessionId,
+        issue: state,
+      };
+    }
+
+    logger.warn('Failed to notify active fixer; clearing stale reference and retrying', {
+      workspaceId: workspace.id,
+      sessionId: workspace.ratchetActiveSessionId,
+      state,
+    });
+    await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+
+    return null;
+  }
+
+  private async handleStateWithoutActiveFixer(
+    workspace: WorkspaceWithPR,
+    state: RatchetState,
+    prStateInfo: PRStateInfo,
+    settings: RatchetSettings
+  ): Promise<RatchetAction> {
     switch (state) {
       case RatchetState.IDLE:
         return { type: 'WAITING', reason: 'No PR or ratchet not active' };
@@ -562,10 +611,19 @@ class RatchetService {
    * Check if we should notify the active fixer about a state change
    */
   private shouldNotifyActiveFixer(
-    _workspace: WorkspaceWithPR,
     currentState: RatchetState,
-    lastNotifiedState: RatchetState | null
+    lastNotifiedState: RatchetState | null,
+    currentCiRunId: string | null,
+    lastCiRunId: string | null
   ): boolean {
+    if (
+      currentState === RatchetState.CI_FAILED &&
+      currentCiRunId &&
+      currentCiRunId !== lastCiRunId
+    ) {
+      return true;
+    }
+
     // Don't notify if state hasn't changed since last notification
     if (currentState === lastNotifiedState) {
       return false;
@@ -582,21 +640,14 @@ class RatchetService {
   private async notifyActiveFixer(
     workspace: WorkspaceWithPR,
     state: RatchetState,
-    prStateInfo: PRStateInfo
-  ): Promise<void> {
+    prStateInfo: PRStateInfo,
+    client: NonNullable<ReturnType<typeof sessionService.getClient>>
+  ): Promise<boolean> {
     if (!workspace.ratchetActiveSessionId) {
       logger.warn('notifyActiveFixer called without active session ID', {
         workspaceId: workspace.id,
       });
-      return;
-    }
-
-    const client = sessionService.getClient(workspace.ratchetActiveSessionId);
-    if (!client) {
-      logger.warn('Could not find client for active fixer session', {
-        sessionId: workspace.ratchetActiveSessionId,
-      });
-      return;
+      return false;
     }
 
     let message = '';
@@ -633,29 +684,21 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
         // Only update last notified state after confirmed delivery
         await workspaceAccessor.update(workspace.id, {
           ratchetLastNotifiedState: state,
+          ...(state === RatchetState.CI_FAILED && prStateInfo.ciRunId
+            ? { ratchetLastCiRunId: prStateInfo.ciRunId }
+            : {}),
         });
+        return true;
       } catch (error) {
         logger.warn('Failed to notify fixer about state change', {
           workspaceId: workspace.id,
           state,
           error,
         });
+        return false;
       }
     }
-  }
-
-  /**
-   * Check if a fixer session is still active (exists and not completed/errored)
-   */
-  private async isFixerActive(sessionId: string): Promise<boolean> {
-    const session = await claudeSessionAccessor.findById(sessionId);
-    if (!session) {
-      return false;
-    }
-
-    // Session is active if it's RUNNING or IDLE (not COMPLETED, ERROR, or STOPPED)
-    // IDLE sessions are still considered active because they're dedicated to fixing this workspace
-    return session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE;
+    return false;
   }
 
   /**
@@ -688,6 +731,9 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
           ...(shouldMarkNotified && {
             ratchetLastNotifiedState: this.determineRatchetState(prStateInfo),
           }),
+          ...(prStateInfo.ciStatus === CIStatus.FAILURE && prStateInfo.ciRunId
+            ? { ratchetLastCiRunId: prStateInfo.ciRunId }
+            : {}),
         });
 
         logger.info('Ratchet fixer session started', {
@@ -701,6 +747,12 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
       }
 
       if (result.status === 'already_active') {
+        await workspaceAccessor.update(workspace.id, {
+          ratchetActiveSessionId: result.sessionId,
+          ...(prStateInfo.ciStatus === CIStatus.FAILURE && prStateInfo.ciRunId
+            ? { ratchetLastCiRunId: prStateInfo.ciRunId }
+            : {}),
+        });
         return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
       }
 
@@ -940,6 +992,32 @@ New review comments have been received on PR #${prNumber}.
 **Do not ask the user what to do. Analyze the comments, implement fixes, push, and request re-review.**`);
 
     return parts.join('');
+  }
+
+  private extractLatestCiRunId(checks: PRWithFullDetails['statusCheckRollup']): string | null {
+    if (!checks || checks.length === 0) {
+      return null;
+    }
+
+    let latestRunId: number | null = null;
+    for (const check of checks) {
+      if (!check.detailsUrl) {
+        continue;
+      }
+      const match = check.detailsUrl.match(/\/actions\/runs\/(\d+)/);
+      if (!match) {
+        continue;
+      }
+      const runId = Number.parseInt(match[1], 10);
+      if (Number.isNaN(runId)) {
+        continue;
+      }
+      if (latestRunId === null || runId > latestRunId) {
+        latestRunId = runId;
+      }
+    }
+
+    return latestRunId ? String(latestRunId) : null;
   }
 }
 
