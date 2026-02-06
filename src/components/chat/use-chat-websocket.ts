@@ -146,7 +146,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     (data: unknown) => {
       chat.handleMessage(data);
     },
-    [chat.handleMessage]
+    [chat]
   );
 
   // Handle connection established - request session data and available sessions
