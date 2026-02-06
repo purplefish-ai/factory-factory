@@ -9,13 +9,10 @@ import {
   WorkspaceStatus,
 } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { prisma } from '../db';
 import type { ExportDataV1, ExportDataV2 } from './data-backup.service';
-import { dataBackupService, exportDataSchema } from './data-backup.service';
 
-// Mock the database
-// Define transaction client separately to avoid circular reference
-const mockTx = {
+// Use vi.hoisted so mockTx is available when vi.mock factory runs (vi.mock is hoisted above imports)
+const mockTx = vi.hoisted(() => ({
   project: {
     findUnique: vi.fn(),
     create: vi.fn(),
@@ -36,8 +33,9 @@ const mockTx = {
     findFirst: vi.fn(),
     create: vi.fn(),
   },
-};
+}));
 
+// vi.mock is hoisted above imports, so static imports below will receive the mocked module
 vi.mock('../db', () => ({
   prisma: {
     project: {
@@ -67,6 +65,9 @@ vi.mock('../db', () => ({
     $transaction: vi.fn((callback) => callback(mockTx)),
   },
 }));
+
+import { prisma } from '../db';
+import { dataBackupService, exportDataSchema } from './data-backup.service';
 
 describe('DataBackupService', () => {
   const mockProject: Project = {

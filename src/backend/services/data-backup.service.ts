@@ -290,12 +290,20 @@ const parseDate = (str: string | null): Date | null => (str ? new Date(str) : nu
  * Validates that claimed v2 data actually has v2 fields to prevent runtime errors.
  */
 function ensureWorkspaceV2Defaults(w: ExportedWorkspaceV2): ExportedWorkspaceV2 {
-  // Validate required v2 fields are present (not undefined)
-  if (w.ratchetEnabled === undefined || w.ratchetState === undefined) {
-    logger.warn('V2 workspace missing required ratchet fields, applying migration', {
+  // Validate all required v2 fields are present (not undefined)
+  const missingRequired =
+    w.ratchetEnabled === undefined ||
+    w.ratchetState === undefined ||
+    w.prReviewLastCheckedAt === undefined ||
+    w.prReviewLastCommentId === undefined;
+
+  if (missingRequired) {
+    logger.warn('V2 workspace missing required v2 fields, applying migration', {
       workspaceId: w.id,
       hasRatchetEnabled: w.ratchetEnabled !== undefined,
       hasRatchetState: w.ratchetState !== undefined,
+      hasPrReviewLastCheckedAt: w.prReviewLastCheckedAt !== undefined,
+      hasPrReviewLastCommentId: w.prReviewLastCommentId !== undefined,
     });
     // Fallback to migration if required fields are missing
     return migrateWorkspaceV1ToV2(w as unknown as ExportedWorkspaceV1);
