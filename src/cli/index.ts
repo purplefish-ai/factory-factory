@@ -84,7 +84,7 @@ async function waitForService(
     console.log(chalk.green(`  ✓ ${serviceName} ready on port ${port}`));
   } catch {
     console.error(chalk.red(`\n  ✗ ${serviceName} failed to start on port ${port}`));
-    killAllProcesses(processes);
+    await killAllProcesses(processes);
     process.exit(1);
   }
 }
@@ -557,9 +557,9 @@ async function startDevelopmentMode(
   await Promise.race([
     createExitPromise(backend, 'Backend', shutdownState),
     createExitPromise(frontend, 'Frontend', shutdownState),
-  ]).catch((error) => {
+  ]).catch(async (error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    killAllProcesses(processes);
+    await killAllProcesses(processes);
     process.exit(1);
   });
 }
@@ -611,9 +611,9 @@ async function startProductionMode(
   const onReady = createOnReady(backendPort);
   await onReady();
 
-  await createExitPromise(backend, 'Server', shutdownState).catch((error) => {
+  await createExitPromise(backend, 'Server', shutdownState).catch(async (error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    killAllProcesses(processes);
+    await killAllProcesses(processes);
     process.exit(1);
   });
 }
