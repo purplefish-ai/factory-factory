@@ -489,7 +489,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, wsMsg);
     });
 
-    client.on('result', (result) => {
+    client.on('result', async (result) => {
       if (DEBUG_CHAT_WS) {
         const res = result as { uuid?: string };
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
@@ -504,7 +504,8 @@ class ChatEventForwarderService {
 
       // Update kanban column BEFORE marking session idle, so wasWorking check sees active session
       // This enables notification on WORKING→WAITING transitions
-      kanbanStateService.updateCachedKanbanColumn(context.workspaceId).catch((error) => {
+      // MUST await to ensure kanban update completes before marking session idle
+      await kanbanStateService.updateCachedKanbanColumn(context.workspaceId).catch((error) => {
         logger.error('Failed to update kanban column after session result', error as Error, {
           workspaceId: context.workspaceId,
           dbSessionId,

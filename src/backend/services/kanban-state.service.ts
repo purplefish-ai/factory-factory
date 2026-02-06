@@ -187,17 +187,20 @@ class KanbanStateService extends EventEmitter {
       wasWorking,
     });
 
-    // Emit event when workspace transitions to WAITING.
-    // This happens either when:
-    // 1. The cached column actually changed to WAITING (e.g., PR state change)
-    // 2. A session just finished (wasWorking=true) and we're now idle in WAITING
-    //    (even if cachedKanbanColumn was already WAITING)
-    if (newColumn === KanbanColumn.WAITING && (columnChanged || wasWorking)) {
+    // Emit event when workspace transitions to WAITING and is truly idle.
+    // Only emit if both flow state and session activity indicate the workspace is idle.
+    // This happens when:
+    // 1. The cached column is/changed to WAITING (workspace is in idle state)
+    // 2. Flow state is NOT working (no ratchet fixing, no CI running, etc.)
+    // 3. Either the column just changed OR a session just finished (wasWorking=true)
+    const isFlowStateIdle = !flowState.isWorking;
+    if (newColumn === KanbanColumn.WAITING && isFlowStateIdle && (columnChanged || wasWorking)) {
       logger.info('Workspace transitioned to WAITING', {
         workspaceId,
         from: previousColumn,
         columnChanged,
         wasWorking,
+        isFlowStateIdle,
       });
 
       this.emit('transition_to_waiting', {
