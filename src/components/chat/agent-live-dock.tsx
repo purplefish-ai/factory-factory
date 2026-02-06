@@ -144,9 +144,15 @@ export const AgentLiveDock = memo(function AgentLiveDock({
       setHeight(newHeight);
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       setIsDragging(false);
-      saveHeight(workspaceId, height);
+      // Calculate the final height directly to avoid stale closure
+      const deltaY = e.clientY - startYRef.current;
+      const finalHeight = Math.max(
+        MIN_HEIGHT,
+        Math.min(MAX_HEIGHT, startHeightRef.current + deltaY)
+      );
+      saveHeight(workspaceId, finalHeight);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -156,7 +162,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, workspaceId, height]);
+  }, [isDragging, workspaceId]);
 
   // Get only the most recent tool call from the sequence
   const mostRecentToolCall =
