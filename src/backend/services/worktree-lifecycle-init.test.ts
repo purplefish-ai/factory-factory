@@ -2,7 +2,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { StartupScriptResult } from './startup-script.service';
 import { worktreeLifecycleService } from './worktree-lifecycle.service';
 
 const mocks = vi.hoisted(() => ({
@@ -129,20 +128,21 @@ describe('worktreeLifecycleService initialization', () => {
     mocks.stopWorkspaceSessions.mockResolvedValue(undefined);
   });
 
-  it('starts the default Claude session before startup script completes', async () => {
-    let resolveScript: ((result: StartupScriptResult) => void) | undefined;
-    const scriptPromise = new Promise<StartupScriptResult>((resolve) => {
-      resolveScript = resolve;
+  it('starts the default Claude session after startup script completes', async () => {
+    mocks.runStartupScript.mockResolvedValue({
+      success: true,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+      durationMs: 10,
     });
-    mocks.runStartupScript.mockReturnValueOnce(scriptPromise);
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
-    const initPromise = worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
       branchName: 'main',
       useExistingBranch: false,
     });
-
-    await new Promise((resolve) => setImmediate(resolve));
 
     expect(mocks.findByWorkspaceId).toHaveBeenCalledWith('workspace-1', {
       status: SessionStatus.IDLE,
@@ -151,21 +151,6 @@ describe('worktreeLifecycleService initialization', () => {
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
       initialPrompt: '',
     });
-
-    if (!resolveScript) {
-      throw new Error('Expected startup script resolver to be defined');
-    }
-
-    resolveScript({
-      success: true,
-      exitCode: 0,
-      stdout: '',
-      stderr: '',
-      timedOut: false,
-      durationMs: 10,
-    });
-
-    await initPromise;
   });
 
   it('skips auto-start when no idle Claude session exists', async () => {
@@ -187,7 +172,7 @@ describe('worktreeLifecycleService initialization', () => {
     expect(mocks.startClaudeSession).not.toHaveBeenCalled();
   });
 
-  it('stops sessions when initialization fails after auto-start', async () => {
+  it('does not start session when initialization fails', async () => {
     mocks.runStartupScript.mockRejectedValue(new Error('boom'));
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
@@ -196,9 +181,7 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
-      initialPrompt: '',
-    });
+    expect(mocks.startClaudeSession).not.toHaveBeenCalled();
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
   });
