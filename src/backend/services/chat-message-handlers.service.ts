@@ -21,6 +21,7 @@ import type { ClientCreator } from './chat-message-handlers/types';
 import { createLogger } from './logger.service';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
 import { messageStateService } from './message-state.service';
+import { sessionRepository } from './session.repository';
 import { sessionService } from './session.service';
 
 const logger = createLogger('chat-message-handlers');
@@ -57,9 +58,50 @@ class ChatMessageHandlerService {
   }
 
   /**
+   * Check if workspace is ready to receive messages.
+   * Returns true if dispatch should proceed, false if messages should be held.
+   */
+  private async isWorkspaceReadyForDispatch(dbSessionId: string): Promise<boolean> {
+    try {
+      const session = await sessionRepository.getSessionById(dbSessionId);
+      if (!session?.workspaceId) {
+        return true; // No workspace - proceed with dispatch
+      }
+
+      const workspace = await sessionRepository.getWorkspaceById(session.workspaceId);
+      if (!workspace) {
+        return true; // Workspace not found - proceed with dispatch
+      }
+
+      if (workspace.status === 'NEW' || workspace.status === 'PROVISIONING') {
+        if (DEBUG_CHAT_WS) {
+          logger.info('[Chat WS] Workspace not ready, holding message dispatch', {
+            dbSessionId,
+            workspaceId: session.workspaceId,
+            status: workspace.status,
+          });
+        }
+        return false; // Workspace still initializing - hold messages
+      }
+
+      return true; // Workspace ready
+    } catch (error) {
+      // If we can't check workspace status, log and continue with dispatch
+      logger.warn('[Chat WS] Failed to check workspace status, proceeding with dispatch', {
+        dbSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return true;
+    }
+  }
+
+  /**
    * Try to dispatch the next queued message to Claude.
    * Auto-starts the client if needed.
    * Uses a guard to prevent concurrent dispatch calls for the same session.
+   *
+   * Messages are held if workspace is still initializing (NEW or PROVISIONING status).
+   * They will be dispatched when the workspace transitions to READY.
    */
   async tryDispatchNextMessage(dbSessionId: string): Promise<void> {
     // Guard against concurrent dispatch calls for the same session
@@ -71,6 +113,13 @@ class ChatMessageHandlerService {
     }
 
     this.dispatchInProgress.set(dbSessionId, true);
+
+    // Check if workspace is ready before dispatching
+    const isReady = await this.isWorkspaceReadyForDispatch(dbSessionId);
+    if (!isReady) {
+      this.dispatchInProgress.set(dbSessionId, false);
+      return; // Don't dequeue - leave message for later dispatch
+    }
 
     // Dequeue first to claim the message atomically before any async operations.
     const msg = messageQueueService.dequeue(dbSessionId);

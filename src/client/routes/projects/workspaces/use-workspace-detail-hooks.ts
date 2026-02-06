@@ -38,8 +38,10 @@ export function useWorkspaceInitStatus(
   }, [workspaceInitStatus?.status, workspaceId, utils, workspace?.worktreePath]);
 
   const status = workspaceInitStatus?.status;
-  const isInitializing =
-    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
+  // Only show blocking overlay for NEW state (brief moment before PROVISIONING starts)
+  // PROVISIONING: Init Logs tab shows progress (non-blocking)
+  // FAILED: InitFailedBanner shows error (non-blocking)
+  const isInitializing = isInitStatusPending || status === 'NEW';
 
   return { workspaceInitStatus, isInitStatusPending, isInitializing };
 }

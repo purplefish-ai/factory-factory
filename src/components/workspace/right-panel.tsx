@@ -10,10 +10,12 @@ import { cn } from '@/lib/utils';
 import { DevLogsPanel } from './dev-logs-panel';
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
+import { InitLogsPanel } from './init-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
 import { useDevLogs } from './use-dev-logs';
+import { useInitLogs } from './use-init-logs';
 
 // =============================================================================
 // Constants
@@ -27,7 +29,41 @@ const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-right-panel-bottom-tab-';
 // =============================================================================
 
 type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
-type BottomPanelTab = 'terminal' | 'dev-logs';
+type BottomPanelTab = 'terminal' | 'dev-logs' | 'init-logs';
+
+// =============================================================================
+// Hooks
+// =============================================================================
+
+/**
+ * Hook to auto-focus the Init Logs tab when workspace starts provisioning.
+ * Only auto-focuses once per workspace to avoid interrupting user if they switch away.
+ */
+function useAutoFocusInitLogs(
+  workspaceId: string,
+  initLogsStatus: 'NEW' | 'PROVISIONING' | 'READY' | 'FAILED' | 'ARCHIVED' | null | undefined,
+  setActiveBottomTab: (tab: BottomPanelTab) => void
+): void {
+  const hasAutoFocusedRef = useRef(false);
+  const prevWorkspaceIdRef = useRef(workspaceId);
+
+  useEffect(() => {
+    // Reset flag when workspace changes
+    if (prevWorkspaceIdRef.current !== workspaceId) {
+      hasAutoFocusedRef.current = false;
+      prevWorkspaceIdRef.current = workspaceId;
+    }
+    // Only auto-focus once per workspace, when status becomes PROVISIONING
+    if (initLogsStatus === 'PROVISIONING' && !hasAutoFocusedRef.current) {
+      hasAutoFocusedRef.current = true;
+      setActiveBottomTab('init-logs');
+    }
+    // Reset the flag when status becomes terminal (READY/FAILED)
+    if (initLogsStatus === 'READY' || initLogsStatus === 'FAILED') {
+      hasAutoFocusedRef.current = false;
+    }
+  }, [initLogsStatus, workspaceId, setActiveBottomTab]);
+}
 
 // =============================================================================
 // Main Component
@@ -39,6 +75,7 @@ interface RightPanelProps {
   messages?: ChatMessage[];
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: multiple tab panels with state management
 export function RightPanel({ workspaceId, className, messages = [] }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
@@ -48,6 +85,9 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
 
   // Single shared dev logs connection for both tab indicator and panel content
   const devLogs = useDevLogs(workspaceId);
+
+  // Init logs connection for startup script output during workspace initialization
+  const initLogs = useInitLogs(workspaceId);
 
   // Terminal tab state lifted up from TerminalPanel for inline rendering
   const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
@@ -78,13 +118,20 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
       }
 
       const storedBottom = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
-      if (storedBottom === 'terminal' || storedBottom === 'dev-logs') {
+      if (
+        storedBottom === 'terminal' ||
+        storedBottom === 'dev-logs' ||
+        storedBottom === 'init-logs'
+      ) {
         setActiveBottomTab(storedBottom);
       }
     } catch {
       // Ignore storage errors
     }
   }, [workspaceId]);
+
+  // Auto-focus Init Logs tab when workspace starts provisioning
+  useAutoFocusInitLogs(workspaceId, initLogs.status, setActiveBottomTab);
 
   // Persist tab selection to localStorage
   const handleTabChange = (tab: TopPanelTab) => {
@@ -201,6 +248,22 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
               isActive={activeBottomTab === 'dev-logs'}
               onSelect={() => handleBottomTabChange('dev-logs')}
             />
+            <TabButton
+              label="Init Logs"
+              icon={
+                <span
+                  className={cn(
+                    'w-1.5 h-1.5 rounded-full',
+                    initLogs.status === 'PROVISIONING' && 'bg-blue-500 animate-pulse',
+                    initLogs.status === 'READY' && 'bg-green-500',
+                    initLogs.status === 'FAILED' && 'bg-red-500',
+                    !initLogs.status && 'bg-gray-500'
+                  )}
+                />
+              }
+              isActive={activeBottomTab === 'init-logs'}
+              onSelect={() => handleBottomTabChange('init-logs')}
+            />
           </div>
 
           {/* Content */}
@@ -218,6 +281,15 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
               <DevLogsPanel
                 output={devLogs.output}
                 outputEndRef={devLogs.outputEndRef}
+                className="h-full"
+              />
+            )}
+            {activeBottomTab === 'init-logs' && (
+              <InitLogsPanel
+                output={initLogs.output}
+                status={initLogs.status}
+                errorMessage={initLogs.errorMessage}
+                outputEndRef={initLogs.outputEndRef}
                 className="h-full"
               />
             )}

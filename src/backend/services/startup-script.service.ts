@@ -3,12 +3,14 @@
  *
  * Handles execution of startup scripts when workspaces are created.
  * Supports both inline shell commands and script file paths.
+ *
+ * Provides real-time output streaming via subscription pattern for WebSocket handlers.
  */
 
 import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
-import type { Project, Workspace } from '@prisma-gen/client';
+import type { Project, Workspace, WorkspaceStatus } from '@prisma-gen/client';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { createLogger } from './logger.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
@@ -17,6 +19,12 @@ const logger = createLogger('startup-script');
 
 /** Callback type for streaming output during script execution */
 type OutputCallback = (output: string) => void;
+
+/** Callback type for status change notifications */
+type StatusCallback = (status: WorkspaceStatus, errorMessage?: string | null) => void;
+
+/** Maximum size of in-memory output buffer per workspace (100KB) */
+const MAX_OUTPUT_BUFFER_SIZE = 100 * 1024;
 
 export interface StartupScriptResult {
   success: boolean;
@@ -27,7 +35,126 @@ export interface StartupScriptResult {
   durationMs: number;
 }
 
-class StartupScriptService {
+export class StartupScriptService {
+  // ============================================================================
+  // Real-time Subscription System for WebSocket Handlers
+  // ============================================================================
+
+  /** Subscribers for output events per workspace */
+  private outputSubscribers = new Map<string, Set<OutputCallback>>();
+
+  /** Subscribers for status change events per workspace */
+  private statusSubscribers = new Map<string, Set<StatusCallback>>();
+
+  /** In-memory output buffers per workspace (for late-joining WebSocket clients) */
+  private outputBuffers = new Map<string, string>();
+
+  /**
+   * Subscribe to real-time output for a workspace.
+   * Returns unsubscribe function.
+   */
+  subscribeToOutput(workspaceId: string, callback: OutputCallback): () => void {
+    if (!this.outputSubscribers.has(workspaceId)) {
+      this.outputSubscribers.set(workspaceId, new Set());
+    }
+    this.outputSubscribers.get(workspaceId)?.add(callback);
+
+    return () => {
+      const subscribers = this.outputSubscribers.get(workspaceId);
+      if (subscribers) {
+        subscribers.delete(callback);
+        if (subscribers.size === 0) {
+          this.outputSubscribers.delete(workspaceId);
+        }
+      }
+    };
+  }
+
+  /**
+   * Subscribe to status changes for a workspace.
+   * Returns unsubscribe function.
+   */
+  subscribeToStatus(workspaceId: string, callback: StatusCallback): () => void {
+    if (!this.statusSubscribers.has(workspaceId)) {
+      this.statusSubscribers.set(workspaceId, new Set());
+    }
+    this.statusSubscribers.get(workspaceId)?.add(callback);
+
+    return () => {
+      const subscribers = this.statusSubscribers.get(workspaceId);
+      if (subscribers) {
+        subscribers.delete(callback);
+        if (subscribers.size === 0) {
+          this.statusSubscribers.delete(workspaceId);
+        }
+      }
+    };
+  }
+
+  /**
+   * Get buffered output for a workspace (for late-joining clients).
+   */
+  getOutputBuffer(workspaceId: string): string {
+    return this.outputBuffers.get(workspaceId) ?? '';
+  }
+
+  /**
+   * Emit output to all subscribers and buffer it.
+   */
+  private emitOutput(workspaceId: string, output: string): void {
+    // Buffer the output (with size limit)
+    const currentBuffer = this.outputBuffers.get(workspaceId) ?? '';
+    let newBuffer = currentBuffer + output;
+    if (newBuffer.length > MAX_OUTPUT_BUFFER_SIZE) {
+      // Keep the most recent output
+      newBuffer = newBuffer.slice(-MAX_OUTPUT_BUFFER_SIZE);
+    }
+    this.outputBuffers.set(workspaceId, newBuffer);
+
+    // Notify subscribers
+    const subscribers = this.outputSubscribers.get(workspaceId);
+    if (subscribers) {
+      for (const callback of subscribers) {
+        try {
+          callback(output);
+        } catch (error) {
+          logger.warn('Error in output subscriber callback', { workspaceId, error });
+        }
+      }
+    }
+  }
+
+  /**
+   * Emit status change to all subscribers.
+   */
+  private emitStatus(
+    workspaceId: string,
+    status: WorkspaceStatus,
+    errorMessage?: string | null
+  ): void {
+    const subscribers = this.statusSubscribers.get(workspaceId);
+    if (subscribers) {
+      for (const callback of subscribers) {
+        try {
+          callback(status, errorMessage);
+        } catch (error) {
+          logger.warn('Error in status subscriber callback', { workspaceId, error });
+        }
+      }
+    }
+  }
+
+  /**
+   * Clear output buffer for a workspace (called on retry or archive).
+   */
+  clearOutputBuffer(workspaceId: string): void {
+    this.outputBuffers.delete(workspaceId);
+  }
+
+  // ============================================================================
+  // Script Execution
+  // ============================================================================
+
   /**
    * Run the startup script for a workspace synchronously.
    * Updates workspace status throughout execution via state machine.
@@ -62,6 +189,7 @@ class StartupScriptService {
 
     // Clear any previous output from retry attempts
     await workspaceAccessor.clearInitOutput(workspace.id);
+    this.clearOutputBuffer(workspace.id);
 
     // Create output streaming callback with debouncing
     const { callback: outputCallback, flush: flushOutput } = this.createDebouncedOutputCallback(
@@ -85,6 +213,7 @@ class StartupScriptService {
 
       if (result.success) {
         await workspaceStateMachine.markReady(workspace.id);
+        this.emitStatus(workspace.id, 'READY');
         logger.info('Startup script completed successfully', {
           workspaceId: workspace.id,
           durationMs,
@@ -95,6 +224,7 @@ class StartupScriptService {
           : `Script exited with code ${result.exitCode}: ${result.stderr.slice(0, 500)}`;
 
         await workspaceStateMachine.markFailed(workspace.id, errorMessage);
+        this.emitStatus(workspace.id, 'FAILED', errorMessage);
         logger.error('Startup script failed', {
           workspaceId: workspace.id,
           exitCode: result.exitCode,
@@ -112,6 +242,7 @@ class StartupScriptService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       await workspaceStateMachine.markFailed(workspace.id, errorMessage);
+      this.emitStatus(workspace.id, 'FAILED', errorMessage);
       logger.error('Startup script execution error', error as Error, {
         workspaceId: workspace.id,
       });
@@ -348,6 +479,9 @@ class StartupScriptService {
 
     const callback = (output: string): void => {
       buffer += output;
+
+      // Emit output immediately to WebSocket subscribers (real-time)
+      this.emitOutput(workspaceId, output);
 
       // Flush immediately if buffer is large enough
       if (buffer.length >= 4096) {

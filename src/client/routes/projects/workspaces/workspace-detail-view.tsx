@@ -9,7 +9,7 @@ import type { useSessionManagement, useWorkspaceData } from './use-workspace-det
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
-import { ArchivingOverlay, InitializationOverlay } from './workspace-overlays';
+import { ArchivingOverlay, InitFailedBanner, InitializationOverlay } from './workspace-overlays';
 
 export interface WorkspaceDetailViewProps {
   workspaceLoading: boolean;
@@ -164,13 +164,7 @@ export function WorkspaceDetailView({
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {isInitializing && (
-        <InitializationOverlay
-          workspaceId={workspaceId}
-          status={workspaceInitStatus?.status ?? 'PROVISIONING'}
-          initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
-          initOutput={workspaceInitStatus?.initOutput ?? null}
-          hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
-        />
+        <InitializationOverlay status={workspaceInitStatus?.status ?? 'PROVISIONING'} />
       )}
 
       {archivePending && <ArchivingOverlay />}
@@ -188,6 +182,13 @@ export function WorkspaceDetailView({
         isCreatingSession={isCreatingSession}
         hasChanges={hasChanges}
       />
+
+      {workspaceInitStatus?.status === 'FAILED' && (
+        <InitFailedBanner
+          workspaceId={workspaceId}
+          errorMessage={workspaceInitStatus.initErrorMessage ?? null}
+        />
+      )}
 
       <ResizablePanelGroup
         direction="horizontal"

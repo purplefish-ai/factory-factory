@@ -64,7 +64,40 @@ export interface StartProvisioningOptions {
   maxRetries?: number;
 }
 
+/** Callback type for workspace ready event */
+type OnReadyCallback = (workspaceId: string) => void | Promise<void>;
+
 class WorkspaceStateMachineService {
+  /** Callbacks to invoke when a workspace becomes READY */
+  private onReadyCallbacks: OnReadyCallback[] = [];
+
+  /**
+   * Register a callback to be invoked when a workspace transitions to READY.
+   * Used for triggering dispatch of queued messages.
+   * Returns an unsubscribe function.
+   */
+  onWorkspaceReady(callback: OnReadyCallback): () => void {
+    this.onReadyCallbacks.push(callback);
+    return () => {
+      const index = this.onReadyCallbacks.indexOf(callback);
+      if (index !== -1) {
+        this.onReadyCallbacks.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Invoke all onReady callbacks.
+   */
+  private async invokeOnReadyCallbacks(workspaceId: string): Promise<void> {
+    for (const callback of this.onReadyCallbacks) {
+      try {
+        await callback(workspaceId);
+      } catch (error) {
+        logger.error('Error in onWorkspaceReady callback', error as Error, { workspaceId });
+      }
+    }
+  }
   /**
    * Check if a state transition is valid.
    */
@@ -215,12 +248,19 @@ class WorkspaceStateMachineService {
 
   /**
    * Mark workspace as ready (successful initialization).
+   * Invokes onReady callbacks to trigger queued message dispatch.
    */
-  markReady(
+  async markReady(
     workspaceId: string,
     options?: Pick<TransitionOptions, 'worktreePath' | 'branchName'>
   ): Promise<Workspace> {
-    return this.transition(workspaceId, 'READY', options);
+    const result = await this.transition(workspaceId, 'READY', options);
+
+    // Invoke callbacks after successful transition to READY
+    // This triggers dispatch of any messages queued during initialization
+    await this.invokeOnReadyCallbacks(workspaceId);
+
+    return result;
   }
 
   /**

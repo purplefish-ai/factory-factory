@@ -6,6 +6,7 @@ import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 
+import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
@@ -28,7 +29,8 @@ export function WorkspaceDetailContainer() {
     invalidateWorkspace,
   } = useWorkspaceData({ workspaceId: workspaceId });
 
-  const { rightPanelVisible, activeTabId, clearScrollState } = useWorkspacePanel();
+  const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState } =
+    useWorkspacePanel();
 
   const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
     { workspaceId },
@@ -40,6 +42,23 @@ export function WorkspaceDetailContainer() {
     workspace,
     utils
   );
+
+  // Force right panel open when workspace starts provisioning so init logs are visible
+  const hasOpenedForInitRef = useRef(false);
+  useEffect(() => {
+    if (workspaceInitStatus?.status === 'PROVISIONING' && !hasOpenedForInitRef.current) {
+      hasOpenedForInitRef.current = true;
+      setRightPanelVisible(true);
+    }
+  }, [workspaceInitStatus?.status, setRightPanelVisible]);
+
+  // Clean up resume-workspace localStorage when workspace reaches a terminal init state
+  useEffect(() => {
+    const status = workspaceInitStatus?.status;
+    if (status === 'READY' || status === 'ARCHIVED') {
+      forgetResumeWorkspace(workspaceId);
+    }
+  }, [workspaceInitStatus?.status, workspaceId]);
 
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     initialDbSessionId ?? null
