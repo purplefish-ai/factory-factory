@@ -241,7 +241,8 @@ async function runFactorySetupScriptIfConfigured(
   factoryConfig: Awaited<ReturnType<typeof FactoryConfigService.readConfig>>
 ): Promise<{ ran: boolean; success: boolean }> {
   if (!factoryConfig?.scripts.setup) {
-    return { ran: false, success: false };
+    // No script configured - not a failure, just nothing to run
+    return { ran: false, success: true };
   }
 
   logger.info('Running setup script from factory-factory.json', { workspaceId });
@@ -281,7 +282,8 @@ async function runProjectStartupScriptIfConfigured(
 ): Promise<{ ran: boolean; success: boolean }> {
   const project = workspaceWithProject.project;
   if (!startupScriptService.hasStartupScript(project)) {
-    return { ran: false, success: false };
+    // No script configured - not a failure, just nothing to run
+    return { ran: false, success: true };
   }
 
   logger.info('Running startup script for workspace', {
