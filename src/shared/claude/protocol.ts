@@ -701,8 +701,10 @@ export interface UserMessageWithState {
   queuePosition?: number;
   /** Error message for REJECTED/FAILED states */
   errorMessage?: string;
-  /** Backend-assigned order for reliable sorting (monotonically increasing per session) */
-  order: number;
+  /** Backend-assigned order for reliable sorting (monotonically increasing per session).
+   * Assigned when message transitions to DISPATCHED state (when sent to agent),
+   * not when queued. Undefined for ACCEPTED (queued) messages. */
+  order?: number;
 }
 
 /**

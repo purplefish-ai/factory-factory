@@ -50,7 +50,7 @@ export type MessageStateEvent =
           timestamp: string;
           attachments?: UserMessageWithState['attachments'];
           settings: UserMessageWithState['settings'];
-          order: number;
+          order?: number; // Undefined for ACCEPTED, set when DISPATCHED
         };
       };
     }
@@ -462,6 +462,7 @@ class MessageStateService {
     // Flatten to ChatMessage[] - user messages become ChatMessages,
     // Claude messages expand their chatMessages array
     const chatMessages: ChatMessage[] = [];
+    const BASE_ORDER = 1_000_000_000;
     for (const msg of allMessages) {
       if (isUserMessage(msg)) {
         chatMessages.push({
@@ -470,7 +471,8 @@ class MessageStateService {
           text: msg.text,
           timestamp: msg.timestamp,
           attachments: msg.attachments,
-          order: msg.order,
+          // Queued messages (order=undefined) use base order plus queuePosition to maintain queue order
+          order: msg.order ?? BASE_ORDER + (msg.queuePosition ?? 0),
         });
       } else {
         // Claude message - add all its chatMessages (they already have order from history load)
@@ -531,6 +533,7 @@ class MessageStateService {
    * Emit a state change event to all connections for a session.
    * For user messages in ACCEPTED state, includes full message content so
    * clients can add the message without needing optimistic updates.
+   * For DISPATCHED state, includes order so clients can update message position.
    */
   private emitStateChange(sessionId: string, message: MessageWithState): void {
     // Extract user-specific fields only if this is a user message
@@ -538,6 +541,7 @@ class MessageStateService {
     const errorMessage = isUserMessage(message) ? message.errorMessage : undefined;
 
     // For ACCEPTED user messages, include full content so frontend can add the message
+    // For DISPATCHED messages with order, include full content with the newly assigned order
     const userMessage =
       isUserMessage(message) && message.state === MessageState.ACCEPTED
         ? {
@@ -547,7 +551,17 @@ class MessageStateService {
             settings: message.settings,
             order: message.order,
           }
-        : undefined;
+        : isUserMessage(message) &&
+            message.state === MessageState.DISPATCHED &&
+            message.order !== undefined
+          ? {
+              text: message.text,
+              timestamp: message.timestamp,
+              attachments: message.attachments,
+              settings: message.settings,
+              order: message.order,
+            }
+          : undefined;
 
     this.emitter.emit('event', {
       type: 'message_state_changed',

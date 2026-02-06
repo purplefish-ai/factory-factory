@@ -137,13 +137,13 @@ describe('MessageStateService', () => {
             newState: MessageState.ACCEPTED,
             queuePosition: 0,
             errorMessage: undefined,
-            // For ACCEPTED state, includes full user message content
+            // For ACCEPTED state, includes full user message content but no order yet
             userMessage: {
               text: msg.text,
               timestamp: msg.timestamp,
               attachments: msg.attachments,
               settings: msg.settings,
-              order: 0,
+              order: undefined,
             },
           },
         },
@@ -236,19 +236,19 @@ describe('MessageStateService', () => {
       messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
       unsubscribe();
 
-      expect(events).toEqual([
-        {
-          type: 'message_state_changed',
-          sessionId: 'session-1',
-          data: {
-            id: 'msg-1',
-            newState: MessageState.DISPATCHED,
-            queuePosition: 0,
-            errorMessage: undefined,
-            userMessage: undefined,
-          },
-        },
-      ]);
+      expect(events).toHaveLength(1);
+      const event = events[0]!;
+      expect(event.type).toBe('message_state_changed');
+      expect(event.sessionId).toBe('session-1');
+      if (event.type !== 'message_state_changed') {
+        expect.fail('Expected message_state_changed event');
+      }
+      expect(event.data.id).toBe('msg-1');
+      expect(event.data.newState).toBe(MessageState.DISPATCHED);
+      // When transitioning to DISPATCHED, userMessage should include the newly assigned order
+      expect(event.data.userMessage).toBeDefined();
+      expect(event.data.userMessage!.order).toBe(0);
+      expect(event.data.userMessage!.text).toBe('Test message');
     });
   });
 
@@ -288,16 +288,21 @@ describe('MessageStateService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should return messages sorted by order (creation order)', () => {
-      // Create messages - order is determined by when createUserMessage is called
+    it('should return messages sorted by order (dispatch order)', () => {
+      // Create messages - order is determined by when they are dispatched, not when created
       const msg1 = createTestQueuedMessage('msg-1');
       const msg2 = createTestQueuedMessage('msg-2');
       const msg3 = createTestQueuedMessage('msg-3');
 
-      // Add in specific order - this is the order they will appear
+      // Add in specific order
       messageStateService.createUserMessage('session-1', msg1);
       messageStateService.createUserMessage('session-1', msg2);
       messageStateService.createUserMessage('session-1', msg3);
+
+      // Dispatch in order - this assigns their order values
+      messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
+      messageStateService.updateState('session-1', 'msg-2', MessageState.DISPATCHED);
+      messageStateService.updateState('session-1', 'msg-3', MessageState.DISPATCHED);
 
       const result = messageStateService.getAllMessages('session-1');
 
@@ -701,9 +706,14 @@ describe('MessageStateService', () => {
       const msg1 = createTestQueuedMessage('msg-1');
       const msg2 = createTestQueuedMessage('msg-2');
 
-      // Add in specific order - messages will be sorted by order (creation order)
+      // Add in specific order
       messageStateService.createUserMessage('session-1', msg1);
       messageStateService.createUserMessage('session-1', msg2);
+
+      // Dispatch them to assign order values
+      messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
+      messageStateService.updateState('session-1', 'msg-2', MessageState.DISPATCHED);
+
       messageStateService.sendSnapshot('session-1', { phase: 'ready' });
       unsubscribe();
 

@@ -16,12 +16,15 @@ function applyMessageStateChange(
   state: ChatState,
   payload: Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']
 ): ChatState {
-  const { id, newState, userMessage, errorMessage } = payload;
+  const { id, newState, userMessage, errorMessage, queuePosition } = payload;
 
   switch (newState) {
     case MessageState.ACCEPTED:
-      return userMessage ? handleAcceptedState(state, id, userMessage) : state;
+      return userMessage ? handleAcceptedState(state, id, userMessage, queuePosition) : state;
     case MessageState.DISPATCHED:
+      return userMessage
+        ? handleDispatchedState(state, id, userMessage)
+        : handleRemoveFromQueue(state, id);
     case MessageState.COMMITTED:
     case MessageState.COMPLETE:
       return handleRemoveFromQueue(state, id);
@@ -42,7 +45,8 @@ function handleAcceptedState(
   userMessage: Extract<
     Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
     object
-  >
+  >,
+  queuePosition?: number
 ): ChatState {
   const newPendingMessages = new Map(state.pendingMessages);
   newPendingMessages.delete(id);
@@ -73,7 +77,10 @@ function handleAcceptedState(
     text: userMessage.text,
     timestamp: userMessage.timestamp,
     attachments: userMessage.attachments,
-    order: userMessage.order,
+    // Order is undefined for queued messages - use a large base value plus queuePosition
+    // to ensure they appear at the end in queue order until dispatched with real order
+    // Using 1 billion as base to leave room for real messages before queued messages
+    order: userMessage.order ?? 1_000_000_000 + (queuePosition ?? 0),
   };
 
   const newQueuedMessages = new Map(state.queuedMessages);
@@ -110,6 +117,50 @@ function handleAcceptedState(
     messageIdToUuid: newMessageIdToUuid,
     pendingUserMessageUuids: newPendingUuids,
     localUserMessageIds: newLocalUserMessageIds,
+  };
+}
+
+function handleDispatchedState(
+  state: ChatState,
+  id: string,
+  userMessage: Extract<
+    Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
+    object
+  >
+): ChatState {
+  // Remove from queue styling
+  const newQueuedMessages = new Map(state.queuedMessages);
+  newQueuedMessages.delete(id);
+
+  // Find the existing message and update its order
+  const existingMessageIndex = state.messages.findIndex((m) => m.id === id);
+  if (existingMessageIndex === -1) {
+    // Message not found in transcript yet - shouldn't happen but handle gracefully
+    return { ...state, queuedMessages: newQueuedMessages };
+  }
+
+  // Update the message with the new order and re-insert at correct position
+  const existingMessage = state.messages[existingMessageIndex];
+  if (!existingMessage) {
+    return { ...state, queuedMessages: newQueuedMessages };
+  }
+
+  const updatedMessage: ChatMessage = {
+    ...existingMessage,
+    order: userMessage.order,
+  };
+
+  // Remove old message and insert at new position based on order
+  const messagesWithoutOld = [
+    ...state.messages.slice(0, existingMessageIndex),
+    ...state.messages.slice(existingMessageIndex + 1),
+  ];
+  const newMessages = insertMessageByOrder(messagesWithoutOld, updatedMessage);
+
+  return {
+    ...state,
+    messages: newMessages,
+    queuedMessages: newQueuedMessages,
   };
 }
 
