@@ -3,10 +3,12 @@
  *
  * Tracks the running state of all Claude sessions per workspace.
  * Emits events when all sessions in a workspace finish.
+ *
+ * NOTE: Session idle events no longer trigger notifications directly.
+ * Notifications are triggered by kanban state transitions (see kanban-state.service.ts).
  */
 
 import { EventEmitter } from 'node:events';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('workspace-activity');
@@ -19,31 +21,6 @@ interface WorkspaceActivityState {
 
 class WorkspaceActivityService extends EventEmitter {
   private workspaceStates = new Map<string, WorkspaceActivityState>();
-
-  constructor() {
-    super();
-
-    // Listen for workspace idle events and trigger notification requests
-    this.on('workspace_idle', async ({ workspaceId, finishedAt }) => {
-      try {
-        const workspace = await workspaceAccessor.findById(workspaceId);
-        if (!workspace) {
-          logger.warn('Workspace not found for notification', { workspaceId });
-          return;
-        }
-
-        // Emit event to frontend for suppression check
-        this.emit('request_notification', {
-          workspaceId,
-          workspaceName: workspace.name,
-          sessionCount: workspace.claudeSessions.length,
-          finishedAt,
-        });
-      } catch (error) {
-        logger.error('Failed to process workspace idle event', error as Error, { workspaceId });
-      }
-    });
-  }
 
   /**
    * Mark a session as started/running in a workspace

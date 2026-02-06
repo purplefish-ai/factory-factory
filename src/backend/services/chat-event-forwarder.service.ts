@@ -23,6 +23,7 @@ import {
 } from '../schemas/tool-inputs.schema';
 import { chatConnectionService } from './chat-connection.service';
 import { configService } from './config.service';
+import { kanbanStateService } from './kanban-state.service';
 import { createLogger } from './logger.service';
 import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
@@ -99,6 +100,11 @@ class ChatEventForwarderService {
   /**
    * Set up workspace-level notification forwarding.
    * Call this once during handler initialization.
+   *
+   * Listens for kanban state transitions to WAITING and broadcasts notifications.
+   * This replaces the old session idle notification trigger to avoid false positives
+   * during ratcheting (where many short fixer sessions complete without the workspace
+   * actually being ready for user attention).
    */
   setupWorkspaceNotifications(): void {
     if (this.workspaceNotificationsSetup) {
@@ -106,10 +112,14 @@ class ChatEventForwarderService {
     }
     this.workspaceNotificationsSetup = true;
 
-    workspaceActivityService.on('request_notification', (data) => {
-      const { workspaceId, workspaceName, sessionCount, finishedAt } = data;
+    // Listen for workspace transitions to WAITING column
+    kanbanStateService.on('transition_to_waiting', (data) => {
+      const { workspaceId, workspaceName, sessionCount, transitionedAt } = data;
 
-      logger.debug('Broadcasting workspace notification request', { workspaceId });
+      logger.info('Workspace transitioned to WAITING, broadcasting notification', {
+        workspaceId,
+        workspaceName,
+      });
 
       // Send to all open connections so any workspace can hear the notification
       const message = JSON.stringify({
@@ -117,7 +127,7 @@ class ChatEventForwarderService {
         workspaceId,
         workspaceName,
         sessionCount,
-        finishedAt: finishedAt.toISOString(),
+        finishedAt: transitionedAt.toISOString(),
       });
 
       for (const info of chatConnectionService.values()) {
@@ -494,6 +504,14 @@ class ChatEventForwarderService {
 
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+
+      // Update kanban column - this may trigger a transition_to_waiting event and notification
+      kanbanStateService.updateCachedKanbanColumn(context.workspaceId).catch((error) => {
+        logger.error('Failed to update kanban column after session idle', error as Error, {
+          workspaceId: context.workspaceId,
+          dbSessionId,
+        });
+      });
 
       const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);

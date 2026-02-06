@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { KanbanColumn, PRState, type Workspace, WorkspaceStatus } from '@prisma-gen/client';
 import { workspaceAccessor } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
@@ -71,7 +72,7 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
   return KanbanColumn.WAITING;
 }
 
-class KanbanStateService {
+class KanbanStateService extends EventEmitter {
   /**
    * Get kanban state for a single workspace, including real-time activity check.
    */
@@ -137,6 +138,8 @@ class KanbanStateService {
    * Note: For archived workspaces, the cachedKanbanColumn is preserved
    * to show the column it was in before archiving.
    * Only updates stateComputedAt when the column actually changes.
+   *
+   * Emits 'transition_to_waiting' event when workspace transitions to WAITING column.
    */
   async updateCachedKanbanColumn(workspaceId: string): Promise<void> {
     const workspace = await workspaceAccessor.findById(workspaceId);
@@ -165,12 +168,34 @@ class KanbanStateService {
 
     // Only update stateComputedAt if the column actually changed
     const columnChanged = workspace.cachedKanbanColumn !== newColumn;
+    const previousColumn = workspace.cachedKanbanColumn;
+
     await workspaceAccessor.update(workspaceId, {
       cachedKanbanColumn: newColumn,
       ...(columnChanged && { stateComputedAt: new Date() }),
     });
 
-    logger.debug('Updated cached kanban column', { workspaceId, cachedColumn, columnChanged });
+    logger.debug('Updated cached kanban column', {
+      workspaceId,
+      previousColumn,
+      newColumn,
+      columnChanged,
+    });
+
+    // Emit event when workspace transitions to WAITING
+    if (columnChanged && newColumn === KanbanColumn.WAITING) {
+      logger.info('Workspace transitioned to WAITING', {
+        workspaceId,
+        from: previousColumn,
+      });
+
+      this.emit('transition_to_waiting', {
+        workspaceId,
+        workspaceName: workspace.name,
+        sessionCount: workspace.claudeSessions?.length ?? 0,
+        transitionedAt: new Date(),
+      });
+    }
   }
 
   /**
