@@ -175,16 +175,8 @@ export class ClaudeProcess extends EventEmitter {
     const protocol = new ClaudeProtocolIO(childProcess.stdin, childProcess.stdout);
     const claudeProcess = new ClaudeProcess(childProcess, protocol, options.sessionId);
 
-    // Attach error handler immediately to prevent unhandled 'error' events
-    // (The full exit handling is set up later in setupExitHandling())
-    childProcess.on('error', (error) => {
-      logger.error('Claude process error event (early handler)', {
-        pid: childProcess.pid,
-        error: error.message,
-        sessionId: options.sessionId,
-      });
-      claudeProcess.emit('error', error);
-    });
+    // Set up process exit and error handling immediately to prevent unhandled events
+    claudeProcess.setupExitHandling();
 
     const monitor = new ClaudeProcessMonitor(claudeProcess, options.resourceMonitoring);
     claudeProcess.attachMonitor(monitor);
@@ -202,9 +194,6 @@ export class ClaudeProcess extends EventEmitter {
 
     // Set up event forwarding
     claudeProcess.setupEventForwarding();
-
-    // Set up process exit handling
-    claudeProcess.setupExitHandling();
 
     // Start the protocol
     protocol.start();
@@ -597,11 +586,18 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   /**
-   * Set up process exit handling.
-   * Note: The 'error' handler is attached earlier (immediately after spawn) to prevent
-   * unhandled error events during the initialization window.
+   * Set up process exit and error handling.
    */
   private setupExitHandling(): void {
+    this.process.on('error', (error) => {
+      logger.error('Claude process error event', {
+        pid: this.process.pid,
+        error: error.message,
+        sessionId: this.sessionId,
+      });
+      this.emit('error', error);
+    });
+
     this.process.on('exit', (code, signal) => {
       const stderr = this.stderrBuffer.join('');
       logger.info('Claude process exited', {
@@ -629,9 +625,6 @@ export class ClaudeProcess extends EventEmitter {
 
       this.emit('exit', result);
     });
-
-    // The 'error' handler was already attached immediately after spawn to prevent
-    // unhandled error events. We don't add it again here to avoid duplicate handlers.
   }
 
   /**
