@@ -115,7 +115,6 @@ export function WorkspaceDetailContainer() {
     openInIde,
     availableIdes,
     preferredIde,
-    isArchivingWorkspace,
     handleSelectSession,
     handleCloseSession,
     handleNewChat,
@@ -220,7 +219,7 @@ export function WorkspaceDetailContainer() {
       handleBackToWorkspaces={handleBackToWorkspaces}
       isInitializing={isInitializing}
       workspaceInitStatus={workspaceInitStatus}
-      archivePending={isArchivingWorkspace(workspaceId)}
+      archivePending={archiveWorkspace.isPending}
       availableIdes={availableIdes}
       preferredIde={preferredIde}
       openInIde={openInIde}

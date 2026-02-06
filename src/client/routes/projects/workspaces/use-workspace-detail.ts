@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
@@ -124,7 +124,6 @@ export interface UseSessionManagementReturn {
   openInIde: MutationLike<{ id: string }>;
   availableIdes: AvailableIde[];
   preferredIde: string;
-  isArchivingWorkspace: (workspaceId: string) => boolean;
   handleSelectSession: (dbSessionId: string) => void;
   handleCloseSession: (dbSessionId: string) => void;
   handleNewChat: () => void;
@@ -144,9 +143,6 @@ export function useSessionManagement({
 }: UseSessionManagementOptions): UseSessionManagementReturn {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
-
-  // Track workspace IDs that are currently being archived (for per-workspace pending state)
-  const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
 
   // Ref to store pending quick action prompt (to send after session is ready)
   const pendingQuickActionRef = useRef<{ dbSessionId: string; prompt: string } | null>(null);
@@ -202,26 +198,8 @@ export function useSessionManagement({
   });
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
-    onMutate: (variables) => {
-      // Add this workspace ID to the archiving set
-      setArchivingWorkspaceIds((prev) => new Set(prev).add(variables.id));
-    },
-    onSuccess: (_data, variables) => {
-      // Remove from archiving set
-      setArchivingWorkspaceIds((prev) => {
-        const next = new Set(prev);
-        next.delete(variables.id);
-        return next;
-      });
+    onSuccess: () => {
       navigate(`/projects/${slug}/workspaces`);
-    },
-    onError: (_error, variables) => {
-      // Remove from archiving set on error
-      setArchivingWorkspaceIds((prev) => {
-        const next = new Set(prev);
-        next.delete(variables.id);
-        return next;
-      });
     },
   });
 
@@ -324,12 +302,6 @@ export function useSessionManagement({
     [createSession, workspaceId, setSelectedDbSessionId, selectedModel]
   );
 
-  // Helper to check if a specific workspace is being archived
-  const isArchivingWorkspace = useCallback(
-    (id: string) => archivingWorkspaceIds.has(id),
-    [archivingWorkspaceIds]
-  );
-
   return {
     createSession,
     deleteSession,
@@ -337,7 +309,6 @@ export function useSessionManagement({
     openInIde,
     availableIdes,
     preferredIde,
-    isArchivingWorkspace,
     handleSelectSession,
     handleCloseSession,
     handleNewChat,
