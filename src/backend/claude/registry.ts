@@ -38,7 +38,10 @@ export function getProcess(sessionId: string): RegisteredProcess | undefined {
 
 export function isProcessWorking(sessionId: string): boolean {
   const process = activeProcesses.get(sessionId);
-  return process?.getStatus() === 'running';
+  const status = process?.getStatus();
+  // Consider starting, ready, and running as "working" states
+  // This prevents brief WAITING flickers when sessions are starting up
+  return status === 'starting' || status === 'ready' || status === 'running';
 }
 
 export function isAnyProcessWorking(sessionIds: string[]): boolean {
