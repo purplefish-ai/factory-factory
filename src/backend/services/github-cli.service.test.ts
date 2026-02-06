@@ -392,7 +392,7 @@ describe('GitHubCLIService', () => {
 
   describe('schema validation', () => {
     describe('getPRStatus with malformed data', () => {
-      it('should throw error when response is missing required fields', async () => {
+      it('should return null and log error when response is missing required fields', async () => {
         const malformedData = {
           number: 123,
           // missing state, isDraft, etc.
@@ -403,10 +403,9 @@ describe('GitHubCLIService', () => {
           stderr: '',
         });
 
-        await expect(
-          githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123')
-        ).rejects.toThrow('Invalid gh CLI response for getPRStatus');
+        const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
 
+        expect(result).toBeNull();
         expect(mockLoggerError).toHaveBeenCalledWith(
           'Invalid gh CLI JSON response',
           expect.objectContaining({
@@ -416,7 +415,7 @@ describe('GitHubCLIService', () => {
         );
       });
 
-      it('should throw error when response has wrong field types', async () => {
+      it('should return null and log error when response has wrong field types', async () => {
         const malformedData = {
           number: '123', // should be number
           state: 'OPEN',
@@ -432,21 +431,26 @@ describe('GitHubCLIService', () => {
           stderr: '',
         });
 
-        await expect(
-          githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123')
-        ).rejects.toThrow('Invalid gh CLI response for getPRStatus');
+        const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
+
+        expect(result).toBeNull();
+        expect(mockLoggerError).toHaveBeenCalledWith(
+          'Invalid gh CLI JSON response',
+          expect.objectContaining({
+            context: 'getPRStatus',
+          })
+        );
       });
 
-      it('should throw error when JSON is invalid', async () => {
+      it('should return null and log error when JSON is invalid', async () => {
         mockExecFile.mockResolvedValue({
           stdout: 'not valid json{',
           stderr: '',
         });
 
-        await expect(
-          githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123')
-        ).rejects.toThrow('Failed to parse gh CLI JSON for getPRStatus');
+        const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
 
+        expect(result).toBeNull();
         expect(mockLoggerError).toHaveBeenCalledWith(
           'Failed to parse gh CLI JSON',
           expect.objectContaining({
@@ -493,7 +497,7 @@ describe('GitHubCLIService', () => {
     });
 
     describe('findPRForBranch with malformed data', () => {
-      it('should throw error when PR list items have wrong structure', async () => {
+      it('should return null and log error when PR list items have wrong structure', async () => {
         const malformedData = [
           {
             number: 123,
@@ -507,9 +511,15 @@ describe('GitHubCLIService', () => {
           stderr: '',
         });
 
-        await expect(
-          githubCLIService.findPRForBranch('owner', 'repo', 'test-branch')
-        ).rejects.toThrow('Invalid gh CLI response for findPRForBranch');
+        const result = await githubCLIService.findPRForBranch('owner', 'repo', 'test-branch');
+
+        expect(result).toBeNull();
+        expect(mockLoggerError).toHaveBeenCalledWith(
+          'Invalid gh CLI JSON response',
+          expect.objectContaining({
+            context: 'findPRForBranch',
+          })
+        );
       });
     });
 
