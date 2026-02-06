@@ -19,7 +19,7 @@ The same control appears in:
 `processing` is only true when both conditions are true:
 
 - `workspace.ratchetEnabled === true`
-- `workspace.ratchetState` is one of `CI_RUNNING`, `CI_FAILED`, `MERGE_CONFLICT`, `REVIEW_PENDING`
+- `workspace.ratchetState` is one of `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`
 
 All other `ratchetState` values (`IDLE`, `READY`, `MERGED`) render as **On + idle** when enabled.
 

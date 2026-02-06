@@ -5,7 +5,7 @@
  * Uses a state machine to continuously advance each PR toward merge by detecting
  * the current state and triggering the appropriate fixer action.
  *
- * States: IDLE → CI_RUNNING → CI_FAILED → MERGE_CONFLICT → REVIEW_PENDING → READY → MERGED
+ * States: IDLE → CI_RUNNING → CI_FAILED → REVIEW_PENDING → READY → MERGED
  */
 
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
@@ -30,7 +30,6 @@ const RATCHET_WORKFLOW = 'ratchet';
 
 export interface RatchetSettings {
   autoFixCi: boolean;
-  autoFixConflicts: boolean;
   autoFixReviews: boolean;
   autoMerge: boolean;
   allowedReviewers: string[];
@@ -177,7 +176,6 @@ class RatchetService {
     const userSettings = await userSettingsAccessor.get();
     const settings: RatchetSettings = {
       autoFixCi: userSettings.ratchetAutoFixCi,
-      autoFixConflicts: userSettings.ratchetAutoFixConflicts,
       autoFixReviews: userSettings.ratchetAutoFixReviews,
       autoMerge: userSettings.ratchetAutoMerge,
       allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
@@ -231,7 +229,6 @@ class RatchetService {
     const userSettings = await userSettingsAccessor.get();
     const settings: RatchetSettings = {
       autoFixCi: userSettings.ratchetAutoFixCi,
-      autoFixConflicts: userSettings.ratchetAutoFixConflicts,
       autoFixReviews: userSettings.ratchetAutoFixReviews,
       autoMerge: userSettings.ratchetAutoMerge,
       allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
@@ -481,11 +478,8 @@ class RatchetService {
     }
 
     // CI is green from here on...
-
-    // Check for merge conflicts
-    if (pr.mergeStateStatus === 'CONFLICTING') {
-      return RatchetState.MERGE_CONFLICT;
-    }
+    // Merge conflicts are not a distinct ratchet state — agents sync with main
+    // before every CI/review fix, resolving conflicts opportunistically.
 
     // Check for unaddressed review comments (either formal changes requested OR new review comments)
     if (pr.hasChangesRequested || pr.hasNewReviewComments) {
@@ -594,13 +588,21 @@ class RatchetService {
         if (!settings.autoFixCi) {
           return { type: 'DISABLED', reason: 'CI auto-fix disabled' };
         }
-        return await this.triggerFixer(workspace, 'ci', prStateInfo, settings);
-
-      case RatchetState.MERGE_CONFLICT:
-        if (!settings.autoFixConflicts) {
-          return { type: 'DISABLED', reason: 'Conflict resolution disabled' };
+        // Skip if we already dispatched a fixer for this exact CI run.
+        // After a fixer pushes, there's a delay before GitHub registers the new
+        // CI run. Without this guard, the next poll sees the old failure and
+        // launches a duplicate fixer for the same issue.
+        if (prStateInfo.ciRunId && prStateInfo.ciRunId === workspace.ratchetLastCiRunId) {
+          logger.info('Skipping CI fixer dispatch — already handled this CI run', {
+            workspaceId: workspace.id,
+            ciRunId: prStateInfo.ciRunId,
+          });
+          return {
+            type: 'WAITING',
+            reason: 'Already dispatched fixer for this CI run; waiting for new run',
+          };
         }
-        return await this.triggerFixer(workspace, 'merge', prStateInfo, settings);
+        return await this.triggerFixer(workspace, 'ci', prStateInfo, settings);
 
       case RatchetState.REVIEW_PENDING:
         if (!settings.autoFixReviews) {
@@ -649,9 +651,9 @@ class RatchetService {
       return false;
     }
 
-    // Priority states that should always trigger notification
-    const priorityStates: RatchetState[] = [RatchetState.CI_FAILED, RatchetState.MERGE_CONFLICT];
-    return priorityStates.includes(currentState);
+    // Only CI failures trigger mid-flight notification. Merge conflicts are
+    // handled by agent branch sync, so no separate notification needed.
+    return currentState === RatchetState.CI_FAILED;
   }
 
   /**
@@ -683,13 +685,6 @@ ${prStateInfo.failedChecks.map((c) => `- **${c.name}**: ${c.conclusion}${c.detai
 Please investigate and fix the CI failure before continuing with your current task.
 Use \`gh pr checks ${prStateInfo.prNumber}\` to see current status.
 Use \`gh run view <run-id> --log-failed\` to see detailed logs.`;
-    } else if (state === RatchetState.MERGE_CONFLICT) {
-      message = `⚠️ **Merge Conflict Detected**
-
-The branch now has merge conflicts with the base branch.
-Please resolve the conflicts before continuing.
-
-Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     }
 
     if (message) {
@@ -723,7 +718,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
    */
   private async triggerFixer(
     workspace: WorkspaceWithPR,
-    fixerType: 'ci' | 'merge' | 'review',
+    fixerType: 'ci' | 'review',
     prStateInfo: PRStateInfo,
     settings: RatchetSettings
   ): Promise<RatchetAction> {
@@ -789,7 +784,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
    * Build the initial prompt for a fixer session
    */
   private buildInitialPrompt(
-    fixerType: 'ci' | 'merge' | 'review',
+    fixerType: 'ci' | 'review',
     prUrl: string,
     prStateInfo: PRStateInfo,
     settings: RatchetSettings
@@ -799,8 +794,6 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     switch (fixerType) {
       case 'ci':
         return this.buildCIFixPrompt(prNumber, prUrl, prStateInfo);
-      case 'merge':
-        return this.buildMergeFixPrompt(prNumber, prUrl);
       case 'review':
         return this.buildReviewFixPrompt(prNumber, prUrl, prStateInfo, settings);
       default:
@@ -831,41 +824,18 @@ The CI checks for PR #${prNumber} have failed.
 
     prompt += `### Next Steps
 
-1. Use \`gh pr checks ${prNumber}\` to see the current check status
-2. Use \`gh run view <run-id> --log-failed\` to see detailed failure logs
-3. Identify the root cause and implement a fix
-4. Run tests locally to verify: \`pnpm test\`
-5. Run type checking: \`pnpm typecheck\`
-6. Run linting: \`pnpm check:fix\`
-7. Commit and push your changes
+1. Sync with main first: \`git fetch origin && git merge origin/main\` (resolve any conflicts)
+2. Use \`gh pr checks ${prNumber}\` to see the current check status
+3. Use \`gh run view <run-id> --log-failed\` to see detailed failure logs
+4. Identify the root cause and implement a fix
+5. Run tests locally to verify: \`pnpm test\`
+6. Run type checking: \`pnpm typecheck\`
+7. Run linting: \`pnpm check:fix\`
+8. Commit and push your changes
 
 Please investigate and fix these CI failures.`;
 
     return prompt;
-  }
-
-  private buildMergeFixPrompt(prNumber: number, prUrl: string): string {
-    return `## Merge Conflict Alert
-
-PR #${prNumber} has merge conflicts with the base branch.
-
-**PR URL:** ${prUrl}
-
-### Next Steps
-
-1. Fetch the latest changes: \`git fetch origin\`
-2. Merge the base branch: \`git merge origin/main\`
-3. Resolve any conflicts in the affected files
-4. For each conflict:
-   - Understand both sides of the change
-   - Preserve functionality from both when possible
-   - If unsure, prefer the main branch changes
-5. After resolving, run tests: \`pnpm test\`
-6. Run type checking: \`pnpm typecheck\`
-7. Commit the merge: \`git commit -m "Merge main into feature branch"\`
-8. Push your changes: \`git push\`
-
-Please resolve these merge conflicts.`;
   }
 
   /**
@@ -984,21 +954,27 @@ New review comments have been received on PR #${prNumber}.
 
 **IMPORTANT: Execute autonomously. Do not ask the user for input or confirmation. Complete all steps without waiting.**
 
-1. **Analyze each comment** - Determine what changes are requested. If a comment is purely informational (e.g., automated coverage reports with no action items), note it and move on.
+1. **Sync with main** - Before making changes, sync your branch:
+   \`\`\`bash
+   git fetch origin && git merge origin/main
+   \`\`\`
+   Resolve any conflicts as part of your fix.
 
-2. **Implement fixes** - Address each actionable comment systematically. Make focused changes that directly address the feedback.
+2. **Analyze each comment** - Determine what changes are requested. If a comment is purely informational (e.g., automated coverage reports with no action items), note it and move on.
 
-3. **Verify changes**:
+3. **Implement fixes** - Address each actionable comment systematically. Make focused changes that directly address the feedback.
+
+4. **Verify changes**:
    \`\`\`bash
    pnpm test && pnpm typecheck && pnpm check:fix
    \`\`\`
 
-4. **Commit and push**:
+5. **Commit and push**:
    \`\`\`bash
    git add -A && git commit -m "Address review comments" && git push
    \`\`\`
 
-5. **Post re-review request** - After pushing, notify the reviewers:
+6. **Post re-review request** - After pushing, notify the reviewers:
    \`\`\`bash
    gh pr comment ${prNumber} --body "${reviewerMentions} I've addressed the review comments. Please re-review when you have a chance."
    \`\`\`

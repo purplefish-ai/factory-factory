@@ -10,7 +10,6 @@ interface UpdateUserSettingsInput {
   // Ratchet settings
   ratchetEnabled?: boolean;
   ratchetAutoFixCi?: boolean;
-  ratchetAutoFixConflicts?: boolean;
   ratchetAutoFixReviews?: boolean;
   ratchetAutoMerge?: boolean;
   ratchetAllowedReviewers?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;

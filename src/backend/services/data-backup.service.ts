@@ -149,8 +149,9 @@ const exportedUserSettingsSchemaV2 = z.object({
   // Ratchet settings (Phase 3+)
   ratchetEnabled: z.boolean(),
   ratchetAutoFixCi: z.boolean(),
-  ratchetAutoFixConflicts: z.boolean(),
   ratchetAutoFixReviews: z.boolean(),
+  // Removed fields - kept for backward compatibility during import
+  ratchetAutoFixConflicts: z.boolean().optional(),
   ratchetAutoMerge: z.boolean(),
   ratchetAllowedReviewers: z.unknown().nullish(), // JSON field - allow undefined from DB
   // Deprecated fields - kept for backward compatibility during import
@@ -271,7 +272,6 @@ function migrateUserSettingsV1ToV2(
     // Set defaults for Phase 3+ ratchet settings (preserve if present, match schema defaults)
     ratchetEnabled: partial.ratchetEnabled ?? false,
     ratchetAutoFixCi: partial.ratchetAutoFixCi ?? true,
-    ratchetAutoFixConflicts: partial.ratchetAutoFixConflicts ?? true,
     ratchetAutoFixReviews: partial.ratchetAutoFixReviews ?? true,
     ratchetAutoMerge: partial.ratchetAutoMerge ?? false,
     ratchetAllowedReviewers: partial.ratchetAllowedReviewers ?? null,
@@ -327,7 +327,6 @@ function ensureUserSettingsV2Defaults(s: ExportedUserSettingsV2): ExportedUserSe
   if (
     s.ratchetEnabled === undefined ||
     s.ratchetAutoFixCi === undefined ||
-    s.ratchetAutoFixConflicts === undefined ||
     s.ratchetAutoFixReviews === undefined ||
     s.ratchetAutoMerge === undefined
   ) {
@@ -593,7 +592,6 @@ async function importUserSettings(
       // Phase 3+ ratchet settings
       ratchetEnabled: s.ratchetEnabled,
       ratchetAutoFixCi: s.ratchetAutoFixCi,
-      ratchetAutoFixConflicts: s.ratchetAutoFixConflicts,
       ratchetAutoFixReviews: s.ratchetAutoFixReviews,
       ratchetAutoMerge: s.ratchetAutoMerge,
       ratchetAllowedReviewers:
@@ -735,7 +733,6 @@ class DataBackupService {
               // Phase 3+ ratchet settings
               ratchetEnabled: userSettings.ratchetEnabled,
               ratchetAutoFixCi: userSettings.ratchetAutoFixCi,
-              ratchetAutoFixConflicts: userSettings.ratchetAutoFixConflicts,
               ratchetAutoFixReviews: userSettings.ratchetAutoFixReviews,
               ratchetAutoMerge: userSettings.ratchetAutoMerge,
               ratchetAllowedReviewers: userSettings.ratchetAllowedReviewers,

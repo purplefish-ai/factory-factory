@@ -215,6 +215,12 @@ class SessionService {
           // Eagerly clear stale ratchet fixer reference instead of waiting for next poll.
           // The conditional update is a no-op if this session isn't the active fixer.
           await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
+
+          // Ratchet fixer sessions are transient — delete the record to avoid clutter.
+          if (session.workflow === 'ratchet') {
+            await this.repository.deleteSession(sessionId);
+            logger.debug('Deleted transient ratchet session', { sessionId });
+          }
         } catch (error) {
           logger.warn('Failed to update session status on exit', {
             sessionId,

@@ -12,6 +12,7 @@ type SessionAccessor = {
     id: string,
     data: Partial<Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId'>>
   ): Promise<ClaudeSession>;
+  delete(id: string): Promise<ClaudeSession>;
 };
 
 type WorkspaceAccessor = {
@@ -60,6 +61,10 @@ export class SessionRepository {
     data: Partial<Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId'>>
   ): Promise<ClaudeSession> {
     return this.sessions.update(sessionId, data);
+  }
+
+  deleteSession(sessionId: string): Promise<ClaudeSession> {
+    return this.sessions.delete(sessionId);
   }
 }
 

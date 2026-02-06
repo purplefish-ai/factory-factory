@@ -172,7 +172,6 @@ model UserSettings {
   // Replace separate toggles with unified ratchet config
   ratchetEnabled           Boolean  @default(false)   // Master toggle
   ratchetAutoFixCi         Boolean  @default(true)    // Fix CI failures
-  ratchetAutoFixConflicts  Boolean  @default(true)    // Resolve merge conflicts
   ratchetAutoFixReviews    Boolean  @default(true)    // Address review comments
   ratchetAutoMerge         Boolean  @default(false)   // Auto-merge when ready
   ratchetAllowedReviewers  Json?                      // Whose reviews to auto-fix
@@ -275,12 +274,6 @@ class RatchetService {
           return { type: 'DISABLED', reason: 'CI auto-fix disabled' };
         }
         return await this.triggerCiFixer(workspace, prState);
-
-      case 'MERGE_CONFLICT':
-        if (!settings.ratchetAutoFixConflicts) {
-          return { type: 'DISABLED', reason: 'Conflict resolution disabled' };
-        }
-        return await this.triggerMainMerger(workspace, prState);
 
       case 'REVIEW_PENDING':
         if (!settings.ratchetAutoFixReviews) {
@@ -420,7 +413,6 @@ function RatchetSettingsSection() {
 
         {/* Individual toggles */}
         <Toggle label="Auto-fix CI failures" field="ratchetAutoFixCi" />
-        <Toggle label="Auto-resolve merge conflicts" field="ratchetAutoFixConflicts" />
         <Toggle label="Auto-address review comments" field="ratchetAutoFixReviews" />
         <Toggle label="Auto-merge when ready" field="ratchetAutoMerge" />
 

@@ -149,7 +149,6 @@ describe('DataBackupService', () => {
     // Phase 3+ ratchet settings
     ratchetEnabled: true,
     ratchetAutoFixCi: true,
-    ratchetAutoFixConflicts: true,
     ratchetAutoFixReviews: false,
     ratchetAutoMerge: false,
     ratchetAllowedReviewers: ['user1', 'user2'],
@@ -192,7 +191,6 @@ describe('DataBackupService', () => {
       expect(exportedSettings).not.toBeNull();
       expect(exportedSettings?.ratchetEnabled).toBe(true);
       expect(exportedSettings?.ratchetAutoFixCi).toBe(true);
-      expect(exportedSettings?.ratchetAutoFixConflicts).toBe(true);
       expect(exportedSettings?.ratchetAutoFixReviews).toBe(false);
       expect(exportedSettings?.ratchetAutoMerge).toBe(false);
       expect(exportedSettings?.ratchetAllowedReviewers).toEqual(['user1', 'user2']);
@@ -314,7 +312,6 @@ describe('DataBackupService', () => {
             notificationSoundPath: '/path/to/sound.mp3',
             ratchetEnabled: true,
             ratchetAutoFixCi: true,
-            ratchetAutoFixConflicts: true,
             ratchetAutoFixReviews: false,
             ratchetAutoMerge: false,
             ratchetAllowedReviewers: ['user1', 'user2'],
@@ -355,7 +352,6 @@ describe('DataBackupService', () => {
         data: expect.objectContaining({
           ratchetEnabled: true,
           ratchetAutoFixCi: true,
-          ratchetAutoFixConflicts: true,
           ratchetAutoFixReviews: false,
           ratchetAutoMerge: false,
         }),
@@ -484,7 +480,6 @@ describe('DataBackupService', () => {
           preferredIde: 'cursor',
           ratchetEnabled: false,
           ratchetAutoFixCi: true,
-          ratchetAutoFixConflicts: true,
           ratchetAutoFixReviews: true,
           ratchetAutoMerge: false,
         }),
