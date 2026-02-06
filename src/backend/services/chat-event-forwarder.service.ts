@@ -52,8 +52,8 @@ interface EventForLogging {
 // ============================================================================
 
 class ChatEventForwarderService {
-  /** Tracks which sessions have event forwarding set up */
-  private clientEventSetup = new Set<string>();
+  /** Tracks which sessions have event forwarding set up, mapping to the client instance */
+  private clientEventSetup = new Map<string, ClaudeClient>();
 
   /** Pending interactive requests by session ID (for restore on reconnect) */
   private pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
@@ -142,14 +142,25 @@ class ChatEventForwarderService {
     context: EventForwarderContext,
     onDispatchNextMessage: () => Promise<void>
   ): void {
-    // Idempotent: skip if already set up for this session
-    if (this.clientEventSetup.has(dbSessionId)) {
+    // Idempotent: skip if already set up for the same client instance
+    const existingClient = this.clientEventSetup.get(dbSessionId);
+    if (existingClient === client) {
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Event forwarding already set up, skipping', { dbSessionId });
+        logger.info('[Chat WS] Event forwarding already set up for same client, skipping', {
+          dbSessionId,
+        });
       }
       return;
     }
-    this.clientEventSetup.add(dbSessionId);
+
+    // If a different client was previously set up, tear down old listeners
+    // This happens when a new Claude process replaces an existing one for the same session
+    if (existingClient) {
+      logger.info('[Chat WS] Replacing event forwarding with new client', { dbSessionId });
+      existingClient.removeAllListeners();
+    }
+
+    this.clientEventSetup.set(dbSessionId, client);
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Setting up event forwarding for session', { dbSessionId });
