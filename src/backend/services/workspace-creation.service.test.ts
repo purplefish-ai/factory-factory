@@ -369,7 +369,7 @@ describe('WorkspaceCreationService', () => {
         expect(result.defaultSessionCreated).toBe(true);
         expect(claudeSessionAccessorModule.claudeSessionAccessor.create).toHaveBeenCalledWith({
           workspaceId: 'ws-123',
-          workflow: 'feature',
+          workflow: 'followup',
           name: 'Chat 1',
         });
       });

@@ -1,13 +1,12 @@
 import type { inferRouterOutputs } from '@trpc/server';
+import { Play } from 'lucide-react';
 import type { ReactNode } from 'react';
-
-import type { GitHubIssue } from '@/backend/services/github-cli.service';
 import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
+import { Button } from '@/components/ui/button';
 import type { AppRouter } from '@/frontend/lib/trpc';
 
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
-import { WorkflowSelector } from './workflow-selector';
 
 // =============================================================================
 // Types
@@ -15,13 +14,10 @@ import { WorkflowSelector } from './workflow-selector';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type ClaudeSession = RouterOutputs['session']['listClaudeSessions'][number];
-type Workflow = RouterOutputs['session']['listWorkflows'][number];
 
 interface WorkspaceContentViewProps {
   workspaceId: string;
   claudeSessions: ClaudeSession[] | undefined;
-  workflows: Workflow[] | undefined;
-  recommendedWorkflow: string | undefined;
   selectedSessionId: string | null;
   runningSessionId: string | undefined;
   /** Session status for the currently selected session */
@@ -30,7 +26,6 @@ interface WorkspaceContentViewProps {
   processStatus?: ProcessStatus;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
-  onWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
@@ -47,7 +42,7 @@ interface WorkspaceContentViewProps {
 
 /**
  * WorkspaceContentView handles the conditional rendering between:
- * - Workflow selector (when no sessions exist yet)
+ * - Start-session prompt (when no sessions exist yet)
  * - Session tab bar + chat content (when sessions exist)
  *
  * This extraction reduces cognitive complexity in the main page component.
@@ -55,15 +50,12 @@ interface WorkspaceContentViewProps {
 export function WorkspaceContentView({
   workspaceId,
   claudeSessions,
-  workflows,
-  recommendedWorkflow,
   selectedSessionId,
   runningSessionId,
   sessionStatus,
   processStatus,
   isCreatingSession,
   isDeletingSession,
-  onWorkflowSelect,
   onSelectSession,
   onCreateSession,
   onCloseSession,
@@ -71,28 +63,36 @@ export function WorkspaceContentView({
   maxSessions,
   hasWorktreePath,
 }: WorkspaceContentViewProps) {
-  // Show workflow selector when no sessions exist
+  // Show a single start-session action when no sessions exist yet.
   if (claudeSessions && claudeSessions.length === 0) {
     return (
       <MainViewContent workspaceId={workspaceId} className="flex-1">
-        {workflows && recommendedWorkflow ? (
-          <WorkflowSelector
-            workflows={workflows}
-            recommendedWorkflow={recommendedWorkflow}
-            onSelect={onWorkflowSelect}
-            disabled={isCreatingSession || !hasWorktreePath}
-            warningMessage={
-              !hasWorktreePath
-                ? 'Workspace is initializing... Please wait for the worktree to be created.'
-                : undefined
-            }
-            workspaceId={workspaceId}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="flex flex-col items-center justify-center h-full p-8">
+          <div className="max-w-md w-full space-y-6 text-center">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold">Start a Session</h2>
+              <p className="text-muted-foreground">Start a new chat session in this workspace.</p>
+            </div>
+
+            {!hasWorktreePath && (
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md text-sm">
+                Workspace is initializing... Please wait for the worktree to be created.
+              </div>
+            )}
+
+            <div className="flex justify-center">
+              <Button
+                size="lg"
+                onClick={onCreateSession}
+                disabled={isCreatingSession || !hasWorktreePath}
+                className="gap-2"
+              >
+                <Play className="h-4 w-4" />
+                Start Session
+              </Button>
+            </div>
           </div>
-        )}
+        </div>
       </MainViewContent>
     );
   }
