@@ -75,6 +75,13 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
 
 class KanbanStateService extends EventEmitter {
   /**
+   * Track the last time we emitted a transition_to_waiting event for each workspace.
+   * This prevents duplicate notifications when multiple sessions complete near-simultaneously.
+   * We use a timestamp to allow re-notification if the workspace transitions away and back.
+   */
+  private lastWaitingTransitionAt = new Map<string, number>();
+
+  /**
    * Get kanban state for a single workspace, including real-time activity check.
    */
   async getWorkspaceKanbanState(workspaceId: string): Promise<WorkspaceWithKanbanState | null> {
@@ -189,6 +196,16 @@ class KanbanStateService extends EventEmitter {
       ...(columnChanged && { stateComputedAt: new Date() }),
     });
 
+    // If workspace transitions away from WAITING (e.g., back to WORKING), clear the notification tracking
+    // so we can notify again when it returns to WAITING
+    if (
+      columnChanged &&
+      previousColumn === KanbanColumn.WAITING &&
+      newColumn !== KanbanColumn.WAITING
+    ) {
+      this.lastWaitingTransitionAt.delete(workspaceId);
+    }
+
     logger.debug('Updated cached kanban column', {
       workspaceId,
       previousColumn,
@@ -203,11 +220,23 @@ class KanbanStateService extends EventEmitter {
     // 2. Flow state is NOT working (no ratchet fixing, no CI running, etc.)
     // 3. NO sessions are running in the workspace (all sessions idle)
     // 4. Either column just changed OR this was triggered by session completion
+    // 5. We haven't already emitted a notification for this workspace recently (within 5 seconds)
     const isFlowStateIdle = !flowState.isWorking;
     const allSessionsIdle = !workspaceHasRunningSessions;
     const isTransition = columnChanged || isSessionCompletionTrigger;
 
-    if (newColumn === KanbanColumn.WAITING && isFlowStateIdle && allSessionsIdle && isTransition) {
+    const now = Date.now();
+    const lastNotificationAt = this.lastWaitingTransitionAt.get(workspaceId) ?? 0;
+    const timeSinceLastNotification = now - lastNotificationAt;
+    const isNotDuplicate = timeSinceLastNotification > 5000; // 5 second debounce
+
+    if (
+      newColumn === KanbanColumn.WAITING &&
+      isFlowStateIdle &&
+      allSessionsIdle &&
+      isTransition &&
+      isNotDuplicate
+    ) {
       logger.info('Workspace transitioned to WAITING', {
         workspaceId,
         from: previousColumn,
@@ -215,13 +244,27 @@ class KanbanStateService extends EventEmitter {
         isSessionCompletionTrigger,
         isFlowStateIdle,
         allSessionsIdle,
+        timeSinceLastNotification,
       });
+
+      this.lastWaitingTransitionAt.set(workspaceId, now);
 
       this.emit('transition_to_waiting', {
         workspaceId,
         workspaceName: workspace.name,
         sessionCount: workspace.claudeSessions?.length ?? 0,
         transitionedAt: new Date(),
+      });
+    } else if (
+      newColumn === KanbanColumn.WAITING &&
+      isFlowStateIdle &&
+      allSessionsIdle &&
+      isTransition &&
+      !isNotDuplicate
+    ) {
+      logger.debug('Skipping duplicate waiting notification', {
+        workspaceId,
+        timeSinceLastNotification,
       });
     }
   }
