@@ -440,6 +440,7 @@ class WorkspaceAccessor {
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
+      ratchetLastCiRunId: string | null;
       ratchetLastNotifiedState: RatchetState | null;
       prReviewLastCheckedAt: Date | null;
     }>
@@ -456,6 +457,7 @@ class WorkspaceAccessor {
         ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
+        ratchetLastCiRunId: true,
         ratchetLastNotifiedState: true,
         prReviewLastCheckedAt: true,
       },
@@ -468,6 +470,7 @@ class WorkspaceAccessor {
         ratchetEnabled: boolean;
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
+        ratchetLastCiRunId: string | null;
         ratchetLastNotifiedState: RatchetState | null;
         prReviewLastCheckedAt: Date | null;
       }>
@@ -484,6 +487,7 @@ class WorkspaceAccessor {
     ratchetEnabled: boolean;
     ratchetState: RatchetState;
     ratchetActiveSessionId: string | null;
+    ratchetLastCiRunId: string | null;
     ratchetLastNotifiedState: RatchetState | null;
     prReviewLastCheckedAt: Date | null;
   } | null> {
@@ -500,6 +504,7 @@ class WorkspaceAccessor {
         ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
+        ratchetLastCiRunId: true,
         ratchetLastNotifiedState: true,
         prReviewLastCheckedAt: true,
       },
@@ -510,6 +515,7 @@ class WorkspaceAccessor {
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
+      ratchetLastCiRunId: string | null;
       ratchetLastNotifiedState: RatchetState | null;
       prReviewLastCheckedAt: Date | null;
     } | null>;
