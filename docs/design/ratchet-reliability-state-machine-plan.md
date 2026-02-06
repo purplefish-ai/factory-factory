@@ -33,10 +33,15 @@ async function ratchetWorkspace(workspaceId, githubDelta) {
   // determineFixupAction. They decide whether we should evaluate this
   // workspace at all this tick.
   if (hasAnyWorkingSession(workspaceId)) {
-    await setPauseState('PAUSED_USER_WORKING');
+    // IMPORTANT: only update UI status fields here. Do NOT update last-known
+    // GitHub markers (head SHA, CI run ID, review state, etc.) so the delta
+    // is preserved and re-detected on the next tick after the session ends.
+    await setUiPauseStatus('PAUSED_USER_WORKING');
     return;
   }
   if (notHasPr(workspaceId)) {
+    // Defensive: in practice, workspaces without PRs produce no GitHub deltas
+    // and would not appear in the changed set. Kept as a safety check.
     await setPauseState('PAUSED_NO_PR');
     return;
   }
@@ -342,6 +347,16 @@ Definition for this design:
 3. Ratchet must call one canonical helper for this decision (do not duplicate ad-hoc status checks in ratchet service).
 4. Add tests that pin this behavior so future session-state refactors do not accidentally change ratchet blocking behavior.
 
+### User Session Delta Preservation
+
+The `PAUSED_USER_WORKING` guard must not consume GitHub deltas. If a user is chatting while CI reaches a terminal failure, and the guard updates last-known GitHub markers alongside the UI status, the CI-failed delta is consumed. When the user session ends, the next heartbeat sees no new delta and the workspace silently stops ratcheting.
+
+**Rule:** The `PAUSED_USER_WORKING` early exit writes only UI status fields (`ratchetState`, `ratchetStateReason`, `ratchetCurrentActivity`, `ratchetStateUpdatedAt`). It does **not** update last-known GitHub markers (head SHA, CI run ID, review state, mergeability). This preserves the unconsumed delta for the next tick.
+
+**Belt-and-suspenders:** When any user session exits on a workspace with `ratchetEnabled = true`, add that workspace to a "force re-evaluate" set in the heartbeat. The next heartbeat tick dispatches `ratchetWorkspace` for force-re-evaluate workspaces regardless of whether `collectWorkspaceGithubDeltas()` detected a delta. This ensures no state is dropped even if markers are accidentally stale.
+
+Implementation: the session `onExit` hook (already used for `ratchetActiveSessionId` cleanup) checks `workspace.ratchetEnabled` and, if true, calls `heartbeat.scheduleReEvaluation(workspaceId)`. The heartbeat merges this set into its dispatch list on the next tick.
+
 ### `didPush` Recovery Semantics
 
 `didPush()` should return a tri-state result:
@@ -482,6 +497,9 @@ Deliver the heartbeat dispatcher model in one phase.
 
 2. `src/backend/services/ratchet.service.test.ts`
    - `hasAnyWorkingSession()` uses `isSessionWorking()` semantics; `RUNNING`-but-idle sessions do not block ratchet.
+   - `PAUSED_USER_WORKING` does not update last-known GitHub markers (delta preserved for next tick).
+   - User session exit triggers force re-evaluation on next heartbeat tick.
+   - CI reaches terminal state while user session active → user session ends → workspace dispatched and CI failure acted on.
    - `clearRatchetSessions()` tears down previous fixup before action phase.
    - `clearRatchetSessions()` runs even when ratchet is disabled (cleanup path).
    - Heartbeat delta filter dispatches only changed workspaces.
@@ -516,7 +534,7 @@ Deliver the heartbeat dispatcher model in one phase.
 2. Repeated attempts: 3 fixup attempts push but PR still not green/no-review-clean → `PAUSED_ATTENTION_TERMINAL_FAILED` → manual push → counter resets → retry.
 3. No-push path: CI fails → agent can't fix → no push → `PAUSED_ATTENTION_NO_PUSH` (no stale CI wait).
 4. Review no-push: review comments → agent declines → no push → enters `PAUSED_ATTENTION_NO_PUSH`.
-5. User session active: ratchet waits until user session exits.
+5. User session active: ratchet defers but preserves delta → user session exits → force re-evaluate fires → ratchet picks up the CI failure.
 6. Ratchet disabled mid-flight: current fixup completes, `clearRatchetSessions()` cleans up, then workspace transitions to `PAUSED_DISABLED`.
 7. Previous ratchet session cleaned up before new fixup launches.
 8. Stale CI timeout: run ID never changes after push for > timeout window → attention pause + audit log.
@@ -600,10 +618,12 @@ Structured logs at each decision point:
 11. Add heartbeat scheduler + per-workspace single-flight/coalescing registry.
 12. Add UI status fields + API wiring so workspace view can show current ratchet activity and recent transitions.
 13. Add canonical working-session predicate usage (`isSessionWorking`) and tests for `RUNNING`-but-idle behavior.
-14. Add `didPush` tri-state verification with retry/backoff on transient failures.
-15. Add post-green grace window before `PAUSED_DONE`.
-16. Add blocked-merge wait state (`PAUSED_WAIT_HUMAN_REVIEW`).
-17. Ensure heartbeat delta detection covers late push/comment/mergeability updates while paused.
-18. Ensure Kanban reflects in-flight ratchet work as `WORKING`, and candidate scanning includes all non-archived open-PR workspaces regardless of current column.
-19. Ensure conflict-only mergeability changes set `PAUSED_WAIT_CONFLICT_ONLY` and do not trigger fixer dispatch.
-20. Ensure ratchet agent instructions for `FIX_CI`/`FIX_REVIEW` include sync-with-main guidance.
+14. Ensure `PAUSED_USER_WORKING` does not update last-known GitHub markers (delta preservation).
+15. Add session-exit force re-evaluation hook: `onExit` → `heartbeat.scheduleReEvaluation(workspaceId)` when `ratchetEnabled`.
+16. Add `didPush` tri-state verification with retry/backoff on transient failures.
+17. Add post-green grace window before `PAUSED_DONE`.
+18. Add blocked-merge wait state (`PAUSED_WAIT_HUMAN_REVIEW`).
+19. Ensure heartbeat delta detection covers late push/comment/mergeability updates while paused.
+20. Ensure Kanban reflects in-flight ratchet work as `WORKING`, and candidate scanning includes all non-archived open-PR workspaces regardless of current column.
+21. Ensure conflict-only mergeability changes set `PAUSED_WAIT_CONFLICT_ONLY` and do not trigger fixer dispatch.
+22. Ensure ratchet agent instructions for `FIX_CI`/`FIX_REVIEW` include sync-with-main guidance.
