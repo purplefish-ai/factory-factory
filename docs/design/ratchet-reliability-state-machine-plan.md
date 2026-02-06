@@ -1,4 +1,4 @@
-# Ratchet Reliability Design: Sequential Loop Model
+# Ratchet Reliability Design: Global Heartbeat Dispatcher Model
 
 ## Status
 
@@ -6,66 +6,115 @@ Draft for implementation planning. Phase 0 (session exit hook) shipped in #760.
 
 ## Core Model
 
-The ratchet is a simple sequential loop per workspace. Each iteration checks the PR state and takes at most one action. The fixup is synchronous — the loop blocks while the agent works, eliminating all concurrent fixup state management. The loop itself is long-lived and does not terminate under normal operation; it transitions between active and paused modes.
+The ratchet uses one global GitHub heartbeat loop that discovers workspace deltas, then dispatches per-workspace handling. `ratchetWorkspace(workspaceId, githubDelta)` is a single-pass function that performs at most one action.
 
 ```
 while (true) {
-  await sleep(60);
-  if (hasAnyWorkingSession()) { setPauseState('PAUSED_USER_WORKING'); continue; }
-  if (notHasPr()) { setPauseState('PAUSED_NO_PR'); continue; }
-  if (!prIsOpen()) { setPauseState('PAUSED_PR_NOT_OPEN'); continue; }
-  if (ciRunning()) continue;              // CI in progress — wait for result
-  if (ciJustTurnedGreenWithin(120)) continue; // short post-green grace window for late AI review comments
-  if (hasStaleCiRun() && !staleCiTimedOut()) continue; // unchanged CI run ID since last push — wait for restart
-  if (staleCiTimedOut()) { setPauseState('PAUSED_ATTENTION_STALE_CI_TIMEOUT'); continue; }
-  await clearRatchetSessions();           // close the ratchet session from the previous run, if any (note we do this before checking if ratchet is disabled, since it might have just been disabled after the previous run)
-  if (!ratchetEnabled()) { setPauseState('PAUSED_DISABLED'); continue; }
-  if (tooManyFixupAttempts()) { setPauseState('PAUSED_ATTENTION_TERMINAL_FAILED'); continue; }
-  if (hasMergeConflict()) {               // can't merge regardless of CI — resolve first
-    recordCiRunId();
-    await sendAgentToResolveConflictAndPush();
-    if (didPush() === 'NO') { setPauseState('PAUSED_ATTENTION_NO_PUSH'); continue; }
-    if (didPush() === 'UNKNOWN') continue; // transient push verification failure — retry on next poll
-    incrementFixupAttempt();
-    setPauseState('ACTIVE');
-    continue;
+  await sleep(heartbeatInterval);
+  const changed = await collectWorkspaceGithubDeltas(); // head/CI/review/mergeability/toggle deltas
+
+  for (const workspaceDelta of changed) {
+    await ratchetWorkspace(workspaceDelta.workspaceId, workspaceDelta);
   }
-  if (!ciGreen()) {                       // CI failed — fix the failure
-    recordCiRunId();
-    await sendAgentToFixCiAndPush();
-    if (didPush() === 'NO') { setPauseState('PAUSED_ATTENTION_NO_PUSH'); continue; }
-    if (didPush() === 'UNKNOWN') continue; // transient push verification failure — retry on next poll
-    incrementFixupAttempt();
-    setPauseState('ACTIVE');
-    continue;
+}
+```
+
+```
+async function ratchetWorkspace(workspaceId, githubDelta) {
+  await clearRatchetSessions(workspaceId);
+  if (hasAnyWorkingSession(workspaceId)) {
+    await setPauseState('PAUSED_USER_WORKING');
+    return; // control-flow only; setPauseState is side-effecting
   }
-  if (hasReviewComments()) {              // CI green but reviewer requested changes
-    recordCiRunId();
-    await sendAgentToAddressReviewAndPush();
-    if (didPush() === 'NO') { setPauseState('PAUSED_ATTENTION_NO_PUSH'); continue; }
-    if (didPush() === 'UNKNOWN') continue; // transient push verification failure — retry on next poll
-    incrementFixupAttempt();
-    setPauseState('ACTIVE');
-    continue;
+  if (notHasPr(workspaceId)) {
+    await setPauseState('PAUSED_NO_PR');
+    return;
   }
-  if (isMergeBlockedOnHumanReview()) { setPauseState('PAUSED_WAIT_HUMAN_REVIEW'); continue; } // no fixer action possible; keep monitoring
-  setPauseState('PAUSED_DONE');           // green CI, no conflicts, no comments
-  continue;
+  if (!prIsOpen(workspaceId)) {
+    await setPauseState('PAUSED_PR_NOT_OPEN');
+    return;
+  }
+  if (!ratchetEnabled(workspaceId)) {
+    await setPauseState('PAUSED_DISABLED');
+    return;
+  }
+  if (tooManyFixupAttempts(workspaceId)) {
+    await setPauseState('PAUSED_ATTENTION_TERMINAL_FAILED');
+    return;
+  }
+
+  // Optimization: do not dispatch fixups while CI is in progress.
+  if (githubDelta.ci.isInProgress) {
+    await setPauseState('WAITING_FOR_CI');
+    return;
+  }
+
+  const action = determineFixupAction(githubDelta, workspaceSnapshot);
+  await executeRatchetAction(workspaceId, action, githubDelta);
+}
+```
+
+`setPauseState(...)` is used for side effects (persisting/UI status + logging metadata). Its return value is not used; `return` only exits `ratchetWorkspace` early after writing state.
+
+```
+async function executeRatchetAction(workspaceId, action, githubDelta) {
+  if (action.action === 'WAIT') {
+    await setPauseState(workspaceId, 'WAITING_FOR_CI', action.reason);
+    await appendTransitionLog(workspaceId, { action: 'WAIT', reason: action.reason, snapshot: githubDelta });
+    return;
+  }
+
+  if (action.action === 'PAUSE') {
+    await setPauseState(workspaceId, action.pauseState, action.reason);
+    await appendTransitionLog(workspaceId, { action: 'PAUSE', reason: action.reason, snapshot: githubDelta });
+    return;
+  }
+
+  if (action.action === 'NOOP') {
+    await appendTransitionLog(workspaceId, { action: 'NOOP', reason: action.reason, snapshot: githubDelta });
+    return;
+  }
+
+  // FIX_CI / FIX_REVIEW: dispatch one fixer run and await completion.
+  const preFixerHeadSha = await getWorkspaceHeadSha(workspaceId);
+  const preCiRunId = githubDelta.ci.runId ?? null;
+  await setLastCiRunId(workspaceId, preCiRunId);
+  await setStaleCiSince(workspaceId, now());
+  await appendTransitionLog(workspaceId, {
+    action: action.action,
+    reason: action.reason,
+    snapshot: githubDelta,
+  });
+
+  const sessionId = await acquireAndDispatchFixer(workspaceId, action);
+  await waitForCompletion(sessionId);
+
+  const didPush = await detectDidPush(workspaceId, preFixerHeadSha); // YES | NO | UNKNOWN
+  if (didPush === 'UNKNOWN') {
+    await scheduleRetryWithBackoff(workspaceId, 'PUSH_STATUS_UNKNOWN');
+    await appendTransitionLog(workspaceId, { action: 'WAIT', reason: 'PUSH_STATUS_UNKNOWN' });
+    return;
+  }
+
+  if (didPush === 'NO') {
+    await setPauseState(workspaceId, 'PAUSED_ATTENTION_NO_PUSH', 'Fixer exited without push');
+    await appendTransitionLog(workspaceId, { action: 'PAUSE', reason: 'PAUSED_ATTENTION_NO_PUSH' });
+    return;
+  }
+
+  await incrementFixupAttempts(workspaceId);
+  await clearRetrySchedule(workspaceId);
 }
 ```
 
 Key properties:
-- **One thing at a time:** `hasAnyWorkingSession()` checks only sessions considered "working" by `isSessionWorking()` semantics. Idle sessions do not block ratchet.
-- **Synchronous fixup:** `await sendAgentToFixAndPush()` blocks the loop. No concurrent "fixup running while poller checks" state to manage.
-- **Stale CI detection:** After a fixup pushes, `hasStaleCiRun()` compares the current CI run ID to the one recorded before the fixup. If unchanged, CI hasn't restarted yet — just wait.
-- **Post-green grace:** After CI first turns green, ratchet waits a short grace window before `PAUSED_DONE` to catch late AI review comments.
-- **Bounded stale CI wait:** If CI run ID remains unchanged beyond a timeout window (for example 5 minutes), ratchet enters attention pause (`PAUSED_ATTENTION_STALE_CI_TIMEOUT`) and logs `STALE_CI_TIMEOUT` for manual follow-up.
-- **Session cleanup before action:** `clearRatchetSessions()` tears down the previous fixup session *before* deciding whether to launch a new one. This runs even when ratchet is disabled, so disabling mid-flight still cleans up.
-- **Late ratchet-enabled check:** `!ratchetEnabled()` is evaluated after monitoring guards (PR state, CI state) and after session cleanup, but before any fixup action. The loop continues to observe PR/CI state regardless of the toggle — disabling ratchet only prevents new fixup launches.
-- **No-push pauses actioning:** After each fixup, `didPush()` checks whether the agent actually pushed. If no push, ratchet moves to attention pause (`PAUSED_ATTENTION_NO_PUSH`); if push verification is transiently unknown (for example GitHub API outage), ratchet retries verification next iteration.
-- **Terminal attempt budget:** If attempt count reaches threshold, ratchet moves to attention pause (`PAUSED_ATTENTION_TERMINAL_FAILED`) rather than looping indefinitely.
-- **External-event wake safety:** Push/comment/review-change events wake paused ratchets so late changes are picked up quickly.
-- **Re-derive action each iteration:** No cached state. Each iteration fetches fresh PR/CI/review status and decides what to do.
+- **Global coordinator:** A single heartbeat decides which workspaces need processing.
+- **Delta-triggered processing:** `ratchetWorkspace` is called only for workspaces with relevant state changes (or scheduled retries).
+- **One thing at a time per workspace:** `ratchetWorkspace` is single-flight keyed by `workspaceId`.
+- **Synchronous fixup execution:** dispatch waits for fixer completion; no concurrent fixer orchestration per workspace.
+- **CI-in-progress optimization:** heartbeat can ignore CI-in-progress workspaces for fixup dispatch decisions, while still updating UI status.
+- **Broad triggers, not only CI:** CI terminal-state change is primary, but push/comment/review/mergeability/toggle deltas also trigger processing.
+- **Agent-owned branch sync:** ratchet agents are instructed to sync with `main` as needed while handling `FIX_CI`/`FIX_REVIEW`; orchestrator does not implement merge-main special cases.
 
 ## Why This Exists
 
@@ -74,75 +123,96 @@ The current ratchet loop has two reliability issues:
 1. Active fixer linkage (`ratchetActiveSessionId`) was not cleaned up on session exit; stale references persisted until the next poll detected them. (**Fixed in Phase 0, #760.**)
 2. After a fixup pushes a fix, the next poll can see stale CI state (old failure, new run hasn't registered yet) and incorrectly launch another fixup for the same issue.
 
-This document defines a plan to fix issue 2 and simplify the ratchet into the sequential model above.
+This document defines a plan to fix issue 2 and simplify ratchet around a global heartbeat + per-workspace dispatcher.
 
 ## Design Goals
 
-1. Simple sequential loop per workspace — easy to reason about.
+1. Simple global heartbeat + single-pass per-workspace actioning.
 2. At most one action per workspace at a time.
 3. No duplicate fixup launches for the same issue.
 4. Stop retrying after repeated attempts (`PAUSED_ATTENTION_TERMINAL_FAILED`).
 5. Observable — a transition log explains every ratchet decision.
+6. PR-local trigger discipline: changes external to a workspace PR do not, by themselves, trigger ratchet fixer work.
+
+## Trigger Principle
+
+Ratchet dispatch is driven by changes intrinsic to the workspace PR. External repository changes (including unrelated merges to `main`) must not, by themselves, trigger fixer work for that workspace.
+
+Implications:
+
+1. Conflict-only mergeability changes caused by external `main` movement set status (`PAUSED_WAIT_CONFLICT_ONLY`) but do not dispatch fixers.
+2. `main` is merged into a workspace branch only when ratchet is already handling a PR-local actionable issue (`FIX_CI` or `FIX_REVIEW`).
+3. Dispatch triggers remain PR-local: head SHA changes on the workspace branch, CI terminal changes for that PR branch, review/comment changes on that PR, mergeability policy changes on that PR, and ratchet toggle changes.
 
 ## Non-Goals
 
 1. Replacing polling with webhooks.
 2. Implementing auto-merge behavior.
 3. Reworking workspace lifecycle state machine (`NEW/PROVISIONING/READY/...`).
-4. Multi-instance backend support (leases, CAS versioning, heartbeats). The current runtime is single-process SQLite. The sequential loop model is inherently single-writer per workspace; multi-instance would require additional concurrency controls that can be layered on later.
+4. Multi-instance backend support (leases, CAS versioning, distributed heartbeats). The current runtime is single-process SQLite.
 
 ## State Determination
 
-Each poll iteration derives the workspace action from fresh GitHub state. This is a pure function — no side effects, no database access:
+Each heartbeat-triggered workspace evaluation derives the next action from fresh GitHub state + local workspace metadata. This is a pure function — no side effects, no network calls, no database writes:
 
 ```
-determineFixupAction(prState, ciStatus, mergeState, reviewState, ratchetEnabled, consecutiveAttempts) ->
+determineFixupAction(githubDelta, workspaceSnapshot) ->
   | { action: 'WAIT', reason: string }
   | { action: 'PAUSE', pauseState: string, reason: string }
-  | { action: 'FIX_MERGE_CONFLICT', reason: string }
   | { action: 'FIX_CI', reason: string }
   | { action: 'FIX_REVIEW', reason: string }
   | { action: 'NOOP', reason: string }
 ```
 
-Guard evaluation order (matches the loop):
+Guard evaluation order (matches `ratchetWorkspace`):
 
 1. **No PR** → `PAUSE(PAUSED_NO_PR)`
 2. **PR not open** (closed or merged) → `PAUSE(PAUSED_PR_NOT_OPEN)`
-3. **CI running** → `WAIT`
+3. **CI running** → `WAIT` (optimization: no fixer dispatch)
 4. **Stale CI run** (run ID unchanged since last push and stale timeout not reached) → `WAIT`
 5. **Stale CI timeout reached** → `PAUSE(PAUSED_ATTENTION_STALE_CI_TIMEOUT)` (manual attention required; audit as `STALE_CI_TIMEOUT`)
-6. *(Orchestration: `clearRatchetSessions()` runs here — not part of the pure function)*
+6. *(Orchestration: `clearRatchetSessions()` runs before action determination — not part of the pure function)*
 7. **Ratchet disabled** → `PAUSE(PAUSED_DISABLED)` (previous session cleaned up, no new fixup launched)
-8. **Merge conflict** and `consecutiveAttempts < 3` → `FIX_MERGE_CONFLICT`
-9. **Merge conflict** and `consecutiveAttempts >= 3` → `PAUSE(PAUSED_ATTENTION_TERMINAL_FAILED)`
-10. **CI failed** and `consecutiveAttempts < 3` → `FIX_CI`
-11. **CI failed** and `consecutiveAttempts >= 3` → `PAUSE(PAUSED_ATTENTION_TERMINAL_FAILED)`
-12. **Review comments** and `consecutiveAttempts < 3` → `FIX_REVIEW`
-13. **Review comments** and `consecutiveAttempts >= 3` → `PAUSE(PAUSED_ATTENTION_TERMINAL_FAILED)`
-14. **Merge blocked on human review** → `PAUSE(PAUSED_WAIT_HUMAN_REVIEW)`
-15. **All green** → `PAUSE(PAUSED_DONE)`
+8. **Merge conflict only** (no CI failure, no actionable review comments) → `PAUSE(PAUSED_WAIT_CONFLICT_ONLY)`
+9. **CI failed** and `consecutiveAttempts < 3` → `FIX_CI`
+10. **CI failed** and `consecutiveAttempts >= 3` → `PAUSE(PAUSED_ATTENTION_TERMINAL_FAILED)`
+11. **Review comments** and `consecutiveAttempts < 3` → `FIX_REVIEW`
+12. **Review comments** and `consecutiveAttempts >= 3` → `PAUSE(PAUSED_ATTENTION_TERMINAL_FAILED)`
+13. **Merge blocked on human review** → `PAUSE(PAUSED_WAIT_HUMAN_REVIEW)`
+14. **All green** → `PAUSE(PAUSED_DONE)`
+
+### Heartbeat Delta Detection
+
+The heartbeat dispatches `ratchetWorkspace` only when relevant PR-local deltas are observed:
+
+1. Branch head SHA changed.
+2. CI status changed to a terminal state (failed/cancelled/success), or stale CI timeout criteria changed.
+3. Review/comment state changed (new comments, changes requested, review resolved).
+4. Mergeability changed for the PR itself (including blocked/unblocked due to required human review).
+5. Ratchet toggle changed.
+
+CI-in-progress updates can be skipped for dispatch as an optimization, but should still refresh UI status.
+
+Conflict-only mergeability deltas should not trigger fixer dispatch by themselves. They update UI status (`PAUSED_WAIT_CONFLICT_ONLY`) and wait for another PR-local actionable trigger.
+
+When conflict-only deltas are filtered from dispatch, the heartbeat must still write the pause status (`PAUSED_WAIT_CONFLICT_ONLY`) and transition log directly.
+
+Important: delta detection must include updates to existing PR artifacts (for example edited review comments), not just newly created comments/reviews/check runs.
 
 ### No-Push Detection
 
-After each fixup session completes, the ratchet checks whether the agent pushed. Implementation: compare the branch HEAD sha (or `ratchetLastPushAt`) before and after the session.
+After each fixup session completes, the ratchet checks whether the fixer agent pushed. Implementation: capture `preFixerHeadSha` immediately before fixer dispatch, then compare to branch HEAD after session completion.
 
 - **Agent didn't push:** Ratchet moves to attention pause (`PAUSED_ATTENTION_NO_PUSH`). No state changed on the remote, so repeating the same fixup immediately is not useful. The workspace surfaces as needing manual attention.
-- **Agent pushed:** The loop continues — `incrementFixupAttempt()` runs, then the next iteration waits for CI to restart via `hasStaleCiRun()` before re-evaluating.
+- **Agent pushed:** Increment attempt counter and rely on heartbeat CI/review deltas for follow-up processing.
 
-### Wake Safety
+### Dispatch Safety
 
-To avoid missing updates while paused, wake ratchet from external change triggers:
-
-1. New push to the workspace branch.
-2. New PR review comment / review submitted with changes requested.
-3. Mergeability status changes (for example blocked review requirement resolved).
-
-`wakeRatchetLoop(workspaceId)` must be idempotent, so these triggers can fire aggressively without duplicate loops.
+`ratchetWorkspace` must run under single-flight per workspace (`workspaceId` lock). If a new delta arrives while a run is in progress, enqueue/coalesce and run one more pass after completion.
 
 ### Terminal Attempt Pause (`PAUSED_ATTENTION_TERMINAL_FAILED`)
 
-**Entry:** `consecutiveAttempts >= 3` when a fixup action would otherwise be taken. The no-push case exits the loop immediately without incrementing the counter.
+**Entry:** `consecutiveAttempts >= 3` when a fixup action would otherwise be taken. The no-push case enters attention pause immediately without incrementing the counter.
 
 **Counter increment:** Increment after each ratchet fixup session that pushed, regardless of issue category. This is an attempt budget, not a failed-push-only budget.
 
@@ -151,17 +221,26 @@ To avoid missing updates while paused, wake ratchet from external change trigger
 - The ratchet toggle is disabled and re-enabled.
 - The workspace reaches `PAUSED_DONE` (green CI, no merge conflict, no review comments).
 
-**Behavior:** The loop continues running, but stays in `PAUSED_ATTENTION_TERMINAL_FAILED` and skips fixup launches until external intervention changes inputs.
+**Behavior:** `ratchetWorkspace` sets `PAUSED_ATTENTION_TERMINAL_FAILED`; future heartbeat ticks skip fixup dispatch until external intervention changes inputs.
 
 ### Blocked Merge Handling
 
-If CI is green and there are no actionable review comments, but merge is blocked by human-review policy (for example required approval missing), ratchet does not launch fixers and stays in a waiting state (`WAIT_HUMAN_REVIEW`) until mergeability changes.
+If CI is green and there are no actionable review comments, but merge is blocked by human-review policy (for example required approval missing), ratchet does not launch fixers and stays in a waiting state (`PAUSED_WAIT_HUMAN_REVIEW`) until mergeability changes.
+
+### Conflict-Only Strategy
+
+To avoid thundering-herd conflict churn:
+
+1. Ratchet does not run standalone "resolve merge conflict" fixer sessions for conflict-only workspaces.
+2. Conflict-only workspaces remain in `PAUSED_WAIT_CONFLICT_ONLY`.
+3. Conflict resolution is handled opportunistically by ratchet agents during other actionable runs (`FIX_CI` / `FIX_REVIEW`) based on agent instructions.
+4. This avoids fan-out updates triggered only by external `main` movement.
 
 ### Stale CI Detection
 
 After a fixup pushes, the push should trigger a new CI run. But there's a delay before GitHub registers the new run. During this window, the poller would see the old failed CI run and incorrectly launch another fixup.
 
-**Fix:** Before launching a fixup, record the current CI run ID (`ratchetLastCiRunId`) and stale wait start time (`ratchetStaleCiSince`). On the next iteration, `hasStaleCiRun()` compares the current CI run ID to the recorded one. If they match, CI hasn't restarted yet — wait until timeout. Once a new run starts, the ID changes and the stale check passes.
+**Fix:** Before launching a fixup, record the current CI run ID (`ratchetLastCiRunId`) and stale wait start time (`ratchetStaleCiSince`). On subsequent heartbeat ticks, `hasStaleCiRun()` compares the current CI run ID to the recorded one. If they match, CI hasn't restarted yet — wait until timeout. Once a new run starts, the ID changes and the stale check passes.
 
 **Timeout:** If run ID remains unchanged for longer than the stale timeout window (for example 5 minutes), pause with `PAUSED_ATTENTION_STALE_CI_TIMEOUT` and audit log `STALE_CI_TIMEOUT` so manual action can unblock CI.
 
@@ -177,7 +256,7 @@ Add to `Workspace`:
 2. `ratchetStaleCiSince DateTime?` — when stale CI waiting started for timeout enforcement
 3. `ratchetStateReason String?` — short reason code for current UI-visible ratchet status
 4. `ratchetStateUpdatedAt DateTime?` — last time UI-visible ratchet status changed
-5. `ratchetCurrentActivity String?` — user-facing current action summary (`FIXING_BUILD`, `FIXING_REVIEW_COMMENTS`, `RESOLVING_MERGE_CONFLICT`, `WAITING_FOR_CI`, etc.)
+5. `ratchetCurrentActivity String?` — user-facing current action summary (`FIXING_BUILD`, `FIXING_REVIEW_COMMENTS`, `WAITING_FOR_CI`, etc.)
 
 Existing fields used as-is:
 - `ratchetState` — updated each poll to reflect current PR state
@@ -219,32 +298,26 @@ Create `src/backend/services/ratchet-action.service.ts`:
 
 ### Ratchet Service Refactor
 
-Simplify `ratchet.service.ts` to match the sequential loop:
+Refactor `ratchet.service.ts` into heartbeat + dispatcher:
 
-1. **Check monitoring guards:** `hasAnyWorkingSession()`, `notHasPr()`, `!prIsOpen()`, `ciRunning()`, `hasStaleCiRun()`, `staleCiTimedOut()`. These are passive — they only observe state and decide to wait or set pause state.
-2. **Clean up previous session:** `clearRatchetSessions()` tears down any leftover ratchet fixer session from the previous iteration. This runs before the ratchet-enabled check so that disabling ratchet mid-flight still cleans up.
-3. **Check ratchet toggle:** `!ratchetEnabled()` — if disabled, set pause state (`PAUSED_DISABLED`) and skip fixup actions.
-4. **Fetch state:** Get PR/CI/review status from GitHub.
-5. **Determine action:** Call `determineFixupAction()`.
-6. **Execute:** If `FIX_*`, record CI run ID + stale wait start, launch fixup session, await completion. After completion, check `didPush()`: if no push, set attention pause; if pushed, increment attempt counter and continue to next iteration. If `PAUSE`, set the requested pause state. If `WAIT`/`NOOP`, do nothing.
+1. **Global heartbeat tick:** Enumerate candidate workspaces and fetch GitHub snapshots.
+2. **Compute deltas:** Compare snapshot with last-known workspace markers (head SHA, CI state/run ID, review state, mergeability, ratchet toggle).
+3. **Filter for work:** Dispatch only changed workspaces (plus retry-scheduled workspaces), excluding merge-conflict-only deltas from fixer dispatch.
+4. **Per-workspace single-flight:** `ratchetWorkspace(workspaceId, githubDelta)` runs under lock.
+5. **Action determination:** Call `determineFixupAction(githubDelta, workspaceSnapshot)`.
+6. **Execute one action:** launch fixer and await completion for `FIX_CI`/`FIX_REVIEW`; handle `didPush` tri-state; update counters/states.
 7. **Audit log:** Write structured transition log entry for every wait, dispatch, pause transition, and terminal attention state.
+8. **Conflict-only status path:** when a workspace is filtered due to conflict-only delta, write `PAUSED_WAIT_CONFLICT_ONLY` status + transition log without dispatching a fixer.
 
-The fixup launch uses the existing `fixerSessionService.acquireAndDispatch()` but the orchestrator awaits session completion before returning.
+### Heartbeat Implementation Shape (Explicit)
 
-### Loop Implementation Shape (Explicit)
+Implement one global long-lived task and one per-workspace single-pass handler.
 
-Implement ratchet almost exactly like the pseudocode as a long-lived async task per workspace.
-
-1. `runRatchetLoop(workspaceId, signal): Promise<void>` contains the `while (!signal.aborted)` loop and mirrors the guard order in this doc.
-2. Each guard/action remains a small named helper so the loop body reads top-to-bottom like the design (`hasAnyWorkingSession`, `hasStaleCiRun`, `staleCiTimedOut`, `determineFixupAction`, `didPush`).
-3. Keep one loop owner per workspace via an in-memory registry, for example `Map<workspaceId, { controller, promise }>`; do not allow concurrent loops for the same workspace.
-4. Add explicit lifecycle methods:
-   - `startRatchetLoop(workspaceId)` (no-op if already running)
-   - `stopRatchetLoop(workspaceId, reason)` (abort controller + cleanup)
-   - `wakeRatchetLoop(workspaceId, reason)` (poke loop to skip sleep/backoff and re-evaluate immediately)
-5. Re-entry triggers should call `wakeRatchetLoop(...)` on meaningful external state changes such as new push, ratchet re-enable, or workspace returning to ratchet-eligible state.
-6. Sleep and blocking waits must be cancellable via `AbortSignal` so disable/shutdown does not strand the loop in `sleep(...)` or long waits.
-7. Push/review-comment/mergeability change triggers should call `wakeRatchetLoop(...)` so paused loops re-evaluate immediately.
+1. `runGithubHeartbeat(signal): Promise<void>` contains `while (!signal.aborted)` and runs on fixed cadence.
+2. `collectWorkspaceGithubDeltas()` gathers current GitHub snapshots and computes workspace deltas.
+3. `ratchetWorkspace(workspaceId, githubDelta)` is idempotent and performs at most one action.
+4. Maintain `Map<workspaceId, Promise<void>>` (or equivalent) single-flight guard.
+5. If a delta arrives while a workspace is in-flight, coalesce and run one follow-up pass.
 
 ### Working Session Definition (Explicit)
 
@@ -265,7 +338,7 @@ Definition for this design:
 2. `NO` — no push confirmed.
 3. `UNKNOWN` — transient verification failure (for example GitHub API unavailable or timeout).
 
-On `UNKNOWN`, ratchet should not mark no-push or terminal; it should record an attention/wait reason and retry verification on subsequent iterations with backoff.
+On `UNKNOWN`, ratchet should not mark no-push or terminal; it should schedule retry with backoff.
 
 ### Awaiting Session Completion
 
@@ -290,19 +363,20 @@ Expose ratchet progress without using ratchet state as orchestration truth.
 1. Keep `ratchetState` as a display status only.
 2. Use `ratchetStateReason` for stable reason codes suitable for UI badges/tooltips.
 3. Use `ratchetCurrentActivity` for explicit current-action messaging:
+   - `Updating branch from main`
    - `Fixing build failures`
    - `Addressing PR review comments`
-   - `Resolving merge conflicts`
    - `Waiting for CI to restart`
    - `Waiting for active workspace session to finish`
    - `Waiting for human review approval`
+   - `Waiting for non-conflict trigger to update branch`
 4. Update these fields at every major transition (wait, dispatch, completion, pause, terminal attention).
 5. Keep `RatchetTransitionLog` as the detailed timeline.
 6. Add/extend API endpoints for UI:
    - `currentRatchetStatus(workspaceId)` → current status snapshot (`state`, `reason`, `currentActivity`, `updatedAt`, counters)
    - `ratchetTransitions(workspaceId, limit)` → recent timeline entries (`action`, `reason`, `uiMessage`, `createdAt`)
 7. Add an outcome/attention indicator in status payload (for example `outcomeKind: SUCCESS | ATTENTION`) so UI can visually separate clean exits from error/manual-attention exits.
-8. While ratchet loop is active for a workspace, workspace should present in Kanban `WORKING` column.
+8. While a ratchet run is in-flight for a workspace, workspace should present in Kanban `WORKING` column.
 9. Ratchet eligibility scanning should include all non-archived workspaces with open PRs regardless of current Kanban column, so `WAITING` work can move back to `WORKING` when new comments/pushes arrive.
 
 ## Migration and Rollout Plan
@@ -311,29 +385,34 @@ Expose ratchet progress without using ratchet state as orchestration truth.
 
 ~~Add session exit hook to clear `ratchetActiveSessionId` on fixer session exit.~~
 
-### Phase 1: Sequential Loop with Synchronous Fixup
+### Phase 1: Heartbeat Dispatcher with Synchronous Fixup
 
-Deliver the full sequential loop model in one phase, since stale CI detection and synchronous fixup are interdependent and the intermediate async state isn't worth supporting.
+Deliver the heartbeat dispatcher model in one phase.
 
 1. Add `ratchetConsecutiveFixupAttempts` and `ratchetStaleCiSince` fields (schema migration).
    - Add `ratchetStateReason`, `ratchetStateUpdatedAt`, `ratchetCurrentActivity` fields for UI status.
 2. Build `determineFixupAction()` pure function with exhaustive tests.
 3. Add `waitForCompletion(sessionId)` to fixer session service (promise resolved by `onExit` hook, with timeout).
 4. Add `clearWorkspaceRatchetSessions(workspaceId)` to fixer session service.
-5. Rewrite ratchet orchestrator as the sequential loop:
-   - Monitoring guards (session running, PR state, CI state, stale CI).
+5. Add global GitHub heartbeat dispatcher:
+   - Collect deltas across candidate workspaces.
+   - Dispatch only changed workspaces (CI-terminal/review/mergeability/push/toggle deltas + retries).
+   - Ignore CI-in-progress for fixup dispatch as an optimization.
+   - Do not dispatch conflict-only mergeability changes for fixer work.
+   - Still write `PAUSED_WAIT_CONFLICT_ONLY` status/log for conflict-only filtered workspaces.
+6. Implement `ratchetWorkspace(workspaceId, githubDelta)` single-pass actioning:
    - `clearRatchetSessions()` before action phase.
-   - `ratchetEnabled` check after cleanup.
-   - Synchronous fixup: record CI run ID, launch session, await completion.
+   - Guard checks (session working, PR state, toggle, attempt budget).
+   - For `FIX_CI`/`FIX_REVIEW`: launch fixup session; agent instructions handle sync-with-main behavior.
    - No-push detection: compare branch HEAD before/after session, pause attention if no push.
    - `didPush` tri-state handling with retry/backoff for transient verification errors.
    - Post-green grace window before declaring `PAUSED_DONE`.
-   - Blocked-merge wait state (`WAIT_HUMAN_REVIEW`) when only human review is pending.
-   - Use per-workspace loop registry + `AbortController` to enforce one loop owner and support cancellation.
-6. Wire consecutive attempt counter: increment after each pushed fixup, reset on `PAUSED_DONE`, external push, or ratchet re-enable.
-7. Skip fixup launch when `consecutiveAttempts >= 3` (`PAUSED_ATTENTION_TERMINAL_FAILED`).
-8. Make `RatchetTransitionLog` mandatory and log all dispatch/wait/pause/terminal-attention transitions.
-9. Write UI status fields (`ratchetStateReason`, `ratchetStateUpdatedAt`, `ratchetCurrentActivity`) at each transition.
+   - Blocked-merge wait state (`PAUSED_WAIT_HUMAN_REVIEW`) when only human review is pending.
+7. Enforce per-workspace single-flight + coalesced follow-up pass when new deltas arrive mid-run.
+8. Wire consecutive attempt counter: increment after each pushed fixup, reset on `PAUSED_DONE`, external push, or ratchet re-enable.
+9. Skip fixup launch when `consecutiveAttempts >= 3` (`PAUSED_ATTENTION_TERMINAL_FAILED`).
+10. Make `RatchetTransitionLog` mandatory and log all dispatch/wait/pause/terminal-attention transitions.
+11. Write UI status fields (`ratchetStateReason`, `ratchetStateUpdatedAt`, `ratchetCurrentActivity`) at each transition.
 
 ### Phase 2: Cleanup
 
@@ -354,12 +433,14 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - Exhaustive guard tests.
 
 4. `src/backend/services/ratchet.service.ts`
-   - Rewrite as sequential loop: monitoring guards → `clearRatchetSessions()` → `ratchetEnabled` check → `determineFixupAction()` → synchronous fixup.
+   - Implement heartbeat tick + workspace dispatch.
+   - Implement `ratchetWorkspace(workspaceId, githubDelta)` single-pass handler.
    - Wire attempt counter (increment, reset, terminal check).
    - Wire stale CI timeout attention pause path.
    - Emit user-facing current-activity messages for each step (`fixing build`, `fixing review comments`, etc.).
    - Implement `didPush` tri-state verification + transient recovery/backoff.
    - Implement post-green grace window and blocked-merge wait state.
+   - Implement heartbeat-side conflict-only status/log update path (`PAUSED_WAIT_CONFLICT_ONLY`) without fixer dispatch.
    - Use canonical `isSessionWorking()` semantics for `hasAnyWorkingSession()`.
 
 5. `src/backend/services/fixer-session.service.ts`
@@ -381,7 +462,7 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
 ### Unit Tests
 
 1. `src/backend/services/ratchet-action.service.test.ts` (new)
-   - Every guard combination for `determineFixupAction`: ratchet disabled, merge conflict, CI failed, review comments, all green.
+   - Every guard combination for `determineFixupAction`: ratchet disabled, merge conflict-only, CI failed, review comments, merge blocked, all green.
    - `PAUSED_ATTENTION_TERMINAL_FAILED` entry at 3 attempts.
    - Terminal threshold uses consecutive attempts at 3.
    - Counter reset on `PAUSED_DONE`, external push, ratchet re-enable.
@@ -391,6 +472,11 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - `hasAnyWorkingSession()` uses `isSessionWorking()` semantics; `RUNNING`-but-idle sessions do not block ratchet.
    - `clearRatchetSessions()` tears down previous fixup before action phase.
    - `clearRatchetSessions()` runs even when ratchet is disabled (cleanup path).
+   - Heartbeat delta filter dispatches only changed workspaces.
+   - CI-in-progress workspaces are skipped for fixup dispatch.
+   - Conflict-only mergeability deltas do not dispatch fixer work.
+   - Conflict-only filtered workspaces still get `PAUSED_WAIT_CONFLICT_ONLY` status/log updates.
+   - `FIX_CI`/`FIX_REVIEW` prompts include sync-with-main instructions for ratchet agents.
    - Stale CI guard prevents duplicate fixup after push.
    - Stale CI timeout triggers attention pause with audit reason `STALE_CI_TIMEOUT`.
    - UI status is updated with expected activity text when fixing CI, review comments, and merge conflicts.
@@ -401,6 +487,8 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - Attempt counter resets on `PAUSED_DONE` and external push.
    - `PAUSED_ATTENTION_TERMINAL_FAILED` skips fixup launch.
    - Awaiting fixup completion works end-to-end.
+   - Workspace single-flight prevents concurrent `ratchetWorkspace` runs.
+   - Mid-run delta coalescing schedules one follow-up pass.
    - No-push detection: agent exits without pushing → enters `PAUSED_ATTENTION_NO_PUSH`.
    - No-push does not increment attempt counter.
    - `didPush() === UNKNOWN` (transient verification failure) does not pause attention; ratchet retries with backoff.
@@ -412,16 +500,20 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
 
 ### Integration Tests
 
-1. Full loop: CI fails → fixup pushes → stale CI detected → CI restarts → CI passes → `PAUSED_DONE`.
+1. Full flow: CI fails → fixup pushes → stale CI detected → CI restarts → CI passes → `PAUSED_DONE`.
 2. Repeated attempts: 3 fixup attempts push but PR still not green/no-review-clean → `PAUSED_ATTENTION_TERMINAL_FAILED` → manual push → counter resets → retry.
 3. No-push path: CI fails → agent can't fix → no push → `PAUSED_ATTENTION_NO_PUSH` (no stale CI wait).
-4. Review no-push: review comments → agent declines → no push → loop breaks.
+4. Review no-push: review comments → agent declines → no push → enters `PAUSED_ATTENTION_NO_PUSH`.
 5. User session active: ratchet waits until user session exits.
-6. Ratchet disabled mid-flight: current fixup completes, `clearRatchetSessions()` cleans up, loop transitions to `PAUSED_DISABLED`.
+6. Ratchet disabled mid-flight: current fixup completes, `clearRatchetSessions()` cleans up, then workspace transitions to `PAUSED_DISABLED`.
 7. Previous ratchet session cleaned up before new fixup launches.
 8. Stale CI timeout: run ID never changes after push for > timeout window → attention pause + audit log.
-9. Late review comment arrives after `PAUSED_DONE` → wake trigger wakes loop and workspace returns to active ratcheting.
+9. Late review comment arrives after `PAUSED_DONE` → wake trigger dispatches `ratchetWorkspace` and workspace returns to active ratcheting.
 10. Waiting workspace receives new push/comment and is picked back up by ratchet candidate scan (all states).
+11. Heartbeat sees CI in progress for unchanged workspace and skips dispatch without losing later terminal-state trigger.
+12. Merge one workspace to `main`; other conflict-only workspaces do not all dispatch fixers (no thundering herd).
+13. Conflict + CI failure in a workspace triggers single run where agent handles sync-with-main as part of fix workflow.
+14. Edited PR comment (no new comment created) is detected as a delta and re-dispatches `ratchetWorkspace`.
 
 ## Observability
 
@@ -440,7 +532,7 @@ Structured logs at each decision point:
 ## Risks and Mitigations
 
 1. **Risk:** Synchronous fixup blocks the workspace's ratchet slot for the duration of the agent session (could be minutes).
-   - **Mitigation:** This is intentional — one thing at a time. Other workspaces continue processing independently via `p-limit`. The slot is freed immediately on session exit.
+   - **Mitigation:** This is intentional — one thing at a time per workspace. Global heartbeat continues dispatching other workspaces.
 
 2. **Risk:** Stale CI run ID check depends on GitHub API returning updated run IDs.
    - **Mitigation:** Add a stale CI timeout window (for example 5 minutes). If run ID never changes, move to `PAUSED_ATTENTION_STALE_CI_TIMEOUT` and surface manual attention required.
@@ -452,7 +544,7 @@ Structured logs at each decision point:
    - **Mitigation:** `waitForCompletion` has a timeout (e.g., 30 minutes). On timeout, the session is terminated, `clearRatchetSessions()` cleans up, and the attempt counter increments. The next iteration re-evaluates fresh state.
 
 5. **Risk:** Ratchet disabled while blocked in `await waitForCompletion()`.
-   - **Mitigation:** The current fixup finishes (or times out). On the next iteration, `clearRatchetSessions()` cleans up, then loop state transitions to `PAUSED_DISABLED`. Disabling ratchet lets the in-flight fixup complete but prevents new launches.
+   - **Mitigation:** The current fixup finishes (or times out). On the next heartbeat dispatch for that workspace, `clearRatchetSessions()` runs and state transitions to `PAUSED_DISABLED`. Disabling ratchet lets the in-flight fixup complete but prevents new launches.
 
 6. **Risk:** `didPush` verification fails transiently (for example GitHub API outage), causing false no-push attention pause.
    - **Mitigation:** Use tri-state `didPush` and retry/backoff on `UNKNOWN`; do not treat `UNKNOWN` as no-push.
@@ -461,7 +553,10 @@ Structured logs at each decision point:
    - **Mitigation:** Add short post-green grace window before `PAUSED_DONE`.
 
 8. **Risk:** Ratchet ignores merge-blocked states that require human approval.
-   - **Mitigation:** Add explicit `WAIT_HUMAN_REVIEW` wait state and continue monitoring.
+   - **Mitigation:** Add explicit `PAUSED_WAIT_HUMAN_REVIEW` wait state and continue monitoring.
+
+9. **Risk:** Merging `main` into all conflict-only workspaces causes a thundering herd of unnecessary fixer sessions.
+   - **Mitigation:** Conflict-only deltas are non-dispatching; branch sync is handled inside agent workflows during already-actionable runs.
 
 ## Success Criteria
 
@@ -482,16 +577,18 @@ Structured logs at each decision point:
 3. Build `determineFixupAction()` pure function + exhaustive tests.
 4. Add `waitForCompletion(sessionId)` to fixer session service (with timeout).
 5. Add `clearWorkspaceRatchetSessions(workspaceId)` to fixer session service.
-6. Rewrite ratchet orchestrator as sequential loop (monitoring guards → cleanup → enabled check → action → synchronous fixup → no-push check).
+6. Implement global heartbeat + `ratchetWorkspace(workspaceId, githubDelta)` single-pass dispatch.
 7. Wire no-push detection: compare branch HEAD before/after fixup session, transition to attention pause if unchanged.
 8. Wire consecutive attempt counter (increment on each pushed fixup, reset on `PAUSED_DONE`/external push/re-enable, terminal at 3).
 9. Remove `handleExistingFixerSession`, `shouldNotifyActiveFixer`, and `ratchetLastNotifiedState`.
 10. Add mandatory transition/audit logging for every wait, dispatch, pause, and terminal-attention state.
-11. Add per-workspace loop registry (`start/stop/wake`) with `AbortController` cancellation.
+11. Add heartbeat scheduler + per-workspace single-flight/coalescing registry.
 12. Add UI status fields + API wiring so workspace view can show current ratchet activity and recent transitions.
 13. Add canonical working-session predicate usage (`isSessionWorking`) and tests for `RUNNING`-but-idle behavior.
 14. Add `didPush` tri-state verification with retry/backoff on transient failures.
 15. Add post-green grace window before `PAUSED_DONE`.
-16. Add blocked-merge wait state (`WAIT_HUMAN_REVIEW`).
-17. Add wake triggers for late push/comment/mergeability updates while paused.
-18. Ensure Kanban reflects active ratchet loop as `WORKING`, and candidate scanning includes all non-archived open-PR workspaces regardless of current column.
+16. Add blocked-merge wait state (`PAUSED_WAIT_HUMAN_REVIEW`).
+17. Ensure heartbeat delta detection covers late push/comment/mergeability updates while paused.
+18. Ensure Kanban reflects in-flight ratchet work as `WORKING`, and candidate scanning includes all non-archived open-PR workspaces regardless of current column.
+19. Ensure conflict-only mergeability changes set `PAUSED_WAIT_CONFLICT_ONLY` and do not trigger fixer dispatch.
+20. Ensure ratchet agent instructions for `FIX_CI`/`FIX_REVIEW` include sync-with-main guidance.
