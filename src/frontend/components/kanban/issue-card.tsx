@@ -9,9 +9,10 @@ import type { GitHubIssue } from './kanban-context';
 interface IssueCardProps {
   issue: GitHubIssue;
   projectId: string;
+  onClick?: () => void;
 }
 
-export function IssueCard({ issue, projectId }: IssueCardProps) {
+export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
@@ -60,8 +61,15 @@ export function IssueCard({ issue, projectId }: IssueCardProps) {
     window.open(issue.url, '_blank', 'noopener,noreferrer');
   };
 
+  const handleCardClick = () => {
+    onClick?.();
+  };
+
   return (
-    <Card className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden border-dashed">
+    <Card
+      className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden border-dashed"
+      onClick={handleCardClick}
+    >
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
           {issue.title}
