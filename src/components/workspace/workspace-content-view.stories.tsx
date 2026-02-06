@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
 
 import { WorkspaceContentView } from './workspace-content-view';
+import { WorkspacePanelProvider } from './workspace-panel-context';
 
 const meta = {
   title: 'Workspace/WorkspaceContentView',
@@ -9,6 +10,13 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
   },
+  decorators: [
+    (Story, context) => (
+      <WorkspacePanelProvider workspaceId={context.args.workspaceId}>
+        <Story />
+      </WorkspacePanelProvider>
+    ),
+  ],
   tags: ['autodocs'],
   args: {
     workspaceId: 'workspace-1',

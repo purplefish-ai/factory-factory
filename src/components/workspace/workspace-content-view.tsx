@@ -42,7 +42,7 @@ interface WorkspaceContentViewProps {
 
 /**
  * WorkspaceContentView handles the conditional rendering between:
- * - Workflow selector (when no sessions exist yet)
+ * - Start-session prompt (when no sessions exist yet)
  * - Session tab bar + chat content (when sessions exist)
  *
  * This extraction reduces cognitive complexity in the main page component.
