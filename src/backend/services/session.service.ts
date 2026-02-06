@@ -206,11 +206,15 @@ class SessionService {
       },
       onExit: async (sessionId: string) => {
         try {
-          await this.repository.updateSession(sessionId, {
+          const session = await this.repository.updateSession(sessionId, {
             status: SessionStatus.COMPLETED,
             claudeProcessPid: null,
           });
           logger.debug('Updated session status to COMPLETED on exit', { sessionId });
+
+          // Eagerly clear stale ratchet fixer reference instead of waiting for next poll.
+          // The conditional update is a no-op if this session isn't the active fixer.
+          await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
         } catch (error) {
           logger.warn('Failed to update session status on exit', {
             sessionId,
