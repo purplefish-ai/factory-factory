@@ -10,7 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Show GitHub issue details in side panel (#777)
-- Add draggable height resize to live activity feed (#757)
 
 ### Changed
 
@@ -23,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix workspace WAITING flicker during GitHub issue dispatch (#772)
 - Clear workspace notification glow on selection (#775)
-- Fix chat replay flicker by showing loading state during reconnect (#756)
 - Harden Claude protocol control responses with schema validation (#755)
 
 ### Refactored
