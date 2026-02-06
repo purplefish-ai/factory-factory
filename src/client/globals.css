@@ -261,6 +261,30 @@
   }
 }
 
+/* Workspace attention glow animation */
+@keyframes waiting-pulse-animation {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--destructive) 50%, transparent);
+    border-color: color-mix(in oklab, var(--destructive) 30%, var(--border));
+  }
+  50% {
+    box-shadow: 0 0 12px 2px color-mix(in oklab, var(--destructive) 40%, transparent);
+    border-color: color-mix(in oklab, var(--destructive) 60%, var(--border));
+  }
+}
+
+.waiting-pulse {
+  animation: waiting-pulse-animation 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting-pulse {
+    animation: none;
+    border-color: color-mix(in oklab, var(--destructive) 50%, var(--border));
+  }
+}
+
 /* Enable text selection in toast notifications */
 [data-sonner-toast] {
   user-select: text !important;
