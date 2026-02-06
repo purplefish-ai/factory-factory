@@ -314,7 +314,7 @@ describe('Ratchet CI regression behavior', () => {
 
     vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
       id: 'session-stale',
-      status: SessionStatus.IDLE,
+      status: SessionStatus.RUNNING,
     } as never);
     vi.mocked(sessionService.getClient).mockReturnValue(undefined);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
@@ -324,7 +324,12 @@ describe('Ratchet CI regression behavior', () => {
         ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
         'triggerFixer'
       )
-      .mockResolvedValue({ type: 'TRIGGERED_FIXER', sessionId: 'new-fixer', fixerType: 'ci' });
+      .mockResolvedValue({
+        type: 'TRIGGERED_FIXER',
+        sessionId: 'new-fixer',
+        fixerType: 'ci',
+        promptSent: true,
+      });
 
     const result = await (
       ratchetService as unknown as {
@@ -370,6 +375,7 @@ describe('Ratchet CI regression behavior', () => {
       type: 'TRIGGERED_FIXER',
       sessionId: 'new-fixer',
       fixerType: 'ci',
+      promptSent: true,
     });
   });
 
@@ -446,13 +452,107 @@ describe('Ratchet CI regression behavior', () => {
   });
 
   it('returns run id "0" when parsed from details url', () => {
-    const runId = (
+    const signature = (
       ratchetService as unknown as {
-        extractLatestCiRunId: (checks: Array<{ detailsUrl?: string }>) => string | null;
+        extractFailedCiSignature: (
+          checks: Array<{
+            name?: string;
+            status?: string;
+            conclusion?: string;
+            detailsUrl?: string;
+          }>
+        ) => string | null;
       }
-    ).extractLatestCiRunId([{ detailsUrl: 'https://github.com/acme/repo/actions/runs/0' }]);
+    ).extractFailedCiSignature([
+      {
+        name: 'unit-tests',
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/acme/repo/actions/runs/0',
+      },
+      {
+        name: 'lint',
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/acme/repo/actions/runs/42',
+      },
+    ]);
 
-    expect(runId).toBe('0');
+    expect(signature).toBe('lint:42|unit-tests:0');
+  });
+
+  it('keeps active session linkage when session is IDLE so it can be restarted', async () => {
+    const workspace = {
+      id: 'ws-idle',
+      prUrl: 'https://github.com/example/repo/pull/88',
+      prNumber: 88,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: 'session-idle',
+      ratchetLastCiRunId: 'sig-old',
+      ratchetLastNotifiedState: RatchetState.CI_FAILED,
+      prReviewLastCheckedAt: null,
+    };
+
+    vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
+      id: 'session-idle',
+      status: SessionStatus.IDLE,
+    } as never);
+    vi.mocked(sessionService.getClient).mockReturnValue(undefined);
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    const triggerFixerSpy = vi
+      .spyOn(
+        ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+        'triggerFixer'
+      )
+      .mockResolvedValue({
+        type: 'TRIGGERED_FIXER',
+        sessionId: 'session-idle',
+        fixerType: 'ci',
+        promptSent: true,
+      });
+
+    await (
+      ratchetService as unknown as {
+        executeRatchetAction: (
+          workspaceArg: typeof workspace,
+          state: RatchetState,
+          prStateInfo: unknown,
+          settings: unknown
+        ) => Promise<unknown>;
+      }
+    ).executeRatchetAction(
+      workspace,
+      RatchetState.CI_FAILED,
+      {
+        ciStatus: CIStatus.FAILURE,
+        mergeStateStatus: 'CLEAN',
+        hasChangesRequested: false,
+        hasNewReviewComments: false,
+        failedChecks: [],
+        ciRunId: 'sig-new',
+        reviews: [],
+        comments: [],
+        reviewComments: [],
+        newReviewComments: [],
+        newPRComments: [],
+        prState: 'OPEN',
+        prNumber: 88,
+      },
+      {
+        autoFixCi: true,
+        autoFixConflicts: true,
+        autoFixReviews: true,
+        autoMerge: false,
+        allowedReviewers: [],
+      }
+    );
+
+    expect(triggerFixerSpy).toHaveBeenCalledTimes(1);
+    expect(workspaceAccessor.update).not.toHaveBeenCalledWith(workspace.id, {
+      ratchetActiveSessionId: null,
+    });
   });
 });
 

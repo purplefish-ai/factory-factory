@@ -77,7 +77,7 @@ export type RatchetAction =
   | { type: 'WAITING'; reason: string }
   | { type: 'FIXER_ACTIVE'; sessionId: string }
   | { type: 'NOTIFIED_ACTIVE_FIXER'; sessionId: string; issue: string }
-  | { type: 'TRIGGERED_FIXER'; sessionId: string; fixerType: string }
+  | { type: 'TRIGGERED_FIXER'; sessionId: string; fixerType: string; promptSent: boolean }
   | { type: 'DISABLED'; reason: string }
   | { type: 'READY_FOR_MERGE' }
   | { type: 'AUTO_MERGED' }
@@ -298,7 +298,8 @@ class RatchetService {
         shouldTakeAction &&
         prStateInfo.ciStatus === CIStatus.FAILURE &&
         !!prStateInfo.ciRunId &&
-        (action.type === 'TRIGGERED_FIXER' || action.type === 'NOTIFIED_ACTIVE_FIXER');
+        (action.type === 'NOTIFIED_ACTIVE_FIXER' ||
+          (action.type === 'TRIGGERED_FIXER' && action.promptSent));
       await workspaceAccessor.update(workspace.id, {
         ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
         ratchetLastCheckedAt: now,
@@ -386,7 +387,11 @@ class RatchetService {
       if (prDetails.statusCheckRollup) {
         for (const check of prDetails.statusCheckRollup) {
           const conclusion = check.conclusion || check.status;
-          if (conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED') {
+          if (
+            conclusion === 'FAILURE' ||
+            conclusion === 'ACTION_REQUIRED' ||
+            conclusion === 'ERROR'
+          ) {
             failedChecks.push({
               name: check.name || 'Unknown check',
               conclusion,
@@ -395,7 +400,7 @@ class RatchetService {
           }
         }
       }
-      const ciRunId = this.extractLatestCiRunId(prDetails.statusCheckRollup);
+      const ciRunId = this.extractFailedCiSignature(prDetails.statusCheckRollup);
 
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
@@ -523,9 +528,17 @@ class RatchetService {
 
     const session = await claudeSessionAccessor.findById(workspace.ratchetActiveSessionId);
     const client = sessionService.getClient(workspace.ratchetActiveSessionId);
-    const hasReachableFixer = session?.status === SessionStatus.RUNNING && !!client;
+    if (!session) {
+      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      return null;
+    }
 
-    if (!hasReachableFixer) {
+    if (session.status === SessionStatus.IDLE) {
+      // Keep linkage so triggerFixer can restart this session instead of creating churn.
+      return null;
+    }
+
+    if (session.status !== SessionStatus.RUNNING || !client) {
       await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
       return null;
     }
@@ -687,9 +700,6 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
         // Only update last notified state after confirmed delivery
         await workspaceAccessor.update(workspace.id, {
           ratchetLastNotifiedState: state,
-          ...(state === RatchetState.CI_FAILED && prStateInfo.ciRunId
-            ? { ratchetLastCiRunId: prStateInfo.ciRunId }
-            : {}),
         });
         return true;
       } catch (error) {
@@ -733,10 +743,6 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
           ratchetActiveSessionId: result.sessionId,
           ...(shouldMarkNotified && {
             ratchetLastNotifiedState: this.determineRatchetState(prStateInfo),
-            ...(prStateInfo.ciStatus === CIStatus.FAILURE &&
-              prStateInfo.ciRunId && {
-                ratchetLastCiRunId: prStateInfo.ciRunId,
-              }),
           }),
         });
 
@@ -747,7 +753,12 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
           prNumber: prStateInfo.prNumber,
         });
 
-        return { type: 'TRIGGERED_FIXER', sessionId: result.sessionId, fixerType };
+        return {
+          type: 'TRIGGERED_FIXER',
+          sessionId: result.sessionId,
+          fixerType,
+          promptSent: shouldMarkNotified,
+        };
       }
 
       if (result.status === 'already_active') {
@@ -993,30 +1004,30 @@ New review comments have been received on PR #${prNumber}.
     return parts.join('');
   }
 
-  private extractLatestCiRunId(checks: PRWithFullDetails['statusCheckRollup']): string | null {
+  private extractFailedCiSignature(checks: PRWithFullDetails['statusCheckRollup']): string | null {
     if (!checks || checks.length === 0) {
       return null;
     }
 
-    let latestRunId: number | null = null;
+    const failedEntries: string[] = [];
     for (const check of checks) {
-      if (!check.detailsUrl) {
+      const conclusion = check.conclusion || check.status;
+      const isFailure =
+        conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED' || conclusion === 'ERROR';
+      if (!isFailure) {
         continue;
       }
-      const match = check.detailsUrl.match(/\/actions\/runs\/(\d+)/);
-      if (!match) {
-        continue;
-      }
-      const runId = Number.parseInt(match[1], 10);
-      if (Number.isNaN(runId)) {
-        continue;
-      }
-      if (latestRunId === null || runId > latestRunId) {
-        latestRunId = runId;
-      }
+      const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
+      const runId = runIdMatch?.[1] ?? 'no-run-id';
+      const checkName = check.name || 'Unknown check';
+      failedEntries.push(`${checkName}:${runId}`);
     }
 
-    return latestRunId !== null ? String(latestRunId) : null;
+    if (failedEntries.length === 0) {
+      return null;
+    }
+
+    return failedEntries.sort().join('|');
   }
 }
 
