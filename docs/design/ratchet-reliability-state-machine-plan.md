@@ -148,6 +148,9 @@ Add to `Workspace`:
 
 1. `ratchetConsecutiveFixupAttempts Int @default(0)` — counter for `TERMINAL_FAILED` entry
 2. `ratchetStaleCiSince DateTime?` — when stale CI waiting started for timeout enforcement
+3. `ratchetStateReason String?` — short reason code for current UI-visible ratchet status
+4. `ratchetStateUpdatedAt DateTime?` — last time UI-visible ratchet status changed
+5. `ratchetCurrentActivity String?` — user-facing current action summary (`FIXING_BUILD`, `FIXING_REVIEW_COMMENTS`, `RESOLVING_MERGE_CONFLICT`, `WAITING_FOR_CI`, etc.)
 
 Existing fields used as-is:
 - `ratchetState` — updated each poll to reflect current PR state
@@ -169,8 +172,9 @@ For observability, add a mandatory append-only log:
 2. `workspaceId String`
 3. `action String` — the action taken (`WAIT`, `FIX_CI`, `FIX_REVIEW`, `DONE`, `TERMINAL_FAILED`, `BREAK`)
 4. `reason String` — human-readable explanation
-5. `snapshot Json?` — decision-relevant fields (CI status, merge state, review state)
-6. `createdAt DateTime @default(now())`
+5. `uiMessage String?` — concise user-facing text (`Fixing build failures`, `Addressing PR review comments`, `Waiting for CI to restart`)
+6. `snapshot Json?` — decision-relevant fields (CI status, merge state, review state)
+7. `createdAt DateTime @default(now())`
 
 Index: `(workspaceId, createdAt)`.
 
@@ -200,6 +204,20 @@ Simplify `ratchet.service.ts` to match the sequential loop:
 
 The fixup launch uses the existing `fixerSessionService.acquireAndDispatch()` but the orchestrator awaits session completion before returning.
 
+### Loop Implementation Shape (Explicit)
+
+Implement ratchet almost exactly like the pseudocode as a long-lived async task per workspace.
+
+1. `runRatchetLoop(workspaceId, signal): Promise<void>` contains the `while (!signal.aborted)` loop and mirrors the guard order in this doc.
+2. Each guard/action remains a small named helper so the loop body reads top-to-bottom like the design (`hasAnyWorkingSession`, `hasStaleCiRun`, `staleCiTimedOut`, `determineFixupAction`, `didPush`).
+3. Keep one loop owner per workspace via an in-memory registry, for example `Map<workspaceId, { controller, promise }>`; do not allow concurrent loops for the same workspace.
+4. Add explicit lifecycle methods:
+   - `startRatchetLoop(workspaceId)` (no-op if already running)
+   - `stopRatchetLoop(workspaceId, reason)` (abort controller + cleanup)
+   - `restartRatchetLoop(workspaceId, reason)` (stop then start)
+5. Re-entry triggers should call `startRatchetLoop(...)` (or `restartRatchetLoop(...)`) on meaningful external state changes such as new push, ratchet re-enable, or workspace returning to ratchet-eligible state.
+6. Sleep and blocking waits must be cancellable via `AbortSignal` so disable/shutdown does not strand the loop in `sleep(...)` or long waits.
+
 ### Awaiting Session Completion
 
 The key change: instead of fire-and-forget, the ratchet awaits the fixup session. Implementation options:
@@ -214,6 +232,25 @@ Option 2 is preferred. The `onExit` hook (from Phase 0) already fires on session
 1. **`session.service.ts`** — No additional changes beyond Phase 0. The `onExit` hook already clears `ratchetActiveSessionId`.
 2. **`fixer-session.service.ts`** — Existing `acquireAndDispatch()` returns the session ID. Add a `waitForCompletion(sessionId)` method that returns a promise resolved by the session exit hook. Add `clearWorkspaceRatchetSessions(workspaceId)` to terminate and clean up leftover ratchet fixer sessions.
 3. **`workspace.accessor.ts`** — Add method to increment/reset `ratchetConsecutiveFixupAttempts` and manage stale CI timeout fields.
+4. **Status writer:** central helper to update `ratchetState`, `ratchetStateReason`, `ratchetStateUpdatedAt`, and `ratchetCurrentActivity` together to keep UI status coherent.
+
+### UI Observability Contract
+
+Expose ratchet progress without using ratchet state as orchestration truth.
+
+1. Keep `ratchetState` as a display status only.
+2. Use `ratchetStateReason` for stable reason codes suitable for UI badges/tooltips.
+3. Use `ratchetCurrentActivity` for explicit current-action messaging:
+   - `Fixing build failures`
+   - `Addressing PR review comments`
+   - `Resolving merge conflicts`
+   - `Waiting for CI to restart`
+   - `Waiting for active workspace session to finish`
+4. Update these fields at every major transition (wait, dispatch, completion, break, terminal).
+5. Keep `RatchetTransitionLog` as the detailed timeline.
+6. Add/extend API endpoints for UI:
+   - `currentRatchetStatus(workspaceId)` → current status snapshot (`state`, `reason`, `currentActivity`, `updatedAt`, counters)
+   - `ratchetTransitions(workspaceId, limit)` → recent timeline entries (`action`, `reason`, `uiMessage`, `createdAt`)
 
 ## Migration and Rollout Plan
 
@@ -226,6 +263,7 @@ Option 2 is preferred. The `onExit` hook (from Phase 0) already fires on session
 Deliver the full sequential loop model in one phase, since stale CI detection and synchronous fixup are interdependent and the intermediate async state isn't worth supporting.
 
 1. Add `ratchetConsecutiveFixupAttempts` and `ratchetStaleCiSince` fields (schema migration).
+   - Add `ratchetStateReason`, `ratchetStateUpdatedAt`, `ratchetCurrentActivity` fields for UI status.
 2. Build `determineFixupAction()` pure function with exhaustive tests.
 3. Add `waitForCompletion(sessionId)` to fixer session service (promise resolved by `onExit` hook, with timeout).
 4. Add `clearWorkspaceRatchetSessions(workspaceId)` to fixer session service.
@@ -235,9 +273,11 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - `ratchetEnabled` check after cleanup.
    - Synchronous fixup: record CI run ID, launch session, await completion.
    - No-push detection: compare branch HEAD before/after session, break if no push.
+   - Use per-workspace loop registry + `AbortController` to enforce one loop owner and support cancellation.
 6. Wire consecutive attempt counter: increment after each pushed fixup, reset on `DONE`, external push, or ratchet re-enable.
 7. Skip fixup launch when `consecutiveAttempts >= 3` (`TERMINAL_FAILED`).
 8. Make `RatchetTransitionLog` mandatory and log all dispatch/wait/break/terminal transitions.
+9. Write UI status fields (`ratchetStateReason`, `ratchetStateUpdatedAt`, `ratchetCurrentActivity`) at each transition.
 
 ### Phase 2: Cleanup
 
@@ -248,7 +288,7 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
 ## Detailed File-Level Plan
 
 1. `prisma/schema.prisma`
-   - Add `ratchetConsecutiveFixupAttempts` and `ratchetStaleCiSince` fields to Workspace.
+   - Add `ratchetConsecutiveFixupAttempts`, `ratchetStaleCiSince`, `ratchetStateReason`, `ratchetStateUpdatedAt`, `ratchetCurrentActivity` fields to Workspace.
    - Add `RatchetTransitionLog` table (mandatory).
 
 2. `src/backend/services/ratchet-action.service.ts` (new)
@@ -261,6 +301,7 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - Rewrite as sequential loop: monitoring guards → `clearRatchetSessions()` → `ratchetEnabled` check → `determineFixupAction()` → synchronous fixup.
    - Wire attempt counter (increment, reset, terminal check).
    - Wire stale CI timeout break path.
+   - Emit user-facing current-activity messages for each step (`fixing build`, `fixing review comments`, etc.).
 
 5. `src/backend/services/fixer-session.service.ts`
    - Add `waitForCompletion(sessionId)` (with timeout).
@@ -269,10 +310,12 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
 6. `src/backend/resource_accessors/workspace.accessor.ts`
    - Add `incrementFixupAttempts()` / `resetFixupAttempts()`.
    - Add `setStaleCiSince()` / `clearStaleCiSince()`.
+   - Add `updateRatchetUiStatus()` helper for status/reason/activity/timestamp.
    - Add `appendTransitionLog()` / `pruneTransitionLog()`.
 
 7. `src/backend/trpc/workspace.trpc.ts`
    - Reset `ratchetConsecutiveFixupAttempts` on ratchet re-enable.
+   - Expose `currentRatchetStatus` and transition timeline fields used by workspace UI.
 
 ## Testing Plan
 
@@ -291,6 +334,8 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - `clearRatchetSessions()` runs even when ratchet is disabled (cleanup path).
    - Stale CI guard prevents duplicate fixup after push.
    - Stale CI timeout triggers loop break with audit reason `STALE_CI_TIMEOUT`.
+   - UI status is updated with expected activity text when fixing CI, review comments, and merge conflicts.
+   - UI status is updated with waiting text during CI wait and active-session wait.
    - Attempt counter increments when agent pushes.
    - Attempt counter resets on `DONE` and external push.
    - `TERMINAL_FAILED` skips fixup launch.
@@ -325,6 +370,7 @@ Structured logs at each decision point:
 5. Stale CI timeout break: `workspaceId`, `staleSince`, `timeoutMs`.
 6. Terminal failure: `workspaceId`, `consecutiveAttempts`.
 7. Transition log: mandatory and queryable via admin endpoint for recent history per workspace.
+8. Every log entry should include `uiMessage` when applicable so the UI can render a human-readable timeline without extra mapping.
 
 ## Risks and Mitigations
 
@@ -351,6 +397,7 @@ Structured logs at each decision point:
 4. Repeated fixup attempts (3x pushes) trigger `TERMINAL_FAILED` and stop retrying.
 5. Manual push, ratchet re-enable, or reaching `DONE` resets the attempt counter and resumes.
 6. Structured logs explain every ratchet decision for debugging.
+7. Workspace UI always shows current ratchet activity (for example, `Fixing build failures` or `Addressing PR review comments`) when ratchet is active.
 
 ## Implementation Checklist
 
@@ -364,3 +411,5 @@ Structured logs at each decision point:
 8. Wire consecutive attempt counter (increment on each pushed fixup, reset on `DONE`/external push/re-enable, terminal at 3).
 9. Remove `handleExistingFixerSession`, `shouldNotifyActiveFixer`, and `ratchetLastNotifiedState`.
 10. Add mandatory transition/audit logging for every wait, dispatch, break, and terminal state.
+11. Add per-workspace loop registry (`start/stop/restart`) with `AbortController` cancellation.
+12. Add UI status fields + API wiring so workspace view can show current ratchet activity and recent transitions.
