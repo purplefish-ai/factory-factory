@@ -502,16 +502,17 @@ class ChatEventForwarderService {
       messageStateService.storeEvent(dbSessionId, resultMsg);
       chatConnectionService.forwardToSession(dbSessionId, resultMsg);
 
-      // Mark session as idle
-      workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
-
-      // Update kanban column - this may trigger a transition_to_waiting event and notification
+      // Update kanban column BEFORE marking session idle, so wasWorking check sees active session
+      // This enables notification on WORKING→WAITING transitions
       kanbanStateService.updateCachedKanbanColumn(context.workspaceId).catch((error) => {
-        logger.error('Failed to update kanban column after session idle', error as Error, {
+        logger.error('Failed to update kanban column after session result', error as Error, {
           workspaceId: context.workspaceId,
           dbSessionId,
         });
       });
+
+      // Mark session as idle (after kanban update so wasWorking check detects the transition)
+      workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
 
       const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);
