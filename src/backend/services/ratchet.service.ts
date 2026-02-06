@@ -5,7 +5,7 @@
  * Uses a state machine to continuously advance each PR toward merge by detecting
  * the current state and triggering the appropriate fixer action.
  *
- * States: IDLE → CI_RUNNING → CI_FAILED → MERGE_CONFLICT → REVIEW_PENDING → READY → MERGED
+ * States: IDLE → CI_RUNNING → CI_FAILED → REVIEW_PENDING → READY → MERGED
  */
 
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
@@ -481,11 +481,8 @@ class RatchetService {
     }
 
     // CI is green from here on...
-
-    // Check for merge conflicts
-    if (pr.mergeStateStatus === 'CONFLICTING') {
-      return RatchetState.MERGE_CONFLICT;
-    }
+    // Merge conflicts are not a distinct ratchet state — agents sync with main
+    // before every CI/review fix, resolving conflicts opportunistically.
 
     // Check for unaddressed review comments (either formal changes requested OR new review comments)
     if (pr.hasChangesRequested || pr.hasNewReviewComments) {
@@ -609,11 +606,6 @@ class RatchetService {
           };
         }
         return await this.triggerFixer(workspace, 'ci', prStateInfo, settings);
-
-      case RatchetState.MERGE_CONFLICT:
-        // No standalone fixer dispatch — agents sync with main before every
-        // CI/review fix, resolving conflicts opportunistically.
-        return { type: 'WAITING', reason: 'Merge conflict — waiting for CI or review trigger' };
 
       case RatchetState.REVIEW_PENDING:
         if (!settings.autoFixReviews) {

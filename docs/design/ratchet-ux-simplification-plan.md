@@ -87,7 +87,7 @@ Use the same control and same interpretation everywhere ratchet appears.
 - Kanban card:
   - Replace spinner-only ratchet indicator with shared control (or same visual token).
 - Ensure processing logic is consistent:
-  - `isProcessing = workspace.ratchetEnabled && ratchetState in [CI_RUNNING, CI_FAILED, MERGE_CONFLICT, REVIEW_PENDING]`
+  - `isProcessing = workspace.ratchetEnabled && ratchetState in [CI_RUNNING, CI_FAILED, REVIEW_PENDING]`
   - Exclude `IDLE`, `READY`, `MERGED`.
 
 ## Phase 5: Remove Ambiguous Glow Language/Effects

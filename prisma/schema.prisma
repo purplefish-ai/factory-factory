@@ -55,7 +55,6 @@ enum RatchetState {
   IDLE              // No PR or ratchet not active for this workspace
   CI_RUNNING        // CI checks in progress
   CI_FAILED         // CI checks failed
-  MERGE_CONFLICT    // Has merge conflicts with base branch
   REVIEW_PENDING    // Has unaddressed review comments
   READY             // Ready to merge (CI green, no conflicts, no pending reviews)
   MERGED            // PR has been merged
