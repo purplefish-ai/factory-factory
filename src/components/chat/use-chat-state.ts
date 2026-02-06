@@ -26,7 +26,12 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/claude-types';
-import { type ChatState, chatReducer, createInitialChatState } from './chat-reducer';
+import {
+  type ChatAction,
+  type ChatState,
+  chatReducer,
+  createInitialChatState,
+} from './chat-reducer';
 import { useChatActions } from './use-chat-actions';
 import { useChatPersistence } from './use-chat-persistence';
 import { useChatSession } from './use-chat-session';
@@ -73,6 +78,8 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   getUuidForMessageId: (messageId: string) => string | undefined;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
+  // Dispatch function for actions
+  dispatch: React.Dispatch<ChatAction>;
   // Refs for UI
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -212,6 +219,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       setInputAttachments,
       // Message handler for transport (stable - no deps)
       handleMessage,
+      // Dispatch function for actions
+      dispatch,
       // Refs for UI
       inputRef,
       messagesEndRef,

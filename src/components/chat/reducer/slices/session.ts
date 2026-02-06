@@ -1,20 +1,26 @@
 import { createSessionSwitchResetState } from '../state';
 import type { ChatAction, ChatState } from '../types';
 
+function resolveProcessStatus(
+  processAlive: boolean | undefined,
+  current: ChatState['processStatus']
+): ChatState['processStatus'] {
+  if (processAlive === undefined) {
+    return current;
+  }
+  if (processAlive) {
+    return { state: 'alive' };
+  }
+  return current.lastExit ? { state: 'stopped', lastExit: current.lastExit } : { state: 'stopped' };
+}
+
 export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'WS_STATUS':
       return {
         ...state,
         sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
-        processStatus:
-          action.payload.processAlive === undefined
-            ? state.processStatus
-            : action.payload.processAlive
-              ? { state: 'alive' }
-              : state.processStatus.lastExit
-                ? { state: 'stopped', lastExit: state.processStatus.lastExit }
-                : { state: 'stopped' },
+        processStatus: resolveProcessStatus(action.payload.processAlive, state.processStatus),
       };
     case 'WS_STARTING':
       return { ...state, sessionStatus: { phase: 'starting' } };
@@ -63,6 +69,11 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
       };
     case 'SESSION_LOADING_START':
       return { ...state, sessionStatus: { phase: 'loading' } };
+    case 'SESSION_LOADING_END':
+      // Only clear loading if still in loading phase (avoid overriding a valid status)
+      return state.sessionStatus.phase === 'loading'
+        ? { ...state, sessionStatus: { phase: 'ready' } }
+        : state;
     case 'STOP_REQUESTED':
       return { ...state, sessionStatus: { phase: 'stopping' } };
     default:
