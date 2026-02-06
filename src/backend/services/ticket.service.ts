@@ -6,7 +6,11 @@
  * Designed for easy extensibility to Linear, Jira, etc.
  */
 
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createLogger } from './logger.service';
+
+const execFileAsync = promisify(execFile);
 
 const logger = createLogger('ticket');
 
@@ -38,10 +42,6 @@ export interface TicketProvider {
 
 class GitHubTicketProvider implements TicketProvider {
   async createIssue(params: CreateIssueParams): Promise<CreatedIssue> {
-    const { execFile } = require('node:child_process');
-    const { promisify } = require('node:util');
-    const execFileAsync = promisify(execFile);
-
     const args = [
       'issue',
       'create',

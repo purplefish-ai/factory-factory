@@ -100,12 +100,22 @@ export const sessionRouter = router({
       if (input.workflow === 'plan') {
         const workspace = await workspaceAccessor.findById(input.workspaceId);
         if (workspace?.worktreePath) {
-          const planFilePath = await planFileService.createPlanFile(
-            workspace.worktreePath,
-            workspace.branchName
-          );
-          await claudeSessionAccessor.update(session.id, { planFilePath });
-          return { ...session, planFilePath };
+          try {
+            const planFilePath = await planFileService.createPlanFile(
+              workspace.worktreePath,
+              workspace.branchName
+            );
+            await claudeSessionAccessor.update(session.id, { planFilePath });
+            return { ...session, planFilePath };
+          } catch (error) {
+            // Clean up session if plan file creation fails
+            await claudeSessionAccessor.delete(session.id);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: 'Failed to create plan file',
+              cause: error,
+            });
+          }
         }
       }
 

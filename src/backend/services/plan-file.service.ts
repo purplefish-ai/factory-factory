@@ -5,9 +5,9 @@
  * Handles creation, reading, and path management of plan files.
  */
 
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('plan-file');
@@ -109,7 +109,7 @@ _Potential issues and how to address them._
     const resolvedWorktree = resolve(worktreePath);
 
     // Security: ensure path is within workspace
-    if (!fullPath.startsWith(resolvedWorktree)) {
+    if (!fullPath.startsWith(resolvedWorktree + sep) && fullPath !== resolvedWorktree) {
       logger.warn('Plan file path escapes workspace', { fullPath, worktreePath });
       return null;
     }
@@ -149,7 +149,6 @@ _Potential issues and how to address them._
     }
 
     try {
-      const { readdirSync } = require('node:fs');
       const files: string[] = readdirSync(planDir)
         .filter((f: string) => f.endsWith('.md'))
         .map((f: string) => join(PLANNING_DIR, f));
