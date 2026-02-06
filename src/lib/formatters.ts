@@ -126,3 +126,11 @@ export function formatDateTimeShort(dateStr: string): string {
     return dateStr;
   }
 }
+
+/**
+ * Format status label from ALL_CAPS to Capitalized format.
+ * Used for displaying status labels in dropdowns and UI elements.
+ */
+export function formatStatusLabel(status: string): string {
+  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+}
