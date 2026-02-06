@@ -355,13 +355,19 @@ async function buildInitialPromptFromGitHubIssue(workspaceId: string): Promise<s
       return '';
     }
 
+    // Check if this is a bug issue based on labels
+    const isBugIssue = issue.labels.some((label) => label.name.toLowerCase() === 'bug');
+
     logger.info('Built initial prompt from GitHub issue', {
       workspaceId,
       issueNumber: issue.number,
       issueTitle: issue.title,
+      isBugIssue,
     });
 
-    return `Please work on the following GitHub issue and take it through the full development pipeline:
+    // Generate orchestrated prompt based on issue type
+    if (isBugIssue) {
+      return `Please work on the following bug report. Follow a systematic, test-driven approach:
 
 ## Issue #${issue.number}: ${issue.title}
 
@@ -371,26 +377,95 @@ ${issue.body || '(No description provided)'}
 
 GitHub Issue URL: ${issue.url}
 
-## Instructions
+## Orchestrated Bug Fix Workflow
 
-Please complete the following steps:
+Follow these phases systematically:
 
-1. **Plan**: Analyze the issue and come up with a plan to implement it. Consider the codebase structure, existing patterns, and any edge cases.
+### Phase 1: Investigation & Understanding
+1. **Reproduce the bug** - Understand the reported symptoms and document reproduction steps
+2. **Research context** - Use Grep/Glob to find relevant code and understand the intended behavior
+3. **Form hypothesis** - Trace the code path and identify the root cause (not just symptoms)
+4. **Self-review** - Can you explain the root cause clearly?
 
-2. **Implement**: If the requirements are clear and no clarification is needed, proceed to implement the plan. Write clean, well-tested code that follows the project's conventions.
+### Phase 2: Write Failing Test (TDD Approach)
+1. **Create test case** - Write a test that reproduces the bug
+2. **Verify it fails** - Confirm the test fails for the right reason
+3. **Commit failing test** - This proves the bug exists and will prevent regression
 
-3. **Review**: After implementation, review your own code for:
-   - Correctness and completeness
-   - Code quality and adherence to project patterns
-   - Potential bugs or edge cases
-   - Test coverage
+### Phase 3: Implement Fix
+1. **Make minimal change** - Fix only what's broken, no refactoring
+2. **Verify test passes** - Confirm your specific test now passes
+3. **Run full suite** - Check for regressions
 
-4. **Create PR**: Once you're satisfied with the implementation, create a pull request with:
-   - A clear title and description
-   - Reference to this issue
-   - Summary of changes made
+### Phase 4: Review & Simplify
+1. **Self-review** - Does the fix address the root cause?
+2. **Simplify if needed** - Make the fix as clear as possible
+3. **Final verification** - Run all checks: \`pnpm test && pnpm typecheck && pnpm check:fix\`
 
-If you need clarification on any requirements before proceeding, ask for clarification first.`;
+### Phase 5: Create PR
+Create a pull request with:
+- Clear description of the bug and root cause
+- Reproduction steps
+- Explanation of the fix
+- Reference to this issue
+
+**Remember**: Test-driven approach means write the failing test FIRST, then fix it.`;
+    }
+
+    // Default: Feature implementation
+    return `Please work on the following feature request. Follow a systematic, planning-driven approach:
+
+## Issue #${issue.number}: ${issue.title}
+
+${issue.body || '(No description provided)'}
+
+---
+
+GitHub Issue URL: ${issue.url}
+
+## Orchestrated Feature Implementation Workflow
+
+Follow these phases systematically:
+
+### Phase 1: Planning
+1. **Understand requirements** - Read the issue carefully and clarify any ambiguities
+2. **Explore codebase** - Use Grep/Glob to understand existing patterns
+3. **Create plan** - Use TodoWrite to break down the work into logical tasks
+4. **Consider edge cases** - Think about error handling and testing upfront
+
+### Phase 2: Plan Review
+1. **Self-review your plan**:
+   - Does it address all requirements?
+   - Does it follow existing patterns?
+   - Have you considered edge cases?
+2. **Ask for clarification** if any requirements are unclear
+
+### Phase 3: Implementation
+1. **Follow your plan** - Implement each task systematically
+2. **Mark tasks complete** - Update TodoWrite as you progress
+3. **Write tests** - Add tests for new functionality as you go
+4. **Keep commits atomic** - Make focused commits for each logical unit
+
+### Phase 4: Review & Simplify
+1. **Self-review implementation**:
+   - Does it match the plan?
+   - Are all requirements addressed?
+   - Is error handling appropriate?
+2. **Look for complexity** - Can anything be simplified?
+3. **Run all checks** - \`pnpm test && pnpm typecheck && pnpm check:fix\`
+
+### Phase 5: Final Verification
+1. **Test end-to-end** - Manually verify the feature works
+2. **Check edge cases** - Test error scenarios
+3. **Review commits** - Are commit messages clear?
+
+### Phase 6: Create PR
+Create a pull request with:
+- Clear summary of what changed and why
+- Testing notes and how to verify
+- Reference to this issue
+
+**Remember**: Plan first, then implement. Ask questions if unclear.`;
   } catch (error) {
     logger.warn('Error building initial prompt from GitHub issue', {
       workspaceId,
