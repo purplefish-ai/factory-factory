@@ -86,7 +86,7 @@ describe('ratchet service', () => {
     vi.mocked(userSettingsAccessor.get).mockResolvedValue({
       ratchetEnabled: false,
       ratchetAutoFixCi: true,
-      ratchetAutoFixConflicts: true,
+
       ratchetAutoFixReviews: true,
       ratchetAutoMerge: false,
       ratchetAllowedReviewers: null,
@@ -179,7 +179,7 @@ describe('ratchet service', () => {
       }
     ).processWorkspace(workspace, {
       autoFixCi: true,
-      autoFixConflicts: true,
+
       autoFixReviews: true,
       autoMerge: false,
       allowedReviewers: [],
@@ -252,7 +252,7 @@ describe('ratchet service', () => {
       }
     ).processWorkspace(workspace, {
       autoFixCi: true,
-      autoFixConflicts: true,
+
       autoFixReviews: true,
       autoMerge: false,
       allowedReviewers: [],
@@ -360,7 +360,7 @@ describe('Ratchet CI regression behavior', () => {
       },
       {
         autoFixCi: true,
-        autoFixConflicts: true,
+
         autoFixReviews: true,
         autoMerge: false,
         allowedReviewers: [],
@@ -428,7 +428,7 @@ describe('Ratchet CI regression behavior', () => {
       },
       {
         autoFixCi: true,
-        autoFixConflicts: true,
+
         autoFixReviews: true,
         autoMerge: false,
         allowedReviewers: [],
@@ -498,7 +498,7 @@ describe('Ratchet CI regression behavior', () => {
       },
       {
         autoFixCi: true,
-        autoFixConflicts: true,
+
         autoFixReviews: true,
         autoMerge: false,
         allowedReviewers: [],
@@ -569,7 +569,7 @@ describe('Ratchet CI regression behavior', () => {
       }
     ).processWorkspace(workspace, {
       autoFixCi: true,
-      autoFixConflicts: true,
+
       autoFixReviews: true,
       autoMerge: false,
       allowedReviewers: [],
@@ -668,7 +668,7 @@ describe('Ratchet CI regression behavior', () => {
       },
       {
         autoFixCi: true,
-        autoFixConflicts: true,
+
         autoFixReviews: true,
         autoMerge: false,
         allowedReviewers: [],

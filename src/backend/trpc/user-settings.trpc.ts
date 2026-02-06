@@ -42,7 +42,6 @@ export const userSettingsRouter = router({
         // Ratchet settings
         ratchetEnabled: z.boolean().optional(),
         ratchetAutoFixCi: z.boolean().optional(),
-        ratchetAutoFixConflicts: z.boolean().optional(),
         ratchetAutoFixReviews: z.boolean().optional(),
         ratchetAutoMerge: z.boolean().optional(),
         ratchetAllowedReviewers: z.array(z.string()).nullable().optional(),

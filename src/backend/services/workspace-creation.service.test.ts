@@ -129,7 +129,7 @@ describe('WorkspaceCreationService', () => {
       cachedSlashCommands: null,
       ratchetEnabled: true,
       ratchetAutoFixCi: true,
-      ratchetAutoFixConflicts: true,
+
       ratchetAutoFixReviews: true,
       ratchetAutoMerge: false,
       ratchetAllowedReviewers: null,
@@ -212,7 +212,7 @@ describe('WorkspaceCreationService', () => {
           cachedSlashCommands: null,
           ratchetEnabled: false,
           ratchetAutoFixCi: true,
-          ratchetAutoFixConflicts: true,
+
           ratchetAutoFixReviews: true,
           ratchetAutoMerge: false,
           ratchetAllowedReviewers: null,

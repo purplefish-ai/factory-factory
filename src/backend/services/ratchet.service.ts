@@ -30,7 +30,6 @@ const RATCHET_WORKFLOW = 'ratchet';
 
 export interface RatchetSettings {
   autoFixCi: boolean;
-  autoFixConflicts: boolean;
   autoFixReviews: boolean;
   autoMerge: boolean;
   allowedReviewers: string[];
@@ -177,7 +176,6 @@ class RatchetService {
     const userSettings = await userSettingsAccessor.get();
     const settings: RatchetSettings = {
       autoFixCi: userSettings.ratchetAutoFixCi,
-      autoFixConflicts: userSettings.ratchetAutoFixConflicts,
       autoFixReviews: userSettings.ratchetAutoFixReviews,
       autoMerge: userSettings.ratchetAutoMerge,
       allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
@@ -231,7 +229,6 @@ class RatchetService {
     const userSettings = await userSettingsAccessor.get();
     const settings: RatchetSettings = {
       autoFixCi: userSettings.ratchetAutoFixCi,
-      autoFixConflicts: userSettings.ratchetAutoFixConflicts,
       autoFixReviews: userSettings.ratchetAutoFixReviews,
       autoMerge: userSettings.ratchetAutoMerge,
       allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],

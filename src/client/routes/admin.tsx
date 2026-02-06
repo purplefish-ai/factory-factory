@@ -411,23 +411,6 @@ function RatchetSettingsSection() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="ratchet-conflicts">Auto-resolve merge conflicts</Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically merge main branch and resolve conflicts
-              </p>
-            </div>
-            <Switch
-              id="ratchet-conflicts"
-              checked={settings?.ratchetAutoFixConflicts ?? true}
-              onCheckedChange={(checked) => {
-                updateSettings.mutate({ ratchetAutoFixConflicts: checked });
-              }}
-              disabled={updateSettings.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
               <Label htmlFor="ratchet-reviews">Auto-address review comments</Label>
               <p className="text-sm text-muted-foreground">
                 Automatically implement changes requested by reviewers
