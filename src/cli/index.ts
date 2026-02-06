@@ -79,9 +79,13 @@ async function waitForService(
 
 // Kill all tracked processes and their child process trees
 function killAllProcesses(processes: { name: string; proc: ChildProcess }[]): void {
-  for (const { proc } of processes) {
+  for (const { name, proc } of processes) {
     if (proc.pid) {
-      treeKill(proc.pid, 'SIGTERM');
+      treeKill(proc.pid, 'SIGTERM', (err) => {
+        if (err) {
+          console.error(chalk.yellow(`  Failed to kill ${name} (${proc.pid}): ${err.message}`));
+        }
+      });
     }
   }
 }
@@ -317,9 +321,13 @@ function createShutdownHandler(
     shutdownState.shuttingDown = true;
 
     console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
-    for (const { proc } of processes) {
+    for (const { name, proc } of processes) {
       if (proc.pid) {
-        treeKill(proc.pid, 'SIGTERM');
+        treeKill(proc.pid, 'SIGTERM', (err) => {
+          if (err) {
+            console.error(chalk.yellow(`  Failed to kill ${name} (${proc.pid}): ${err.message}`));
+          }
+        });
       }
     }
 
@@ -329,9 +337,15 @@ function createShutdownHandler(
         console.log(
           chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
         );
-        for (const { proc } of alive) {
+        for (const { name, proc } of alive) {
           if (proc.pid) {
-            treeKill(proc.pid, 'SIGKILL');
+            treeKill(proc.pid, 'SIGKILL', (err) => {
+              if (err) {
+                console.error(
+                  chalk.yellow(`  Failed to force kill ${name} (${proc.pid}): ${err.message}`)
+                );
+              }
+            });
           }
         }
       }
