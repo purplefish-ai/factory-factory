@@ -58,8 +58,14 @@ class SessionService {
       throw new Error('Session is currently being stopped');
     }
 
+    // Check if session is already running to prevent duplicate message sends
+    const existingClient = this.processManager.getClient(sessionId);
+    if (existingClient) {
+      throw new Error('Session is already running');
+    }
+
     // Use getOrCreateClient for race-protected creation
-    // If already running, returns existing client; if concurrent starts, waits for pending
+    // If concurrent starts happen, one will succeed and others will wait then fail the check above
     const client = await this.getOrCreateClient(sessionId, {
       permissionMode: 'bypassPermissions',
     });
