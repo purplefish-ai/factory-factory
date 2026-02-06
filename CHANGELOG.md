@@ -5,6 +5,37 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-02-06
+
+### Added
+
+- Show GitHub issue details in side panel (#777)
+- Add draggable height resize to live activity feed (#757)
+
+### Changed
+
+- Improve session status indicators during workspace startup (#774)
+- Format statuses in status dropdown (#776)
+- Lighten secondary text color in dark mode (#769)
+- Unify session start semantics across WebSocket and tRPC (#773)
+
+### Fixed
+
+- Fix workspace WAITING flicker during GitHub issue dispatch (#772)
+- Clear workspace notification glow on selection (#775)
+- Fix chat replay flicker by showing loading state during reconnect (#756)
+- Harden Claude protocol control responses with schema validation (#755)
+
+### Refactored
+
+- Refactor attachment validation to reduce complexity (#778)
+- Enforce PRSnapshotService as single writer for workspace PR fields (#770)
+- Phase 4: Backup/Import v2 and Compatibility Hardening (#722)
+
+### Documentation
+
+- Ratchet reliability: design doc + stale CI guard + agent branch sync (#762)
+
 ## [0.2.3] - 2026-02-06
 
 ### Added
