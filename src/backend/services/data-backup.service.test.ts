@@ -14,6 +14,30 @@ import type { ExportDataV1, ExportDataV2 } from './data-backup.service';
 import { dataBackupService, exportDataSchema } from './data-backup.service';
 
 // Mock the database
+// Define transaction client separately to avoid circular reference
+const mockTx = {
+  project: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  },
+  workspace: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  },
+  claudeSession: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  },
+  terminalSession: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  },
+  userSettings: {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+  },
+};
+
 vi.mock('../db', () => ({
   prisma: {
     project: {
@@ -40,7 +64,7 @@ vi.mock('../db', () => ({
       findFirst: vi.fn(),
       create: vi.fn(),
     },
-    $transaction: vi.fn((callback) => callback(prisma)),
+    $transaction: vi.fn((callback) => callback(mockTx)),
   },
 }));
 
@@ -296,19 +320,16 @@ describe('DataBackupService', () => {
         },
       };
 
-      // Mock project.findUnique to handle multiple calls:
-      // 1st: ID check during project import (null = not exists)
-      // 2nd: slug check during project import (null = no conflict)
-      // 3rd+: project lookup during workspace import (return project)
-      vi.mocked(prisma.project.findUnique)
-        .mockResolvedValueOnce(null) // ID check
-        .mockResolvedValueOnce(null) // slug check
+      // Mock transaction client methods
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null) // ID check during project import
+        .mockResolvedValueOnce(null) // slug check during project import
         .mockResolvedValue(mockProject); // workspace import checks
-      vi.mocked(prisma.project.create).mockResolvedValue(mockProject);
-      vi.mocked(prisma.workspace.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.workspace.create).mockResolvedValue(mockWorkspaceV2);
-      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
-      vi.mocked(prisma.userSettings.create).mockResolvedValue(mockUserSettingsV2);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspaceV2);
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettingsV2);
 
       const result = await dataBackupService.importData(exportedData);
 
@@ -317,7 +338,7 @@ describe('DataBackupService', () => {
       expect(result.userSettings.imported).toBe(true);
 
       // Verify workspace was created with all ratchet fields
-      expect(prisma.workspace.create).toHaveBeenCalledWith({
+      expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetEnabled: true,
           ratchetState: RatchetState.READY,
@@ -328,7 +349,7 @@ describe('DataBackupService', () => {
       });
 
       // Verify user settings was created with all ratchet fields
-      expect(prisma.userSettings.create).toHaveBeenCalledWith({
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetEnabled: true,
           ratchetAutoFixCi: true,
@@ -416,19 +437,16 @@ describe('DataBackupService', () => {
         },
       };
 
-      // Mock project.findUnique to handle multiple calls:
-      // 1st: ID check during project import (null = not exists)
-      // 2nd: slug check during project import (null = no conflict)
-      // 3rd+: project lookup during workspace import (return project)
-      vi.mocked(prisma.project.findUnique)
-        .mockResolvedValueOnce(null) // ID check
-        .mockResolvedValueOnce(null) // slug check
+      // Mock transaction client methods
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null) // ID check during project import
+        .mockResolvedValueOnce(null) // slug check during project import
         .mockResolvedValue(mockProject); // workspace import checks
-      vi.mocked(prisma.project.create).mockResolvedValue(mockProject);
-      vi.mocked(prisma.workspace.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.workspace.create).mockResolvedValue(mockWorkspaceV2);
-      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
-      vi.mocked(prisma.userSettings.create).mockResolvedValue(mockUserSettingsV2);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspaceV2);
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettingsV2);
 
       const result = await dataBackupService.importData(v1Data);
 
@@ -437,7 +455,7 @@ describe('DataBackupService', () => {
       expect(result.userSettings.imported).toBe(true);
 
       // Verify workspace was created with v2 defaults for missing fields
-      expect(prisma.workspace.create).toHaveBeenCalledWith({
+      expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           // v1 fields should be preserved
           id: 'ws-1',
@@ -459,7 +477,7 @@ describe('DataBackupService', () => {
       });
 
       // Verify user settings was created with v2 defaults
-      expect(prisma.userSettings.create).toHaveBeenCalledWith({
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           preferredIde: 'cursor',
           ratchetEnabled: false,
@@ -524,15 +542,15 @@ describe('DataBackupService', () => {
         },
       };
 
-      // Mock project lookup to return a project (for workspace import to succeed)
-      vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject);
-      vi.mocked(prisma.workspace.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.workspace.create).mockResolvedValue(mockWorkspaceV2);
+      // Mock transaction client methods
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspaceV2);
 
       await dataBackupService.importData(v1Data);
 
       // Verify PAUSED was converted to IDLE
-      expect(prisma.workspace.create).toHaveBeenCalledWith({
+      expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           runScriptStatus: RunScriptStatus.IDLE,
         }),
@@ -574,13 +592,13 @@ describe('DataBackupService', () => {
         },
       };
 
-      vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(mockProject);
 
       const result = await dataBackupService.importData(exportedData);
 
       expect(result.projects.skipped).toBe(1);
       expect(result.projects.imported).toBe(0);
-      expect(prisma.project.create).not.toHaveBeenCalled();
+      expect(mockTx.project.create).not.toHaveBeenCalled();
     });
 
     it('should skip workspaces with missing projects', async () => {
@@ -647,14 +665,14 @@ describe('DataBackupService', () => {
         },
       };
 
-      vi.mocked(prisma.workspace.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.project.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(null);
 
       const result = await dataBackupService.importData(exportedData);
 
       expect(result.workspaces.skipped).toBe(1);
       expect(result.workspaces.imported).toBe(0);
-      expect(prisma.workspace.create).not.toHaveBeenCalled();
+      expect(mockTx.workspace.create).not.toHaveBeenCalled();
     });
   });
 });
