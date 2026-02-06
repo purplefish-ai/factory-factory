@@ -7,11 +7,6 @@ interface UpdateUserSettingsInput {
   playSoundOnComplete?: boolean;
   notificationSoundPath?: string | null;
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
-  // Legacy CI/PR review settings (deprecated - use ratchet settings)
-  autoFixCiIssues?: boolean;
-  autoFixPrReviewComments?: boolean;
-  prReviewFixAllowedUsers?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
-  prReviewFixPrompt?: string | null;
   // Ratchet settings
   ratchetEnabled?: boolean;
   ratchetAutoFixCi?: boolean;

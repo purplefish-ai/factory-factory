@@ -1,4 +1,4 @@
-import type { Workspace } from '@prisma-gen/client';
+import type { Prisma, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { DEFAULT_FIRST_SESSION } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
@@ -127,6 +127,8 @@ export class WorkspaceCreationService {
       branchName?: string;
       githubIssueNumber?: number;
       githubIssueUrl?: string;
+      creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE';
+      creationMetadata?: Prisma.InputJsonValue;
     };
     initMode?: {
       useExistingBranch: boolean;
@@ -141,6 +143,7 @@ export class WorkspaceCreationService {
             name: source.name,
             description: source.description,
             branchName: source.branchName,
+            creationSource: 'MANUAL',
           },
         };
       }
@@ -169,6 +172,10 @@ export class WorkspaceCreationService {
             name: source.name || source.branchName,
             description: source.description,
             branchName: source.branchName,
+            creationSource: 'RESUME_BRANCH',
+            creationMetadata: {
+              resumedBranch: source.branchName,
+            },
           },
           initMode: {
             useExistingBranch: true,
@@ -185,6 +192,11 @@ export class WorkspaceCreationService {
             description: source.description,
             githubIssueNumber: source.issueNumber,
             githubIssueUrl: source.issueUrl,
+            creationSource: 'GITHUB_ISSUE',
+            creationMetadata: {
+              issueNumber: source.issueNumber,
+              issueUrl: source.issueUrl,
+            },
           },
         };
       }
