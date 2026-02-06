@@ -13,6 +13,9 @@ while (true) {
   await sleep(heartbeatInterval);
   const changed = await collectWorkspaceGithubDeltas(); // head/CI/review/mergeability/toggle deltas
 
+  // Sequential dispatch: processes one workspace at a time. Since ratchetWorkspace
+  // awaits fixer completion, this means workspace B waits while A's fixer runs.
+  // Acceptable for initial implementation; parallel dispatch is a planned fast-follow.
   for (const workspaceDelta of changed) {
     await ratchetWorkspace(workspaceDelta.workspaceId, workspaceDelta);
   }
@@ -21,10 +24,17 @@ while (true) {
 
 ```
 async function ratchetWorkspace(workspaceId, githubDelta) {
+  // Cleanup: idempotent teardown of any leftover ratchet fixer sessions.
+  // Safe to call when no fixer exists (no-op). Runs under single-flight lock,
+  // so it cannot interfere with a waitForCompletion() from the current iteration.
   await clearRatchetSessions(workspaceId);
+
+  // Eligibility guards — these are owned by ratchetWorkspace, NOT by
+  // determineFixupAction. They decide whether we should evaluate this
+  // workspace at all this tick.
   if (hasAnyWorkingSession(workspaceId)) {
     await setPauseState('PAUSED_USER_WORKING');
-    return; // control-flow only; setPauseState is side-effecting
+    return;
   }
   if (notHasPr(workspaceId)) {
     await setPauseState('PAUSED_NO_PR');
@@ -49,6 +59,8 @@ async function ratchetWorkspace(workspaceId, githubDelta) {
     return;
   }
 
+  // Action determination — determineFixupAction is a pure function that
+  // decides what to do given the workspace has passed eligibility.
   const action = determineFixupAction(githubDelta, workspaceSnapshot);
   await executeRatchetAction(workspaceId, action, githubDelta);
 }
@@ -153,7 +165,7 @@ Implications:
 
 ## State Determination
 
-Each heartbeat-triggered workspace evaluation derives the next action from fresh GitHub state + local workspace metadata. This is a pure function — no side effects, no network calls, no database writes:
+Once a workspace passes the eligibility guards in `ratchetWorkspace` (working session, PR existence/open state, ratchet toggle, attempt budget, CI-in-progress), action determination derives the next action from fresh GitHub state + local workspace metadata. This is a pure function — no side effects, no network calls, no database writes:
 
 ```
 determineFixupAction(githubDelta, workspaceSnapshot) ->
@@ -164,22 +176,18 @@ determineFixupAction(githubDelta, workspaceSnapshot) ->
   | { action: 'NOOP', reason: string }
 ```
 
-Guard evaluation order (matches `ratchetWorkspace`):
+Guard evaluation order (assumes eligibility guards in `ratchetWorkspace` already passed):
 
-1. **No PR** → `PAUSE(PAUSED_NO_PR)`
-2. **PR not open** (closed or merged) → `PAUSE(PAUSED_PR_NOT_OPEN)`
-3. **CI running** → `WAIT` (optimization: no fixer dispatch)
-4. **Stale CI run** (run ID unchanged since last push and stale timeout not reached) → `WAIT`
-5. **Stale CI timeout reached** → `PAUSE(PAUSED_ATTENTION_STALE_CI_TIMEOUT)` (manual attention required; audit as `STALE_CI_TIMEOUT`)
-6. *(Orchestration: `clearRatchetSessions()` runs before action determination — not part of the pure function)*
-7. **Ratchet disabled** → `PAUSE(PAUSED_DISABLED)` (previous session cleaned up, no new fixup launched)
-8. **Merge conflict only** (no CI failure, no actionable review comments) → `PAUSE(PAUSED_WAIT_CONFLICT_ONLY)`
-9. **CI failed** and `consecutiveAttempts < 3` → `FIX_CI`
-10. **CI failed** and `consecutiveAttempts >= 3` → `PAUSE(PAUSED_ATTENTION_TERMINAL_FAILED)`
-11. **Review comments** and `consecutiveAttempts < 3` → `FIX_REVIEW`
-12. **Review comments** and `consecutiveAttempts >= 3` → `PAUSE(PAUSED_ATTENTION_TERMINAL_FAILED)`
-13. **Merge blocked on human review** → `PAUSE(PAUSED_WAIT_HUMAN_REVIEW)`
-14. **All green** → `PAUSE(PAUSED_DONE)`
+1. **Stale CI run** (run ID unchanged since last push and stale timeout not reached) → `WAIT`
+2. **Stale CI timeout reached** → `PAUSE(PAUSED_ATTENTION_STALE_CI_TIMEOUT)` (manual attention required; audit as `STALE_CI_TIMEOUT`)
+3. **Merge conflict only** (no CI failure, no actionable review comments) → `PAUSE(PAUSED_WAIT_CONFLICT_ONLY)`
+4. **CI failed** → `FIX_CI`
+5. **Review comments** → `FIX_REVIEW`
+6. **Merge blocked on human review** → `PAUSE(PAUSED_WAIT_HUMAN_REVIEW)`
+7. **All green** → `PAUSE(PAUSED_DONE)`
+8. **No actionable change** (delta arrived but re-evaluation found nothing changed) → `NOOP`
+
+Note: eligibility guards (no PR, PR not open, ratchet disabled, attempt budget exceeded, CI in progress, working user session) are handled by `ratchetWorkspace` before `determineFixupAction` is called. They are not duplicated here. See the `ratchetWorkspace` pseudocode for the full guard order.
 
 ### Heartbeat Delta Detection
 
@@ -199,6 +207,8 @@ When conflict-only deltas are filtered from dispatch, the heartbeat must still w
 
 Important: delta detection must include updates to existing PR artifacts (for example edited review comments), not just newly created comments/reviews/check runs.
 
+**Paused workspaces remain candidates:** Workspaces in any pause state (including `PAUSED_DONE`) stay in the heartbeat's candidate set and are re-dispatched when new deltas appear (new comments, CI re-runs, head SHA changes, etc.). Pause states are notification/auditing markers, not exclusion criteria for delta detection. A workspace only leaves the candidate set when it is archived or its PR is closed/merged.
+
 ### No-Push Detection
 
 After each fixup session completes, the ratchet checks whether the fixer agent pushed. Implementation: capture `preFixerHeadSha` immediately before fixer dispatch, then compare to branch HEAD after session completion.
@@ -214,7 +224,7 @@ After each fixup session completes, the ratchet checks whether the fixer agent p
 
 **Entry:** `consecutiveAttempts >= 3` when a fixup action would otherwise be taken. The no-push case enters attention pause immediately without incrementing the counter.
 
-**Counter increment:** Increment after each ratchet fixup session that pushed, regardless of issue category. This is an attempt budget, not a failed-push-only budget.
+**Counter increment:** Increment after each ratchet fixup session that pushed, regardless of issue category. This is a global "the agent is struggling with this PR" budget, not a per-category counter. For example: attempt 1 = FIX_CI, attempt 2 = FIX_REVIEW, attempt 3 = FIX_CI again → terminal. This is intentional — if three pushes haven't resolved the PR, the workspace needs human attention regardless of which issues were addressed.
 
 **Counter reset:** Resets to 0 when:
 - A new push is detected from outside the ratchet (`ratchetLastPushAt` changes without a ratchet fixup preceding it), indicating manual intervention.
@@ -245,6 +255,8 @@ After a fixup pushes, the push should trigger a new CI run. But there's a delay 
 **Timeout:** If run ID remains unchanged for longer than the stale timeout window (for example 5 minutes), pause with `PAUSED_ATTENTION_STALE_CI_TIMEOUT` and audit log `STALE_CI_TIMEOUT` so manual action can unblock CI.
 
 This uses the existing `ratchetLastCiRunId` field, which the current code already tracks.
+
+**Reset:** `ratchetStaleCiSince` is cleared when a new CI run ID is detected (i.e., `currentRunId !== ratchetLastCiRunId`). At that point the stale window is no longer relevant — CI has restarted and the heartbeat evaluates fresh CI state normally. It is also cleared when the workspace enters any non-stale pause state (e.g., `PAUSED_DONE`, `PAUSED_DISABLED`) to avoid spurious timeouts on subsequent re-entry.
 
 ## Persistence Changes
 
@@ -557,6 +569,9 @@ Structured logs at each decision point:
 
 9. **Risk:** Merging `main` into all conflict-only workspaces causes a thundering herd of unnecessary fixer sessions.
    - **Mitigation:** Conflict-only deltas are non-dispatching; branch sync is handled inside agent workflows during already-actionable runs.
+
+10. **Risk:** Sequential workspace dispatch means workspace B waits while workspace A's fixer runs (potentially 10-30 minutes per workspace).
+    - **Mitigation:** Acceptable for initial implementation. Parallel dispatch (concurrent `ratchetWorkspace` calls across workspaces, each under its own single-flight lock) is a planned fast-follow. The per-workspace single-flight guard is already designed to support this — the heartbeat loop is the only thing that needs to change.
 
 ## Success Criteria
 
