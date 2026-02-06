@@ -38,7 +38,26 @@ export function getProcess(sessionId: string): RegisteredProcess | undefined {
 
 export function isProcessWorking(sessionId: string): boolean {
   const process = activeProcesses.get(sessionId);
-  return process?.getStatus() === 'running';
+  if (!process) {
+    return false;
+  }
+
+  const status = process.getStatus();
+
+  // Actively working states
+  if (status === 'starting' || status === 'running') {
+    return true;
+  }
+
+  // For 'ready' status, distinguish initial ready (startup) from idle ready (awaiting input)
+  // Consider ready as "working" only if idle time is very short (< 2 seconds)
+  // This prevents startup flickers while allowing idle sessions to show as WAITING
+  if (status === 'ready') {
+    const idleTimeMs = process.getIdleTimeMs();
+    return idleTimeMs < 2000; // 2 second threshold
+  }
+
+  return false;
 }
 
 export function isAnyProcessWorking(sessionIds: string[]): boolean {
