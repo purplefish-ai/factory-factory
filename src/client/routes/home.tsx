@@ -21,7 +21,10 @@ export default function HomePage() {
     if (projects && projects.length > 0) {
       // Get stored project or use first one
       const stored = localStorage.getItem('factoryfactory_selected_project_slug');
-      const slug = stored || projects[0].slug;
+      const slug = stored || projects[0]?.slug;
+      if (!slug) {
+        return;
+      }
       navigate(`/projects/${slug}`, { replace: true });
     } else {
       navigate('/projects/new', { replace: true });

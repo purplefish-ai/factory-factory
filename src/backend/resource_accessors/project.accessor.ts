@@ -100,14 +100,14 @@ export function parseGitHubRemoteUrl(remoteUrl: string): { owner: string; repo: 
   // Repo name: alphanumeric, hyphens, underscores, dots (no slashes)
   const sshMatch = remoteUrl.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (sshMatch) {
-    return { owner: sshMatch[1], repo: sshMatch[2] };
+    return { owner: sshMatch[1] as string, repo: sshMatch[2] as string };
   }
 
   // HTTPS format: https://github.com/owner/repo.git or https://github.com/owner/repo
   // Repo name: alphanumeric, hyphens, underscores, dots (no slashes)
   const httpsMatch = remoteUrl.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (httpsMatch) {
-    return { owner: httpsMatch[1], repo: httpsMatch[2] };
+    return { owner: httpsMatch[1] as string, repo: httpsMatch[2] as string };
   }
 
   return null;

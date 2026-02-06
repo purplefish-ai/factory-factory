@@ -43,7 +43,8 @@ function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {
     return false;
   }
   for (let i = 0; i < a.length; i += 1) {
-    const left = a[i];
+    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+    const left = a[i]!;
     const right = b[i];
     if (!right) {
       return false;

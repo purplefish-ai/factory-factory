@@ -78,7 +78,7 @@ describe('ClaudePermissionCoordinator', () => {
 
     await vi.waitFor(() => expect(protocol.sendControlResponse).toHaveBeenCalled());
 
-    const [requestId, response] = protocol.sendControlResponse.mock.calls[0];
+    const [requestId, response] = protocol.sendControlResponse.mock.calls[0]!;
     expect(requestId).toBe('req-1');
     expect(response).toEqual({
       behavior: 'allow',

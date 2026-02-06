@@ -91,7 +91,8 @@ export const ChatContent = memo(function ChatContent({
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
   const latestToolSequence = useMemo(() => {
     for (let i = groupedMessages.length - 1; i >= 0; i -= 1) {
-      const item = groupedMessages[i];
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const item = groupedMessages[i]!;
       if (isToolSequence(item)) {
         return item;
       }

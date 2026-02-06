@@ -323,7 +323,7 @@ describe('requestLoggerMiddleware', () => {
 
     // Trigger the finish event
     expect(mockRes.finishCallbacks.length).toBe(1);
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     // The logger.debug should have been called
     // We can't easily verify the exact call since the logger is mocked,
@@ -339,7 +339,7 @@ describe('requestLoggerMiddleware', () => {
     requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
 
     // Trigger the finish event
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     // The middleware should have registered the callback but skipped logging
     // We verify this by ensuring the callback completes without error
@@ -355,7 +355,7 @@ describe('requestLoggerMiddleware', () => {
     requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
 
     // Trigger the finish event
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     // The middleware should have registered the callback but skipped logging
     expect(mockNext).toHaveBeenCalled();
@@ -370,7 +370,7 @@ describe('requestLoggerMiddleware', () => {
     requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
 
     // Trigger the finish event
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     expect(mockNext).toHaveBeenCalled();
   });
@@ -384,7 +384,7 @@ describe('requestLoggerMiddleware', () => {
     requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
 
     // Trigger the finish event - this should log (not skip)
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     expect(mockNext).toHaveBeenCalled();
   });
@@ -416,7 +416,7 @@ describe('requestLoggerMiddleware', () => {
       requestLoggerMiddleware(mockReq, res as unknown as Response, next);
 
       // Trigger finish callback
-      res.finishCallbacks[0]();
+      res.finishCallbacks[0]!();
 
       expect(next).toHaveBeenCalled();
     }

@@ -255,9 +255,11 @@ function MultiQuestionLayout({
         </div>
       </div>
 
-      {currentQuestion.multiSelect ? (
+      {/* biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by totalQuestions */}
+      {currentQuestion!.multiSelect ? (
         <MultiSelectQuestion
-          question={currentQuestion}
+          // biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by totalQuestions
+          question={currentQuestion!}
           index={currentIndex}
           value={answers[currentIndex] ?? []}
           onChange={(value) => onAnswerChange(currentIndex, value)}
@@ -267,7 +269,8 @@ function MultiQuestionLayout({
         />
       ) : (
         <SingleSelectQuestion
-          question={currentQuestion}
+          // biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by totalQuestions
+          question={currentQuestion!}
           index={currentIndex}
           value={answers[currentIndex] ?? ''}
           onChange={(value) => onAnswerChange(currentIndex, value)}
@@ -561,7 +564,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     const formattedAnswers: Record<string, string | string[]> = {};
 
     question.questions.forEach((q, index) => {
-      formattedAnswers[q.question] = formatAnswer(q, answers[index], otherTexts[index]);
+      formattedAnswers[q.question] = formatAnswer(q, answers[index], otherTexts[index] ?? '');
     });
 
     onAnswer(question.requestId, formattedAnswers);
@@ -582,7 +585,8 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     if (!question) {
       return false;
     }
-    const q = question.questions[currentIndex];
+    // biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by questions.length
+    const q = question.questions[currentIndex]!;
     return isAnswerComplete(q, answers[currentIndex], otherTexts[currentIndex] ?? '');
   })();
 
@@ -597,7 +601,8 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     return (
       <div ref={containerRef}>
         <SingleQuestionLayout
-          question={question.questions[0]}
+          // biome-ignore lint/style/noNonNullAssertion: totalQuestions === 1 checked above
+          question={question.questions[0]!}
           requestId={requestId}
           answers={answers}
           otherTexts={otherTexts}

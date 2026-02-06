@@ -105,8 +105,8 @@ describe('AskUserQuestionInputSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.questions).toHaveLength(1);
-      expect(result.data.questions[0].question).toBe('Which framework do you prefer?');
-      expect(result.data.questions[0].options).toHaveLength(2);
+      expect(result.data.questions[0]!.question).toBe('Which framework do you prefer?');
+      expect(result.data.questions[0]!.options).toHaveLength(2);
     }
   });
 
@@ -138,8 +138,8 @@ describe('AskUserQuestionInputSchema', () => {
     const result = AskUserQuestionInputSchema.safeParse(input);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.questions[0].header).toBeUndefined();
-      expect(result.data.questions[0].multiSelect).toBeUndefined();
+      expect(result.data.questions[0]!.header).toBeUndefined();
+      expect(result.data.questions[0]!.multiSelect).toBeUndefined();
     }
   });
 

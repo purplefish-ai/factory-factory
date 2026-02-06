@@ -183,7 +183,8 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   if (pairedCalls.length === 1) {
     return (
       <PairedToolCallRenderer
-        call={summaryCalls[0]}
+        // biome-ignore lint/style/noNonNullAssertion: pairedCalls.length === 1 checked above
+        call={summaryCalls[0]!}
         defaultOpen={isControlled ? undefined : defaultOpen}
         open={isOpen}
         onOpenChange={setIsOpen}

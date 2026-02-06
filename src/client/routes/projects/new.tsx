@@ -33,7 +33,7 @@ export default function NewProjectPage() {
       });
 
       if (!result.canceled && result.filePaths.length > 0) {
-        setRepoPath(result.filePaths[0]);
+        setRepoPath(result.filePaths[0] as string);
       }
     } catch {
       // Silently handle dialog failure - nothing actionable for user
