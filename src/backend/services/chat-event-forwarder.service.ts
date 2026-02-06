@@ -188,6 +188,9 @@ class ChatEventForwarderService {
     if (existingClient) {
       logger.info('[Chat WS] Replacing event forwarding with new client', { dbSessionId });
       this.removeForwardingListeners(dbSessionId, existingClient);
+      // Clear stale interactive requests from the old client so the UI
+      // doesn't try to respond to a request the new client knows nothing about
+      this.pendingInteractiveRequests.delete(dbSessionId);
     }
 
     this.clientEventSetup.set(dbSessionId, client);
