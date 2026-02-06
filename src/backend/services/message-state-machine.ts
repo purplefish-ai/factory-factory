@@ -98,7 +98,6 @@ export class MessageStateMachine {
   createUserMessage(sessionId: string, msg: QueuedMessage): UserMessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
     const queuePosition = this.getQueuedMessageCount(sessionId);
-    const order = this.getNextOrder(sessionId);
 
     const messageWithState: UserMessageWithState = {
       id: msg.id,
@@ -109,7 +108,8 @@ export class MessageStateMachine {
       attachments: msg.attachments,
       queuePosition,
       settings: msg.settings,
-      order,
+      // Order is assigned when message transitions to DISPATCHED
+      order: undefined,
     };
 
     messages.set(msg.id, messageWithState);
@@ -123,7 +123,6 @@ export class MessageStateMachine {
     text?: string
   ): UserMessageWithState {
     const messages = this.getOrCreateSessionMap(sessionId);
-    const order = this.getNextOrder(sessionId);
 
     const messageWithState: UserMessageWithState = {
       id: messageId,
@@ -132,7 +131,8 @@ export class MessageStateMachine {
       timestamp: new Date().toISOString(),
       text: text ?? '',
       errorMessage,
-      order,
+      // Rejected messages don't get an order since they never appear in transcript
+      order: undefined,
     };
 
     messages.set(messageId, messageWithState);
@@ -173,6 +173,12 @@ export class MessageStateMachine {
       message.errorMessage = metadata.errorMessage;
     }
 
+    // Assign order when transitioning to DISPATCHED (message is sent to agent)
+    // This ensures queued messages appear in transcript at dispatch time, not queue time
+    if (newState === MessageState.DISPATCHED && message.order === undefined) {
+      message.order = this.getNextOrder(sessionId);
+    }
+
     return { ok: true, message, oldState };
   }
 
@@ -190,7 +196,14 @@ export class MessageStateMachine {
 
     return Array.from(messages.values())
       .filter((msg) => !terminalErrorStates.has(msg.state))
-      .sort((a, b) => a.order - b.order);
+      .sort((a, b) => {
+        // Messages without order (queued) sort to the end
+        // Use a large base value plus queuePosition to maintain queue order
+        const BASE_ORDER = 1_000_000_000;
+        const aOrder = a.order ?? BASE_ORDER + (isUserMessage(a) ? (a.queuePosition ?? 0) : 0);
+        const bOrder = b.order ?? BASE_ORDER + (isUserMessage(b) ? (b.queuePosition ?? 0) : 0);
+        return aOrder - bOrder;
+      });
   }
 
   removeMessage(sessionId: string, messageId: string): boolean {

@@ -250,8 +250,8 @@ export type ChatAction =
           timestamp: string;
           attachments?: MessageAttachment[];
           settings?: ChatSettings;
-          /** Backend-assigned order for reliable sorting */
-          order: number;
+          /** Backend-assigned order for reliable sorting. Undefined for ACCEPTED, defined for DISPATCHED. */
+          order?: number;
         };
       };
     }

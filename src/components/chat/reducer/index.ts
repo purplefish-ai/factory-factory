@@ -163,11 +163,8 @@ function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
   if (!(data.id && data.newState)) {
     return null;
   }
-  // If userMessage exists, order is required
-  const userMessage =
-    data.userMessage && data.userMessage.order !== undefined
-      ? { ...data.userMessage, order: data.userMessage.order }
-      : undefined;
+  // Pass userMessage as-is; order may be undefined for ACCEPTED messages
+  const userMessage = data.userMessage ? { ...data.userMessage } : undefined;
   return {
     type: 'MESSAGE_STATE_CHANGED',
     payload: {
