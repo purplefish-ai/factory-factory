@@ -540,6 +540,59 @@ export class ClaudeProtocol extends EventEmitter {
   }
 
   /**
+   * Safely format raw response for logging, handling undefined case.
+   */
+  private formatResponseForLogging(rawResponse: unknown): string {
+    return rawResponse === undefined ? 'undefined' : JSON.stringify(rawResponse).slice(0, 500);
+  }
+
+  /**
+   * Validate a control response payload against its schema.
+   */
+  private validateControlResponsePayload(
+    rawResponse: unknown,
+    requestSubtype: string | null | undefined,
+    requestId: string
+  ): unknown {
+    if (requestSubtype === 'initialize') {
+      const parseResult = InitializeResponseDataSchema.safeParse(rawResponse);
+      if (!parseResult.success) {
+        logger.error('Invalid initialize response payload', parseResult.error, {
+          requestId,
+          rawResponse: this.formatResponseForLogging(rawResponse),
+        });
+        throw new Error(
+          `Invalid initialize response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
+        );
+      }
+      return parseResult.data;
+    }
+
+    if (requestSubtype === 'rewind_files') {
+      const parseResult = RewindFilesResponseSchema.safeParse(rawResponse);
+      if (!parseResult.success) {
+        logger.error('Invalid rewind files response payload', parseResult.error, {
+          requestId,
+          rawResponse: this.formatResponseForLogging(rawResponse),
+        });
+        throw new Error(
+          `Invalid rewind files response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
+        );
+      }
+      return parseResult.data;
+    }
+
+    // No validation schema for this request subtype - reject to prevent bypass
+    const noSchemaError = new Error('Control response has no validation schema');
+    logger.error('Control response has no validation schema', noSchemaError, {
+      requestId,
+      requestSubtype: requestSubtype ?? 'unknown',
+      rawResponse: this.formatResponseForLogging(rawResponse),
+    });
+    throw noSchemaError;
+  }
+
+  /**
    * Handle a control response from the CLI.
    * Validates response payload against expected schema before resolving.
    */
@@ -563,55 +616,14 @@ export class ClaudeProtocol extends EventEmitter {
     }
     this.pendingRequests.delete(requestId);
 
-    // Validate response payload based on the original request type
     const rawResponse = msg.response.response;
 
     try {
-      // Validate response based on the request subtype we tracked
-      let validatedResponse: unknown;
-
-      if (pending.requestSubtype === 'initialize') {
-        const parseResult = InitializeResponseDataSchema.safeParse(rawResponse);
-        if (!parseResult.success) {
-          logger.error('Invalid initialize response payload', parseResult.error, {
-            requestId,
-            rawResponse: JSON.stringify(rawResponse).slice(0, 500),
-          });
-          pending.reject(
-            new Error(
-              `Invalid initialize response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
-            )
-          );
-          return;
-        }
-        validatedResponse = parseResult.data;
-      } else if (pending.requestSubtype === 'rewind_files') {
-        const parseResult = RewindFilesResponseSchema.safeParse(rawResponse);
-        if (!parseResult.success) {
-          logger.error('Invalid rewind files response payload', parseResult.error, {
-            requestId,
-            rawResponse: JSON.stringify(rawResponse).slice(0, 500),
-          });
-          pending.reject(
-            new Error(
-              `Invalid rewind files response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
-            )
-          );
-          return;
-        }
-        validatedResponse = parseResult.data;
-      } else {
-        // No validation schema for this request subtype - reject to prevent bypass
-        const noSchemaError = new Error('Control response has no validation schema');
-        logger.error('Control response has no validation schema', noSchemaError, {
-          requestId,
-          requestSubtype: pending.requestSubtype ?? 'unknown',
-          rawResponse: JSON.stringify(rawResponse).slice(0, 500),
-        });
-        pending.reject(noSchemaError);
-        return;
-      }
-
+      const validatedResponse = this.validateControlResponsePayload(
+        rawResponse,
+        pending.requestSubtype,
+        requestId
+      );
       pending.resolve(validatedResponse);
     } catch (error) {
       logger.error('Unexpected error validating control response', error as Error, {
