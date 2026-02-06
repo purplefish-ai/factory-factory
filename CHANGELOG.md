@@ -5,6 +5,57 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-02-06
+
+### Added
+
+- Add draggable height resize to live activity feed (#757)
+- Show starting state for issue workspace auto-start (#758)
+
+### Changed
+
+- Stabilize live activity dock with internal tool scrolling (#754)
+- Clear ratchetActiveSessionId on session exit (#760)
+
+### Fixed
+
+- Fix chat replay flicker by showing loading state during reconnect (#756)
+- Fix agent messages lost when Claude process is replaced (#752)
+- Fix kanban column scrolling when items overflow (#753)
+- Fix crash when argumentHint is non-string in slash command cache (#743)
+
+## [0.2.2] - 2026-02-06
+
+### Added
+
+- Show factory-factory.json preview on new workspace page (#709)
+- Add missing workspace attention glow animation (#731)
+
+### Changed
+
+- Enable noUncheckedIndexedAccess for safer array/object indexing (#741)
+- Simplify ratchet flow and unify working-state derivation (#711)
+- Improve attachments (#701, #714)
+- Extract workspace list page subcomponents + shared create hook (#703)
+- Stay on kanban view when starting workspace from GitHub issue (#653)
+- Consolidate fixer sessions and PR snapshot writes (#691, #697)
+- Enable text selection in toast notifications (#718)
+
+### Fixed
+
+- Fix ratchet missing repeated CI failures (#736)
+- Fix Claude process timeout during workspace initialization (#729)
+- Fix unhandled promise rejection from ClaudeClient error events (#717, #721)
+- Fix Claude keepalive activity timeout (#712)
+- Fix unhandled promise rejection from stdin stream errors (#702)
+
+### Refactored
+
+- Phase 3: Schema cleanup and legacy surface removal (#693, #719)
+- Phase 2: Unify workspace creation orchestration (#692, #706)
+- Remove workflow/session selectors and default session startup (#720)
+- Remove adaptLegacyCreateInput compatibility path (#713, #715)
+
 ## [0.2.1] - 2026-02-05
 
 ### Added

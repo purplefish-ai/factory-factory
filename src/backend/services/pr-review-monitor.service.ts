@@ -278,7 +278,7 @@ class PRReviewMonitorService {
 
       // Update last checked timestamp and last comment ID
       const latestCommentId =
-        allNewComments.length > 0 ? String(allNewComments[allNewComments.length - 1].id) : null;
+        allNewComments.length > 0 ? String(allNewComments[allNewComments.length - 1]?.id) : null;
 
       await workspaceAccessor.update(workspace.id, {
         prReviewLastCheckedAt: new Date(),

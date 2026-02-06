@@ -239,9 +239,10 @@ async function runFactorySetupScriptIfConfigured(
   workspaceWithProject: WorkspaceWithProject,
   worktreePath: string,
   factoryConfig: Awaited<ReturnType<typeof FactoryConfigService.readConfig>>
-): Promise<boolean> {
+): Promise<{ ran: boolean; success: boolean }> {
   if (!factoryConfig?.scripts.setup) {
-    return false;
+    // No script configured - not a failure, just nothing to run
+    return { ran: false, success: true };
   }
 
   logger.info('Running setup script from factory-factory.json', { workspaceId });
@@ -271,17 +272,18 @@ async function runFactorySetupScriptIfConfigured(
     }
   }
 
-  return true;
+  return { ran: true, success: scriptResult.success };
 }
 
 async function runProjectStartupScriptIfConfigured(
   workspaceId: string,
   workspaceWithProject: WorkspaceWithProject,
   worktreePath: string
-): Promise<boolean> {
+): Promise<{ ran: boolean; success: boolean }> {
   const project = workspaceWithProject.project;
   if (!startupScriptService.hasStartupScript(project)) {
-    return false;
+    // No script configured - not a failure, just nothing to run
+    return { ran: false, success: true };
   }
 
   logger.info('Running startup script for workspace', {
@@ -311,7 +313,7 @@ async function runProjectStartupScriptIfConfigured(
     }
   }
 
-  return true;
+  return { ran: true, success: scriptResult.success };
 }
 
 async function handleWorkspaceInitFailure(workspaceId: string, error: Error): Promise<void> {
@@ -605,33 +607,51 @@ class WorktreeLifecycleService {
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });
 
+      const factorySetupResult = await runFactorySetupScriptIfConfigured(
+        workspaceId,
+        workspaceWithProject,
+        worktreeInfo.worktreePath,
+        factoryConfig
+      );
+      if (factorySetupResult.ran) {
+        // Only start Claude session if factory setup succeeded
+        if (factorySetupResult.success) {
+          void startDefaultClaudeSession(workspaceId).catch((error) => {
+            logger.error('Failed to start default Claude session after factory setup', {
+              workspaceId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
+        return;
+      }
+
+      const projectSetupResult = await runProjectStartupScriptIfConfigured(
+        workspaceId,
+        workspaceWithProject,
+        worktreeInfo.worktreePath
+      );
+      if (projectSetupResult.ran) {
+        // Only start Claude session if project setup succeeded
+        if (projectSetupResult.success) {
+          void startDefaultClaudeSession(workspaceId).catch((error) => {
+            logger.error('Failed to start default Claude session after project setup', {
+              workspaceId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
+        return;
+      }
+
+      // No setup scripts ran, mark ready and start Claude session
+      await workspaceStateMachine.markReady(workspaceId);
       void startDefaultClaudeSession(workspaceId).catch((error) => {
         logger.error('Failed to start default Claude session', {
           workspaceId,
           error: error instanceof Error ? error.message : String(error),
         });
       });
-
-      const ranFactorySetup = await runFactorySetupScriptIfConfigured(
-        workspaceId,
-        workspaceWithProject,
-        worktreeInfo.worktreePath,
-        factoryConfig
-      );
-      if (ranFactorySetup) {
-        return;
-      }
-
-      const ranProjectSetup = await runProjectStartupScriptIfConfigured(
-        workspaceId,
-        workspaceWithProject,
-        worktreeInfo.worktreePath
-      );
-      if (ranProjectSetup) {
-        return;
-      }
-
-      await workspaceStateMachine.markReady(workspaceId);
     } catch (error) {
       await handleWorkspaceInitFailure(workspaceId, error as Error);
     } finally {

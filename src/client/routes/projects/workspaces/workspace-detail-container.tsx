@@ -23,8 +23,6 @@ export function WorkspaceDetailContainer() {
     workspace,
     workspaceLoading,
     claudeSessions,
-    workflows,
-    recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
     invalidateWorkspace,
@@ -94,6 +92,13 @@ export function WorkspaceDetailContainer() {
   const running = sessionStatus.phase === 'running';
   const loadingSession = sessionStatus.phase === 'loading';
   const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
+  const isIssueAutoStartPending =
+    workspace?.creationSource === 'GITHUB_ISSUE' &&
+    selectedDbSessionId !== null &&
+    (sessionStatus.phase === 'loading' || sessionStatus.phase === 'ready') &&
+    (processStatus.state === 'unknown' || processStatus.state === 'alive') &&
+    messages.some((message) => message.source === 'user') &&
+    !messages.some((message) => message.source === 'claude');
 
   const wasRunningRef = useRef(false);
   useEffect(() => {
@@ -112,7 +117,6 @@ export function WorkspaceDetailContainer() {
     preferredIde,
     handleSelectSession,
     handleCloseSession,
-    handleWorkflowSelect,
     handleNewChat,
     handleQuickAction,
   } = useSessionManagement({
@@ -225,12 +229,9 @@ export function WorkspaceDetailContainer() {
       isCreatingSession={createSession.isPending}
       hasChanges={hasChanges}
       claudeSessions={claudeSessions}
-      workflows={workflows}
-      recommendedWorkflow={recommendedWorkflow}
       selectedDbSessionId={selectedDbSessionId}
       runningSessionId={runningSessionId}
       isDeletingSession={deleteSession.isPending}
-      handleWorkflowSelect={handleWorkflowSelect}
       handleSelectSession={handleSelectSession}
       handleNewChat={handleNewChat}
       handleCloseChatSession={handleCloseChatSession}
@@ -271,6 +272,7 @@ export function WorkspaceDetailContainer() {
       confirmRewind={confirmRewind}
       cancelRewind={cancelRewind}
       getUuidForMessageId={getUuidForMessageId}
+      isIssueAutoStartPending={isIssueAutoStartPending}
       rightPanelVisible={rightPanelVisible}
       archiveDialogOpen={archiveDialogOpen}
       setArchiveDialogOpen={setArchiveDialogOpen}

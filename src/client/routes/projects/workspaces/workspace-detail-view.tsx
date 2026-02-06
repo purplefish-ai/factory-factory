@@ -28,12 +28,9 @@ export interface WorkspaceDetailViewProps {
   isCreatingSession: boolean;
   hasChanges: boolean | undefined;
   claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
-  workflows: ReturnType<typeof useWorkspaceData>['workflows'];
-  recommendedWorkflow: ReturnType<typeof useWorkspaceData>['recommendedWorkflow'];
   selectedDbSessionId: string | null;
   runningSessionId: string | undefined;
   isDeletingSession: boolean;
-  handleWorkflowSelect: ReturnType<typeof useSessionManagement>['handleWorkflowSelect'];
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
@@ -74,6 +71,7 @@ export interface WorkspaceDetailViewProps {
   confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
   cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
   getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
+  isIssueAutoStartPending: boolean;
   rightPanelVisible: boolean;
   archiveDialogOpen: boolean;
   setArchiveDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -98,12 +96,9 @@ export function WorkspaceDetailView({
   isCreatingSession,
   hasChanges,
   claudeSessions,
-  workflows,
-  recommendedWorkflow,
   selectedDbSessionId,
   runningSessionId,
   isDeletingSession,
-  handleWorkflowSelect,
   handleSelectSession,
   handleNewChat,
   handleCloseChatSession,
@@ -144,6 +139,7 @@ export function WorkspaceDetailView({
   confirmRewind,
   cancelRewind,
   getUuidForMessageId,
+  isIssueAutoStartPending,
   rightPanelVisible,
   archiveDialogOpen,
   setArchiveDialogOpen,
@@ -204,15 +200,12 @@ export function WorkspaceDetailView({
             <WorkspaceContentView
               workspaceId={workspaceId}
               claudeSessions={claudeSessions}
-              workflows={workflows}
-              recommendedWorkflow={recommendedWorkflow}
               selectedSessionId={selectedDbSessionId}
               runningSessionId={runningSessionId}
               sessionStatus={sessionStatus}
               processStatus={processStatus}
               isCreatingSession={isCreatingSession}
               isDeletingSession={isDeletingSession}
-              onWorkflowSelect={handleWorkflowSelect}
               onSelectSession={handleSelectSession}
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseChatSession}
@@ -255,6 +248,7 @@ export function WorkspaceDetailView({
                 confirmRewind={confirmRewind}
                 cancelRewind={cancelRewind}
                 getUuidForMessageId={getUuidForMessageId}
+                autoStartPending={isIssueAutoStartPending}
               />
             </WorkspaceContentView>
           </div>

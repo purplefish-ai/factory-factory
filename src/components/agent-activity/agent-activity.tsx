@@ -33,9 +33,11 @@ function getAssistantCopyText(message: ChatMessage['message']): string | null {
     message.message &&
     Array.isArray(message.message.content) &&
     message.message.content.length === 1 &&
-    isThinkingContent(message.message.content[0])
+    // biome-ignore lint/style/noNonNullAssertion: length === 1 checked above
+    isThinkingContent(message.message.content[0]!)
   ) {
-    return message.message.content[0].thinking;
+    // biome-ignore lint/style/noNonNullAssertion: length === 1 checked above
+    return message.message.content[0]!.thinking;
   }
 
   return null;

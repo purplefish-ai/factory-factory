@@ -145,7 +145,7 @@ describe('SessionFileLogger', () => {
       logger.initSession('test-session-123');
 
       expect(mockCreateWriteStream).toHaveBeenCalledTimes(1);
-      const [filePath] = mockCreateWriteStream.mock.calls[0];
+      const [filePath] = mockCreateWriteStream.mock.calls[0]!;
 
       expect(filePath).toMatch(/test-session-123_.*\.log$/);
       expect(mockStream.write).toHaveBeenCalledTimes(1);
@@ -169,7 +169,7 @@ describe('SessionFileLogger', () => {
 
       logger.initSession('session/with:special*chars');
 
-      const [filePath] = mockCreateWriteStream.mock.calls[0];
+      const [filePath] = mockCreateWriteStream.mock.calls[0]!;
       expect(filePath).not.toContain('/with:');
       expect(filePath).not.toContain('*');
       expect(filePath).toMatch(/session_with_special_chars_.*\.log$/);

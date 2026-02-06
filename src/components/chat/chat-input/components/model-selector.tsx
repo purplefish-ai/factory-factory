@@ -21,7 +21,8 @@ interface ModelSelectorProps {
  */
 export function ModelSelector({ selectedModel, onChange, disabled }: ModelSelectorProps) {
   const currentModel = AVAILABLE_MODELS.find((m) => m.value === selectedModel);
-  const displayName = currentModel?.displayName ?? AVAILABLE_MODELS[0].displayName;
+  // biome-ignore lint/style/noNonNullAssertion: AVAILABLE_MODELS is a non-empty constant array
+  const displayName = currentModel?.displayName ?? AVAILABLE_MODELS[0]!.displayName;
 
   return (
     <DropdownMenu>

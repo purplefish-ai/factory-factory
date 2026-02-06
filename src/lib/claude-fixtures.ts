@@ -1102,7 +1102,8 @@ export function createCompleteConversation(): ChatMessage[] {
     createBashToolUse('ls -la src/', 'List files in src directory'),
   ];
   const toolResult1 = createToolResultMessage(
-    getToolUseId(exchange1[2]),
+    // biome-ignore lint/style/noNonNullAssertion: fixed-length array
+    getToolUseId(exchange1[2]!),
     `total 24
 drwxr-xr-x   5 developer  staff   160 Jan 15 10:30 .
 drwxr-xr-x  12 developer  staff   384 Jan 15 10:30 ..
@@ -1120,7 +1121,8 @@ drwxr-xr-x   3 developer  staff    96 Jan 15 10:30 utils
     createReadToolUse('/Users/developer/project/src/index.ts'),
   ];
   const toolResult2 = createToolResultMessage(
-    getToolUseId(exchange2[3]),
+    // biome-ignore lint/style/noNonNullAssertion: fixed-length array
+    getToolUseId(exchange2[3]!),
     `export { Button } from './components/Button';
 export { IconButton } from './components/IconButton';
 export * from './utils/helpers';`

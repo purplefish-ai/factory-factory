@@ -19,7 +19,6 @@ export * from './terminal-tab-bar';
 export * from './todo-panel-container';
 export * from './use-persistent-scroll';
 export * from './use-terminal-websocket';
-export * from './workflow-selector';
 export * from './workspace-content-view';
 export * from './workspace-panel-context';
 export * from './workspace-status-badge';

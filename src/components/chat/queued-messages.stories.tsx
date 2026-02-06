@@ -61,7 +61,7 @@ export const Empty: Story = {
 
 export const SingleMessage: Story = {
   args: {
-    messages: [mockMessages[0]],
+    messages: [mockMessages[0]!],
   },
 };
 

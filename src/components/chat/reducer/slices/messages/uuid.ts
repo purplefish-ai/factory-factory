@@ -12,7 +12,8 @@ export function reduceMessageUuidSlice(state: ChatState, action: ChatAction): Ch
       );
 
       if (unmappedUserMessages.length > 0) {
-        const targetMessage = unmappedUserMessages[0];
+        // biome-ignore lint/style/noNonNullAssertion: length > 0 checked above
+        const targetMessage = unmappedUserMessages[0]!;
         const newMap = new Map(state.messageIdToUuid);
         newMap.set(targetMessage.id, action.payload.uuid);
         return {
