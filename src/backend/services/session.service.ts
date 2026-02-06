@@ -47,28 +47,29 @@ class SessionService {
 
   /**
    * Start a Claude session.
-   * Uses createClient() internally for unified lifecycle management.
+   * Uses getOrCreateClient() internally for unified lifecycle management with race protection.
    */
   async startClaudeSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    if (session.status === SessionStatus.RUNNING) {
-      throw new Error('Session is already running');
-    }
     if (this.processManager.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
-    // Use createClient for unified lifecycle - it handles workspace validation,
-    // marking sessions, DB updates, and event handler setup
-    await this.createClient(sessionId, {
-      initialPrompt: options?.initialPrompt ?? 'Continue with the task.',
+    // Use getOrCreateClient for race-protected creation
+    // If already running, returns existing client; if concurrent starts, waits for pending
+    const client = await this.getOrCreateClient(sessionId, {
       permissionMode: 'bypassPermissions',
     });
 
-    logger.info('Claude session started via createClient', { sessionId });
+    // Send initial prompt if provided
+    if (options?.initialPrompt) {
+      await client.sendMessage(options.initialPrompt);
+    }
+
+    logger.info('Claude session started', { sessionId });
   }
 
   /**
@@ -124,18 +125,35 @@ class SessionService {
       model?: string;
     }
   ): Promise<ClaudeClient> {
+    // Check for existing client first - fast path
     const existing = this.processManager.getClient(sessionId);
     if (existing) {
       return existing;
     }
 
-    const pending = this.processManager.getPendingClient(sessionId);
-    if (pending) {
-      return pending;
-    }
+    // Use processManager.getOrCreateClient() for race protection
+    // Build options first, then delegate to processManager
+    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
+      thinkingEnabled: options?.thinkingEnabled,
+      permissionMode: options?.permissionMode,
+      model: options?.model,
+    });
 
-    // Use createClient to ensure DB updates happen consistently
-    return await this.createClient(sessionId, options);
+    const client = await this.processManager.getOrCreateClient(
+      sessionId,
+      clientOptions,
+      handlers,
+      context
+    );
+
+    // Update DB with running status and PID
+    // This is idempotent and safe even if called by concurrent callers
+    await this.repository.updateSession(sessionId, {
+      status: SessionStatus.RUNNING,
+      claudeProcessPid: client.getPid() ?? null,
+    });
+
+    return client;
   }
 
   /**
@@ -146,40 +164,6 @@ class SessionService {
    */
   getClient(sessionId: string): ClaudeClient | undefined {
     return this.processManager.getClient(sessionId);
-  }
-
-  /**
-   * Internal: Create a new ClaudeClient for a session.
-   */
-  private async createClient(
-    sessionId: string,
-    options?: {
-      thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
-      model?: string;
-      initialPrompt?: string;
-    }
-  ): Promise<ClaudeClient> {
-    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-      thinkingEnabled: options?.thinkingEnabled,
-      permissionMode: options?.permissionMode,
-      model: options?.model,
-      initialPrompt: options?.initialPrompt,
-    });
-
-    const client = await this.processManager.createClient(
-      sessionId,
-      clientOptions,
-      handlers,
-      context
-    );
-
-    await this.repository.updateSession(sessionId, {
-      status: SessionStatus.RUNNING,
-      claudeProcessPid: client.getPid() ?? null,
-    });
-
-    return client;
   }
 
   /**
