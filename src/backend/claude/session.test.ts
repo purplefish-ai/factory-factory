@@ -479,4 +479,54 @@ describe('parseHistoryEntry', () => {
       expect(result[0]!.uuid).toBeUndefined();
     });
   });
+
+  describe('malformed entries', () => {
+    it('should return empty array for entry without type field', () => {
+      const entry = {
+        timestamp,
+        message: {
+          role: 'user',
+          content: 'Missing type',
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should return empty array for entry without message field', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should skip meta messages', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        isMeta: true,
+        message: {
+          role: 'user',
+          content: 'Meta message',
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should return empty array for unknown message type', () => {
+      const entry = {
+        type: 'unknown_type',
+        timestamp,
+        message: {
+          role: 'unknown',
+          content: 'Unknown',
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
+    });
+  });
 });

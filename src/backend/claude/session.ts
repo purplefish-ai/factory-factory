@@ -1,10 +1,26 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { createLogger } from '../services/logger.service';
 import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
 
 const logger = createLogger('session');
+
+/**
+ * Zod schema for session JSONL entry validation.
+ * Validates minimal required fields: type, and allows optional fields consumed by the code.
+ */
+const SessionJsonlEntrySchema = z
+  .object({
+    type: z.string(),
+    timestamp: z.string().optional(),
+    uuid: z.string().optional(),
+    isMeta: z.boolean().optional(),
+    gitBranch: z.string().optional(),
+    message: z.any().optional(),
+  })
+  .passthrough();
 
 /**
  * Represents a message from session history
@@ -66,12 +82,27 @@ export class SessionManager {
 
       for (const line of lines) {
         try {
-          const entry = JSON.parse(line) as Record<string, unknown>;
-          const parsedMessages = parseHistoryEntry(entry);
+          const rawData = JSON.parse(line);
+          const validationResult = SessionJsonlEntrySchema.safeParse(rawData);
+
+          if (!validationResult.success) {
+            logger.warn('Skipping invalid JSONL entry', {
+              claudeSessionId,
+              line: line.slice(0, 100),
+              errors: validationResult.error.format(),
+            });
+            continue;
+          }
+
+          const parsedMessages = parseHistoryEntry(validationResult.data);
           messages.push(...parsedMessages);
-        } catch {
+        } catch (error) {
           // Skip malformed JSONL lines
-          logger.warn('Skipping malformed JSONL line', { claudeSessionId });
+          logger.warn('Skipping malformed JSONL line', {
+            claudeSessionId,
+            line: line.slice(0, 100),
+            error,
+          });
         }
       }
     } catch (error) {
@@ -101,7 +132,14 @@ export class SessionManager {
       // Look for the first assistant message with a model field
       for (const line of lines) {
         try {
-          const entry = JSON.parse(line) as Record<string, unknown>;
+          const rawData = JSON.parse(line);
+          const validationResult = SessionJsonlEntrySchema.safeParse(rawData);
+
+          if (!validationResult.success) {
+            continue;
+          }
+
+          const entry = validationResult.data;
           if (entry.type === 'assistant') {
             const message = entry.message as { model?: string } | undefined;
             if (message?.model) {
@@ -138,7 +176,14 @@ export class SessionManager {
       // Check first few messages for gitBranch (it should be on most messages)
       for (const line of lines.slice(0, 10)) {
         try {
-          const entry = JSON.parse(line) as Record<string, unknown>;
+          const rawData = JSON.parse(line);
+          const validationResult = SessionJsonlEntrySchema.safeParse(rawData);
+
+          if (!validationResult.success) {
+            continue;
+          }
+
+          const entry = validationResult.data;
           if (typeof entry.gitBranch === 'string' && entry.gitBranch) {
             return entry.gitBranch;
           }
