@@ -109,7 +109,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
 
   return (
     <div className={cn('bg-muted/20 border-b', className)}>
-      <div className="px-4 py-3 space-y-3">
+      <div className="h-36 sm:h-44 px-4 py-3 flex flex-col">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">Live activity</span>
           <Badge variant={tone} className="text-[10px] px-1.5 py-0">
@@ -117,23 +117,26 @@ export const AgentLiveDock = memo(function AgentLiveDock({
           </Badge>
         </div>
 
-        {mostRecentToolSequence && (
-          <div>
-            <ToolSequenceGroup
-              sequence={mostRecentToolSequence}
-              summaryOrder="latest-first"
-              open={toolWindowOpen}
-              onOpenChange={setToolWindowOpen}
-            />
-          </div>
-        )}
+        <div className="mt-3 min-h-0 space-y-3 overflow-hidden">
+          {mostRecentToolSequence && (
+            <div>
+              <ToolSequenceGroup
+                sequence={mostRecentToolSequence}
+                summaryOrder="latest-first"
+                open={toolWindowOpen}
+                onOpenChange={setToolWindowOpen}
+                toolDetailsClassName="max-h-24 overflow-y-auto"
+              />
+            </div>
+          )}
 
-        {hasThinking && (
-          <div className="space-y-1">
-            <div className="text-[10px] font-medium text-muted-foreground">Latest thinking</div>
-            <LatestThinking thinking={latestThinking} running={running || starting} />
-          </div>
-        )}
+          {hasThinking && (
+            <div className="space-y-1">
+              <div className="text-[10px] font-medium text-muted-foreground">Latest thinking</div>
+              <LatestThinking thinking={latestThinking} running={running || starting} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
