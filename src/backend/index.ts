@@ -55,6 +55,12 @@ process.on('uncaughtException', async (error) => {
 });
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled rejection at promise', { reason, promise });
+process.on('unhandledRejection', (reason) => {
+  // Extract meaningful error information from reason
+  const errorInfo =
+    reason instanceof Error
+      ? { message: reason.message, stack: reason.stack, name: reason.name }
+      : { reason: String(reason) };
+
+  logger.error('Unhandled rejection at promise', errorInfo);
 });

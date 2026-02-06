@@ -20,7 +20,7 @@ export type ClientCreatedCallback = (
 export type ClientEventHandlers = {
   onSessionId?: (sessionId: string, claudeSessionId: string) => Promise<void>;
   onExit?: (sessionId: string) => Promise<void>;
-  onError?: (sessionId: string, error: Error) => Promise<void>;
+  onError?: (sessionId: string, error: Error) => Promise<void> | void;
 };
 
 export class SessionProcessManager {

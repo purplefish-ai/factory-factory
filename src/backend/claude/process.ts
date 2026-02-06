@@ -175,6 +175,9 @@ export class ClaudeProcess extends EventEmitter {
     const protocol = new ClaudeProtocolIO(childProcess.stdin, childProcess.stdout);
     const claudeProcess = new ClaudeProcess(childProcess, protocol, options.sessionId);
 
+    // Set up process exit and error handling immediately to prevent unhandled events
+    claudeProcess.setupExitHandling();
+
     const monitor = new ClaudeProcessMonitor(claudeProcess, options.resourceMonitoring);
     claudeProcess.attachMonitor(monitor);
 
@@ -191,9 +194,6 @@ export class ClaudeProcess extends EventEmitter {
 
     // Set up event forwarding
     claudeProcess.setupEventForwarding();
-
-    // Set up process exit handling
-    claudeProcess.setupExitHandling();
 
     // Start the protocol
     protocol.start();
@@ -586,9 +586,18 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   /**
-   * Set up process exit handling.
+   * Set up process exit and error handling.
    */
   private setupExitHandling(): void {
+    this.process.on('error', (error) => {
+      logger.error('Claude process error event', {
+        pid: this.process.pid,
+        error: error.message,
+        sessionId: this.sessionId,
+      });
+      this.emit('error', error);
+    });
+
     this.process.on('exit', (code, signal) => {
       const stderr = this.stderrBuffer.join('');
       logger.info('Claude process exited', {
@@ -615,15 +624,6 @@ export class ClaudeProcess extends EventEmitter {
       };
 
       this.emit('exit', result);
-    });
-
-    this.process.on('error', (error) => {
-      logger.error('Claude process error event', {
-        pid: this.process.pid,
-        error: error.message,
-        claudeSessionId: this.claudeSessionId,
-      });
-      this.emit('error', error);
     });
   }
 
