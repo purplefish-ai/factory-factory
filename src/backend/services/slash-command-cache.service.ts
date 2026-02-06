@@ -23,11 +23,14 @@ function isCommandInfo(value: unknown): value is CommandInfo {
 }
 
 function normalizeCommands(commands: CommandInfo[]): CommandInfo[] {
-  return commands.map((command) => ({
-    name: command.name,
-    description: command.description ?? '',
-    argumentHint: command.argumentHint?.trim() ? command.argumentHint : undefined,
-  }));
+  return commands.map((command) => {
+    const hint = typeof command.argumentHint === 'string' ? command.argumentHint.trim() : undefined;
+    return {
+      name: command.name,
+      description: command.description ?? '',
+      argumentHint: hint || undefined,
+    };
+  });
 }
 
 function toCommandInfoArray(value: unknown): CommandInfo[] | null {
