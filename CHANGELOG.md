@@ -5,6 +5,25 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-02-06
+
+### Added
+
+- Add draggable height resize to live activity feed (#757)
+- Show starting state for issue workspace auto-start (#758)
+
+### Changed
+
+- Stabilize live activity dock with internal tool scrolling (#754)
+- Clear ratchetActiveSessionId on session exit (#760)
+
+### Fixed
+
+- Fix chat replay flicker by showing loading state during reconnect (#756)
+- Fix agent messages lost when Claude process is replaced (#752)
+- Fix kanban column scrolling when items overflow (#753)
+- Fix crash when argumentHint is non-string in slash command cache (#743)
+
 ## [0.2.2] - 2026-02-06
 
 ### Added
