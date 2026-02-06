@@ -169,16 +169,23 @@ class SchedulerService {
             prNumber: result.snapshot.prNumber,
             prUrl: pr.url,
           });
-        } else {
-          logger.warn('Discovered PR but failed to attach snapshot', {
-            workspaceId: workspace.id,
-            branchName,
-            prUrl: pr.url,
-            reason: result.reason,
-          });
+          return { found: true };
         }
 
-        return { found: true };
+        // Log warning but don't count as discovered if attachment failed
+        logger.warn('Discovered PR but failed to attach snapshot', {
+          workspaceId: workspace.id,
+          branchName,
+          prUrl: pr.url,
+          reason: result.reason,
+        });
+
+        // Only count as discovered if attachment succeeded or partially succeeded (fetch_failed still attaches prUrl)
+        if (result.reason === 'fetch_failed') {
+          return { found: true };
+        }
+
+        return { found: false };
       }
 
       return { found: false };

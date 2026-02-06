@@ -123,6 +123,54 @@ describe('SchedulerService', () => {
         'https://github.com/org/repo/pull/101'
       );
     });
+
+    it('counts PR as discovered when attachment succeeds but snapshot fetch fails', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([
+        {
+          id: 'ws-1',
+          branchName: 'feature',
+          project: { githubOwner: 'org', githubRepo: 'repo' },
+        },
+      ]);
+
+      mockFindPRForBranch.mockResolvedValue({
+        number: 101,
+        url: 'https://github.com/org/repo/pull/101',
+      });
+
+      mockAttachAndRefreshPR.mockResolvedValue({
+        success: false,
+        reason: 'fetch_failed',
+      });
+
+      const result = await schedulerService.discoverNewPRs();
+
+      expect(result).toEqual({ discovered: 1, checked: 1 });
+    });
+
+    it('does not count PR as discovered when attachment fails entirely', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([
+        {
+          id: 'ws-1',
+          branchName: 'feature',
+          project: { githubOwner: 'org', githubRepo: 'repo' },
+        },
+      ]);
+
+      mockFindPRForBranch.mockResolvedValue({
+        number: 101,
+        url: 'https://github.com/org/repo/pull/101',
+      });
+
+      mockAttachAndRefreshPR.mockResolvedValue({
+        success: false,
+        reason: 'workspace_not_found',
+      });
+
+      const result = await schedulerService.discoverNewPRs();
+
+      expect(result).toEqual({ discovered: 0, checked: 1 });
+    });
   });
 
   describe('interval behavior', () => {
