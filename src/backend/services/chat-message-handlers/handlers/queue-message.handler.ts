@@ -30,18 +30,19 @@ function extractTextFromAttachments(
   return textParts.length > 0 ? textParts.join('\n\n') : undefined;
 }
 
-export function createQueueMessageHandler(deps: HandlerRegistryDependencies): ChatMessageHandler {
+export function createQueueMessageHandler(
+  deps: HandlerRegistryDependencies
+): ChatMessageHandler<QueueMessageInput> {
   return async ({ ws, sessionId, message }) => {
-    const typedMessage = message as QueueMessageInput;
-    const text = typedMessage.text?.trim();
-    const hasContent = text || (typedMessage.attachments && typedMessage.attachments.length > 0);
+    const text = message.text?.trim();
+    const hasContent = text || (message.attachments && message.attachments.length > 0);
 
     if (!hasContent) {
       ws.send(JSON.stringify({ type: 'error', message: 'Empty message' }));
       return;
     }
 
-    if (!typedMessage.id) {
+    if (!message.id) {
       ws.send(JSON.stringify({ type: 'error', message: 'Missing message id' }));
       return;
     }
@@ -49,13 +50,13 @@ export function createQueueMessageHandler(deps: HandlerRegistryDependencies): Ch
     // Check if there's a pending interactive request - if so, treat this message as a response
     // Use inline text if available, otherwise extract text from text attachments
     // This handles the case where user pastes large text that becomes an attachment
-    const messageId = typedMessage.id;
-    const responseText = text || extractTextFromAttachments(typedMessage.attachments);
+    const messageId = message.id;
+    const responseText = text || extractTextFromAttachments(message.attachments);
     if (responseText && tryHandleAsInteractiveResponse(ws, sessionId, messageId, responseText)) {
       return;
     }
 
-    const queuedMsg = buildQueuedMessage(messageId, typedMessage, text ?? '');
+    const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
     const result = messageQueueService.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {

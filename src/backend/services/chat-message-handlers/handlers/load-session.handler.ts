@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws';
+import type { LoadSessionMessage } from '@/shared/websocket';
 import { SessionManager } from '../../../claude/index';
 import { claudeSessionAccessor } from '../../../resource_accessors/claude-session.accessor';
 import {
@@ -16,7 +17,7 @@ import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createLoadSessionHandler(): ChatMessageHandler {
+export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, workingDir }) => {
     const dbSession = await claudeSessionAccessor.findById(sessionId);
     if (!dbSession) {

@@ -8,10 +8,9 @@ import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createRemoveQueuedMessageHandler(): ChatMessageHandler {
+export function createRemoveQueuedMessageHandler(): ChatMessageHandler<RemoveQueuedMessageInput> {
   return ({ ws, sessionId, message }) => {
-    const typedMessage = message as RemoveQueuedMessageInput;
-    const { messageId } = typedMessage;
+    const { messageId } = message;
     const removed = messageQueueService.remove(sessionId, messageId);
 
     if (removed) {

@@ -1,8 +1,9 @@
+import type { StopMessage } from '@/shared/websocket';
 import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import { sessionService } from '../../session.service';
 import type { ChatMessageHandler } from '../types';
 
-export function createStopHandler(): ChatMessageHandler {
+export function createStopHandler(): ChatMessageHandler<StopMessage> {
   return async ({ ws, sessionId }) => {
     await sessionService.stopClaudeSession(sessionId);
     // Only clear pending requests here - clientEventSetup cleanup happens in the exit handler

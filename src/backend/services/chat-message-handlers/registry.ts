@@ -15,7 +15,13 @@ import { createStopHandler } from './handlers/stop.handler';
 import { createUserInputHandler } from './handlers/user-input.handler';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from './types';
 
-export type ChatMessageHandlerRegistry = Record<ChatMessageInput['type'], ChatMessageHandler>;
+/**
+ * Type-safe registry that maps each message type to a handler for that specific message type.
+ * This ensures handlers receive correctly typed messages without needing casts.
+ */
+export type ChatMessageHandlerRegistry = {
+  [K in ChatMessageInput['type']]: ChatMessageHandler<Extract<ChatMessageInput, { type: K }>>;
+};
 
 export function createChatMessageHandlerRegistry(
   deps: HandlerRegistryDependencies

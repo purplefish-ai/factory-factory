@@ -120,13 +120,17 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
 export type ChatMessageInput = z.infer<typeof ChatMessageSchema>;
 
 // Narrow types for specific message types
-export type QuestionResponseMessage = Extract<ChatMessageInput, { type: 'question_response' }>;
-export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permission_response' }>;
-export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message' }>;
+export type ListSessionsMessage = Extract<ChatMessageInput, { type: 'list_sessions' }>;
 export type StartMessageInput = Extract<ChatMessageInput, { type: 'start' }>;
 export type UserInputMessage = Extract<ChatMessageInput, { type: 'user_input' }>;
+export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message' }>;
 export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove_queued_message' }>;
+export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;
+export type GetHistoryMessage = Extract<ChatMessageInput, { type: 'get_history' }>;
+export type LoadSessionMessage = Extract<ChatMessageInput, { type: 'load_session' }>;
+export type GetQueueMessage = Extract<ChatMessageInput, { type: 'get_queue' }>;
+export type QuestionResponseMessage = Extract<ChatMessageInput, { type: 'question_response' }>;
+export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permission_response' }>;
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
 export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;
 export type RewindFilesMessage = Extract<ChatMessageInput, { type: 'rewind_files' }>;
-export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;
