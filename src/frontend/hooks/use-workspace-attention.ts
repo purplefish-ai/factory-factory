@@ -72,5 +72,16 @@ export function useWorkspaceAttention() {
     [attentionWorkspaces]
   );
 
-  return { needsAttention };
+  const clearAttention = useCallback((workspaceId: string) => {
+    setAttentionWorkspaces((prev) => {
+      if (!prev.has(workspaceId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.delete(workspaceId);
+      return next;
+    });
+  }, []);
+
+  return { needsAttention, clearAttention };
 }
