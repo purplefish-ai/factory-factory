@@ -152,14 +152,13 @@ export const WithArchiving: Story = {
       ...mockData,
       projectState: {
         workspaces: [
-          ...mockWorkspaces.slice(0, 2),
           {
-            ...mockWorkspaces[1],
+            ...mockWorkspaces[0],
             id: 'ws-archiving',
-            name: 'Polish Kanban layout',
+            name: 'Archiving workspace',
             uiState: 'archiving' as const,
           } as WorkspaceListItem,
-          ...mockWorkspaces.slice(2),
+          ...mockWorkspaces.slice(1),
         ],
         reviewCount: 3,
       },
