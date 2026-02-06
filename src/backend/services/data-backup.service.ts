@@ -28,6 +28,9 @@ export { exportDataSchema, type ExportData, type ExportDataV1, type ExportDataV2
 // ============================================================================
 
 // Internal types for schema parsing
+// Note: These rely on Zod's internal structure. If the union order changes
+// (v2 at index 0, v1 at index 1), these will break at runtime.
+// The shared schema (export-data.schema.ts) defines: z.union([v2, v1])
 const exportedProjectSchema = exportDataSchema.options[0].shape.data.shape.projects.element;
 const exportedWorkspaceSchemaV1 = exportDataSchema.options[1].shape.data.shape.workspaces.element;
 const exportedWorkspaceSchemaV2 = exportDataSchema.options[0].shape.data.shape.workspaces.element;
