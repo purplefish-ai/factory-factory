@@ -4,7 +4,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { ThemeProvider } from '@/frontend/components/theme-provider';
 import { TRPCProvider } from '@/frontend/lib/providers';
 import { AppSidebar } from './app-sidebar';
-import type { ServerWorkspace } from './use-workspace-list-state';
+import type { ServerWorkspace, WorkspaceListItem } from './use-workspace-list-state';
 
 const now = new Date();
 
@@ -141,6 +141,27 @@ export const Empty: Story = {
       projectState: {
         workspaces: [],
         reviewCount: 0,
+      },
+    },
+  },
+};
+
+export const WithArchiving: Story = {
+  args: {
+    mockData: {
+      ...mockData,
+      projectState: {
+        workspaces: [
+          ...mockWorkspaces.slice(0, 2),
+          {
+            ...mockWorkspaces[1],
+            id: 'ws-archiving',
+            name: 'Polish Kanban layout',
+            uiState: 'archiving' as const,
+          } as WorkspaceListItem,
+          ...mockWorkspaces.slice(2),
+        ],
+        reviewCount: 3,
       },
     },
   },

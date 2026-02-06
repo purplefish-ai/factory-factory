@@ -673,10 +673,15 @@ function SortableWorkspaceItem({
               <GripVertical className="h-3 w-3" />
             </button>
 
-            {/* Status dot + ratchet toggle */}
+            {/* Status dot + ratchet toggle OR archiving spinner */}
             <div className="w-5 shrink-0 mt-1.5 flex flex-col items-center gap-1.5">
               {isArchivingItem ? (
-                <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
+                <div className="relative h-5 w-5 flex items-center justify-center">
+                  {/* Outer pulsing ring */}
+                  <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                  {/* Rotating ring */}
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                </div>
               ) : (
                 <>
                   <Tooltip>
@@ -706,7 +711,7 @@ function SortableWorkspaceItem({
                 <span className="truncate font-medium text-sm leading-tight flex-1">
                   {isArchivingItem ? 'Archiving...' : workspace.name}
                 </span>
-                {workspace.lastActivityAt && (
+                {!isArchivingItem && workspace.lastActivityAt && (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatRelativeTime(workspace.lastActivityAt)}
                   </span>
@@ -747,7 +752,7 @@ function SortableWorkspaceItem({
               )}
 
               {/* Row 3: files changed + deltas + PR */}
-              <WorkspaceMetaRow workspace={workspace} stats={stats} />
+              {!isArchivingItem && <WorkspaceMetaRow workspace={workspace} stats={stats} />}
             </div>
           </div>
         </Link>
