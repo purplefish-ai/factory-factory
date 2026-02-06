@@ -132,6 +132,11 @@ function handleDispatchedState(
   const newQueuedMessages = new Map(state.queuedMessages);
   newQueuedMessages.delete(id);
 
+  // DISPATCHED messages must have an order assigned
+  if (userMessage.order === undefined) {
+    return { ...state, queuedMessages: newQueuedMessages };
+  }
+
   // Find the existing message and update its order
   const existingMessageIndex = state.messages.findIndex((m) => m.id === id);
   if (existingMessageIndex === -1) {

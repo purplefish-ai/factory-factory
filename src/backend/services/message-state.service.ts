@@ -540,10 +540,12 @@ class MessageStateService {
     const queuePosition = isUserMessage(message) ? message.queuePosition : undefined;
     const errorMessage = isUserMessage(message) ? message.errorMessage : undefined;
 
-    // For ACCEPTED user messages, include full content so frontend can add the message
-    // For DISPATCHED messages with order, include full content with the newly assigned order
+    // For ACCEPTED or DISPATCHED user messages, include full content
+    // ACCEPTED messages have order=undefined; DISPATCHED messages have assigned order
     const userMessage =
-      isUserMessage(message) && message.state === MessageState.ACCEPTED
+      isUserMessage(message) &&
+      (message.state === MessageState.ACCEPTED ||
+        (message.state === MessageState.DISPATCHED && message.order !== undefined))
         ? {
             text: message.text,
             timestamp: message.timestamp,
@@ -551,17 +553,7 @@ class MessageStateService {
             settings: message.settings,
             order: message.order,
           }
-        : isUserMessage(message) &&
-            message.state === MessageState.DISPATCHED &&
-            message.order !== undefined
-          ? {
-              text: message.text,
-              timestamp: message.timestamp,
-              attachments: message.attachments,
-              settings: message.settings,
-              order: message.order,
-            }
-          : undefined;
+        : undefined;
 
     this.emitter.emit('event', {
       type: 'message_state_changed',
