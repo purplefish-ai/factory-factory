@@ -51,7 +51,8 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Update docs if behavior or commands change.
 
 ## Security & Configuration Notes
-- Default database path is `~/factory-factory/data.db`, overridden by `DATABASE_PATH` or `BASE_DIR`.
+- Default database path is `~/.factory-factory/data.db`, overridden by `DATABASE_PATH` or `BASE_DIR`.
+- The app automatically migrates data from old `~/factory-factory` to `~/.factory-factory` on startup.
 - The app can run commands without manual approval in some modes; review changes carefully before merging.
 
 ## Feature Notes (Keep Docs Current)

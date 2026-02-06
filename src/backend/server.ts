@@ -38,6 +38,7 @@ import {
   createDevLogsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
+import { migrateDataDirectory } from './services/migration.service';
 import { reconciliationService } from './services/reconciliation.service';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
@@ -283,6 +284,13 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           // This must be on its own line starting with BACKEND_PORT: for the CLI to detect
           // biome-ignore lint/suspicious/noConsole: Required for CLI to detect actual backend port
           console.log(`BACKEND_PORT:${actualPort}`);
+
+          // Migrate data from old directory structure to new hidden directory
+          try {
+            migrateDataDirectory();
+          } catch (error) {
+            logger.error('Failed to migrate data directory on startup', error as Error);
+          }
 
           try {
             await reconciliationService.cleanupOrphans();

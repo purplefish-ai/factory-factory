@@ -297,7 +297,7 @@ function buildClaudeProcessConfig(): ClaudeProcessConfig {
  * Get default base directory
  */
 function getDefaultBaseDir(): string {
-  return join(homedir(), 'factory-factory');
+  return join(homedir(), '.factory-factory');
 }
 
 /**
