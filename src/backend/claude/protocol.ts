@@ -45,6 +45,8 @@ export interface PendingRequest<T = unknown> {
   resolve: (response: T) => void;
   reject: (error: Error) => void;
   timeoutId?: NodeJS.Timeout;
+  /** The subtype of the request, used to validate the response schema */
+  requestSubtype?: string;
 }
 
 /**
@@ -153,6 +155,7 @@ export class ClaudeProtocol extends EventEmitter {
         resolve: resolve as (response: unknown) => void,
         reject,
         timeoutId,
+        requestSubtype: 'initialize',
       });
 
       // Fire-and-forget the send - backpressure handled internally
@@ -312,6 +315,7 @@ export class ClaudeProtocol extends EventEmitter {
         resolve: resolve as (response: unknown) => void,
         reject,
         timeoutId,
+        requestSubtype: 'rewind_files',
       });
 
       // Fire-and-forget the send - backpressure handled internally
@@ -560,21 +564,13 @@ export class ClaudeProtocol extends EventEmitter {
     this.pendingRequests.delete(requestId);
 
     // Validate response payload based on the original request type
-    // We need to know which schema to use. We'll infer from the response structure.
     const rawResponse = msg.response.response;
 
     try {
-      // Try to determine response type and validate accordingly
+      // Validate response based on the request subtype we tracked
       let validatedResponse: unknown = rawResponse;
 
-      // Check if this looks like an InitializeResponseData
-      if (
-        rawResponse &&
-        typeof rawResponse === 'object' &&
-        'commands' in rawResponse &&
-        'models' in rawResponse &&
-        'account' in rawResponse
-      ) {
+      if (pending.requestSubtype === 'initialize') {
         const parseResult = InitializeResponseDataSchema.safeParse(rawResponse);
         if (!parseResult.success) {
           logger.error('Invalid initialize response payload', parseResult.error, {
@@ -589,13 +585,7 @@ export class ClaudeProtocol extends EventEmitter {
           return;
         }
         validatedResponse = parseResult.data;
-      }
-      // Check if this looks like a RewindFilesResponse
-      else if (
-        rawResponse &&
-        typeof rawResponse === 'object' &&
-        ('affected_files' in rawResponse || Object.keys(rawResponse).length === 0)
-      ) {
+      } else if (pending.requestSubtype === 'rewind_files') {
         const parseResult = RewindFilesResponseSchema.safeParse(rawResponse);
         if (!parseResult.success) {
           logger.error('Invalid rewind files response payload', parseResult.error, {
@@ -610,6 +600,20 @@ export class ClaudeProtocol extends EventEmitter {
           return;
         }
         validatedResponse = parseResult.data;
+      } else if (pending.requestSubtype) {
+        // For other known request types (like set_permission_mode), no validation schema yet
+        // but we track that it's a known type
+        validatedResponse = rawResponse;
+      } else {
+        // Unknown request type - reject to prevent bypassing validation
+        logger.error('Control response received for request with unknown subtype', {
+          requestId,
+          rawResponse: JSON.stringify(rawResponse).slice(0, 500),
+        });
+        pending.reject(
+          new Error('Control response received for request with unknown type - validation bypassed')
+        );
+        return;
       }
 
       pending.resolve(validatedResponse);
