@@ -90,6 +90,7 @@ export interface GitHubIssue {
   state: 'OPEN' | 'CLOSED';
   createdAt: string;
   author: { login: string };
+  labels: Array<{ name: string }>;
 }
 
 /**
@@ -740,7 +741,7 @@ class GitHubCLIService {
         '--state',
         'open',
         '--json',
-        'number,title,body,url,state,createdAt,author',
+        'number,title,body,url,state,createdAt,author,labels',
         '--limit',
         String(limit),
       ];

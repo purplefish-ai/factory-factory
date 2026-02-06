@@ -10,6 +10,7 @@ export interface GitHubIssue {
   state: 'OPEN' | 'CLOSED';
   createdAt: string;
   author: { login: string };
+  labels: Array<{ name: string }>;
 }
 
 interface KanbanContextValue {

@@ -50,6 +50,7 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
       projectId,
       issueNumber: issue.number,
       issueUrl: issue.url,
+      issueLabels: issue.labels,
       name: issue.title,
       ratchetEnabled,
     });

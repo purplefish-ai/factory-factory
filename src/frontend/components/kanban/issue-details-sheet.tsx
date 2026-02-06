@@ -78,6 +78,7 @@ export function IssueDetailsSheet({
       projectId,
       issueNumber: issue.number,
       issueUrl: issue.url,
+      issueLabels: issue.labels,
       name: issue.title,
       ratchetEnabled,
     });

@@ -1,6 +1,6 @@
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
-import { DEFAULT_FOLLOWUP } from '../prompts/workflows';
+import { getDefaultWorkflowForWorkspace } from '../prompts/workflow-selection';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
@@ -39,6 +39,7 @@ export type WorkspaceCreationSource =
       projectId: string;
       issueNumber: number;
       issueUrl: string;
+      issueLabels?: Array<{ name: string }>;
       name?: string;
       description?: string;
       ratchetEnabled?: boolean;
@@ -104,7 +105,11 @@ export class WorkspaceCreationService {
     }
 
     // Provision default session if enabled
-    const defaultSessionCreated = await this.provisionDefaultSession(workspace.id, configService);
+    const defaultSessionCreated = await this.provisionDefaultSession(
+      workspace.id,
+      source,
+      configService
+    );
 
     // Kick off background initialization
     this.startBackgroundInitialization(workspace.id, source, logger);
@@ -196,6 +201,7 @@ export class WorkspaceCreationService {
             creationMetadata: {
               issueNumber: source.issueNumber,
               issueUrl: source.issueUrl,
+              issueLabels: source.issueLabels,
             },
           },
         };
@@ -220,6 +226,7 @@ export class WorkspaceCreationService {
    */
   private async provisionDefaultSession(
     workspaceId: string,
+    source: WorkspaceCreationSource,
     configService: ConfigService
   ): Promise<boolean> {
     const maxSessions = configService.getMaxSessionsPerWorkspace();
@@ -228,9 +235,15 @@ export class WorkspaceCreationService {
     }
 
     try {
+      // Select appropriate workflow based on source and labels
+      const workflow = getDefaultWorkflowForWorkspace(
+        source.type,
+        source.type === 'GITHUB_ISSUE' ? source.issueLabels : undefined
+      );
+
       await claudeSessionAccessor.create({
         workspaceId,
-        workflow: DEFAULT_FOLLOWUP,
+        workflow,
         name: 'Chat 1',
       });
       return true;

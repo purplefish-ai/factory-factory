@@ -44,6 +44,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     projectId: z.string(),
     issueNumber: z.number(),
     issueUrl: z.string(),
+    issueLabels: z.array(z.object({ name: z.string() })).optional(),
     name: z.string().optional(),
     description: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
