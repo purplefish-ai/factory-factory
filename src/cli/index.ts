@@ -332,7 +332,7 @@ function createShutdownHandler(
     }
 
     setTimeout(() => {
-      const alive = processes.filter(({ proc }) => !proc.killed && proc.exitCode === null);
+      const alive = processes.filter(({ proc }) => proc.exitCode === null);
       if (alive.length > 0) {
         console.log(
           chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
@@ -349,7 +349,7 @@ function createShutdownHandler(
           }
         }
       }
-      process.exit(1);
+      process.exit(0);
     }, 5000);
   };
 }
