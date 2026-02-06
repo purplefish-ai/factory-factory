@@ -49,6 +49,7 @@ interface ChatContentProps {
   confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
   cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
   getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
+  autoStartPending?: boolean;
 }
 
 export const ChatContent = memo(function ChatContent({
@@ -87,6 +88,7 @@ export const ChatContent = memo(function ChatContent({
   confirmRewind,
   cancelRewind,
   getUuidForMessageId,
+  autoStartPending = false,
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
   const latestToolSequence = useMemo(() => {
@@ -117,6 +119,7 @@ export const ChatContent = memo(function ChatContent({
   const running = sessionStatus.phase === 'running';
   const stopping = sessionStatus.phase === 'stopping';
   const startingSession = sessionStatus.phase === 'starting';
+  const displayStartingState = startingSession || autoStartPending;
   const loadingSession = sessionStatus.phase === 'loading';
 
   const permissionRequestId =
@@ -139,6 +142,9 @@ export const ChatContent = memo(function ChatContent({
     if (stopping) {
       return 'Stopping...';
     }
+    if (displayStartingState && !running) {
+      return 'Agent is starting...';
+    }
     if (
       pendingRequest.type === 'permission' &&
       pendingRequest.request.toolName === 'ExitPlanMode'
@@ -157,7 +163,7 @@ export const ChatContent = memo(function ChatContent({
         <VirtualizedMessageList
           messages={groupedMessages}
           running={running}
-          startingSession={startingSession}
+          startingSession={displayStartingState}
           loadingSession={loadingSession}
           scrollContainerRef={viewportRef}
           onScroll={onScroll}
@@ -189,7 +195,7 @@ export const ChatContent = memo(function ChatContent({
         <AgentLiveDock
           workspaceId={workspaceId}
           running={running}
-          starting={startingSession}
+          starting={displayStartingState}
           stopping={stopping}
           permissionMode={permissionMode}
           latestThinking={latestThinking ?? null}

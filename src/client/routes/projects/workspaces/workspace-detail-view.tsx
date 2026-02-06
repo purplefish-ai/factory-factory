@@ -71,6 +71,7 @@ export interface WorkspaceDetailViewProps {
   confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
   cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
   getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
+  isIssueAutoStartPending: boolean;
   rightPanelVisible: boolean;
   archiveDialogOpen: boolean;
   setArchiveDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -138,6 +139,7 @@ export function WorkspaceDetailView({
   confirmRewind,
   cancelRewind,
   getUuidForMessageId,
+  isIssueAutoStartPending,
   rightPanelVisible,
   archiveDialogOpen,
   setArchiveDialogOpen,
@@ -246,6 +248,7 @@ export function WorkspaceDetailView({
                 confirmRewind={confirmRewind}
                 cancelRewind={cancelRewind}
                 getUuidForMessageId={getUuidForMessageId}
+                autoStartPending={isIssueAutoStartPending}
               />
             </WorkspaceContentView>
           </div>
