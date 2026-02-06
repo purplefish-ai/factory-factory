@@ -7,10 +7,9 @@ import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createQuestionResponseHandler(): ChatMessageHandler {
+export function createQuestionResponseHandler(): ChatMessageHandler<QuestionResponseMessage> {
   return ({ ws, sessionId, message }) => {
-    const typedMessage = message as QuestionResponseMessage;
-    const { requestId, answers } = typedMessage;
+    const { requestId, answers } = message;
 
     const client = sessionService.getClient(sessionId);
     if (!client) {

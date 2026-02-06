@@ -1,8 +1,9 @@
+import type { GetHistoryMessage } from '@/shared/websocket';
 import { SessionManager } from '../../../claude/index';
 import { sessionService } from '../../session.service';
 import type { ChatMessageHandler } from '../types';
 
-export function createGetHistoryHandler(): ChatMessageHandler {
+export function createGetHistoryHandler(): ChatMessageHandler<GetHistoryMessage> {
   return async ({ ws, sessionId, workingDir }) => {
     const client = sessionService.getClient(sessionId);
     const claudeSessionId = client?.getClaudeSessionId();

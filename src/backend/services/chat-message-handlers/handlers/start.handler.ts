@@ -6,7 +6,9 @@ import { getValidModel } from '../utils';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createStartHandler(deps: HandlerRegistryDependencies): ChatMessageHandler {
+export function createStartHandler(
+  deps: HandlerRegistryDependencies
+): ChatMessageHandler<StartMessageInput> {
   return async ({ ws, sessionId, message }) => {
     const clientCreator = deps.getClientCreator();
     if (!clientCreator) {
@@ -24,9 +26,9 @@ export function createStartHandler(deps: HandlerRegistryDependencies): ChatMessa
     }
 
     await clientCreator.getOrCreate(sessionId, {
-      thinkingEnabled: (message as StartMessageInput).thinkingEnabled,
-      planModeEnabled: (message as StartMessageInput).planModeEnabled,
-      model: getValidModel(message as StartMessageInput),
+      thinkingEnabled: message.thinkingEnabled,
+      planModeEnabled: message.planModeEnabled,
+      model: getValidModel(message),
     });
     ws.send(JSON.stringify({ type: 'started', dbSessionId: sessionId }));
   };

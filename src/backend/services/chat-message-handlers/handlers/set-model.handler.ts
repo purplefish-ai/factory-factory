@@ -6,9 +6,8 @@ import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createSetModelHandler(): ChatMessageHandler {
+export function createSetModelHandler(): ChatMessageHandler<SetModelMessage> {
   return async ({ ws, sessionId, message }) => {
-    const typedMessage = message as SetModelMessage;
     const client = sessionService.getClient(sessionId);
     if (!client) {
       ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
@@ -16,16 +15,16 @@ export function createSetModelHandler(): ChatMessageHandler {
     }
 
     try {
-      await client.setModel(typedMessage.model);
+      await client.setModel(message.model);
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Set model', { sessionId, model: typedMessage.model });
+        logger.info('[Chat WS] Set model', { sessionId, model: message.model });
       }
-      ws.send(JSON.stringify({ type: 'model_set', model: typedMessage.model }));
+      ws.send(JSON.stringify({ type: 'model_set', model: message.model }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to set model', {
         sessionId,
-        model: typedMessage.model,
+        model: message.model,
         error: errorMessage,
       });
       ws.send(JSON.stringify({ type: 'error', message: `Failed to set model: ${errorMessage}` }));

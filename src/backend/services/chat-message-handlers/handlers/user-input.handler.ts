@@ -6,10 +6,9 @@ import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createUserInputHandler(): ChatMessageHandler {
+export function createUserInputHandler(): ChatMessageHandler<UserInputMessage> {
   return ({ ws, sessionId, message }) => {
-    const typedMessage = message as UserInputMessage;
-    const rawContent = typedMessage.content || typedMessage.text;
+    const rawContent = message.content || message.text;
     if (!rawContent) {
       return;
     }

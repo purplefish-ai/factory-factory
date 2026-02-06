@@ -7,10 +7,9 @@ import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createPermissionResponseHandler(): ChatMessageHandler {
+export function createPermissionResponseHandler(): ChatMessageHandler<PermissionResponseMessage> {
   return ({ ws, sessionId, message }) => {
-    const typedMessage = message as PermissionResponseMessage;
-    const { requestId, allow } = typedMessage;
+    const { requestId, allow } = message;
 
     const client = sessionService.getClient(sessionId);
     if (!client) {

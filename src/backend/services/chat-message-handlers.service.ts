@@ -131,7 +131,15 @@ class ChatMessageHandlerService {
     workingDir: string,
     message: ChatMessage
   ): Promise<void> {
-    const handler = this.handlerRegistry[message.type];
+    const handler = this.handlerRegistry[message.type] as
+      | ((context: {
+          ws: WebSocket;
+          sessionId: string;
+          workingDir: string;
+          message: ChatMessage;
+        }) => Promise<void> | void)
+      | undefined;
+
     if (!handler) {
       logger.warn('[Chat WS] No handler registered for message type', { type: message.type });
       return;
