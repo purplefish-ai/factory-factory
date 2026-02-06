@@ -22,6 +22,7 @@ import {
   GripVertical,
   Kanban,
   Loader2,
+  Play,
   Plus,
   Settings,
 } from 'lucide-react';
@@ -682,6 +683,16 @@ function SortableWorkspaceItem({
                       toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
                     }}
                   />
+                  {workspace.runScriptStatus === 'RUNNING' && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Play className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">Dev server running</TooltipContent>
+                    </Tooltip>
+                  )}
                 </>
               )}
             </div>
