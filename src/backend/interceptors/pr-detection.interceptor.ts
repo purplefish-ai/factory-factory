@@ -50,11 +50,18 @@ export const prDetectionInterceptor: ToolInterceptor = {
     const result = await prSnapshotService.attachAndRefreshPR(context.workspaceId, prUrl);
 
     if (!result.success) {
-      logger.warn('Failed to attach PR and refresh snapshot', {
-        workspaceId: context.workspaceId,
-        prUrl,
-        reason: result.reason,
-      });
+      if (result.reason === 'fetch_failed') {
+        logger.warn('Attached PR URL but could not fetch snapshot details', {
+          workspaceId: context.workspaceId,
+          prUrl,
+        });
+      } else {
+        logger.warn('Failed to attach PR and refresh snapshot', {
+          workspaceId: context.workspaceId,
+          prUrl,
+          reason: result.reason,
+        });
+      }
       return;
     }
 
