@@ -478,7 +478,7 @@ describe('Ratchet CI regression behavior', () => {
     expect(signature).toBe('lint:42|unit-tests:0');
   });
 
-  it('keeps active session linkage when session is IDLE so it can be restarted', async () => {
+  it('clears stale active session linkage when IDLE session has no client', async () => {
     const workspace = {
       id: 'ws-idle',
       prUrl: 'https://github.com/example/repo/pull/88',
@@ -547,7 +547,7 @@ describe('Ratchet CI regression behavior', () => {
     );
 
     expect(triggerFixerSpy).toHaveBeenCalledTimes(1);
-    expect(workspaceAccessor.update).not.toHaveBeenCalledWith(workspace.id, {
+    expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
       ratchetActiveSessionId: null,
     });
   });

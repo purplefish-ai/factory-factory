@@ -534,7 +534,11 @@ class RatchetService {
     }
 
     if (session.status === SessionStatus.IDLE) {
-      // Keep linkage so triggerFixer can restart this session instead of creating churn.
+      // If we can't reach a client for the linked session, clear stale linkage.
+      // triggerFixer can still recover by workflow and restart/create as needed.
+      if (!client) {
+        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      }
       return null;
     }
 
