@@ -379,6 +379,7 @@ You are implementing this issue through a structured workflow. Work independentl
 - **Make reasonable assumptions**: When details are ambiguous, follow existing codebase patterns
 - **Commit frequently**: Make atomic commits as you complete logical units
 - **Update TodoWrite**: Keep your task list current throughout
+- **Protect your context**: Delegate to specialized agents for exploratory or intensive tasks
 
 Only ask the user for clarification if:
 - The issue description is contradictory or fundamentally unclear
@@ -393,7 +394,10 @@ For all other cases, make reasonable assumptions and proceed.
 
 1. **Understand the requirements**
    - Read the issue description and any linked resources
-   - Explore the codebase to understand relevant patterns and structure
+   - For broad codebase exploration (understanding architecture, finding related code across many files):
+     - Use Task tool with subagent_type="Explore" to delegate exploration
+     - This protects your context from being cluttered with search results
+   - For targeted searches (specific function/file): Use Grep or Glob directly
    - Identify which files will need to be modified or created
 
 2. **Create a task breakdown using TodoWrite**
@@ -447,14 +451,19 @@ For all other cases, make reasonable assumptions and proceed.
 
 ## Phase 4: Code Simplification (Optional but Recommended)
 
-1. **Simplify recent changes for clarity**
-   - This step is particularly valuable for large/complex changes or frequently-modified code
+1. **Delegate to code-simplifier agent**
+   - For significant changes, use Task tool with subagent_type="code-simplifier:code-simplifier"
+   - This agent will review recent changes and simplify for clarity
+   - Particularly valuable for large/complex changes or frequently-modified code
+   - The agent operates autonomously and returns simplified code
+
+2. **If agent is unavailable, simplify manually**
    - Review your code for unnecessary complexity or abstractions
    - Improve variable/function naming where helpful
    - Add clarifying comments only where logic isn't self-evident
    - Ensure consistent code style
 
-2. **Verify after simplification**
+3. **Verify after simplification**
    - Re-run tests after any changes: \`pnpm test\`
 
 ## Phase 5: Final Checks
@@ -510,6 +519,21 @@ You've successfully completed this issue when:
 - [ ] All changes are committed with descriptive messages
 - [ ] PR is created with clear title and description
 - [ ] PR references \`Closes #${issue.number}\`
+
+---
+
+## Key Principles
+
+**Orchestrate, don't execute everything yourself**:
+- Use Explore agent for broad codebase understanding (architecture, patterns, finding related code)
+- Use code-simplifier agent to refine completed code
+- Use Grep/Glob directly only for targeted, specific searches
+- This keeps your context focused on coordination and decision-making
+
+**Stay autonomous**:
+- Make implementation decisions based on codebase patterns
+- Only ask critical clarifying questions once at the start
+- Trust your judgment and proceed confidently
 
 ---
 
