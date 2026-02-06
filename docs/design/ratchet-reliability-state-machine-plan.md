@@ -40,18 +40,20 @@ while (true) {
     incrementFixupAttempt();
     continue;
   }
+  if (headChangedSinceIterationStart()) continue; // exit race safety: external push arrived while deciding to exit
   break;                                  // green CI, no conflicts, no comments — done
 }
 ```
 
 Key properties:
-- **One thing at a time:** `hasAnyWorkingSession()` checks only actively running workspace sessions. Idle sessions (waiting for user input) do not block ratchet.
+- **One thing at a time:** `hasAnyWorkingSession()` checks only sessions considered "working" by `isSessionWorking()` semantics. Idle sessions do not block ratchet.
 - **Synchronous fixup:** `await sendAgentToFixAndPush()` blocks the loop. No concurrent "fixup running while poller checks" state to manage.
 - **Stale CI detection:** After a fixup pushes, `hasStaleCiRun()` compares the current CI run ID to the one recorded before the fixup. If unchanged, CI hasn't restarted yet — just wait.
 - **Bounded stale CI wait:** If CI run ID remains unchanged beyond a timeout window (for example 5 minutes), ratchet exits and logs `STALE_CI_TIMEOUT` for manual follow-up.
 - **Session cleanup before action:** `clearRatchetSessions()` tears down the previous fixup session *before* deciding whether to launch a new one. This runs even when ratchet is disabled, so disabling mid-flight still cleans up.
 - **Late ratchet-enabled check:** `!ratchetEnabled()` is evaluated after monitoring guards (PR state, CI state) and after session cleanup, but before any fixup action. The loop continues to observe PR/CI state regardless of the toggle — disabling ratchet only prevents new fixup launches.
 - **No-push exits the loop:** After each fixup, `didPush()` checks whether the agent actually pushed. If the agent didn't push — couldn't fix it, got stuck, or (for reviews) decided the comments aren't actionable — the loop breaks immediately. Retrying would produce the same result since no state changed. This also prevents the stale CI infinite-wait: no push means no new CI run, so `hasStaleCiRun()` would block forever.
+- **Exit race safety:** Before any loop `break`, re-read branch head and compare to iteration-start head. If changed, continue/restart instead of exiting so late pushes are never missed.
 - **Re-derive action each iteration:** No cached state. Each iteration fetches fresh PR/CI/review status and decides what to do.
 
 ## Why This Exists
@@ -116,6 +118,16 @@ After each fixup session completes, the ratchet checks whether the agent pushed.
 
 - **Agent didn't push:** The loop breaks immediately. No state changed on the remote, so retrying would produce the same result. The workspace surfaces as needing manual attention. This covers: agent stuck/errored, agent couldn't resolve the conflict, agent decided review comments aren't actionable.
 - **Agent pushed:** The loop continues — `incrementFixupAttempt()` runs, then the next iteration waits for CI to restart via `hasStaleCiRun()` before re-evaluating.
+
+### Exit Race Safety
+
+To avoid missing a push that lands while the loop is about to exit:
+
+1. Record `iterationStartHeadSha` at the start of each iteration (or right before evaluating break paths).
+2. Before every `break` path (`DONE`, `no push`, ratchet disabled, stale CI timeout), re-read head SHA.
+3. If head changed, do not break; continue the loop (or `restartRatchetLoop`) and re-evaluate from fresh state.
+
+This makes loop exit conditional on "no relevant upstream change occurred while deciding to exit."
 
 ### `TERMINAL_FAILED`
 
@@ -217,6 +229,18 @@ Implement ratchet almost exactly like the pseudocode as a long-lived async task 
    - `restartRatchetLoop(workspaceId, reason)` (stop then start)
 5. Re-entry triggers should call `startRatchetLoop(...)` (or `restartRatchetLoop(...)`) on meaningful external state changes such as new push, ratchet re-enable, or workspace returning to ratchet-eligible state.
 6. Sleep and blocking waits must be cancellable via `AbortSignal` so disable/shutdown does not strand the loop in `sleep(...)` or long waits.
+7. Before every loop exit, run an exit recheck (`headChangedSinceIterationStart`); if head changed, continue/restart instead of breaking.
+
+### Working Session Definition (Explicit)
+
+`hasAnyWorkingSession()` must use the same semantics as `fixerSessionService.isSessionWorking()` to avoid drift.
+
+Definition for this design:
+
+1. A session is **working** when `isSessionWorking(session)` is true (active execution state).
+2. A session that is `RUNNING` but waiting for user input/idle is **not** working and must not block ratchet.
+3. Ratchet must call one canonical helper for this decision (do not duplicate ad-hoc status checks in ratchet service).
+4. Add tests that pin this behavior so future session-state refactors do not accidentally change ratchet blocking behavior.
 
 ### Awaiting Session Completion
 
@@ -273,6 +297,7 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - `ratchetEnabled` check after cleanup.
    - Synchronous fixup: record CI run ID, launch session, await completion.
    - No-push detection: compare branch HEAD before/after session, break if no push.
+   - Exit race safety: before every break, re-read head and continue/restart if it changed during the iteration.
    - Use per-workspace loop registry + `AbortController` to enforce one loop owner and support cancellation.
 6. Wire consecutive attempt counter: increment after each pushed fixup, reset on `DONE`, external push, or ratchet re-enable.
 7. Skip fixup launch when `consecutiveAttempts >= 3` (`TERMINAL_FAILED`).
@@ -302,6 +327,8 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - Wire attempt counter (increment, reset, terminal check).
    - Wire stale CI timeout break path.
    - Emit user-facing current-activity messages for each step (`fixing build`, `fixing review comments`, etc.).
+   - Enforce exit recheck (`iterationStartHeadSha` vs current head) before every loop break.
+   - Use canonical `isSessionWorking()` semantics for `hasAnyWorkingSession()`.
 
 5. `src/backend/services/fixer-session.service.ts`
    - Add `waitForCompletion(sessionId)` (with timeout).
@@ -329,7 +356,7 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - Ratchet disabled → `CLEANUP_ONLY`.
 
 2. `src/backend/services/ratchet.service.test.ts`
-   - `hasAnyWorkingSession()` blocks only actively running sessions; idle sessions do not block ratchet.
+   - `hasAnyWorkingSession()` uses `isSessionWorking()` semantics; `RUNNING`-but-idle sessions do not block ratchet.
    - `clearRatchetSessions()` tears down previous fixup before action phase.
    - `clearRatchetSessions()` runs even when ratchet is disabled (cleanup path).
    - Stale CI guard prevents duplicate fixup after push.
@@ -342,6 +369,7 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
    - Awaiting fixup completion works end-to-end.
    - No-push detection: agent exits without pushing → loop breaks immediately.
    - No-push does not increment attempt counter.
+   - Exit race safety: if head changes while loop is about to break, loop continues/restarts and ratchets the new push.
 
 3. `src/backend/services/fixer-session.service.test.ts`
    - `waitForCompletion()` resolves when session exits.
@@ -358,6 +386,7 @@ Deliver the full sequential loop model in one phase, since stale CI detection an
 6. Ratchet disabled mid-flight: current fixup completes, `clearRatchetSessions()` cleans up, loop exits.
 7. Previous ratchet session cleaned up before new fixup launches.
 8. Stale CI timeout: run ID never changes after push for > timeout window → break + audit log.
+9. User push races with loop exit: push arrives while ratchet is evaluating `break` → exit recheck detects head change and ratchet continues.
 
 ## Observability
 
@@ -381,13 +410,16 @@ Structured logs at each decision point:
    - **Mitigation:** Add a stale CI timeout window (for example 5 minutes). If run ID never changes, break with `STALE_CI_TIMEOUT` and surface manual attention required.
 
 3. **Risk:** session activity guard blocks ratchet while user is interactively working.
-   - **Mitigation:** `hasAnyWorkingSession()` only blocks on active working sessions. Idle sessions do not block.
+   - **Mitigation:** `hasAnyWorkingSession()` delegates to canonical `isSessionWorking()` semantics. `RUNNING`-but-idle sessions do not block.
 
 4. **Risk:** Fixup session hangs and `waitForCompletion` never resolves.
    - **Mitigation:** `waitForCompletion` has a timeout (e.g., 30 minutes). On timeout, the session is terminated, `clearRatchetSessions()` cleans up, and the attempt counter increments. The next iteration re-evaluates fresh state.
 
 5. **Risk:** Ratchet disabled while blocked in `await waitForCompletion()`.
    - **Mitigation:** The current fixup finishes (or times out). On the next iteration, `clearRatchetSessions()` cleans up, then `!ratchetEnabled()` breaks the loop. Disabling ratchet lets the in-flight fixup complete but prevents new launches.
+
+6. **Risk:** A new push arrives while ratchet is deciding to break, causing missed ratcheting.
+   - **Mitigation:** Exit recheck compares current head to `iterationStartHeadSha` before each break and continues/restarts when changed.
 
 ## Success Criteria
 
@@ -413,3 +445,5 @@ Structured logs at each decision point:
 10. Add mandatory transition/audit logging for every wait, dispatch, break, and terminal state.
 11. Add per-workspace loop registry (`start/stop/restart`) with `AbortController` cancellation.
 12. Add UI status fields + API wiring so workspace view can show current ratchet activity and recent transitions.
+13. Add canonical working-session predicate usage (`isSessionWorking`) and tests for `RUNNING`-but-idle behavior.
+14. Add exit-race recheck before all break paths so late pushes are not missed.
