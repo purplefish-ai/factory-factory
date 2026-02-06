@@ -242,7 +242,6 @@ describe('SessionService', () => {
     await sessionService.startClaudeSession('session-1');
 
     // Extract the onExit handler passed to processManager.createClient
-    // biome-ignore lint/style/noNonNullAssertion: test assertion — createClient must have been called
     const handlers = vi.mocked(sessionProcessManager.createClient).mock.calls[0]![2] as {
       onExit: (id: string) => Promise<void>;
     };

@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import treeKill from 'tree-kill';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
 import { createLogger } from './logger.service';
@@ -290,30 +291,47 @@ export class RunScriptService {
         }
       }
 
-      // Kill the process
-      if (childProcess) {
+      // Kill the process tree and wait for it to complete
+      if (childProcess?.pid) {
+        const processPid = childProcess.pid;
         logger.info('Stopping run script via stored process', {
           workspaceId,
-          pid: childProcess.pid,
+          pid: processPid,
         });
-        childProcess.kill('SIGTERM');
-        RunScriptService.runningProcesses.delete(workspaceId);
+        await new Promise<void>((resolve) => {
+          treeKill(processPid, 'SIGTERM', (err) => {
+            if (err) {
+              logger.warn('Failed to tree-kill run script process', {
+                workspaceId,
+                pid: processPid,
+                error: err.message,
+              });
+            }
+            // Always remove from tracking - if kill failed, the process may be
+            // dead/zombie and keeping it in the map prevents future cleanup retries
+            RunScriptService.runningProcesses.delete(workspaceId);
+            resolve();
+          });
+        });
       } else if (pid) {
         // Fallback: kill by PID if we don't have the process reference
         logger.info('Stopping run script via PID', { workspaceId, pid });
-        try {
-          process.kill(pid, 'SIGTERM');
-        } catch (error) {
-          // Process might already be dead
-          logger.warn('Failed to kill process, might already be stopped', {
-            workspaceId,
-            pid,
-            error,
+        await new Promise<void>((resolve) => {
+          treeKill(pid, 'SIGTERM', (err) => {
+            if (err) {
+              logger.warn('Failed to tree-kill process, might already be stopped', {
+                workspaceId,
+                pid,
+                error: err.message,
+              });
+            }
+            resolve();
           });
-        }
+        });
       }
 
       // Update workspace status and clear all run script state
+      // This now runs after treeKill completes, preventing race condition
       await workspaceAccessor.update(workspaceId, {
         runScriptStatus: 'IDLE',
         runScriptPid: null,
@@ -435,19 +453,36 @@ export class RunScriptService {
 
   /**
    * Synchronous cleanup for 'exit' event - kills processes without running cleanup scripts
+   *
+   * LIMITATION: childProcess.kill() only sends the signal to the direct parent process,
+   * not the entire process tree. Grandchildren processes (tsx, vite, esbuild workers, etc.)
+   * may be orphaned. Since this is called from the 'exit' event handler which cannot await
+   * async operations, we cannot use tree-kill here.
+   *
+   * Note: Processes are spawned with detached: false, so they share the same process group.
+   * On Unix-like systems, signals should propagate to the group, but this is not guaranteed
+   * for deeply nested child processes created by the script itself.
+   *
+   * For proper cleanup with full tree kill, graceful shutdown via SIGINT/SIGTERM handlers
+   * should be used instead (see handlers below which call killAllProcesses() with tree-kill).
+   *
    * @internal
    */
   static cleanupSync() {
     logger.info('Process exiting, killing any remaining run scripts');
     for (const [workspaceId, childProcess] of RunScriptService.runningProcesses.entries()) {
       try {
-        childProcess.kill('SIGKILL');
+        if (!childProcess.killed) {
+          // Use childProcess.kill() on the ChildProcess object (more reliable than process.kill(pid))
+          // Send SIGKILL for immediate termination since we can't wait in sync handler
+          childProcess.kill('SIGKILL');
+        }
         logger.info('Force killed run script on exit', {
           workspaceId,
           pid: childProcess.pid,
         });
       } catch {
-        // Ignore errors during forced shutdown
+        // Ignore errors during forced shutdown (process may already be dead)
       }
     }
     RunScriptService.runningProcesses.clear();

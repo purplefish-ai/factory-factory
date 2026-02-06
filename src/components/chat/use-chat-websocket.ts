@@ -141,26 +141,29 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     connected: false, // Will be overridden by transport.connected in return value
   });
 
+  // Destructure stable callbacks to avoid broad [chat] dependency causing handler churn
+  const { handleMessage: onChatMessage, dispatch } = chat;
+
   // Handle incoming messages - delegate to chat state
   const handleMessage = useCallback(
     (data: unknown) => {
-      chat.handleMessage(data);
+      onChatMessage(data);
     },
-    [chat.handleMessage]
+    [onChatMessage]
   );
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
     // Dispatch loading state to prevent flicker while replaying events
-    chat.dispatch({ type: 'SESSION_LOADING_START' });
+    dispatch({ type: 'SESSION_LOADING_START' });
     sendRef.current({ type: 'list_sessions' });
     sendRef.current({ type: 'load_session' }); // Loads history and sends messages_snapshot
-  }, [chat.dispatch]);
+  }, [dispatch]);
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
-    chat.dispatch({ type: 'SESSION_LOADING_END' });
-  }, [chat.dispatch]);
+    dispatch({ type: 'SESSION_LOADING_END' });
+  }, [dispatch]);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
