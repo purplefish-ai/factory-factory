@@ -327,6 +327,7 @@ async function importProjects(
 
 async function importWorkspaces(
   workspaces: Array<ExportedWorkspaceV1 | ExportedWorkspaceV2>,
+  schemaVersion: number,
   tx: TransactionClient
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
@@ -348,9 +349,9 @@ async function importWorkspaces(
       continue;
     }
 
-    // Migrate v1 to v2 if needed (detect by presence of ratchetEnabled field)
+    // Migrate v1 to v2 if needed (based on schema version from meta)
     const w: ExportedWorkspaceV2 =
-      'ratchetEnabled' in workspace ? workspace : migrateWorkspaceV1ToV2(workspace);
+      schemaVersion >= 2 ? (workspace as ExportedWorkspaceV2) : migrateWorkspaceV1ToV2(workspace);
 
     await tx.workspace.create({
       data: {
@@ -495,6 +496,7 @@ async function importTerminalSessions(
 
 async function importUserSettings(
   settings: ExportedUserSettingsV1 | ExportedUserSettingsV2 | null,
+  schemaVersion: number,
   tx: TransactionClient
 ): Promise<{ imported: boolean; skipped: boolean }> {
   if (!settings) {
@@ -506,9 +508,9 @@ async function importUserSettings(
     return { imported: false, skipped: true };
   }
 
-  // Migrate v1 to v2 if needed (detect by presence of ratchetEnabled field)
+  // Migrate v1 to v2 if needed (based on schema version from meta)
   const s: ExportedUserSettingsV2 =
-    'ratchetEnabled' in settings ? settings : migrateUserSettingsV1ToV2(settings);
+    schemaVersion >= 2 ? (settings as ExportedUserSettingsV2) : migrateUserSettingsV1ToV2(settings);
 
   await tx.userSettings.create({
     data: {
@@ -700,11 +702,12 @@ class DataBackupService {
 
     // Import in dependency order within a transaction for atomicity
     const results = await prisma.$transaction(async (tx) => {
+      const schemaVersion = input.meta.schemaVersion;
       const projects = await importProjects(input.data.projects, tx);
-      const workspaces = await importWorkspaces(input.data.workspaces, tx);
+      const workspaces = await importWorkspaces(input.data.workspaces, schemaVersion, tx);
       const claudeSessions = await importClaudeSessions(input.data.claudeSessions, tx);
       const terminalSessions = await importTerminalSessions(input.data.terminalSessions, tx);
-      const userSettings = await importUserSettings(input.data.userSettings, tx);
+      const userSettings = await importUserSettings(input.data.userSettings, schemaVersion, tx);
 
       return {
         projects,
