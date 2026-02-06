@@ -109,6 +109,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
 
   useEffect(() => {
     skipNextPersistRef.current = true;
+    setIsDragging(false);
     const storedOpen = readToolWindowOpen(workspaceId);
     setToolWindowOpen(storedOpen ?? true);
     const storedHeight = readHeight(workspaceId);
