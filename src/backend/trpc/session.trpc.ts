@@ -6,6 +6,7 @@ import { DEFAULT_FIRST_SESSION, DEFAULT_FOLLOWUP, listWorkflows } from '../promp
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { planFileService } from '../services/plan-file.service';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
@@ -94,6 +95,20 @@ export const sessionRouter = router({
       }
 
       const session = await claudeSessionAccessor.create(input);
+
+      // For plan workflow sessions, create the plan file and store its path
+      if (input.workflow === 'plan') {
+        const workspace = await workspaceAccessor.findById(input.workspaceId);
+        if (workspace?.worktreePath) {
+          const planFilePath = await planFileService.createPlanFile(
+            workspace.worktreePath,
+            workspace.branchName
+          );
+          await claudeSessionAccessor.update(session.id, { planFilePath });
+          return { ...session, planFilePath };
+        }
+      }
+
       return session;
     }),
 

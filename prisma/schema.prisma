@@ -198,11 +198,12 @@ model ClaudeSession {
   workspaceId      String
   workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name             String?
-  workflow         String        // "explore", "implement", "test"
+  workflow         String        // "explore", "implement", "test", "plan"
   model            String        @default("sonnet")
   status           SessionStatus @default(IDLE)
   claudeSessionId  String?       // For resume
   claudeProcessPid Int?
+  planFilePath     String?       // Relative path to plan file (e.g. "planning/2025-01-15-1430-my-branch.md")
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

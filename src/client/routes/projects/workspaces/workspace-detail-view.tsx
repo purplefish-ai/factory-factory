@@ -1,8 +1,14 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useMemo } from 'react';
 import type { useChatWebSocket } from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/components/workspace';
+import {
+  ArchiveWorkspaceDialog,
+  PlanPanel,
+  RightPanel,
+  WorkspaceContentView,
+} from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
@@ -81,6 +87,7 @@ export interface WorkspaceDetailViewProps {
   handleArchive: (commitUncommitted: boolean) => void;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex UI component with planning mode conditional layout
 export function WorkspaceDetailView({
   workspaceLoading,
   workspace,
@@ -150,6 +157,15 @@ export function WorkspaceDetailView({
   hasUncommitted,
   handleArchive,
 }: WorkspaceDetailViewProps) {
+  // Derive planning mode from the selected session's workflow
+  const isPlanningMode = useMemo(() => {
+    if (!(selectedDbSessionId && claudeSessions)) {
+      return false;
+    }
+    const selectedSession = claudeSessions.find((s) => s.id === selectedDbSessionId);
+    return selectedSession?.workflow === 'plan';
+  }, [selectedDbSessionId, claudeSessions]);
+
   if (workspaceLoading) {
     return <Loading message="Loading workspace..." />;
   }
@@ -164,6 +180,10 @@ export function WorkspaceDetailView({
       </div>
     );
   }
+
+  // In planning mode: always show right panel with plan, 50/50 split
+  // In normal mode: conditionally show right panel with standard tools, 70/30 split
+  const showRightPanel = isPlanningMode || rightPanelVisible;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -196,10 +216,10 @@ export function WorkspaceDetailView({
       <ResizablePanelGroup
         direction="horizontal"
         className="flex-1 overflow-hidden"
-        autoSaveId="workspace-main-panel"
+        autoSaveId={isPlanningMode ? 'workspace-plan-panel' : 'workspace-main-panel'}
       >
         {/* NOTE: react-resizable-panels v4+ changed its API to use percentage strings. */}
-        <ResizablePanel defaultSize="70%" minSize="30%">
+        <ResizablePanel defaultSize={isPlanningMode ? '50%' : '70%'} minSize="30%">
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
               workspaceId={workspaceId}
@@ -260,12 +280,20 @@ export function WorkspaceDetailView({
           </div>
         </ResizablePanel>
 
-        {rightPanelVisible && (
+        {showRightPanel && (
           <>
             <ResizableHandle />
-            <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
+            <ResizablePanel
+              defaultSize={isPlanningMode ? '50%' : '30%'}
+              minSize="15%"
+              maxSize={isPlanningMode ? '70%' : '50%'}
+            >
               <div className="h-full border-l">
-                <RightPanel workspaceId={workspaceId} messages={messages} />
+                {isPlanningMode && selectedDbSessionId ? (
+                  <PlanPanel sessionId={selectedDbSessionId} />
+                ) : (
+                  <RightPanel workspaceId={workspaceId} messages={messages} />
+                )}
               </div>
             </ResizablePanel>
           </>

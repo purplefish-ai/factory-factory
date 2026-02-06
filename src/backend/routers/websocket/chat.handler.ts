@@ -69,15 +69,16 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       logger.info('[Chat WS] Getting or creating client via sessionService', { dbSessionId });
     }
 
+    // Check if session workflow forces plan mode
+    const session = await claudeSessionAccessor.findById(dbSessionId);
+    const isPlanWorkflow = session?.workflow === 'plan';
+
     // Delegate client lifecycle to sessionService
     const client = await sessionService.getOrCreateClient(dbSessionId, {
       thinkingEnabled: options.thinkingEnabled,
-      permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
+      permissionMode: isPlanWorkflow || options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,
     });
-
-    // Set up event forwarding (idempotent - safe to call multiple times)
-    const session = await claudeSessionAccessor.findById(dbSessionId);
     const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
     chatEventForwarderService.setupClientEvents(
       dbSessionId,

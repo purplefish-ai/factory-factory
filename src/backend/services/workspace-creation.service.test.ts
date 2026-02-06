@@ -151,6 +151,7 @@ describe('WorkspaceCreationService', () => {
       model: 'sonnet',
       claudeSessionId: null,
       claudeProcessPid: null,
+      planFilePath: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
