@@ -605,13 +605,6 @@ class WorktreeLifecycleService {
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });
 
-      void startDefaultClaudeSession(workspaceId).catch((error) => {
-        logger.error('Failed to start default Claude session', {
-          workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-
       const ranFactorySetup = await runFactorySetupScriptIfConfigured(
         workspaceId,
         workspaceWithProject,
@@ -619,6 +612,13 @@ class WorktreeLifecycleService {
         factoryConfig
       );
       if (ranFactorySetup) {
+        // Start Claude session after factory setup completes
+        void startDefaultClaudeSession(workspaceId).catch((error) => {
+          logger.error('Failed to start default Claude session after factory setup', {
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
         return;
       }
 
@@ -628,10 +628,24 @@ class WorktreeLifecycleService {
         worktreeInfo.worktreePath
       );
       if (ranProjectSetup) {
+        // Start Claude session after project setup completes
+        void startDefaultClaudeSession(workspaceId).catch((error) => {
+          logger.error('Failed to start default Claude session after project setup', {
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
         return;
       }
 
+      // No setup scripts ran, mark ready and start Claude session
       await workspaceStateMachine.markReady(workspaceId);
+      void startDefaultClaudeSession(workspaceId).catch((error) => {
+        logger.error('Failed to start default Claude session', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     } catch (error) {
       await handleWorkspaceInitFailure(workspaceId, error as Error);
     } finally {
