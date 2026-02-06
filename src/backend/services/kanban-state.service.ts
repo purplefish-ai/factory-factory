@@ -3,6 +3,7 @@ import { KanbanColumn, PRState, type Workspace, WorkspaceStatus } from '@prisma-
 import { workspaceAccessor } from '../resource_accessors/index';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
+import { workspaceActivityService } from './workspace-activity.service';
 import { deriveWorkspaceFlowStateFromWorkspace } from './workspace-flow-state.service';
 
 const logger = createLogger('kanban-state');
@@ -139,16 +140,17 @@ class KanbanStateService extends EventEmitter {
    * to show the column it was in before archiving.
    * Only updates stateComputedAt when the column actually changes.
    *
-   * Emits 'transition_to_waiting' event when workspace transitions to WAITING column.
+   * Emits 'transition_to_waiting' event when workspace transitions to WAITING column
+   * AND all sessions are idle (checked via workspaceActivityService).
    *
    * @param workspaceId - The workspace to update
-   * @param wasWorkingBeforeUpdate - Optional pre-captured working state. If provided,
-   *   used instead of querying current session state. This is critical when called
-   *   from result handlers where the session may have already transitioned to 'ready'.
+   * @param isSessionCompletionTrigger - Set to true when called from session completion
+   *   (result/exit handlers). Used to detect workspace becoming idle even if column
+   *   was already WAITING.
    */
   async updateCachedKanbanColumn(
     workspaceId: string,
-    wasWorkingBeforeUpdate?: boolean
+    isSessionCompletionTrigger = false
   ): Promise<void> {
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (!workspace) {
@@ -163,11 +165,9 @@ class KanbanStateService extends EventEmitter {
 
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
 
-    // Determine if sessions were working: use pre-captured state if provided,
-    // otherwise query current in-memory state
-    const wasWorking =
-      wasWorkingBeforeUpdate ??
-      sessionService.isAnySessionWorking(workspace.claudeSessions?.map((s) => s.id) ?? []);
+    // Check if workspace has any running sessions via workspace activity service
+    // This is more reliable than checking individual session states
+    const workspaceHasRunningSessions = workspaceActivityService.isWorkspaceActive(workspaceId);
 
     // For cached column, include flow-state working but not in-memory session activity.
     const cachedColumn = computeKanbanColumn({
@@ -194,23 +194,27 @@ class KanbanStateService extends EventEmitter {
       previousColumn,
       newColumn,
       columnChanged,
-      wasWorking,
+      workspaceHasRunningSessions,
     });
 
     // Emit event when workspace transitions to WAITING and is truly idle.
-    // Only emit if both flow state and session activity indicate the workspace is idle.
-    // This happens when:
-    // 1. The cached column is/changed to WAITING (workspace is in idle state)
+    // All conditions must be met:
+    // 1. Cached column is WAITING (workspace in idle state based on PR/ratchet)
     // 2. Flow state is NOT working (no ratchet fixing, no CI running, etc.)
-    // 3. Either the column just changed OR a session just finished (wasWorking=true)
+    // 3. NO sessions are running in the workspace (all sessions idle)
+    // 4. Either column just changed OR this was triggered by session completion
     const isFlowStateIdle = !flowState.isWorking;
-    if (newColumn === KanbanColumn.WAITING && isFlowStateIdle && (columnChanged || wasWorking)) {
+    const allSessionsIdle = !workspaceHasRunningSessions;
+    const isTransition = columnChanged || isSessionCompletionTrigger;
+
+    if (newColumn === KanbanColumn.WAITING && isFlowStateIdle && allSessionsIdle && isTransition) {
       logger.info('Workspace transitioned to WAITING', {
         workspaceId,
         from: previousColumn,
         columnChanged,
-        wasWorking,
+        isSessionCompletionTrigger,
         isFlowStateIdle,
+        allSessionsIdle,
       });
 
       this.emit('transition_to_waiting', {
