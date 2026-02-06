@@ -17,11 +17,21 @@ const statusCheckRollupItemSchema = z.object({
   state: z.string().optional(),
 });
 
+/**
+ * Transform empty string to null for reviewDecision field.
+ * The gh CLI returns "" (empty string) when a PR has no review decision,
+ * as the Go backend serializes GraphQL null enum values as empty strings.
+ */
+const reviewDecisionSchema = z.preprocess(
+  (val) => (val === '' ? null : val),
+  z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable()
+);
+
 const prStatusSchema = z.object({
   number: z.number(),
   state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
   isDraft: z.boolean(),
-  reviewDecision: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable(),
+  reviewDecision: reviewDecisionSchema,
   mergedAt: z.string().nullable(),
   updatedAt: z.string(),
   statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
@@ -46,7 +56,7 @@ const basePRSchema = z.object({
 });
 
 const prDetailsSchema = z.object({
-  reviewDecision: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable(),
+  reviewDecision: reviewDecisionSchema,
   additions: z.number().optional(),
   deletions: z.number().optional(),
   changedFiles: z.number().optional(),
@@ -67,7 +77,7 @@ const fullPRDetailsSchema = z.object({
   updatedAt: z.string(),
   isDraft: z.boolean(),
   state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
-  reviewDecision: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable(),
+  reviewDecision: reviewDecisionSchema,
   statusCheckRollup: z.array(z.any()).nullable(),
   reviews: z.array(z.any()),
   comments: z.array(z.any()),
@@ -588,7 +598,7 @@ class GitHubCLIService {
           const details = parseGhJson(prDetailsSchema, prDetails, 'listReviewRequests:prDetails');
           return {
             ...pr,
-            reviewDecision: details.reviewDecision || null,
+            reviewDecision: details.reviewDecision,
             additions: details.additions ?? 0,
             deletions: details.deletions ?? 0,
             changedFiles: details.changedFiles ?? 0,
@@ -738,7 +748,7 @@ class GitHubCLIService {
         updatedAt: data.updatedAt,
         isDraft: data.isDraft,
         state: data.state,
-        reviewDecision: data.reviewDecision || null,
+        reviewDecision: data.reviewDecision,
         statusCheckRollup: data.statusCheckRollup || null,
         reviews: data.reviews || [],
         comments: data.comments || [],
