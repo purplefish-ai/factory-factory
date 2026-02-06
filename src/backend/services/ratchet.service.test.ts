@@ -98,6 +98,7 @@ describe('ratchet service', () => {
         ratchetActiveSessionId: null,
         ratchetLastNotifiedState: null,
         prReviewLastCheckedAt: null,
+        ratchetCiGreenAt: null,
       },
     ]);
 
@@ -129,6 +130,7 @@ describe('ratchet service', () => {
       ratchetActiveSessionId: null,
       ratchetLastNotifiedState: null,
       prReviewLastCheckedAt: null,
+      ratchetCiGreenAt: null,
     };
 
     const prStateInfo = {
@@ -200,6 +202,7 @@ describe('ratchet service', () => {
       ratchetActiveSessionId: null,
       ratchetLastNotifiedState: null,
       prReviewLastCheckedAt: null,
+      ratchetCiGreenAt: null,
     };
 
     const prStateInfo = {
@@ -391,6 +394,135 @@ describe('Ratchet Comment Detection', () => {
 
       expect(filteredComments).toHaveLength(1);
       expect(filteredComments[0].author.login).toBe('reviewer1');
+    });
+  });
+
+  describe('CI green grace period', () => {
+    it('stays in CI_RUNNING state within grace period even when CI is green', () => {
+      const workspace = {
+        id: 'ws-grace',
+        prUrl: 'https://github.com/example/repo/pull/100',
+        prNumber: 100,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+        ratchetLastNotifiedState: null,
+        prReviewLastCheckedAt: null,
+        ratchetCiGreenAt: new Date(Date.now() - 30_000), // 30 seconds ago (within grace period)
+      };
+
+      const prStateInfo = {
+        ciStatus: 'SUCCESS' as const,
+        mergeStateStatus: 'CLEAN',
+        hasChangesRequested: false,
+        hasNewReviewComments: false,
+        failedChecks: [],
+        reviews: [],
+        comments: [],
+        reviewComments: [],
+        newReviewComments: [],
+        newPRComments: [],
+        prState: 'OPEN',
+        prNumber: 100,
+      };
+
+      const determineRatchetState = (
+        ratchetService as unknown as {
+          determineRatchetState: (pr: typeof prStateInfo, ws: typeof workspace) => RatchetState;
+        }
+      ).determineRatchetState;
+
+      const state = determineRatchetState(prStateInfo, workspace);
+
+      expect(state).toBe(RatchetState.CI_RUNNING);
+    });
+
+    it('moves to READY state after grace period expires', () => {
+      const workspace = {
+        id: 'ws-grace',
+        prUrl: 'https://github.com/example/repo/pull/100',
+        prNumber: 100,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+        ratchetLastNotifiedState: null,
+        prReviewLastCheckedAt: null,
+        ratchetCiGreenAt: new Date(Date.now() - 70_000), // 70 seconds ago (past grace period)
+      };
+
+      const prStateInfo = {
+        ciStatus: 'SUCCESS' as const,
+        mergeStateStatus: 'CLEAN',
+        hasChangesRequested: false,
+        hasNewReviewComments: false,
+        failedChecks: [],
+        reviews: [],
+        comments: [],
+        reviewComments: [],
+        newReviewComments: [],
+        newPRComments: [],
+        prState: 'OPEN',
+        prNumber: 100,
+      };
+
+      const determineRatchetState = (
+        ratchetService as unknown as {
+          determineRatchetState: (pr: typeof prStateInfo, ws: typeof workspace) => RatchetState;
+        }
+      ).determineRatchetState;
+
+      const state = determineRatchetState(prStateInfo, workspace);
+
+      expect(state).toBe(RatchetState.READY);
+    });
+
+    it('immediately moves to REVIEW_PENDING if comments exist, ignoring grace period', () => {
+      const workspace = {
+        id: 'ws-grace',
+        prUrl: 'https://github.com/example/repo/pull/100',
+        prNumber: 100,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+        ratchetLastNotifiedState: null,
+        prReviewLastCheckedAt: null,
+        ratchetCiGreenAt: new Date(Date.now() - 30_000), // 30 seconds ago (within grace period)
+      };
+
+      const prStateInfo = {
+        ciStatus: 'SUCCESS' as const,
+        mergeStateStatus: 'CLEAN',
+        hasChangesRequested: false,
+        hasNewReviewComments: true, // New review comments present
+        failedChecks: [],
+        reviews: [],
+        comments: [],
+        reviewComments: [],
+        newReviewComments: [
+          {
+            id: 1,
+            author: { login: 'reviewer1' },
+            body: 'Please fix this',
+            path: 'test.ts',
+            line: 10,
+            createdAt: '2024-01-01T12:00:00Z',
+            url: 'https://github.com/test/pr/1',
+          },
+        ],
+        newPRComments: [],
+        prState: 'OPEN',
+        prNumber: 100,
+      };
+
+      const determineRatchetState = (
+        ratchetService as unknown as {
+          determineRatchetState: (pr: typeof prStateInfo, ws: typeof workspace) => RatchetState;
+        }
+      ).determineRatchetState;
+
+      const state = determineRatchetState(prStateInfo, workspace);
+
+      expect(state).toBe(RatchetState.REVIEW_PENDING);
     });
   });
 });

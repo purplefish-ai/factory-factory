@@ -24,6 +24,7 @@ const logger = createLogger('ratchet');
 
 const RATCHET_POLL_INTERVAL_MS = 60_000; // 1 minute
 const MAX_CONCURRENT_CHECKS = 5;
+const CI_GREEN_GRACE_PERIOD_MS = 60_000; // 60 seconds grace period after CI goes green
 
 // Workflow identifiers for fixer sessions
 const RATCHET_WORKFLOW = 'ratchet';
@@ -106,6 +107,7 @@ interface WorkspaceWithPR {
   ratchetActiveSessionId: string | null;
   ratchetLastNotifiedState: RatchetState | null;
   prReviewLastCheckedAt: Date | null;
+  ratchetCiGreenAt: Date | null;
 }
 
 class RatchetService {
@@ -239,6 +241,34 @@ class RatchetService {
   }
 
   /**
+   * Compute workspace update fields based on PR state
+   */
+  private computeWorkspaceUpdate(
+    prStateInfo: PRStateInfo,
+    previousState: RatchetState,
+    newState: RatchetState,
+    shouldTakeAction: boolean
+  ) {
+    const now = new Date();
+    const ciJustWentGreen =
+      prStateInfo.ciStatus === CIStatus.SUCCESS &&
+      (previousState === RatchetState.CI_RUNNING || previousState === RatchetState.CI_FAILED);
+
+    return {
+      ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
+      ratchetLastCheckedAt: now,
+      // Update review timestamp if we detected review comments
+      ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
+      // Set ratchetCiGreenAt when CI transitions to green, or clear it if CI is not green
+      ...(ciJustWentGreen
+        ? { ratchetCiGreenAt: now }
+        : prStateInfo.ciStatus !== CIStatus.SUCCESS
+          ? { ratchetCiGreenAt: null }
+          : {}),
+    };
+  }
+
+  /**
    * Process a single workspace through the ratchet state machine
    */
   private async processWorkspace(
@@ -267,7 +297,7 @@ class RatchetService {
       }
 
       // 2. Determine ratchet state
-      const newState = this.determineRatchetState(prStateInfo);
+      const newState = this.determineRatchetState(prStateInfo, workspace);
       const previousState = workspace.ratchetState;
 
       // 3. Log state transition if changed
@@ -290,14 +320,14 @@ class RatchetService {
         ? await this.executeRatchetAction(workspace, newState, prStateInfo, settings)
         : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
 
-      // 6. Update workspace (including review check timestamp if we found review comments)
-      const now = new Date();
-      await workspaceAccessor.update(workspace.id, {
-        ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
-        ratchetLastCheckedAt: now,
-        // Update review timestamp if we detected review comments
-        ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
-      });
+      // 6. Update workspace with new state and timestamps
+      const updateFields = this.computeWorkspaceUpdate(
+        prStateInfo,
+        previousState,
+        newState,
+        shouldTakeAction
+      );
+      await workspaceAccessor.update(workspace.id, updateFields);
 
       return {
         workspaceId: workspace.id,
@@ -444,7 +474,7 @@ class RatchetService {
   /**
    * Determine ratchet state from PR state info
    */
-  private determineRatchetState(pr: PRStateInfo): RatchetState {
+  private determineRatchetState(pr: PRStateInfo, workspace: WorkspaceWithPR): RatchetState {
     // Check if PR is merged
     if (pr.prState === 'MERGED') {
       return RatchetState.MERGED;
@@ -468,8 +498,25 @@ class RatchetService {
     }
 
     // Check for unaddressed review comments (either formal changes requested OR new review comments)
+    // BUT apply grace period: if CI just went green, wait before checking for review comments
+    // This gives AI reviewers time to post their comments after CI completes
+    const now = Date.now();
+    const ciGreenTime = workspace.ratchetCiGreenAt?.getTime() ?? 0;
+    const timeSinceCiGreen = now - ciGreenTime;
+    const isWithinGracePeriod = ciGreenTime > 0 && timeSinceCiGreen < CI_GREEN_GRACE_PERIOD_MS;
+
     if (pr.hasChangesRequested || pr.hasNewReviewComments) {
       return RatchetState.REVIEW_PENDING;
+    }
+
+    // If we're within the grace period, stay in CI_RUNNING state to wait for potential review comments
+    if (isWithinGracePeriod) {
+      logger.debug('Within CI green grace period, waiting for potential review comments', {
+        workspaceId: workspace.id,
+        timeSinceCiGreen,
+        gracePeriod: CI_GREEN_GRACE_PERIOD_MS,
+      });
+      return RatchetState.CI_RUNNING;
     }
 
     // All clear - ready to merge
@@ -686,7 +733,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
         await workspaceAccessor.update(workspace.id, {
           ratchetActiveSessionId: result.sessionId,
           ...(shouldMarkNotified && {
-            ratchetLastNotifiedState: this.determineRatchetState(prStateInfo),
+            ratchetLastNotifiedState: this.determineRatchetState(prStateInfo, workspace),
           }),
         });
 

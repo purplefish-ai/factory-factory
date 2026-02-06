@@ -177,6 +177,7 @@ model Workspace {
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
   ratchetLastCiRunId      String?                         // Track which CI run we processed
   ratchetLastNotifiedState RatchetState?                  // Last state we notified the fixer about
+  ratchetCiGreenAt        DateTime?                       // When CI last went green (for grace period)
 
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
