@@ -273,6 +273,13 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         });
       }
 
+      // Migrate data from old directory structure before starting server
+      try {
+        migrateDataDirectory();
+      } catch (error) {
+        logger.error('Failed to migrate data directory on startup', error as Error);
+      }
+
       return new Promise((resolve, reject) => {
         server.listen(actualPort, async () => {
           logger.info('Backend server started', {
@@ -284,13 +291,6 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           // This must be on its own line starting with BACKEND_PORT: for the CLI to detect
           // biome-ignore lint/suspicious/noConsole: Required for CLI to detect actual backend port
           console.log(`BACKEND_PORT:${actualPort}`);
-
-          // Migrate data from old directory structure to new hidden directory
-          try {
-            migrateDataDirectory();
-          } catch (error) {
-            logger.error('Failed to migrate data directory on startup', error as Error);
-          }
 
           try {
             await reconciliationService.cleanupOrphans();
