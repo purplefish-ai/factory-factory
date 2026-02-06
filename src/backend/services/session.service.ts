@@ -64,9 +64,10 @@ class SessionService {
       permissionMode: 'bypassPermissions',
     });
 
-    // Send initial prompt if provided
-    if (options?.initialPrompt) {
-      await client.sendMessage(options.initialPrompt);
+    // Send initial prompt - defaults to 'Continue with the task.' if not provided
+    const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
+    if (initialPrompt) {
+      await client.sendMessage(initialPrompt);
     }
 
     logger.info('Claude session started', { sessionId });

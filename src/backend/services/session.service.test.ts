@@ -264,6 +264,7 @@ describe('SessionService', () => {
 
     const client = {
       getPid: vi.fn().mockReturnValue(456),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
     } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
@@ -326,6 +327,7 @@ describe('SessionService', () => {
 
     const client = {
       getPid: vi.fn().mockReturnValue(789),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
     } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
@@ -459,6 +461,7 @@ describe('SessionService', () => {
 
     const client = {
       getPid: vi.fn().mockReturnValue(888),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
     } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
