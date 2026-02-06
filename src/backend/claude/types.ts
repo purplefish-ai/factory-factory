@@ -8,6 +8,7 @@
  * @see docs/claude/claude-code-cli-reference.md
  */
 
+import { z } from 'zod';
 import type {
   AskUserQuestion,
   AskUserQuestionOption,
@@ -167,11 +168,12 @@ export interface ModelInfo extends SharedModelInfo {
 
 /**
  * Account information returned in initialize response.
+ * All fields are optional per the official Claude Agent SDK spec.
  */
 export interface AccountInfo {
-  email: string;
-  organization: string;
-  subscriptionType: string;
+  email?: string;
+  organization?: string;
+  subscriptionType?: string;
 }
 
 /**
@@ -184,6 +186,29 @@ export interface InitializeResponseData {
   models: ModelInfo[];
   account: AccountInfo;
 }
+
+/**
+ * Zod schema for InitializeResponseData runtime validation.
+ */
+export const InitializeResponseDataSchema = z
+  .object({
+    commands: z.array(z.object({ name: z.string(), description: z.string() }).passthrough()),
+    output_style: z.string(),
+    available_output_styles: z.array(z.string()),
+    models: z.array(
+      z
+        .object({ value: z.string(), displayName: z.string(), description: z.string() })
+        .passthrough()
+    ),
+    account: z
+      .object({
+        email: z.string().optional(),
+        organization: z.string().optional(),
+        subscriptionType: z.string().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
 
 // =============================================================================
 // Permission Update Types
@@ -332,6 +357,15 @@ export interface RewindFilesResponse {
   /** List of file paths that were/would be reverted */
   affected_files?: string[];
 }
+
+/**
+ * Zod schema for RewindFilesResponse runtime validation.
+ */
+export const RewindFilesResponseSchema = z
+  .object({
+    affected_files: z.array(z.string()).optional(),
+  })
+  .passthrough();
 
 /**
  * Union of all request subtypes SDK can send to CLI.
