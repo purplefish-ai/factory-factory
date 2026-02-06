@@ -361,36 +361,153 @@ async function buildInitialPromptFromGitHubIssue(workspaceId: string): Promise<s
       issueTitle: issue.title,
     });
 
-    return `Please work on the following GitHub issue and take it through the full development pipeline:
-
-## Issue #${issue.number}: ${issue.title}
+    return `# GitHub Issue #${issue.number}: ${issue.title}
 
 ${issue.body || '(No description provided)'}
 
+**Issue URL**: ${issue.url}
+
 ---
 
-GitHub Issue URL: ${issue.url}
+## Your Task
 
-## Instructions
+Implement this issue following the 5-phase workflow below. Work autonomously—only ask questions if requirements are contradictory or fundamentally unclear.
 
-Please complete the following steps:
+**Protect your context by delegating to specialized agents:**
+- Exploring unfamiliar code or architecture? Use: "Please use the Explore agent to understand [specific area]"
+- Significant changes to review/simplify? Use: "Please use the code-simplifier agent to review recent changes"
+- Targeted searches only? Use Grep/Glob directly
 
-1. **Plan**: Analyze the issue and come up with a plan to implement it. Consider the codebase structure, existing patterns, and any edge cases.
+---
 
-2. **Implement**: If the requirements are clear and no clarification is needed, proceed to implement the plan. Write clean, well-tested code that follows the project's conventions.
+## Phase 1: Planning
 
-3. **Review**: After implementation, review your own code for:
-   - Correctness and completeness
-   - Code quality and adherence to project patterns
-   - Potential bugs or edge cases
-   - Test coverage
+1. **Understand requirements and find relevant code**
+   - Read issue description and any linked resources
+   - Search for affected files (delegate to Explore agent for broad architecture questions)
+   - Identify which files need changes
 
-4. **Create PR**: Once you're satisfied with the implementation, create a pull request with:
-   - A clear title and description
-   - Reference to this issue
-   - Summary of changes made
+2. **Create task list with TodoWrite**
+   Create specific tasks for:
+   - Code changes (which files and what changes?)
+   - Tests to add (which test files?)
+   - Verification commands (typecheck, test, build)
+   - PR creation
 
-If you need clarification on any requirements before proceeding, ask for clarification first.`;
+   Update status as you work: pending → in_progress → completed
+
+3. **Identify edge cases**
+   - What could go wrong?
+   - What scenarios need tests?
+   - What existing patterns should you follow?
+
+## Phase 2: Implementation
+
+1. **Work through your TodoWrite tasks systematically**
+   - Follow existing code patterns and conventions
+   - Add type definitions and error handling
+   - Keep commits atomic and focused
+   - Update TodoWrite as you discover additional work
+
+2. **Write tests**
+   - Test new functionality and edge cases
+   - Follow existing test patterns in the codebase
+   - Ensure tests are focused and maintainable
+
+3. **Commit frequently**
+   - Atomic commits as you complete logical units
+   - Follow project style: short, imperative, descriptive (<72 chars)
+   - Reference issue number when relevant
+   - Example: "Add session error handling (#${issue.number})"
+
+## Phase 3: Verification
+
+Run all verification checks:
+
+\`\`\`bash
+pnpm typecheck && pnpm check:fix && pnpm test && pnpm build
+\`\`\`
+
+Fix any failures:
+- **Type errors**: Resolve without type casts when possible
+- **Lint errors**: Review \`pnpm check:fix\` changes
+- **Test failures**: Debug and fix before proceeding
+- **Build failures**: Check for syntax errors or missing dependencies
+
+Update TodoWrite with any additional fix tasks discovered.
+
+## Phase 4: Final Review
+
+1. **Review your changes**
+   \`\`\`bash
+   git diff origin/main
+   \`\`\`
+
+   Look for:
+   - Debug logs or commented code to remove
+   - Unclear variable names to improve
+   - Unnecessary complexity to simplify
+
+2. **Optional: Delegate to code-simplifier for large changes**
+   If you've changed many files (8+) or added complex logic:
+   - Use: "Please use the code-simplifier agent to review recent changes"
+   - Re-run tests after any changes: \`pnpm test\`
+
+3. **Ensure everything is committed**
+   \`\`\`bash
+   git status  # should show clean working directory
+   \`\`\`
+
+## Phase 5: Create Pull Request [REQUIRED - DO NOT SKIP]
+
+**Pre-flight checklist before creating PR:**
+- [ ] All TodoWrite tasks marked completed
+- [ ] \`pnpm test\` passes
+- [ ] \`pnpm typecheck\` passes
+- [ ] \`pnpm build\` succeeds
+- [ ] Working directory clean (\`git status\`)
+- [ ] All commits have descriptive messages
+
+**Now create the PR:**
+
+1. **Push your branch:**
+   \`\`\`bash
+   git push -u origin HEAD
+   \`\`\`
+
+2. **Write PR body to /tmp/pr-body.md:**
+   \`\`\`markdown
+   ## Summary
+   [1-3 bullets describing what this PR accomplishes]
+
+   ## Changes
+   - **[Component/Area]**: [What changed and why]
+   - [Add more lines as needed]
+
+   ## Testing
+   - [x] Tests pass (\`pnpm test\`)
+   - [x] Types pass (\`pnpm typecheck\`)
+   - [x] Build succeeds (\`pnpm build\`)
+   - [ ] Manual testing: [How to verify this change works]
+
+   Closes #${issue.number}
+   \`\`\`
+
+3. **Create the PR:**
+   \`\`\`bash
+   gh pr create --title "Fix #${issue.number}: [concise description]" --body-file /tmp/pr-body.md
+   \`\`\`
+
+4. **Verify PR created successfully:**
+   \`\`\`bash
+   gh pr view --web
+   \`\`\`
+
+---
+
+**You have completed this issue successfully when the PR is created and the URL is shown above.**
+
+Start with Phase 1: Planning.`;
   } catch (error) {
     logger.warn('Error building initial prompt from GitHub issue', {
       workspaceId,
