@@ -58,16 +58,17 @@ class PRSnapshotService {
         return { success: false, reason: 'fetch_failed' };
       }
 
-      // Write full PR snapshot through the canonical write path
-      await this.applySnapshot(workspaceId, {
-        prNumber: snapshot.prNumber,
-        prState: snapshot.prState,
-        prReviewState: snapshot.prReviewState,
-        prCiStatus: snapshot.prCiStatus,
-      });
-
-      // Also update the prUrl field
-      await workspaceAccessor.update(workspaceId, { prUrl });
+      // Write full PR snapshot atomically, including prUrl
+      await this.applySnapshot(
+        workspaceId,
+        {
+          prNumber: snapshot.prNumber,
+          prState: snapshot.prState,
+          prReviewState: snapshot.prReviewState,
+          prCiStatus: snapshot.prCiStatus,
+        },
+        prUrl
+      );
 
       logger.info('Attached PR and refreshed snapshot', {
         workspaceId,
@@ -141,14 +142,21 @@ class PRSnapshotService {
     }
   }
 
-  async applySnapshot(workspaceId: string, snapshot: SnapshotData): Promise<void> {
-    await workspaceAccessor.update(workspaceId, {
+  async applySnapshot(workspaceId: string, snapshot: SnapshotData, prUrl?: string): Promise<void> {
+    const updateData: Parameters<typeof workspaceAccessor.update>[1] = {
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,
       prCiStatus: snapshot.prCiStatus,
       prUpdatedAt: new Date(),
-    });
+    };
+
+    // Include prUrl in the atomic update if provided
+    if (prUrl !== undefined) {
+      updateData.prUrl = prUrl;
+    }
+
+    await workspaceAccessor.update(workspaceId, updateData);
 
     await kanbanStateService.updateCachedKanbanColumn(workspaceId);
   }

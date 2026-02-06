@@ -95,18 +95,14 @@ describe('PRSnapshotService', () => {
         },
       });
 
-      // Verify snapshot write
+      // Verify atomic update with all PR fields including prUrl
       expect(mockUpdate).toHaveBeenCalledWith('w1', {
         prNumber: 123,
         prState: 'OPEN',
         prReviewState: 'APPROVED',
         prCiStatus: 'SUCCESS',
-        prUpdatedAt: expect.any(Date),
-      });
-
-      // Verify prUrl update
-      expect(mockUpdate).toHaveBeenCalledWith('w1', {
         prUrl: 'https://github.com/org/repo/pull/123',
+        prUpdatedAt: expect.any(Date),
       });
 
       // Verify kanban cache update
