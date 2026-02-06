@@ -149,10 +149,10 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('user');
-      expect(result[0].content).toBe('Hello, Claude!');
-      expect(result[0].timestamp).toBe(timestamp);
-      expect(result[0].uuid).toBe('uuid-123');
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('Hello, Claude!');
+      expect(result[0]!.timestamp).toBe(timestamp);
+      expect(result[0]!.uuid).toBe('uuid-123');
     });
 
     it('should parse user message with text content array', () => {
@@ -166,8 +166,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('user');
-      expect(result[0].content).toBe('Hello from array!');
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('Hello from array!');
     });
 
     it('should parse user message with multiple text content items', () => {
@@ -184,8 +184,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(2);
-      expect(result[0].content).toBe('First message');
-      expect(result[1].content).toBe('Second message');
+      expect(result[0]!.content).toBe('First message');
+      expect(result[1]!.content).toBe('Second message');
     });
 
     it('should parse user message with tool_result content', () => {
@@ -206,10 +206,10 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('tool_result');
-      expect(result[0].content).toBe('File contents here');
-      expect(result[0].toolId).toBe('tool-123');
-      expect(result[0].isError).toBe(false);
+      expect(result[0]!.type).toBe('tool_result');
+      expect(result[0]!.content).toBe('File contents here');
+      expect(result[0]!.toolId).toBe('tool-123');
+      expect(result[0]!.isError).toBe(false);
     });
 
     it('should parse user message with tool_result error', () => {
@@ -230,8 +230,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('tool_result');
-      expect(result[0].isError).toBe(true);
+      expect(result[0]!.type).toBe('tool_result');
+      expect(result[0]!.isError).toBe(true);
     });
 
     it('should parse tool_result with array content', () => {
@@ -254,7 +254,7 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].content).toBe('Line 1\nLine 2');
+      expect(result[0]!.content).toBe('Line 1\nLine 2');
     });
 
     it('should handle tool_result with empty array content', () => {
@@ -274,7 +274,7 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].content).toBe('');
+      expect(result[0]!.content).toBe('');
     });
   });
 
@@ -290,8 +290,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('assistant');
-      expect(result[0].content).toBe('Hello!');
+      expect(result[0]!.type).toBe('assistant');
+      expect(result[0]!.content).toBe('Hello!');
     });
 
     it('should parse assistant message with string content', () => {
@@ -305,8 +305,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('assistant');
-      expect(result[0].content).toBe('Direct string response');
+      expect(result[0]!.type).toBe('assistant');
+      expect(result[0]!.content).toBe('Direct string response');
     });
 
     it('should parse assistant message with tool_use content', () => {
@@ -327,11 +327,11 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('tool_use');
-      expect(result[0].toolName).toBe('Read');
-      expect(result[0].toolId).toBe('tool-123');
-      expect(result[0].toolInput).toEqual({ file_path: '/test.txt' });
-      expect(result[0].content).toBe(JSON.stringify({ file_path: '/test.txt' }, null, 2));
+      expect(result[0]!.type).toBe('tool_use');
+      expect(result[0]!.toolName).toBe('Read');
+      expect(result[0]!.toolId).toBe('tool-123');
+      expect(result[0]!.toolInput).toEqual({ file_path: '/test.txt' });
+      expect(result[0]!.content).toBe(JSON.stringify({ file_path: '/test.txt' }, null, 2));
     });
 
     it('should include thinking content', () => {
@@ -348,10 +348,10 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(2);
-      expect(result[0].type).toBe('thinking');
-      expect(result[0].content).toBe('Let me think...');
-      expect(result[1].type).toBe('assistant');
-      expect(result[1].content).toBe('Here is my response');
+      expect(result[0]!.type).toBe('thinking');
+      expect(result[0]!.content).toBe('Let me think...');
+      expect(result[1]!.type).toBe('assistant');
+      expect(result[1]!.content).toBe('Here is my response');
     });
 
     it('should return thinking content when only thinking content exists', () => {
@@ -365,8 +365,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('thinking');
-      expect(result[0].content).toBe('Just thinking...');
+      expect(result[0]!.type).toBe('thinking');
+      expect(result[0]!.content).toBe('Just thinking...');
     });
 
     it('should parse multiple content items in assistant message', () => {
@@ -385,10 +385,10 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(4);
-      expect(result[0].type).toBe('assistant');
-      expect(result[1].type).toBe('tool_use');
-      expect(result[2].type).toBe('assistant');
-      expect(result[3].type).toBe('tool_use');
+      expect(result[0]!.type).toBe('assistant');
+      expect(result[1]!.type).toBe('tool_use');
+      expect(result[2]!.type).toBe('assistant');
+      expect(result[3]!.type).toBe('tool_use');
     });
   });
 
@@ -447,7 +447,7 @@ describe('parseHistoryEntry', () => {
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
       // Timestamp should be after test started
-      expect(new Date(result[0].timestamp).getTime()).toBeGreaterThanOrEqual(
+      expect(new Date(result[0]!.timestamp).getTime()).toBeGreaterThanOrEqual(
         new Date(beforeTest).getTime() - 1000
       );
     });
@@ -476,7 +476,7 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].uuid).toBeUndefined();
+      expect(result[0]!.uuid).toBeUndefined();
     });
   });
 });

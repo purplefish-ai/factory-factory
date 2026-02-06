@@ -135,10 +135,10 @@ describe('terminal.mcp', () => {
       if (result.success) {
         expect(result.data.terminals).toHaveLength(2);
         expect(result.data.totalTerminals).toBe(2);
-        expect(result.data.terminals[0].terminalId).toBe('term-1');
-        expect(result.data.terminals[0].output).toBe('output1');
-        expect(result.data.terminals[1].terminalId).toBe('term-2');
-        expect(result.data.terminals[1].output).toBe('output2');
+        expect(result.data.terminals[0]!.terminalId).toBe('term-1');
+        expect(result.data.terminals[0]!.output).toBe('output1');
+        expect(result.data.terminals[1]!.terminalId).toBe('term-2');
+        expect(result.data.terminals[1]!.output).toBe('output2');
       }
     });
 
@@ -151,8 +151,8 @@ describe('terminal.mcp', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.terminals).toHaveLength(1);
-        expect(result.data.terminals[0].terminalId).toBe('term-specific');
-        expect(result.data.terminals[0].output).toBe('specific output');
+        expect(result.data.terminals[0]!.terminalId).toBe('term-specific');
+        expect(result.data.terminals[0]!.output).toBe('specific output');
       }
       expect(mockGetTerminal).toHaveBeenCalledWith(mockWorkspaceId, 'term-specific');
     });
@@ -170,8 +170,8 @@ describe('terminal.mcp', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.terminals).toHaveLength(1);
-        expect(result.data.terminals[0].terminalId).toBe('term-active');
-        expect(result.data.terminals[0].isActive).toBe(true);
+        expect(result.data.terminals[0]!.terminalId).toBe('term-active');
+        expect(result.data.terminals[0]!.isActive).toBe(true);
       }
     });
 
@@ -185,7 +185,7 @@ describe('terminal.mcp', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.terminals).toHaveLength(1);
-        expect(result.data.terminals[0].terminalId).toBe('term-first');
+        expect(result.data.terminals[0]!.terminalId).toBe('term-first');
       }
     });
 
@@ -200,9 +200,9 @@ describe('terminal.mcp', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.terminals[0].output).toBe('line4\nline5');
-        expect(result.data.terminals[0].truncated).toBe(true);
-        expect(result.data.terminals[0].lineCount).toBe(2);
+        expect(result.data.terminals[0]!.output).toBe('line4\nline5');
+        expect(result.data.terminals[0]!.truncated).toBe(true);
+        expect(result.data.terminals[0]!.lineCount).toBe(2);
       }
     });
 
@@ -217,8 +217,8 @@ describe('terminal.mcp', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.terminals[0].output).toBe('line1\nline2');
-        expect(result.data.terminals[0].truncated).toBe(false);
+        expect(result.data.terminals[0]!.output).toBe('line1\nline2');
+        expect(result.data.terminals[0]!.truncated).toBe(false);
       }
     });
 
@@ -268,8 +268,8 @@ describe('terminal.mcp', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.terminals[0].isActive).toBe(false);
-        expect(result.data.terminals[1].isActive).toBe(true);
+        expect(result.data.terminals[0]!.isActive).toBe(false);
+        expect(result.data.terminals[1]!.isActive).toBe(true);
       }
     });
 
@@ -287,7 +287,7 @@ describe('terminal.mcp', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        const t = result.data.terminals[0];
+        const t = result.data.terminals[0]!;
         expect(t.cols).toBe(120);
         expect(t.rows).toBe(40);
         expect(t.pid).toBe(54_321);

@@ -17,6 +17,7 @@ type SessionAccessor = {
 type WorkspaceAccessor = {
   findById(id: string): Promise<Workspace | null>;
   markHasHadSessions(id: string): Promise<void>;
+  clearRatchetActiveSession(workspaceId: string, sessionId: string): Promise<void>;
 };
 
 type ProjectAccessor = {
@@ -48,6 +49,10 @@ export class SessionRepository {
 
   markWorkspaceHasHadSessions(workspaceId: string): Promise<void> {
     return this.workspaces.markHasHadSessions(workspaceId);
+  }
+
+  clearRatchetActiveSession(workspaceId: string, sessionId: string): Promise<void> {
+    return this.workspaces.clearRatchetActiveSession(workspaceId, sessionId);
   }
 
   updateSession(

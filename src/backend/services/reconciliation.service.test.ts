@@ -229,7 +229,7 @@ describe('workspaceAccessor.findNeedingWorktree', () => {
     expect(result).toContainEqual(staleWorkspace);
 
     // Verify the threshold calculation
-    const callArgs = mockFindMany.mock.calls[0][0];
+    const callArgs = mockFindMany.mock.calls[0]![0];
     const threshold = callArgs.where.OR[1].initStartedAt.lt;
     expect(threshold.getTime()).toBe(now.getTime() - 10 * 60 * 1000);
   });
@@ -247,7 +247,7 @@ describe('workspaceAccessor.findNeedingWorktree', () => {
     expect(result).toEqual([]);
 
     // Verify the threshold is 10 minutes ago
-    const callArgs = mockFindMany.mock.calls[0][0];
+    const callArgs = mockFindMany.mock.calls[0]![0];
     const threshold = callArgs.where.OR[1].initStartedAt.lt;
     const expectedThreshold = new Date(now.getTime() - 10 * 60 * 1000);
     expect(threshold.getTime()).toBe(expectedThreshold.getTime());

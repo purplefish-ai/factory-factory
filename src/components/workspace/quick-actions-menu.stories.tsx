@@ -136,7 +136,7 @@ export const Default: Story = {
 
 export const SingleAction: Story = {
   args: {
-    actions: [mockQuickActions[0]],
+    actions: [mockQuickActions[0]!],
   },
 };
 

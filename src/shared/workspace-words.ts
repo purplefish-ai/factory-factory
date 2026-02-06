@@ -63,7 +63,8 @@ export const WORKSPACE_WORDS = [
  * Pick a random word from the list
  */
 export function pickRandomWord(): string {
-  return WORKSPACE_WORDS[Math.floor(Math.random() * WORKSPACE_WORDS.length)];
+  // biome-ignore lint/style/noNonNullAssertion: index bounded by array length
+  return WORKSPACE_WORDS[Math.floor(Math.random() * WORKSPACE_WORDS.length)]!;
 }
 
 /**

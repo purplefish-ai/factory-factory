@@ -90,7 +90,8 @@ class EventCompressionService {
     let i = 0;
 
     while (i < events.length) {
-      const event = events[i];
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by while loop condition
+      const event = events[i]!;
 
       // Try to compress consecutive content_block_delta events
       if (this.isContentBlockDelta(event)) {
@@ -161,7 +162,8 @@ class EventCompressionService {
     i: number,
     stats: CompressionStats
   ): { output: StoredEvent; nextIndex: number } {
-    const event = events[i];
+    // biome-ignore lint/style/noNonNullAssertion: index bounded by while loop condition
+    const event = events[i]!;
 
     // Try to compress consecutive content_block_delta events
     if (this.isContentBlockDelta(event)) {
@@ -327,7 +329,8 @@ class EventCompressionService {
     events: StoredEvent[],
     startIndex: number
   ): { compressed: StoredEvent; endIndex: number; deltaType: MergeableDeltaType | null } {
-    const first = events[startIndex];
+    // biome-ignore lint/style/noNonNullAssertion: startIndex validated by caller
+    const first = events[startIndex]!;
     const blockIndex = this.getBlockIndex(first);
     const deltaType = this.getDeltaType(first);
 
@@ -342,7 +345,8 @@ class EventCompressionService {
 
     // Look ahead for consecutive matching deltas
     for (let i = startIndex + 1; i < events.length; i++) {
-      const event = events[i];
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const event = events[i]!;
 
       // Must be a content_block_delta
       if (!this.isContentBlockDelta(event)) {
@@ -417,13 +421,15 @@ class EventCompressionService {
     events: StoredEvent[],
     startIndex: number
   ): { deduplicated: StoredEvent; endIndex: number } {
-    const first = events[startIndex];
+    // biome-ignore lint/style/noNonNullAssertion: startIndex validated by caller
+    const first = events[startIndex]!;
     const runningState = first.running;
     const processAlive = first.processAlive;
     let endIndex = startIndex;
 
     for (let i = startIndex + 1; i < events.length; i++) {
-      const event = events[i];
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const event = events[i]!;
       if (
         !this.isStatusEvent(event) ||
         event.running !== runningState ||

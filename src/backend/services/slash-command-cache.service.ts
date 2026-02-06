@@ -23,11 +23,14 @@ function isCommandInfo(value: unknown): value is CommandInfo {
 }
 
 function normalizeCommands(commands: CommandInfo[]): CommandInfo[] {
-  return commands.map((command) => ({
-    name: command.name,
-    description: command.description ?? '',
-    argumentHint: command.argumentHint?.trim() ? command.argumentHint : undefined,
-  }));
+  return commands.map((command) => {
+    const hint = typeof command.argumentHint === 'string' ? command.argumentHint.trim() : undefined;
+    return {
+      name: command.name,
+      description: command.description ?? '',
+      argumentHint: hint || undefined,
+    };
+  });
 }
 
 function toCommandInfoArray(value: unknown): CommandInfo[] | null {
@@ -43,7 +46,8 @@ function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {
     return false;
   }
   for (let i = 0; i < a.length; i += 1) {
-    const left = a[i];
+    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+    const left = a[i]!;
     const right = b[i];
     if (!right) {
       return false;

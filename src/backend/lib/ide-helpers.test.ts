@@ -33,16 +33,16 @@ describe('ide-helpers', () => {
   describe('IDE_CONFIGS', () => {
     it('should have cursor configuration', () => {
       expect(IDE_CONFIGS.cursor).toBeDefined();
-      expect(IDE_CONFIGS.cursor.cliCommand).toBe('cursor');
-      expect(IDE_CONFIGS.cursor.macAppName).toBe('Cursor');
-      expect(IDE_CONFIGS.cursor.macBundleId).toBe('com.todesktop.230313mzl4w4u92');
+      expect(IDE_CONFIGS.cursor!.cliCommand).toBe('cursor');
+      expect(IDE_CONFIGS.cursor!.macAppName).toBe('Cursor');
+      expect(IDE_CONFIGS.cursor!.macBundleId).toBe('com.todesktop.230313mzl4w4u92');
     });
 
     it('should have vscode configuration', () => {
       expect(IDE_CONFIGS.vscode).toBeDefined();
-      expect(IDE_CONFIGS.vscode.cliCommand).toBe('code');
-      expect(IDE_CONFIGS.vscode.macAppName).toBe('Visual Studio Code');
-      expect(IDE_CONFIGS.vscode.macBundleId).toBe('com.microsoft.VSCode');
+      expect(IDE_CONFIGS.vscode!.cliCommand).toBe('code');
+      expect(IDE_CONFIGS.vscode!.macAppName).toBe('Visual Studio Code');
+      expect(IDE_CONFIGS.vscode!.macBundleId).toBe('com.microsoft.VSCode');
     });
   });
 

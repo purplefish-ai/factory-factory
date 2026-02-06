@@ -80,7 +80,8 @@ function handleToolInputDelta(
   }
 
   // Get the last (most recent) tool_use_id
-  const [toolUseId, currentJson] = accumulatorEntries[accumulatorEntries.length - 1];
+  // biome-ignore lint/style/noNonNullAssertion: length > 0 checked above
+  const [toolUseId, currentJson] = accumulatorEntries[accumulatorEntries.length - 1]!;
   const newJson = currentJson + delta.partial_json;
   toolInputAccumulatorRef.current.set(toolUseId, newJson);
 

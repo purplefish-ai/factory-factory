@@ -47,6 +47,7 @@ export interface PRStateInfo {
     conclusion: string;
     detailsUrl?: string;
   }>;
+  ciRunId: string | null;
   reviews: PRWithFullDetails['reviews'];
   comments: PRWithFullDetails['comments'];
   reviewComments: Array<{
@@ -77,7 +78,7 @@ export type RatchetAction =
   | { type: 'WAITING'; reason: string }
   | { type: 'FIXER_ACTIVE'; sessionId: string }
   | { type: 'NOTIFIED_ACTIVE_FIXER'; sessionId: string; issue: string }
-  | { type: 'TRIGGERED_FIXER'; sessionId: string; fixerType: string }
+  | { type: 'TRIGGERED_FIXER'; sessionId: string; fixerType: string; promptSent: boolean }
   | { type: 'DISABLED'; reason: string }
   | { type: 'READY_FOR_MERGE' }
   | { type: 'AUTO_MERGED' }
@@ -105,6 +106,7 @@ interface WorkspaceWithPR {
   ratchetEnabled: boolean;
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
+  ratchetLastCiRunId: string | null;
   ratchetLastNotifiedState: RatchetState | null;
   prReviewLastCheckedAt: Date | null;
 }
@@ -278,6 +280,57 @@ class RatchetService {
   }
 
   /**
+   * Log an audit entry for a ratchet action
+   */
+  private logAuditEntry(
+    workspaceId: string,
+    prNumber: number | undefined,
+    previousState: RatchetState,
+    newState: RatchetState,
+    actionType: string,
+    actionDetail?: string,
+    prSnapshot?: string
+  ): void {
+    ratchetAuditLogAccessor
+      .create({
+        workspaceId,
+        prNumber,
+        previousState,
+        newState,
+        action: actionType,
+        actionDetail,
+        prSnapshot,
+      })
+      .catch((err) => logger.warn('Failed to write ratchet audit log', { error: err }));
+  }
+
+  /**
+   * Update workspace state after processing
+   */
+  private async updateWorkspaceState(
+    workspace: WorkspaceWithPR,
+    newState: RatchetState,
+    prStateInfo: PRStateInfo,
+    action: RatchetAction,
+    shouldTakeAction: boolean
+  ): Promise<void> {
+    const now = new Date();
+    const shouldRecordCiRunId =
+      shouldTakeAction &&
+      prStateInfo.ciStatus === CIStatus.FAILURE &&
+      !!prStateInfo.ciRunId &&
+      (action.type === 'NOTIFIED_ACTIVE_FIXER' ||
+        (action.type === 'TRIGGERED_FIXER' && action.promptSent));
+
+    await workspaceAccessor.update(workspace.id, {
+      ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
+      ratchetLastCheckedAt: now,
+      ...(shouldRecordCiRunId ? { ratchetLastCiRunId: prStateInfo.ciRunId } : {}),
+      ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
+    });
+  }
+
+  /**
    * Process a single workspace through the ratchet state machine
    */
   private async processWorkspace(
@@ -294,19 +347,17 @@ class RatchetService {
     }
 
     try {
-      // 1. Fetch current PR state from GitHub (pass allowedReviewers for filtering)
+      // 1. Fetch current PR state from GitHub
       const prStateInfo = await this.fetchPRState(workspace, settings.allowedReviewers);
       if (!prStateInfo) {
-        ratchetAuditLogAccessor
-          .create({
-            workspaceId: workspace.id,
-            prNumber: workspace.prNumber ?? undefined,
-            previousState: workspace.ratchetState,
-            newState: workspace.ratchetState,
-            action: 'ERROR',
-            actionDetail: JSON.stringify({ error: 'Failed to fetch PR state' }),
-          })
-          .catch((err) => logger.warn('Failed to write ratchet audit log', { error: err }));
+        this.logAuditEntry(
+          workspace.id,
+          workspace.prNumber ?? undefined,
+          workspace.ratchetState,
+          workspace.ratchetState,
+          'ERROR',
+          JSON.stringify({ error: 'Failed to fetch PR state' })
+        );
         return {
           workspaceId: workspace.id,
           previousState: workspace.ratchetState,
@@ -329,38 +380,29 @@ class RatchetService {
         });
       }
 
-      // 4. Check workspace-level ratchet setting using latest value to avoid
-      // triggering actions after a user disables ratchet during an in-flight check.
+      // 4. Check workspace-level ratchet setting
       const latestWorkspace = await workspaceAccessor.findById(workspace.id);
       const shouldTakeAction = latestWorkspace?.ratchetEnabled ?? workspace.ratchetEnabled;
 
-      // 5. Take action based on state (only if ratcheting is enabled for this workspace)
+      // 5. Take action based on state
       const action = shouldTakeAction
         ? await this.executeRatchetAction(workspace, newState, prStateInfo, settings)
         : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
 
-      // 6. Update workspace (including review check timestamp if we found review comments)
-      const now = new Date();
-      await workspaceAccessor.update(workspace.id, {
-        ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
-        ratchetLastCheckedAt: now,
-        // Update review timestamp if we detected review comments
-        ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
-      });
+      // 6. Update workspace
+      await this.updateWorkspaceState(workspace, newState, prStateInfo, action, shouldTakeAction);
 
       // 7. Write audit log entry
       const effectiveNewState = shouldTakeAction ? newState : RatchetState.IDLE;
-      ratchetAuditLogAccessor
-        .create({
-          workspaceId: workspace.id,
-          prNumber: prStateInfo.prNumber,
-          previousState,
-          newState: effectiveNewState,
-          action: action.type,
-          actionDetail: this.buildActionDetail(action),
-          prSnapshot: this.buildPRSnapshot(prStateInfo),
-        })
-        .catch((err) => logger.warn('Failed to write ratchet audit log', { error: err }));
+      this.logAuditEntry(
+        workspace.id,
+        prStateInfo.prNumber,
+        previousState,
+        effectiveNewState,
+        action.type,
+        this.buildActionDetail(action),
+        this.buildPRSnapshot(prStateInfo)
+      );
 
       return {
         workspaceId: workspace.id,
@@ -373,16 +415,14 @@ class RatchetService {
       logger.error('Error processing workspace in ratchet', error as Error, {
         workspaceId: workspace.id,
       });
-      ratchetAuditLogAccessor
-        .create({
-          workspaceId: workspace.id,
-          prNumber: workspace.prNumber ?? undefined,
-          previousState: workspace.ratchetState,
-          newState: workspace.ratchetState,
-          action: 'ERROR',
-          actionDetail: JSON.stringify({ error: errorMessage }),
-        })
-        .catch((err) => logger.warn('Failed to write ratchet audit log', { error: err }));
+      this.logAuditEntry(
+        workspace.id,
+        workspace.prNumber ?? undefined,
+        workspace.ratchetState,
+        workspace.ratchetState,
+        'ERROR',
+        JSON.stringify({ error: errorMessage })
+      );
       return {
         workspaceId: workspace.id,
         previousState: workspace.ratchetState,
@@ -450,8 +490,12 @@ class RatchetService {
       const failedChecks: PRStateInfo['failedChecks'] = [];
       if (prDetails.statusCheckRollup) {
         for (const check of prDetails.statusCheckRollup) {
-          const conclusion = check.conclusion || check.status;
-          if (conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED') {
+          const conclusion = String(check.conclusion || check.status);
+          if (
+            conclusion === 'FAILURE' ||
+            conclusion === 'ACTION_REQUIRED' ||
+            conclusion === 'ERROR'
+          ) {
             failedChecks.push({
               name: check.name || 'Unknown check',
               conclusion,
@@ -460,6 +504,7 @@ class RatchetService {
           }
         }
       }
+      const ciRunId = this.extractFailedCiSignature(failedChecks);
 
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
@@ -497,6 +542,7 @@ class RatchetService {
         hasChangesRequested,
         hasNewReviewComments,
         failedChecks,
+        ciRunId,
         reviews: prDetails.reviews,
         comments: prDetails.comments,
         reviewComments,
@@ -533,6 +579,11 @@ class RatchetService {
       return RatchetState.CI_FAILED;
     }
 
+    // UNKNOWN means CI result isn't complete enough to trust as green.
+    if (pr.ciStatus === CIStatus.UNKNOWN) {
+      return RatchetState.CI_RUNNING;
+    }
+
     // CI is green from here on...
 
     // Check for merge conflicts
@@ -558,35 +609,84 @@ class RatchetService {
     prStateInfo: PRStateInfo,
     settings: RatchetSettings
   ): Promise<RatchetAction> {
-    // Check if a fixer session is already active
-    if (workspace.ratchetActiveSessionId) {
-      const isActive = await this.isFixerActive(workspace.ratchetActiveSessionId);
-
-      if (isActive) {
-        // Check if we need to notify about a state change
-        const shouldNotify = this.shouldNotifyActiveFixer(
-          workspace,
-          state,
-          workspace.ratchetLastNotifiedState
-        );
-
-        if (shouldNotify) {
-          await this.notifyActiveFixer(workspace, state, prStateInfo);
-          return {
-            type: 'NOTIFIED_ACTIVE_FIXER',
-            sessionId: workspace.ratchetActiveSessionId,
-            issue: state,
-          };
-        }
-
-        return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
-      }
-
-      // Clear stale fixer reference
-      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+    const existingFixerResult = await this.handleExistingFixerSession(
+      workspace,
+      state,
+      prStateInfo
+    );
+    if (existingFixerResult) {
+      return existingFixerResult;
     }
 
-    // No active fixer - proceed with state machine
+    return this.handleStateWithoutActiveFixer(workspace, state, prStateInfo, settings);
+  }
+
+  private async handleExistingFixerSession(
+    workspace: WorkspaceWithPR,
+    state: RatchetState,
+    prStateInfo: PRStateInfo
+  ): Promise<RatchetAction | null> {
+    if (!workspace.ratchetActiveSessionId) {
+      return null;
+    }
+
+    const session = await claudeSessionAccessor.findById(workspace.ratchetActiveSessionId);
+    const client = sessionService.getClient(workspace.ratchetActiveSessionId);
+    if (!session) {
+      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      return null;
+    }
+
+    if (session.status === SessionStatus.IDLE) {
+      // If we can't reach a client for the linked session, clear stale linkage.
+      // triggerFixer can still recover by workflow and restart/create as needed.
+      if (!client) {
+        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      }
+      return null;
+    }
+
+    if (session.status !== SessionStatus.RUNNING || !client) {
+      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      return null;
+    }
+
+    const shouldNotify = this.shouldNotifyActiveFixer(
+      state,
+      workspace.ratchetLastNotifiedState,
+      prStateInfo.ciRunId,
+      workspace.ratchetLastCiRunId
+    );
+
+    if (!shouldNotify) {
+      return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
+    }
+
+    const delivered = await this.notifyActiveFixer(workspace, state, prStateInfo, client);
+    if (delivered) {
+      return {
+        type: 'NOTIFIED_ACTIVE_FIXER',
+        sessionId: workspace.ratchetActiveSessionId,
+        issue: state,
+      };
+    }
+
+    logger.warn('Failed to notify active fixer; clearing stale reference and retrying', {
+      workspaceId: workspace.id,
+      sessionId: workspace.ratchetActiveSessionId,
+      state,
+    });
+    await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+
+    return null;
+  }
+
+  private async handleStateWithoutActiveFixer(
+    workspace: WorkspaceWithPR,
+    state: RatchetState,
+    prStateInfo: PRStateInfo,
+    settings: RatchetSettings
+  ): Promise<RatchetAction> {
     switch (state) {
       case RatchetState.IDLE:
         return { type: 'WAITING', reason: 'No PR or ratchet not active' };
@@ -635,10 +735,19 @@ class RatchetService {
    * Check if we should notify the active fixer about a state change
    */
   private shouldNotifyActiveFixer(
-    _workspace: WorkspaceWithPR,
     currentState: RatchetState,
-    lastNotifiedState: RatchetState | null
+    lastNotifiedState: RatchetState | null,
+    currentCiRunId: string | null,
+    lastCiRunId: string | null
   ): boolean {
+    if (
+      currentState === RatchetState.CI_FAILED &&
+      currentCiRunId &&
+      currentCiRunId !== lastCiRunId
+    ) {
+      return true;
+    }
+
     // Don't notify if state hasn't changed since last notification
     if (currentState === lastNotifiedState) {
       return false;
@@ -655,21 +764,14 @@ class RatchetService {
   private async notifyActiveFixer(
     workspace: WorkspaceWithPR,
     state: RatchetState,
-    prStateInfo: PRStateInfo
-  ): Promise<void> {
+    prStateInfo: PRStateInfo,
+    client: NonNullable<ReturnType<typeof sessionService.getClient>>
+  ): Promise<boolean> {
     if (!workspace.ratchetActiveSessionId) {
       logger.warn('notifyActiveFixer called without active session ID', {
         workspaceId: workspace.id,
       });
-      return;
-    }
-
-    const client = sessionService.getClient(workspace.ratchetActiveSessionId);
-    if (!client) {
-      logger.warn('Could not find client for active fixer session', {
-        sessionId: workspace.ratchetActiveSessionId,
-      });
-      return;
+      return false;
     }
 
     let message = '';
@@ -707,28 +809,17 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
         await workspaceAccessor.update(workspace.id, {
           ratchetLastNotifiedState: state,
         });
+        return true;
       } catch (error) {
         logger.warn('Failed to notify fixer about state change', {
           workspaceId: workspace.id,
           state,
           error,
         });
+        return false;
       }
     }
-  }
-
-  /**
-   * Check if a fixer session is still active (exists and not completed/errored)
-   */
-  private async isFixerActive(sessionId: string): Promise<boolean> {
-    const session = await claudeSessionAccessor.findById(sessionId);
-    if (!session) {
-      return false;
-    }
-
-    // Session is active if it's RUNNING or IDLE (not COMPLETED, ERROR, or STOPPED)
-    // IDLE sessions are still considered active because they're dedicated to fixing this workspace
-    return session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE;
+    return false;
   }
 
   /**
@@ -770,10 +861,16 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
           prNumber: prStateInfo.prNumber,
         });
 
-        return { type: 'TRIGGERED_FIXER', sessionId: result.sessionId, fixerType };
+        return {
+          type: 'TRIGGERED_FIXER',
+          sessionId: result.sessionId,
+          fixerType,
+          promptSent: shouldMarkNotified,
+        };
       }
 
       if (result.status === 'already_active') {
+        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: result.sessionId });
         return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
       }
 
@@ -1013,6 +1110,25 @@ New review comments have been received on PR #${prNumber}.
 **Do not ask the user what to do. Analyze the comments, implement fixes, push, and request re-review.**`);
 
     return parts.join('');
+  }
+
+  private extractFailedCiSignature(failedChecks: PRStateInfo['failedChecks']): string | null {
+    if (failedChecks.length === 0) {
+      return null;
+    }
+
+    const failedEntries: string[] = [];
+    for (const check of failedChecks) {
+      const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
+      const runId = runIdMatch?.[1] ?? 'no-run-id';
+      failedEntries.push(`${check.name}:${runId}`);
+    }
+
+    if (failedEntries.length === 0) {
+      return null;
+    }
+
+    return failedEntries.sort().join('|');
   }
 }
 

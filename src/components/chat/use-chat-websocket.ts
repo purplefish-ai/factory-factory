@@ -151,15 +151,23 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
+    // Dispatch loading state to prevent flicker while replaying events
+    chat.dispatch({ type: 'SESSION_LOADING_START' });
     sendRef.current({ type: 'list_sessions' });
     sendRef.current({ type: 'load_session' }); // Loads history and sends messages_snapshot
-  }, []);
+  }, [chat.dispatch]);
+
+  // Handle disconnection - clear loading state to avoid stuck spinner
+  const handleDisconnected = useCallback(() => {
+    chat.dispatch({ type: 'SESSION_LOADING_END' });
+  }, [chat.dispatch]);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
     url,
     onMessage: handleMessage,
     onConnected: handleConnected,
+    onDisconnected: handleDisconnected,
   });
 
   // Wire up the send function to the transport

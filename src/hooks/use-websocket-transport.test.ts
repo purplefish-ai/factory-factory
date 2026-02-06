@@ -242,7 +242,7 @@ describe('WebSocket transport patterns', () => {
       ws.send(JSON.stringify(message));
 
       expect(ws.sentMessages).toHaveLength(1);
-      expect(JSON.parse(ws.sentMessages[0])).toEqual(message);
+      expect(JSON.parse(ws.sentMessages[0]!)).toEqual(message);
     });
 
     it('should throw error when sending on closed connection', () => {
@@ -612,7 +612,7 @@ describe('URL change handling', () => {
     ws.simulateOpen();
 
     expect(createdWebSockets).toHaveLength(1);
-    expect(createdWebSockets[0].url).toBe('ws://localhost:3000/chat?sessionId=1');
+    expect(createdWebSockets[0]!.url).toBe('ws://localhost:3000/chat?sessionId=1');
 
     // URL changes to different session
     url = 'ws://localhost:3000/chat?sessionId=2';
@@ -626,6 +626,6 @@ describe('URL change handling', () => {
     ws.simulateOpen();
 
     expect(createdWebSockets).toHaveLength(2);
-    expect(createdWebSockets[1].url).toBe('ws://localhost:3000/chat?sessionId=2');
+    expect(createdWebSockets[1]!.url).toBe('ws://localhost:3000/chat?sessionId=2');
   });
 });

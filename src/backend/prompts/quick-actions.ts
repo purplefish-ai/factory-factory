@@ -66,7 +66,7 @@ function parseFrontmatter(content: string): { frontmatter: Frontmatter; body: st
     return { frontmatter: {}, body: content };
   }
 
-  const frontmatterText = match[1];
+  const frontmatterText = match[1] as string;
   const body = content.slice(match[0].length);
   const frontmatter: Frontmatter = {};
 

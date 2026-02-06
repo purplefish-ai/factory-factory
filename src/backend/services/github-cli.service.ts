@@ -21,7 +21,8 @@ async function mapWithConcurrencyLimit<T, R>(
   async function worker(): Promise<void> {
     while (nextIndex < items.length) {
       const index = nextIndex++;
-      results[index] = await fn(items[index]);
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by while loop condition
+      results[index] = await fn(items[index]!);
     }
   }
 
@@ -254,9 +255,9 @@ class GitHubCLIService {
     }
 
     return {
-      owner: match[1],
-      repo: match[2],
-      number: Number.parseInt(match[3], 10),
+      owner: match[1] as string,
+      repo: match[2] as string,
+      number: Number.parseInt(match[3] as string, 10),
     };
   }
 
@@ -610,7 +611,7 @@ class GitHubCLIService {
       const data = JSON.parse(stdout);
 
       // Extract repository info from the repo string
-      const [, repoName] = repo.split('/');
+      const [, repoName] = repo.split('/') as [string, string];
 
       return {
         number: data.number,

@@ -361,6 +361,17 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Clear ratchetActiveSessionId if it still points to the given session.
+   * Called on session exit to eagerly clean up stale fixer references.
+   */
+  async clearRatchetActiveSession(workspaceId: string, sessionId: string): Promise<void> {
+    await prisma.workspace.updateMany({
+      where: { id: workspaceId, ratchetActiveSessionId: sessionId },
+      data: { ratchetActiveSessionId: null },
+    });
+  }
+
+  /**
    * Append output to initOutput field during startup script execution.
    * Truncates from the beginning if output exceeds maxSize to prevent unbounded growth.
    */
@@ -440,6 +451,7 @@ class WorkspaceAccessor {
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
+      ratchetLastCiRunId: string | null;
       ratchetLastNotifiedState: RatchetState | null;
       prReviewLastCheckedAt: Date | null;
     }>
@@ -456,6 +468,7 @@ class WorkspaceAccessor {
         ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
+        ratchetLastCiRunId: true,
         ratchetLastNotifiedState: true,
         prReviewLastCheckedAt: true,
       },
@@ -468,6 +481,7 @@ class WorkspaceAccessor {
         ratchetEnabled: boolean;
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
+        ratchetLastCiRunId: string | null;
         ratchetLastNotifiedState: RatchetState | null;
         prReviewLastCheckedAt: Date | null;
       }>
@@ -484,6 +498,7 @@ class WorkspaceAccessor {
     ratchetEnabled: boolean;
     ratchetState: RatchetState;
     ratchetActiveSessionId: string | null;
+    ratchetLastCiRunId: string | null;
     ratchetLastNotifiedState: RatchetState | null;
     prReviewLastCheckedAt: Date | null;
   } | null> {
@@ -500,6 +515,7 @@ class WorkspaceAccessor {
         ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
+        ratchetLastCiRunId: true,
         ratchetLastNotifiedState: true,
         prReviewLastCheckedAt: true,
       },
@@ -510,6 +526,7 @@ class WorkspaceAccessor {
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
+      ratchetLastCiRunId: string | null;
       ratchetLastNotifiedState: RatchetState | null;
       prReviewLastCheckedAt: Date | null;
     } | null>;

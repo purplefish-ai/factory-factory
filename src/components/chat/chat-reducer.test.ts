@@ -267,8 +267,8 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].source).toBe('claude');
-      expect(newState.messages[0].message).toEqual(claudeMsg);
+      expect(newState.messages[0]!.source).toBe('claude');
+      expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
     it('should transition from starting to running when receiving a Claude message', () => {
@@ -484,9 +484,9 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].source).toBe('claude');
-      expect(newState.messages[0].message?.type).toBe('error');
-      expect(newState.messages[0].message?.error).toBe('Connection failed');
+      expect(newState.messages[0]!.source).toBe('claude');
+      expect(newState.messages[0]!.message?.type).toBe('error');
+      expect(newState.messages[0]!.message?.error).toBe('Connection failed');
     });
   });
 
@@ -750,7 +750,7 @@ describe('chatReducer', () => {
       state = chatReducer(state, updateAction);
 
       // Verify the update
-      const updatedMessage = state.messages[0];
+      const updatedMessage = state.messages[0]!;
       const event = updatedMessage.message?.event as { content_block?: { input?: unknown } };
       expect(event?.content_block?.input).toEqual(updatedInput);
     });
@@ -775,7 +775,7 @@ describe('chatReducer', () => {
       const newState = chatReducer(state, updateAction);
 
       // Verify update worked and index was populated
-      const event = newState.messages[0].message?.event as { content_block?: { input?: unknown } };
+      const event = newState.messages[0]!.message?.event as { content_block?: { input?: unknown } };
       expect(event?.content_block?.input).toEqual(updatedInput);
       expect(newState.toolUseIdToIndex.get(toolUseId)).toBe(0);
     });
@@ -817,8 +817,8 @@ describe('chatReducer', () => {
         // toolUseIdToIndex still points to 0 (stale!)
       };
       expect(state.messages.length).toBe(2);
-      expect(state.messages[0].id).toBe('earlier-msg');
-      expect(state.messages[1].source).toBe('claude'); // Tool use is now at index 1
+      expect(state.messages[0]!.id).toBe('earlier-msg');
+      expect(state.messages[1]!.source).toBe('claude'); // Tool use is now at index 1
 
       // Update should still work - it should detect stale index and do linear scan
       const updatedInput = { recovered: 'input' };
@@ -829,7 +829,7 @@ describe('chatReducer', () => {
       const newState = chatReducer(state, updateAction);
 
       // Verify update worked
-      const toolUseMessage = newState.messages[1];
+      const toolUseMessage = newState.messages[1]!;
       const event = toolUseMessage.message?.event as { content_block?: { input?: unknown } };
       expect(event?.content_block?.input).toEqual(updatedInput);
 
@@ -1004,9 +1004,9 @@ describe('chatReducer', () => {
 
       // Message should be added to chat
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].id).toBe('msg-1');
-      expect(newState.messages[0].source).toBe('user');
-      expect(newState.messages[0].text).toBe('My response');
+      expect(newState.messages[0]!.id).toBe('msg-1');
+      expect(newState.messages[0]!.source).toBe('user');
+      expect(newState.messages[0]!.text).toBe('My response');
 
       // Pending request should be cleared
       expect(newState.pendingRequest).toEqual({ type: 'none' });
@@ -1037,7 +1037,7 @@ describe('chatReducer', () => {
 
       // Message should be added
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].text).toBe('Please revise the plan');
+      expect(newState.messages[0]!.text).toBe('Please revise the plan');
 
       // Pending request should be cleared
       expect(newState.pendingRequest).toEqual({ type: 'none' });
@@ -1067,7 +1067,7 @@ describe('chatReducer', () => {
 
       // Message should include attachments
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].attachments).toEqual(attachments);
+      expect(newState.messages[0]!.attachments).toEqual(attachments);
     });
 
     it('should de-dupe if message already exists (reconnect scenario)', () => {
@@ -1099,7 +1099,7 @@ describe('chatReducer', () => {
 
       // Message should NOT be duplicated
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0].text).toBe('Already in chat');
+      expect(newState.messages[0]!.text).toBe('Already in chat');
 
       // But pending state should still be cleared
       expect(newState.pendingMessages.has('msg-1')).toBe(false);
@@ -1458,10 +1458,10 @@ describe('chatReducer', () => {
       const newState = chatReducer(state, action);
 
       expect(newState.messages).toHaveLength(2);
-      expect(newState.messages[0].id).toBe('msg-1');
-      expect(newState.messages[0].source).toBe('user');
-      expect(newState.messages[1].id).toBe('msg-2-0');
-      expect(newState.messages[1].source).toBe('claude');
+      expect(newState.messages[0]!.id).toBe('msg-1');
+      expect(newState.messages[0]!.source).toBe('user');
+      expect(newState.messages[1]!.id).toBe('msg-2-0');
+      expect(newState.messages[1]!.source).toBe('claude');
     });
 
     it('should clear queuedMessages on snapshot (queued state tracked via MESSAGE_STATE_CHANGED)', () => {
@@ -1552,7 +1552,7 @@ describe('chatReducer', () => {
 
       expect(newState.pendingRequest.type).toBe('question');
       if (newState.pendingRequest.type === 'question') {
-        expect(newState.pendingRequest.request.questions[0].question).toBe('Pick one');
+        expect(newState.pendingRequest.request.questions[0]!.question).toBe('Pick one');
       }
     });
 
@@ -1768,8 +1768,8 @@ describe('chatReducer', () => {
 
       // Earlier message should be inserted before the later one due to lower order
       expect(newState.messages.length).toBe(2);
-      expect(newState.messages[0].id).toBe('earlier-msg');
-      expect(newState.messages[1].id).toBe('later-msg');
+      expect(newState.messages[0]!.id).toBe('earlier-msg');
+      expect(newState.messages[1]!.id).toBe('later-msg');
     });
 
     it('should insert ACCEPTED messages at end when they have highest order', () => {
@@ -1803,8 +1803,8 @@ describe('chatReducer', () => {
 
       // Later message should be at the end due to higher order
       expect(newState.messages.length).toBe(2);
-      expect(newState.messages[0].id).toBe('earlier-msg');
-      expect(newState.messages[1].id).toBe('later-msg');
+      expect(newState.messages[0]!.id).toBe('earlier-msg');
+      expect(newState.messages[1]!.id).toBe('later-msg');
     });
 
     it('should maintain correct order when multiple messages arrive out of order', () => {
@@ -1846,9 +1846,9 @@ describe('chatReducer', () => {
 
       // All messages should be sorted by backend-assigned order
       expect(newState.messages.length).toBe(3);
-      expect(newState.messages[0].id).toBe('msg-1'); // order: 0
-      expect(newState.messages[1].id).toBe('msg-2'); // order: 1
-      expect(newState.messages[2].id).toBe('msg-3'); // order: 2
+      expect(newState.messages[0]!.id).toBe('msg-1'); // order: 0
+      expect(newState.messages[1]!.id).toBe('msg-2'); // order: 1
+      expect(newState.messages[2]!.id).toBe('msg-3'); // order: 2
     });
 
     it('should insert messages in order even when arriving out of sequence', () => {
@@ -1882,8 +1882,8 @@ describe('chatReducer', () => {
 
       // Messages should be sorted by order
       expect(newState.messages.length).toBe(2);
-      expect(newState.messages[0].id).toBe('msg-0'); // order: 0
-      expect(newState.messages[1].id).toBe('msg-1'); // order: 1
+      expect(newState.messages[0]!.id).toBe('msg-0'); // order: 0
+      expect(newState.messages[1]!.id).toBe('msg-1'); // order: 1
     });
   });
 });
@@ -2299,9 +2299,9 @@ describe('SDK Task Notification Actions', () => {
     const newState = chatReducer(state, action);
 
     expect(newState.taskNotifications).toHaveLength(1);
-    expect(newState.taskNotifications[0].message).toBe('Task started');
-    expect(newState.taskNotifications[0].id).toBeDefined();
-    expect(newState.taskNotifications[0].timestamp).toBeDefined();
+    expect(newState.taskNotifications[0]!.message).toBe('Task started');
+    expect(newState.taskNotifications[0]!.id).toBeDefined();
+    expect(newState.taskNotifications[0]!.timestamp).toBeDefined();
   });
 
   it('should generate unique UUIDs for notifications', () => {
@@ -2319,9 +2319,9 @@ describe('SDK Task Notification Actions', () => {
     const state2 = chatReducer(state1, action2);
 
     expect(state2.taskNotifications).toHaveLength(2);
-    expect(state2.taskNotifications[0].id).not.toBe(state2.taskNotifications[1].id);
+    expect(state2.taskNotifications[0]!.id).not.toBe(state2.taskNotifications[1]!.id);
     // UUID format check
-    expect(state2.taskNotifications[0].id).toMatch(
+    expect(state2.taskNotifications[0]!.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     );
   });

@@ -162,10 +162,13 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           }));
 
           // Set the first tab as active
-          if (restoredTabs.length > 0 && restoredTabs[0].terminalId) {
-            const firstTerminalId = restoredTabs[0].terminalId;
+          // biome-ignore lint/style/noNonNullAssertion: length > 0 checked
+          if (restoredTabs.length > 0 && restoredTabs[0]!.terminalId) {
+            // biome-ignore lint/style/noNonNullAssertion: length > 0 checked
+            const firstTerminalId = restoredTabs[0]!.terminalId;
             setTimeout(() => {
-              setActiveTabId(restoredTabs[0].id);
+              // biome-ignore lint/style/noNonNullAssertion: length > 0 checked
+              setActiveTabId(restoredTabs[0]!.id);
               // Notify backend of active terminal
               setActiveRef.current(firstTerminalId);
             }, 0);
@@ -236,7 +239,8 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           if (activeTabId === id && filtered.length > 0) {
             const closedIndex = prev.findIndex((t) => t.id === id);
             // Prefer the tab before the closed one, or the first remaining tab
-            const newActiveTab = filtered[closedIndex - 1] ?? filtered[0];
+            // biome-ignore lint/style/noNonNullAssertion: filtered.length > 0 checked above
+            const newActiveTab = (filtered[closedIndex - 1] ?? filtered[0])!;
             setTimeout(() => {
               setActiveTabId(newActiveTab.id);
               // Notify backend of new active terminal
