@@ -491,7 +491,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, wsMsg);
     });
 
-    client.on('result', async (result) => {
+    client.on('result', (result) => {
       if (DEBUG_CHAT_WS) {
         const res = result as { uuid?: string };
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
@@ -505,28 +505,26 @@ class ChatEventForwarderService {
       messageStateService.storeEvent(dbSessionId, resultMsg);
       chatConnectionService.forwardToSession(dbSessionId, resultMsg);
 
-      // Mark session as idle first, then update kanban column
-      // This ensures the session count reflects the new idle state when checking if workspace is done
-      workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
-
-      // Update kanban column to detect WAITING transition, but only if we haven't already triggered completion
-      // Pass true to indicate this is a session completion trigger (only first time)
-      const alreadyTriggered = this.sessionCompletionTriggered.has(dbSessionId);
-      if (!alreadyTriggered) {
-        this.sessionCompletionTriggered.add(dbSessionId);
-        await kanbanStateService
-          .updateCachedKanbanColumn(context.workspaceId, true)
-          .catch((error) => {
-            logger.error('Failed to update kanban column after session result', error as Error, {
-              workspaceId: context.workspaceId,
-              dbSessionId,
-            });
-          });
-      }
-
+      // Send status message synchronously BEFORE any async work to guarantee
+      // it arrives at the frontend before the 'exit' handler's process_exit message
       const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);
       chatConnectionService.forwardToSession(dbSessionId, statusMsg);
+
+      // Mark session as idle, then fire-and-forget kanban update for notification
+      workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+
+      // Update kanban column to detect WAITING transition (only first time per session)
+      const alreadyTriggered = this.sessionCompletionTriggered.has(dbSessionId);
+      if (!alreadyTriggered) {
+        this.sessionCompletionTriggered.add(dbSessionId);
+        kanbanStateService.updateCachedKanbanColumn(context.workspaceId, true).catch((error) => {
+          logger.error('Failed to update kanban column after session result', error as Error, {
+            workspaceId: context.workspaceId,
+            dbSessionId,
+          });
+        });
+      }
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
@@ -546,14 +544,14 @@ class ChatEventForwarderService {
       this.routeInteractiveRequest(dbSessionId, request);
     });
 
-    client.on('exit', async (result) => {
+    client.on('exit', (result) => {
       chatConnectionService.forwardToSession(dbSessionId, {
         type: 'process_exit',
         code: result.code,
         processAlive: false,
       });
 
-      // Mark session as idle and update kanban column to potentially trigger notification
+      // Mark session as idle and fire-and-forget kanban update for notification
       // This ensures notifications fire even if session exits without emitting 'result'
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
 
@@ -561,14 +559,12 @@ class ChatEventForwarderService {
       const alreadyTriggered = this.sessionCompletionTriggered.has(dbSessionId);
       if (!alreadyTriggered) {
         this.sessionCompletionTriggered.add(dbSessionId);
-        await kanbanStateService
-          .updateCachedKanbanColumn(context.workspaceId, true)
-          .catch((error) => {
-            logger.error('Failed to update kanban column after session exit', error as Error, {
-              workspaceId: context.workspaceId,
-              dbSessionId,
-            });
+        kanbanStateService.updateCachedKanbanColumn(context.workspaceId, true).catch((error) => {
+          logger.error('Failed to update kanban column after session exit', error as Error, {
+            workspaceId: context.workspaceId,
+            dbSessionId,
           });
+        });
       }
 
       client.removeAllListeners();
