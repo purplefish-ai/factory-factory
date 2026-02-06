@@ -30,7 +30,8 @@ function appendThinkingDelta(state: ChatState, index: number, deltaText: string)
   }
 
   for (let i = state.messages.length - 1; i >= 0; i -= 1) {
-    const msg = state.messages[i];
+    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+    const msg = state.messages[i]!;
     if (msg.source !== 'claude' || !msg.message || !isStreamEventMessage(msg.message)) {
       continue;
     }
@@ -57,7 +58,7 @@ function appendThinkingDelta(state: ChatState, index: number, deltaText: string)
           },
         },
       },
-    };
+    } as ChatMessage;
 
     return { ...state, messages: nextMessages };
   }
@@ -92,7 +93,8 @@ export function insertMessageByOrder(
 
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    if (messages[mid].order <= newOrder) {
+    // biome-ignore lint/style/noNonNullAssertion: mid bounded by low/high within array bounds
+    if (messages[mid]!.order <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;
@@ -246,7 +248,8 @@ export function handleToolInputUpdate(
   // If cached index exists, verify it points to the correct message
   // (index may be stale if messages were inserted in the middle of the array)
   if (messageIndex !== undefined) {
-    const cachedMsg = state.messages[messageIndex];
+    // biome-ignore lint/style/noNonNullAssertion: messageIndex from Map lookup, verified below
+    const cachedMsg = state.messages[messageIndex]!;
     if (!isToolUseMessageWithId(cachedMsg, toolUseId)) {
       // Cached index is stale, need to do linear scan
       messageIndex = undefined;
@@ -270,7 +273,8 @@ export function handleToolInputUpdate(
     currentState = { ...state, toolUseIdToIndex: newToolUseIdToIndex };
   }
 
-  const msg = currentState.messages[messageIndex];
+  // biome-ignore lint/style/noNonNullAssertion: messageIndex verified by findIndex check above
+  const msg = currentState.messages[messageIndex]!;
 
   // Update the message with new input
   const claudeMsg = msg.message;
@@ -289,10 +293,10 @@ export function handleToolInputUpdate(
     },
   };
 
-  const updatedChatMessage: ChatMessage = {
+  const updatedChatMessage = {
     ...msg,
     message: { ...claudeMsg, event: updatedEvent } as ClaudeMessage,
-  };
+  } as ChatMessage;
 
   const newMessages = [...currentState.messages];
   newMessages[messageIndex] = updatedChatMessage;

@@ -42,7 +42,8 @@ function getInputPreview(input: Record<string, unknown>): string {
     return 'No parameters';
   }
 
-  const firstValue = input[keys[0]];
+  // biome-ignore lint/style/noNonNullAssertion: keys.length > 0 checked above
+  const firstValue = input[keys[0]!];
   if (typeof firstValue === 'string' && firstValue.length < 100) {
     return firstValue;
   }

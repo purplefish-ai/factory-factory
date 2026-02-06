@@ -256,7 +256,7 @@ export function useSessionManagement({
     const existingNumbers = (claudeSessions ?? [])
       .map((s) => {
         const match = s.name?.match(/^Chat (\d+)$/);
-        return match ? Number.parseInt(match[1], 10) : 0;
+        return match ? Number.parseInt(match[1] as string, 10) : 0;
       })
       .filter((n) => n > 0);
     const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;

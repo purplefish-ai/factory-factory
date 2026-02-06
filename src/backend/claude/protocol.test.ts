@@ -191,8 +191,8 @@ describe('ClaudeProtocol', () => {
 
       const written = Buffer.concat(chunks).toString();
       const lines = written.trim().split('\n');
-      const parsed1 = JSON.parse(lines[0]);
-      const parsed2 = JSON.parse(lines[1]);
+      const parsed1 = JSON.parse(lines[0]!);
+      const parsed2 = JSON.parse(lines[1]!);
 
       expect(parsed1.request_id).not.toBe(parsed2.request_id);
     });
@@ -348,7 +348,7 @@ describe('ClaudeProtocol', () => {
       // Wait for the message to be written
       await new Promise((resolve) => setImmediate(resolve));
 
-      const sentMessage = JSON.parse(chunks2[0].trim());
+      const sentMessage = JSON.parse(chunks2[0]!.trim());
       const requestId = sentMessage.request_id;
 
       // Send the response
@@ -612,7 +612,7 @@ describe('ClaudeProtocol', () => {
 
       await new Promise((resolve) => setImmediate(resolve));
 
-      const sentMessage = JSON.parse(chunks[0].trim());
+      const sentMessage = JSON.parse(chunks[0]!.trim());
       const requestId = sentMessage.request_id;
 
       // Send cancel
@@ -911,7 +911,7 @@ describe('ClaudeProtocol', () => {
 
       const received = (await messagePromise) as AssistantMessage;
       const content = received.message.content as Array<{ type: string; text: string }>;
-      expect(content[0].text).toBe(longText);
+      expect(content[0]!.text).toBe(longText);
     });
   });
 });

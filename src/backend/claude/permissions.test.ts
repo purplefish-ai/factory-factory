@@ -1065,7 +1065,7 @@ describe('DeferredHandler', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(eventHandler).toHaveBeenCalled();
-      const emittedId = eventHandler.mock.calls[0][1];
+      const emittedId = eventHandler.mock.calls[0]![1];
       expect(emittedId).toMatch(/^deferred-\d+-\d+$/);
 
       // Clean up
@@ -1096,7 +1096,7 @@ describe('DeferredHandler', () => {
 
       expect(eventHandler).toHaveBeenCalled();
       // Empty string is used as the ID since ?? only triggers for null/undefined
-      const emittedId = eventHandler.mock.calls[0][1];
+      const emittedId = eventHandler.mock.calls[0]![1];
       expect(emittedId).toBe('');
 
       // Clean up - need to use empty string to approve

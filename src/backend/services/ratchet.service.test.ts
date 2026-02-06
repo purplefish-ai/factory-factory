@@ -390,7 +390,7 @@ describe('Ratchet Comment Detection', () => {
       });
 
       expect(filteredComments).toHaveLength(1);
-      expect(filteredComments[0].author.login).toBe('reviewer1');
+      expect(filteredComments[0]!.author.login).toBe('reviewer1');
     });
   });
 });

@@ -116,7 +116,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   const lastThinkingMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const item = messages[i];
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const item = messages[i]!;
       if (isToolSequence(item)) {
         continue;
       }
@@ -138,7 +139,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => 80, // Estimated average height
     overscan: running ? 3 : 5, // Fewer items when streaming for better performance
-    getItemKey: (index) => messages[index].id,
+    // biome-ignore lint/style/noNonNullAssertion: index provided by virtualizer within bounds
+    getItemKey: (index) => messages[index]!.id,
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -216,6 +218,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         >
           {virtualItems.map((virtualRow) => {
             const item = messages[virtualRow.index];
+            if (!item) {
+              return null;
+            }
             const isQueued = queuedMessageIds?.has(item.id) ?? false;
             // Get UUID for user messages to enable rewind functionality
             // Use message ID (stable identifier) instead of array index to avoid issues
