@@ -385,11 +385,40 @@ describe('Ratchet CI regression behavior', () => {
         shouldNotifyActiveFixer: (
           currentState: RatchetState,
           lastNotifiedState: RatchetState | null,
+          hasNewReviewComments: boolean,
           currentCiRunId: string | null,
           lastCiRunId: string | null
         ) => boolean;
       }
-    ).shouldNotifyActiveFixer(RatchetState.CI_FAILED, RatchetState.CI_FAILED, '4002', '4001');
+    ).shouldNotifyActiveFixer(
+      RatchetState.CI_FAILED,
+      RatchetState.CI_FAILED,
+      false,
+      '4002',
+      '4001'
+    );
+
+    expect(shouldNotify).toBe(true);
+  });
+
+  it('notifies active fixer when new review comments arrive in REVIEW_PENDING', () => {
+    const shouldNotify = (
+      ratchetService as unknown as {
+        shouldNotifyActiveFixer: (
+          currentState: RatchetState,
+          lastNotifiedState: RatchetState | null,
+          hasNewReviewComments: boolean,
+          currentCiRunId: string | null,
+          lastCiRunId: string | null
+        ) => boolean;
+      }
+    ).shouldNotifyActiveFixer(
+      RatchetState.REVIEW_PENDING,
+      RatchetState.REVIEW_PENDING,
+      true,
+      null,
+      null
+    );
 
     expect(shouldNotify).toBe(true);
   });

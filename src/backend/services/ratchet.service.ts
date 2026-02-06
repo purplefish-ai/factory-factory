@@ -550,6 +550,7 @@ class RatchetService {
     const shouldNotify = this.shouldNotifyActiveFixer(
       state,
       workspace.ratchetLastNotifiedState,
+      prStateInfo.hasNewReviewComments,
       prStateInfo.ciRunId,
       workspace.ratchetLastCiRunId
     );
@@ -633,9 +634,14 @@ class RatchetService {
   private shouldNotifyActiveFixer(
     currentState: RatchetState,
     lastNotifiedState: RatchetState | null,
+    hasNewReviewComments: boolean,
     currentCiRunId: string | null,
     lastCiRunId: string | null
   ): boolean {
+    if (currentState === RatchetState.REVIEW_PENDING && hasNewReviewComments) {
+      return true;
+    }
+
     if (
       currentState === RatchetState.CI_FAILED &&
       currentCiRunId &&
@@ -690,6 +696,20 @@ The branch now has merge conflicts with the base branch.
 Please resolve the conflicts before continuing.
 
 Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
+    } else if (state === RatchetState.REVIEW_PENDING && prStateInfo.hasNewReviewComments) {
+      const codeCommentLines = prStateInfo.newReviewComments.map((comment) => {
+        const location = comment.line ? `:${comment.line}` : '';
+        return `- **${comment.author.login}** on \`${comment.path}${location}\`: ${comment.url}`;
+      });
+      const prCommentLines = prStateInfo.newPRComments.map(
+        (comment) => `- **${comment.author.login}**: ${comment.url}`
+      );
+      const commentLines = [...codeCommentLines, ...prCommentLines];
+      message = `⚠️ **New Review Feedback**
+
+New comments were posted on PR #${prStateInfo.prNumber}.
+
+${commentLines.length > 0 ? `**New comments:**\n${commentLines.join('\n')}\n\n` : ''}Please review and address this feedback before continuing.`;
     }
 
     if (message) {
