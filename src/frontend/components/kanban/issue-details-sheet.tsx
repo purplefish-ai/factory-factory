@@ -99,31 +99,32 @@ export function IssueDetailsSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col p-0">
         {issue ? (
           <>
-            <SheetHeader className="pb-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <SheetTitle className="text-xl leading-tight pr-8">{issue.title}</SheetTitle>
-                  <SheetDescription className="flex items-center gap-2 text-xs mt-2">
-                    <span className="inline-flex items-center gap-1">
-                      <CircleDot className="h-3 w-3 text-green-500" />
-                      <span>#{issue.number}</span>
-                    </span>
-                    <span>•</span>
-                    <span className="inline-flex items-center gap-1">
-                      <User className="h-3 w-3" />
-                      {issue.author.login}
-                    </span>
-                    <span>•</span>
-                    <span>{new Date(issue.createdAt).toLocaleDateString()}</span>
-                  </SheetDescription>
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <SheetHeader className="pb-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <SheetTitle className="text-xl leading-tight pr-8">{issue.title}</SheetTitle>
+                    <SheetDescription className="flex items-center gap-2 text-xs mt-2">
+                      <span className="inline-flex items-center gap-1">
+                        <CircleDot className="h-3 w-3 text-green-500" />
+                        <span>#{issue.number}</span>
+                      </span>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        {issue.author.login}
+                      </span>
+                      <span>•</span>
+                      <span>{new Date(issue.createdAt).toLocaleDateString()}</span>
+                    </SheetDescription>
+                  </div>
                 </div>
-              </div>
-            </SheetHeader>
+              </SheetHeader>
 
-            <div className="space-y-4">
               {/* Issue Body */}
               <div>
                 <h3 className="text-sm font-semibold mb-2">Description</h3>
@@ -141,44 +142,44 @@ export function IssueDetailsSheet({
                   <p className="text-sm text-muted-foreground italic">No description provided.</p>
                 )}
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-3 pt-4 border-t">
-                <div className="flex items-center gap-2">
-                  <RatchetToggleButton
-                    enabled={ratchetEnabled}
-                    state="IDLE"
-                    className="h-6 w-6 shrink-0"
-                    stopPropagation={false}
-                    disabled={isLoadingSettings || createWorkspaceMutation.isPending}
-                    onToggle={(enabled) => {
-                      setRatchetEnabled(enabled);
-                      try {
-                        window.localStorage.setItem(ratchetPreferenceKey, String(enabled));
-                      } catch {
-                        // Ignore localStorage failures without interrupting the toggle.
-                      }
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {ratchetEnabled ? 'Ratcheting enabled' : 'Ratcheting disabled'}
-                  </span>
-                </div>
+            {/* Fixed footer with action buttons */}
+            <div className="border-t p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <RatchetToggleButton
+                  enabled={ratchetEnabled}
+                  state="IDLE"
+                  className="h-6 w-6 shrink-0"
+                  stopPropagation={false}
+                  disabled={isLoadingSettings || createWorkspaceMutation.isPending}
+                  onToggle={(enabled) => {
+                    setRatchetEnabled(enabled);
+                    try {
+                      window.localStorage.setItem(ratchetPreferenceKey, String(enabled));
+                    } catch {
+                      // Ignore localStorage failures without interrupting the toggle.
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {ratchetEnabled ? 'Ratcheting enabled' : 'Ratcheting disabled'}
+                </span>
+              </div>
 
-                <div className="flex gap-2">
-                  <Button onClick={handleOpenInGitHub} variant="outline">
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in GitHub
-                  </Button>
-                  <Button
-                    onClick={handleStart}
-                    disabled={createWorkspaceMutation.isPending || isLoadingSettings}
-                    className="flex-1"
-                  >
-                    <Play className="h-4 w-4 mr-2" />
-                    {createWorkspaceMutation.isPending ? 'Starting...' : 'Start Issue'}
-                  </Button>
-                </div>
+              <div className="flex gap-2">
+                <Button onClick={handleOpenInGitHub} variant="outline">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open in GitHub
+                </Button>
+                <Button
+                  onClick={handleStart}
+                  disabled={createWorkspaceMutation.isPending || isLoadingSettings}
+                  className="flex-1"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  {createWorkspaceMutation.isPending ? 'Starting...' : 'Start Issue'}
+                </Button>
               </div>
             </div>
           </>
