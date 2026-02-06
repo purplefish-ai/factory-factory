@@ -12,6 +12,13 @@ import {
   type ExportDataV1,
   type ExportDataV2,
   exportDataSchema,
+  type exportedClaudeSessionSchema,
+  type exportedProjectSchema,
+  type exportedTerminalSessionSchema,
+  type exportedUserSettingsSchemaV1,
+  type exportedUserSettingsSchemaV2,
+  type exportedWorkspaceSchemaV1,
+  type exportedWorkspaceSchemaV2,
 } from '@/shared/schemas/export-data.schema';
 import { prisma } from '../db';
 import { createLogger } from './logger.service';
@@ -22,26 +29,6 @@ const logger = createLogger('data-backup');
 
 // Re-export schema and types for backwards compatibility
 export { exportDataSchema, type ExportData, type ExportDataV1, type ExportDataV2 };
-
-// ============================================================================
-// Internal Schema Types
-// ============================================================================
-
-// Internal types for schema parsing
-// Note: These rely on Zod's internal structure. If the union order changes
-// (v2 at index 0, v1 at index 1), these will break at runtime.
-// The shared schema (export-data.schema.ts) defines: z.union([v2, v1])
-const exportedProjectSchema = exportDataSchema.options[0].shape.data.shape.projects.element;
-const exportedWorkspaceSchemaV1 = exportDataSchema.options[1].shape.data.shape.workspaces.element;
-const exportedWorkspaceSchemaV2 = exportDataSchema.options[0].shape.data.shape.workspaces.element;
-const exportedClaudeSessionSchema =
-  exportDataSchema.options[0].shape.data.shape.claudeSessions.element;
-const exportedTerminalSessionSchema =
-  exportDataSchema.options[0].shape.data.shape.terminalSessions.element;
-const exportedUserSettingsSchemaV1 =
-  exportDataSchema.options[1].shape.data.shape.userSettings.unwrap();
-const exportedUserSettingsSchemaV2 =
-  exportDataSchema.options[0].shape.data.shape.userSettings.unwrap();
 
 // ============================================================================
 // Types
@@ -60,6 +47,7 @@ export interface ImportResults {
   userSettings: { imported: boolean; skipped: boolean };
 }
 
+// Internal types extracted from schemas (using explicit exports instead of Zod internals)
 type ExportedProject = z.infer<typeof exportedProjectSchema>;
 type ExportedWorkspaceV1 = z.infer<typeof exportedWorkspaceSchemaV1>;
 type ExportedWorkspaceV2 = z.infer<typeof exportedWorkspaceSchemaV2>;

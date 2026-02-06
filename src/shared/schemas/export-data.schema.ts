@@ -203,6 +203,17 @@ const exportDataSchemaV2 = z.object({
 // Main export schema that accepts both v1 and v2
 export const exportDataSchema = z.union([exportDataSchemaV2, exportDataSchemaV1]);
 
+// Export individual schemas for backend use (avoids accessing Zod internals)
+export {
+  exportedProjectSchema,
+  exportedWorkspaceSchemaV1,
+  exportedWorkspaceSchemaV2,
+  exportedClaudeSessionSchema,
+  exportedTerminalSessionSchema,
+  exportedUserSettingsSchemaV1,
+  exportedUserSettingsSchemaV2,
+};
+
 export type ExportData = z.infer<typeof exportDataSchemaV2>;
 export type ExportDataV1 = z.infer<typeof exportDataSchemaV1>;
 export type ExportDataV2 = z.infer<typeof exportDataSchemaV2>;
