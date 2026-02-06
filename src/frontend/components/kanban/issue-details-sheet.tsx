@@ -166,6 +166,10 @@ export function IssueDetailsSheet({
                 </div>
 
                 <div className="flex gap-2">
+                  <Button onClick={handleOpenInGitHub} variant="outline">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open in GitHub
+                  </Button>
                   <Button
                     onClick={handleStart}
                     disabled={createWorkspaceMutation.isPending || isLoadingSettings}
@@ -173,10 +177,6 @@ export function IssueDetailsSheet({
                   >
                     <Play className="h-4 w-4 mr-2" />
                     {createWorkspaceMutation.isPending ? 'Starting...' : 'Start Issue'}
-                  </Button>
-                  <Button onClick={handleOpenInGitHub} variant="outline">
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in GitHub
                   </Button>
                 </div>
               </div>
