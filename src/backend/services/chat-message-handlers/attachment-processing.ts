@@ -36,7 +36,6 @@ function validateImageBase64(attachment: MessageAttachment): void {
   if (!/^[A-Za-z0-9+/=]+$/.test(attachment.data)) {
     logger.error('[Chat WS] Invalid base64 data in attachment', {
       attachmentId: attachment.id,
-      name: attachment.name,
     });
     throw new Error(`Attachment "${attachment.name}" has invalid image data`);
   }
