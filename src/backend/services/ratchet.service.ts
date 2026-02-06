@@ -611,10 +611,8 @@ class RatchetService {
         return await this.triggerFixer(workspace, 'ci', prStateInfo, settings);
 
       case RatchetState.MERGE_CONFLICT:
-        // Merge conflicts are resolved opportunistically as part of CI/review
-        // fixes (agents sync with main before starting). Standalone conflict
-        // fixer dispatch is intentionally removed to avoid thundering-herd
-        // churn when main moves.
+        // No standalone fixer dispatch — agents sync with main before every
+        // CI/review fix, resolving conflicts opportunistically.
         return { type: 'WAITING', reason: 'Merge conflict — waiting for CI or review trigger' };
 
       case RatchetState.REVIEW_PENDING:
@@ -664,9 +662,9 @@ class RatchetService {
       return false;
     }
 
-    // Priority states that should always trigger notification
-    const priorityStates: RatchetState[] = [RatchetState.CI_FAILED, RatchetState.MERGE_CONFLICT];
-    return priorityStates.includes(currentState);
+    // Only CI failures trigger mid-flight notification. Merge conflicts are
+    // handled by agent branch sync, so no separate notification needed.
+    return currentState === RatchetState.CI_FAILED;
   }
 
   /**
@@ -698,13 +696,6 @@ ${prStateInfo.failedChecks.map((c) => `- **${c.name}**: ${c.conclusion}${c.detai
 Please investigate and fix the CI failure before continuing with your current task.
 Use \`gh pr checks ${prStateInfo.prNumber}\` to see current status.
 Use \`gh run view <run-id> --log-failed\` to see detailed logs.`;
-    } else if (state === RatchetState.MERGE_CONFLICT) {
-      message = `⚠️ **Merge Conflict Detected**
-
-The branch now has merge conflicts with the base branch.
-Please resolve the conflicts before continuing.
-
-Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     }
 
     if (message) {
