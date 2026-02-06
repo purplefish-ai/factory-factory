@@ -361,36 +361,104 @@ async function buildInitialPromptFromGitHubIssue(workspaceId: string): Promise<s
       issueTitle: issue.title,
     });
 
-    return `Please work on the following GitHub issue and take it through the full development pipeline:
+    return `# GitHub Issue Implementation
 
 ## Issue #${issue.number}: ${issue.title}
 
 ${issue.body || '(No description provided)'}
 
+**GitHub Issue URL**: ${issue.url}
+
 ---
 
-GitHub Issue URL: ${issue.url}
+You are implementing this GitHub issue through a structured, autonomous workflow. Do NOT ask the user for plan approval or clarification unless there are critical ambiguities that block all progress. Proceed through each phase systematically.
 
-## Instructions
+## Phase 1: Planning with TodoWrite
 
-Please complete the following steps:
+1. Analyze the issue requirements thoroughly
+2. Explore the codebase to understand relevant code structure and patterns
+3. Create a detailed task breakdown using TodoWrite with specific, actionable items
+4. Consider edge cases, error handling, and testing requirements
+5. Identify which files will need to be modified or created
 
-1. **Plan**: Analyze the issue and come up with a plan to implement it. Consider the codebase structure, existing patterns, and any edge cases.
+## Phase 2: Plan Review
 
-2. **Implement**: If the requirements are clear and no clarification is needed, proceed to implement the plan. Write clean, well-tested code that follows the project's conventions.
+1. Review your own plan critically for:
+   - Missing edge cases or error scenarios
+   - Alignment with existing codebase patterns
+   - Test coverage gaps
+   - Potential architecture issues
+2. If the plan is complex (affects >5 files or changes core architecture), use the Plan agent to validate your approach
+3. Fix any identified issues in your plan and update the TodoWrite list
 
-3. **Review**: After implementation, review your own code for:
-   - Correctness and completeness
-   - Code quality and adherence to project patterns
-   - Potential bugs or edge cases
-   - Test coverage
+## Phase 3: Implementation
 
-4. **Create PR**: Once you're satisfied with the implementation, create a pull request with:
-   - A clear title and description
-   - Reference to this issue
-   - Summary of changes made
+1. Follow your plan systematically, marking each task as in_progress then completed
+2. Write clean, well-structured code following existing patterns
+3. Add appropriate type definitions and error handling
+4. Create atomic, focused commits as you complete logical units
+5. Add tests for new functionality and edge cases
+6. Keep your TodoWrite list updated as you discover new tasks
 
-If you need clarification on any requirements before proceeding, ask for clarification first.`;
+## Phase 4: Implementation Review
+
+Run through this self-review checklist:
+- [ ] All TodoWrite tasks are completed
+- [ ] Code follows existing patterns and conventions
+- [ ] Edge cases and error scenarios are handled
+- [ ] Tests are added for new functionality
+- [ ] Type safety is maintained (run \`pnpm typecheck\`)
+- [ ] Linting passes (run \`pnpm check:fix\`)
+- [ ] Test suite passes (run \`pnpm test\`)
+- [ ] Build succeeds (run \`pnpm build:all\` if applicable)
+
+Fix any issues discovered during this review.
+
+## Phase 5: Code Simplification
+
+1. Use the code-simplifier agent (via Task tool with subagent_type="code-simplifier:code-simplifier") to refine recently modified code for clarity and maintainability
+2. If code-simplifier is not available, perform manual simplification:
+   - Remove unnecessary complexity or abstractions
+   - Improve variable/function naming
+   - Add clarifying comments only where logic isn't self-evident
+   - Ensure consistent code style
+
+## Phase 6: Final Verification
+
+Perform comprehensive final checks:
+1. Run the full test suite again: \`pnpm test\`
+2. Verify type checking: \`pnpm typecheck\`
+3. Verify linting: \`pnpm check:fix\`
+4. Review git diff to ensure no unintended changes
+5. Verify all commits have good messages
+6. Test the feature/fix end-to-end manually if applicable
+
+## Phase 7: PR Creation
+
+1. Ensure all changes are committed with descriptive messages
+2. Push your branch: \`git push -u origin HEAD\`
+3. Create the PR using:
+   \`\`\`bash
+   gh pr create --title "Clear, concise title (<70 chars)" --body-file <temp-file>
+   \`\`\`
+4. PR body should include:
+   - **Summary**: Brief overview of changes (1-3 bullet points)
+   - **Changes**: What was modified and why
+   - **Testing**: How to verify the changes work
+   - **References**: Closes #${issue.number}
+
+---
+
+## Important Guidelines
+
+- **Work autonomously**: Do NOT ask for plan approval or confirmation between phases
+- **Only ask critical questions**: If the issue requirements are fundamentally ambiguous or contradictory, ask for clarification once at the start, then proceed
+- **Use agents strategically**: Delegate to specialized agents (Plan, code-simplifier) to maintain focus
+- **Commit frequently**: Make atomic commits after completing logical units
+- **Update todos**: Keep TodoWrite list current as you discover new tasks
+- **Self-review rigorously**: Catch issues before creating the PR
+
+Begin with Phase 1.`;
   } catch (error) {
     logger.warn('Error building initial prompt from GitHub issue', {
       workspaceId,
