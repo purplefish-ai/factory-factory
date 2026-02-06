@@ -155,6 +155,10 @@ class KanbanStateService extends EventEmitter {
 
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
 
+    // Check if any sessions are currently running (in-memory state)
+    const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+    const wasWorking = sessionService.isAnySessionWorking(sessionIds);
+
     // For cached column, include flow-state working but not in-memory session activity.
     const cachedColumn = computeKanbanColumn({
       lifecycle: workspace.status,
@@ -180,13 +184,20 @@ class KanbanStateService extends EventEmitter {
       previousColumn,
       newColumn,
       columnChanged,
+      wasWorking,
     });
 
-    // Emit event when workspace transitions to WAITING
-    if (columnChanged && newColumn === KanbanColumn.WAITING) {
+    // Emit event when workspace transitions to WAITING.
+    // This happens either when:
+    // 1. The cached column actually changed to WAITING (e.g., PR state change)
+    // 2. A session just finished (wasWorking=true) and we're now idle in WAITING
+    //    (even if cachedKanbanColumn was already WAITING)
+    if (newColumn === KanbanColumn.WAITING && (columnChanged || wasWorking)) {
       logger.info('Workspace transitioned to WAITING', {
         workspaceId,
         from: previousColumn,
+        columnChanged,
+        wasWorking,
       });
 
       this.emit('transition_to_waiting', {
