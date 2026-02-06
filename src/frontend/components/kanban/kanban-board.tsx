@@ -150,7 +150,9 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
           </div>
         ) : (
           issues.map((issue) => (
-            <IssueCard key={issue.number} issue={issue} projectId={projectId} />
+            <div key={issue.number} className="shrink-0">
+              <IssueCard issue={issue} projectId={projectId} />
+            </div>
           ))
         )}
       </div>
