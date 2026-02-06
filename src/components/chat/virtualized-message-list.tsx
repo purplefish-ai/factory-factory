@@ -188,21 +188,21 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [scrollContainerRef, handleScroll]);
 
-  // Show empty/loading states
-  if (messages.length === 0) {
-    if (loadingSession) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-8">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span className="text-sm">Loading session...</span>
-          </div>
+  // Show loading state while session is loading (prevents flicker during event replay)
+  if (loadingSession) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-sm">Loading session...</span>
         </div>
-      );
-    }
-    if (!(running || startingSession)) {
-      return <EmptyState />;
-    }
+      </div>
+    );
+  }
+
+  // Show empty state if no messages and not starting
+  if (messages.length === 0 && !(running || startingSession)) {
+    return <EmptyState />;
   }
 
   return (
