@@ -194,7 +194,11 @@ export const InitializeResponseDataSchema = z
     commands: z.array(z.object({ name: z.string(), description: z.string() }).passthrough()),
     output_style: z.string(),
     available_output_styles: z.array(z.string()),
-    models: z.array(z.object({ value: z.string(), displayName: z.string() }).passthrough()),
+    models: z.array(
+      z
+        .object({ value: z.string(), displayName: z.string(), description: z.string() })
+        .passthrough()
+    ),
     account: z
       .object({
         email: z.string(),
