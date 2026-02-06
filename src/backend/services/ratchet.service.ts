@@ -292,7 +292,7 @@ class RatchetService {
         ? await this.executeRatchetAction(workspace, newState, prStateInfo, settings)
         : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
 
-      // 6. Update workspace (including review check timestamp if we found review comments)
+      // 6. Update workspace and persist progress markers for delivered notifications.
       const now = new Date();
       const shouldRecordCiRunId =
         shouldTakeAction &&
@@ -300,12 +300,19 @@ class RatchetService {
         !!prStateInfo.ciRunId &&
         (action.type === 'NOTIFIED_ACTIVE_FIXER' ||
           (action.type === 'TRIGGERED_FIXER' && action.promptSent));
+      const shouldRecordReviewCheckAt =
+        shouldTakeAction &&
+        newState === RatchetState.REVIEW_PENDING &&
+        prStateInfo.hasNewReviewComments &&
+        ((action.type === 'NOTIFIED_ACTIVE_FIXER' && action.issue === RatchetState.REVIEW_PENDING) ||
+          (action.type === 'TRIGGERED_FIXER' &&
+            action.fixerType === 'review' &&
+            action.promptSent));
       await workspaceAccessor.update(workspace.id, {
         ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
         ratchetLastCheckedAt: now,
         ...(shouldRecordCiRunId ? { ratchetLastCiRunId: prStateInfo.ciRunId } : {}),
-        // Update review timestamp if we detected review comments
-        ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
+        ...(shouldRecordReviewCheckAt ? { prReviewLastCheckedAt: now } : {}),
       });
 
       return {
@@ -699,10 +706,10 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
     } else if (state === RatchetState.REVIEW_PENDING && prStateInfo.hasNewReviewComments) {
       const codeCommentLines = prStateInfo.newReviewComments.map((comment) => {
         const location = comment.line ? `:${comment.line}` : '';
-        return `- **${comment.author.login}** on \`${comment.path}${location}\`: ${comment.url}`;
+        return `- **${comment.author.login}** on \`${comment.path}${location}\`: [view comment](${comment.url})`;
       });
       const prCommentLines = prStateInfo.newPRComments.map(
-        (comment) => `- **${comment.author.login}**: ${comment.url}`
+        (comment) => `- **${comment.author.login}**: [view comment](${comment.url})`
       );
       const commentLines = [...codeCommentLines, ...prCommentLines];
       message = `⚠️ **New Review Feedback**

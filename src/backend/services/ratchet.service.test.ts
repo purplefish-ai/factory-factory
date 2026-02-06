@@ -268,6 +268,161 @@ describe('ratchet service', () => {
       expect.objectContaining({ ratchetState: RatchetState.IDLE })
     );
   });
+
+  it('records review check timestamp only when review feedback is successfully dispatched', async () => {
+    const workspace = {
+      id: 'ws-review-dispatch',
+      prUrl: 'https://github.com/example/repo/pull/4',
+      prNumber: 4,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.REVIEW_PENDING,
+      ratchetActiveSessionId: 'session-1',
+      ratchetLastCiRunId: null,
+      ratchetLastNotifiedState: RatchetState.REVIEW_PENDING,
+      prReviewLastCheckedAt: null,
+    };
+
+    const prStateInfo = {
+      ciStatus: CIStatus.SUCCESS,
+      mergeStateStatus: 'CLEAN',
+      hasChangesRequested: false,
+      hasNewReviewComments: true,
+      failedChecks: [],
+      ciRunId: null,
+      reviews: [],
+      comments: [],
+      reviewComments: [],
+      newReviewComments: [
+        {
+          id: 1,
+          author: { login: 'reviewer1' },
+          body: 'Please fix this',
+          path: 'src/file.ts',
+          line: 10,
+          createdAt: '2026-01-01T00:00:00Z',
+          url: 'https://github.com/example/repo/pull/4#discussion_r1',
+        },
+      ],
+      newPRComments: [],
+      prState: 'OPEN',
+      prNumber: 4,
+    };
+
+    vi.spyOn(
+      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+      'fetchPRState'
+    ).mockResolvedValue(prStateInfo);
+
+    vi.spyOn(
+      ratchetService as unknown as { determineRatchetState: (...args: unknown[]) => RatchetState },
+      'determineRatchetState'
+    ).mockReturnValue(RatchetState.REVIEW_PENDING);
+
+    vi.spyOn(
+      ratchetService as unknown as { executeRatchetAction: (...args: unknown[]) => unknown },
+      'executeRatchetAction'
+    ).mockResolvedValue({
+      type: 'NOTIFIED_ACTIVE_FIXER',
+      sessionId: 'session-1',
+      issue: RatchetState.REVIEW_PENDING,
+    });
+
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: true } as never);
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    await (
+      ratchetService as unknown as {
+        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+      }
+    ).processWorkspace(workspace, {
+      autoFixCi: true,
+      autoFixConflicts: true,
+      autoFixReviews: true,
+      autoMerge: false,
+      allowedReviewers: [],
+    });
+
+    const updateCalls = vi.mocked(workspaceAccessor.update).mock.calls;
+    const finalUpdatePayload = updateCalls[updateCalls.length - 1]?.[1] as Record<string, unknown>;
+    expect(finalUpdatePayload).toHaveProperty('prReviewLastCheckedAt');
+  });
+
+  it('does not record review check timestamp when review feedback dispatch fails', async () => {
+    const workspace = {
+      id: 'ws-review-failure',
+      prUrl: 'https://github.com/example/repo/pull/5',
+      prNumber: 5,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.REVIEW_PENDING,
+      ratchetActiveSessionId: 'session-2',
+      ratchetLastCiRunId: null,
+      ratchetLastNotifiedState: RatchetState.REVIEW_PENDING,
+      prReviewLastCheckedAt: null,
+    };
+
+    const prStateInfo = {
+      ciStatus: CIStatus.SUCCESS,
+      mergeStateStatus: 'CLEAN',
+      hasChangesRequested: false,
+      hasNewReviewComments: true,
+      failedChecks: [],
+      ciRunId: null,
+      reviews: [],
+      comments: [],
+      reviewComments: [],
+      newReviewComments: [
+        {
+          id: 2,
+          author: { login: 'reviewer2' },
+          body: 'Needs update',
+          path: 'src/file2.ts',
+          line: 20,
+          createdAt: '2026-01-01T00:00:00Z',
+          url: 'https://github.com/example/repo/pull/5#discussion_r2',
+        },
+      ],
+      newPRComments: [],
+      prState: 'OPEN',
+      prNumber: 5,
+    };
+
+    vi.spyOn(
+      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+      'fetchPRState'
+    ).mockResolvedValue(prStateInfo);
+
+    vi.spyOn(
+      ratchetService as unknown as { determineRatchetState: (...args: unknown[]) => RatchetState },
+      'determineRatchetState'
+    ).mockReturnValue(RatchetState.REVIEW_PENDING);
+
+    vi.spyOn(
+      ratchetService as unknown as { executeRatchetAction: (...args: unknown[]) => unknown },
+      'executeRatchetAction'
+    ).mockResolvedValue({
+      type: 'ERROR',
+      error: 'Failed to notify active fixer',
+    });
+
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: true } as never);
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    await (
+      ratchetService as unknown as {
+        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+      }
+    ).processWorkspace(workspace, {
+      autoFixCi: true,
+      autoFixConflicts: true,
+      autoFixReviews: true,
+      autoMerge: false,
+      allowedReviewers: [],
+    });
+
+    const updateCalls = vi.mocked(workspaceAccessor.update).mock.calls;
+    const finalUpdatePayload = updateCalls[updateCalls.length - 1]?.[1] as Record<string, unknown>;
+    expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
+  });
 });
 
 describe('Ratchet CI regression behavior', () => {
