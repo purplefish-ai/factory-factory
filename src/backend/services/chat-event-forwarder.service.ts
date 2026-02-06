@@ -63,6 +63,8 @@ class ChatEventForwarderService {
   private workspaceNotificationsSetup = false;
   /** Track last compact boundary per session to avoid duplicate indicators */
   private lastCompactBoundaryAt = new Map<string, number>();
+  /** Track sessions that have triggered completion notification to prevent duplicates from result+exit */
+  private sessionCompletionTriggered = new Set<string>();
 
   /**
    * Check if event forwarding is already set up for a session.
@@ -507,16 +509,20 @@ class ChatEventForwarderService {
       // This ensures the session count reflects the new idle state when checking if workspace is done
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
 
-      // Update kanban column to detect WAITING transition
-      // Pass true to indicate this is a session completion trigger
-      await kanbanStateService
-        .updateCachedKanbanColumn(context.workspaceId, true)
-        .catch((error) => {
-          logger.error('Failed to update kanban column after session result', error as Error, {
-            workspaceId: context.workspaceId,
-            dbSessionId,
+      // Update kanban column to detect WAITING transition, but only if we haven't already triggered completion
+      // Pass true to indicate this is a session completion trigger (only first time)
+      const alreadyTriggered = this.sessionCompletionTriggered.has(dbSessionId);
+      if (!alreadyTriggered) {
+        this.sessionCompletionTriggered.add(dbSessionId);
+        await kanbanStateService
+          .updateCachedKanbanColumn(context.workspaceId, true)
+          .catch((error) => {
+            logger.error('Failed to update kanban column after session result', error as Error, {
+              workspaceId: context.workspaceId,
+              dbSessionId,
+            });
           });
-        });
+      }
 
       const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
       messageStateService.storeEvent(dbSessionId, statusMsg);
@@ -550,18 +556,25 @@ class ChatEventForwarderService {
       // Mark session as idle and update kanban column to potentially trigger notification
       // This ensures notifications fire even if session exits without emitting 'result'
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
-      await kanbanStateService
-        .updateCachedKanbanColumn(context.workspaceId, true)
-        .catch((error) => {
-          logger.error('Failed to update kanban column after session exit', error as Error, {
-            workspaceId: context.workspaceId,
-            dbSessionId,
+
+      // Only trigger notification if we haven't already done so from 'result' event
+      const alreadyTriggered = this.sessionCompletionTriggered.has(dbSessionId);
+      if (!alreadyTriggered) {
+        this.sessionCompletionTriggered.add(dbSessionId);
+        await kanbanStateService
+          .updateCachedKanbanColumn(context.workspaceId, true)
+          .catch((error) => {
+            logger.error('Failed to update kanban column after session exit', error as Error, {
+              workspaceId: context.workspaceId,
+              dbSessionId,
+            });
           });
-        });
+      }
 
       client.removeAllListeners();
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);
+      this.sessionCompletionTriggered.delete(dbSessionId);
       // Note: We intentionally do NOT clear the message queue on exit
       // Queue is preserved so messages can be sent when user starts next interaction
       // Clear any pending interactive requests when process exits
