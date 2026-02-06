@@ -134,13 +134,8 @@ class SessionService {
       return pending;
     }
 
-    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-      thinkingEnabled: options?.thinkingEnabled,
-      permissionMode: options?.permissionMode,
-      model: options?.model,
-    });
-
-    return this.processManager.getOrCreateClient(sessionId, clientOptions, handlers, context);
+    // Use createClient to ensure DB updates happen consistently
+    return await this.createClient(sessionId, options);
   }
 
   /**
