@@ -202,9 +202,9 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
-      initialPrompt: '',
-    });
+    // Should NOT start session when script fails
+    expect(mocks.startClaudeSession).not.toHaveBeenCalled();
+    // stopWorkspaceSessions is still called but is a no-op (no sessions running)
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
   });
 });
