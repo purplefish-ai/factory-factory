@@ -117,7 +117,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
           </Badge>
         </div>
 
-        <div className="mt-3 min-h-0 space-y-3 overflow-hidden">
+        <div className="mt-3 min-h-0 space-y-3 overflow-y-auto">
           {mostRecentToolSequence && (
             <div>
               <ToolSequenceGroup
