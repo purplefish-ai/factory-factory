@@ -568,7 +568,7 @@ export class ClaudeProtocol extends EventEmitter {
 
     try {
       // Validate response based on the request subtype we tracked
-      let validatedResponse: unknown = rawResponse;
+      let validatedResponse: unknown;
 
       if (pending.requestSubtype === 'initialize') {
         const parseResult = InitializeResponseDataSchema.safeParse(rawResponse);
@@ -600,19 +600,15 @@ export class ClaudeProtocol extends EventEmitter {
           return;
         }
         validatedResponse = parseResult.data;
-      } else if (pending.requestSubtype) {
-        // For other known request types (like set_permission_mode), no validation schema yet
-        // but we track that it's a known type
-        validatedResponse = rawResponse;
       } else {
-        // Unknown request type - reject to prevent bypassing validation
-        logger.error('Control response received for request with unknown subtype', {
+        // No validation schema for this request subtype - reject to prevent bypass
+        const noSchemaError = new Error('Control response has no validation schema');
+        logger.error('Control response has no validation schema', noSchemaError, {
           requestId,
+          requestSubtype: pending.requestSubtype ?? 'unknown',
           rawResponse: JSON.stringify(rawResponse).slice(0, 500),
         });
-        pending.reject(
-          new Error('Control response received for request with unknown type - validation bypassed')
-        );
+        pending.reject(noSchemaError);
         return;
       }
 
