@@ -386,8 +386,12 @@ class RatchetService {
       const failedChecks: PRStateInfo['failedChecks'] = [];
       if (prDetails.statusCheckRollup) {
         for (const check of prDetails.statusCheckRollup) {
-          const conclusion = check.conclusion || check.status;
-          if (conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED') {
+          const conclusion = String(check.conclusion || check.status);
+          if (
+            conclusion === 'FAILURE' ||
+            conclusion === 'ACTION_REQUIRED' ||
+            conclusion === 'ERROR'
+          ) {
             failedChecks.push({
               name: check.name || 'Unknown check',
               conclusion,
@@ -1007,8 +1011,9 @@ New review comments have been received on PR #${prNumber}.
 
     const failedEntries: string[] = [];
     for (const check of checks) {
-      const conclusion = check.conclusion || check.status;
-      const isFailure = conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED';
+      const conclusion = String(check.conclusion || check.status);
+      const isFailure =
+        conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED' || conclusion === 'ERROR';
       if (!isFailure) {
         continue;
       }
