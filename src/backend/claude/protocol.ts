@@ -13,6 +13,7 @@ import { createLogger } from '../services/logger.service';
 import {
   type ClaudeContentItem,
   type ClaudeJson,
+  ClaudeJsonSchema,
   type ControlCancelRequest,
   type ControlRequest,
   type ControlResponseData,
@@ -489,7 +490,18 @@ export class ClaudeProtocol extends EventEmitter {
 
     let parsed: ClaudeJson;
     try {
-      parsed = JSON.parse(trimmed) as ClaudeJson;
+      const rawData = JSON.parse(trimmed);
+      const validationResult = ClaudeJsonSchema.safeParse(rawData);
+
+      if (!validationResult.success) {
+        logger.error('Invalid Claude JSON message', new Error('Schema validation failed'), {
+          rawLine: trimmed.slice(0, 200),
+          errors: validationResult.error.format(),
+        });
+        return;
+      }
+
+      parsed = validationResult.data as ClaudeJson;
     } catch (error) {
       // Log and skip malformed JSON
       logger.error('Failed to parse JSON', error as Error, {

@@ -697,6 +697,21 @@ export type ClaudeJson =
 export type SdkToCliMessage = SdkControlRequest | ControlResponse | UserMessageRequest;
 
 // =============================================================================
+// Zod Schemas for Runtime Validation
+// =============================================================================
+
+/**
+ * Zod schema for ClaudeJson runtime validation.
+ * Validates the discriminated union based on the `type` field.
+ * Uses passthrough() to allow additional fields from Claude CLI.
+ */
+export const ClaudeJsonSchema = z
+  .object({
+    type: z.string(),
+  })
+  .passthrough();
+
+// =============================================================================
 // Type Guards
 // =============================================================================
 
