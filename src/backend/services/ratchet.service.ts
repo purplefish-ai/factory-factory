@@ -302,9 +302,7 @@ class RatchetService {
       await workspaceAccessor.update(workspace.id, {
         ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
         ratchetLastCheckedAt: now,
-        ...(shouldRecordCiRunId
-          ? { ratchetLastCiRunId: prStateInfo.ciRunId }
-          : {}),
+        ...(shouldRecordCiRunId ? { ratchetLastCiRunId: prStateInfo.ciRunId } : {}),
         // Update review timestamp if we detected review comments
         ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
       });
