@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import treeKill from 'tree-kill';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
 import { createLogger } from './logger.service';
@@ -290,27 +291,34 @@ export class RunScriptService {
         }
       }
 
-      // Kill the process
-      if (childProcess) {
+      // Kill the process tree
+      if (childProcess?.pid) {
         logger.info('Stopping run script via stored process', {
           workspaceId,
           pid: childProcess.pid,
         });
-        childProcess.kill('SIGTERM');
+        treeKill(childProcess.pid, 'SIGTERM', (err) => {
+          if (err) {
+            logger.warn('Failed to tree-kill run script process', {
+              workspaceId,
+              pid: childProcess.pid,
+              error: err.message,
+            });
+          }
+        });
         RunScriptService.runningProcesses.delete(workspaceId);
       } else if (pid) {
         // Fallback: kill by PID if we don't have the process reference
         logger.info('Stopping run script via PID', { workspaceId, pid });
-        try {
-          process.kill(pid, 'SIGTERM');
-        } catch (error) {
-          // Process might already be dead
-          logger.warn('Failed to kill process, might already be stopped', {
-            workspaceId,
-            pid,
-            error,
-          });
-        }
+        treeKill(pid, 'SIGTERM', (err) => {
+          if (err) {
+            logger.warn('Failed to tree-kill process, might already be stopped', {
+              workspaceId,
+              pid,
+              error: err.message,
+            });
+          }
+        });
       }
 
       // Update workspace status and clear all run script state
@@ -441,7 +449,16 @@ export class RunScriptService {
     logger.info('Process exiting, killing any remaining run scripts');
     for (const [workspaceId, childProcess] of RunScriptService.runningProcesses.entries()) {
       try {
-        childProcess.kill('SIGKILL');
+        if (childProcess.pid) {
+          treeKill(childProcess.pid, 'SIGKILL', (err) => {
+            if (err) {
+              logger.warn('Failed to force kill run script on exit', {
+                workspaceId,
+                pid: childProcess.pid,
+              });
+            }
+          });
+        }
         logger.info('Force killed run script on exit', {
           workspaceId,
           pid: childProcess.pid,
