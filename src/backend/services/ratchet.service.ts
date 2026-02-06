@@ -244,14 +244,18 @@ class RatchetService {
    * Compute workspace update fields based on PR state
    */
   private computeWorkspaceUpdate(
+    workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
-    previousState: RatchetState,
     newState: RatchetState,
     shouldTakeAction: boolean
   ) {
     const now = new Date();
+    const previousState = workspace.ratchetState;
+    // Only set ratchetCiGreenAt on the actual first transition to green,
+    // not on subsequent polls where we're artificially holding CI_RUNNING for the grace period
     const ciJustWentGreen =
       prStateInfo.ciStatus === CIStatus.SUCCESS &&
+      !workspace.ratchetCiGreenAt &&
       (previousState === RatchetState.CI_RUNNING || previousState === RatchetState.CI_FAILED);
 
     return {
@@ -353,8 +357,8 @@ class RatchetService {
 
       // 6. Update workspace with new state and timestamps
       const updateFields = this.computeWorkspaceUpdate(
+        workspace,
         prStateInfo,
-        previousState,
         newState,
         shouldTakeAction
       );

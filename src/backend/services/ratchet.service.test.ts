@@ -579,5 +579,35 @@ describe('Ratchet Comment Detection', () => {
         newState: RatchetState.REVIEW_PENDING,
       });
     });
+
+    it('does not reset ratchetCiGreenAt on subsequent polls during grace period', async () => {
+      const existingGreenAt = new Date(Date.now() - 30_000); // 30s ago
+      const workspace = makeWorkspace({
+        ratchetCiGreenAt: existingGreenAt,
+      });
+
+      vi.spyOn(
+        ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+        'fetchPRState'
+      ).mockResolvedValue(greenPrStateInfo);
+
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        ratchetEnabled: true,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      await (
+        ratchetService as unknown as {
+          processWorkspace: (ws: typeof workspace, s: typeof settings) => Promise<unknown>;
+        }
+      ).processWorkspace(workspace, settings);
+
+      // ratchetCiGreenAt should NOT be overwritten since it's already set
+      const updateCall = vi.mocked(workspaceAccessor.update).mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect(updateCall).not.toHaveProperty('ratchetCiGreenAt');
+    });
   });
 });
