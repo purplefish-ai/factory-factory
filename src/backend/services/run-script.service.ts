@@ -306,9 +306,10 @@ export class RunScriptService {
                 pid: processPid,
                 error: err.message,
               });
-            } else {
-              RunScriptService.runningProcesses.delete(workspaceId);
             }
+            // Always remove from tracking - if kill failed, the process may be
+            // dead/zombie and keeping it in the map prevents future cleanup retries
+            RunScriptService.runningProcesses.delete(workspaceId);
             resolve();
           });
         });
