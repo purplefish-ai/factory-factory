@@ -371,94 +371,149 @@ ${issue.body || '(No description provided)'}
 
 ---
 
-You are implementing this GitHub issue through a structured, autonomous workflow. Do NOT ask the user for plan approval or clarification unless there are critical ambiguities that block all progress. Proceed through each phase systematically.
+## Work Autonomously
 
-## Phase 1: Planning with TodoWrite
+You are implementing this issue through a structured workflow. Work independently:
+- **Proceed without approval**: Do NOT ask for plan review between phases
+- **Ask critical questions once**: Only if requirements are fundamentally unclear, ask ONE TIME at the start, then proceed
+- **Make reasonable assumptions**: When details are ambiguous, follow existing codebase patterns
+- **Commit frequently**: Make atomic commits as you complete logical units
+- **Update TodoWrite**: Keep your task list current throughout
 
-1. Analyze the issue requirements thoroughly
-2. Explore the codebase to understand relevant code structure and patterns
-3. Create a detailed task breakdown using TodoWrite with specific, actionable items
-4. Consider edge cases, error handling, and testing requirements
-5. Identify which files will need to be modified or created
+Only ask the user for clarification if:
+- The issue description is contradictory or fundamentally unclear
+- You need to choose between multiple valid architectural approaches
+- Required information (API endpoints, credentials, configuration) is missing
 
-## Phase 2: Plan Review
-
-1. Review your own plan critically for:
-   - Missing edge cases or error scenarios
-   - Alignment with existing codebase patterns
-   - Test coverage gaps
-   - Potential architecture issues
-2. If the plan is complex (affects >5 files or changes core architecture), use the Plan agent to validate your approach
-3. Fix any identified issues in your plan and update the TodoWrite list
-
-## Phase 3: Implementation
-
-1. Follow your plan systematically, marking each task as in_progress then completed
-2. Write clean, well-structured code following existing patterns
-3. Add appropriate type definitions and error handling
-4. Create atomic, focused commits as you complete logical units
-5. Add tests for new functionality and edge cases
-6. Keep your TodoWrite list updated as you discover new tasks
-
-## Phase 4: Implementation Review
-
-Run through this self-review checklist:
-- [ ] All TodoWrite tasks are completed
-- [ ] Code follows existing patterns and conventions
-- [ ] Edge cases and error scenarios are handled
-- [ ] Tests are added for new functionality
-- [ ] Type safety is maintained (run \`pnpm typecheck\`)
-- [ ] Linting passes (run \`pnpm check:fix\`)
-- [ ] Test suite passes (run \`pnpm test\`)
-- [ ] Build succeeds (run \`pnpm build:all\` if applicable)
-
-Fix any issues discovered during this review.
-
-## Phase 5: Code Simplification
-
-1. Use the code-simplifier agent (via Task tool with subagent_type="code-simplifier:code-simplifier") to refine recently modified code for clarity and maintainability
-2. If code-simplifier is not available, perform manual simplification:
-   - Remove unnecessary complexity or abstractions
-   - Improve variable/function naming
-   - Add clarifying comments only where logic isn't self-evident
-   - Ensure consistent code style
-
-## Phase 6: Final Verification
-
-Perform comprehensive final checks:
-1. Run the full test suite again: \`pnpm test\`
-2. Verify type checking: \`pnpm typecheck\`
-3. Verify linting: \`pnpm check:fix\`
-4. Review git diff to ensure no unintended changes
-5. Verify all commits have good messages
-6. Test the feature/fix end-to-end manually if applicable
-
-## Phase 7: PR Creation
-
-1. Ensure all changes are committed with descriptive messages
-2. Push your branch: \`git push -u origin HEAD\`
-3. Create the PR using:
-   \`\`\`bash
-   gh pr create --title "Clear, concise title (<70 chars)" --body-file <temp-file>
-   \`\`\`
-4. PR body should include:
-   - **Summary**: Brief overview of changes (1-3 bullet points)
-   - **Changes**: What was modified and why
-   - **Testing**: How to verify the changes work
-   - **References**: Closes #${issue.number}
+For all other cases, make reasonable assumptions and proceed.
 
 ---
 
-## Important Guidelines
+## Phase 1: Planning
 
-- **Work autonomously**: Do NOT ask for plan approval or confirmation between phases
-- **Only ask critical questions**: If the issue requirements are fundamentally ambiguous or contradictory, ask for clarification once at the start, then proceed
-- **Use agents strategically**: Delegate to specialized agents (Plan, code-simplifier) to maintain focus
-- **Commit frequently**: Make atomic commits after completing logical units
-- **Update todos**: Keep TodoWrite list current as you discover new tasks
-- **Self-review rigorously**: Catch issues before creating the PR
+1. **Understand the requirements**
+   - Read the issue description and any linked resources
+   - Explore the codebase to understand relevant patterns and structure
+   - Identify which files will need to be modified or created
 
-Begin with Phase 1.`;
+2. **Create a task breakdown using TodoWrite**
+   - Break down into specific, actionable items
+   - Include separate tasks for: implementation, testing, documentation (if needed)
+   - Consider edge cases, error handling, and test requirements
+   - Mark tasks as in_progress when starting, completed when done
+
+3. **Review your plan**
+   - Check for missing edge cases or error scenarios
+   - Verify alignment with existing codebase patterns
+   - Identify potential test coverage gaps
+   - For highly complex changes (affects core architecture or many files), consider asking user to review plan before proceeding
+
+## Phase 2: Implementation
+
+1. **Follow your plan systematically**
+   - Work through TodoWrite tasks, updating status as you go
+   - Write clean, well-structured code following existing patterns
+   - Add appropriate type definitions and error handling
+   - Add new tasks to TodoWrite as you discover additional work
+
+2. **Write tests**
+   - Add tests for new functionality and edge cases
+   - Follow existing test patterns in the codebase
+   - Ensure tests are focused and maintainable
+
+3. **Commit your work**
+   - Make atomic, focused commits as you complete logical units
+   - Follow project commit style: short, imperative, descriptive
+   - Keep first line under 72 characters
+   - Example: "Add error handling to session creation" or "Fix session initialization bug (#${issue.number})"
+
+## Phase 3: Verification
+
+1. **Run the verification checklist**
+   - [ ] All TodoWrite tasks are completed
+   - [ ] Code follows existing patterns and conventions
+   - [ ] Edge cases and error scenarios are handled
+   - [ ] Tests are added for new functionality
+   - [ ] Type checking passes: \`pnpm typecheck\`
+   - [ ] Linting passes: \`pnpm check:fix\`
+   - [ ] Test suite passes: \`pnpm test\`
+   - [ ] Build succeeds: \`pnpm build\`
+
+2. **Fix any issues**
+   - If tests fail, debug and fix them before proceeding
+   - If type errors occur, resolve them (avoid type casts unless necessary)
+   - If linting fails, run \`pnpm check:fix\` and review changes
+   - Update TodoWrite with any additional tasks discovered
+
+## Phase 4: Code Simplification (Optional but Recommended)
+
+1. **Simplify recent changes for clarity**
+   - This step is particularly valuable for large/complex changes or frequently-modified code
+   - Review your code for unnecessary complexity or abstractions
+   - Improve variable/function naming where helpful
+   - Add clarifying comments only where logic isn't self-evident
+   - Ensure consistent code style
+
+2. **Verify after simplification**
+   - Re-run tests after any changes: \`pnpm test\`
+
+## Phase 5: Final Checks
+
+1. **Review your changes**
+   - Run \`git diff\` to ensure no unintended changes (debug logs, commented code, etc.)
+   - Verify all commits have descriptive messages following project conventions
+   - Test the feature/fix end-to-end manually if applicable
+
+2. **Ensure everything is committed**
+   - All changes should be committed with descriptive messages
+   - Use \`git status\` to verify working directory is clean
+
+## Phase 6: Create Pull Request
+
+1. **Push your branch**
+   \`\`\`bash
+   git push -u origin HEAD
+   \`\`\`
+
+2. **Create PR body**
+   Write a temporary file with this structure:
+   \`\`\`markdown
+   ## Summary
+   [1-3 bullet points describing what this PR accomplishes]
+
+   ## Changes
+   - **[Component/Area]**: [What changed and why]
+   - [Additional changes as needed]
+
+   ## Testing
+   - [x] All tests pass (\`pnpm test\`)
+   - [x] Type checking passes (\`pnpm typecheck\`)
+   - [x] Linting passes (\`pnpm check:fix\`)
+   - [x] Build succeeds (\`pnpm build\`)
+   - [ ] Manual testing: [Describe how to test the change]
+
+   Closes #${issue.number}
+   \`\`\`
+
+3. **Create the pull request**
+   \`\`\`bash
+   gh pr create --title "Clear, concise title (<70 chars)" --body-file <temp-file-path>
+   \`\`\`
+
+---
+
+## Success Criteria
+
+You've successfully completed this issue when:
+- [ ] All TodoWrite tasks are marked completed
+- [ ] All verification checks pass
+- [ ] All changes are committed with descriptive messages
+- [ ] PR is created with clear title and description
+- [ ] PR references \`Closes #${issue.number}\`
+
+---
+
+Start with Phase 1: Planning.`;
   } catch (error) {
     logger.warn('Error building initial prompt from GitHub issue', {
       workspaceId,
