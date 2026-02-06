@@ -29,6 +29,12 @@ vi.mock('../resource_accessors/claude-session.accessor', () => ({
   },
 }));
 
+vi.mock('../resource_accessors/ratchet-audit-log.accessor', () => ({
+  ratchetAuditLogAccessor: {
+    create: vi.fn().mockResolvedValue({}),
+  },
+}));
+
 vi.mock('./github-cli.service', () => ({
   githubCLIService: {
     extractPRInfo: vi.fn(),

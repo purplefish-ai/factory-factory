@@ -7,6 +7,7 @@ export * from './git-summary-panel';
 export * from './main-view-content';
 export * from './main-view-tab-bar';
 export * from './quick-actions-menu';
+export * from './ratchet-log-panel';
 export * from './ratchet-state';
 export * from './ratchet-toggle-button';
 export * from './ratchet-wrench-icon';
