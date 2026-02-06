@@ -455,10 +455,9 @@ describe('Ratchet CI regression behavior', () => {
     const signature = (
       ratchetService as unknown as {
         extractFailedCiSignature: (
-          checks: Array<{
-            name?: string;
-            status?: string;
-            conclusion?: string;
+          failedChecks: Array<{
+            name: string;
+            conclusion: string;
             detailsUrl?: string;
           }>
         ) => string | null;
@@ -466,13 +465,11 @@ describe('Ratchet CI regression behavior', () => {
     ).extractFailedCiSignature([
       {
         name: 'unit-tests',
-        status: 'COMPLETED',
         conclusion: 'FAILURE',
         detailsUrl: 'https://github.com/acme/repo/actions/runs/0',
       },
       {
         name: 'lint',
-        status: 'COMPLETED',
         conclusion: 'FAILURE',
         detailsUrl: 'https://github.com/acme/repo/actions/runs/42',
       },

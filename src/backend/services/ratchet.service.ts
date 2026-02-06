@@ -400,7 +400,7 @@ class RatchetService {
           }
         }
       }
-      const ciRunId = this.extractFailedCiSignature(prDetails.statusCheckRollup);
+      const ciRunId = this.extractFailedCiSignature(failedChecks);
 
       // Check for reviews requesting changes
       const hasChangesRequested = prDetails.reviews.some((r) => r.state === 'CHANGES_REQUESTED');
@@ -1004,23 +1004,16 @@ New review comments have been received on PR #${prNumber}.
     return parts.join('');
   }
 
-  private extractFailedCiSignature(checks: PRWithFullDetails['statusCheckRollup']): string | null {
-    if (!checks || checks.length === 0) {
+  private extractFailedCiSignature(failedChecks: PRStateInfo['failedChecks']): string | null {
+    if (failedChecks.length === 0) {
       return null;
     }
 
     const failedEntries: string[] = [];
-    for (const check of checks) {
-      const conclusion = String(check.conclusion || check.status);
-      const isFailure =
-        conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED' || conclusion === 'ERROR';
-      if (!isFailure) {
-        continue;
-      }
+    for (const check of failedChecks) {
       const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
       const runId = runIdMatch?.[1] ?? 'no-run-id';
-      const checkName = check.name || 'Unknown check';
-      failedEntries.push(`${checkName}:${runId}`);
+      failedEntries.push(`${check.name}:${runId}`);
     }
 
     if (failedEntries.length === 0) {
