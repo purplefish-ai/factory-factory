@@ -178,13 +178,14 @@ describe('DataBackupService', () => {
 
       // Verify all workspace fields are exported
       const exportedWorkspace = result.data.workspaces[0];
-      expect(exportedWorkspace.ratchetEnabled).toBe(true);
-      expect(exportedWorkspace.ratchetState).toBe(RatchetState.READY);
-      expect(exportedWorkspace.ratchetLastCheckedAt).toBe('2025-01-01T00:25:00.000Z');
-      expect(exportedWorkspace.ratchetActiveSessionId).toBe('session-123');
-      expect(exportedWorkspace.ratchetLastCiRunId).toBe('run-123');
-      expect(exportedWorkspace.prReviewLastCheckedAt).toBe('2025-01-01T00:20:00.000Z');
-      expect(exportedWorkspace.prReviewLastCommentId).toBe('comment-123');
+      expect(exportedWorkspace).toBeDefined();
+      expect(exportedWorkspace?.ratchetEnabled).toBe(true);
+      expect(exportedWorkspace?.ratchetState).toBe(RatchetState.READY);
+      expect(exportedWorkspace?.ratchetLastCheckedAt).toBe('2025-01-01T00:25:00.000Z');
+      expect(exportedWorkspace?.ratchetActiveSessionId).toBe('session-123');
+      expect(exportedWorkspace?.ratchetLastCiRunId).toBe('run-123');
+      expect(exportedWorkspace?.prReviewLastCheckedAt).toBe('2025-01-01T00:20:00.000Z');
+      expect(exportedWorkspace?.prReviewLastCommentId).toBe('comment-123');
 
       // Verify all user settings fields are exported
       const exportedSettings = result.data.userSettings;
