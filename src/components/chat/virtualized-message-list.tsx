@@ -264,13 +264,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {/* Loading indicators after messages */}
         {running && <LoadingIndicator className="py-4" />}
 
-        {loadingSession && !running && (
-          <div className="flex items-center gap-2 text-muted-foreground py-4">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Loading session...</span>
-          </div>
-        )}
-
         {startingSession && !running && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
             <Loader2 className="h-4 w-4 animate-spin" />
