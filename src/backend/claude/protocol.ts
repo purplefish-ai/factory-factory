@@ -626,9 +626,7 @@ export class ClaudeProtocol extends EventEmitter {
       );
       pending.resolve(validatedResponse);
     } catch (error) {
-      logger.error('Unexpected error validating control response', error as Error, {
-        requestId,
-      });
+      // validateControlResponsePayload already logs detailed errors before throwing
       pending.reject(error instanceof Error ? error : new Error('Unknown validation error'));
     }
   }
