@@ -183,8 +183,8 @@ determineFixupAction(githubDelta, workspaceSnapshot) ->
 
 Guard evaluation order (assumes eligibility guards in `ratchetWorkspace` already passed):
 
-1. **Stale CI run** (run ID unchanged since last push and stale timeout not reached) → `WAIT`
-2. **Stale CI timeout reached** → `PAUSE(PAUSED_ATTENTION_STALE_CI_TIMEOUT)` (manual attention required; audit as `STALE_CI_TIMEOUT`)
+1. **Stale CI run** (run ID unchanged since last dispatch and stale timeout not reached) → `WAIT`
+2. **Stale CI timeout reached** (run ID unchanged since last dispatch and timeout exceeded) → `PAUSE(PAUSED_ATTENTION_STALE_CI_TIMEOUT)` (manual attention required; audit as `STALE_CI_TIMEOUT`)
 3. **Merge conflict only** (no CI failure, no actionable review comments) → `PAUSE(PAUSED_WAIT_CONFLICT_ONLY)`
 4. **CI failed** → `FIX_CI`
 5. **Review comments** → `FIX_REVIEW`

@@ -160,6 +160,7 @@ export const workspaceRouter = router({
               ratchetState: RatchetState.IDLE,
               ratchetActiveSessionId: null,
               ratchetLastNotifiedState: null,
+              ratchetLastCiRunId: null,
             }
       );
       if (input.enabled) {
