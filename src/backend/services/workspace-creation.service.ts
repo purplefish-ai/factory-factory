@@ -1,6 +1,6 @@
 import type { Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
-import { DEFAULT_FIRST_SESSION } from '../prompts/workflows';
+import { DEFAULT_FOLLOWUP } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
@@ -218,7 +218,7 @@ export class WorkspaceCreationService {
     try {
       await claudeSessionAccessor.create({
         workspaceId,
-        workflow: DEFAULT_FIRST_SESSION,
+        workflow: DEFAULT_FOLLOWUP,
         name: 'Chat 1',
       });
       return true;

@@ -23,8 +23,6 @@ export function WorkspaceDetailContainer() {
     workspace,
     workspaceLoading,
     claudeSessions,
-    workflows,
-    recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
     invalidateWorkspace,
@@ -112,7 +110,6 @@ export function WorkspaceDetailContainer() {
     preferredIde,
     handleSelectSession,
     handleCloseSession,
-    handleWorkflowSelect,
     handleNewChat,
     handleQuickAction,
   } = useSessionManagement({
@@ -225,12 +222,9 @@ export function WorkspaceDetailContainer() {
       isCreatingSession={createSession.isPending}
       hasChanges={hasChanges}
       claudeSessions={claudeSessions}
-      workflows={workflows}
-      recommendedWorkflow={recommendedWorkflow}
       selectedDbSessionId={selectedDbSessionId}
       runningSessionId={runningSessionId}
       isDeletingSession={deleteSession.isPending}
-      handleWorkflowSelect={handleWorkflowSelect}
       handleSelectSession={handleSelectSession}
       handleNewChat={handleNewChat}
       handleCloseChatSession={handleCloseChatSession}

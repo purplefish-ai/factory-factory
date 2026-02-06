@@ -2,10 +2,8 @@ import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
-import { DEFAULT_FIRST_SESSION, DEFAULT_FOLLOWUP, listWorkflows } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
@@ -15,19 +13,6 @@ export const sessionRouter = router({
   getMaxSessionsPerWorkspace: publicProcedure.query(({ ctx }) => {
     return ctx.appContext.services.configService.getMaxSessionsPerWorkspace();
   }),
-
-  // Workflows
-
-  // List all available workflows
-  listWorkflows: publicProcedure.query(() => listWorkflows()),
-
-  // Get recommended workflow for a workspace (feature for first session, followup otherwise)
-  getRecommendedWorkflow: publicProcedure
-    .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.workspaceId);
-      return workspace?.hasHadSessions ? DEFAULT_FOLLOWUP : DEFAULT_FIRST_SESSION;
-    }),
 
   // Quick Actions
 
