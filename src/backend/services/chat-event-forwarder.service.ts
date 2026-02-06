@@ -26,6 +26,7 @@ import { configService } from './config.service';
 import { kanbanStateService } from './kanban-state.service';
 import { createLogger } from './logger.service';
 import { messageStateService } from './message-state.service';
+import { sessionService } from './session.service';
 import { sessionFileLogger } from './session-file-logger.service';
 import { slashCommandCacheService } from './slash-command-cache.service';
 import { workspaceActivityService } from './workspace-activity.service';
@@ -495,6 +496,12 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
+
+      // Capture working state NOW, before process transitions to 'ready'.
+      // The process will call setStatus('ready') after emitting this event,
+      // so we must capture the pre-transition state to detect session completion.
+      const wasWorkingBeforeResult = sessionService.isSessionWorking(dbSessionId);
+
       // Store-then-forward: store events for replay before forwarding
       // Include order for consistent frontend message sorting
       const order = messageStateService.allocateOrder(dbSessionId);
@@ -502,17 +509,19 @@ class ChatEventForwarderService {
       messageStateService.storeEvent(dbSessionId, resultMsg);
       chatConnectionService.forwardToSession(dbSessionId, resultMsg);
 
-      // Update kanban column BEFORE marking session idle, so wasWorking check sees active session
-      // This enables notification on WORKING→WAITING transitions
-      // MUST await to ensure kanban update completes before marking session idle
-      await kanbanStateService.updateCachedKanbanColumn(context.workspaceId).catch((error) => {
-        logger.error('Failed to update kanban column after session result', error as Error, {
-          workspaceId: context.workspaceId,
-          dbSessionId,
+      // Update kanban column with pre-captured working state. This ensures
+      // notifications fire correctly even though process status has changed by now.
+      // MUST await to prevent race with markSessionIdle below.
+      await kanbanStateService
+        .updateCachedKanbanColumn(context.workspaceId, wasWorkingBeforeResult)
+        .catch((error) => {
+          logger.error('Failed to update kanban column after session result', error as Error, {
+            workspaceId: context.workspaceId,
+            dbSessionId,
+          });
         });
-      });
 
-      // Mark session as idle (after kanban update so wasWorking check detects the transition)
+      // Mark session as idle after kanban update completes
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
 
       const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };

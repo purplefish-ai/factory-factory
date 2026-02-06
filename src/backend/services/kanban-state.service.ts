@@ -140,8 +140,16 @@ class KanbanStateService extends EventEmitter {
    * Only updates stateComputedAt when the column actually changes.
    *
    * Emits 'transition_to_waiting' event when workspace transitions to WAITING column.
+   *
+   * @param workspaceId - The workspace to update
+   * @param wasWorkingBeforeUpdate - Optional pre-captured working state. If provided,
+   *   used instead of querying current session state. This is critical when called
+   *   from result handlers where the session may have already transitioned to 'ready'.
    */
-  async updateCachedKanbanColumn(workspaceId: string): Promise<void> {
+  async updateCachedKanbanColumn(
+    workspaceId: string,
+    wasWorkingBeforeUpdate?: boolean
+  ): Promise<void> {
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (!workspace) {
       logger.warn('Cannot update cached kanban column: workspace not found', { workspaceId });
@@ -155,9 +163,11 @@ class KanbanStateService extends EventEmitter {
 
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
 
-    // Check if any sessions are currently running (in-memory state)
-    const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-    const wasWorking = sessionService.isAnySessionWorking(sessionIds);
+    // Determine if sessions were working: use pre-captured state if provided,
+    // otherwise query current in-memory state
+    const wasWorking =
+      wasWorkingBeforeUpdate ??
+      sessionService.isAnySessionWorking(workspace.claudeSessions?.map((s) => s.id) ?? []);
 
     // For cached column, include flow-state working but not in-memory session activity.
     const cachedColumn = computeKanbanColumn({

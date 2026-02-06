@@ -7,6 +7,7 @@ import { KanbanColumn, PRState, WorkspaceStatus } from '@prisma-gen/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { kanbanStateService } from './kanban-state.service';
+import { sessionService } from './session.service';
 
 describe('Workspace Notification on WAITING Transition', () => {
   let mockWorkspace: {
@@ -53,6 +54,9 @@ describe('Workspace Notification on WAITING Transition', () => {
     } as never);
     vi.spyOn(workspaceAccessor, 'update').mockResolvedValue({} as never);
 
+    // Mock session service to return false (session not working anymore)
+    vi.spyOn(sessionService, 'isAnySessionWorking').mockReturnValue(false);
+
     // Set up event listener
     let eventEmitted = false;
     let eventData: unknown = null;
@@ -73,7 +77,7 @@ describe('Workspace Notification on WAITING Transition', () => {
     });
   });
 
-  it('does not emit event when workspace stays in same column', async () => {
+  it('does not emit event when workspace stays in same column and wasWorking=false', async () => {
     // Workspace already in WAITING
     mockWorkspace.cachedKanbanColumn = KanbanColumn.WAITING;
 
@@ -83,6 +87,9 @@ describe('Workspace Notification on WAITING Transition', () => {
     } as never);
     vi.spyOn(workspaceAccessor, 'update').mockResolvedValue({} as never);
 
+    // Mock session service - not working and column not changing means no event
+    vi.spyOn(sessionService, 'isAnySessionWorking').mockReturnValue(false);
+
     let eventEmitted = false;
     kanbanStateService.once('transition_to_waiting', () => {
       eventEmitted = true;
@@ -90,8 +97,38 @@ describe('Workspace Notification on WAITING Transition', () => {
 
     await kanbanStateService.updateCachedKanbanColumn('workspace-1');
 
-    // No event should be emitted if column didn't change
+    // No event should be emitted if column didn't change and wasWorking=false
     expect(eventEmitted).toBe(false);
+  });
+
+  it('emits event when workspace stays in WAITING but session just completed (wasWorking=true)', async () => {
+    // Workspace already in WAITING column (no column change)
+    mockWorkspace.cachedKanbanColumn = KanbanColumn.WAITING;
+
+    vi.spyOn(workspaceAccessor, 'findById').mockResolvedValue({
+      ...mockWorkspace,
+      terminalSessions: [],
+    } as never);
+    vi.spyOn(workspaceAccessor, 'update').mockResolvedValue({} as never);
+
+    let eventEmitted = false;
+    let eventData: unknown = null;
+    kanbanStateService.once('transition_to_waiting', (data) => {
+      eventEmitted = true;
+      eventData = data;
+    });
+
+    // Pass wasWorkingBeforeUpdate=true to simulate session just completed
+    // This is what happens from result handler in chat-event-forwarder
+    await kanbanStateService.updateCachedKanbanColumn('workspace-1', true);
+
+    // Event should be emitted because wasWorking=true (session completed)
+    expect(eventEmitted).toBe(true);
+    expect(eventData).toMatchObject({
+      workspaceId: 'workspace-1',
+      workspaceName: 'Test Workspace',
+      sessionCount: 1,
+    });
   });
 
   it('does not emit event when transitioning to DONE instead of WAITING', async () => {
@@ -104,6 +141,9 @@ describe('Workspace Notification on WAITING Transition', () => {
       terminalSessions: [],
     } as never);
     vi.spyOn(workspaceAccessor, 'update').mockResolvedValue({} as never);
+
+    // Mock session service
+    vi.spyOn(sessionService, 'isAnySessionWorking').mockReturnValue(false);
 
     let eventEmitted = false;
     kanbanStateService.once('transition_to_waiting', () => {
@@ -131,6 +171,9 @@ describe('Workspace Notification on WAITING Transition', () => {
       terminalSessions: [],
     } as never);
     vi.spyOn(workspaceAccessor, 'update').mockResolvedValue({} as never);
+
+    // Mock session service
+    vi.spyOn(sessionService, 'isAnySessionWorking').mockReturnValue(false);
 
     let eventEmitted = false;
     kanbanStateService.once('transition_to_waiting', () => {
