@@ -674,16 +674,11 @@ function SortableWorkspaceItem({
             </button>
 
             {/* Status dot + ratchet toggle OR archiving spinner */}
-            <div className="w-5 shrink-0 mt-1.5 flex flex-col items-center gap-1.5">
+            <div className="w-5 shrink-0 flex items-center justify-center">
               {isArchivingItem ? (
-                <div className="relative h-5 w-5 flex items-center justify-center">
-                  {/* Outer pulsing ring */}
-                  <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-                  {/* Rotating ring */}
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-                </div>
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
               ) : (
-                <>
+                <div className="mt-1.5 flex flex-col items-center gap-1.5">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
@@ -701,16 +696,22 @@ function SortableWorkspaceItem({
                       toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
                     }}
                   />
-                </>
+                </div>
               )}
             </div>
 
             <div className="min-w-0 flex-1 space-y-0">
               {/* Row 1: name + timestamp + archive */}
               <div className="flex items-center gap-2">
-                <span className="truncate font-medium text-sm leading-tight flex-1">
-                  {isArchivingItem ? 'Archiving...' : workspace.name}
-                </span>
+                {isArchivingItem ? (
+                  <span className="truncate text-sm text-muted-foreground flex-1">
+                    Archiving...
+                  </span>
+                ) : (
+                  <span className="truncate font-medium text-sm leading-tight flex-1">
+                    {workspace.name}
+                  </span>
+                )}
                 {!isArchivingItem && workspace.lastActivityAt && (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatRelativeTime(workspace.lastActivityAt)}

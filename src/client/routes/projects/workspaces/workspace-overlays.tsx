@@ -135,30 +135,11 @@ export function InitializationOverlay({
 export function ArchivingOverlay() {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-md">
-      <div className="flex flex-col items-center gap-6 p-8">
-        {/* Animated archiving icon */}
-        <div className="relative">
-          {/* Outer pulsing ring */}
-          <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-
-          {/* Middle rotating ring */}
-          <div
-            className="relative h-24 w-24 animate-spin rounded-full border-4 border-primary/30 border-t-primary"
-            style={{ animationDuration: '2s' }}
-          />
-
-          {/* Inner spinning circle */}
-          <div
-            className="absolute inset-0 m-auto h-16 w-16 animate-spin rounded-full border-4 border-primary/50 border-b-primary"
-            style={{ animationDuration: '1.5s', animationDirection: 'reverse' }}
-          />
-
-          {/* Center dot */}
-          <div className="absolute inset-0 m-auto h-3 w-3 rounded-full bg-primary animate-pulse" />
-        </div>
-
-        {/* Simple text */}
-        <p className="text-sm font-medium text-muted-foreground">Archiving...</p>
+      <div className="flex items-center gap-3 p-8">
+        {/* Simple spinner */}
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
+        {/* Grayed out text */}
+        <p className="text-sm text-muted-foreground">Archiving...</p>
       </div>
     </div>
   );
