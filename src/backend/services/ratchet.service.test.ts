@@ -379,6 +379,135 @@ describe('Ratchet CI regression behavior', () => {
     });
   });
 
+  it('skips CI fixer dispatch when ciRunId matches ratchetLastCiRunId', async () => {
+    const workspace = {
+      id: 'ws-stale-ci',
+      prUrl: 'https://github.com/example/repo/pull/99',
+      prNumber: 99,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'run-already-handled',
+      ratchetLastNotifiedState: null,
+      prReviewLastCheckedAt: null,
+    };
+
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    const triggerFixerSpy = vi.spyOn(
+      ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+      'triggerFixer'
+    );
+
+    const result = await (
+      ratchetService as unknown as {
+        executeRatchetAction: (
+          workspaceArg: typeof workspace,
+          state: RatchetState,
+          prStateInfo: unknown,
+          settings: unknown
+        ) => Promise<unknown>;
+      }
+    ).executeRatchetAction(
+      workspace,
+      RatchetState.CI_FAILED,
+      {
+        ciStatus: CIStatus.FAILURE,
+        mergeStateStatus: 'CLEAN',
+        hasChangesRequested: false,
+        hasNewReviewComments: false,
+        failedChecks: [],
+        ciRunId: 'run-already-handled',
+        reviews: [],
+        comments: [],
+        reviewComments: [],
+        newReviewComments: [],
+        newPRComments: [],
+        prState: 'OPEN',
+        prNumber: 99,
+      },
+      {
+        autoFixCi: true,
+        autoFixConflicts: true,
+        autoFixReviews: true,
+        autoMerge: false,
+        allowedReviewers: [],
+      }
+    );
+
+    expect(triggerFixerSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      type: 'WAITING',
+      reason: 'Already dispatched fixer for this CI run; waiting for new run',
+    });
+  });
+
+  it('dispatches CI fixer when ciRunId differs from ratchetLastCiRunId', async () => {
+    const workspace = {
+      id: 'ws-new-ci',
+      prUrl: 'https://github.com/example/repo/pull/100',
+      prNumber: 100,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'run-old',
+      ratchetLastNotifiedState: null,
+      prReviewLastCheckedAt: null,
+    };
+
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    const triggerFixerSpy = vi
+      .spyOn(
+        ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+        'triggerFixer'
+      )
+      .mockResolvedValue({
+        type: 'TRIGGERED_FIXER',
+        sessionId: 'new-fixer',
+        fixerType: 'ci',
+        promptSent: true,
+      });
+
+    await (
+      ratchetService as unknown as {
+        executeRatchetAction: (
+          workspaceArg: typeof workspace,
+          state: RatchetState,
+          prStateInfo: unknown,
+          settings: unknown
+        ) => Promise<unknown>;
+      }
+    ).executeRatchetAction(
+      workspace,
+      RatchetState.CI_FAILED,
+      {
+        ciStatus: CIStatus.FAILURE,
+        mergeStateStatus: 'CLEAN',
+        hasChangesRequested: false,
+        hasNewReviewComments: false,
+        failedChecks: [],
+        ciRunId: 'run-new',
+        reviews: [],
+        comments: [],
+        reviewComments: [],
+        newReviewComments: [],
+        newPRComments: [],
+        prState: 'OPEN',
+        prNumber: 100,
+      },
+      {
+        autoFixCi: true,
+        autoFixConflicts: true,
+        autoFixReviews: true,
+        autoMerge: false,
+        allowedReviewers: [],
+      }
+    );
+
+    expect(triggerFixerSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('notifies on a new CI run even when state is already CI_FAILED', () => {
     const shouldNotify = (
       ratchetService as unknown as {
