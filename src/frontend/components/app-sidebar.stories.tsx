@@ -153,9 +153,19 @@ export const WithArchiving: Story = {
       projectState: {
         workspaces: [
           {
-            ...mockWorkspaces[0],
             id: 'ws-archiving',
             name: 'Archiving workspace',
+            createdAt: new Date().toISOString(),
+            branchName: null,
+            prUrl: null,
+            prNumber: null,
+            prState: 'NONE',
+            prCiStatus: 'UNKNOWN',
+            ratchetEnabled: false,
+            ratchetState: 'IDLE',
+            isWorking: false,
+            gitStats: null,
+            lastActivityAt: null,
             uiState: 'archiving' as const,
           } as WorkspaceListItem,
           ...mockWorkspaces.slice(1),
