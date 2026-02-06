@@ -269,6 +269,37 @@ class RatchetService {
   }
 
   /**
+   * Determine ratchet state with CI green grace period applied.
+   * When CI just went green, holds the workspace in CI_RUNNING for a grace period
+   * to give AI reviewers time to post their comments.
+   */
+  private determineStateWithGracePeriod(
+    prStateInfo: PRStateInfo,
+    workspace: WorkspaceWithPR
+  ): RatchetState {
+    const rawState = this.determineRatchetState(prStateInfo);
+
+    if (rawState !== RatchetState.READY || prStateInfo.ciStatus !== CIStatus.SUCCESS) {
+      return rawState;
+    }
+
+    const previousState = workspace.ratchetState;
+    // On the first check where CI goes green, use "now" as the green timestamp
+    // since ratchetCiGreenAt hasn't been persisted yet
+    const ciGreenAt =
+      workspace.ratchetCiGreenAt ??
+      (previousState === RatchetState.CI_RUNNING || previousState === RatchetState.CI_FAILED
+        ? new Date()
+        : null);
+
+    if (ciGreenAt && this.isWithinCiGreenGracePeriod(workspace, previousState, ciGreenAt)) {
+      return RatchetState.CI_RUNNING;
+    }
+
+    return rawState;
+  }
+
+  /**
    * Process a single workspace through the ratchet state machine
    */
   private async processWorkspace(
@@ -296,9 +327,9 @@ class RatchetService {
         };
       }
 
-      // 2. Determine ratchet state
-      const newState = this.determineRatchetState(prStateInfo, workspace);
+      // 2. Determine ratchet state, applying CI green grace period
       const previousState = workspace.ratchetState;
+      const newState = this.determineStateWithGracePeriod(prStateInfo, workspace);
 
       // 3. Log state transition if changed
       if (newState !== previousState) {
@@ -472,9 +503,10 @@ class RatchetService {
   }
 
   /**
-   * Determine ratchet state from PR state info
+   * Determine ratchet state from PR state info.
+   * Pure state derivation — grace period is applied separately in processWorkspace.
    */
-  private determineRatchetState(pr: PRStateInfo, workspace: WorkspaceWithPR): RatchetState {
+  private determineRatchetState(pr: PRStateInfo): RatchetState {
     // Check if PR is merged
     if (pr.prState === 'MERGED') {
       return RatchetState.MERGED;
@@ -498,29 +530,41 @@ class RatchetService {
     }
 
     // Check for unaddressed review comments (either formal changes requested OR new review comments)
-    // BUT apply grace period: if CI just went green, wait before checking for review comments
-    // This gives AI reviewers time to post their comments after CI completes
-    const now = Date.now();
-    const ciGreenTime = workspace.ratchetCiGreenAt?.getTime() ?? 0;
-    const timeSinceCiGreen = now - ciGreenTime;
-    const isWithinGracePeriod = ciGreenTime > 0 && timeSinceCiGreen < CI_GREEN_GRACE_PERIOD_MS;
-
     if (pr.hasChangesRequested || pr.hasNewReviewComments) {
       return RatchetState.REVIEW_PENDING;
     }
 
-    // If we're within the grace period, stay in CI_RUNNING state to wait for potential review comments
-    if (isWithinGracePeriod) {
+    // All clear - ready to merge
+    return RatchetState.READY;
+  }
+
+  /**
+   * Check if CI just went green and we should wait for AI reviewers to post comments.
+   * Returns true if we're within the grace period after CI first goes green.
+   */
+  private isWithinCiGreenGracePeriod(
+    workspace: WorkspaceWithPR,
+    previousState: RatchetState,
+    ciGreenAt: Date
+  ): boolean {
+    // Only apply grace period when CI is transitioning from a CI state
+    const wasInCiState =
+      previousState === RatchetState.CI_RUNNING || previousState === RatchetState.CI_FAILED;
+    if (!wasInCiState) {
+      return false;
+    }
+
+    const timeSinceCiGreen = Date.now() - ciGreenAt.getTime();
+    if (timeSinceCiGreen < CI_GREEN_GRACE_PERIOD_MS) {
       logger.debug('Within CI green grace period, waiting for potential review comments', {
         workspaceId: workspace.id,
         timeSinceCiGreen,
         gracePeriod: CI_GREEN_GRACE_PERIOD_MS,
       });
-      return RatchetState.CI_RUNNING;
+      return true;
     }
 
-    // All clear - ready to merge
-    return RatchetState.READY;
+    return false;
   }
 
   /**
@@ -733,7 +777,7 @@ Run \`git fetch origin && git merge origin/main\` to see the conflicts.`;
         await workspaceAccessor.update(workspace.id, {
           ratchetActiveSessionId: result.sessionId,
           ...(shouldMarkNotified && {
-            ratchetLastNotifiedState: this.determineRatchetState(prStateInfo, workspace),
+            ratchetLastNotifiedState: this.determineRatchetState(prStateInfo),
           }),
         });
 

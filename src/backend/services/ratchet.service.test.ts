@@ -398,106 +398,154 @@ describe('Ratchet Comment Detection', () => {
   });
 
   describe('CI green grace period', () => {
-    it('stays in CI_RUNNING state within grace period even when CI is green', () => {
-      const workspace = {
-        id: 'ws-grace',
-        prUrl: 'https://github.com/example/repo/pull/100',
-        prNumber: 100,
-        ratchetEnabled: true,
-        ratchetState: RatchetState.CI_RUNNING,
-        ratchetActiveSessionId: null,
-        ratchetLastNotifiedState: null,
-        prReviewLastCheckedAt: null,
-        ratchetCiGreenAt: new Date(Date.now() - 30_000), // 30 seconds ago (within grace period)
-      };
+    const greenPrStateInfo = {
+      ciStatus: 'SUCCESS' as const,
+      mergeStateStatus: 'CLEAN',
+      hasChangesRequested: false,
+      hasNewReviewComments: false,
+      failedChecks: [],
+      reviews: [],
+      comments: [],
+      reviewComments: [],
+      newReviewComments: [],
+      newPRComments: [],
+      prState: 'OPEN',
+      prNumber: 100,
+    };
 
-      const prStateInfo = {
-        ciStatus: 'SUCCESS' as const,
-        mergeStateStatus: 'CLEAN',
-        hasChangesRequested: false,
-        hasNewReviewComments: false,
-        failedChecks: [],
-        reviews: [],
-        comments: [],
-        reviewComments: [],
-        newReviewComments: [],
-        newPRComments: [],
-        prState: 'OPEN',
-        prNumber: 100,
-      };
-
-      const determineRatchetState = (
-        ratchetService as unknown as {
-          determineRatchetState: (pr: typeof prStateInfo, ws: typeof workspace) => RatchetState;
-        }
-      ).determineRatchetState;
-
-      const state = determineRatchetState(prStateInfo, workspace);
-
-      expect(state).toBe(RatchetState.CI_RUNNING);
+    const makeWorkspace = (overrides = {}) => ({
+      id: 'ws-grace',
+      prUrl: 'https://github.com/example/repo/pull/100',
+      prNumber: 100,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_RUNNING,
+      ratchetActiveSessionId: null,
+      ratchetLastNotifiedState: null,
+      prReviewLastCheckedAt: null,
+      ratchetCiGreenAt: null as Date | null,
+      ...overrides,
     });
 
-    it('moves to READY state after grace period expires', () => {
-      const workspace = {
-        id: 'ws-grace',
-        prUrl: 'https://github.com/example/repo/pull/100',
-        prNumber: 100,
+    const settings = {
+      autoFixCi: true,
+      autoFixConflicts: true,
+      autoFixReviews: true,
+      autoMerge: false,
+      allowedReviewers: [],
+    };
+
+    it('applies grace period on first CI green check (ratchetCiGreenAt is null)', async () => {
+      const workspace = makeWorkspace({ ratchetCiGreenAt: null });
+
+      vi.spyOn(
+        ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+        'fetchPRState'
+      ).mockResolvedValue(greenPrStateInfo);
+
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
         ratchetEnabled: true,
-        ratchetState: RatchetState.CI_RUNNING,
-        ratchetActiveSessionId: null,
-        ratchetLastNotifiedState: null,
-        prReviewLastCheckedAt: null,
-        ratchetCiGreenAt: new Date(Date.now() - 70_000), // 70 seconds ago (past grace period)
-      };
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
-      const prStateInfo = {
-        ciStatus: 'SUCCESS' as const,
-        mergeStateStatus: 'CLEAN',
-        hasChangesRequested: false,
-        hasNewReviewComments: false,
-        failedChecks: [],
-        reviews: [],
-        comments: [],
-        reviewComments: [],
-        newReviewComments: [],
-        newPRComments: [],
-        prState: 'OPEN',
-        prNumber: 100,
-      };
-
-      const determineRatchetState = (
+      const result = await (
         ratchetService as unknown as {
-          determineRatchetState: (pr: typeof prStateInfo, ws: typeof workspace) => RatchetState;
+          processWorkspace: (ws: typeof workspace, s: typeof settings) => Promise<unknown>;
         }
-      ).determineRatchetState;
+      ).processWorkspace(workspace, settings);
 
-      const state = determineRatchetState(prStateInfo, workspace);
-
-      expect(state).toBe(RatchetState.READY);
+      expect(result).toMatchObject({
+        newState: RatchetState.CI_RUNNING,
+      });
     });
 
-    it('immediately moves to REVIEW_PENDING if comments exist, ignoring grace period', () => {
-      const workspace = {
-        id: 'ws-grace',
-        prUrl: 'https://github.com/example/repo/pull/100',
-        prNumber: 100,
-        ratchetEnabled: true,
-        ratchetState: RatchetState.CI_RUNNING,
-        ratchetActiveSessionId: null,
-        ratchetLastNotifiedState: null,
-        prReviewLastCheckedAt: null,
-        ratchetCiGreenAt: new Date(Date.now() - 30_000), // 30 seconds ago (within grace period)
-      };
+    it('stays in CI_RUNNING within grace period when ratchetCiGreenAt is recent', async () => {
+      const workspace = makeWorkspace({
+        ratchetCiGreenAt: new Date(Date.now() - 30_000), // 30s ago
+      });
 
-      const prStateInfo = {
-        ciStatus: 'SUCCESS' as const,
-        mergeStateStatus: 'CLEAN',
-        hasChangesRequested: false,
-        hasNewReviewComments: true, // New review comments present
-        failedChecks: [],
-        reviews: [],
-        comments: [],
-        reviewComments: [],
+      vi.spyOn(
+        ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+        'fetchPRState'
+      ).mockResolvedValue(greenPrStateInfo);
+
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        ratchetEnabled: true,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const result = await (
+        ratchetService as unknown as {
+          processWorkspace: (ws: typeof workspace, s: typeof settings) => Promise<unknown>;
+        }
+      ).processWorkspace(workspace, settings);
+
+      expect(result).toMatchObject({
+        newState: RatchetState.CI_RUNNING,
+      });
+    });
+
+    it('moves to READY after grace period expires', async () => {
+      const workspace = makeWorkspace({
+        ratchetCiGreenAt: new Date(Date.now() - 70_000), // 70s ago
+      });
+
+      vi.spyOn(
+        ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+        'fetchPRState'
+      ).mockResolvedValue(greenPrStateInfo);
+
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        ratchetEnabled: true,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const result = await (
+        ratchetService as unknown as {
+          processWorkspace: (ws: typeof workspace, s: typeof settings) => Promise<unknown>;
+        }
+      ).processWorkspace(workspace, settings);
+
+      expect(result).toMatchObject({
+        newState: RatchetState.READY,
+      });
+    });
+
+    it('does not apply grace period when previous state is already READY', async () => {
+      const workspace = makeWorkspace({
+        ratchetState: RatchetState.READY,
+        ratchetCiGreenAt: new Date(Date.now() - 30_000), // 30s ago, within grace
+      });
+
+      vi.spyOn(
+        ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+        'fetchPRState'
+      ).mockResolvedValue(greenPrStateInfo);
+
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        ratchetEnabled: true,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const result = await (
+        ratchetService as unknown as {
+          processWorkspace: (ws: typeof workspace, s: typeof settings) => Promise<unknown>;
+        }
+      ).processWorkspace(workspace, settings);
+
+      // Should NOT regress to CI_RUNNING since previous state was READY
+      expect(result).toMatchObject({
+        newState: RatchetState.READY,
+      });
+    });
+
+    it('immediately moves to REVIEW_PENDING if comments exist during grace period', async () => {
+      const workspace = makeWorkspace({
+        ratchetCiGreenAt: new Date(Date.now() - 30_000), // within grace
+      });
+
+      const prWithComments = {
+        ...greenPrStateInfo,
+        hasNewReviewComments: true,
         newReviewComments: [
           {
             id: 1,
@@ -509,20 +557,27 @@ describe('Ratchet Comment Detection', () => {
             url: 'https://github.com/test/pr/1',
           },
         ],
-        newPRComments: [],
-        prState: 'OPEN',
-        prNumber: 100,
       };
 
-      const determineRatchetState = (
+      vi.spyOn(
+        ratchetService as unknown as { fetchPRState: (...args: unknown[]) => unknown },
+        'fetchPRState'
+      ).mockResolvedValue(prWithComments);
+
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        ratchetEnabled: true,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const result = await (
         ratchetService as unknown as {
-          determineRatchetState: (pr: typeof prStateInfo, ws: typeof workspace) => RatchetState;
+          processWorkspace: (ws: typeof workspace, s: typeof settings) => Promise<unknown>;
         }
-      ).determineRatchetState;
+      ).processWorkspace(workspace, settings);
 
-      const state = determineRatchetState(prStateInfo, workspace);
-
-      expect(state).toBe(RatchetState.REVIEW_PENDING);
+      expect(result).toMatchObject({
+        newState: RatchetState.REVIEW_PENDING,
+      });
     });
   });
 });
