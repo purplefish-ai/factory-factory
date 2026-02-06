@@ -152,7 +152,7 @@ const exportedUserSettingsSchemaV2 = z.object({
   ratchetAutoFixConflicts: z.boolean(),
   ratchetAutoFixReviews: z.boolean(),
   ratchetAutoMerge: z.boolean(),
-  ratchetAllowedReviewers: z.unknown().nullable(), // JSON field
+  ratchetAllowedReviewers: z.unknown().nullish(), // JSON field - allow undefined from DB
   // Deprecated fields - kept for backward compatibility during import
   autoFixCiIssues: z.boolean().optional(),
   autoFixPrReviewComments: z.boolean().optional(),
