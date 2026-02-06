@@ -291,38 +291,46 @@ export class RunScriptService {
         }
       }
 
-      // Kill the process tree
+      // Kill the process tree and wait for it to complete
       if (childProcess?.pid) {
+        const processPid = childProcess.pid;
         logger.info('Stopping run script via stored process', {
           workspaceId,
-          pid: childProcess.pid,
+          pid: processPid,
         });
-        treeKill(childProcess.pid, 'SIGTERM', (err) => {
-          if (err) {
-            logger.warn('Failed to tree-kill run script process', {
-              workspaceId,
-              pid: childProcess.pid,
-              error: err.message,
-            });
-          } else {
-            RunScriptService.runningProcesses.delete(workspaceId);
-          }
+        await new Promise<void>((resolve) => {
+          treeKill(processPid, 'SIGTERM', (err) => {
+            if (err) {
+              logger.warn('Failed to tree-kill run script process', {
+                workspaceId,
+                pid: processPid,
+                error: err.message,
+              });
+            } else {
+              RunScriptService.runningProcesses.delete(workspaceId);
+            }
+            resolve();
+          });
         });
       } else if (pid) {
         // Fallback: kill by PID if we don't have the process reference
         logger.info('Stopping run script via PID', { workspaceId, pid });
-        treeKill(pid, 'SIGTERM', (err) => {
-          if (err) {
-            logger.warn('Failed to tree-kill process, might already be stopped', {
-              workspaceId,
-              pid,
-              error: err.message,
-            });
-          }
+        await new Promise<void>((resolve) => {
+          treeKill(pid, 'SIGTERM', (err) => {
+            if (err) {
+              logger.warn('Failed to tree-kill process, might already be stopped', {
+                workspaceId,
+                pid,
+                error: err.message,
+              });
+            }
+            resolve();
+          });
         });
       }
 
       // Update workspace status and clear all run script state
+      // This now runs after treeKill completes, preventing race condition
       await workspaceAccessor.update(workspaceId, {
         runScriptStatus: 'IDLE',
         runScriptPid: null,
