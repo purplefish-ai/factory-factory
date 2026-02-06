@@ -9,6 +9,7 @@
  * - Routing interactive tool requests to appropriate message formats
  */
 
+import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
@@ -48,12 +49,27 @@ interface EventForLogging {
 }
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+// biome-ignore lint/suspicious/noExplicitAny: EventEmitter listeners accept any arguments
+type AnyListener = (...args: any[]) => void;
+
+interface RegisteredListener {
+  event: string;
+  handler: AnyListener;
+}
+
+// ============================================================================
 // Service
 // ============================================================================
 
 class ChatEventForwarderService {
-  /** Tracks which sessions have event forwarding set up */
-  private clientEventSetup = new Set<string>();
+  /** Tracks which sessions have event forwarding set up, mapping to the client instance */
+  private clientEventSetup = new Map<string, ClaudeClient>();
+
+  /** Stores the specific listener references this service attached, for precise teardown */
+  private registeredListeners = new Map<string, RegisteredListener[]>();
 
   /** Pending interactive requests by session ID (for restore on reconnect) */
   private pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
@@ -62,6 +78,20 @@ class ChatEventForwarderService {
   private workspaceNotificationsSetup = false;
   /** Track last compact boundary per session to avoid duplicate indicators */
   private lastCompactBoundaryAt = new Map<string, number>();
+
+  /**
+   * Remove only the specific listener functions that this service attached to a client.
+   * Preserves listeners from other services (DB handlers, process manager, etc.).
+   */
+  private removeForwardingListeners(dbSessionId: string, client: ClaudeClient): void {
+    const listeners = this.registeredListeners.get(dbSessionId);
+    if (listeners) {
+      for (const { event, handler } of listeners) {
+        client.off(event, handler);
+      }
+      this.registeredListeners.delete(dbSessionId);
+    }
+  }
 
   /**
    * Check if event forwarding is already set up for a session.
@@ -142,18 +172,42 @@ class ChatEventForwarderService {
     context: EventForwarderContext,
     onDispatchNextMessage: () => Promise<void>
   ): void {
-    // Idempotent: skip if already set up for this session
-    if (this.clientEventSetup.has(dbSessionId)) {
+    // Idempotent: skip if already set up for the same client instance
+    const existingClient = this.clientEventSetup.get(dbSessionId);
+    if (existingClient === client) {
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Event forwarding already set up, skipping', { dbSessionId });
+        logger.info('[Chat WS] Event forwarding already set up for same client, skipping', {
+          dbSessionId,
+        });
       }
       return;
     }
-    this.clientEventSetup.add(dbSessionId);
+
+    // If a different client was previously set up, tear down old listeners
+    // This happens when a new Claude process replaces an existing one for the same session
+    if (existingClient) {
+      logger.info('[Chat WS] Replacing event forwarding with new client', { dbSessionId });
+      this.removeForwardingListeners(dbSessionId, existingClient);
+      // Clear stale interactive requests from the old client so the UI
+      // doesn't try to respond to a request the new client knows nothing about
+      this.pendingInteractiveRequests.delete(dbSessionId);
+    }
+
+    this.clientEventSetup.set(dbSessionId, client);
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Setting up event forwarding for session', { dbSessionId });
     }
+
+    // Helper to register a listener and track it for precise teardown later.
+    // Uses EventEmitter.prototype.on to bypass ClaudeClient's typed overloads.
+    const emitterOn = EventEmitter.prototype.on.bind(client);
+    const listeners: RegisteredListener[] = [];
+    const on = (event: string, handler: AnyListener) => {
+      emitterOn(event, handler);
+      listeners.push({ event, handler });
+    };
+    this.registeredListeners.set(dbSessionId, listeners);
 
     // Store-then-forward slash commands from initialize response (sent once per session setup)
     const initResponse = client.getInitializeResponse();
@@ -176,7 +230,7 @@ class ChatEventForwarderService {
     const pendingToolNames = new Map<string, string>();
     const pendingToolInputs = new Map<string, Record<string, unknown>>();
 
-    client.on('tool_use', (toolUse) => {
+    on('tool_use', (toolUse) => {
       pendingToolNames.set(toolUse.id, toolUse.name);
       pendingToolInputs.set(toolUse.id, toolUse.input);
 
@@ -192,7 +246,7 @@ class ChatEventForwarderService {
     });
 
     // Note: DB update for claudeSessionId is now handled by sessionService.setupClientDbHandlers()
-    client.on('session_id', (claudeSessionId) => {
+    on('session_id', (claudeSessionId) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received session_id from Claude CLI', {
           dbSessionId,
@@ -210,7 +264,7 @@ class ChatEventForwarderService {
     });
 
     // Hook into idle event to dispatch next queued message
-    client.on('idle', () => {
+    on('idle', () => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Claude became idle, checking queue', { dbSessionId });
       }
@@ -223,7 +277,7 @@ class ChatEventForwarderService {
       });
     });
 
-    client.on('stream', (event) => {
+    on('stream', (event) => {
       const streamEvent = event as EventForLogging;
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received stream event from client', {
@@ -242,7 +296,7 @@ class ChatEventForwarderService {
     });
 
     // SDK message types - forwarded as dedicated event types
-    client.on('tool_progress', (event) => {
+    on('tool_progress', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received tool_progress event', { dbSessionId });
       }
@@ -255,7 +309,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
     });
 
-    client.on('tool_use_summary', (event) => {
+    on('tool_use_summary', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received tool_use_summary event', { dbSessionId });
       }
@@ -269,7 +323,7 @@ class ChatEventForwarderService {
     });
 
     // System subtype event handlers
-    client.on('system_init', (event) => {
+    on('system_init', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received system_init event', {
           dbSessionId,
@@ -296,7 +350,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, msg);
     });
 
-    client.on('system_status', (event) => {
+    on('system_status', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received system_status event', {
           dbSessionId,
@@ -316,7 +370,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, msg);
     });
 
-    client.on('compact_boundary', (event) => {
+    on('compact_boundary', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received compact_boundary event', { dbSessionId });
       }
@@ -335,7 +389,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, boundaryMsg);
     });
 
-    client.on('hook_started', (event) => {
+    on('hook_started', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received hook_started event', {
           dbSessionId,
@@ -360,7 +414,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, msg);
     });
 
-    client.on('hook_response', (event) => {
+    on('hook_response', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received hook_response event', {
           dbSessionId,
@@ -389,7 +443,7 @@ class ChatEventForwarderService {
     });
 
     // Context compaction events
-    client.on('compacting_start', () => {
+    on('compacting_start', () => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Context compaction started', { dbSessionId });
       }
@@ -399,7 +453,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, event);
     });
 
-    client.on('compacting_end', () => {
+    on('compacting_end', () => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Context compaction ended', { dbSessionId });
       }
@@ -409,7 +463,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, event);
     });
 
-    client.on('message', (msg) => {
+    on('message', (msg) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });
 
       const msgWithType = msg as {
@@ -479,7 +533,7 @@ class ChatEventForwarderService {
       chatConnectionService.forwardToSession(dbSessionId, wsMsg);
     });
 
-    client.on('result', (result) => {
+    on('result', (result) => {
       if (DEBUG_CHAT_WS) {
         const res = result as { uuid?: string };
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
@@ -501,7 +555,7 @@ class ChatEventForwarderService {
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
-    client.on('interactive_request', (request) => {
+    on('interactive_request', (request) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received interactive_request from client', {
           dbSessionId,
@@ -517,13 +571,13 @@ class ChatEventForwarderService {
       this.routeInteractiveRequest(dbSessionId, request);
     });
 
-    client.on('exit', (result) => {
+    on('exit', (result) => {
       chatConnectionService.forwardToSession(dbSessionId, {
         type: 'process_exit',
         code: result.code,
         processAlive: false,
       });
-      client.removeAllListeners();
+      this.removeForwardingListeners(dbSessionId, client);
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);
       // Note: We intentionally do NOT clear the message queue on exit
@@ -535,7 +589,7 @@ class ChatEventForwarderService {
     });
 
     // Forward request cancellation to frontend (e.g., when CLI cancels during permission or question prompt)
-    client.on('permission_cancelled', (requestId: string) => {
+    on('permission_cancelled', (requestId: string) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
         eventType: 'permission_cancelled',
         requestId,
@@ -548,7 +602,7 @@ class ChatEventForwarderService {
       });
     });
 
-    client.on('error', (error) => {
+    on('error', (error) => {
       chatConnectionService.forwardToSession(dbSessionId, {
         type: 'error',
         message: error.message,
