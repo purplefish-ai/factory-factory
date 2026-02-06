@@ -389,4 +389,172 @@ describe('GitHubCLIService', () => {
       });
     });
   });
+
+  describe('schema validation', () => {
+    describe('getPRStatus with malformed data', () => {
+      it('should throw error when response is missing required fields', async () => {
+        const malformedData = {
+          number: 123,
+          // missing state, isDraft, etc.
+        };
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(malformedData),
+          stderr: '',
+        });
+
+        await expect(
+          githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123')
+        ).rejects.toThrow('Invalid gh CLI response for getPRStatus');
+
+        expect(mockLoggerError).toHaveBeenCalledWith(
+          'Invalid gh CLI JSON response',
+          expect.objectContaining({
+            context: 'getPRStatus',
+            validationErrors: expect.any(Array),
+          })
+        );
+      });
+
+      it('should throw error when response has wrong field types', async () => {
+        const malformedData = {
+          number: '123', // should be number
+          state: 'OPEN',
+          isDraft: 'false', // should be boolean
+          reviewDecision: null,
+          mergedAt: null,
+          updatedAt: '2024-01-01T00:00:00Z',
+          statusCheckRollup: null,
+        };
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(malformedData),
+          stderr: '',
+        });
+
+        await expect(
+          githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123')
+        ).rejects.toThrow('Invalid gh CLI response for getPRStatus');
+      });
+
+      it('should throw error when JSON is invalid', async () => {
+        mockExecFile.mockResolvedValue({
+          stdout: 'not valid json{',
+          stderr: '',
+        });
+
+        await expect(
+          githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123')
+        ).rejects.toThrow('Failed to parse gh CLI JSON for getPRStatus');
+
+        expect(mockLoggerError).toHaveBeenCalledWith(
+          'Failed to parse gh CLI JSON',
+          expect.objectContaining({
+            context: 'getPRStatus',
+          })
+        );
+      });
+    });
+
+    describe('listIssues with malformed data', () => {
+      it('should throw error when array items are missing required fields', async () => {
+        const malformedData = [
+          {
+            number: 1,
+            title: 'Issue 1',
+            // missing body, url, state, etc.
+          },
+        ];
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(malformedData),
+          stderr: '',
+        });
+
+        await expect(githubCLIService.listIssues('owner', 'repo')).rejects.toThrow(
+          'Invalid gh CLI response for listIssues'
+        );
+      });
+
+      it('should throw error when response is not an array', async () => {
+        const malformedData = {
+          issues: [], // should be array at top level, not nested
+        };
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(malformedData),
+          stderr: '',
+        });
+
+        await expect(githubCLIService.listIssues('owner', 'repo')).rejects.toThrow(
+          'Invalid gh CLI response for listIssues'
+        );
+      });
+    });
+
+    describe('findPRForBranch with malformed data', () => {
+      it('should throw error when PR list items have wrong structure', async () => {
+        const malformedData = [
+          {
+            number: 123,
+            url: 'https://github.com/owner/repo/pull/123',
+            // missing state field
+          },
+        ];
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(malformedData),
+          stderr: '',
+        });
+
+        await expect(
+          githubCLIService.findPRForBranch('owner', 'repo', 'test-branch')
+        ).rejects.toThrow('Invalid gh CLI response for findPRForBranch');
+      });
+    });
+
+    describe('getReviewComments with malformed data', () => {
+      it('should throw error when comment structure is invalid', async () => {
+        const malformedData = [
+          {
+            id: 1,
+            user: { login: 'user1' },
+            body: 'comment body',
+            path: 'file.ts',
+            line: 10,
+            created_at: '2024-01-01T00:00:00Z',
+            // missing updated_at and html_url
+          },
+        ];
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(malformedData),
+          stderr: '',
+        });
+
+        await expect(githubCLIService.getReviewComments('owner/repo', 123)).rejects.toThrow(
+          'Invalid gh CLI response for getReviewComments'
+        );
+      });
+    });
+
+    describe('getPRFullDetails with malformed data', () => {
+      it('should throw error when full PR details are incomplete', async () => {
+        const malformedData = {
+          number: 123,
+          title: 'Test PR',
+          // missing many required fields
+        };
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(malformedData),
+          stderr: '',
+        });
+
+        await expect(githubCLIService.getPRFullDetails('owner/repo', 123)).rejects.toThrow(
+          'Invalid gh CLI response for getPRFullDetails'
+        );
+      });
+    });
+  });
 });

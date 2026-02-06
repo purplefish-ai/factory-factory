@@ -1,11 +1,136 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { CIStatus, PRState } from '@prisma-gen/client';
+import { z } from 'zod';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { createLogger } from './logger.service';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
+
+/**
+ * Zod schemas for gh CLI JSON responses
+ */
+const statusCheckRollupItemSchema = z.object({
+  status: z.string(),
+  conclusion: z.string().optional(),
+  state: z.string().optional(),
+});
+
+const prStatusSchema = z.object({
+  number: z.number(),
+  state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
+  isDraft: z.boolean(),
+  reviewDecision: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable(),
+  mergedAt: z.string().nullable(),
+  updatedAt: z.string(),
+  statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
+});
+
+const authorSchema = z.object({
+  login: z.string(),
+});
+
+const repositorySchema = z.object({
+  nameWithOwner: z.string(),
+});
+
+const basePRSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  url: z.string(),
+  repository: repositorySchema,
+  author: authorSchema,
+  createdAt: z.string(),
+  isDraft: z.boolean(),
+});
+
+const prDetailsSchema = z.object({
+  reviewDecision: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable(),
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
+  changedFiles: z.number().optional(),
+});
+
+const prListItemSchema = z.object({
+  number: z.number(),
+  url: z.string(),
+  state: z.string(),
+});
+
+const fullPRDetailsSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  url: z.string(),
+  author: authorSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  isDraft: z.boolean(),
+  state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
+  reviewDecision: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable(),
+  statusCheckRollup: z.array(z.any()).nullable(),
+  reviews: z.array(z.any()),
+  comments: z.array(z.any()),
+  labels: z.array(z.any()),
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
+  changedFiles: z.number().optional(),
+  headRefName: z.string().optional(),
+  baseRefName: z.string().optional(),
+  mergeStateStatus: z
+    .enum(['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'])
+    .optional(),
+});
+
+const issueSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  body: z.string(),
+  url: z.string(),
+  state: z.enum(['OPEN', 'CLOSED']),
+  createdAt: z.string(),
+  author: authorSchema,
+});
+
+const reviewCommentSchema = z.object({
+  id: z.number(),
+  user: z.object({
+    login: z.string(),
+  }),
+  body: z.string(),
+  path: z.string(),
+  line: z.number().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  html_url: z.string(),
+});
+
+/**
+ * Parse and validate gh CLI JSON output using a Zod schema.
+ * Logs and throws on validation failure.
+ */
+function parseGhJson<T>(schema: z.ZodSchema<T>, stdout: string, context: string): T {
+  try {
+    const data = JSON.parse(stdout);
+    return schema.parse(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error('Invalid gh CLI JSON response', {
+        context,
+        validationErrors: error.issues,
+        stdout: stdout.slice(0, 500), // Log first 500 chars for debugging
+      });
+      throw new Error(`Invalid gh CLI response for ${context}: ${error.message}`);
+    }
+    // JSON parse error
+    logger.error('Failed to parse gh CLI JSON', {
+      context,
+      error: error instanceof Error ? error.message : String(error),
+      stdout: stdout.slice(0, 500),
+    });
+    throw new Error(`Failed to parse gh CLI JSON for ${context}`);
+  }
+}
 
 /**
  * Execute async functions with limited concurrency, preserving order.
@@ -288,17 +413,7 @@ class GitHubCLIService {
         { timeout: 30_000 }
       );
 
-      const data = JSON.parse(stdout);
-
-      return {
-        number: data.number,
-        state: data.state,
-        isDraft: data.isDraft,
-        reviewDecision: data.reviewDecision || null,
-        mergedAt: data.mergedAt || null,
-        updatedAt: data.updatedAt,
-        statusCheckRollup: data.statusCheckRollup || null,
-      };
+      return parseGhJson(prStatusSchema, stdout, 'getPRStatus');
     } catch (error) {
       const errorType = this.classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -450,10 +565,7 @@ class GitHubCLIService {
       { timeout: 30_000 }
     );
 
-    const basePRs = JSON.parse(stdout) as Omit<
-      ReviewRequestedPR,
-      'reviewDecision' | 'additions' | 'deletions' | 'changedFiles'
-    >[];
+    const basePRs = parseGhJson(z.array(basePRSchema), stdout, 'listReviewRequests');
 
     // Fetch reviewDecision and stats for each PR with limited concurrency to avoid rate limits
     const prsWithDetails = await mapWithConcurrencyLimit(
@@ -473,7 +585,7 @@ class GitHubCLIService {
             ],
             { timeout: 10_000 }
           );
-          const details = JSON.parse(prDetails);
+          const details = parseGhJson(prDetailsSchema, prDetails, 'listReviewRequests:prDetails');
           return {
             ...pr,
             reviewDecision: details.reviewDecision || null,
@@ -523,7 +635,7 @@ class GitHubCLIService {
         { timeout: 30_000 }
       );
 
-      const prs = JSON.parse(stdout) as Array<{ number: number; url: string; state: string }>;
+      const prs = parseGhJson(z.array(prListItemSchema), stdout, 'findPRForBranch');
       if (prs.length === 0) {
         return null;
       }
@@ -608,7 +720,7 @@ class GitHubCLIService {
         { timeout: 30_000 }
       );
 
-      const data = JSON.parse(stdout);
+      const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');
 
       // Extract repository info from the repo string
       const [, repoName] = repo.split('/') as [string, string];
@@ -751,7 +863,7 @@ class GitHubCLIService {
 
       const { stdout } = await execFileAsync('gh', args, { timeout: 30_000 });
 
-      return JSON.parse(stdout) as GitHubIssue[];
+      return parseGhJson(z.array(issueSchema), stdout, 'listIssues');
     } catch (error) {
       const errorType = this.classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -797,28 +909,17 @@ class GitHubCLIService {
         return [];
       }
 
-      const comments = JSON.parse(stdout);
-      return comments.map(
-        (comment: {
-          id: number;
-          user: { login: string };
-          body: string;
-          path: string;
-          line: number | null;
-          created_at: string;
-          updated_at: string;
-          html_url: string;
-        }) => ({
-          id: comment.id,
-          author: { login: comment.user.login },
-          body: comment.body,
-          path: comment.path,
-          line: comment.line,
-          createdAt: comment.created_at,
-          updatedAt: comment.updated_at,
-          url: comment.html_url,
-        })
-      );
+      const comments = parseGhJson(z.array(reviewCommentSchema), stdout, 'getReviewComments');
+      return comments.map((comment) => ({
+        id: comment.id,
+        author: { login: comment.user.login },
+        body: comment.body,
+        path: comment.path,
+        line: comment.line,
+        createdAt: comment.created_at,
+        updatedAt: comment.updated_at,
+        url: comment.html_url,
+      }));
     } catch (error) {
       const errorType = this.classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -913,7 +1014,7 @@ class GitHubCLIService {
         { timeout: 30_000 }
       );
 
-      return JSON.parse(stdout) as GitHubIssue;
+      return parseGhJson(issueSchema, stdout, 'getIssue');
     } catch (error) {
       const errorType = this.classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
