@@ -10,6 +10,7 @@ import {
   KanbanColumn,
   PRState,
   type Prisma,
+  RatchetState,
   RunScriptStatus,
   SessionStatus,
   WorkspaceCreationSource,
@@ -44,7 +45,8 @@ const exportedProjectSchema = z.object({
   updatedAt: z.string(),
 });
 
-const exportedWorkspaceSchema = z.object({
+// Schema v1 - for importing legacy backups
+const exportedWorkspaceSchemaV1 = z.object({
   id: z.string(),
   projectId: z.string(),
   name: z.string(),
@@ -85,6 +87,21 @@ const exportedWorkspaceSchema = z.object({
   updatedAt: z.string(),
 });
 
+// Schema v2 - includes all Phase 3 and Phase 4 fields
+const exportedWorkspaceSchemaV2 = exportedWorkspaceSchemaV1.extend({
+  // PR review tracking (Phase 3+)
+  prReviewLastCheckedAt: z.string().nullable(),
+  prReviewLastCommentId: z.string().nullable(),
+  // Ratchet tracking fields (Phase 3+)
+  ratchetEnabled: z.boolean(),
+  ratchetState: z.nativeEnum(RatchetState),
+  ratchetLastCheckedAt: z.string().nullable(),
+  ratchetLastPushAt: z.string().nullable(),
+  ratchetActiveSessionId: z.string().nullable(),
+  ratchetLastCiRunId: z.string().nullable(),
+  ratchetLastNotifiedState: z.nativeEnum(RatchetState).nullable(),
+});
+
 const exportedClaudeSessionSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -108,7 +125,8 @@ const exportedTerminalSessionSchema = z.object({
   updatedAt: z.string(),
 });
 
-const exportedUserSettingsSchema = z.object({
+// Schema v1 - for importing legacy backups
+const exportedUserSettingsSchemaV1 = z.object({
   preferredIde: z.string(),
   customIdeCommand: z.string().nullable(),
   playSoundOnComplete: z.boolean(),
@@ -120,7 +138,30 @@ const exportedUserSettingsSchema = z.object({
   prReviewFixPrompt: z.string().nullable().optional(),
 });
 
-export const exportDataSchema = z.object({
+// Schema v2 - includes ratchet settings
+const exportedUserSettingsSchemaV2 = z.object({
+  preferredIde: z.string(),
+  customIdeCommand: z.string().nullable(),
+  playSoundOnComplete: z.boolean(),
+  notificationSoundPath: z.string().nullable(),
+  // Note: workspaceOrder and cachedSlashCommands are intentionally excluded as they are
+  // rebuild-able cache data (per design doc: "Excludes cached data")
+  // Ratchet settings (Phase 3+)
+  ratchetEnabled: z.boolean(),
+  ratchetAutoFixCi: z.boolean(),
+  ratchetAutoFixConflicts: z.boolean(),
+  ratchetAutoFixReviews: z.boolean(),
+  ratchetAutoMerge: z.boolean(),
+  ratchetAllowedReviewers: z.unknown().nullable(), // JSON field
+  // Deprecated fields - kept for backward compatibility during import
+  autoFixCiIssues: z.boolean().optional(),
+  autoFixPrReviewComments: z.boolean().optional(),
+  prReviewFixAllowedUsers: z.array(z.string()).nullable().optional(),
+  prReviewFixPrompt: z.string().nullable().optional(),
+});
+
+// Schema v1 - for importing legacy backups
+const exportDataSchemaV1 = z.object({
   meta: z.object({
     exportedAt: z.string(),
     version: z.string(),
@@ -128,14 +169,35 @@ export const exportDataSchema = z.object({
   }),
   data: z.object({
     projects: z.array(exportedProjectSchema),
-    workspaces: z.array(exportedWorkspaceSchema),
+    workspaces: z.array(exportedWorkspaceSchemaV1),
     claudeSessions: z.array(exportedClaudeSessionSchema),
     terminalSessions: z.array(exportedTerminalSessionSchema),
-    userSettings: exportedUserSettingsSchema.nullable(),
+    userSettings: exportedUserSettingsSchemaV1.nullable(),
   }),
 });
 
-export type ExportData = z.infer<typeof exportDataSchema>;
+// Schema v2 - includes all Phase 3 and Phase 4 fields
+const exportDataSchemaV2 = z.object({
+  meta: z.object({
+    exportedAt: z.string(),
+    version: z.string(),
+    schemaVersion: z.literal(2),
+  }),
+  data: z.object({
+    projects: z.array(exportedProjectSchema),
+    workspaces: z.array(exportedWorkspaceSchemaV2),
+    claudeSessions: z.array(exportedClaudeSessionSchema),
+    terminalSessions: z.array(exportedTerminalSessionSchema),
+    userSettings: exportedUserSettingsSchemaV2.nullable(),
+  }),
+});
+
+// Main export schema that accepts both v1 and v2
+export const exportDataSchema = z.union([exportDataSchemaV2, exportDataSchemaV1]);
+
+export type ExportData = z.infer<typeof exportDataSchemaV2>;
+export type ExportDataV1 = z.infer<typeof exportDataSchemaV1>;
+export type ExportDataV2 = z.infer<typeof exportDataSchemaV2>;
 
 // ============================================================================
 // Types
@@ -155,15 +217,57 @@ export interface ImportResults {
 }
 
 type ExportedProject = z.infer<typeof exportedProjectSchema>;
-type ExportedWorkspace = z.infer<typeof exportedWorkspaceSchema>;
+type ExportedWorkspaceV1 = z.infer<typeof exportedWorkspaceSchemaV1>;
+type ExportedWorkspaceV2 = z.infer<typeof exportedWorkspaceSchemaV2>;
 type ExportedClaudeSession = z.infer<typeof exportedClaudeSessionSchema>;
 type ExportedTerminalSession = z.infer<typeof exportedTerminalSessionSchema>;
-type ExportedUserSettings = z.infer<typeof exportedUserSettingsSchema>;
+type ExportedUserSettingsV1 = z.infer<typeof exportedUserSettingsSchemaV1>;
+type ExportedUserSettingsV2 = z.infer<typeof exportedUserSettingsSchemaV2>;
 
 function normalizeRunScriptStatus(
-  status: z.infer<typeof exportedWorkspaceSchema.shape.runScriptStatus>
+  status: z.infer<typeof exportedWorkspaceSchemaV1.shape.runScriptStatus>
 ): RunScriptStatus {
   return status === 'PAUSED' ? RunScriptStatus.IDLE : status;
+}
+
+/**
+ * Migrates v1 workspace data to v2 format by adding default values for new fields
+ */
+function migrateWorkspaceV1ToV2(v1: ExportedWorkspaceV1): ExportedWorkspaceV2 {
+  return {
+    ...v1,
+    // Set defaults for Phase 3 creation tracking fields
+    isAutoGeneratedBranch: v1.isAutoGeneratedBranch ?? false,
+    creationSource: v1.creationSource ?? 'MANUAL',
+    creationMetadata: v1.creationMetadata ?? null,
+    // Set defaults for Phase 3+ PR review tracking fields
+    prReviewLastCheckedAt: null,
+    prReviewLastCommentId: null,
+    // Set defaults for Phase 3+ ratchet fields
+    ratchetEnabled: true, // Default to enabled (matches schema default)
+    ratchetState: RatchetState.IDLE,
+    ratchetLastCheckedAt: null,
+    ratchetLastPushAt: null,
+    ratchetActiveSessionId: null,
+    ratchetLastCiRunId: null,
+    ratchetLastNotifiedState: null,
+  };
+}
+
+/**
+ * Migrates v1 user settings to v2 format by adding default values for new fields
+ */
+function migrateUserSettingsV1ToV2(v1: ExportedUserSettingsV1): ExportedUserSettingsV2 {
+  return {
+    ...v1,
+    // Set defaults for Phase 3+ ratchet settings (match schema defaults)
+    ratchetEnabled: false,
+    ratchetAutoFixCi: true,
+    ratchetAutoFixConflicts: true,
+    ratchetAutoFixReviews: true,
+    ratchetAutoMerge: false,
+    ratchetAllowedReviewers: null,
+  };
 }
 
 // ============================================================================
@@ -222,27 +326,31 @@ async function importProjects(
 }
 
 async function importWorkspaces(
-  workspaces: ExportedWorkspace[],
+  workspaces: Array<ExportedWorkspaceV1 | ExportedWorkspaceV2>,
   tx: TransactionClient
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
-  for (const w of workspaces) {
-    const existing = await tx.workspace.findUnique({ where: { id: w.id } });
+  for (const workspace of workspaces) {
+    const existing = await tx.workspace.findUnique({ where: { id: workspace.id } });
     if (existing) {
       counter.skipped++;
       continue;
     }
 
-    const project = await tx.project.findUnique({ where: { id: w.projectId } });
+    const project = await tx.project.findUnique({ where: { id: workspace.projectId } });
     if (!project) {
       logger.warn('Skipping workspace due to missing project', {
-        workspaceId: w.id,
-        projectId: w.projectId,
+        workspaceId: workspace.id,
+        projectId: workspace.projectId,
       });
       counter.skipped++;
       continue;
     }
+
+    // Migrate v1 to v2 if needed (detect by presence of ratchetEnabled field)
+    const w: ExportedWorkspaceV2 =
+      'ratchetEnabled' in workspace ? workspace : migrateWorkspaceV1ToV2(workspace);
 
     await tx.workspace.create({
       data: {
@@ -253,8 +361,8 @@ async function importWorkspaces(
         status: w.status,
         worktreePath: w.worktreePath,
         branchName: w.branchName,
-        isAutoGeneratedBranch: w.isAutoGeneratedBranch ?? false,
-        creationSource: w.creationSource ?? 'MANUAL',
+        isAutoGeneratedBranch: w.isAutoGeneratedBranch,
+        creationSource: w.creationSource,
         creationMetadata:
           w.creationMetadata != null ? (w.creationMetadata as Prisma.InputJsonValue) : undefined,
         initErrorMessage: w.initErrorMessage,
@@ -267,7 +375,6 @@ async function importWorkspaces(
         runScriptPid: w.runScriptPid,
         runScriptPort: w.runScriptPort,
         runScriptStartedAt: parseDate(w.runScriptStartedAt),
-        // Map old SessionStatus values to RunScriptStatus (PAUSED -> IDLE)
         runScriptStatus: normalizeRunScriptStatus(w.runScriptStatus),
         prUrl: w.prUrl,
         githubIssueNumber: w.githubIssueNumber,
@@ -279,6 +386,17 @@ async function importWorkspaces(
         prUpdatedAt: parseDate(w.prUpdatedAt),
         prCiFailedAt: parseDate(w.prCiFailedAt),
         prCiLastNotifiedAt: parseDate(w.prCiLastNotifiedAt),
+        // Phase 3+ PR review tracking fields
+        prReviewLastCheckedAt: parseDate(w.prReviewLastCheckedAt),
+        prReviewLastCommentId: w.prReviewLastCommentId,
+        // Phase 3+ ratchet fields
+        ratchetEnabled: w.ratchetEnabled,
+        ratchetState: w.ratchetState,
+        ratchetLastCheckedAt: parseDate(w.ratchetLastCheckedAt),
+        ratchetLastPushAt: parseDate(w.ratchetLastPushAt),
+        ratchetActiveSessionId: w.ratchetActiveSessionId,
+        ratchetLastCiRunId: w.ratchetLastCiRunId,
+        ratchetLastNotifiedState: w.ratchetLastNotifiedState,
         hasHadSessions: w.hasHadSessions,
         cachedKanbanColumn: w.cachedKanbanColumn,
         stateComputedAt: parseDate(w.stateComputedAt),
@@ -376,7 +494,7 @@ async function importTerminalSessions(
 }
 
 async function importUserSettings(
-  settings: ExportedUserSettings | null,
+  settings: ExportedUserSettingsV1 | ExportedUserSettingsV2 | null,
   tx: TransactionClient
 ): Promise<{ imported: boolean; skipped: boolean }> {
   if (!settings) {
@@ -388,13 +506,29 @@ async function importUserSettings(
     return { imported: false, skipped: true };
   }
 
+  // Migrate v1 to v2 if needed (detect by presence of ratchetEnabled field)
+  const s: ExportedUserSettingsV2 =
+    'ratchetEnabled' in settings ? settings : migrateUserSettingsV1ToV2(settings);
+
   await tx.userSettings.create({
     data: {
       userId: 'default',
-      preferredIde: settings.preferredIde,
-      customIdeCommand: settings.customIdeCommand,
-      playSoundOnComplete: settings.playSoundOnComplete,
-      notificationSoundPath: settings.notificationSoundPath,
+      preferredIde: s.preferredIde,
+      customIdeCommand: s.customIdeCommand,
+      playSoundOnComplete: s.playSoundOnComplete,
+      notificationSoundPath: s.notificationSoundPath,
+      // Phase 3+ ratchet settings
+      ratchetEnabled: s.ratchetEnabled,
+      ratchetAutoFixCi: s.ratchetAutoFixCi,
+      ratchetAutoFixConflicts: s.ratchetAutoFixConflicts,
+      ratchetAutoFixReviews: s.ratchetAutoFixReviews,
+      ratchetAutoMerge: s.ratchetAutoMerge,
+      ratchetAllowedReviewers:
+        s.ratchetAllowedReviewers != null
+          ? (s.ratchetAllowedReviewers as Prisma.InputJsonValue)
+          : undefined,
+      // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
+      // as they are rebuild-able cache data
       // Deprecated fields are ignored - they no longer exist in the schema
     },
   });
@@ -411,6 +545,7 @@ class DataBackupService {
    * Export all data for backup/migration.
    * Exports projects, workspaces, sessions, and user preferences.
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
+   * Exports in schema version 2 format.
    */
   async exportData(appVersion: string): Promise<ExportData> {
     logger.info('Exporting database data');
@@ -429,7 +564,7 @@ class DataBackupService {
       meta: {
         exportedAt: new Date().toISOString(),
         version: appVersion,
-        schemaVersion: 1,
+        schemaVersion: 2,
       },
       data: {
         projects: projects.map((p) => ({
@@ -480,6 +615,17 @@ class DataBackupService {
           prUpdatedAt: toISOString(w.prUpdatedAt),
           prCiFailedAt: toISOString(w.prCiFailedAt),
           prCiLastNotifiedAt: toISOString(w.prCiLastNotifiedAt),
+          // Phase 3+ PR review tracking fields
+          prReviewLastCheckedAt: toISOString(w.prReviewLastCheckedAt),
+          prReviewLastCommentId: w.prReviewLastCommentId,
+          // Phase 3+ ratchet tracking fields
+          ratchetEnabled: w.ratchetEnabled,
+          ratchetState: w.ratchetState,
+          ratchetLastCheckedAt: toISOString(w.ratchetLastCheckedAt),
+          ratchetLastPushAt: toISOString(w.ratchetLastPushAt),
+          ratchetActiveSessionId: w.ratchetActiveSessionId,
+          ratchetLastCiRunId: w.ratchetLastCiRunId,
+          ratchetLastNotifiedState: w.ratchetLastNotifiedState,
           hasHadSessions: w.hasHadSessions,
           cachedKanbanColumn: w.cachedKanbanColumn,
           stateComputedAt: toISOString(w.stateComputedAt),
@@ -513,6 +659,15 @@ class DataBackupService {
               customIdeCommand: userSettings.customIdeCommand,
               playSoundOnComplete: userSettings.playSoundOnComplete,
               notificationSoundPath: userSettings.notificationSoundPath,
+              // Phase 3+ ratchet settings
+              ratchetEnabled: userSettings.ratchetEnabled,
+              ratchetAutoFixCi: userSettings.ratchetAutoFixCi,
+              ratchetAutoFixConflicts: userSettings.ratchetAutoFixConflicts,
+              ratchetAutoFixReviews: userSettings.ratchetAutoFixReviews,
+              ratchetAutoMerge: userSettings.ratchetAutoMerge,
+              ratchetAllowedReviewers: userSettings.ratchetAllowedReviewers,
+              // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
+              // as they are rebuild-able cache data (per design doc)
             }
           : null,
       },
@@ -530,11 +685,12 @@ class DataBackupService {
 
   /**
    * Import data from a backup file.
+   * Supports both v1 and v2 schema versions with automatic migration.
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    * All imports are wrapped in a transaction for atomicity.
    */
-  async importData(input: ExportData): Promise<ImportResults> {
+  async importData(input: ExportDataV1 | ExportDataV2): Promise<ImportResults> {
     logger.info('Starting data import', {
       schemaVersion: input.meta.schemaVersion,
       exportedAt: input.meta.exportedAt,
@@ -560,6 +716,7 @@ class DataBackupService {
     });
 
     logger.info('Import completed', {
+      schemaVersion: input.meta.schemaVersion,
       projects: results.projects,
       workspaces: results.workspaces,
       claudeSessions: results.claudeSessions,
