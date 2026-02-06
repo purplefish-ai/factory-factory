@@ -711,18 +711,6 @@ export const ClaudeJsonSchema = z
   })
   .passthrough();
 
-/**
- * Parse and validate a ClaudeJson message from unknown data.
- * Returns the parsed message or null if validation fails.
- */
-export function parseClaudeJson(data: unknown): ClaudeJson | null {
-  const result = ClaudeJsonSchema.safeParse(data);
-  if (!result.success) {
-    return null;
-  }
-  return result.data as ClaudeJson;
-}
-
 // =============================================================================
 // Type Guards
 // =============================================================================
