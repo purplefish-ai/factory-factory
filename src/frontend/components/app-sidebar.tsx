@@ -339,10 +339,10 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
   // Clear attention glow when viewing a workspace
   useEffect(() => {
-    if (currentWorkspaceId) {
+    if (currentWorkspaceId && needsAttention(currentWorkspaceId)) {
       clearAttention(currentWorkspaceId);
     }
-  }, [currentWorkspaceId, clearAttention]);
+  }, [currentWorkspaceId, needsAttention, clearAttention]);
 
   useEffect(() => {
     if (selectedProjectId) {
