@@ -18,6 +18,7 @@ import {
   type ControlResponseData,
   type HooksConfig,
   type InitializeResponseData,
+  InitializeResponseDataSchema,
   isControlCancelRequest,
   isControlRequest,
   isKeepAliveMessage,
@@ -25,6 +26,7 @@ import {
   type KeepAliveMessage,
   type PermissionMode,
   type RewindFilesResponse,
+  RewindFilesResponseSchema,
   type StreamEventMessage,
 } from './types';
 
@@ -36,10 +38,11 @@ const logger = createLogger('protocol');
 
 /**
  * Pending request tracking for request/response correlation.
+ * Generic type parameter allows type-safe response handling.
  */
-export interface PendingRequest {
+export interface PendingRequest<T = unknown> {
   requestId: string;
-  resolve: (response: unknown) => void;
+  resolve: (response: T) => void;
   reject: (error: Error) => void;
   timeoutId?: NodeJS.Timeout;
 }
@@ -88,7 +91,7 @@ export type ControlResponseBody = ControlResponseData;
 export class ClaudeProtocol extends EventEmitter {
   private stdin: Writable;
   private stdout: Readable;
-  private pendingRequests: Map<string, PendingRequest>;
+  private pendingRequests: Map<string, PendingRequest<unknown>>;
   private rl: readline.Interface | null;
   private requestTimeout: number;
   private maxLineLength: number;
@@ -534,6 +537,7 @@ export class ClaudeProtocol extends EventEmitter {
 
   /**
    * Handle a control response from the CLI.
+   * Validates response payload against expected schema before resolving.
    */
   private handleControlResponse(msg: {
     type: 'control_response';
@@ -546,12 +550,74 @@ export class ClaudeProtocol extends EventEmitter {
     const requestId = msg.response.request_id;
     const pending = this.pendingRequests.get(requestId);
 
-    if (pending) {
-      if (pending.timeoutId) {
-        clearTimeout(pending.timeoutId);
+    if (!pending) {
+      return;
+    }
+
+    if (pending.timeoutId) {
+      clearTimeout(pending.timeoutId);
+    }
+    this.pendingRequests.delete(requestId);
+
+    // Validate response payload based on the original request type
+    // We need to know which schema to use. We'll infer from the response structure.
+    const rawResponse = msg.response.response;
+
+    try {
+      // Try to determine response type and validate accordingly
+      let validatedResponse: unknown = rawResponse;
+
+      // Check if this looks like an InitializeResponseData
+      if (
+        rawResponse &&
+        typeof rawResponse === 'object' &&
+        'commands' in rawResponse &&
+        'models' in rawResponse &&
+        'account' in rawResponse
+      ) {
+        const parseResult = InitializeResponseDataSchema.safeParse(rawResponse);
+        if (!parseResult.success) {
+          logger.error('Invalid initialize response payload', parseResult.error, {
+            requestId,
+            rawResponse: JSON.stringify(rawResponse).slice(0, 500),
+          });
+          pending.reject(
+            new Error(
+              `Invalid initialize response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
+            )
+          );
+          return;
+        }
+        validatedResponse = parseResult.data;
       }
-      this.pendingRequests.delete(requestId);
-      pending.resolve(msg.response.response);
+      // Check if this looks like a RewindFilesResponse
+      else if (
+        rawResponse &&
+        typeof rawResponse === 'object' &&
+        ('affected_files' in rawResponse || Object.keys(rawResponse).length === 0)
+      ) {
+        const parseResult = RewindFilesResponseSchema.safeParse(rawResponse);
+        if (!parseResult.success) {
+          logger.error('Invalid rewind files response payload', parseResult.error, {
+            requestId,
+            rawResponse: JSON.stringify(rawResponse).slice(0, 500),
+          });
+          pending.reject(
+            new Error(
+              `Invalid rewind files response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
+            )
+          );
+          return;
+        }
+        validatedResponse = parseResult.data;
+      }
+
+      pending.resolve(validatedResponse);
+    } catch (error) {
+      logger.error('Unexpected error validating control response', error as Error, {
+        requestId,
+      });
+      pending.reject(error instanceof Error ? error : new Error('Unknown validation error'));
     }
   }
 

@@ -8,6 +8,7 @@
  * @see docs/claude/claude-code-cli-reference.md
  */
 
+import { z } from 'zod';
 import type {
   AskUserQuestion,
   AskUserQuestionOption,
@@ -185,6 +186,21 @@ export interface InitializeResponseData {
   account: AccountInfo;
 }
 
+/**
+ * Zod schema for InitializeResponseData runtime validation.
+ */
+export const InitializeResponseDataSchema = z.object({
+  commands: z.array(z.any()), // CommandInfo is complex, validate minimally
+  output_style: z.string(),
+  available_output_styles: z.array(z.string()),
+  models: z.array(z.any()), // ModelInfo is complex, validate minimally
+  account: z.object({
+    email: z.string(),
+    organization: z.string(),
+    subscriptionType: z.string(),
+  }),
+});
+
 // =============================================================================
 // Permission Update Types
 // =============================================================================
@@ -332,6 +348,13 @@ export interface RewindFilesResponse {
   /** List of file paths that were/would be reverted */
   affected_files?: string[];
 }
+
+/**
+ * Zod schema for RewindFilesResponse runtime validation.
+ */
+export const RewindFilesResponseSchema = z.object({
+  affected_files: z.array(z.string()).optional(),
+});
 
 /**
  * Union of all request subtypes SDK can send to CLI.
