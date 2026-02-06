@@ -361,181 +361,151 @@ async function buildInitialPromptFromGitHubIssue(workspaceId: string): Promise<s
       issueTitle: issue.title,
     });
 
-    return `# GitHub Issue Implementation
-
-## Issue #${issue.number}: ${issue.title}
+    return `# GitHub Issue #${issue.number}: ${issue.title}
 
 ${issue.body || '(No description provided)'}
 
-**GitHub Issue URL**: ${issue.url}
+**Issue URL**: ${issue.url}
 
 ---
 
-## Work Autonomously
+## Your Task
 
-You are implementing this issue through a structured workflow. Work independently:
-- **Proceed without approval**: Do NOT ask for plan review between phases
-- **Ask critical questions once**: Only if requirements are fundamentally unclear, ask ONE TIME at the start, then proceed
-- **Make reasonable assumptions**: When details are ambiguous, follow existing codebase patterns
-- **Commit frequently**: Make atomic commits as you complete logical units
-- **Update TodoWrite**: Keep your task list current throughout
-- **Protect your context**: Delegate to specialized agents for exploratory or intensive tasks
+Implement this issue following the 5-phase workflow below. Work autonomously—only ask questions if requirements are contradictory or fundamentally unclear.
 
-Only ask the user for clarification if:
-- The issue description is contradictory or fundamentally unclear
-- You need to choose between multiple valid architectural approaches
-- Required information (API endpoints, credentials, configuration) is missing
-
-For all other cases, make reasonable assumptions and proceed.
+**Protect your context by delegating to specialized agents:**
+- Exploring unfamiliar code or architecture? Use: "Please use the Explore agent to understand [specific area]"
+- Significant changes to review/simplify? Use: "Please use the code-simplifier agent to review recent changes"
+- Targeted searches only? Use Grep/Glob directly
 
 ---
 
 ## Phase 1: Planning
 
-1. **Understand the requirements**
-   - Read the issue description and any linked resources
-   - For broad codebase exploration (understanding architecture, finding related code across many files):
-     - Use Task tool with subagent_type="Explore" to delegate exploration
-     - This protects your context from being cluttered with search results
-   - For targeted searches (specific function/file): Use Grep or Glob directly
-   - Identify which files will need to be modified or created
+1. **Understand requirements and find relevant code**
+   - Read issue description and any linked resources
+   - Search for affected files (delegate to Explore agent for broad architecture questions)
+   - Identify which files need changes
 
-2. **Create a task breakdown using TodoWrite**
-   - Break down into specific, actionable items
-   - Include separate tasks for: implementation, testing, documentation (if needed)
-   - Consider edge cases, error handling, and test requirements
-   - Mark tasks as in_progress when starting, completed when done
+2. **Create task list with TodoWrite**
+   Create specific tasks for:
+   - Code changes (which files and what changes?)
+   - Tests to add (which test files?)
+   - Verification commands (typecheck, test, build)
+   - PR creation
 
-3. **Review your plan**
-   - Check for missing edge cases or error scenarios
-   - Verify alignment with existing codebase patterns
-   - Identify potential test coverage gaps
-   - For highly complex changes (affects core architecture or many files), consider asking user to review plan before proceeding
+   Update status as you work: pending → in_progress → completed
+
+3. **Identify edge cases**
+   - What could go wrong?
+   - What scenarios need tests?
+   - What existing patterns should you follow?
 
 ## Phase 2: Implementation
 
-1. **Follow your plan systematically**
-   - Work through TodoWrite tasks, updating status as you go
-   - Write clean, well-structured code following existing patterns
-   - Add appropriate type definitions and error handling
-   - Add new tasks to TodoWrite as you discover additional work
+1. **Work through your TodoWrite tasks systematically**
+   - Follow existing code patterns and conventions
+   - Add type definitions and error handling
+   - Keep commits atomic and focused
+   - Update TodoWrite as you discover additional work
 
 2. **Write tests**
-   - Add tests for new functionality and edge cases
+   - Test new functionality and edge cases
    - Follow existing test patterns in the codebase
    - Ensure tests are focused and maintainable
 
-3. **Commit your work**
-   - Make atomic, focused commits as you complete logical units
-   - Follow project commit style: short, imperative, descriptive
-   - Keep first line under 72 characters
-   - Example: "Add error handling to session creation" or "Fix session initialization bug (#${issue.number})"
+3. **Commit frequently**
+   - Atomic commits as you complete logical units
+   - Follow project style: short, imperative, descriptive (<72 chars)
+   - Reference issue number when relevant
+   - Example: "Add session error handling (#${issue.number})"
 
 ## Phase 3: Verification
 
-1. **Run the verification checklist**
-   - [ ] All TodoWrite tasks are completed
-   - [ ] Code follows existing patterns and conventions
-   - [ ] Edge cases and error scenarios are handled
-   - [ ] Tests are added for new functionality
-   - [ ] Type checking passes: \`pnpm typecheck\`
-   - [ ] Linting passes: \`pnpm check:fix\`
-   - [ ] Test suite passes: \`pnpm test\`
-   - [ ] Build succeeds: \`pnpm build\`
+Run all verification checks:
 
-2. **Fix any issues**
-   - If tests fail, debug and fix them before proceeding
-   - If type errors occur, resolve them (avoid type casts unless necessary)
-   - If linting fails, run \`pnpm check:fix\` and review changes
-   - Update TodoWrite with any additional tasks discovered
+\`\`\`bash
+pnpm typecheck && pnpm check:fix && pnpm test && pnpm build
+\`\`\`
 
-## Phase 4: Code Simplification (Optional but Recommended)
+Fix any failures:
+- **Type errors**: Resolve without type casts when possible
+- **Lint errors**: Review \`pnpm check:fix\` changes
+- **Test failures**: Debug and fix before proceeding
+- **Build failures**: Check for syntax errors or missing dependencies
 
-1. **Delegate to code-simplifier agent**
-   - For significant changes, use Task tool with subagent_type="code-simplifier:code-simplifier"
-   - This agent will review recent changes and simplify for clarity
-   - Particularly valuable for large/complex changes or frequently-modified code
-   - The agent operates autonomously and returns simplified code
+Update TodoWrite with any additional fix tasks discovered.
 
-2. **If agent is unavailable, simplify manually**
-   - Review your code for unnecessary complexity or abstractions
-   - Improve variable/function naming where helpful
-   - Add clarifying comments only where logic isn't self-evident
-   - Ensure consistent code style
-
-3. **Verify after simplification**
-   - Re-run tests after any changes: \`pnpm test\`
-
-## Phase 5: Final Checks
+## Phase 4: Final Review
 
 1. **Review your changes**
-   - Run \`git diff\` to ensure no unintended changes (debug logs, commented code, etc.)
-   - Verify all commits have descriptive messages following project conventions
-   - Test the feature/fix end-to-end manually if applicable
+   \`\`\`bash
+   git diff origin/main
+   \`\`\`
 
-2. **Ensure everything is committed**
-   - All changes should be committed with descriptive messages
-   - Use \`git status\` to verify working directory is clean
+   Look for:
+   - Debug logs or commented code to remove
+   - Unclear variable names to improve
+   - Unnecessary complexity to simplify
 
-## Phase 6: Create Pull Request
+2. **Optional: Delegate to code-simplifier for large changes**
+   If you've changed many files (8+) or added complex logic:
+   - Use: "Please use the code-simplifier agent to review recent changes"
+   - Re-run tests after any changes: \`pnpm test\`
 
-1. **Push your branch**
+3. **Ensure everything is committed**
+   \`\`\`bash
+   git status  # should show clean working directory
+   \`\`\`
+
+## Phase 5: Create Pull Request [REQUIRED - DO NOT SKIP]
+
+**Pre-flight checklist before creating PR:**
+- [ ] All TodoWrite tasks marked completed
+- [ ] \`pnpm test\` passes
+- [ ] \`pnpm typecheck\` passes
+- [ ] \`pnpm build\` succeeds
+- [ ] Working directory clean (\`git status\`)
+- [ ] All commits have descriptive messages
+
+**Now create the PR:**
+
+1. **Push your branch:**
    \`\`\`bash
    git push -u origin HEAD
    \`\`\`
 
-2. **Create PR body**
-   Write a temporary file with this structure:
+2. **Write PR body to /tmp/pr-body.md:**
    \`\`\`markdown
    ## Summary
-   [1-3 bullet points describing what this PR accomplishes]
+   [1-3 bullets describing what this PR accomplishes]
 
    ## Changes
    - **[Component/Area]**: [What changed and why]
-   - [Additional changes as needed]
+   - [Add more lines as needed]
 
    ## Testing
-   - [x] All tests pass (\`pnpm test\`)
-   - [x] Type checking passes (\`pnpm typecheck\`)
-   - [x] Linting passes (\`pnpm check:fix\`)
+   - [x] Tests pass (\`pnpm test\`)
+   - [x] Types pass (\`pnpm typecheck\`)
    - [x] Build succeeds (\`pnpm build\`)
-   - [ ] Manual testing: [Describe how to test the change]
+   - [ ] Manual testing: [How to verify this change works]
 
    Closes #${issue.number}
    \`\`\`
 
-3. **Create the pull request**
+3. **Create the PR:**
    \`\`\`bash
-   gh pr create --title "Clear, concise title (<70 chars)" --body-file <temp-file-path>
+   gh pr create --title "Fix #${issue.number}: [concise description]" --body-file /tmp/pr-body.md
+   \`\`\`
+
+4. **Verify PR created successfully:**
+   \`\`\`bash
+   gh pr view --web
    \`\`\`
 
 ---
 
-## Success Criteria
-
-You've successfully completed this issue when:
-- [ ] All TodoWrite tasks are marked completed
-- [ ] All verification checks pass
-- [ ] All changes are committed with descriptive messages
-- [ ] PR is created with clear title and description
-- [ ] PR references \`Closes #${issue.number}\`
-
----
-
-## Key Principles
-
-**Orchestrate, don't execute everything yourself**:
-- Use Explore agent for broad codebase understanding (architecture, patterns, finding related code)
-- Use code-simplifier agent to refine completed code
-- Use Grep/Glob directly only for targeted, specific searches
-- This keeps your context focused on coordination and decision-making
-
-**Stay autonomous**:
-- Make implementation decisions based on codebase patterns
-- Only ask critical clarifying questions once at the start
-- Trust your judgment and proceed confidently
-
----
+**You have completed this issue successfully when the PR is created and the URL is shown above.**
 
 Start with Phase 1: Planning.`;
   } catch (error) {
