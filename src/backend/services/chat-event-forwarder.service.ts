@@ -737,6 +737,14 @@ class ChatEventForwarderService {
   }
 
   /**
+   * Get all pending interactive requests indexed by session ID.
+   * Used by workspace query service to determine which workspaces have pending requests.
+   */
+  getAllPendingRequests(): Map<string, PendingInteractiveRequest> {
+    return new Map(this.pendingInteractiveRequests);
+  }
+
+  /**
    * Notify interceptors about tool results.
    */
   private notifyToolResultInterceptors(

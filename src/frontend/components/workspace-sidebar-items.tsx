@@ -1,5 +1,12 @@
 import type { useSortable } from '@dnd-kit/sortable';
-import { Archive, CheckCircle2, GitPullRequest, GripVertical } from 'lucide-react';
+import {
+  Archive,
+  CheckCircle2,
+  FileCheck,
+  GitPullRequest,
+  GripVertical,
+  MessageCircleQuestion,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
@@ -212,6 +219,28 @@ export function ActiveWorkspaceItem({
                   <TooltipContent side="right">Archive</TooltipContent>
                 </Tooltip>
               </div>
+
+              {/* Pending request indicator */}
+              {workspace.pendingRequestType && (
+                <div className="flex items-center gap-1 text-[10px] leading-tight mt-0.5">
+                  {workspace.pendingRequestType === 'plan_approval' && (
+                    <>
+                      <FileCheck className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
+                      <span className="text-amber-700 dark:text-amber-400 font-medium">
+                        Plan Approval Needed
+                      </span>
+                    </>
+                  )}
+                  {workspace.pendingRequestType === 'user_question' && (
+                    <>
+                      <MessageCircleQuestion className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
+                      <span className="text-blue-700 dark:text-blue-400 font-medium">
+                        Question Waiting
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Row 2: branch name */}
               {workspace.branchName && (
