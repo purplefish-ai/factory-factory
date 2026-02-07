@@ -33,6 +33,7 @@ export interface ServerWorkspace {
   cachedKanbanColumn?: string | null;
   stateComputedAt?: string | null;
   sidebarStatus?: WorkspaceSidebarStatus;
+  pendingRequestType?: 'plan_approval' | 'user_question' | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {

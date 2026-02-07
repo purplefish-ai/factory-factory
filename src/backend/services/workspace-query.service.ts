@@ -3,6 +3,7 @@ import pLimit from 'p-limit';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { chatEventForwarderService } from './chat-event-forwarder.service';
 import { FactoryConfigService } from './factory-config.service';
 import { gitOpsService } from './git-ops.service';
 import { githubCLIService } from './github-cli.service';
@@ -22,6 +23,32 @@ const gitConcurrencyLimit = pLimit(DEFAULT_GIT_CONCURRENCY);
 let cachedReviewCount: { count: number; fetchedAt: number } | null = null;
 const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
 
+/**
+ * Determine the pending request type for a workspace based on its active sessions.
+ * Returns 'plan_approval' if any session has a pending ExitPlanMode request,
+ * 'user_question' if any session has a pending AskUserQuestion request,
+ * or null if no pending requests.
+ */
+function computePendingRequestType(
+  sessionIds: string[],
+  pendingRequests: Map<string, { toolName: string }>
+): 'plan_approval' | 'user_question' | null {
+  for (const sessionId of sessionIds) {
+    const request = pendingRequests.get(sessionId);
+    if (!request) {
+      continue;
+    }
+
+    if (request.toolName === 'ExitPlanMode') {
+      return 'plan_approval';
+    }
+    if (request.toolName === 'AskUserQuestion') {
+      return 'user_question';
+    }
+  }
+  return null;
+}
+
 class WorkspaceQueryService {
   async getProjectSummaryState(projectId: string) {
     const [project, workspaces] = await Promise.all([
@@ -33,11 +60,15 @@ class WorkspaceQueryService {
 
     const defaultBranch = project?.defaultBranch ?? 'main';
 
+    // Get all pending requests from active sessions
+    const allPendingRequests = chatEventForwarderService.getAllPendingRequests();
+
     const workingStatusByWorkspace = new Map<string, boolean>();
     const flowStateByWorkspace = new Map<
       string,
       ReturnType<typeof deriveWorkspaceFlowStateFromWorkspace>
     >();
+    const pendingRequestByWorkspace = new Map<string, 'plan_approval' | 'user_question' | null>();
     for (const workspace of workspaces) {
       const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
       flowStateByWorkspace.set(workspace.id, flowState);
@@ -45,6 +76,9 @@ class WorkspaceQueryService {
       const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
       const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
       workingStatusByWorkspace.set(workspace.id, isSessionWorking || flowState.isWorking);
+
+      const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);
+      pendingRequestByWorkspace.set(workspace.id, pendingRequestType);
     }
 
     const gitStatsResults: Record<
@@ -132,6 +166,7 @@ class WorkspaceQueryService {
           ciObservation: flowState?.ciObservation ?? 'CHECKS_UNKNOWN',
           cachedKanbanColumn: w.cachedKanbanColumn,
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
+          pendingRequestType: pendingRequestByWorkspace.get(w.id) ?? null,
         };
       }),
       reviewCount,
@@ -152,6 +187,9 @@ class WorkspaceQueryService {
       excludeStatuses: [WorkspaceStatus.ARCHIVED],
     });
 
+    // Get all pending requests from active sessions
+    const allPendingRequests = chatEventForwarderService.getAllPendingRequests();
+
     return workspaces
       .map((workspace) => {
         const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
@@ -166,6 +204,8 @@ class WorkspaceQueryService {
           hasHadSessions: workspace.hasHadSessions,
         });
 
+        const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);
+
         return {
           ...workspace,
           kanbanColumn,
@@ -174,6 +214,7 @@ class WorkspaceQueryService {
           flowPhase: flowState.phase,
           ciObservation: flowState.ciObservation,
           isArchived: false,
+          pendingRequestType,
         };
       })
       .filter((workspace) => {
