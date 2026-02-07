@@ -134,15 +134,12 @@ export function InitializationOverlay({
 
 export function ArchivingOverlay() {
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-4 p-8 max-w-md text-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">Archiving workspace...</h2>
-          <p className="text-sm text-muted-foreground">
-            Cleaning up worktree and archiving this workspace.
-          </p>
-        </div>
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-md">
+      <div className="flex items-center gap-3 p-8">
+        {/* Simple spinner */}
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
+        {/* Grayed out text */}
+        <p className="text-sm text-muted-foreground">Archiving...</p>
       </div>
     </div>
   );

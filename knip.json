@@ -49,5 +49,8 @@
   ],
   "vitest": {
     "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]
+  },
+  "storybook": {
+    "entry": ["src/**/*.stories.tsx", ".storybook/**/*.{ts,tsx}"]
   }
 }

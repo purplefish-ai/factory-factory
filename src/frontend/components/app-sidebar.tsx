@@ -14,17 +14,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  Archive,
-  CheckCircle2,
-  ExternalLink,
-  GitPullRequest,
-  GripVertical,
-  Kanban,
-  Loader2,
-  Plus,
-  Settings,
-} from 'lucide-react';
+import { ExternalLink, GitPullRequest, Kanban, Loader2, Plus, Settings } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -49,9 +39,7 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ArchiveWorkspaceDialog, RatchetToggleButton } from '@/components/workspace';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { useCreateWorkspace } from '../hooks/use-create-workspace';
 import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
@@ -64,64 +52,17 @@ import {
   useWorkspaceListState,
   type WorkspaceListItem,
 } from './use-workspace-list-state';
+import {
+  ActiveWorkspaceItem,
+  ArchivingWorkspaceItem,
+  CreatingWorkspaceItem,
+} from './workspace-sidebar-items';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
 function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
   return match ? (match[1] as string) : null;
-}
-
-/**
- * Get status dot color class for a workspace.
- * Priority: working > merged > CI failure > CI pending > CI success > uncommitted > default
- */
-function getStatusDotClass(workspace: WorkspaceListItem): string {
-  if (workspace.isWorking) {
-    return 'bg-green-500 animate-pulse';
-  }
-  if (workspace.prState === 'MERGED') {
-    return 'bg-purple-500';
-  }
-  if (workspace.prCiStatus === 'FAILURE') {
-    return 'bg-red-500';
-  }
-  if (workspace.prCiStatus === 'PENDING') {
-    return 'bg-yellow-500 animate-pulse';
-  }
-  if (workspace.prCiStatus === 'SUCCESS') {
-    return 'bg-green-500';
-  }
-  if (workspace.gitStats?.hasUncommitted) {
-    return 'bg-orange-500';
-  }
-  return 'bg-gray-400';
-}
-
-/**
- * Get tooltip text explaining the status dot color.
- * Uses same priority as getStatusDotClass.
- */
-function getStatusTooltip(workspace: WorkspaceListItem): string {
-  if (workspace.isWorking) {
-    return 'Claude is working';
-  }
-  if (workspace.prState === 'MERGED') {
-    return 'PR merged';
-  }
-  if (workspace.prCiStatus === 'FAILURE') {
-    return 'CI checks failing';
-  }
-  if (workspace.prCiStatus === 'PENDING') {
-    return 'CI checks running';
-  }
-  if (workspace.prCiStatus === 'SUCCESS') {
-    return 'CI checks passing';
-  }
-  if (workspace.gitStats?.hasUncommitted) {
-    return 'Uncommitted changes';
-  }
-  return 'Ready';
 }
 
 type AppSidebarMockData = {
@@ -481,18 +422,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
                       // Creating placeholder - non-clickable, not sortable
                       if (isCreatingItem) {
-                        return (
-                          <SidebarMenuItem key={workspace.id}>
-                            <SidebarMenuButton size="lg" className="px-2 cursor-default">
-                              <div className="flex items-center gap-2 w-full min-w-0">
-                                <Loader2 className="h-2 w-2 shrink-0 text-muted-foreground animate-spin" />
-                                <span className="truncate text-sm text-muted-foreground">
-                                  Creating...
-                                </span>
-                              </div>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        );
+                        return <CreatingWorkspaceItem key={workspace.id} />;
                       }
 
                       return (
@@ -611,17 +541,6 @@ function SortableWorkspaceItem({
   needsAttention: (workspaceId: string) => boolean;
   clearAttention: (workspaceId: string) => void;
 }) {
-  const utils = trpc.useUtils();
-  const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
-    onSuccess: () => {
-      if (selectedProjectId) {
-        utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-        utils.workspace.listWithKanbanState.invalidate({ projectId: selectedProjectId });
-      }
-      utils.workspace.get.invalidate({ id: workspace.id });
-    },
-  });
-
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
   });
@@ -632,240 +551,40 @@ function SortableWorkspaceItem({
   };
 
   const isArchivingItem = workspace.uiState === 'archiving';
-  const { gitStats: stats } = workspace;
-  const ratchetEnabled = workspace.ratchetEnabled ?? true;
-  const { showAttentionGlow } = getSidebarAttentionState(
-    workspace,
-    Boolean(disableRatchetAnimation),
-    needsAttention
-  );
 
+  // Archiving state: use dedicated component
+  if (isArchivingItem) {
+    return (
+      <ArchivingWorkspaceItem
+        workspace={workspace}
+        selectedProjectSlug={selectedProjectSlug}
+        sortableRef={setNodeRef}
+        sortableStyle={style}
+      />
+    );
+  }
+
+  // Active workspace: use dedicated component
   return (
-    <SidebarMenuItem ref={setNodeRef} style={style}>
-      <SidebarMenuButton
-        asChild
-        isActive={isActive}
-        className={cn(
-          'h-auto px-2 py-2.5',
-          isArchivingItem && 'opacity-50 pointer-events-none',
-          isDragging && 'opacity-50 bg-sidebar-accent',
-          showAttentionGlow && 'waiting-pulse'
-        )}
-      >
-        <Link
-          to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
-          onClick={() => clearAttention(workspace.id)}
-        >
-          <div className="flex w-full min-w-0 items-start gap-2">
-            {/* Drag handle */}
-            <button
-              type="button"
-              className="w-4 shrink-0 flex justify-center mt-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
-              aria-label="Drag to reorder"
-              {...attributes}
-              {...listeners}
-              onClick={(e) => {
-                // Prevent click from propagating to the Link and triggering navigation
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-            >
-              <GripVertical className="h-3 w-3" />
-            </button>
-
-            {/* Status dot + ratchet toggle */}
-            <div className="w-5 shrink-0 mt-1.5 flex flex-col items-center gap-1.5">
-              {isArchivingItem ? (
-                <Loader2 className="h-2 w-2 text-muted-foreground animate-spin" />
-              ) : (
-                <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
-                  </Tooltip>
-                  <RatchetToggleButton
-                    enabled={ratchetEnabled}
-                    state={workspace.ratchetState}
-                    animated={workspace.ratchetButtonAnimated ?? false}
-                    className="h-5 w-5 shrink-0"
-                    disabled={toggleRatcheting.isPending}
-                    stopPropagation
-                    onToggle={(enabled) => {
-                      toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
-                    }}
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1 space-y-0">
-              {/* Row 1: name + timestamp + archive */}
-              <div className="flex items-center gap-2">
-                <span className="truncate font-medium text-sm leading-tight flex-1">
-                  {isArchivingItem ? 'Archiving...' : workspace.name}
-                </span>
-                {workspace.lastActivityAt && (
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {formatRelativeTime(workspace.lastActivityAt)}
-                  </span>
-                )}
-                {/* Archive button (hover for non-merged, always visible for merged PRs) */}
-                {!isArchivingItem && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onArchiveRequest(workspace);
-                        }}
-                        className={cn(
-                          'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
-                          workspace.prState === 'MERGED'
-                            ? 'opacity-100 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25'
-                            : workspace.prState === 'CLOSED'
-                              ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
-                              : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent'
-                        )}
-                      >
-                        <Archive className="h-3 w-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">Archive</TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-
-              {/* Row 2: branch name */}
-              {!isArchivingItem && workspace.branchName && (
-                <div className="truncate text-[11px] leading-tight text-muted-foreground font-mono">
-                  {workspace.branchName}
-                </div>
-              )}
-
-              {/* Row 3: files changed + deltas + PR */}
-              <WorkspaceMetaRow workspace={workspace} stats={stats} />
-            </div>
-          </div>
-        </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+    <ActiveWorkspaceItem
+      workspace={workspace}
+      isActive={isActive}
+      selectedProjectId={selectedProjectId}
+      selectedProjectSlug={selectedProjectSlug}
+      onArchiveRequest={onArchiveRequest}
+      disableRatchetAnimation={disableRatchetAnimation}
+      needsAttention={needsAttention}
+      clearAttention={clearAttention}
+      sortableRef={setNodeRef}
+      sortableStyle={style}
+      sortableAttributes={attributes}
+      sortableListeners={listeners}
+      isDragging={isDragging}
+    />
   );
 }
 
-function WorkspaceMetaRow({
-  workspace,
-  stats,
-}: {
-  workspace: WorkspaceListItem;
-  stats: WorkspaceListItem['gitStats'];
-}) {
-  const hasStats = Boolean(
-    stats && (stats.additions > 0 || stats.deletions > 0 || stats.total > 0)
-  );
-  const showPR = Boolean(workspace.prNumber && workspace.prState !== 'NONE' && workspace.prUrl);
-  if (!(hasStats || showPR)) {
-    return null;
-  }
-
-  const filesText = hasStats && stats?.total ? `${stats.total} files` : '';
-  const additionsText = hasStats && stats?.additions ? `+${stats.additions}` : '';
-  const deletionsText = hasStats && stats?.deletions ? `-${stats.deletions}` : '';
-
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_40px_40px_72px] items-center gap-x-2 text-xs text-muted-foreground">
-      <span className="truncate">{filesText}</span>
-      <span className="w-10 text-right tabular-nums text-green-600 dark:text-green-400">
-        {additionsText}
-      </span>
-      <span className="w-10 text-left tabular-nums text-red-600 dark:text-red-400">
-        {deletionsText}
-      </span>
-      {showPR ? <WorkspacePrButton workspace={workspace} /> : <WorkspacePrSpacer />}
-    </div>
-  );
-}
-
-function WorkspacePrSpacer() {
-  return <span className="w-[72px]" aria-hidden="true" />;
-}
-
-function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
-  const tooltipSuffix = getPrTooltipSuffix(workspace);
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (workspace.prUrl) {
-              window.open(workspace.prUrl, '_blank', 'noopener,noreferrer');
-            }
-          }}
-          className={cn(
-            'flex w-[72px] items-center justify-end gap-1 text-xs hover:opacity-80 transition-opacity p-0',
-            workspace.prState === 'MERGED'
-              ? 'text-green-500'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <GitPullRequest className="h-3 w-3" />
-          <span>#{workspace.prNumber}</span>
-          {workspace.prState === 'MERGED' ? (
-            <CheckCircle2 className="h-3 w-3 text-green-500" />
-          ) : (
-            <CheckCircle2 className="h-3 w-3 opacity-0" aria-hidden="true" />
-          )}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="right">
-        <p>
-          PR #{workspace.prNumber}
-          {tooltipSuffix}
-        </p>
-        <p className="text-xs text-muted-foreground">Click to open on GitHub</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function getPrTooltipSuffix(workspace: WorkspaceListItem) {
-  if (workspace.prState === 'MERGED') {
-    return ' · Merged';
-  }
-  if (workspace.prState === 'CLOSED') {
-    return ' · Closed';
-  }
-  if (workspace.prCiStatus === 'SUCCESS') {
-    return ' · CI passed';
-  }
-  if (workspace.prCiStatus === 'FAILURE') {
-    return ' · CI failed';
-  }
-  if (workspace.prCiStatus === 'PENDING') {
-    return ' · CI running';
-  }
-  return '';
-}
-
-function getSidebarAttentionState(
-  workspace: WorkspaceListItem,
-  disableRatchetAnimation: boolean,
-  needsAttention: (workspaceId: string) => boolean
-) {
-  const isDone = workspace.cachedKanbanColumn === 'DONE';
-  const isRatchetActive =
-    !(disableRatchetAnimation || isDone) && Boolean(workspace.ratchetButtonAnimated);
-
-  return {
-    showAttentionGlow: needsAttention(workspace.id) && !isRatchetActive,
-  };
-}
+// Helper functions and components moved to workspace-sidebar-items.tsx
 
 /**
  * ServerPortInfo Component
