@@ -36,10 +36,12 @@ const ResizablePanelGroup = ({
   className,
   direction = 'horizontal',
   autoSaveId,
+  defaultLayout: defaultLayoutProp,
+  onLayoutChanged: onLayoutChangedProp,
   ...props
 }: ResizablePanelGroupProps) => {
   // Load layout synchronously during render to avoid flicker
-  const defaultLayout = useMemo(
+  const storedLayout = useMemo(
     () => (autoSaveId ? loadLayoutFromStorage(autoSaveId) : undefined),
     [autoSaveId]
   );
@@ -47,6 +49,9 @@ const ResizablePanelGroup = ({
   // Save layout to localStorage when it changes
   const handleLayoutChange = useCallback(
     (layout: Layout) => {
+      // Call the consumer's callback first
+      onLayoutChangedProp?.(layout);
+
       if (!autoSaveId) {
         return;
       }
@@ -57,7 +62,7 @@ const ResizablePanelGroup = ({
         // Ignore storage errors
       }
     },
-    [autoSaveId]
+    [autoSaveId, onLayoutChangedProp]
   );
 
   return (
@@ -65,7 +70,7 @@ const ResizablePanelGroup = ({
       orientation={direction}
       className={cn('flex h-full w-full', direction === 'vertical' && 'flex-col', className)}
       id={autoSaveId}
-      defaultLayout={defaultLayout}
+      defaultLayout={autoSaveId ? (storedLayout ?? defaultLayoutProp) : defaultLayoutProp}
       onLayoutChanged={handleLayoutChange}
       {...props}
     />
