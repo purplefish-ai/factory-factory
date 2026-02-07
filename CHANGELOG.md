@@ -5,6 +5,43 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-02-07
+
+### Added
+
+- Centralize sidebar status and add CI chip (#799)
+- Enable concurrent multi-workspace archiving (#787)
+- Enhance GitHub issue prompt with orchestrated workflow (#783)
+
+### Changed
+
+- Unify session runtime status model and transport (#807)
+- Unify CI status icons across workspace views (#806)
+- Simplify ratchet to a single idle-gated dispatch loop (#798)
+- Batch session hydration to eliminate tab-switch replay flicker (#797)
+- Move live activity drag handle from bottom to top (#796)
+- Improve archiving workspace overlay with multi-ring animation (#791)
+- Enable noImplicitOverride TypeScript compiler option (#795)
+- Increase Vite chunk size warning limit to 5MB
+- Update homepage URL to https://factoryfactory.ai
+
+### Fixed
+
+- Fix sidebar width localStorage persistence (#808)
+- Fix #800: Unify the Markdown loading logic (#804)
+- Fix #727: Introduce guarded run-script runtime state machine (#792)
+- Fix #750: Add lint guardrails for unsafe JSON.parse casts and unknown resolver casts (#794)
+- Fix #747: Validate persisted JSON stores with Zod schemas (#793)
+- Fix #748: Use shared schema for frontend backup import parsing (#789)
+- Fix #746: Schema-validate GitHub CLI JSON responses (#788)
+- Fix task list clipping and blank state during TodoWrite (#784, #786)
+- Fix queued message ordering to use dispatch time instead of queue time (#782)
+
+### Refactored
+
+- Validate Claude stream JSON and session JSONL inputs at parse boundaries (#745, #790)
+- Refactor chat handler registry to eliminate message payload casts (#785)
+
 ## [0.2.4] - 2026-02-06
 
 ### Added
