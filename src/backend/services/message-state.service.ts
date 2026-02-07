@@ -60,15 +60,23 @@ export type MessageStateEvent =
       data: {
         messages: ChatMessage[];
         sessionStatus: SessionStatus;
-        pendingInteractiveRequest?: {
-          requestId: string;
-          toolName: string;
-          input: Record<string, unknown>;
-          planContent?: string | null;
-          timestamp: string;
-        } | null;
+        loadRequestId?: string;
+        pendingInteractiveRequest?: PendingInteractiveRequestPayload | null;
       };
     };
+
+type PendingInteractiveRequestPayload = {
+  requestId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  planContent?: string | null;
+  timestamp: string;
+};
+
+interface SendSnapshotOptions {
+  loadRequestId?: string;
+  pendingInteractiveRequest?: PendingInteractiveRequestPayload | null;
+}
 
 class MessageStateService {
   private stateMachine = new MessageStateMachine();
@@ -437,7 +445,8 @@ class MessageStateService {
    *
    * @param sessionId - The database session ID
    * @param sessionStatus - Current session lifecycle status (idle, loading, starting, ready, running, stopping)
-   * @param pendingInteractiveRequest - Optional pending interactive request awaiting user response.
+   * @param options.loadRequestId - Optional request ID used to correlate load_session responses on the client.
+   * @param options.pendingInteractiveRequest - Optional pending interactive request awaiting user response.
    *   If present, the frontend will display the appropriate UI (permission dialog or question form).
    *   Structure includes:
    *   - requestId: Unique identifier for the request
@@ -449,14 +458,9 @@ class MessageStateService {
   sendSnapshot(
     sessionId: string,
     sessionStatus: SessionStatus,
-    pendingInteractiveRequest?: {
-      requestId: string;
-      toolName: string;
-      input: Record<string, unknown>;
-      planContent?: string | null;
-      timestamp: string;
-    } | null
+    options?: SendSnapshotOptions
   ): void {
+    const { loadRequestId, pendingInteractiveRequest } = options ?? {};
     const allMessages = this.getAllMessages(sessionId);
 
     // Flatten to ChatMessage[] - user messages become ChatMessages,
@@ -486,6 +490,7 @@ class MessageStateService {
       data: {
         messages: chatMessages,
         sessionStatus,
+        ...(loadRequestId ? { loadRequestId } : {}),
         pendingInteractiveRequest,
       },
     } satisfies MessageStateEvent);

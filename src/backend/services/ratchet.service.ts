@@ -23,6 +23,7 @@ const logger = createLogger('ratchet');
 const RATCHET_POLL_INTERVAL_MS = 60_000; // 1 minute
 const MAX_CONCURRENT_CHECKS = 5;
 const RATCHET_WORKFLOW = 'ratchet';
+const STALE_ACTIVE_RATCHET_SESSION_MS = 15 * 60_000;
 
 interface PRStateInfo {
   ciStatus: CIStatus;
@@ -315,6 +316,15 @@ class RatchetService {
       return null;
     }
 
+    if (!sessionService.isSessionRunning(session.id)) {
+      const updatedAtMs = session.updatedAt.getTime();
+      const staleDurationMs = Date.now() - updatedAtMs;
+      if (staleDurationMs > STALE_ACTIVE_RATCHET_SESSION_MS) {
+        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+        return null;
+      }
+    }
+
     return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
   }
 
@@ -437,7 +447,13 @@ class RatchetService {
     const failedChecks =
       statusChecks?.filter((check) => {
         const conclusion = check.conclusion?.toUpperCase();
-        return conclusion === 'FAILURE' || conclusion === 'TIMED_OUT' || conclusion === 'CANCELLED';
+        return (
+          conclusion === 'FAILURE' ||
+          conclusion === 'TIMED_OUT' ||
+          conclusion === 'CANCELLED' ||
+          conclusion === 'ERROR' ||
+          conclusion === 'ACTION_REQUIRED'
+        );
       }) ?? [];
 
     if (failedChecks.length === 0) {

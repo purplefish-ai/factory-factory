@@ -1,4 +1,4 @@
-import { CIStatus, RatchetState } from '@prisma-gen/client';
+import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../resource_accessors/workspace.accessor', () => ({
@@ -71,6 +71,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         id: 'ws-1',
         prUrl: 'https://github.com/example/repo/pull/1',
         prNumber: 1,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
         ratchetEnabled: true,
         ratchetState: RatchetState.IDLE,
         ratchetActiveSessionId: null,
@@ -98,6 +100,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-disabled',
       prUrl: 'https://github.com/example/repo/pull/2',
       prNumber: 2,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: false,
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
@@ -142,6 +146,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-busy',
       prUrl: 'https://github.com/example/repo/pull/3',
       prNumber: 3,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
@@ -189,6 +195,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-change',
       prUrl: 'https://github.com/example/repo/pull/4',
       prNumber: 4,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
@@ -239,6 +247,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-unchanged',
       prUrl: 'https://github.com/example/repo/pull/5',
       prNumber: 5,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
       ratchetActiveSessionId: null,
@@ -272,6 +282,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-review-unchanged',
       prUrl: 'https://github.com/example/repo/pull/55',
       prNumber: 55,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.REVIEW_PENDING,
       ratchetActiveSessionId: null,
@@ -327,6 +339,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-prompt-fail',
       prUrl: 'https://github.com/example/repo/pull/7',
       prNumber: 7,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
@@ -376,6 +390,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-clean',
       prUrl: 'https://github.com/example/repo/pull/8',
       prNumber: 8,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
       ratchetActiveSessionId: null,
@@ -406,6 +422,41 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(action).toEqual({
       type: 'WAITING',
       reason: 'PR is clean (green CI and no new review activity)',
+    });
+  });
+
+  it('clears stale active ratchet session when runtime is not running past timeout', async () => {
+    const workspace = {
+      id: 'ws-stale-active',
+      prUrl: 'https://github.com/example/repo/pull/9',
+      prNumber: 9,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: 'ratchet-session',
+      ratchetLastCiRunId: null,
+      prReviewLastCheckedAt: null,
+    };
+
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-01-01T00:30:00Z').getTime());
+    vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
+      id: 'ratchet-session',
+      status: SessionStatus.RUNNING,
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    } as never);
+    vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    const action = await (
+      ratchetService as unknown as {
+        getActiveRatchetSession: (workspaceArg: typeof workspace) => Promise<unknown>;
+      }
+    ).getActiveRatchetSession(workspace);
+
+    expect(action).toBeNull();
+    expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
+      ratchetActiveSessionId: null,
     });
   });
 });

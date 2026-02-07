@@ -11,6 +11,6 @@ export function createGetQueueHandler(): ChatMessageHandler<GetQueueMessage> {
     const pendingInteractiveRequest =
       chatEventForwarderService.getPendingRequest(sessionId) ?? null;
     const sessionStatus = messageStateService.computeSessionStatus(sessionId, isRunning);
-    messageStateService.sendSnapshot(sessionId, sessionStatus, pendingInteractiveRequest);
+    messageStateService.sendSnapshot(sessionId, sessionStatus, { pendingInteractiveRequest });
   };
 }

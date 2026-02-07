@@ -12,6 +12,7 @@ import { findAvailablePort } from './services/port.service';
 import { ratchetService } from './services/ratchet.service';
 import { rateLimiter } from './services/rate-limiter.service';
 import { RunScriptService } from './services/run-script.service';
+import { runScriptStateMachine } from './services/run-script-state-machine.service';
 import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
 import { sessionService } from './services/session.service';
@@ -35,6 +36,7 @@ export type AppServices = {
   ratchetService: typeof ratchetService;
   rateLimiter: typeof rateLimiter;
   runScriptService: typeof RunScriptService;
+  runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
   serverInstanceService: typeof serverInstanceService;
   sessionFileLogger: SessionFileLogger;
@@ -67,6 +69,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     ratchetService,
     rateLimiter,
     runScriptService: RunScriptService,
+    runScriptStateMachine,
     schedulerService,
     serverInstanceService,
     sessionFileLogger,

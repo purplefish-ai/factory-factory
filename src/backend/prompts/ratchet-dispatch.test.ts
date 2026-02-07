@@ -1,10 +1,18 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildRatchetDispatchPrompt, clearRatchetDispatchPromptCache } from './ratchet-dispatch';
 
+const { readFileSyncMock } = vi.hoisted(() => ({
+  readFileSyncMock: vi.fn(),
+}));
+
+vi.mock('node:fs', () => ({
+  readFileSync: readFileSyncMock,
+}));
+
 describe('ratchet dispatch prompt', () => {
-  const templatePath = resolve(import.meta.dirname, '../../..', 'prompts/ratchet/dispatch.md');
+  beforeEach(() => {
+    readFileSyncMock.mockReset();
+  });
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -12,6 +20,8 @@ describe('ratchet dispatch prompt', () => {
   });
 
   it('injects PR context into template', () => {
+    readFileSyncMock.mockReturnValue('PR Number: {{PR_NUMBER}}\nPR URL: {{PR_URL}}');
+    clearRatchetDispatchPromptCache();
     const prompt = buildRatchetDispatchPrompt('https://github.com/example/repo/pull/42', 42);
 
     expect(prompt).toContain('https://github.com/example/repo/pull/42');
@@ -21,15 +31,11 @@ describe('ratchet dispatch prompt', () => {
   });
 
   it('falls back to built-in template when file is empty', () => {
-    const originalTemplate = readFileSync(templatePath, 'utf-8');
-    writeFileSync(templatePath, '');
+    readFileSyncMock.mockReturnValue('');
     clearRatchetDispatchPromptCache();
-    try {
-      const prompt = buildRatchetDispatchPrompt('https://github.com/example/repo/pull/42', 42);
-      expect(prompt).toContain('Execute autonomously in this order:');
-      expect(prompt).toContain('https://github.com/example/repo/pull/42');
-    } finally {
-      writeFileSync(templatePath, originalTemplate);
-    }
+    const prompt = buildRatchetDispatchPrompt('https://github.com/example/repo/pull/42', 42);
+
+    expect(prompt).toContain('Execute autonomously in this order:');
+    expect(prompt).toContain('https://github.com/example/repo/pull/42');
   });
 });

@@ -140,7 +140,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
     }
 
     const handleMouseMove = (e: MouseEvent) => {
-      const deltaY = e.clientY - startYRef.current;
+      const deltaY = startYRef.current - e.clientY;
       const newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, startHeightRef.current + deltaY));
       setHeight(newHeight);
     };
@@ -148,7 +148,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
     const handleMouseUp = (e: MouseEvent) => {
       setIsDragging(false);
       // Calculate the final height directly to avoid stale closure
-      const deltaY = e.clientY - startYRef.current;
+      const deltaY = startYRef.current - e.clientY;
       const finalHeight = Math.max(
         MIN_HEIGHT,
         Math.min(MAX_HEIGHT, startHeightRef.current + deltaY)
@@ -219,7 +219,7 @@ export const AgentLiveDock = memo(function AgentLiveDock({
       <button
         type="button"
         className={cn(
-          'absolute bottom-0 left-0 right-0 h-1.5 cursor-ns-resize hover:bg-primary/20 transition-colors border-0 p-0',
+          'absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize hover:bg-primary/20 transition-colors border-0 p-0',
           isDragging && 'bg-primary/30'
         )}
         onMouseDown={handleMouseDown}

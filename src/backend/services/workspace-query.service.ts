@@ -1,5 +1,6 @@
 import { type KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
@@ -119,6 +120,13 @@ class WorkspaceQueryService {
           lastActivityAt,
           ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
+          sidebarStatus: deriveWorkspaceSidebarStatus({
+            isWorking: workingStatusByWorkspace.get(w.id) ?? false,
+            prUrl: w.prUrl,
+            prState: w.prState,
+            prCiStatus: w.prCiStatus,
+            ratchetState: w.ratchetState,
+          }),
           ratchetButtonAnimated: flowState?.shouldAnimateRatchetButton ?? false,
           flowPhase: flowState?.phase ?? 'NO_PR',
           ciObservation: flowState?.ciObservation ?? 'CHECKS_UNKNOWN',

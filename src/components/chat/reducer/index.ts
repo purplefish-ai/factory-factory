@@ -11,7 +11,7 @@
  */
 
 import type { ChatMessage, WebSocketMessage } from '@/lib/claude-types';
-import { isWsClaudeMessage } from '@/lib/claude-types';
+import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
@@ -26,7 +26,7 @@ import { reduceSessionSlice } from './slices/session';
 import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
-import { createInitialChatState } from './state';
+import { createBaseResetState, createInitialChatState } from './state';
 import type { ChatAction, ChatState } from './types';
 
 export { createInitialChatState };
@@ -69,15 +69,46 @@ const chatReducerSlices: ReducerSlice[] = [
   reduceRewindExecutionSlice,
 ];
 
-export function chatReducer(state: ChatState, action: ChatAction): ChatState {
-  let nextState = state;
+function reduceSingleAction(currentState: ChatState, currentAction: ChatAction): ChatState {
+  let nextState = currentState;
   for (const reduce of chatReducerSlices) {
-    const updated = reduce(nextState, action);
+    const updated = reduce(nextState, currentAction);
     if (updated !== nextState) {
       nextState = updated;
     }
   }
   return nextState;
+}
+
+function createReplayBaseState(state: ChatState): ChatState {
+  return {
+    ...state,
+    ...createBaseResetState(),
+    // Preserve optimistic pending sends that are not yet reflected in replayed events.
+    pendingMessages: state.pendingMessages,
+    queuedMessages: new Map(),
+    sessionStatus: { phase: 'loading' },
+    processStatus: { state: 'unknown' },
+  };
+}
+
+export function chatReducer(state: ChatState, action: ChatAction): ChatState {
+  if (action.type === 'SESSION_REPLAY_BATCH') {
+    let nextState = createReplayBaseState(state);
+    for (const event of action.payload.replayEvents) {
+      if (event.type === 'session_replay_batch') {
+        continue;
+      }
+      const replayAction = createActionFromWebSocketMessage(event);
+      if (!replayAction || replayAction.type === 'SESSION_REPLAY_BATCH') {
+        continue;
+      }
+      nextState = reduceSingleAction(nextState, replayAction);
+    }
+    return nextState;
+  }
+
+  return reduceSingleAction(state, action);
 }
 
 // =============================================================================
@@ -155,6 +186,18 @@ function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
       messages: data.messages,
       sessionStatus: data.sessionStatus ?? { phase: 'ready' },
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+    },
+  };
+}
+
+function handleSessionReplayBatch(data: WebSocketMessage): ChatAction | null {
+  if (!Array.isArray(data.replayEvents)) {
+    return null;
+  }
+  return {
+    type: 'SESSION_REPLAY_BATCH',
+    payload: {
+      replayEvents: data.replayEvents.filter(isWebSocketMessage),
     },
   };
 }
@@ -347,6 +390,7 @@ const messageHandlers: Record<string, MessageHandler> = {
   permission_cancelled: handlePermissionCancelledMessage,
   message_used_as_response: handleMessageUsedAsResponseMessage,
   messages_snapshot: handleMessagesSnapshot,
+  session_replay_batch: handleSessionReplayBatch,
   message_state_changed: handleMessageStateChanged,
   tool_progress: handleToolProgressMessage,
   tool_use_summary: handleToolUseSummaryMessage,

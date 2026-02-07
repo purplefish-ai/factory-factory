@@ -18,7 +18,7 @@ import type { ChatMessageHandler } from '../types';
 const logger = createLogger('chat-message-handlers');
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
-  return async ({ ws, sessionId, workingDir }) => {
+  return async ({ ws, sessionId, workingDir, message }) => {
     const dbSession = await claudeSessionAccessor.findById(sessionId);
     if (!dbSession) {
       ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
@@ -28,9 +28,14 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
     const existingClient = sessionService.getClient(sessionId);
 
     if (existingClient?.isRunning()) {
-      replayEventsForRunningClient(ws, sessionId, existingClient);
+      replayEventsForRunningClient(ws, sessionId, existingClient, message.loadRequestId);
     } else {
-      await loadHistoryFromJSONL(sessionId, workingDir, dbSession.claudeSessionId);
+      await loadHistoryFromJSONL(
+        sessionId,
+        workingDir,
+        dbSession.claudeSessionId,
+        message.loadRequestId
+      );
     }
 
     await sendCachedSlashCommandsIfNeeded(sessionId);
@@ -44,7 +49,8 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
 function replayEventsForRunningClient(
   ws: WebSocket,
   sessionId: string,
-  client: { isWorking: () => boolean; isRunning: () => boolean }
+  client: { isWorking: () => boolean; isRunning: () => boolean },
+  loadRequestId?: string
 ): void {
   // Get stored events and compress for efficient replay
   const events = messageStateService.getStoredEvents(sessionId);
@@ -55,35 +61,40 @@ function replayEventsForRunningClient(
     eventCompressionService.logCompressionStats(sessionId, stats);
   }
 
-  // Replay compressed events to this specific WebSocket
-  for (const event of compressed) {
-    ws.send(JSON.stringify(event));
-  }
+  const replayEvents: Record<string, unknown>[] = compressed.map((event) => ({ ...event }));
 
   // Send current status
   const isClientWorking = client.isWorking();
-  ws.send(
-    JSON.stringify({
-      type: 'status',
-      running: isClientWorking,
-      processAlive: client.isRunning(),
-    })
-  );
+  replayEvents.push({
+    type: 'status',
+    running: isClientWorking,
+    processAlive: client.isRunning(),
+  });
 
   // Send pending interactive request if any
   const pendingRequest = chatEventForwarderService.getPendingRequest(sessionId);
   if (pendingRequest) {
-    sendPendingInteractiveRequest(ws, pendingRequest);
+    const interactiveEvent = createPendingInteractiveRequestEvent(pendingRequest);
+    if (interactiveEvent) {
+      replayEvents.push(interactiveEvent);
+    }
   }
+
+  ws.send(
+    JSON.stringify({
+      type: 'session_replay_batch',
+      replayEvents,
+      loadRequestId,
+    })
+  );
 }
 
 /**
- * Send a pending interactive request to the WebSocket in the appropriate format.
+ * Build an interactive request event in the appropriate format.
  */
-function sendPendingInteractiveRequest(
-  ws: WebSocket,
+function createPendingInteractiveRequestEvent(
   pendingRequest: NonNullable<ReturnType<typeof chatEventForwarderService.getPendingRequest>>
-): void {
+): Record<string, unknown> | null {
   if (pendingRequest.toolName === 'AskUserQuestion') {
     const parsed = safeParseToolInput(
       AskUserQuestionInputSchema,
@@ -98,49 +109,37 @@ function sendPendingInteractiveRequest(
         requestId: pendingRequest.requestId,
         validationSuccess: parsed.success,
       });
-      // Send error event instead of empty questions
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          message: 'Unable to restore question prompt - invalid format',
-        })
-      );
-      return;
+      return {
+        type: 'error',
+        message: 'Unable to restore question prompt - invalid format',
+      };
     }
 
-    ws.send(
-      JSON.stringify({
-        type: 'user_question',
-        requestId: pendingRequest.requestId,
-        questions: parsed.data.questions,
-      })
-    );
-    return;
+    return {
+      type: 'user_question',
+      requestId: pendingRequest.requestId,
+      questions: parsed.data.questions,
+    };
   }
 
   if (pendingRequest.toolName === 'ExitPlanMode') {
-    ws.send(
-      JSON.stringify({
-        type: 'permission_request',
-        requestId: pendingRequest.requestId,
-        toolName: pendingRequest.toolName,
-        input: pendingRequest.input,
-        planContent: pendingRequest.planContent,
-      })
-    );
-    return;
+    return {
+      type: 'permission_request',
+      requestId: pendingRequest.requestId,
+      toolName: pendingRequest.toolName,
+      toolInput: pendingRequest.input,
+      planContent: pendingRequest.planContent,
+    };
   }
 
   // Generic interactive request fallback
-  ws.send(
-    JSON.stringify({
-      type: 'interactive_request',
-      requestId: pendingRequest.requestId,
-      toolName: pendingRequest.toolName,
-      toolUseId: pendingRequest.toolUseId,
-      input: pendingRequest.input,
-    })
-  );
+  return {
+    type: 'interactive_request',
+    requestId: pendingRequest.requestId,
+    toolName: pendingRequest.toolName,
+    toolUseId: pendingRequest.toolUseId,
+    toolInput: pendingRequest.input,
+  };
 }
 
 /**
@@ -152,14 +151,18 @@ function sendPendingInteractiveRequest(
 async function loadHistoryFromJSONL(
   sessionId: string,
   workingDir: string,
-  claudeSessionId: string | null
+  claudeSessionId: string | null,
+  loadRequestId?: string
 ): Promise<void> {
   if (claudeSessionId) {
     const history = await SessionManager.getHistory(claudeSessionId, workingDir);
     messageStateService.ensureHistoryLoaded(sessionId, history);
   }
   const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
-  messageStateService.sendSnapshot(sessionId, sessionStatus, null);
+  messageStateService.sendSnapshot(sessionId, sessionStatus, {
+    loadRequestId,
+    pendingInteractiveRequest: null,
+  });
 }
 
 async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void> {

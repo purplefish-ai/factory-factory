@@ -6,6 +6,7 @@ import {
   GitBranch,
   GitPullRequest,
   Loader2,
+  type LucideIcon,
   PanelRight,
   XCircle,
 } from 'lucide-react';
@@ -19,6 +20,11 @@ import {
   useWorkspacePanel,
 } from '@/components/workspace';
 import { cn } from '@/lib/utils';
+import {
+  deriveWorkspaceSidebarStatus,
+  getWorkspaceCiLabel,
+  getWorkspaceCiTooltip,
+} from '@/shared/workspace-sidebar-status';
 import { trpc } from '../../../../frontend/lib/trpc';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
@@ -119,47 +125,33 @@ function WorkspacePrAction({
   return null;
 }
 
-const CI_STATUS_CONFIG = {
-  SUCCESS: {
-    label: 'CI Passing',
-    tooltip: 'All CI checks are passing',
-    className: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
-    Icon: CheckCircle2,
-  },
-  FAILURE: {
-    label: 'CI Failing',
-    tooltip: 'Some CI checks are failing',
-    className: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
-    Icon: XCircle,
-  },
-  PENDING: {
-    label: 'CI Running',
-    tooltip: 'CI checks are currently running',
-    className: 'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
-    Icon: Circle,
-  },
-  UNKNOWN: {
-    label: 'CI Unknown',
-    tooltip: 'CI status not yet determined',
-    className: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
-    Icon: Circle,
-  },
-} as const;
-
 function WorkspaceCiStatus({
   workspace,
+  running,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  running: boolean;
 }) {
   if (!workspace.prUrl || workspace.prState !== 'OPEN') {
     return null;
   }
 
-  const statusConfig = CI_STATUS_CONFIG[workspace.prCiStatus];
-  if (!statusConfig) {
+  const sidebarStatus =
+    workspace.sidebarStatus ??
+    deriveWorkspaceSidebarStatus({
+      isWorking: running,
+      prUrl: workspace.prUrl,
+      prState: workspace.prState,
+      prCiStatus: workspace.prCiStatus,
+      ratchetState: workspace.ratchetState,
+    });
+
+  const ciState = sidebarStatus.ciState;
+  if (ciState === 'NONE') {
     return null;
   }
 
+  const statusConfig = getHeaderCiStatusConfig(ciState);
   const { Icon } = statusConfig;
 
   return (
@@ -171,13 +163,50 @@ function WorkspaceCiStatus({
             statusConfig.className
           )}
         >
-          <Icon className={cn('h-3 w-3', workspace.prCiStatus === 'PENDING' && 'animate-pulse')} />
-          <span>{statusConfig.label}</span>
+          <Icon className={cn('h-3 w-3', ciState === 'RUNNING' && 'animate-pulse')} />
+          <span>{getWorkspaceCiLabel(ciState)}</span>
         </div>
       </TooltipTrigger>
-      <TooltipContent>{statusConfig.tooltip}</TooltipContent>
+      <TooltipContent>{getWorkspaceCiTooltip(ciState, workspace.prState)}</TooltipContent>
     </Tooltip>
   );
+}
+
+function getHeaderCiStatusConfig(
+  ciState: ReturnType<typeof deriveWorkspaceSidebarStatus>['ciState']
+): { className: string; Icon: LucideIcon } {
+  switch (ciState) {
+    case 'PASSING':
+      return {
+        className: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
+        Icon: CheckCircle2,
+      };
+    case 'FAILING':
+      return {
+        className: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
+        Icon: XCircle,
+      };
+    case 'RUNNING':
+      return {
+        className: 'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
+        Icon: Circle,
+      };
+    case 'UNKNOWN':
+      return {
+        className: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+        Icon: Circle,
+      };
+    case 'MERGED':
+      return {
+        className: 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300',
+        Icon: CheckCircle2,
+      };
+    case 'NONE':
+      return {
+        className: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+        Icon: Circle,
+      };
+  }
 }
 
 function RatchetingToggle({
@@ -250,7 +279,7 @@ export function WorkspaceHeader({
           isCreatingSession={isCreatingSession}
           handleQuickAction={handleQuickAction}
         />
-        <WorkspaceCiStatus workspace={workspace} />
+        <WorkspaceCiStatus workspace={workspace} running={running} />
       </div>
       <div className="flex items-center gap-1">
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
