@@ -282,6 +282,7 @@ function IdeSettingsSection() {
 }
 
 function RatchetSettingsSection() {
+  const advancedControlsEnabled = false;
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
   const updateSettings = trpc.userSettings.update.useMutation({
@@ -366,8 +367,8 @@ function RatchetSettingsSection() {
             session, apply changes, and push updates.
           </p>
           <p className="text-sm text-muted-foreground">
-            This runs repeatedly until the PR is clean, approved, and ready to merge (or merged
-            automatically if enabled).
+            Ratchet currently runs in single-loop mode. Advanced toggles below are retained for
+            compatibility but are not active yet.
           </p>
         </div>
 
@@ -405,7 +406,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixCi: checked });
               }}
-              disabled={updateSettings.isPending}
+              disabled={updateSettings.isPending || !advancedControlsEnabled}
             />
           </div>
 
@@ -422,7 +423,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoFixReviews: checked });
               }}
-              disabled={updateSettings.isPending}
+              disabled={updateSettings.isPending || !advancedControlsEnabled}
             />
           </div>
 
@@ -439,7 +440,7 @@ function RatchetSettingsSection() {
               onCheckedChange={(checked) => {
                 updateSettings.mutate({ ratchetAutoMerge: checked });
               }}
-              disabled={updateSettings.isPending}
+              disabled={updateSettings.isPending || !advancedControlsEnabled}
             />
           </div>
         </div>
@@ -448,7 +449,7 @@ function RatchetSettingsSection() {
         <div className="space-y-2 border-t pt-4">
           <Label htmlFor="ratchet-reviewers">Allowed Reviewers (GitHub usernames)</Label>
           <p className="text-sm text-muted-foreground">
-            Only auto-fix comments from these reviewers. Leave empty to process all reviewers.
+            This setting is currently inactive in single-loop mode.
           </p>
           <div className="flex gap-2">
             <Input
@@ -457,11 +458,12 @@ function RatchetSettingsSection() {
               value={allowedReviewers}
               onChange={(e) => setAllowedReviewers(e.target.value)}
               className="flex-1"
+              disabled={!advancedControlsEnabled}
             />
             <Button
               variant="outline"
               onClick={handleSaveAllowedReviewers}
-              disabled={updateSettings.isPending}
+              disabled={updateSettings.isPending || !advancedControlsEnabled}
             >
               Save
             </Button>
