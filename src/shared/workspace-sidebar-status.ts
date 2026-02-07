@@ -33,7 +33,7 @@ export function deriveWorkspaceSidebarStatus(
     return { activityState, ciState: 'NONE' };
   }
 
-  if (input.prState === 'MERGED') {
+  if (input.prState === 'MERGED' || input.ratchetState === 'MERGED') {
     return { activityState, ciState: 'MERGED' };
   }
 

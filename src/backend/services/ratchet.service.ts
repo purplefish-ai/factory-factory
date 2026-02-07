@@ -302,7 +302,6 @@ class RatchetService {
         ratchetLastCheckedAt: now,
         // Keep sidebar CI status in sync with ratchet's live PR observation.
         prCiStatus: prStateInfo.ciStatus,
-        prUpdatedAt: now,
         ...(shouldRecordCiRunId ? { ratchetLastCiRunId: prStateInfo.ciRunId } : {}),
         // Update review timestamp if we detected review comments
         ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),

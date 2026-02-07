@@ -31,6 +31,18 @@ describe('workspace-sidebar-status', () => {
     expect(result.ciState).toBe('MERGED');
   });
 
+  it('treats ratchet merged as merged when PR snapshot is stale', () => {
+    const result = deriveWorkspaceSidebarStatus({
+      isWorking: false,
+      prUrl: 'https://github.com/o/r/pull/1',
+      prState: 'OPEN',
+      prCiStatus: 'SUCCESS',
+      ratchetState: 'MERGED',
+    });
+
+    expect(result.ciState).toBe('MERGED');
+  });
+
   it('uses ratchet CI failure even when PR snapshot is stale', () => {
     const result = deriveWorkspaceSidebarStatus({
       isWorking: false,
