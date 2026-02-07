@@ -71,8 +71,8 @@ export function parseFrontmatter<T extends Record<string, unknown>>(
   const body = content.slice(match[0].length);
   const frontmatter: Record<string, unknown> = {};
 
-  // Parse each line as key: value
-  for (const line of frontmatterText.split('\n')) {
+  // Parse each line as key: value (split on \r?\n to handle CRLF)
+  for (const line of frontmatterText.split(/\r?\n/)) {
     const colonIndex = line.indexOf(':');
     if (colonIndex === -1) {
       continue;

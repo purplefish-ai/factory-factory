@@ -118,6 +118,20 @@ Body`;
     expect(result.body).toBe('\r\nBody content');
   });
 
+  it('should parse boolean values correctly with CRLF line endings', () => {
+    const content = '---\r\nenabled: true\r\ndisabled: false\r\n---\r\nBody';
+
+    const result = parseFrontmatter(content, {
+      enabled: (v) => v === 'true',
+      disabled: (v) => v === 'true',
+    });
+
+    expect(result.frontmatter).toEqual({
+      enabled: true,
+      disabled: false,
+    });
+  });
+
   it('should handle empty frontmatter block', () => {
     const content = '---\n\n---\nBody content';
 
