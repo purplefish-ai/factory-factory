@@ -6,6 +6,7 @@
  */
 
 import type { PendingInteractiveRequest } from '../pending-request-types';
+import type { SessionRuntimeState } from '../session-runtime';
 
 export type { PendingInteractiveRequest } from '../pending-request-types';
 
@@ -470,6 +471,9 @@ export interface WebSocketMessage {
     | 'started'
     | 'stopped'
     | 'process_exit'
+    // Unified runtime events
+    | 'session_runtime_snapshot'
+    | 'session_runtime_updated'
     // Message streaming
     | 'claude_message'
     // Errors and metadata
@@ -536,8 +540,8 @@ export interface WebSocketMessage {
   newState?: MessageState;
   /** Pre-built ChatMessages for messages_snapshot events (ready for frontend to use directly) */
   messages?: ChatMessage[];
-  /** Session status for messages_snapshot events */
-  sessionStatus?: SessionStatus;
+  /** Unified runtime state for session_runtime_* events */
+  sessionRuntime?: SessionRuntimeState;
   /** Pending interactive request for messages_snapshot events */
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
   /** Client-generated ID for correlating load_session requests and responses */

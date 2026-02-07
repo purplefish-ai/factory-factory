@@ -60,6 +60,8 @@ export { serverInstanceService } from './server-instance.service';
 export { sessionService } from './session.service';
 // Session file logger service
 export { SessionFileLogger, sessionFileLogger } from './session-file-logger.service';
+// Session runtime store service
+export { sessionRuntimeStoreService } from './session-runtime-store.service';
 // Terminal service
 export { terminalService } from './terminal.service';
 // Workspace activity service

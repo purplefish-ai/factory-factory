@@ -1,5 +1,5 @@
 import { convertPendingRequest } from '../../helpers';
-import type { ChatAction, ChatState, PendingMessageContent, SessionStatus } from '../../types';
+import type { ChatAction, ChatState, PendingMessageContent } from '../../types';
 
 export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -13,14 +13,12 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         }
       }
 
-      const sessionStatus: SessionStatus = action.payload.sessionStatus;
       const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
 
       return {
         ...state,
         messages: snapshotMessages,
         queuedMessages: new Map(),
-        sessionStatus,
         pendingRequest,
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,

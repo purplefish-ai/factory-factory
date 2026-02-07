@@ -1,65 +1,133 @@
 import { createSessionSwitchResetState } from '../state';
 import type { ChatAction, ChatState } from '../types';
 
-function resolveProcessStatus(
-  processAlive: boolean | undefined,
-  current: ChatState['processStatus']
-): ChatState['processStatus'] {
-  if (processAlive === undefined) {
-    return current;
+function deriveSessionStatus(runtime: ChatState['sessionRuntime']): ChatState['sessionStatus'] {
+  switch (runtime.phase) {
+    case 'loading':
+      return { phase: 'loading' };
+    case 'starting':
+      return { phase: 'starting' };
+    case 'running':
+      return { phase: 'running' };
+    case 'stopping':
+      return { phase: 'stopping' };
+    case 'idle':
+    case 'error':
+      return { phase: 'ready' };
+    default:
+      return { phase: 'ready' };
   }
-  if (processAlive) {
-    return { state: 'alive' };
-  }
-  return current.lastExit ? { state: 'stopped', lastExit: current.lastExit } : { state: 'stopped' };
 }
 
-export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatState {
+function deriveProcessStatus(runtime: ChatState['sessionRuntime']): ChatState['processStatus'] {
+  if (runtime.processState === 'alive') {
+    return { state: 'alive' };
+  }
+  if (runtime.processState === 'stopped') {
+    return runtime.lastExit
+      ? {
+          state: 'stopped',
+          lastExit: {
+            code: runtime.lastExit.code,
+            exitedAt: runtime.lastExit.timestamp,
+            unexpected: runtime.lastExit.unexpected,
+          },
+        }
+      : { state: 'stopped' };
+  }
+  return { state: 'unknown' };
+}
+
+function withRuntime(state: ChatState, runtime: ChatState['sessionRuntime']): ChatState {
+  return {
+    ...state,
+    sessionRuntime: runtime,
+    sessionStatus: deriveSessionStatus(runtime),
+    processStatus: deriveProcessStatus(runtime),
+  };
+}
+
+function reduceLegacySessionEvent(state: ChatState, action: ChatAction): ChatState | null {
   switch (action.type) {
     case 'WS_STATUS':
-      return {
-        ...state,
-        sessionStatus: action.payload.running ? { phase: 'running' } : { phase: 'ready' },
-        processStatus: resolveProcessStatus(action.payload.processAlive, state.processStatus),
-      };
+      return withRuntime(state, {
+        ...state.sessionRuntime,
+        phase: action.payload.running ? 'running' : 'idle',
+        processState:
+          action.payload.processAlive === undefined
+            ? state.sessionRuntime.processState
+            : action.payload.processAlive
+              ? 'alive'
+              : 'stopped',
+        activity: action.payload.running ? 'WORKING' : 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
     case 'WS_STARTING':
-      return { ...state, sessionStatus: { phase: 'starting' } };
+      return withRuntime(state, {
+        ...state.sessionRuntime,
+        phase: 'starting',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
     case 'WS_STARTED':
       return {
-        ...state,
-        sessionStatus: { phase: 'running' },
-        processStatus: { state: 'alive' },
+        ...withRuntime(state, {
+          ...state.sessionRuntime,
+          phase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+          updatedAt: new Date().toISOString(),
+        }),
         latestThinking: null,
       };
     case 'WS_STOPPED':
       return {
-        ...state,
-        sessionStatus: { phase: 'ready' },
-        processStatus: state.processStatus.lastExit
-          ? { state: 'stopped', lastExit: state.processStatus.lastExit }
-          : { state: 'stopped' },
+        ...withRuntime(state, {
+          ...state.sessionRuntime,
+          phase: 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
+          updatedAt: new Date().toISOString(),
+        }),
         toolProgress: new Map(),
         isCompacting: false,
         activeHooks: new Map(),
       };
-    case 'WS_PROCESS_EXIT': {
-      const exitedAt = new Date().toISOString();
+    case 'WS_PROCESS_EXIT':
       return {
-        ...state,
-        sessionStatus: { phase: 'ready' },
-        processStatus: {
-          state: 'stopped',
+        ...withRuntime(state, {
+          ...state.sessionRuntime,
+          phase: action.payload.code !== null && action.payload.code !== 0 ? 'error' : 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
           lastExit: {
             code: action.payload.code,
-            exitedAt,
+            timestamp: new Date().toISOString(),
             unexpected: action.payload.code !== null && action.payload.code !== 0,
           },
-        },
+          updatedAt: new Date().toISOString(),
+        }),
         toolProgress: new Map(),
         isCompacting: false,
         activeHooks: new Map(),
       };
-    }
+    default:
+      return null;
+  }
+}
+
+export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatState {
+  const legacyState = reduceLegacySessionEvent(state, action);
+  if (legacyState) {
+    return legacyState;
+  }
+
+  switch (action.type) {
+    case 'SESSION_RUNTIME_SNAPSHOT':
+      return withRuntime(state, action.payload.sessionRuntime);
+    case 'SESSION_RUNTIME_UPDATED':
+      return withRuntime(state, action.payload.sessionRuntime);
     case 'WS_SESSIONS':
       return { ...state, availableSessions: action.payload.sessions };
     case 'SESSION_SWITCH_START':
@@ -68,14 +136,26 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
         ...createSessionSwitchResetState(),
       };
     case 'SESSION_LOADING_START':
-      return { ...state, sessionStatus: { phase: 'loading' } };
+      return withRuntime(state, {
+        ...state.sessionRuntime,
+        phase: 'loading',
+        updatedAt: new Date().toISOString(),
+      });
     case 'SESSION_LOADING_END':
-      // Only clear loading if still in loading phase (avoid overriding a valid status)
-      return state.sessionStatus.phase === 'loading'
-        ? { ...state, sessionStatus: { phase: 'ready' } }
+      return state.sessionRuntime.phase === 'loading'
+        ? withRuntime(state, {
+            ...state.sessionRuntime,
+            phase: 'idle',
+            updatedAt: new Date().toISOString(),
+          })
         : state;
     case 'STOP_REQUESTED':
-      return { ...state, sessionStatus: { phase: 'stopping' } };
+      return withRuntime(state, {
+        ...state.sessionRuntime,
+        phase: 'stopping',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
     default:
       return state;
   }

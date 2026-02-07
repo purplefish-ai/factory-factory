@@ -12,7 +12,6 @@ import type {
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
-  SessionStatus,
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/claude-types';
@@ -234,7 +233,7 @@ describe('chatReducer', () => {
       expect(newState.sessionStatus).toEqual({ phase: 'ready' });
     });
 
-    it('should preserve lastExit info when stopping after a process exit', () => {
+    it('should clear lastExit info when receiving a plain stopped runtime event', () => {
       const state = {
         ...initialState,
         processStatus: {
@@ -249,7 +248,7 @@ describe('chatReducer', () => {
       const action: ChatAction = { type: 'WS_STOPPED' };
       const newState = chatReducer(state, action);
 
-      expect(newState.processStatus).toEqual(state.processStatus);
+      expect(newState.processStatus).toEqual({ state: 'stopped' });
     });
   });
 
@@ -271,7 +270,7 @@ describe('chatReducer', () => {
       expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
-    it('should transition from starting to running when receiving a Claude message', () => {
+    it('does not derive runtime phase changes from Claude message payloads', () => {
       const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();
       const action: ChatAction = {
@@ -280,10 +279,10 @@ describe('chatReducer', () => {
       };
       const newState = chatReducer(state, action);
 
-      expect(newState.sessionStatus).toEqual({ phase: 'running' });
+      expect(newState.sessionStatus).toEqual({ phase: 'starting' });
     });
 
-    it('should set sessionStatus to ready when receiving a result message', () => {
+    it('does not set sessionStatus from result messages', () => {
       const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
       const resultMsg = createTestResultMessage();
       const action: ChatAction = {
@@ -292,7 +291,7 @@ describe('chatReducer', () => {
       };
       const newState = chatReducer(state, action);
 
-      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
       expect(newState.messages).toHaveLength(1);
     });
 
@@ -1452,7 +1451,6 @@ describe('chatReducer', () => {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
           messages: snapshotMessages,
-          sessionStatus: { phase: 'ready' },
         },
       };
       const newState = chatReducer(state, action);
@@ -1481,7 +1479,6 @@ describe('chatReducer', () => {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
           messages: [],
-          sessionStatus: { phase: 'ready' },
         },
       };
       const newState = chatReducer(state, action);
@@ -1490,17 +1487,16 @@ describe('chatReducer', () => {
       expect(newState.queuedMessages.size).toBe(0);
     });
 
-    it('should update session status from snapshot', () => {
+    it('does not derive runtime status from messages snapshots', () => {
       const action: ChatAction = {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
           messages: [],
-          sessionStatus: { phase: 'running' },
         },
       };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.sessionStatus).toEqual({ phase: 'running' });
+      expect(newState.sessionStatus).toEqual({ phase: 'loading' });
     });
 
     it('should restore pending permission request from snapshot', () => {
@@ -1508,7 +1504,6 @@ describe('chatReducer', () => {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
           messages: [],
-          sessionStatus: { phase: 'running' },
           pendingInteractiveRequest: {
             requestId: 'req-1',
             toolName: 'ExitPlanMode',
@@ -1533,7 +1528,6 @@ describe('chatReducer', () => {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
           messages: [],
-          sessionStatus: { phase: 'running' },
           pendingInteractiveRequest: {
             requestId: 'req-2',
             toolName: 'AskUserQuestion',
@@ -1568,7 +1562,6 @@ describe('chatReducer', () => {
         type: 'MESSAGES_SNAPSHOT',
         payload: {
           messages: [], // msg-1 not in snapshot, so it's still pending
-          sessionStatus: { phase: 'ready' },
         },
       };
       const newState = chatReducer(state, action);
@@ -1602,7 +1595,6 @@ describe('chatReducer', () => {
               timestamp: '2024-01-01T00:00:00.000Z',
             },
           ] as ChatMessage[],
-          sessionStatus: { phase: 'ready' },
         },
       };
       const newState = chatReducer(state, action);
@@ -2189,11 +2181,9 @@ describe('createActionFromWebSocketMessage', () => {
         order: 0,
       },
     ];
-    const sessionStatus: SessionStatus = { phase: 'ready' };
     const wsMessage: WebSocketMessage = {
       type: 'messages_snapshot',
       messages: snapshotMessages,
-      sessionStatus,
     };
     const action = createActionFromWebSocketMessage(wsMessage);
 
@@ -2201,7 +2191,6 @@ describe('createActionFromWebSocketMessage', () => {
       type: 'MESSAGES_SNAPSHOT',
       payload: {
         messages: snapshotMessages,
-        sessionStatus,
         pendingInteractiveRequest: null,
       },
     });
@@ -2210,7 +2199,6 @@ describe('createActionFromWebSocketMessage', () => {
   it('should return null for messages_snapshot without messages', () => {
     const wsMessage: WebSocketMessage = {
       type: 'messages_snapshot',
-      sessionStatus: { phase: 'ready' },
     };
     const action = createActionFromWebSocketMessage(wsMessage);
 

@@ -27,6 +27,7 @@ import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
+import { sessionRuntimeStoreService } from './session-runtime-store.service';
 import { slashCommandCacheService } from './slash-command-cache.service';
 import { workspaceActivityService } from './workspace-activity.service';
 
@@ -256,11 +257,7 @@ class ChatEventForwarderService {
 
       // Mark workspace as active
       workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
-
-      // Store-then-forward: store event for replay before forwarding
-      const statusMsg = { type: 'status', running: true, processAlive: client.isRunning() };
-      messageStateService.storeEvent(dbSessionId, statusMsg);
-      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
+      sessionRuntimeStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'unknown');
     });
 
     // Hook into idle event to dispatch next queued message
@@ -548,10 +545,7 @@ class ChatEventForwarderService {
 
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
-
-      const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
-      messageStateService.storeEvent(dbSessionId, statusMsg);
-      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
+      sessionRuntimeStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
@@ -572,11 +566,7 @@ class ChatEventForwarderService {
     });
 
     on('exit', (result) => {
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'process_exit',
-        code: result.code,
-        processAlive: false,
-      });
+      sessionRuntimeStoreService.markProcessExit(dbSessionId, result.code);
       this.removeForwardingListeners(dbSessionId, client);
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);

@@ -12,6 +12,7 @@ import { eventCompressionService } from '../../event-compression.service';
 import { createLogger } from '../../logger.service';
 import { messageStateService } from '../../message-state.service';
 import { sessionService } from '../../session.service';
+import { sessionRuntimeStoreService } from '../../session-runtime-store.service';
 import { slashCommandCacheService } from '../../slash-command-cache.service';
 import type { ChatMessageHandler } from '../types';
 
@@ -52,6 +53,11 @@ function replayEventsForRunningClient(
   client: { isWorking: () => boolean; isRunning: () => boolean },
   loadRequestId?: string
 ): void {
+  const sessionRuntime = sessionRuntimeStoreService.syncFromClient(sessionId, {
+    isRunning: client.isRunning(),
+    isWorking: client.isWorking(),
+  });
+
   // Get stored events and compress for efficient replay
   const events = messageStateService.getStoredEvents(sessionId);
   const { compressed, stats } = eventCompressionService.compressWithStats(events);
@@ -63,12 +69,10 @@ function replayEventsForRunningClient(
 
   const replayEvents: Record<string, unknown>[] = compressed.map((event) => ({ ...event }));
 
-  // Send current status
-  const isClientWorking = client.isWorking();
-  replayEvents.push({
-    type: 'status',
-    running: isClientWorking,
-    processAlive: client.isRunning(),
+  // Always replay deterministic runtime snapshot before deltas.
+  replayEvents.unshift({
+    type: 'session_runtime_snapshot',
+    sessionRuntime,
   });
 
   // Send pending interactive request if any
@@ -158,11 +162,12 @@ async function loadHistoryFromJSONL(
     const history = await SessionManager.getHistory(claudeSessionId, workingDir);
     messageStateService.ensureHistoryLoaded(sessionId, history);
   }
-  const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
-  messageStateService.sendSnapshot(sessionId, sessionStatus, {
+  sessionRuntimeStoreService.markIdle(sessionId, 'stopped');
+  messageStateService.sendSnapshot(sessionId, {
     loadRequestId,
     pendingInteractiveRequest: null,
   });
+  sessionRuntimeStoreService.emitSnapshot(sessionId);
 }
 
 async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void> {

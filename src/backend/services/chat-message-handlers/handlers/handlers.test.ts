@@ -8,6 +8,7 @@ import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import { messageQueueService } from '../../message-queue.service';
 import { messageStateService } from '../../message-state.service';
 import { sessionService } from '../../session.service';
+import { sessionRuntimeStoreService } from '../../session-runtime-store.service';
 import { slashCommandCacheService } from '../../slash-command-cache.service';
 import { createGetHistoryHandler } from './get-history.handler';
 import { createGetQueueHandler } from './get-queue.handler';
@@ -77,7 +78,6 @@ vi.mock('../../message-queue.service', () => ({
 vi.mock('../../message-state.service', () => ({
   messageStateService: {
     allocateOrder: vi.fn(() => 1),
-    computeSessionStatus: vi.fn(() => ({ messages: [], queue: [] })),
     createRejectedMessage: vi.fn(),
     createUserMessage: vi.fn(),
     ensureHistoryLoaded: vi.fn(),
@@ -85,6 +85,22 @@ vi.mock('../../message-state.service', () => ({
     storeEvent: vi.fn(),
     sendSnapshot: vi.fn(),
     updateState: vi.fn(),
+  },
+}));
+
+vi.mock('../../session-runtime-store.service', () => ({
+  sessionRuntimeStoreService: {
+    markStarting: vi.fn(),
+    markIdle: vi.fn(),
+    markError: vi.fn(),
+    markStopping: vi.fn(),
+    emitSnapshot: vi.fn(),
+    syncFromClient: vi.fn(() => ({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-02-07T00:00:00.000Z',
+    })),
   },
 }));
 
@@ -112,6 +128,7 @@ const mockedChatEventForwarderService = vi.mocked(chatEventForwarderService);
 const mockedMessageQueueService = vi.mocked(messageQueueService);
 const mockedMessageStateService = vi.mocked(messageStateService);
 const mockedSessionService = vi.mocked(sessionService);
+const mockedSessionRuntimeStoreService = vi.mocked(sessionRuntimeStoreService);
 const mockedSlashCommandCacheService = vi.mocked(slashCommandCacheService);
 const mockedChatConnectionService = vi.mocked(chatConnectionService);
 
@@ -361,7 +378,7 @@ describe('chat message handlers', () => {
     expect(ws.send).not.toHaveBeenCalled();
   });
 
-  it('stop clears pending requests and notifies', async () => {
+  it('stop clears pending requests and marks runtime idle', async () => {
     const handler = createStopHandler();
     const ws = createWs();
 
@@ -374,9 +391,8 @@ describe('chat message handlers', () => {
 
     expect(mockedSessionService.stopClaudeSession).toHaveBeenCalledWith('session-1');
     expect(mockedChatEventForwarderService.clearPendingRequest).toHaveBeenCalledWith('session-1');
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'stopped', dbSessionId: 'session-1' })
-    );
+    expect(mockedSessionRuntimeStoreService.markStopping).toHaveBeenCalledWith('session-1');
+    expect(mockedSessionRuntimeStoreService.markIdle).toHaveBeenCalledWith('session-1', 'stopped');
   });
 
   it('get_history returns history when claude session exists', async () => {
@@ -420,7 +436,7 @@ describe('chat message handlers', () => {
     );
   });
 
-  it('load_session sends replay batch with status when client running', async () => {
+  it('load_session sends replay batch with runtime snapshot when client running', async () => {
     mockedClaudeSessionAccessor.findById.mockResolvedValue({
       id: 'session-1',
       claudeSessionId: 'claude-1',
@@ -444,7 +460,17 @@ describe('chat message handlers', () => {
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'session_replay_batch',
-        replayEvents: [{ type: 'status', running: true, processAlive: true }],
+        replayEvents: [
+          {
+            type: 'session_runtime_snapshot',
+            sessionRuntime: {
+              phase: 'idle',
+              processState: 'alive',
+              activity: 'IDLE',
+              updatedAt: '2026-02-07T00:00:00.000Z',
+            },
+          },
+        ],
         loadRequestId: 'load-123',
       })
     );
@@ -482,7 +508,15 @@ describe('chat message handlers', () => {
       JSON.stringify({
         type: 'session_replay_batch',
         replayEvents: [
-          { type: 'status', running: false, processAlive: true },
+          {
+            type: 'session_runtime_snapshot',
+            sessionRuntime: {
+              phase: 'idle',
+              processState: 'alive',
+              activity: 'IDLE',
+              updatedAt: '2026-02-07T00:00:00.000Z',
+            },
+          },
           {
             type: 'permission_request',
             requestId: 'req-perm-1',
@@ -513,11 +547,10 @@ describe('chat message handlers', () => {
       message: { type: 'load_session', loadRequestId: 'load-snapshot' },
     });
 
-    expect(mockedMessageStateService.sendSnapshot).toHaveBeenCalledWith(
-      'session-1',
-      expect.any(Object),
-      { loadRequestId: 'load-snapshot', pendingInteractiveRequest: null }
-    );
+    expect(mockedMessageStateService.sendSnapshot).toHaveBeenCalledWith('session-1', {
+      loadRequestId: 'load-snapshot',
+      pendingInteractiveRequest: null,
+    });
   });
 
   it('load_session sends cached slash commands when missing', async () => {
@@ -562,6 +595,7 @@ describe('chat message handlers', () => {
     });
 
     expect(mockedMessageStateService.sendSnapshot).toHaveBeenCalled();
+    expect(mockedSessionRuntimeStoreService.emitSnapshot).toHaveBeenCalledWith('session-1');
   });
 
   it('question_response errors without client', () => {
@@ -695,11 +729,7 @@ describe('chat message handlers', () => {
       planModeEnabled: false,
       model: undefined,
     });
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'starting', dbSessionId: 'session-1' })
-    );
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'started', dbSessionId: 'session-1' })
-    );
+    expect(mockedSessionRuntimeStoreService.markStarting).toHaveBeenCalledWith('session-1');
+    expect(mockedSessionRuntimeStoreService.markIdle).toHaveBeenCalledWith('session-1', 'alive');
   });
 });

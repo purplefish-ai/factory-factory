@@ -23,7 +23,6 @@ import {
   MessageState,
   type MessageWithState,
   type QueuedMessage,
-  type SessionStatus,
   type UserMessageWithState,
 } from '@/shared/claude';
 import { createLogger } from './logger.service';
@@ -59,7 +58,6 @@ export type MessageStateEvent =
       sessionId: string;
       data: {
         messages: ChatMessage[];
-        sessionStatus: SessionStatus;
         loadRequestId?: string;
         pendingInteractiveRequest?: PendingInteractiveRequestPayload | null;
       };
@@ -444,7 +442,6 @@ class MessageStateService {
    * array, so frontend receives messages in the exact format it uses.
    *
    * @param sessionId - The database session ID
-   * @param sessionStatus - Current session lifecycle status (idle, loading, starting, ready, running, stopping)
    * @param options.loadRequestId - Optional request ID used to correlate load_session responses on the client.
    * @param options.pendingInteractiveRequest - Optional pending interactive request awaiting user response.
    *   If present, the frontend will display the appropriate UI (permission dialog or question form).
@@ -455,11 +452,7 @@ class MessageStateService {
    *   - planContent: Optional markdown content for ExitPlanMode requests
    *   - timestamp: When the request was created
    */
-  sendSnapshot(
-    sessionId: string,
-    sessionStatus: SessionStatus,
-    options?: SendSnapshotOptions
-  ): void {
+  sendSnapshot(sessionId: string, options?: SendSnapshotOptions): void {
     const { loadRequestId, pendingInteractiveRequest } = options ?? {};
     const allMessages = this.getAllMessages(sessionId);
 
@@ -489,7 +482,6 @@ class MessageStateService {
       sessionId,
       data: {
         messages: chatMessages,
-        sessionStatus,
         ...(loadRequestId ? { loadRequestId } : {}),
         pendingInteractiveRequest,
       },
@@ -508,30 +500,6 @@ class MessageStateService {
       sessionId,
       messageCount: chatMessages.length,
     });
-  }
-
-  /**
-   * Compute the session status based on client state and queued messages.
-   *
-   * @param sessionId - The database session ID
-   * @param isClientRunning - Whether the Claude client is currently running
-   * @returns SessionStatus with appropriate phase:
-   *   - 'running' if client is running
-   *   - 'starting' if client is NOT running but there are queued messages waiting
-   *   - 'ready' otherwise
-   */
-  computeSessionStatus(sessionId: string, isClientRunning: boolean): SessionStatus {
-    if (isClientRunning) {
-      return { phase: 'running' };
-    }
-
-    // Check if there are messages waiting to be dispatched
-    const queuedCount = this.stateMachine.getQueuedMessageCount(sessionId);
-    if (queuedCount > 0) {
-      return { phase: 'starting' };
-    }
-
-    return { phase: 'ready' };
   }
 
   /**
