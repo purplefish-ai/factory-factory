@@ -485,10 +485,8 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                           <SidebarMenuItem key={workspace.id}>
                             <SidebarMenuButton size="lg" className="px-2 cursor-default">
                               <div className="flex items-center gap-2 w-full min-w-0">
-                                <Loader2 className="h-2 w-2 shrink-0 text-muted-foreground animate-spin" />
-                                <span className="truncate text-sm text-muted-foreground">
-                                  Creating...
-                                </span>
+                                <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
+                                <span className="truncate text-sm">Creating...</span>
                               </div>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
@@ -640,6 +638,23 @@ function SortableWorkspaceItem({
     needsAttention
   );
 
+  // Archiving state: simple spinner + text layout
+  if (isArchivingItem) {
+    return (
+      <SidebarMenuItem ref={setNodeRef} style={style}>
+        <SidebarMenuButton asChild className="h-auto px-2 py-2.5 opacity-50 pointer-events-none">
+          <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
+            <div className="flex items-center gap-2 w-full min-w-0">
+              <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
+              <span className="truncate text-sm text-muted-foreground">Archiving...</span>
+            </div>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
+
+  // Normal workspace layout
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
       <SidebarMenuButton
@@ -647,7 +662,6 @@ function SortableWorkspaceItem({
         isActive={isActive}
         className={cn(
           'h-auto px-2 py-2.5',
-          isArchivingItem && 'opacity-50 pointer-events-none',
           isDragging && 'opacity-50 bg-sidebar-accent',
           showAttentionGlow && 'waiting-pulse'
         )}
@@ -656,11 +670,11 @@ function SortableWorkspaceItem({
           to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
           onClick={() => clearAttention(workspace.id)}
         >
-          <div className="flex w-full min-w-0 items-center gap-2">
+          <div className="flex w-full min-w-0 items-start gap-2">
             {/* Drag handle */}
             <button
               type="button"
-              className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
+              className="w-4 shrink-0 flex justify-center mt-2 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
               aria-label="Drag to reorder"
               {...attributes}
               {...listeners}
@@ -673,84 +687,74 @@ function SortableWorkspaceItem({
               <GripVertical className="h-3 w-3" />
             </button>
 
-            {isArchivingItem ? (
-              <>
-                {/* Archiving: spinner + text in one row */}
-                <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
-                <span className="truncate text-sm text-muted-foreground flex-1">Archiving...</span>
-              </>
-            ) : (
-              <>
-                {/* Normal: status dot + ratchet toggle */}
-                <div className="w-5 shrink-0 flex flex-col items-center gap-1.5">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
-                  </Tooltip>
-                  <RatchetToggleButton
-                    enabled={ratchetEnabled}
-                    state={workspace.ratchetState}
-                    animated={workspace.ratchetButtonAnimated ?? false}
-                    className="h-5 w-5 shrink-0"
-                    disabled={toggleRatcheting.isPending}
-                    stopPropagation
-                    onToggle={(enabled) => {
-                      toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
-                    }}
-                  />
+            {/* Status dot + ratchet toggle */}
+            <div className="w-5 shrink-0 mt-1.5 flex flex-col items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
+                </TooltipTrigger>
+                <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
+              </Tooltip>
+              <RatchetToggleButton
+                enabled={ratchetEnabled}
+                state={workspace.ratchetState}
+                animated={workspace.ratchetButtonAnimated ?? false}
+                className="h-5 w-5 shrink-0"
+                disabled={toggleRatcheting.isPending}
+                stopPropagation
+                onToggle={(enabled) => {
+                  toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
+                }}
+              />
+            </div>
+
+            <div className="min-w-0 flex-1 space-y-0">
+              {/* Row 1: name + timestamp + archive */}
+              <div className="flex items-center gap-2">
+                <span className="truncate font-medium text-sm leading-tight flex-1">
+                  {workspace.name}
+                </span>
+                {workspace.lastActivityAt && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatRelativeTime(workspace.lastActivityAt)}
+                  </span>
+                )}
+                {/* Archive button (hover for non-merged, always visible for merged PRs) */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onArchiveRequest(workspace);
+                      }}
+                      className={cn(
+                        'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
+                        workspace.prState === 'MERGED'
+                          ? 'opacity-100 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25'
+                          : workspace.prState === 'CLOSED'
+                            ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
+                            : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent'
+                      )}
+                    >
+                      <Archive className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Archive</TooltipContent>
+                </Tooltip>
+              </div>
+
+              {/* Row 2: branch name */}
+              {workspace.branchName && (
+                <div className="truncate text-[11px] leading-tight text-muted-foreground font-mono">
+                  {workspace.branchName}
                 </div>
+              )}
 
-                <div className="min-w-0 flex-1 space-y-0">
-                  {/* Row 1: name + timestamp + archive */}
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-sm leading-tight flex-1">
-                      {workspace.name}
-                    </span>
-                    {workspace.lastActivityAt && (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {formatRelativeTime(workspace.lastActivityAt)}
-                      </span>
-                    )}
-                    {/* Archive button (hover for non-merged, always visible for merged PRs) */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onArchiveRequest(workspace);
-                          }}
-                          className={cn(
-                            'shrink-0 h-6 w-6 flex items-center justify-center rounded transition-opacity',
-                            workspace.prState === 'MERGED'
-                              ? 'opacity-100 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25'
-                              : workspace.prState === 'CLOSED'
-                                ? 'opacity-100 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10'
-                                : 'opacity-0 group-hover/menu-item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent'
-                          )}
-                        >
-                          <Archive className="h-3 w-3" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">Archive</TooltipContent>
-                    </Tooltip>
-                  </div>
-
-                  {/* Row 2: branch name */}
-                  {workspace.branchName && (
-                    <div className="truncate text-[11px] leading-tight text-muted-foreground font-mono">
-                      {workspace.branchName}
-                    </div>
-                  )}
-
-                  {/* Row 3: files changed + deltas + PR */}
-                  <WorkspaceMetaRow workspace={workspace} stats={stats} />
-                </div>
-              </>
-            )}
+              {/* Row 3: files changed + deltas + PR */}
+              <WorkspaceMetaRow workspace={workspace} stats={stats} />
+            </div>
           </div>
         </Link>
       </SidebarMenuButton>
