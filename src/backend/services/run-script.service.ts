@@ -3,6 +3,7 @@ import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
 import { createLogger } from './logger.service';
 import { PortAllocationService } from './port-allocation.service';
+import { runScriptStateMachine } from './run-script-state-machine.service';
 
 const logger = createLogger('run-script-service');
 
@@ -47,31 +48,21 @@ export class RunScriptService {
         throw new Error('Workspace worktree not initialized');
       }
 
+      // Verify current status and check for stale processes
+      const currentStatus = await runScriptStateMachine.verifyRunning(workspaceId);
+
       // Check if already running
-      if (workspace.runScriptStatus === 'RUNNING' && workspace.runScriptPid) {
-        // Verify process still exists
-        try {
-          process.kill(workspace.runScriptPid, 0);
-          return {
-            success: false,
-            error: 'Run script is already running',
-            pid: workspace.runScriptPid,
-            port: workspace.runScriptPort ?? undefined,
-          };
-        } catch {
-          // Process doesn't exist, cleanup stale state
-          logger.warn('Stale run script process detected, cleaning up', {
-            workspaceId,
-            pid: workspace.runScriptPid,
-          });
-          await workspaceAccessor.update(workspaceId, {
-            runScriptStatus: 'IDLE',
-            runScriptPid: null,
-            runScriptPort: null,
-            runScriptStartedAt: null,
-          });
-        }
+      if (currentStatus === 'RUNNING') {
+        return {
+          success: false,
+          error: 'Run script is already running',
+          pid: workspace.runScriptPid ?? undefined,
+          port: workspace.runScriptPort ?? undefined,
+        };
       }
+
+      // Transition to STARTING state
+      await runScriptStateMachine.start(workspaceId);
 
       let command = workspace.runScriptCommand;
       let port: number | undefined;
@@ -111,12 +102,10 @@ export class RunScriptService {
       const startMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting ${command}\n\n`;
       RunScriptService.outputBuffers.set(workspaceId, startMessage);
 
-      // Update workspace status
-      await workspaceAccessor.update(workspaceId, {
-        runScriptStatus: 'RUNNING',
-        runScriptPid: pid,
-        runScriptPort: port ?? null,
-        runScriptStartedAt: new Date(),
+      // Transition to RUNNING state via state machine
+      await runScriptStateMachine.markRunning(workspaceId, {
+        pid,
+        port,
       });
 
       // Handle process exit
@@ -131,13 +120,12 @@ export class RunScriptService {
         RunScriptService.runningProcesses.delete(workspaceId);
         RunScriptService.outputListeners.delete(workspaceId);
 
-        const status = code === 0 ? 'COMPLETED' : 'FAILED';
-        await workspaceAccessor.update(workspaceId, {
-          runScriptStatus: status,
-          runScriptPid: null,
-          runScriptPort: null,
-          runScriptStartedAt: null,
-        });
+        // Transition to COMPLETED or FAILED via state machine
+        if (code === 0) {
+          await runScriptStateMachine.markCompleted(workspaceId);
+        } else {
+          await runScriptStateMachine.markFailed(workspaceId);
+        }
       });
 
       // Capture and broadcast stdout/stderr
@@ -178,11 +166,8 @@ export class RunScriptService {
       childProcess.on('error', async (error) => {
         logger.error('Run script spawn error', error, { workspaceId, pid });
         RunScriptService.runningProcesses.delete(workspaceId);
-        await workspaceAccessor.update(workspaceId, {
-          runScriptStatus: 'FAILED',
-          runScriptPid: null,
-          runScriptPort: null,
-        });
+        // Transition to FAILED via state machine
+        await runScriptStateMachine.markFailed(workspaceId);
       });
 
       return {
@@ -225,6 +210,9 @@ export class RunScriptService {
           error: 'No run script is running',
         };
       }
+
+      // Transition to STOPPING state
+      await runScriptStateMachine.beginStopping(workspaceId);
 
       // Run cleanup script if configured
       if (workspace.runScriptCleanupCommand && workspace.worktreePath) {
@@ -313,13 +301,8 @@ export class RunScriptService {
         }
       }
 
-      // Update workspace status and clear all run script state
-      await workspaceAccessor.update(workspaceId, {
-        runScriptStatus: 'IDLE',
-        runScriptPid: null,
-        runScriptPort: null,
-        runScriptStartedAt: null,
-      });
+      // Transition to IDLE state via state machine (completes stopping)
+      await runScriptStateMachine.completeStopping(workspaceId);
 
       return { success: true };
     } catch (error) {
@@ -342,32 +325,11 @@ export class RunScriptService {
       throw new Error('Workspace not found');
     }
 
-    // Verify process is actually running if status says RUNNING
-    if (workspace.runScriptStatus === 'RUNNING' && workspace.runScriptPid) {
-      try {
-        process.kill(workspace.runScriptPid, 0);
-        // Process exists
-      } catch {
-        // Process doesn't exist, update status
-        logger.warn('Detected stale run script status, updating', {
-          workspaceId,
-          pid: workspace.runScriptPid,
-        });
-        await workspaceAccessor.update(workspaceId, {
-          runScriptStatus: 'FAILED',
-          runScriptPid: null,
-          runScriptPort: null,
-        });
-        return {
-          status: 'FAILED' as const,
-          hasRunScript: !!workspace.runScriptCommand,
-          runScriptCommand: workspace.runScriptCommand,
-        };
-      }
-    }
+    // Verify process status via state machine (handles stale process detection)
+    const status = await runScriptStateMachine.verifyRunning(workspaceId);
 
     return {
-      status: workspace.runScriptStatus,
+      status,
       pid: workspace.runScriptPid,
       port: workspace.runScriptPort,
       startedAt: workspace.runScriptStartedAt,
