@@ -20,6 +20,7 @@ vi.mock('./github-cli.service', () => ({
   githubCLIService: {
     extractPRInfo: vi.fn(),
     getPRFullDetails: vi.fn(),
+    getReviewComments: vi.fn(),
     computeCIStatus: vi.fn(),
   },
 }));
@@ -111,6 +112,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ciStatus: CIStatus.FAILURE,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
       prState: 'OPEN',
       prNumber: 2,
     });
@@ -154,6 +156,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ciStatus: CIStatus.SUCCESS,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
+      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
       prState: 'OPEN',
       prNumber: 3,
     });
@@ -200,6 +203,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ciStatus: CIStatus.FAILURE,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
       prState: 'OPEN',
       prNumber: 4,
     });
@@ -249,9 +253,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         evaluateAndDispatch: (workspaceArg: typeof workspace, prState: unknown) => Promise<unknown>;
       }
     ).evaluateAndDispatch(workspace, {
-      ciStatus: CIStatus.SUCCESS,
+      ciStatus: CIStatus.FAILURE,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
       prState: 'OPEN',
       prNumber: 5,
     });
@@ -271,6 +276,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ciStatus: CIStatus.SUCCESS,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
       prState: 'CLOSED',
       prNumber: 6,
     });
@@ -297,6 +303,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ciStatus: CIStatus.SUCCESS,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: true,
+      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
       prState: 'OPEN',
       prNumber: 7,
     });
@@ -324,5 +331,43 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetActiveSessionId: null,
     });
     expect(sessionService.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
+  });
+
+  it('does not dispatch on a clean PR with no new review activity', async () => {
+    const workspace = {
+      id: 'ws-clean',
+      prUrl: 'https://github.com/example/repo/pull/8',
+      prNumber: 8,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: '2026-01-01T00:00:00Z',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+    };
+
+    vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    const triggerSpy = vi.spyOn(
+      ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+      'triggerFixer'
+    );
+
+    const action = await (
+      ratchetService as unknown as {
+        evaluateAndDispatch: (workspaceArg: typeof workspace, prState: unknown) => Promise<unknown>;
+      }
+    ).evaluateAndDispatch(workspace, {
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: '2026-01-03T00:00:00Z',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      prState: 'OPEN',
+      prNumber: 8,
+    });
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(action).toEqual({
+      type: 'WAITING',
+      reason: 'PR is clean (green CI and no new review activity)',
+    });
   });
 });

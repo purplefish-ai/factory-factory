@@ -28,6 +28,7 @@ interface PRStateInfo {
   ciStatus: CIStatus;
   snapshotKey: string;
   hasChangesRequested: boolean;
+  latestReviewActivityAtMs: number | null;
   prState: string;
   prNumber: number;
 }
@@ -220,6 +221,13 @@ class RatchetService {
       return { type: 'WAITING', reason: 'PR is not open' };
     }
 
+    if (this.shouldSkipCleanPR(workspace, prStateInfo)) {
+      return {
+        type: 'WAITING',
+        reason: 'PR is clean (green CI and no new review activity)',
+      };
+    }
+
     const activeRatchetSession = await this.getActiveRatchetSession(workspace);
     if (activeRatchetSession) {
       return activeRatchetSession;
@@ -238,6 +246,29 @@ class RatchetService {
     }
 
     return this.triggerFixer(workspace, prStateInfo);
+  }
+
+  private shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {
+    if (prStateInfo.ciStatus !== CIStatus.SUCCESS || prStateInfo.hasChangesRequested) {
+      return false;
+    }
+
+    return !this.hasNewReviewActivitySinceLastDispatch(workspace, prStateInfo);
+  }
+
+  private hasNewReviewActivitySinceLastDispatch(
+    workspace: WorkspaceWithPR,
+    prStateInfo: PRStateInfo
+  ): boolean {
+    if (prStateInfo.latestReviewActivityAtMs === null) {
+      return false;
+    }
+
+    if (!workspace.prReviewLastCheckedAt) {
+      return true;
+    }
+
+    return prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime();
   }
 
   private hasStateChangedSinceLastDispatch(
@@ -330,7 +361,10 @@ class RatchetService {
     }
 
     try {
-      const prDetails = await githubCLIService.getPRFullDetails(prContext.repo, prContext.prNumber);
+      const [prDetails, reviewComments] = await Promise.all([
+        githubCLIService.getPRFullDetails(prContext.repo, prContext.prNumber),
+        githubCLIService.getReviewComments(prContext.repo, prContext.prNumber),
+      ]);
 
       const statusCheckRollup =
         prDetails.statusCheckRollup?.map((check) => ({
@@ -342,11 +376,16 @@ class RatchetService {
 
       const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
       const snapshotKey = prDetails.updatedAt;
+      const latestReviewActivityAtMs = this.computeLatestReviewActivityAtMs(
+        prDetails,
+        reviewComments
+      );
 
       return {
         ciStatus,
         snapshotKey,
         hasChangesRequested,
+        latestReviewActivityAtMs,
         prState: prDetails.state,
         prNumber: prDetails.number,
       };
@@ -357,6 +396,37 @@ class RatchetService {
       });
       return null;
     }
+  }
+
+  private computeLatestReviewActivityAtMs(
+    prDetails: {
+      reviews: Array<{ submittedAt: string }>;
+      comments: Array<{ updatedAt: string }>;
+    },
+    reviewComments: Array<{ updatedAt: string }>
+  ): number | null {
+    const timestamps: number[] = [];
+
+    for (const review of prDetails.reviews) {
+      const ts = Date.parse(review.submittedAt);
+      if (Number.isFinite(ts)) {
+        timestamps.push(ts);
+      }
+    }
+    for (const comment of prDetails.comments) {
+      const ts = Date.parse(comment.updatedAt);
+      if (Number.isFinite(ts)) {
+        timestamps.push(ts);
+      }
+    }
+    for (const reviewComment of reviewComments) {
+      const ts = Date.parse(reviewComment.updatedAt);
+      if (Number.isFinite(ts)) {
+        timestamps.push(ts);
+      }
+    }
+
+    return timestamps.length > 0 ? Math.max(...timestamps) : null;
   }
 
   private determineRatchetState(pr: PRStateInfo): RatchetState {
