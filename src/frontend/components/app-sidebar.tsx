@@ -74,7 +74,7 @@ function getProjectSlugFromPath(pathname: string): string | null {
 
 /**
  * Get status dot color class for a workspace.
- * Priority: working > merged > CI failure > CI pending > CI success > uncommitted > default
+ * Priority: working > merged > CI failure > CI pending > CI success > uncommitted > waiting > default
  */
 function getStatusDotClass(workspace: WorkspaceListItem): string {
   if (workspace.isWorking) {
@@ -94,6 +94,9 @@ function getStatusDotClass(workspace: WorkspaceListItem): string {
   }
   if (workspace.gitStats?.hasUncommitted) {
     return 'bg-orange-500';
+  }
+  if (workspace.cachedKanbanColumn === 'WAITING') {
+    return 'bg-amber-500 animate-pulse';
   }
   return 'bg-gray-400';
 }
@@ -120,6 +123,9 @@ function getStatusTooltip(workspace: WorkspaceListItem): string {
   }
   if (workspace.gitStats?.hasUncommitted) {
     return 'Uncommitted changes';
+  }
+  if (workspace.cachedKanbanColumn === 'WAITING') {
+    return 'Waiting for input';
   }
   return 'Ready';
 }
