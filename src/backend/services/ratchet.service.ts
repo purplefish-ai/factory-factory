@@ -8,7 +8,7 @@
  * States: IDLE → CI_RUNNING → CI_FAILED → REVIEW_PENDING → READY → MERGED
  */
 
-import { CIStatus, PRState, RatchetState, SessionStatus } from '@prisma-gen/client';
+import { CIStatus, type PRState, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
@@ -490,17 +490,6 @@ class RatchetService {
     return RatchetState.READY;
   }
 
-  private mapGitHubPrState(prState: string): PRState {
-    switch (prState) {
-      case 'MERGED':
-        return PRState.MERGED;
-      case 'CLOSED':
-        return PRState.CLOSED;
-      default:
-        return PRState.OPEN;
-    }
-  }
-
   private buildWorkspaceUpdateFromPRObservation(
     workspace: WorkspaceWithPR,
     shouldTakeAction: boolean,
@@ -512,7 +501,6 @@ class RatchetService {
     ratchetState: RatchetState;
     ratchetLastCheckedAt: Date;
     prCiStatus: CIStatus;
-    prState: PRState;
     prUpdatedAt?: Date;
     ratchetLastCiRunId?: string | null;
     prReviewLastCheckedAt?: Date;
@@ -523,17 +511,13 @@ class RatchetService {
       !!prStateInfo.ciRunId &&
       (action.type === 'NOTIFIED_ACTIVE_FIXER' ||
         (action.type === 'TRIGGERED_FIXER' && action.promptSent));
-    const observedPrState = this.mapGitHubPrState(prStateInfo.prState);
     const ciStatusChanged = workspace.prCiStatus !== prStateInfo.ciStatus;
-    const prStateChanged = observedPrState !== workspace.prState;
-    const shouldUpdatePrTimestamp = ciStatusChanged || prStateChanged;
 
     return {
       ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
       ratchetLastCheckedAt: now,
       prCiStatus: prStateInfo.ciStatus,
-      prState: observedPrState,
-      ...(shouldUpdatePrTimestamp ? { prUpdatedAt: now } : {}),
+      ...(ciStatusChanged ? { prUpdatedAt: now } : {}),
       ...(shouldRecordCiRunId ? { ratchetLastCiRunId: prStateInfo.ciRunId } : {}),
       ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
     };
