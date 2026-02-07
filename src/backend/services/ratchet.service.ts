@@ -30,6 +30,12 @@ interface PRStateInfo {
   snapshotKey: string;
   hasChangesRequested: boolean;
   latestReviewActivityAtMs: number | null;
+  statusCheckRollup: Array<{
+    name?: string;
+    status?: string;
+    conclusion?: string | null;
+    detailsUrl?: string;
+  }> | null;
   prState: string;
   prNumber: number;
 }
@@ -170,32 +176,43 @@ class RatchetService {
       const authenticatedUsername = await this.getAuthenticatedUsernameCached();
       const prStateInfo = await this.fetchPRState(workspace, authenticatedUsername);
       if (!prStateInfo) {
+        const action: RatchetAction = { type: 'ERROR', error: 'Failed to fetch PR state' };
+        this.logWorkspaceRatchetingDecision(
+          workspace,
+          workspace.ratchetState,
+          workspace.ratchetState,
+          action,
+          null
+        );
         return {
           workspaceId: workspace.id,
           previousState: workspace.ratchetState,
           newState: workspace.ratchetState,
-          action: { type: 'ERROR', error: 'Failed to fetch PR state' },
+          action,
         };
       }
 
       const previousState = workspace.ratchetState;
       const newState = this.determineRatchetState(prStateInfo);
+      const finalState = workspace.ratchetEnabled ? newState : RatchetState.IDLE;
 
       const action = workspace.ratchetEnabled
         ? await this.evaluateAndDispatch(workspace, prStateInfo)
         : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
 
-      await this.updateWorkspaceAfterCheck(
+      await this.updateWorkspaceAfterCheck(workspace, prStateInfo, action, finalState);
+      this.logWorkspaceRatchetingDecision(
         workspace,
-        prStateInfo,
+        previousState,
+        finalState,
         action,
-        workspace.ratchetEnabled ? newState : RatchetState.IDLE
+        prStateInfo
       );
 
       return {
         workspaceId: workspace.id,
         previousState,
-        newState: workspace.ratchetEnabled ? newState : RatchetState.IDLE,
+        newState: finalState,
         action,
       };
     } catch (error) {
@@ -203,12 +220,191 @@ class RatchetService {
       logger.error('Error processing workspace in ratchet', error as Error, {
         workspaceId: workspace.id,
       });
+      const action: RatchetAction = { type: 'ERROR', error: errorMessage };
+      this.logWorkspaceRatchetingDecision(
+        workspace,
+        workspace.ratchetState,
+        workspace.ratchetState,
+        action,
+        null
+      );
       return {
         workspaceId: workspace.id,
         previousState: workspace.ratchetState,
         newState: workspace.ratchetState,
-        action: { type: 'ERROR', error: errorMessage },
+        action,
       };
+    }
+  }
+
+  private logWorkspaceRatchetingDecision(
+    workspace: WorkspaceWithPR,
+    previousState: RatchetState,
+    newState: RatchetState,
+    action: RatchetAction,
+    prStateInfo: PRStateInfo | null
+  ): void {
+    const prNumber = prStateInfo?.prNumber ?? workspace.prNumber;
+    const prNumberLabel = prNumber ?? 'unknown';
+    const workspacePrPrefix = `workspace ${workspace.id} for PR #${prNumberLabel}`;
+    const context = this.buildRatchetingDecisionContext(
+      workspace,
+      previousState,
+      newState,
+      action,
+      prStateInfo,
+      prNumber
+    );
+
+    if (action.type === 'TRIGGERED_FIXER') {
+      logger.info(`Ratcheting ${workspacePrPrefix}`, {
+        ...context,
+        sessionId: action.sessionId,
+        promptSent: action.promptSent,
+      });
+      return;
+    }
+
+    const reason = this.describeNonRatchetingReason(action);
+
+    logger.info(`Not ratcheting ${workspacePrPrefix} because ${reason}`, context);
+  }
+
+  private buildRatchetingDecisionContext(
+    workspace: WorkspaceWithPR,
+    previousState: RatchetState,
+    newState: RatchetState,
+    action: RatchetAction,
+    prStateInfo: PRStateInfo | null,
+    prNumber: number | null
+  ) {
+    const reviewDiagnostics = this.buildReviewTimestampDiagnostics(workspace, prStateInfo);
+    const snapshotDiagnostics = this.buildSnapshotDiagnostics(workspace, prStateInfo);
+    const latestReviewActivityAt = reviewDiagnostics.latestReviewActivityAtMs;
+
+    return {
+      workspaceId: workspace.id,
+      prUrl: workspace.prUrl,
+      prNumber,
+      prState: prStateInfo?.prState ?? null,
+      ciStatus: prStateInfo?.ciStatus ?? null,
+      hasChangesRequested: prStateInfo?.hasChangesRequested ?? null,
+      snapshotKey: prStateInfo?.snapshotKey ?? null,
+      ciSnapshotKey: snapshotDiagnostics.ciSnapshotKey,
+      snapshotComparison: snapshotDiagnostics.snapshotComparison,
+      previousState,
+      newState,
+      ratchetEnabled: workspace.ratchetEnabled,
+      ratchetActiveSessionId: workspace.ratchetActiveSessionId,
+      ratchetLastCiRunId: workspace.ratchetLastCiRunId,
+      ciStatusCheckRollup: prStateInfo?.statusCheckRollup ?? null,
+      ciFailedChecks: this.buildFailedCheckDiagnostics(prStateInfo),
+      prReviewLastCheckedAt: workspace.prReviewLastCheckedAt?.toISOString() ?? null,
+      latestReviewActivityAt: latestReviewActivityAt
+        ? new Date(latestReviewActivityAt).toISOString()
+        : null,
+      reviewTimestampComparison: reviewDiagnostics.reviewTimestampComparison,
+      actionType: action.type,
+    };
+  }
+
+  private buildSnapshotDiagnostics(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo | null) {
+    if (!prStateInfo) {
+      return {
+        ciSnapshotKey: null,
+        snapshotComparison: null,
+      };
+    }
+
+    return {
+      ciSnapshotKey: this.computeCiSnapshotKey(prStateInfo.ciStatus, prStateInfo.statusCheckRollup),
+      snapshotComparison: {
+        previousSnapshotKey: workspace.ratchetLastCiRunId,
+        currentSnapshotKey: prStateInfo.snapshotKey,
+        changedSinceLastDispatch: this.hasStateChangedSinceLastDispatch(workspace, prStateInfo),
+      },
+    };
+  }
+
+  private buildReviewTimestampDiagnostics(
+    workspace: WorkspaceWithPR,
+    prStateInfo: PRStateInfo | null
+  ) {
+    const latestReviewActivityAtMs = prStateInfo?.latestReviewActivityAtMs ?? null;
+    const prReviewLastCheckedAtMs = workspace.prReviewLastCheckedAt?.getTime() ?? null;
+    const deltaMs =
+      latestReviewActivityAtMs !== null && prReviewLastCheckedAtMs !== null
+        ? latestReviewActivityAtMs - prReviewLastCheckedAtMs
+        : null;
+
+    if (!prStateInfo) {
+      return {
+        latestReviewActivityAtMs,
+        reviewTimestampComparison: null,
+      };
+    }
+
+    return {
+      latestReviewActivityAtMs,
+      reviewTimestampComparison: {
+        prReviewLastCheckedAt: workspace.prReviewLastCheckedAt?.toISOString() ?? null,
+        latestReviewActivityAt:
+          latestReviewActivityAtMs !== null
+            ? new Date(latestReviewActivityAtMs).toISOString()
+            : null,
+        prReviewLastCheckedAtMs,
+        latestReviewActivityAtMs,
+        deltaMs,
+        hasNewReviewActivitySinceLastDispatch: this.hasNewReviewActivitySinceLastDispatch(
+          workspace,
+          prStateInfo
+        ),
+      },
+    };
+  }
+
+  private buildFailedCheckDiagnostics(prStateInfo: PRStateInfo | null) {
+    return (
+      prStateInfo?.statusCheckRollup
+        ?.filter((check) => {
+          const conclusion = check.conclusion?.toUpperCase();
+          return (
+            conclusion === 'FAILURE' ||
+            conclusion === 'TIMED_OUT' ||
+            conclusion === 'CANCELLED' ||
+            conclusion === 'ERROR' ||
+            conclusion === 'ACTION_REQUIRED'
+          );
+        })
+        .map((check) => {
+          const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
+          return {
+            name: check.name ?? 'unknown',
+            status: check.status ?? null,
+            conclusion: check.conclusion ?? null,
+            runId: runIdMatch?.[1] ?? null,
+            detailsUrl: check.detailsUrl ?? null,
+          };
+        }) ?? []
+    );
+  }
+
+  private describeNonRatchetingReason(
+    action: Exclude<RatchetAction, { type: 'TRIGGERED_FIXER' }>
+  ): string {
+    switch (action.type) {
+      case 'WAITING':
+        return action.reason;
+      case 'FIXER_ACTIVE':
+        return `Ratchet fixer session is already active (${action.sessionId})`;
+      case 'DISABLED':
+        return action.reason;
+      case 'COMPLETED':
+        return 'PR is already merged';
+      case 'ERROR':
+        return action.error;
+      default:
+        return 'No matching ratchet action';
     }
   }
 
@@ -403,6 +599,7 @@ class RatchetService {
         snapshotKey,
         hasChangesRequested,
         latestReviewActivityAtMs,
+        statusCheckRollup: prDetails.statusCheckRollup,
         prState: prDetails.state,
         prNumber: prDetails.number,
       };
