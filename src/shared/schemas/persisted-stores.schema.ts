@@ -1,0 +1,48 @@
+/**
+ * Zod schemas for validating persisted JSON stores (local files/localStorage).
+ *
+ * These schemas protect against malformed or corrupted data from:
+ * - Resume modes map (Record<string, boolean>)
+ * - Advisory lock persistence format
+ * - Resume workspace ID list (string[])
+ */
+
+import { z } from 'zod';
+
+/**
+ * Schema for resume modes JSON file (.ff-resume-modes.json)
+ * Maps workspace IDs to resume mode flags
+ */
+export const resumeModesSchema = z.record(z.string(), z.boolean());
+
+export type ResumeModes = z.infer<typeof resumeModesSchema>;
+
+/**
+ * Schema for a single persisted lock entry
+ */
+const persistedLockSchema = z.object({
+  filePath: z.string(),
+  ownerId: z.string(),
+  ownerLabel: z.string().optional(),
+  acquiredAt: z.string(),
+  expiresAt: z.string(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Schema for the full persisted lock store (.ff-locks.json)
+ */
+export const persistedLockStoreSchema = z.object({
+  version: z.literal(1),
+  workspaceId: z.string(),
+  locks: z.array(persistedLockSchema),
+});
+
+export type PersistedLockStore = z.infer<typeof persistedLockStoreSchema>;
+
+/**
+ * Schema for resume workspace IDs array (localStorage)
+ */
+export const resumeWorkspaceIdsSchema = z.array(z.string());
+
+export type ResumeWorkspaceIds = z.infer<typeof resumeWorkspaceIdsSchema>;

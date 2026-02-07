@@ -18,6 +18,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
+import { persistedLockStoreSchema } from '@/shared/schemas/persisted-stores.schema';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { createLogger } from './logger.service';
 
@@ -54,22 +56,6 @@ interface WorkspaceLockStore {
   workspaceId: string;
   worktreePath: string;
   locks: Map<string, FileLock>;
-}
-
-/**
- * Persisted lock store format
- */
-interface PersistedLockStore {
-  version: 1;
-  workspaceId: string;
-  locks: Array<{
-    filePath: string;
-    ownerId: string;
-    ownerLabel?: string;
-    acquiredAt: string;
-    expiresAt: string;
-    metadata?: Record<string, unknown>;
-  }>;
 }
 
 // Input types for public methods
@@ -212,12 +198,8 @@ class FileLockService {
 
     try {
       const content = await fs.readFile(lockFilePath, 'utf-8');
-      const persisted: PersistedLockStore = JSON.parse(content);
-
-      if (persisted.version !== 1) {
-        logger.warn('Unknown lock file version, ignoring', { version: persisted.version });
-        return locks;
-      }
+      const parsed = JSON.parse(content);
+      const persisted = persistedLockStoreSchema.parse(parsed);
 
       const now = new Date();
       for (const lock of persisted.locks) {

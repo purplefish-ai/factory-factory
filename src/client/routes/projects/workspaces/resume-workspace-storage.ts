@@ -1,3 +1,5 @@
+import { resumeWorkspaceIdsSchema } from '@/shared/schemas/persisted-stores.schema';
+
 const RESUME_WORKSPACE_IDS_KEY = 'ff_resume_workspace_ids';
 
 export function readResumeWorkspaceIds(): string[] {
@@ -7,7 +9,12 @@ export function readResumeWorkspaceIds(): string[] {
 
   try {
     const raw = window.localStorage.getItem(RESUME_WORKSPACE_IDS_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    const validated = resumeWorkspaceIdsSchema.parse(parsed);
+    return validated;
   } catch {
     return [];
   }
