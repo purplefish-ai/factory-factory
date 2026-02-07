@@ -49,21 +49,19 @@ export class RunScriptService {
         throw new Error('Workspace worktree not initialized');
       }
 
-      // Verify current status and check for stale processes
-      const currentStatus = await runScriptStateMachine.verifyRunning(workspaceId);
-
-      // Check if already running
-      if (currentStatus === 'RUNNING') {
+      // Verify stale processes and atomically transition to STARTING.
+      // Returns null if the script is already running.
+      const started = await runScriptStateMachine.start(workspaceId);
+      if (!started) {
+        // Re-read workspace for current pid/port after verify
+        const fresh = await workspaceAccessor.findById(workspaceId);
         return {
           success: false,
           error: 'Run script is already running',
-          pid: workspace.runScriptPid ?? undefined,
-          port: workspace.runScriptPort ?? undefined,
+          pid: fresh?.runScriptPid ?? undefined,
+          port: fresh?.runScriptPort ?? undefined,
         };
       }
-
-      // Transition to STARTING state
-      await runScriptStateMachine.start(workspaceId);
 
       let command = workspace.runScriptCommand;
       let port: number | undefined;
@@ -103,12 +101,7 @@ export class RunScriptService {
       const startMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting ${command}\n\n`;
       RunScriptService.outputBuffers.set(workspaceId, startMessage);
 
-      // Transition to RUNNING state via state machine
-      await runScriptStateMachine.markRunning(workspaceId, {
-        pid,
-        port,
-      });
-
+      // Register event handlers BEFORE async state transition to avoid missing events
       // Handle process exit
       childProcess.on('exit', async (code, signal) => {
         logger.info('Run script exited', {
@@ -121,30 +114,36 @@ export class RunScriptService {
         RunScriptService.runningProcesses.delete(workspaceId);
         RunScriptService.outputListeners.delete(workspaceId);
 
-        // Check current state - if STOPPING, the stopRunScript handler will complete the transition
-        // Otherwise, transition to COMPLETED or FAILED based on exit code
+        // Check current state - if STOPPING, the stopRunScript handler will complete the transition.
+        // If already in a terminal state (COMPLETED/FAILED/IDLE), skip.
+        // Otherwise, transition to COMPLETED or FAILED based on exit code.
         try {
-          const workspace = await workspaceAccessor.findById(workspaceId);
-          if (workspace?.runScriptStatus === 'STOPPING') {
-            // stopRunScript will call completeStopping to transition to IDLE
-            logger.debug(
-              'Process exited during stopping, letting stopRunScript complete transition',
-              {
-                workspaceId,
-              }
-            );
+          const ws = await workspaceAccessor.findById(workspaceId);
+          const status = ws?.runScriptStatus;
+
+          if (
+            status === 'STOPPING' ||
+            status === 'IDLE' ||
+            status === 'COMPLETED' ||
+            status === 'FAILED'
+          ) {
+            logger.debug(`Process exited while in ${status} state, skipping exit transition`, {
+              workspaceId,
+            });
             return;
           }
 
-          // Normal exit from RUNNING state
+          // Normal exit from RUNNING (or STARTING if the process exits very fast)
           if (code === 0) {
             await runScriptStateMachine.markCompleted(workspaceId);
           } else {
             await runScriptStateMachine.markFailed(workspaceId);
           }
         } catch (error) {
-          logger.error('Failed to handle process exit state transition', error as Error, {
+          // Swallow state machine errors — the state was likely already transitioned
+          logger.warn('Exit handler state transition failed (likely already transitioned)', {
             workspaceId,
+            error: (error as Error).message,
           });
         }
       });
@@ -201,6 +200,13 @@ export class RunScriptService {
         }
       });
 
+      // Transition to RUNNING state AFTER registering all event handlers
+      // This ensures we don't miss any events that fire during the async DB operation
+      await runScriptStateMachine.markRunning(workspaceId, {
+        pid,
+        port,
+      });
+
       return {
         success: true,
         port,
@@ -255,29 +261,64 @@ export class RunScriptService {
 
       const childProcess = RunScriptService.runningProcesses.get(workspaceId);
       const pid = workspace.runScriptPid;
+      const status = workspace.runScriptStatus;
 
-      // Check if already stopped or stopping
-      if (workspace.runScriptStatus === 'IDLE' || workspace.runScriptStatus === 'STOPPING') {
-        return {
-          success: true, // Already stopped/stopping, treat as success
-        };
+      // Already stopped or idle — nothing to do
+      if (status === 'IDLE' || status === 'STOPPING') {
+        return { success: true };
       }
 
-      if (workspace.runScriptStatus === 'COMPLETED' || workspace.runScriptStatus === 'FAILED') {
-        return {
-          success: true, // Already in terminal state, no-op
-        };
+      // Terminal states: kill any orphaned process, then reset to IDLE
+      if (status === 'COMPLETED' || status === 'FAILED') {
+        if (childProcess) {
+          logger.warn('Killing orphaned process in terminal state', {
+            workspaceId,
+            pid: childProcess.pid,
+          });
+          try {
+            childProcess.kill('SIGTERM');
+          } catch {
+            /* already dead */
+          }
+          RunScriptService.runningProcesses.delete(workspaceId);
+        }
+        // Reset to IDLE so user can start again
+        try {
+          await runScriptStateMachine.reset(workspaceId);
+        } catch {
+          // State may have already moved — that's fine
+        }
+        return { success: true };
       }
 
+      // STARTING or RUNNING — attempt STOPPING transition
       if (!(childProcess || pid)) {
-        return {
-          success: false,
-          error: 'No run script is running',
-        };
+        // No process reference and not in a stoppable state
+        return { success: false, error: 'No run script is running' };
       }
 
-      // Transition to STOPPING state (only from RUNNING or STARTING)
-      await runScriptStateMachine.beginStopping(workspaceId);
+      // Transition to STOPPING (works from both STARTING and RUNNING)
+      try {
+        await runScriptStateMachine.beginStopping(workspaceId);
+      } catch (error) {
+        // Race: state moved to a terminal state between our read and the CAS write.
+        // Re-read and treat as already stopped.
+        const fresh = await workspaceAccessor.findById(workspaceId);
+        const freshStatus = fresh?.runScriptStatus;
+        if (
+          freshStatus === 'COMPLETED' ||
+          freshStatus === 'FAILED' ||
+          freshStatus === 'IDLE' ||
+          freshStatus === 'STOPPING'
+        ) {
+          logger.debug('beginStopping raced with exit handler, treating as stopped', {
+            workspaceId,
+            freshStatus,
+          });
+          return { success: true };
+        }
+        throw error; // Unexpected — re-throw
+      }
 
       // Run cleanup script if configured
       if (workspace.runScriptCleanupCommand && workspace.worktreePath) {

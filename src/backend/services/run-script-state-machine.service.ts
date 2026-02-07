@@ -80,6 +80,7 @@ class RunScriptStateMachineService {
     targetStatus: RunScriptStatus,
     options?: TransitionOptions
   ): Promise<Workspace> {
+    // First read to validate the transition and get current status for logging
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
     });
@@ -133,10 +134,23 @@ class RunScriptStateMachineService {
         break;
     }
 
-    const updated = await prisma.workspace.update({
-      where: { id: workspaceId },
+    // Atomic compare-and-swap: only update if status hasn't changed since we read it.
+    // This prevents two concurrent callers from both passing validation and racing to write.
+    const result = await prisma.workspace.updateMany({
+      where: { id: workspaceId, runScriptStatus: currentStatus },
       data: updateData,
     });
+
+    if (result.count === 0) {
+      // Status changed between read and write — refetch to report the actual conflict
+      const refreshed = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+      throw new RunScriptStateMachineError(
+        workspaceId,
+        refreshed?.runScriptStatus ?? currentStatus,
+        targetStatus,
+        `Concurrent state change detected: status was ${currentStatus}, now ${refreshed?.runScriptStatus ?? 'unknown'} (target: ${targetStatus})`
+      );
+    }
 
     logger.debug('Run script status transitioned', {
       workspaceId,
@@ -144,14 +158,25 @@ class RunScriptStateMachineService {
       to: targetStatus,
     });
 
+    // Fetch and return the updated workspace (updateMany doesn't return the record)
+    const updated = await prisma.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+    });
+
     return updated;
   }
 
   /**
    * Start the run script (transition to STARTING).
-   * Must be called from IDLE, COMPLETED, or FAILED states.
+   * Verifies the process isn't stale before transitioning.
+   * Returns null (instead of throwing) if already RUNNING.
    */
-  async start(workspaceId: string): Promise<Workspace> {
+  async start(workspaceId: string): Promise<Workspace | null> {
+    // Verify + transition atomically: check for stale processes first
+    const status = await this.verifyRunning(workspaceId);
+    if (status === 'RUNNING') {
+      return null; // Already running — caller should return friendly message
+    }
     return await this.transition(workspaceId, 'STARTING');
   }
 

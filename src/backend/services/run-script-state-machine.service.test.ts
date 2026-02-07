@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock Prisma
 const mockFindUnique = vi.fn();
-const mockUpdate = vi.fn();
+const mockUpdateMany = vi.fn();
+const mockFindUniqueOrThrow = vi.fn();
 
 vi.mock('../db', () => ({
   prisma: {
     workspace: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
-      update: (...args: unknown[]) => mockUpdate(...args),
+      updateMany: (...args: unknown[]) => mockUpdateMany(...args),
+      findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),
     },
   },
 }));
@@ -105,13 +107,14 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'STARTING' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.transition('ws-1', 'STARTING');
 
       expect(result.runScriptStatus).toBe('STARTING');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'IDLE' },
         data: expect.objectContaining({
           runScriptStatus: 'STARTING',
           runScriptPid: null,
@@ -131,7 +134,8 @@ describe('RunScriptStateMachineService', () => {
       };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.transition('ws-1', 'RUNNING', {
         pid: 12_345,
@@ -139,8 +143,8 @@ describe('RunScriptStateMachineService', () => {
       });
 
       expect(result.runScriptStatus).toBe('RUNNING');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'STARTING' },
         data: expect.objectContaining({
           runScriptStatus: 'RUNNING',
           runScriptPid: 12_345,
@@ -160,14 +164,14 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'STOPPING' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.transition('ws-1', 'STOPPING');
 
       expect(result.runScriptStatus).toBe('STOPPING');
-      // Should keep pid and port during stopping
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'RUNNING' },
         data: {
           runScriptStatus: 'STOPPING',
         },
@@ -189,13 +193,14 @@ describe('RunScriptStateMachineService', () => {
       };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.transition('ws-1', 'IDLE');
 
       expect(result.runScriptStatus).toBe('IDLE');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'STOPPING' },
         data: expect.objectContaining({
           runScriptStatus: 'IDLE',
           runScriptPid: null,
@@ -210,13 +215,14 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'COMPLETED' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.transition('ws-1', 'COMPLETED');
 
       expect(result.runScriptStatus).toBe('COMPLETED');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'RUNNING' },
         data: expect.objectContaining({
           runScriptStatus: 'COMPLETED',
           runScriptPid: null,
@@ -231,13 +237,14 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'FAILED' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.transition('ws-1', 'FAILED');
 
       expect(result.runScriptStatus).toBe('FAILED');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'RUNNING' },
         data: expect.objectContaining({
           runScriptStatus: 'FAILED',
           runScriptPid: null,
@@ -267,6 +274,19 @@ describe('RunScriptStateMachineService', () => {
         'Workspace not found: non-existent'
       );
     });
+
+    it('should throw on concurrent state change (CAS failure)', async () => {
+      const workspace = { id: 'ws-1', runScriptStatus: 'IDLE' };
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+      // On CAS failure, refetch shows the conflicting state
+      mockFindUnique.mockResolvedValueOnce(workspace); // initial read
+      mockFindUnique.mockResolvedValueOnce({ ...workspace, runScriptStatus: 'STARTING' }); // refetch after CAS fail
+
+      await expect(runScriptStateMachine.transition('ws-1', 'STARTING')).rejects.toThrow(
+        /Concurrent state change detected/
+      );
+    });
   });
 
   describe('start', () => {
@@ -275,11 +295,26 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'STARTING' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.start('ws-1');
 
-      expect(result.runScriptStatus).toBe('STARTING');
+      expect(result?.runScriptStatus).toBe('STARTING');
+    });
+
+    it('should return null when already RUNNING', async () => {
+      const workspace = {
+        id: 'ws-1',
+        runScriptStatus: 'RUNNING',
+        runScriptPid: process.pid,
+      };
+
+      mockFindUnique.mockResolvedValue(workspace);
+
+      const result = await runScriptStateMachine.start('ws-1');
+
+      expect(result).toBeNull();
     });
 
     it('should transition from COMPLETED to STARTING (restart)', async () => {
@@ -287,11 +322,12 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'STARTING' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.start('ws-1');
 
-      expect(result.runScriptStatus).toBe('STARTING');
+      expect(result?.runScriptStatus).toBe('STARTING');
     });
 
     it('should transition from FAILED to STARTING (restart)', async () => {
@@ -299,11 +335,12 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'STARTING' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.start('ws-1');
 
-      expect(result.runScriptStatus).toBe('STARTING');
+      expect(result?.runScriptStatus).toBe('STARTING');
     });
   });
 
@@ -313,13 +350,14 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'RUNNING', runScriptPid: 12_345 };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.markRunning('ws-1', { pid: 12_345 });
 
       expect(result.runScriptStatus).toBe('RUNNING');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'STARTING' },
         data: expect.objectContaining({
           runScriptPid: 12_345,
           runScriptStartedAt: expect.any(Date),
@@ -337,13 +375,14 @@ describe('RunScriptStateMachineService', () => {
       };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.markRunning('ws-1', { pid: 12_345, port: 3000 });
 
       expect(result.runScriptStatus).toBe('RUNNING');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'STARTING' },
         data: expect.objectContaining({
           runScriptPid: 12_345,
           runScriptPort: 3000,
@@ -359,7 +398,8 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'STOPPING' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.beginStopping('ws-1');
 
@@ -373,7 +413,8 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'IDLE' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.completeStopping('ws-1');
 
@@ -387,7 +428,8 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'COMPLETED' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.markCompleted('ws-1');
 
@@ -401,7 +443,8 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'FAILED' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.markFailed('ws-1');
 
@@ -413,7 +456,8 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'FAILED' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.markFailed('ws-1');
 
@@ -427,7 +471,8 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'IDLE' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.reset('ws-1');
 
@@ -439,7 +484,8 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'IDLE' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.reset('ws-1');
 
@@ -471,13 +517,14 @@ describe('RunScriptStateMachineService', () => {
       const updatedWorkspace = { ...workspace, runScriptStatus: 'FAILED' };
 
       mockFindUnique.mockResolvedValue(workspace);
-      mockUpdate.mockResolvedValue(updatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await runScriptStateMachine.verifyRunning('ws-1');
 
       expect(result).toBe('FAILED');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', runScriptStatus: 'RUNNING' },
         data: expect.objectContaining({
           runScriptStatus: 'FAILED',
         }),
@@ -496,7 +543,7 @@ describe('RunScriptStateMachineService', () => {
       const result = await runScriptStateMachine.verifyRunning('ws-1');
 
       expect(result).toBe('IDLE');
-      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockUpdateMany).not.toHaveBeenCalled();
     });
 
     it('should throw error for non-existent workspace', async () => {
