@@ -59,7 +59,6 @@ interface UpdateWorkspaceInput {
   ratchetLastPushAt?: Date | null;
   ratchetActiveSessionId?: string | null;
   ratchetLastCiRunId?: string | null;
-  ratchetLastNotifiedState?: RatchetState | null;
   // Activity tracking
   hasHadSessions?: boolean;
   // Cached kanban column

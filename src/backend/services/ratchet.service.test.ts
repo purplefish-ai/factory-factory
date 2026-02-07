@@ -44,6 +44,7 @@ vi.mock('./session.service', () => ({
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     startClaudeSession: vi.fn(),
+    stopClaudeSession: vi.fn(),
   },
 }));
 
@@ -136,7 +137,6 @@ describe('ratchet service (simplified loop)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
-      mergeStateStatus: 'CLEAN',
       hasChangesRequested: false,
       hasNewReviewComments: false,
       failedChecks: [],
@@ -165,7 +165,6 @@ describe('ratchet service (simplified loop)', () => {
     ).processWorkspace(workspace, {
       autoFixCi: true,
       autoFixReviews: true,
-      autoMerge: false,
       allowedReviewers: [],
     });
 
@@ -193,7 +192,6 @@ describe('ratchet service (simplified loop)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
-      mergeStateStatus: 'CLEAN',
       hasChangesRequested: false,
       hasNewReviewComments: false,
       failedChecks: [],
@@ -228,7 +226,6 @@ describe('ratchet service (simplified loop)', () => {
     ).processWorkspace(workspace, {
       autoFixCi: true,
       autoFixReviews: true,
-      autoMerge: false,
       allowedReviewers: [],
     });
 
@@ -258,7 +255,6 @@ describe('ratchet service (simplified loop)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
-      mergeStateStatus: 'CLEAN',
       hasChangesRequested: false,
       hasNewReviewComments: false,
       failedChecks: [],
@@ -288,7 +284,6 @@ describe('ratchet service (simplified loop)', () => {
     ).processWorkspace(workspace, {
       autoFixCi: true,
       autoFixReviews: true,
-      autoMerge: false,
       allowedReviewers: [],
     });
 
@@ -345,7 +340,6 @@ describe('ratchet service (simplified loop)', () => {
       workspace,
       {
         ciStatus: CIStatus.FAILURE,
-        mergeStateStatus: 'CLEAN',
         hasChangesRequested: false,
         hasNewReviewComments: false,
         failedChecks: [],
@@ -361,7 +355,6 @@ describe('ratchet service (simplified loop)', () => {
       {
         autoFixCi: true,
         autoFixReviews: true,
-        autoMerge: false,
         allowedReviewers: [],
       }
     );
@@ -407,7 +400,6 @@ describe('ratchet service (simplified loop)', () => {
       },
       {
         ciStatus: CIStatus.SUCCESS,
-        mergeStateStatus: 'CLEAN',
         hasChangesRequested: false,
         hasNewReviewComments: false,
         failedChecks: [],
@@ -423,7 +415,6 @@ describe('ratchet service (simplified loop)', () => {
       {
         autoFixCi: true,
         autoFixReviews: true,
-        autoMerge: false,
         allowedReviewers: [],
       }
     );
@@ -448,7 +439,6 @@ describe('ratchet service (simplified loop)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
-      mergeStateStatus: 'CLEAN',
       hasChangesRequested: false,
       hasNewReviewComments: true,
       failedChecks: [],
@@ -481,6 +471,8 @@ describe('ratchet service (simplified loop)', () => {
       sessionId: 'ratchet-session',
       promptSent: false,
     } as never);
+    vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
+    vi.mocked(sessionService.stopClaudeSession).mockResolvedValue();
 
     await (
       ratchetService as unknown as {
@@ -489,7 +481,6 @@ describe('ratchet service (simplified loop)', () => {
     ).processWorkspace(workspace, {
       autoFixCi: true,
       autoFixReviews: true,
-      autoMerge: false,
       allowedReviewers: [],
     });
 
@@ -498,5 +489,9 @@ describe('ratchet service (simplified loop)', () => {
       unknown
     >;
     expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
+    expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
+      ratchetActiveSessionId: null,
+    });
+    expect(sessionService.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
   });
 });

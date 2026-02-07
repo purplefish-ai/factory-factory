@@ -7,7 +7,7 @@
  * - Dispatch a single ratchet agent only when workspace is idle
  */
 
-import { CIStatus, RatchetState } from '@prisma-gen/client';
+import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
@@ -28,13 +28,11 @@ const RATCHET_WORKFLOW = 'ratchet';
 export interface RatchetSettings {
   autoFixCi: boolean;
   autoFixReviews: boolean;
-  autoMerge: boolean;
   allowedReviewers: string[];
 }
 
 export interface PRStateInfo {
   ciStatus: CIStatus;
-  mergeStateStatus: string;
   hasChangesRequested: boolean;
   hasNewReviewComments: boolean;
   failedChecks: Array<{
@@ -161,7 +159,6 @@ class RatchetService {
     const settings: RatchetSettings = {
       autoFixCi: userSettings.ratchetAutoFixCi,
       autoFixReviews: userSettings.ratchetAutoFixReviews,
-      autoMerge: userSettings.ratchetAutoMerge,
       allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
     };
 
@@ -205,7 +202,6 @@ class RatchetService {
     const settings: RatchetSettings = {
       autoFixCi: userSettings.ratchetAutoFixCi,
       autoFixReviews: userSettings.ratchetAutoFixReviews,
-      autoMerge: userSettings.ratchetAutoMerge,
       allowedReviewers: (userSettings.ratchetAllowedReviewers as string[]) ?? [],
     };
 
@@ -379,7 +375,7 @@ class RatchetService {
       return null;
     }
 
-    if (!sessionService.isSessionRunning(workspace.ratchetActiveSessionId)) {
+    if (session.status !== SessionStatus.RUNNING) {
       await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
       return null;
     }
@@ -393,7 +389,9 @@ class RatchetService {
       if (session.workflow === RATCHET_WORKFLOW) {
         return false;
       }
-      return sessionService.isSessionRunning(session.id);
+      return (
+        session.status === SessionStatus.RUNNING || sessionService.isSessionRunning(session.id)
+      );
     });
   }
 
@@ -523,7 +521,6 @@ class RatchetService {
 
       return {
         ciStatus,
-        mergeStateStatus: prDetails.mergeStateStatus,
         hasChangesRequested,
         hasNewReviewComments,
         failedChecks,
@@ -591,6 +588,18 @@ class RatchetService {
 
       if (result.status === 'started') {
         const promptSent = result.promptSent ?? true;
+        if (!promptSent) {
+          logger.warn('Ratchet session started but prompt delivery failed', {
+            workspaceId: workspace.id,
+            sessionId: result.sessionId,
+          });
+          await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+          if (sessionService.isSessionRunning(result.sessionId)) {
+            await sessionService.stopClaudeSession(result.sessionId);
+          }
+          return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
+        }
+
         await workspaceAccessor.update(workspace.id, {
           ratchetActiveSessionId: result.sessionId,
         });
