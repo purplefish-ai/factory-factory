@@ -40,6 +40,21 @@ interface PRStateInfo {
   prNumber: number;
 }
 
+interface RatchetDecisionContext {
+  workspace: WorkspaceWithPR;
+  prStateInfo: PRStateInfo;
+  previousState: RatchetState;
+  newState: RatchetState;
+  finalState: RatchetState;
+  hasNewReviewActivitySinceLastDispatch: boolean;
+  hasStateChangedSinceLastDispatch: boolean;
+  isCleanPrWithNoNewReviewActivity: boolean;
+  activeRatchetSession: RatchetAction | null;
+  hasOtherActiveSession: boolean;
+}
+
+type RatchetDecision = { type: 'RETURN_ACTION'; action: RatchetAction } | { type: 'TRIGGER_FIXER' };
+
 export type RatchetAction =
   | { type: 'WAITING'; reason: string }
   | { type: 'FIXER_ACTIVE'; sessionId: string }
@@ -192,27 +207,28 @@ class RatchetService {
         };
       }
 
-      const previousState = workspace.ratchetState;
-      const newState = this.determineRatchetState(prStateInfo);
-      const finalState = workspace.ratchetEnabled ? newState : RatchetState.IDLE;
+      const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateInfo);
+      const decision = this.decideRatchetAction(decisionContext);
+      const action = await this.applyRatchetDecision(decisionContext, decision);
 
-      const action = workspace.ratchetEnabled
-        ? await this.evaluateAndDispatch(workspace, prStateInfo)
-        : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
-
-      await this.updateWorkspaceAfterCheck(workspace, prStateInfo, action, finalState);
+      await this.updateWorkspaceAfterCheck(
+        workspace,
+        prStateInfo,
+        action,
+        decisionContext.finalState
+      );
       this.logWorkspaceRatchetingDecision(
         workspace,
-        previousState,
-        finalState,
+        decisionContext.previousState,
+        decisionContext.finalState,
         action,
         prStateInfo
       );
 
       return {
         workspaceId: workspace.id,
-        previousState,
-        newState: finalState,
+        previousState: decisionContext.previousState,
+        newState: decisionContext.finalState,
         action,
       };
     } catch (error) {
@@ -408,43 +424,135 @@ class RatchetService {
     }
   }
 
-  private async evaluateAndDispatch(
+  private async buildRatchetDecisionContext(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo
-  ): Promise<RatchetAction> {
-    if (prStateInfo.prState === 'MERGED') {
-      return { type: 'COMPLETED' };
-    }
+  ): Promise<RatchetDecisionContext> {
+    const previousState = workspace.ratchetState;
+    const newState = this.determineRatchetState(prStateInfo);
+    const finalState = workspace.ratchetEnabled ? newState : RatchetState.IDLE;
+    const hasNewReviewActivitySinceLastDispatch = this.hasNewReviewActivitySinceLastDispatch(
+      workspace,
+      prStateInfo
+    );
+    const hasStateChangedSinceLastDispatch = this.hasStateChangedSinceLastDispatch(
+      workspace,
+      prStateInfo
+    );
+    const isCleanPrWithNoNewReviewActivity = this.shouldSkipCleanPR(workspace, prStateInfo);
 
-    if (prStateInfo.prState !== 'OPEN') {
-      return { type: 'WAITING', reason: 'PR is not open' };
-    }
+    const activityChecks = await this.collectRatchetingActivityChecks(
+      workspace,
+      prStateInfo,
+      isCleanPrWithNoNewReviewActivity
+    );
 
-    if (this.shouldSkipCleanPR(workspace, prStateInfo)) {
+    return {
+      workspace,
+      prStateInfo,
+      previousState,
+      newState,
+      finalState,
+      hasNewReviewActivitySinceLastDispatch,
+      hasStateChangedSinceLastDispatch,
+      isCleanPrWithNoNewReviewActivity,
+      activeRatchetSession: activityChecks.activeRatchetSession,
+      hasOtherActiveSession: activityChecks.hasOtherActiveSession,
+    };
+  }
+
+  private async collectRatchetingActivityChecks(
+    workspace: WorkspaceWithPR,
+    prStateInfo: PRStateInfo,
+    isCleanPrWithNoNewReviewActivity: boolean
+  ): Promise<{
+    activeRatchetSession: RatchetAction | null;
+    hasOtherActiveSession: boolean;
+  }> {
+    if (
+      !workspace.ratchetEnabled ||
+      prStateInfo.prState !== 'OPEN' ||
+      isCleanPrWithNoNewReviewActivity
+    ) {
       return {
-        type: 'WAITING',
-        reason: 'PR is clean (green CI and no new review activity)',
+        activeRatchetSession: null,
+        hasOtherActiveSession: false,
       };
     }
 
     const activeRatchetSession = await this.getActiveRatchetSession(workspace);
     if (activeRatchetSession) {
-      return activeRatchetSession;
-    }
-
-    if (!this.hasStateChangedSinceLastDispatch(workspace, prStateInfo)) {
-      return { type: 'WAITING', reason: 'PR state unchanged since last ratchet dispatch' };
-    }
-
-    const hasOtherActiveSession = await this.hasNonRatchetActiveSession(workspace.id);
-    if (hasOtherActiveSession) {
       return {
-        type: 'WAITING',
-        reason: 'Workspace is not idle (active non-ratchet chat session)',
+        activeRatchetSession,
+        hasOtherActiveSession: false,
       };
     }
 
-    return this.triggerFixer(workspace, prStateInfo);
+    return {
+      activeRatchetSession: null,
+      hasOtherActiveSession: await this.hasNonRatchetActiveSession(workspace.id),
+    };
+  }
+
+  private decideRatchetAction(context: RatchetDecisionContext): RatchetDecision {
+    if (!context.workspace.ratchetEnabled) {
+      return {
+        type: 'RETURN_ACTION',
+        action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
+      };
+    }
+
+    if (context.prStateInfo.prState === 'MERGED') {
+      return { type: 'RETURN_ACTION', action: { type: 'COMPLETED' } };
+    }
+
+    if (context.prStateInfo.prState !== 'OPEN') {
+      return {
+        type: 'RETURN_ACTION',
+        action: { type: 'WAITING', reason: 'PR is not open' },
+      };
+    }
+
+    if (context.isCleanPrWithNoNewReviewActivity) {
+      return {
+        type: 'RETURN_ACTION',
+        action: { type: 'WAITING', reason: 'PR is clean (green CI and no new review activity)' },
+      };
+    }
+
+    if (context.activeRatchetSession) {
+      return { type: 'RETURN_ACTION', action: context.activeRatchetSession };
+    }
+
+    if (!context.hasStateChangedSinceLastDispatch) {
+      return {
+        type: 'RETURN_ACTION',
+        action: { type: 'WAITING', reason: 'PR state unchanged since last ratchet dispatch' },
+      };
+    }
+
+    if (context.hasOtherActiveSession) {
+      return {
+        type: 'RETURN_ACTION',
+        action: {
+          type: 'WAITING',
+          reason: 'Workspace is not idle (active non-ratchet chat session)',
+        },
+      };
+    }
+
+    return { type: 'TRIGGER_FIXER' };
+  }
+
+  private async applyRatchetDecision(
+    context: RatchetDecisionContext,
+    decision: RatchetDecision
+  ): Promise<RatchetAction> {
+    if (decision.type === 'RETURN_ACTION') {
+      return decision.action;
+    }
+
+    return await this.triggerFixer(context.workspace, context.prStateInfo);
   }
 
   private shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {

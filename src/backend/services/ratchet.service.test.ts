@@ -259,24 +259,34 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
     };
 
-    vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
-
-    const action = await (
+    vi.spyOn(
       ratchetService as unknown as {
-        evaluateAndDispatch: (workspaceArg: typeof workspace, prState: unknown) => Promise<unknown>;
-      }
-    ).evaluateAndDispatch(workspace, {
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      },
+      'fetchPRState'
+    ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 5,
     });
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+    vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
 
-    expect(action).toEqual({
-      type: 'WAITING',
-      reason: 'PR state unchanged since last ratchet dispatch',
+    const result = await (
+      ratchetService as unknown as {
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+      }
+    ).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      action: {
+        type: 'WAITING',
+        reason: 'PR state unchanged since last ratchet dispatch',
+      },
     });
   });
 
@@ -294,29 +304,39 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
     };
 
+    vi.spyOn(
+      ratchetService as unknown as {
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      },
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'ci:SUCCESS|changes-requested:1735776000000',
+      hasChangesRequested: true,
+      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 55,
+    });
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     const triggerSpy = vi.spyOn(
       ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
       'triggerFixer'
     );
 
-    const action = await (
+    const result = await (
       ratchetService as unknown as {
-        evaluateAndDispatch: (workspaceArg: typeof workspace, prState: unknown) => Promise<unknown>;
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
       }
-    ).evaluateAndDispatch(workspace, {
-      ciStatus: CIStatus.SUCCESS,
-      snapshotKey: 'ci:SUCCESS|changes-requested:1735776000000',
-      hasChangesRequested: true,
-      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
-      prState: 'OPEN',
-      prNumber: 55,
-    });
+    ).processWorkspace(workspace);
 
     expect(triggerSpy).not.toHaveBeenCalled();
-    expect(action).toEqual({
-      type: 'WAITING',
-      reason: 'PR state unchanged since last ratchet dispatch',
+    expect(result).toMatchObject({
+      action: {
+        type: 'WAITING',
+        reason: 'PR state unchanged since last ratchet dispatch',
+      },
     });
   });
 
@@ -402,29 +422,39 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
     };
 
+    vi.spyOn(
+      ratchetService as unknown as {
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      },
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: '2026-01-03T00:00:00Z',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 8,
+    });
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     const triggerSpy = vi.spyOn(
       ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
       'triggerFixer'
     );
 
-    const action = await (
+    const result = await (
       ratchetService as unknown as {
-        evaluateAndDispatch: (workspaceArg: typeof workspace, prState: unknown) => Promise<unknown>;
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
       }
-    ).evaluateAndDispatch(workspace, {
-      ciStatus: CIStatus.SUCCESS,
-      snapshotKey: '2026-01-03T00:00:00Z',
-      hasChangesRequested: false,
-      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
-      prState: 'OPEN',
-      prNumber: 8,
-    });
+    ).processWorkspace(workspace);
 
     expect(triggerSpy).not.toHaveBeenCalled();
-    expect(action).toEqual({
-      type: 'WAITING',
-      reason: 'PR is clean (green CI and no new review activity)',
+    expect(result).toMatchObject({
+      action: {
+        type: 'WAITING',
+        reason: 'PR is clean (green CI and no new review activity)',
+      },
     });
   });
 
