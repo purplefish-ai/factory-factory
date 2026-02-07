@@ -1,6 +1,7 @@
 import type { useSortable } from '@dnd-kit/sortable';
 import { Archive, CheckCircle2, GitPullRequest, GripVertical } from 'lucide-react';
 import { Link } from 'react-router';
+import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton } from '@/components/workspace';
@@ -8,8 +9,6 @@ import { cn, formatRelativeTime } from '@/lib/utils';
 import {
   deriveWorkspaceSidebarStatus,
   getWorkspaceActivityTooltip,
-  getWorkspaceCiLabel,
-  getWorkspaceCiTooltip,
   getWorkspacePrTooltipSuffix,
   type WorkspaceSidebarStatus,
 } from '@/shared/workspace-sidebar-status';
@@ -279,21 +278,12 @@ function WorkspaceCiBadge({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            'inline-flex w-fit max-w-full truncate rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
-            getCiBadgeClass(sidebarStatus.ciState)
-          )}
-        >
-          {getWorkspaceCiLabel(sidebarStatus.ciState)}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="right">
-        {getWorkspaceCiTooltip(sidebarStatus.ciState, workspace.prState ?? null)}
-      </TooltipContent>
-    </Tooltip>
+    <CiStatusChip
+      ciState={sidebarStatus.ciState}
+      prState={workspace.prState ?? null}
+      size="sm"
+      className="max-w-full truncate"
+    />
   );
 }
 
@@ -382,21 +372,4 @@ function getStatusDotClass(status: WorkspaceSidebarStatus): string {
     return 'bg-green-500 animate-pulse';
   }
   return 'bg-gray-400';
-}
-
-function getCiBadgeClass(ciState: WorkspaceSidebarStatus['ciState']): string {
-  switch (ciState) {
-    case 'RUNNING':
-      return 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300';
-    case 'FAILING':
-      return 'bg-red-500/15 text-red-700 dark:text-red-300';
-    case 'PASSING':
-      return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
-    case 'MERGED':
-      return 'bg-purple-500/15 text-purple-700 dark:text-purple-300';
-    case 'UNKNOWN':
-      return 'bg-muted text-muted-foreground';
-    case 'NONE':
-      return 'bg-transparent text-muted-foreground';
-  }
 }
