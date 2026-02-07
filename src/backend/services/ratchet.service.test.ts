@@ -35,6 +35,7 @@ vi.mock('./fixer-session.service', () => ({
 vi.mock('./session.service', () => ({
   sessionService: {
     isSessionRunning: vi.fn(),
+    isSessionWorking: vi.fn(),
     stopClaudeSession: vi.fn(),
   },
 }));
@@ -66,6 +67,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.clearAllMocks();
     (ratchetService as unknown as { isShuttingDown: boolean }).isShuttingDown = false;
     vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue(null);
+    vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
   });
 
   it('checks workspaces and processes each', async () => {
@@ -180,6 +182,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         status: 'RUNNING',
       },
     ] as never);
+    vi.mocked(sessionService.isSessionWorking).mockReturnValue(true);
 
     const result = await (
       ratchetService as unknown as {
@@ -246,6 +249,60 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     >;
     expect(finalUpdatePayload.ratchetLastCiRunId).toBe('2026-01-02T00:00:00Z');
     expect(finalUpdatePayload).toHaveProperty('prReviewLastCheckedAt');
+  });
+
+  it('does dispatch when non-ratchet session is running but idle', async () => {
+    const workspace = {
+      id: 'ws-idle-session',
+      prUrl: 'https://github.com/example/repo/pull/44',
+      prNumber: 44,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: '2026-01-01T00:00:00Z',
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+
+    vi.spyOn(
+      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => Promise<unknown> },
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      snapshotKey: '2026-01-02T00:00:00Z',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 44,
+    });
+
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+    vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      {
+        id: 'chat-idle-1',
+        workflow: 'default-followup',
+        status: 'RUNNING',
+      },
+    ] as never);
+    vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
+
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'ratchet-session-idle-ok',
+      promptSent: true,
+    } as never);
+
+    const result = await (
+      ratchetService as unknown as {
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+      }
+    ).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      action: { type: 'TRIGGERED_FIXER', sessionId: 'ratchet-session-idle-ok' },
+    });
   });
 
   it('does not dispatch when PR state unchanged since last dispatch', async () => {
