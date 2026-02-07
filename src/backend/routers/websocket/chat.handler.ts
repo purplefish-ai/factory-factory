@@ -40,7 +40,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     chatMessageHandlerService,
     configService,
     createLogger,
-    messageStateService,
     sessionFileLogger,
     sessionService,
   } = appContext.services;
@@ -195,15 +194,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return initialStatus;
   }
 
-  function sendSnapshotIfNeeded(dbSessionId: string | null, isRunning: boolean): void {
-    if (!dbSessionId) {
-      return;
-    }
-    const pendingRequest = chatEventForwarderService.getPendingRequest(dbSessionId);
-    const sessionStatus = messageStateService.computeSessionStatus(dbSessionId, isRunning);
-    messageStateService.sendSnapshot(dbSessionId, sessionStatus, pendingRequest);
-  }
-
   function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
     const rawMessage: unknown = JSON.parse(toMessageString(data));
     const parseResult = ChatMessageSchema.safeParse(rawMessage);
@@ -310,8 +300,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         });
       }
 
-      const initialStatus = sendInitialStatus(ws, dbSessionId);
-      sendSnapshotIfNeeded(dbSessionId, initialStatus.running);
+      sendInitialStatus(ws, dbSessionId);
+      // Session hydration is handled by explicit load_session from the client.
 
       ws.on('message', async (data) => {
         try {

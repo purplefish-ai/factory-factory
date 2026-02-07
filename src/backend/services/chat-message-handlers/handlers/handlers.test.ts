@@ -420,7 +420,7 @@ describe('chat message handlers', () => {
     );
   });
 
-  it('load_session sends status with processAlive when client running', async () => {
+  it('load_session sends replay batch with status when client running', async () => {
     mockedClaudeSessionAccessor.findById.mockResolvedValue({
       id: 'session-1',
       claudeSessionId: 'claude-1',
@@ -429,6 +429,7 @@ describe('chat message handlers', () => {
       isRunning: () => true,
       isWorking: () => true,
     } as unknown as ClaudeClient);
+    mockedChatEventForwarderService.getPendingRequest.mockReturnValue(undefined);
 
     const handler = createLoadSessionHandler();
     const ws = createWs();
@@ -437,11 +438,15 @@ describe('chat message handlers', () => {
       ws,
       sessionId: 'session-1',
       workingDir: '/tmp',
-      message: { type: 'load_session' },
+      message: { type: 'load_session', loadRequestId: 'load-123' },
     });
 
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'status', running: true, processAlive: true })
+      JSON.stringify({
+        type: 'session_replay_batch',
+        replayEvents: [{ type: 'status', running: true, processAlive: true }],
+        loadRequestId: 'load-123',
+      })
     );
   });
 

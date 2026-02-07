@@ -74,7 +74,10 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('get_history') }),
 
   // Load session data
-  z.object({ type: z.literal('load_session') }),
+  z.object({
+    type: z.literal('load_session'),
+    loadRequestId: z.string().min(1).optional(),
+  }),
 
   // Get queued messages (lightweight alternative to load_session)
   z.object({ type: z.literal('get_queue') }),

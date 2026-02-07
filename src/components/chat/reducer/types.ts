@@ -14,6 +14,7 @@ import type {
   SessionStatus as SharedSessionStatus,
   TokenStats,
   UserQuestionRequest,
+  WebSocketMessage,
 } from '@/lib/claude-types';
 
 // =============================================================================
@@ -235,6 +236,12 @@ export type ChatAction =
         messages: ChatMessage[];
         sessionStatus: SharedSessionStatus;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
+      };
+    }
+  | {
+      type: 'SESSION_REPLAY_BATCH';
+      payload: {
+        replayEvents: WebSocketMessage[];
       };
     }
   | {
