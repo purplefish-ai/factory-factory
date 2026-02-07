@@ -1,11 +1,12 @@
-import type { CIStatus, KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import type { KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
 import { Archive, GitBranch, GitPullRequest } from 'lucide-react';
 import { Link } from 'react-router';
+import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
-import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { cn } from '@/lib/utils';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export interface WorkspaceWithKanban extends Workspace {
   kanbanColumn: KanbanColumn | null;
@@ -64,6 +65,14 @@ export function KanbanCard({
   const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
 
+  const sidebarStatus = deriveWorkspaceSidebarStatus({
+    isWorking: workspace.isWorking,
+    prUrl: workspace.prUrl ?? null,
+    prState: workspace.prState ?? null,
+    prCiStatus: workspace.prCiStatus ?? null,
+    ratchetState: workspace.ratchetState ?? null,
+  });
+
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
@@ -121,13 +130,9 @@ export function KanbanCard({
             )}
           </div>
 
-          {showPR && (
+          {sidebarStatus.ciState !== 'NONE' && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <CIFailureWarning
-                ciStatus={workspace.prCiStatus as CIStatus}
-                prUrl={workspace.prUrl}
-                size="sm"
-              />
+              <CiStatusChip ciState={sidebarStatus.ciState} prState={workspace.prState} size="sm" />
             </div>
           )}
 
