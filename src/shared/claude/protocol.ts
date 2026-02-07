@@ -486,6 +486,7 @@ export interface WebSocketMessage {
     // Message state machine events (primary protocol)
     | 'message_state_changed'
     | 'messages_snapshot'
+    | 'session_replay_batch'
     // SDK message types
     | 'tool_progress'
     | 'tool_use_summary'
@@ -539,6 +540,10 @@ export interface WebSocketMessage {
   sessionStatus?: SessionStatus;
   /** Pending interactive request for messages_snapshot events */
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
+  /** Client-generated ID for correlating load_session requests and responses */
+  loadRequestId?: string;
+  /** Batch of WebSocket events for atomic session replay during hydration */
+  replayEvents?: WebSocketMessage[];
   /** Queue position for message_state_changed events */
   queuePosition?: number;
   /** Error message for REJECTED/FAILED states in message_state_changed events */

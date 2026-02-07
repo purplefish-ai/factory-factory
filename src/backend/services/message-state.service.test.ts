@@ -687,7 +687,13 @@ describe('MessageStateService', () => {
         timestamp: new Date().toISOString(),
       };
 
-      messageStateService.sendSnapshot('session-1', { phase: 'running' }, pendingRequest);
+      messageStateService.sendSnapshot(
+        'session-1',
+        { phase: 'running' },
+        {
+          pendingInteractiveRequest: pendingRequest,
+        }
+      );
       unsubscribe();
 
       expect(
@@ -697,6 +703,26 @@ describe('MessageStateService', () => {
             event.sessionId === 'session-1' &&
             event.data.sessionStatus.phase === 'running' &&
             event.data.pendingInteractiveRequest === pendingRequest
+        )
+      ).toBe(true);
+    });
+
+    it('should include loadRequestId when provided', () => {
+      const { events, unsubscribe } = collectEvents();
+
+      messageStateService.sendSnapshot(
+        'session-1',
+        { phase: 'ready' },
+        { loadRequestId: 'load-abc' }
+      );
+      unsubscribe();
+
+      expect(
+        events.some(
+          (event) =>
+            event.type === 'messages_snapshot' &&
+            event.sessionId === 'session-1' &&
+            event.data.loadRequestId === 'load-abc'
         )
       ).toBe(true);
     });
@@ -738,7 +764,13 @@ describe('MessageStateService', () => {
         timestamp: new Date().toISOString(),
       };
 
-      messageStateService.sendSnapshot('session-1', { phase: 'running' }, pendingRequest);
+      messageStateService.sendSnapshot(
+        'session-1',
+        { phase: 'running' },
+        {
+          pendingInteractiveRequest: pendingRequest,
+        }
+      );
       unsubscribe();
 
       expect(
