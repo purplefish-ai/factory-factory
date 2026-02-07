@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import { resumeModesSchema } from '@/shared/schemas/persisted-stores.schema';
 import { pathExists } from '../lib/file-helpers';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
@@ -48,7 +49,9 @@ async function readResumeModes(worktreeBasePath: string): Promise<Record<string,
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     try {
-      return JSON.parse(content) as Record<string, boolean>;
+      const parsed = JSON.parse(content);
+      const validated = resumeModesSchema.parse(parsed);
+      return validated;
     } catch (error) {
       logger.warn('Failed to parse resume modes file; falling back to empty', {
         filePath,
