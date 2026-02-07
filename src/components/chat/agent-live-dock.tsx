@@ -183,6 +183,10 @@ export const AgentLiveDock = memo(function AgentLiveDock({
     return null;
   }
 
+  // Calculate max height for tool details based on available space
+  // Header is ~32px, spacing is 12px, leaving the rest for content
+  const toolDetailsMaxHeight = Math.max(60, height - 44);
+
   return (
     <div className={cn('bg-muted/20 border-b relative', className)}>
       <div className="px-4 py-3 flex flex-col" style={{ height: `${height}px` }}>
@@ -201,7 +205,8 @@ export const AgentLiveDock = memo(function AgentLiveDock({
                 summaryOrder="latest-first"
                 open={toolWindowOpen}
                 onOpenChange={setToolWindowOpen}
-                toolDetailsClassName="max-h-24 overflow-y-auto"
+                toolDetailsClassName="overflow-y-auto"
+                toolDetailsMaxHeight={toolDetailsMaxHeight}
               />
             </div>
           )}
