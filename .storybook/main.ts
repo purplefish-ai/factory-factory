@@ -9,6 +9,7 @@ const config: StorybookConfig = {
   stories: [
     '../src/components/**/*.stories.@(js|jsx|ts|tsx)',
     '../src/frontend/components/**/*.stories.@(js|jsx|ts|tsx)',
+    '../src/client/**/*.stories.@(js|jsx|ts|tsx)',
   ],
 
   addons: [
