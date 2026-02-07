@@ -257,7 +257,10 @@ class ChatEventForwarderService {
 
       // Mark workspace as active
       workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
-      sessionRuntimeStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'unknown');
+      sessionRuntimeStoreService.syncFromClient(dbSessionId, {
+        isRunning: client.isRunning(),
+        isWorking: client.isWorking(),
+      });
     });
 
     // Hook into idle event to dispatch next queued message
