@@ -1,5 +1,6 @@
 import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { ratchetService } from '../services/ratchet.service';
 import { WorkspaceCreationService } from '../services/workspace-creation.service';
@@ -97,6 +98,13 @@ export const workspaceRouter = router({
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     return {
       ...workspace,
+      sidebarStatus: deriveWorkspaceSidebarStatus({
+        isWorking: flowState.isWorking,
+        prUrl: workspace.prUrl,
+        prState: workspace.prState,
+        prCiStatus: workspace.prCiStatus,
+        ratchetState: workspace.ratchetState,
+      }),
       ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
       flowPhase: flowState.phase,
       ciObservation: flowState.ciObservation,

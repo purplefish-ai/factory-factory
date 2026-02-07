@@ -5,6 +5,12 @@ import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton } from '@/components/workspace';
 import { cn, formatRelativeTime } from '@/lib/utils';
+import {
+  deriveWorkspaceSidebarStatus,
+  getWorkspaceActivityTooltip,
+  getWorkspaceCiLabel,
+  type WorkspaceSidebarStatus,
+} from '@/shared/workspace-sidebar-status';
 import { trpc } from '../lib/trpc';
 import type { WorkspaceListItem } from './use-workspace-list-state';
 
@@ -108,6 +114,7 @@ export function ActiveWorkspaceItem({
 
   const { gitStats: stats } = workspace;
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
+  const sidebarStatus = getWorkspaceSidebarStatus(workspace);
   const { showAttentionGlow } = getSidebarAttentionState(
     workspace,
     Boolean(disableRatchetAnimation),
@@ -149,9 +156,11 @@ export function ActiveWorkspaceItem({
             <div className="w-5 shrink-0 flex flex-col items-center gap-1.5 self-start mt-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(workspace))} />
+                  <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(sidebarStatus))} />
                 </TooltipTrigger>
-                <TooltipContent side="right">{getStatusTooltip(workspace)}</TooltipContent>
+                <TooltipContent side="right">
+                  {getWorkspaceActivityTooltip(sidebarStatus.activityState)}
+                </TooltipContent>
               </Tooltip>
               <RatchetToggleButton
                 enabled={ratchetEnabled}
@@ -231,21 +240,20 @@ function WorkspaceMetaRow({
   workspace: WorkspaceListItem;
   stats: WorkspaceListItem['gitStats'];
 }) {
-  const hasStats = Boolean(
-    stats && (stats.additions > 0 || stats.deletions > 0 || stats.total > 0)
-  );
+  const hasStats = Boolean(stats && (stats.additions > 0 || stats.deletions > 0));
+  const sidebarStatus = getWorkspaceSidebarStatus(workspace);
   const showPR = Boolean(workspace.prNumber && workspace.prState !== 'NONE' && workspace.prUrl);
-  if (!(hasStats || showPR)) {
+  const showCI = sidebarStatus.ciState !== 'NONE';
+  if (!(hasStats || showPR || showCI)) {
     return null;
   }
 
-  const filesText = hasStats && stats?.total ? `${stats.total} files` : '';
   const additionsText = hasStats && stats?.additions ? `+${stats.additions}` : '';
   const deletionsText = hasStats && stats?.deletions ? `-${stats.deletions}` : '';
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_40px_40px_72px] items-center gap-x-2 text-xs text-muted-foreground">
-      <span className="truncate">{filesText}</span>
+      <WorkspaceCiBadge workspace={workspace} sidebarStatus={sidebarStatus} />
       <span className="w-10 text-right tabular-nums text-green-600 dark:text-green-400">
         {additionsText}
       </span>
@@ -254,6 +262,36 @@ function WorkspaceMetaRow({
       </span>
       {showPR ? <WorkspacePrButton workspace={workspace} /> : <WorkspacePrSpacer />}
     </div>
+  );
+}
+
+function WorkspaceCiBadge({
+  workspace,
+  sidebarStatus,
+}: {
+  workspace: WorkspaceListItem;
+  sidebarStatus: WorkspaceSidebarStatus;
+}) {
+  if (sidebarStatus.ciState === 'NONE') {
+    return <span className="truncate" aria-hidden="true" />;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            'inline-flex w-fit max-w-full truncate rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+            getCiBadgeClass(sidebarStatus.ciState)
+          )}
+        >
+          {getWorkspaceCiLabel(sidebarStatus.ciState)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="right">
+        {getWorkspaceCiTooltip(workspace, sidebarStatus.ciState)}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -309,13 +347,14 @@ function getPrTooltipSuffix(workspace: WorkspaceListItem) {
   if (workspace.prState === 'CLOSED') {
     return ' · Closed';
   }
-  if (workspace.prCiStatus === 'SUCCESS') {
-    return ' · CI passed';
+  const ciState = getWorkspaceSidebarStatus(workspace).ciState;
+  if (ciState === 'PASSING') {
+    return ' · CI passing';
   }
-  if (workspace.prCiStatus === 'FAILURE') {
-    return ' · CI failed';
+  if (ciState === 'FAILING') {
+    return ' · CI failing';
   }
-  if (workspace.prCiStatus === 'PENDING') {
+  if (ciState === 'RUNNING') {
     return ' · CI running';
   }
   return '';
@@ -324,6 +363,19 @@ function getPrTooltipSuffix(workspace: WorkspaceListItem) {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+function getWorkspaceSidebarStatus(workspace: WorkspaceListItem): WorkspaceSidebarStatus {
+  return (
+    workspace.sidebarStatus ??
+    deriveWorkspaceSidebarStatus({
+      isWorking: workspace.isWorking,
+      prUrl: workspace.prUrl ?? null,
+      prState: workspace.prState ?? null,
+      prCiStatus: workspace.prCiStatus ?? null,
+      ratchetState: workspace.ratchetState ?? null,
+    })
+  );
+}
 
 function getSidebarAttentionState(
   workspace: WorkspaceListItem,
@@ -338,46 +390,51 @@ function getSidebarAttentionState(
   };
 }
 
-function getStatusDotClass(workspace: WorkspaceListItem): string {
-  if (workspace.isWorking) {
+function getStatusDotClass(status: WorkspaceSidebarStatus): string {
+  if (status.activityState === 'WORKING') {
     return 'bg-green-500 animate-pulse';
-  }
-  if (workspace.prState === 'MERGED') {
-    return 'bg-purple-500';
-  }
-  if (workspace.prCiStatus === 'FAILURE') {
-    return 'bg-red-500';
-  }
-  if (workspace.prCiStatus === 'PENDING') {
-    return 'bg-yellow-500 animate-pulse';
-  }
-  if (workspace.prCiStatus === 'SUCCESS') {
-    return 'bg-green-500';
-  }
-  if (workspace.gitStats?.hasUncommitted) {
-    return 'bg-orange-500';
   }
   return 'bg-gray-400';
 }
 
-function getStatusTooltip(workspace: WorkspaceListItem): string {
-  if (workspace.isWorking) {
-    return 'Claude is working';
+function getCiBadgeClass(ciState: WorkspaceSidebarStatus['ciState']): string {
+  switch (ciState) {
+    case 'RUNNING':
+      return 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300';
+    case 'FAILING':
+      return 'bg-red-500/15 text-red-700 dark:text-red-300';
+    case 'PASSING':
+      return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
+    case 'MERGED':
+      return 'bg-purple-500/15 text-purple-700 dark:text-purple-300';
+    case 'UNKNOWN':
+      return 'bg-muted text-muted-foreground';
+    case 'NONE':
+      return 'bg-transparent text-muted-foreground';
   }
-  if (workspace.prState === 'MERGED') {
-    return 'PR merged';
+}
+
+function getWorkspaceCiTooltip(
+  workspace: WorkspaceListItem,
+  ciState: WorkspaceSidebarStatus['ciState']
+): string {
+  if (ciState === 'RUNNING') {
+    return 'CI checks are running';
   }
-  if (workspace.prCiStatus === 'FAILURE') {
-    return 'CI checks failing';
+  if (ciState === 'FAILING') {
+    return 'CI checks are failing';
   }
-  if (workspace.prCiStatus === 'PENDING') {
-    return 'CI checks running';
+  if (ciState === 'PASSING') {
+    return 'CI checks are passing';
   }
-  if (workspace.prCiStatus === 'SUCCESS') {
-    return 'CI checks passing';
+  if (ciState === 'MERGED') {
+    return 'PR is merged';
   }
-  if (workspace.gitStats?.hasUncommitted) {
-    return 'Uncommitted changes';
+  if (ciState === 'UNKNOWN') {
+    if (workspace.prState === 'CLOSED') {
+      return 'PR is closed';
+    }
+    return 'CI status is unknown';
   }
-  return 'Ready';
+  return 'No PR attached';
 }

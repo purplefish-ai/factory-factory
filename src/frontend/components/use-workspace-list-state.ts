@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 // =============================================================================
 // Types
@@ -30,6 +31,7 @@ export interface ServerWorkspace {
   ciObservation?: string | null;
   cachedKanbanColumn?: string | null;
   stateComputedAt?: string | null;
+  sidebarStatus?: WorkspaceSidebarStatus;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {
