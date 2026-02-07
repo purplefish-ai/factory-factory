@@ -448,6 +448,8 @@ class WorkspaceAccessor {
       id: string;
       prUrl: string;
       prNumber: number | null;
+      prState: PRState;
+      prCiStatus: CIStatus;
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
@@ -465,6 +467,8 @@ class WorkspaceAccessor {
         id: true,
         prUrl: true,
         prNumber: true,
+        prState: true,
+        prCiStatus: true,
         ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
@@ -478,6 +482,8 @@ class WorkspaceAccessor {
         id: string;
         prUrl: string;
         prNumber: number | null;
+        prState: PRState;
+        prCiStatus: CIStatus;
         ratchetEnabled: boolean;
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
@@ -495,6 +501,8 @@ class WorkspaceAccessor {
     id: string;
     prUrl: string;
     prNumber: number | null;
+    prState: PRState;
+    prCiStatus: CIStatus;
     ratchetEnabled: boolean;
     ratchetState: RatchetState;
     ratchetActiveSessionId: string | null;
@@ -512,6 +520,8 @@ class WorkspaceAccessor {
         id: true,
         prUrl: true,
         prNumber: true,
+        prState: true,
+        prCiStatus: true,
         ratchetEnabled: true,
         ratchetState: true,
         ratchetActiveSessionId: true,
@@ -523,6 +533,8 @@ class WorkspaceAccessor {
       id: string;
       prUrl: string;
       prNumber: number | null;
+      prState: PRState;
+      prCiStatus: CIStatus;
       ratchetEnabled: boolean;
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
