@@ -1643,6 +1643,37 @@ describe('chatReducer', () => {
       expect(newState.sessionStatus).toEqual({ phase: 'running' });
       expect(newState.processStatus).toEqual({ state: 'alive' });
     });
+
+    it('should replay onto a clean transcript to avoid duplicates on reconnect', () => {
+      const existingMessage: ChatMessage = {
+        id: 'old-msg',
+        source: 'claude',
+        message: createTestAssistantMessage(),
+        timestamp: '2024-01-01T00:00:00.000Z',
+        order: 0,
+      };
+
+      const state: ChatState = {
+        ...initialState,
+        messages: [existingMessage],
+      };
+
+      const action: ChatAction = {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            { type: 'claude_message', data: createTestAssistantMessage(), order: 0 },
+            { type: 'status', running: true, processAlive: true },
+          ],
+        },
+      };
+
+      const newState = chatReducer(state, action);
+
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]!.id).not.toBe('old-msg');
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
+    });
   });
 
   // -------------------------------------------------------------------------

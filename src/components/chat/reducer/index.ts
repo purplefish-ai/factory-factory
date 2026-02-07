@@ -26,7 +26,7 @@ import { reduceSessionSlice } from './slices/session';
 import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
-import { createInitialChatState } from './state';
+import { createBaseResetState, createInitialChatState } from './state';
 import type { ChatAction, ChatState } from './types';
 
 export { createInitialChatState };
@@ -80,9 +80,21 @@ function reduceSingleAction(currentState: ChatState, currentAction: ChatAction):
   return nextState;
 }
 
+function createReplayBaseState(state: ChatState): ChatState {
+  return {
+    ...state,
+    ...createBaseResetState(),
+    // Preserve optimistic pending sends that are not yet reflected in replayed events.
+    pendingMessages: state.pendingMessages,
+    queuedMessages: new Map(),
+    sessionStatus: { phase: 'loading' },
+    processStatus: { state: 'unknown' },
+  };
+}
+
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   if (action.type === 'SESSION_REPLAY_BATCH') {
-    let nextState = state;
+    let nextState = createReplayBaseState(state);
     for (const event of action.payload.replayEvents) {
       if (event.type === 'session_replay_batch') {
         continue;
