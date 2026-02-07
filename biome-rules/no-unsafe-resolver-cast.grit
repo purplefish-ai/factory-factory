@@ -1,0 +1,18 @@
+language js
+
+// Prevent unsafe type assertions on promise resolve functions
+//
+// BAD:  resolve: resolve as (response: unknown) => void
+// GOOD: resolve: (response: SomeType) => void  (with proper typing from generic)
+//
+// Rationale: Casting resolve functions to accept unknown bypasses type safety
+// and can hide validation gaps. The resolve function should have proper types
+// derived from the Promise generic parameter.
+
+`resolve as ($params) => $return` where {
+  $params <: contains `unknown`,
+  register_diagnostic(
+    span=`resolve`,
+    message="Do not cast resolve functions to accept unknown. Use proper generic types on Promise/PendingRequest and validate data before calling resolve."
+  )
+}
