@@ -94,7 +94,6 @@ class ChatMessageHandlerService {
           return;
         }
         client = newClient;
-        sessionRuntimeStoreService.markIdle(dbSessionId, 'alive');
       }
 
       const shouldRequeueReason = this.getRequeueReason(client);

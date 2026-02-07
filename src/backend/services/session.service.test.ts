@@ -288,7 +288,6 @@ describe('SessionService', () => {
     await sessionService.startClaudeSession('session-1');
 
     // Extract the onExit handler passed to processManager.getOrCreateClient
-    // biome-ignore lint/style/noNonNullAssertion: test assertion — getOrCreateClient must have been called
     const handlers = vi.mocked(sessionProcessManager.getOrCreateClient).mock.calls[0]![2] as {
       onExit: (id: string) => Promise<void>;
     };
@@ -348,7 +347,6 @@ describe('SessionService', () => {
 
     await sessionService.startClaudeSession('session-2');
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion — getOrCreateClient must have been called
     const handlers = vi.mocked(sessionProcessManager.getOrCreateClient).mock.calls[0]![2] as {
       onExit: (id: string) => Promise<void>;
     };

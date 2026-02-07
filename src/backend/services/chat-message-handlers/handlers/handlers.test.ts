@@ -379,6 +379,8 @@ describe('chat message handlers', () => {
   });
 
   it('stop clears pending requests and marks runtime idle', async () => {
+    mockedSessionService.getClient.mockReturnValue(undefined);
+
     const handler = createStopHandler();
     const ws = createWs();
 
@@ -393,6 +395,25 @@ describe('chat message handlers', () => {
     expect(mockedChatEventForwarderService.clearPendingRequest).toHaveBeenCalledWith('session-1');
     expect(mockedSessionRuntimeStoreService.markStopping).toHaveBeenCalledWith('session-1');
     expect(mockedSessionRuntimeStoreService.markIdle).toHaveBeenCalledWith('session-1', 'stopped');
+  });
+
+  it('stop does not emit idle runtime when active client exits through exit handler', async () => {
+    mockedSessionService.getClient.mockReturnValue({
+      isRunning: () => true,
+    } as unknown as ClaudeClient);
+
+    const handler = createStopHandler();
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'stop' },
+    });
+
+    expect(mockedSessionRuntimeStoreService.markStopping).toHaveBeenCalledWith('session-1');
+    expect(mockedSessionRuntimeStoreService.markIdle).not.toHaveBeenCalled();
   });
 
   it('get_history returns history when claude session exists', async () => {
