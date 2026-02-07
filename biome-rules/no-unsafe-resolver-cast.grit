@@ -10,10 +10,10 @@ language js
 // derived from the Promise generic parameter, or the Promise should use unknown
 // with runtime validation before calling resolve.
 
-`resolve as ($params) => $return` where {
+`resolve as ($params) => $return` as $cast where {
   $params <: contains `unknown`,
   register_diagnostic(
-    span=`resolve`,
+    span=$cast,
     message="Do not cast resolve functions to accept unknown. Use proper generic types on Promise/PendingRequest and validate data before calling resolve."
   )
 }

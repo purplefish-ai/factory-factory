@@ -94,7 +94,7 @@ function handleToolInputDelta(
     debug.log('Tool input updated:', toolUseId, Object.keys(parsedInput));
     return { type: 'TOOL_INPUT_UPDATE', payload: { toolUseId, input: parsedInput } };
   } catch {
-    // JSON not complete yet, that's expected during streaming
+    // JSON incomplete/invalid - expected during streaming or if structure is wrong
     return null;
   }
 }
