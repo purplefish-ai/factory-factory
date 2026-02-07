@@ -37,7 +37,8 @@ describe('worktreeLifecycleService resume mode persistence', () => {
 
       const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
       const content = await fs.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content) as Record<string, boolean>;
+      const parsed = JSON.parse(content);
+      const data = parsed as Record<string, boolean>;
 
       expect(data['workspace-1']).toBe(true);
       expect(data['workspace-2']).toBe(true);
