@@ -1,4 +1,5 @@
 import { createEmptyTokenStats, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import type { ChatState } from './types';
 
 function createBaseResetState(): Pick<
@@ -80,12 +81,14 @@ function createSessionSwitchResetState(): Pick<
   | 'localUserMessageIds'
   | 'rewindPreview'
   | 'processStatus'
+  | 'sessionRuntime'
 > {
   return {
     ...createBaseResetState(),
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
+    sessionRuntime: createInitialSessionRuntimeState(),
     slashCommands: [], // Clear for new session - will be sent when Claude starts
     slashCommandsLoaded: false,
   };
@@ -96,6 +99,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     messages: [],
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
+    sessionRuntime: createInitialSessionRuntimeState(),
     gitBranch: null,
     availableSessions: [],
     pendingRequest: { type: 'none' },

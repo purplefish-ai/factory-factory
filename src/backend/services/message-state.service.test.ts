@@ -665,15 +665,12 @@ describe('MessageStateService', () => {
       const { events, unsubscribe } = collectEvents();
       messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
 
-      messageStateService.sendSnapshot('session-1', { phase: 'ready' });
+      messageStateService.sendSnapshot('session-1');
       unsubscribe();
 
       expect(
         events.some(
-          (event) =>
-            event.type === 'messages_snapshot' &&
-            event.sessionId === 'session-1' &&
-            event.data.sessionStatus.phase === 'ready'
+          (event) => event.type === 'messages_snapshot' && event.sessionId === 'session-1'
         )
       ).toBe(true);
     });
@@ -687,13 +684,9 @@ describe('MessageStateService', () => {
         timestamp: new Date().toISOString(),
       };
 
-      messageStateService.sendSnapshot(
-        'session-1',
-        { phase: 'running' },
-        {
-          pendingInteractiveRequest: pendingRequest,
-        }
-      );
+      messageStateService.sendSnapshot('session-1', {
+        pendingInteractiveRequest: pendingRequest,
+      });
       unsubscribe();
 
       expect(
@@ -701,7 +694,6 @@ describe('MessageStateService', () => {
           (event) =>
             event.type === 'messages_snapshot' &&
             event.sessionId === 'session-1' &&
-            event.data.sessionStatus.phase === 'running' &&
             event.data.pendingInteractiveRequest === pendingRequest
         )
       ).toBe(true);
@@ -710,11 +702,7 @@ describe('MessageStateService', () => {
     it('should include loadRequestId when provided', () => {
       const { events, unsubscribe } = collectEvents();
 
-      messageStateService.sendSnapshot(
-        'session-1',
-        { phase: 'ready' },
-        { loadRequestId: 'load-abc' }
-      );
+      messageStateService.sendSnapshot('session-1', { loadRequestId: 'load-abc' });
       unsubscribe();
 
       expect(
@@ -740,7 +728,7 @@ describe('MessageStateService', () => {
       messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
       messageStateService.updateState('session-1', 'msg-2', MessageState.DISPATCHED);
 
-      messageStateService.sendSnapshot('session-1', { phase: 'ready' });
+      messageStateService.sendSnapshot('session-1');
       unsubscribe();
 
       const snapshot = events.find((event) => event.type === 'messages_snapshot');
@@ -764,13 +752,9 @@ describe('MessageStateService', () => {
         timestamp: new Date().toISOString(),
       };
 
-      messageStateService.sendSnapshot(
-        'session-1',
-        { phase: 'running' },
-        {
-          pendingInteractiveRequest: pendingRequest,
-        }
-      );
+      messageStateService.sendSnapshot('session-1', {
+        pendingInteractiveRequest: pendingRequest,
+      });
       unsubscribe();
 
       expect(
@@ -778,42 +762,9 @@ describe('MessageStateService', () => {
           (event) =>
             event.type === 'messages_snapshot' &&
             event.sessionId === 'session-1' &&
-            event.data.sessionStatus.phase === 'running' &&
             event.data.pendingInteractiveRequest === pendingRequest
         )
       ).toBe(true);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // computeSessionStatus
-  // ---------------------------------------------------------------------------
-
-  describe('computeSessionStatus', () => {
-    it('should return running when client is running', () => {
-      const status = messageStateService.computeSessionStatus('session-1', true);
-      expect(status).toEqual({ phase: 'running' });
-    });
-
-    it('should return ready when client is not running and no queued messages', () => {
-      const status = messageStateService.computeSessionStatus('session-1', false);
-      expect(status).toEqual({ phase: 'ready' });
-    });
-
-    it('should return starting when client is not running but has queued messages', () => {
-      // Create a message in ACCEPTED state (queued)
-      messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
-
-      const status = messageStateService.computeSessionStatus('session-1', false);
-      expect(status).toEqual({ phase: 'starting' });
-    });
-
-    it('should return ready when queued message is dispatched', () => {
-      messageStateService.createUserMessage('session-1', createTestQueuedMessage('msg-1'));
-      messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
-
-      const status = messageStateService.computeSessionStatus('session-1', false);
-      expect(status).toEqual({ phase: 'ready' });
     });
   });
 

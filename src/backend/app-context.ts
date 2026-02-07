@@ -17,6 +17,7 @@ import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
 import { sessionService } from './services/session.service';
 import { type SessionFileLogger, sessionFileLogger } from './services/session-file-logger.service';
+import { sessionRuntimeStoreService } from './services/session-runtime-store.service';
 import { startupScriptService } from './services/startup-script.service';
 import { terminalService } from './services/terminal.service';
 import { workspaceStateMachine } from './services/workspace-state-machine.service';
@@ -41,6 +42,7 @@ export type AppServices = {
   serverInstanceService: typeof serverInstanceService;
   sessionFileLogger: SessionFileLogger;
   sessionService: typeof sessionService;
+  sessionRuntimeStoreService: typeof sessionRuntimeStoreService;
   startupScriptService: typeof startupScriptService;
   terminalService: typeof terminalService;
   workspaceStateMachine: typeof workspaceStateMachine;
@@ -74,6 +76,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     serverInstanceService,
     sessionFileLogger,
     sessionService,
+    sessionRuntimeStoreService,
     startupScriptService,
     terminalService,
     workspaceStateMachine,

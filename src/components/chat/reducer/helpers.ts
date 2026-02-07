@@ -183,17 +183,13 @@ export function handleClaudeMessage(
   claudeMsg: ClaudeMessage,
   order: number
 ): ChatState {
-  // Transition from starting to running when receiving a Claude message
-  let baseState: ChatState =
-    state.sessionStatus.phase === 'starting'
-      ? { ...state, sessionStatus: { phase: 'running' } }
-      : state;
+  let baseState: ChatState = state;
 
-  // Set to ready when we receive a result, and accumulate token stats
+  // Runtime transitions are driven by session_runtime_updated events.
+  // Result messages only update token stats here.
   if (claudeMsg.type === 'result') {
     baseState = {
       ...baseState,
-      sessionStatus: { phase: 'ready' },
       tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
     };
   }

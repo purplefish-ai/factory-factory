@@ -89,6 +89,13 @@ function createReplayBaseState(state: ChatState): ChatState {
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
+    sessionRuntime: {
+      ...state.sessionRuntime,
+      phase: 'loading',
+      processState: 'unknown',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    },
   };
 }
 
@@ -117,10 +124,30 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
 // Individual message type handlers for createActionFromWebSocketMessage
 
+function handleSessionRuntimeSnapshotMessage(data: WebSocketMessage): ChatAction | null {
+  if (!data.sessionRuntime) {
+    return null;
+  }
+  return {
+    type: 'SESSION_RUNTIME_SNAPSHOT',
+    payload: { sessionRuntime: data.sessionRuntime },
+  };
+}
+
 function handleStatusMessage(data: WebSocketMessage): ChatAction {
   return {
     type: 'WS_STATUS',
     payload: { running: data.running ?? false, processAlive: data.processAlive },
+  };
+}
+
+function handleSessionRuntimeUpdatedMessage(data: WebSocketMessage): ChatAction | null {
+  if (!data.sessionRuntime) {
+    return null;
+  }
+  return {
+    type: 'SESSION_RUNTIME_UPDATED',
+    payload: { sessionRuntime: data.sessionRuntime },
   };
 }
 
@@ -184,7 +211,6 @@ function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
     type: 'MESSAGES_SNAPSHOT',
     payload: {
       messages: data.messages,
-      sessionStatus: data.sessionStatus ?? { phase: 'ready' },
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
     },
   };
@@ -382,6 +408,8 @@ const messageHandlers: Record<string, MessageHandler> = {
   started: () => ({ type: 'WS_STARTED' }),
   stopped: () => ({ type: 'WS_STOPPED' }),
   process_exit: (data) => ({ type: 'WS_PROCESS_EXIT', payload: { code: data.code ?? null } }),
+  session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
+  session_runtime_updated: handleSessionRuntimeUpdatedMessage,
   claude_message: handleClaudeMessageAction,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,

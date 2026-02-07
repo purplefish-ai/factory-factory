@@ -11,7 +11,7 @@ import type {
   QueuedMessage,
   SessionInfo,
   SessionInitData,
-  SessionStatus as SharedSessionStatus,
+  SessionRuntimeState,
   TokenStats,
   UserQuestionRequest,
   WebSocketMessage,
@@ -107,6 +107,8 @@ export interface ChatState {
   sessionStatus: SessionStatus;
   /** Claude process lifecycle status (alive vs stopped) */
   processStatus: ProcessStatus;
+  /** Authoritative runtime snapshot for this session. */
+  sessionRuntime: SessionRuntimeState;
   /** Current git branch for the session */
   gitBranch: string | null;
   /** Available Claude CLI sessions */
@@ -189,6 +191,8 @@ export type ChatAction =
   | { type: 'WS_STARTED' }
   | { type: 'WS_STOPPED' }
   | { type: 'WS_PROCESS_EXIT'; payload: { code: number | null } }
+  | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
+  | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order: number } }
   | { type: 'WS_ERROR'; payload: { message: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
@@ -234,7 +238,6 @@ export type ChatAction =
       payload: {
         /** Pre-built ChatMessages from backend - ready to use directly */
         messages: ChatMessage[];
-        sessionStatus: SharedSessionStatus;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
       };
     }

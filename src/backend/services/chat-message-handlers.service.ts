@@ -13,7 +13,6 @@ import { DEFAULT_THINKING_BUDGET, MessageState } from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
 import type { ClaudeClient } from '../claude/index';
 import type { ClaudeContentItem } from '../claude/types';
-import { chatConnectionService } from './chat-connection.service';
 import { processAttachmentsAndBuildContent } from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
@@ -22,6 +21,7 @@ import { createLogger } from './logger.service';
 import { messageQueueService, type QueuedMessage } from './message-queue.service';
 import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
+import { sessionRuntimeStoreService } from './session-runtime-store.service';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -84,16 +84,13 @@ class ChatMessageHandlerService {
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
-        // Notify frontend that agent is starting BEFORE creating the client
-        // This provides immediate feedback when the first message is sent
-        chatConnectionService.forwardToSession(dbSessionId, { type: 'starting', dbSessionId });
+        sessionRuntimeStoreService.markStarting(dbSessionId);
 
         const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
         if (!newClient) {
           // Re-queue the message at the front so it's not lost
           messageQueueService.requeue(dbSessionId, msg);
-          // Notify frontend that starting failed so UI doesn't get stuck
-          chatConnectionService.forwardToSession(dbSessionId, { type: 'stopped', dbSessionId });
+          sessionRuntimeStoreService.markError(dbSessionId);
           return;
         }
         client = newClient;
@@ -219,13 +216,7 @@ class ChatMessageHandlerService {
     // Now that thinking budget is set, update state to DISPATCHED
     messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
 
-    // Notify frontend that agent is working - this ensures the spinner shows
-    // for subsequent messages when client is already running
-    chatConnectionService.forwardToSession(dbSessionId, {
-      type: 'status',
-      running: true,
-      processAlive: client.isRunning(),
-    });
+    sessionRuntimeStoreService.markRunning(dbSessionId);
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);

@@ -3,6 +3,7 @@ import { MessageState } from '@/shared/claude';
 import { chatConnectionService } from './chat-connection.service';
 import { chatTransportAdapterService } from './chat-transport-adapter.service';
 import { messageStateService } from './message-state.service';
+import { sessionRuntimeStoreService } from './session-runtime-store.service';
 
 vi.mock('./chat-connection.service', () => ({
   chatConnectionService: {
@@ -16,6 +17,7 @@ describe('ChatTransportAdapterService', () => {
   beforeEach(() => {
     mockedChatConnectionService.forwardToSession.mockClear();
     messageStateService.clearAllSessions();
+    sessionRuntimeStoreService.clearAllSessions();
     chatTransportAdapterService.teardown();
   });
 
@@ -69,6 +71,20 @@ describe('ChatTransportAdapterService', () => {
       errorMessage: undefined,
       userMessage: expect.objectContaining({
         text: 'Reconnected',
+      }),
+    });
+  });
+
+  it('forwards session runtime updates to the websocket transport', () => {
+    chatTransportAdapterService.setup();
+    sessionRuntimeStoreService.markRunning('session-1');
+
+    expect(mockedChatConnectionService.forwardToSession).toHaveBeenCalledWith('session-1', {
+      type: 'session_runtime_updated',
+      sessionRuntime: expect.objectContaining({
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
       }),
     });
   });
