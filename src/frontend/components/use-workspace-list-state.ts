@@ -28,6 +28,7 @@ export interface ServerWorkspace {
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   ciObservation?: string | null;
+  runScriptStatus?: string | null;
   cachedKanbanColumn?: string | null;
   stateComputedAt?: string | null;
 }

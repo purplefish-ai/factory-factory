@@ -1,8 +1,9 @@
 import type { CIStatus, KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
-import { Archive, GitBranch, GitPullRequest } from 'lucide-react';
+import { Archive, GitBranch, GitPullRequest, Play } from 'lucide-react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { cn } from '@/lib/utils';
@@ -78,12 +79,24 @@ export function KanbanCard({
             <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
               {workspace.name}
             </CardTitle>
-            <CardStatusIndicator
-              isArchived={isArchived}
-              isWorking={workspace.isWorking}
-              status={workspace.status}
-              errorMessage={workspace.initErrorMessage}
-            />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {workspace.runScriptStatus === 'RUNNING' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Play className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Dev server running</TooltipContent>
+                </Tooltip>
+              )}
+              <CardStatusIndicator
+                isArchived={isArchived}
+                isWorking={workspace.isWorking}
+                status={workspace.status}
+                errorMessage={workspace.initErrorMessage}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
