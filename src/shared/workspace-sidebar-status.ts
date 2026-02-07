@@ -69,3 +69,47 @@ export function getWorkspaceCiLabel(state: WorkspaceSidebarCiState): string {
       return 'Merged';
   }
 }
+
+export function getWorkspaceCiTooltip(
+  ciState: WorkspaceSidebarCiState,
+  prState: string | null
+): string {
+  if (ciState === 'RUNNING') {
+    return 'CI checks are running';
+  }
+  if (ciState === 'FAILING') {
+    return 'CI checks are failing';
+  }
+  if (ciState === 'PASSING') {
+    return 'CI checks are passing';
+  }
+  if (ciState === 'MERGED') {
+    return 'PR is merged';
+  }
+  if (ciState === 'UNKNOWN') {
+    return prState === 'CLOSED' ? 'PR is closed' : 'CI status is unknown';
+  }
+  return 'No PR attached';
+}
+
+export function getWorkspacePrTooltipSuffix(
+  ciState: WorkspaceSidebarCiState,
+  prState: string | null
+): string {
+  if (prState === 'CLOSED') {
+    return ' · Closed';
+  }
+  if (ciState === 'MERGED') {
+    return ' · Merged';
+  }
+  if (ciState === 'FAILING') {
+    return ' · CI failing';
+  }
+  if (ciState === 'RUNNING') {
+    return ' · CI running';
+  }
+  if (ciState === 'PASSING') {
+    return ' · CI passing';
+  }
+  return '';
+}

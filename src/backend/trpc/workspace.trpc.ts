@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { ratchetService } from '../services/ratchet.service';
+import { sessionService } from '../services/session.service';
 import { WorkspaceCreationService } from '../services/workspace-creation.service';
 import { deriveWorkspaceFlowStateFromWorkspace } from '../services/workspace-flow-state.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
@@ -96,10 +97,13 @@ export const workspaceRouter = router({
       throw new Error(`Workspace not found: ${input.id}`);
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+    const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+    const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+    const isWorking = isSessionWorking || flowState.isWorking;
     return {
       ...workspace,
       sidebarStatus: deriveWorkspaceSidebarStatus({
-        isWorking: flowState.isWorking,
+        isWorking,
         prUrl: workspace.prUrl,
         prState: workspace.prState,
         prCiStatus: workspace.prCiStatus,

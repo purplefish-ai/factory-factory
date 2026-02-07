@@ -9,6 +9,8 @@ import {
   deriveWorkspaceSidebarStatus,
   getWorkspaceActivityTooltip,
   getWorkspaceCiLabel,
+  getWorkspaceCiTooltip,
+  getWorkspacePrTooltipSuffix,
   type WorkspaceSidebarStatus,
 } from '@/shared/workspace-sidebar-status';
 import { trpc } from '../lib/trpc';
@@ -289,7 +291,7 @@ function WorkspaceCiBadge({
         </span>
       </TooltipTrigger>
       <TooltipContent side="right">
-        {getWorkspaceCiTooltip(workspace, sidebarStatus.ciState)}
+        {getWorkspaceCiTooltip(sidebarStatus.ciState, workspace.prState ?? null)}
       </TooltipContent>
     </Tooltip>
   );
@@ -341,23 +343,8 @@ function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
 }
 
 function getPrTooltipSuffix(workspace: WorkspaceListItem) {
-  if (workspace.prState === 'MERGED') {
-    return ' · Merged';
-  }
-  if (workspace.prState === 'CLOSED') {
-    return ' · Closed';
-  }
   const ciState = getWorkspaceSidebarStatus(workspace).ciState;
-  if (ciState === 'PASSING') {
-    return ' · CI passing';
-  }
-  if (ciState === 'FAILING') {
-    return ' · CI failing';
-  }
-  if (ciState === 'RUNNING') {
-    return ' · CI running';
-  }
-  return '';
+  return getWorkspacePrTooltipSuffix(ciState, workspace.prState ?? null);
 }
 
 // =============================================================================
@@ -412,29 +399,4 @@ function getCiBadgeClass(ciState: WorkspaceSidebarStatus['ciState']): string {
     case 'NONE':
       return 'bg-transparent text-muted-foreground';
   }
-}
-
-function getWorkspaceCiTooltip(
-  workspace: WorkspaceListItem,
-  ciState: WorkspaceSidebarStatus['ciState']
-): string {
-  if (ciState === 'RUNNING') {
-    return 'CI checks are running';
-  }
-  if (ciState === 'FAILING') {
-    return 'CI checks are failing';
-  }
-  if (ciState === 'PASSING') {
-    return 'CI checks are passing';
-  }
-  if (ciState === 'MERGED') {
-    return 'PR is merged';
-  }
-  if (ciState === 'UNKNOWN') {
-    if (workspace.prState === 'CLOSED') {
-      return 'PR is closed';
-    }
-    return 'CI status is unknown';
-  }
-  return 'No PR attached';
 }

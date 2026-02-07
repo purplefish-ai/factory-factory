@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { deriveWorkspaceSidebarStatus } from './workspace-sidebar-status';
+import {
+  deriveWorkspaceSidebarStatus,
+  getWorkspaceCiTooltip,
+  getWorkspacePrTooltipSuffix,
+} from './workspace-sidebar-status';
 
 describe('workspace-sidebar-status', () => {
   it('marks activity as working when isWorking is true', () => {
@@ -61,5 +65,16 @@ describe('workspace-sidebar-status', () => {
     });
 
     expect(result.ciState).toBe('FAILING');
+  });
+
+  it('provides ci tooltip text from centralized helper', () => {
+    expect(getWorkspaceCiTooltip('RUNNING', 'OPEN')).toBe('CI checks are running');
+    expect(getWorkspaceCiTooltip('UNKNOWN', 'CLOSED')).toBe('PR is closed');
+  });
+
+  it('provides pr tooltip suffix text from centralized helper', () => {
+    expect(getWorkspacePrTooltipSuffix('PASSING', 'OPEN')).toBe(' · CI passing');
+    expect(getWorkspacePrTooltipSuffix('UNKNOWN', 'CLOSED')).toBe(' · Closed');
+    expect(getWorkspacePrTooltipSuffix('UNKNOWN', 'OPEN')).toBe('');
   });
 });
