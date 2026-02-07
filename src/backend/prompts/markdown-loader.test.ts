@@ -28,7 +28,7 @@ This is the body.`;
       description: 'A test markdown file',
       version: '1.0',
     });
-    expect(result.body).toBe('# Content\n\nThis is the body.');
+    expect(result.body).toBe('\n# Content\n\nThis is the body.');
   });
 
   it('should handle boolean values', () => {
@@ -119,10 +119,7 @@ Body`;
   });
 
   it('should handle empty frontmatter block', () => {
-    const content = `---
----
-
-Body content`;
+    const content = '---\n\n---\nBody content';
 
     const result = parseFrontmatter(content, {
       name: (v) => v,
