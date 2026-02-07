@@ -28,7 +28,7 @@ const logger = createLogger('run-script-state-machine');
  */
 const VALID_TRANSITIONS: Record<RunScriptStatus, RunScriptStatus[]> = {
   IDLE: ['STARTING'],
-  STARTING: ['RUNNING', 'FAILED'],
+  STARTING: ['RUNNING', 'FAILED', 'STOPPING'],
   RUNNING: ['STOPPING', 'COMPLETED', 'FAILED'],
   STOPPING: ['IDLE'],
   COMPLETED: ['IDLE', 'STARTING'],
@@ -237,8 +237,19 @@ class RunScriptStateMachineService {
           workspaceId,
           pid: workspace.runScriptPid,
         });
-        await this.markFailed(workspaceId);
-        return 'FAILED';
+        try {
+          await this.markFailed(workspaceId);
+          return 'FAILED';
+        } catch (stateError) {
+          // Race condition: exit handler already transitioned state
+          logger.debug('Failed to mark as FAILED (likely already transitioned)', {
+            workspaceId,
+            error: stateError,
+          });
+          // Refetch to get current state
+          const updated = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+          return updated?.runScriptStatus ?? workspace.runScriptStatus;
+        }
       }
     }
 

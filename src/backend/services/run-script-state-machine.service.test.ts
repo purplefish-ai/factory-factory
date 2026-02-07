@@ -46,6 +46,10 @@ describe('RunScriptStateMachineService', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'FAILED')).toBe(true);
     });
 
+    it('should allow STARTING → STOPPING', () => {
+      expect(runScriptStateMachine.isValidTransition('STARTING', 'STOPPING')).toBe(true);
+    });
+
     it('should allow RUNNING → STOPPING', () => {
       expect(runScriptStateMachine.isValidTransition('RUNNING', 'STOPPING')).toBe(true);
     });
@@ -82,8 +86,8 @@ describe('RunScriptStateMachineService', () => {
       expect(runScriptStateMachine.isValidTransition('IDLE', 'RUNNING')).toBe(false);
     });
 
-    it('should not allow STARTING → STOPPING', () => {
-      expect(runScriptStateMachine.isValidTransition('STARTING', 'STOPPING')).toBe(false);
+    it('should allow STARTING → STOPPING (for stop during startup)', () => {
+      expect(runScriptStateMachine.isValidTransition('STARTING', 'STOPPING')).toBe(true);
     });
 
     it('should not allow STOPPING → RUNNING', () => {

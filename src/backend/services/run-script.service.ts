@@ -28,6 +28,7 @@ export class RunScriptService {
    * @param workspaceId - Workspace ID
    * @returns Object with success status, port (if allocated), and pid
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex state machine transitions and error handling required
   static async startRunScript(workspaceId: string): Promise<{
     success: boolean;
     port?: number;
@@ -186,8 +187,18 @@ export class RunScriptService {
       childProcess.on('error', async (error) => {
         logger.error('Run script spawn error', error, { workspaceId, pid });
         RunScriptService.runningProcesses.delete(workspaceId);
-        // Transition to FAILED via state machine
-        await runScriptStateMachine.markFailed(workspaceId);
+        // Transition to FAILED via state machine (with error handling for race conditions)
+        try {
+          await runScriptStateMachine.markFailed(workspaceId);
+        } catch (stateError) {
+          logger.warn(
+            'Failed to transition to FAILED on spawn error (likely already transitioned)',
+            {
+              workspaceId,
+              error: stateError,
+            }
+          );
+        }
       });
 
       return {
@@ -199,17 +210,26 @@ export class RunScriptService {
       logger.error('Failed to start run script', error as Error, {
         workspaceId,
       });
-      // Transition to FAILED if we're stuck in STARTING state
-      try {
-        const workspace = await workspaceAccessor.findById(workspaceId);
-        if (workspace?.runScriptStatus === 'STARTING') {
-          await runScriptStateMachine.markFailed(workspaceId);
+
+      // Only transition to FAILED if THIS call initiated the STARTING state
+      // If the error is a state machine error (e.g., concurrent start), don't mark as FAILED
+      const isStateMachineError = (error as Error).name === 'RunScriptStateMachineError';
+
+      if (!isStateMachineError) {
+        // This was a real error (spawn failure, port allocation, etc.)
+        // Transition to FAILED if we're stuck in STARTING state
+        try {
+          const workspace = await workspaceAccessor.findById(workspaceId);
+          if (workspace?.runScriptStatus === 'STARTING') {
+            await runScriptStateMachine.markFailed(workspaceId);
+          }
+        } catch (stateError) {
+          logger.error('Failed to transition to FAILED state', stateError as Error, {
+            workspaceId,
+          });
         }
-      } catch (stateError) {
-        logger.error('Failed to transition to FAILED state', stateError as Error, {
-          workspaceId,
-        });
       }
+
       return {
         success: false,
         error: (error as Error).message,
@@ -222,6 +242,7 @@ export class RunScriptService {
    * @param workspaceId - Workspace ID
    * @returns Object with success status
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex state checks and cleanup logic required
   static async stopRunScript(workspaceId: string): Promise<{
     success: boolean;
     error?: string;
@@ -235,6 +256,19 @@ export class RunScriptService {
       const childProcess = RunScriptService.runningProcesses.get(workspaceId);
       const pid = workspace.runScriptPid;
 
+      // Check if already stopped or stopping
+      if (workspace.runScriptStatus === 'IDLE' || workspace.runScriptStatus === 'STOPPING') {
+        return {
+          success: true, // Already stopped/stopping, treat as success
+        };
+      }
+
+      if (workspace.runScriptStatus === 'COMPLETED' || workspace.runScriptStatus === 'FAILED') {
+        return {
+          success: true, // Already in terminal state, no-op
+        };
+      }
+
       if (!(childProcess || pid)) {
         return {
           success: false,
@@ -242,7 +276,7 @@ export class RunScriptService {
         };
       }
 
-      // Transition to STOPPING state
+      // Transition to STOPPING state (only from RUNNING or STARTING)
       await runScriptStateMachine.beginStopping(workspaceId);
 
       // Run cleanup script if configured
