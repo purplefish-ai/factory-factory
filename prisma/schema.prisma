@@ -22,6 +22,7 @@ enum WorkspaceStatus {
 
 enum SessionStatus {
   IDLE
+  STARTING  // Process initiated but not yet fully running
   RUNNING
   PAUSED
   COMPLETED

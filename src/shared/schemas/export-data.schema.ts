@@ -33,7 +33,7 @@ const RatchetState = z.enum([
   'READY',
   'MERGED',
 ]);
-const SessionStatus = z.enum(['IDLE', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']);
+const SessionStatus = z.enum(['IDLE', 'STARTING', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']);
 
 const exportedProjectSchema = z.object({
   id: z.string(),

@@ -22,6 +22,36 @@ const gitConcurrencyLimit = pLimit(DEFAULT_GIT_CONCURRENCY);
 let cachedReviewCount: { count: number; fetchedAt: number } | null = null;
 const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
 
+function computeWorkspaceStatuses(
+  workspaces: ReturnType<typeof workspaceAccessor.findByProjectIdWithSessions> extends Promise<
+    infer T
+  >
+    ? T
+    : never
+) {
+  const workingStatusByWorkspace = new Map<string, boolean>();
+  const startingStatusByWorkspace = new Map<string, boolean>();
+  const flowStateByWorkspace = new Map<
+    string,
+    ReturnType<typeof deriveWorkspaceFlowStateFromWorkspace>
+  >();
+
+  for (const workspace of workspaces) {
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+    flowStateByWorkspace.set(workspace.id, flowState);
+
+    const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+    const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+    const hasStartingSessions =
+      workspace.claudeSessions?.some((s) => s.status === 'STARTING') ?? false;
+
+    workingStatusByWorkspace.set(workspace.id, isSessionWorking || flowState.isWorking);
+    startingStatusByWorkspace.set(workspace.id, hasStartingSessions);
+  }
+
+  return { workingStatusByWorkspace, startingStatusByWorkspace, flowStateByWorkspace };
+}
+
 class WorkspaceQueryService {
   async getProjectSummaryState(projectId: string) {
     const [project, workspaces] = await Promise.all([
@@ -33,19 +63,8 @@ class WorkspaceQueryService {
 
     const defaultBranch = project?.defaultBranch ?? 'main';
 
-    const workingStatusByWorkspace = new Map<string, boolean>();
-    const flowStateByWorkspace = new Map<
-      string,
-      ReturnType<typeof deriveWorkspaceFlowStateFromWorkspace>
-    >();
-    for (const workspace of workspaces) {
-      const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-      flowStateByWorkspace.set(workspace.id, flowState);
-
-      const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-      const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
-      workingStatusByWorkspace.set(workspace.id, isSessionWorking || flowState.isWorking);
-    }
+    const { workingStatusByWorkspace, startingStatusByWorkspace, flowStateByWorkspace } =
+      computeWorkspaceStatuses(workspaces);
 
     const gitStatsResults: Record<
       string,
@@ -122,6 +141,7 @@ class WorkspaceQueryService {
           ratchetState: w.ratchetState,
           sidebarStatus: deriveWorkspaceSidebarStatus({
             isWorking: workingStatusByWorkspace.get(w.id) ?? false,
+            isStarting: startingStatusByWorkspace.get(w.id) ?? false,
             prUrl: w.prUrl,
             prState: w.prState,
             prCiStatus: w.prCiStatus,

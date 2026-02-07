@@ -64,6 +64,11 @@ class SessionService {
       throw new Error('Session is already running');
     }
 
+    // Set STARTING status before creating client
+    await this.repository.updateSession(sessionId, {
+      status: SessionStatus.STARTING,
+    });
+
     // Use getOrCreateClient for race-protected creation
     // If concurrent starts happen, one will succeed and others will wait then fail the check above
     const client = await this.getOrCreateClient(sessionId, {
