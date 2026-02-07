@@ -513,6 +513,38 @@ describe('ClaudeProtocol', () => {
       consoleErrorSpy.mockRestore();
     });
 
+    it('should skip messages that fail schema validation', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+        // Intentionally empty - suppress console output during test
+      });
+
+      const messages: ClaudeJson[] = [];
+      protocol.on('message', (msg) => messages.push(msg));
+
+      // Send JSON without required 'type' field
+      stdout.write('{"session_id": "test", "data": "missing type field"}\n');
+
+      // Then send valid message
+      const validMsg: AssistantMessage = {
+        type: 'assistant',
+        session_id: 'test',
+        message: { role: 'assistant', content: [] },
+      };
+      stdout.write(`${JSON.stringify(validMsg)}\n`);
+
+      // Wait for processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Should only have the valid message
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toEqual(validMsg);
+
+      // Console error should have been called for validation failure
+      expect(consoleErrorSpy).toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
     it('should emit both message and specific event for control requests', async () => {
       const messages: ClaudeJson[] = [];
       const controlRequests: ControlRequest[] = [];
