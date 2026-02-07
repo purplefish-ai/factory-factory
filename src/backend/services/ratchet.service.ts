@@ -440,7 +440,7 @@ class RatchetService {
         return action.error;
     }
     const exhaustiveCheck: never = action;
-    return exhaustiveCheck;
+    throw new Error(`Unhandled ratchet action: ${JSON.stringify(exhaustiveCheck)}`);
   }
 
   private async buildRatchetDecisionContext(
