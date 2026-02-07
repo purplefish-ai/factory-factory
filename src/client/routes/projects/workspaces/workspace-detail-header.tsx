@@ -127,8 +127,10 @@ function WorkspacePrAction({
 
 function WorkspaceCiStatus({
   workspace,
+  running,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  running: boolean;
 }) {
   if (!workspace.prUrl || workspace.prState !== 'OPEN') {
     return null;
@@ -137,7 +139,7 @@ function WorkspaceCiStatus({
   const sidebarStatus =
     workspace.sidebarStatus ??
     deriveWorkspaceSidebarStatus({
-      isWorking: false,
+      isWorking: running,
       prUrl: workspace.prUrl,
       prState: workspace.prState,
       prCiStatus: workspace.prCiStatus,
@@ -277,7 +279,7 @@ export function WorkspaceHeader({
           isCreatingSession={isCreatingSession}
           handleQuickAction={handleQuickAction}
         />
-        <WorkspaceCiStatus workspace={workspace} />
+        <WorkspaceCiStatus workspace={workspace} running={running} />
       </div>
       <div className="flex items-center gap-1">
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />

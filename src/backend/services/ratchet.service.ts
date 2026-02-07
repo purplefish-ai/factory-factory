@@ -8,7 +8,7 @@
  * States: IDLE → CI_RUNNING → CI_FAILED → REVIEW_PENDING → READY → MERGED
  */
 
-import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
+import { CIStatus, PRState, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
@@ -101,6 +101,8 @@ interface WorkspaceWithPR {
   id: string;
   prUrl: string;
   prNumber: number | null;
+  prState: PRState;
+  prCiStatus: CIStatus;
   ratchetEnabled: boolean;
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
@@ -291,21 +293,17 @@ class RatchetService {
 
       // 6. Update workspace (including review check timestamp if we found review comments)
       const now = new Date();
-      const shouldRecordCiRunId =
-        shouldTakeAction &&
-        prStateInfo.ciStatus === CIStatus.FAILURE &&
-        !!prStateInfo.ciRunId &&
-        (action.type === 'NOTIFIED_ACTIVE_FIXER' ||
-          (action.type === 'TRIGGERED_FIXER' && action.promptSent));
-      await workspaceAccessor.update(workspace.id, {
-        ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
-        ratchetLastCheckedAt: now,
-        // Keep sidebar CI status in sync with ratchet's live PR observation.
-        prCiStatus: prStateInfo.ciStatus,
-        ...(shouldRecordCiRunId ? { ratchetLastCiRunId: prStateInfo.ciRunId } : {}),
-        // Update review timestamp if we detected review comments
-        ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
-      });
+      await workspaceAccessor.update(
+        workspace.id,
+        this.buildWorkspaceUpdateFromPRObservation(
+          workspace,
+          shouldTakeAction,
+          newState,
+          prStateInfo,
+          action,
+          now
+        )
+      );
 
       return {
         workspaceId: workspace.id,
@@ -490,6 +488,55 @@ class RatchetService {
 
     // All clear - ready to merge
     return RatchetState.READY;
+  }
+
+  private mapGitHubPrState(prState: string): PRState {
+    switch (prState) {
+      case 'MERGED':
+        return PRState.MERGED;
+      case 'CLOSED':
+        return PRState.CLOSED;
+      default:
+        return PRState.OPEN;
+    }
+  }
+
+  private buildWorkspaceUpdateFromPRObservation(
+    workspace: WorkspaceWithPR,
+    shouldTakeAction: boolean,
+    newState: RatchetState,
+    prStateInfo: PRStateInfo,
+    action: RatchetAction,
+    now: Date
+  ): {
+    ratchetState: RatchetState;
+    ratchetLastCheckedAt: Date;
+    prCiStatus: CIStatus;
+    prState: PRState;
+    prUpdatedAt?: Date;
+    ratchetLastCiRunId?: string | null;
+    prReviewLastCheckedAt?: Date;
+  } {
+    const shouldRecordCiRunId =
+      shouldTakeAction &&
+      prStateInfo.ciStatus === CIStatus.FAILURE &&
+      !!prStateInfo.ciRunId &&
+      (action.type === 'NOTIFIED_ACTIVE_FIXER' ||
+        (action.type === 'TRIGGERED_FIXER' && action.promptSent));
+    const observedPrState = this.mapGitHubPrState(prStateInfo.prState);
+    const ciStatusChanged = workspace.prCiStatus !== prStateInfo.ciStatus;
+    const prStateChanged = observedPrState !== workspace.prState;
+    const shouldUpdatePrTimestamp = ciStatusChanged || prStateChanged;
+
+    return {
+      ratchetState: shouldTakeAction ? newState : RatchetState.IDLE,
+      ratchetLastCheckedAt: now,
+      prCiStatus: prStateInfo.ciStatus,
+      prState: observedPrState,
+      ...(shouldUpdatePrTimestamp ? { prUpdatedAt: now } : {}),
+      ...(shouldRecordCiRunId ? { ratchetLastCiRunId: prStateInfo.ciRunId } : {}),
+      ...(prStateInfo.hasNewReviewComments ? { prReviewLastCheckedAt: now } : {}),
+    };
   }
 
   /**
