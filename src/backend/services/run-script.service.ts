@@ -226,6 +226,22 @@ export class RunScriptService {
           );
           return { success: true, port, pid };
         }
+        // Concurrent stop completed (STARTING → STOPPING → IDLE) while we were spawning.
+        // Kill the orphaned process so it doesn't leak.
+        if (currentStatus === 'IDLE' || currentStatus === 'STOPPING') {
+          logger.info('Concurrent stop completed before markRunning — killing orphaned process', {
+            workspaceId,
+            pid,
+            currentStatus,
+          });
+          try {
+            childProcess.kill('SIGTERM');
+          } catch {
+            /* already dead */
+          }
+          RunScriptService.runningProcesses.delete(workspaceId);
+          return { success: false, error: 'Run script was stopped before it could start' };
+        }
         throw markRunningError;
       }
 
