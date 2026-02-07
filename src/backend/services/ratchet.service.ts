@@ -575,8 +575,10 @@ class RatchetService {
 
       const statusCheckRollup =
         prDetails.statusCheckRollup?.map((check) => ({
+          name: check.name,
           status: check.status,
           conclusion: check.conclusion ?? undefined,
+          detailsUrl: check.detailsUrl,
         })) ?? null;
 
       const ciStatus = githubCLIService.computeCIStatus(statusCheckRollup);
