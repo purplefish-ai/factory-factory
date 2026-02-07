@@ -1,12 +1,6 @@
 import { CIStatus, RatchetState } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../resource_accessors/user-settings.accessor', () => ({
-  userSettingsAccessor: {
-    get: vi.fn(),
-  },
-}));
-
 vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findWithPRsForRatchet: vi.fn(),
@@ -40,10 +34,7 @@ vi.mock('./fixer-session.service', () => ({
 
 vi.mock('./session.service', () => ({
   sessionService: {
-    getClient: vi.fn(),
     isSessionRunning: vi.fn(),
-    isSessionWorking: vi.fn(),
-    startClaudeSession: vi.fn(),
     stopClaudeSession: vi.fn(),
   },
 }));
@@ -64,35 +55,18 @@ vi.mock('./logger.service', () => ({
 }));
 
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { fixerSessionService } from './fixer-session.service';
 import { ratchetService } from './ratchet.service';
 import { sessionService } from './session.service';
 
-describe('ratchet service (simplified loop)', () => {
+describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (ratchetService as unknown as { isShuttingDown: boolean }).isShuttingDown = false;
-
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
-      ratchetEnabled: true,
-      ratchetAutoFixCi: true,
-      ratchetAutoFixReviews: true,
-      ratchetAutoMerge: false,
-      ratchetAllowedReviewers: null,
-    } as Awaited<ReturnType<typeof userSettingsAccessor.get>>);
   });
 
-  it('checks workspaces even when global ratchet default is off', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
-      ratchetEnabled: false,
-      ratchetAutoFixCi: true,
-      ratchetAutoFixReviews: true,
-      ratchetAutoMerge: false,
-      ratchetAllowedReviewers: null,
-    } as Awaited<ReturnType<typeof userSettingsAccessor.get>>);
-
+  it('checks workspaces and processes each', async () => {
     vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue([
       {
         id: 'ws-1',
@@ -137,15 +111,9 @@ describe('ratchet service (simplified loop)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
+      ciSignature: 'status:FAILURE:run-1',
+      latestActivityAtMs: Date.now(),
       hasChangesRequested: false,
-      hasNewReviewComments: false,
-      failedChecks: [],
-      ciRunId: 'run-1',
-      reviews: [],
-      comments: [],
-      reviewComments: [],
-      newReviewComments: [],
-      newPRComments: [],
       prState: 'OPEN',
       prNumber: 2,
     });
@@ -160,13 +128,9 @@ describe('ratchet service (simplified loop)', () => {
 
     const result = await (
       ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
       }
-    ).processWorkspace(workspace, {
-      autoFixCi: true,
-      autoFixReviews: true,
-      allowedReviewers: [],
-    });
+    ).processWorkspace(workspace);
 
     expect(triggerSpy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
@@ -175,7 +139,7 @@ describe('ratchet service (simplified loop)', () => {
     });
   });
 
-  it('does not dispatch when non-ratchet chat session is active', async () => {
+  it('does not dispatch when workspace is not idle', async () => {
     const workspace = {
       id: 'ws-busy',
       prUrl: 'https://github.com/example/repo/pull/3',
@@ -184,23 +148,17 @@ describe('ratchet service (simplified loop)', () => {
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: null,
-      prReviewLastCheckedAt: null,
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
     };
 
     vi.spyOn(
       ratchetService as unknown as { fetchPRState: (...args: unknown[]) => Promise<unknown> },
       'fetchPRState'
     ).mockResolvedValue({
-      ciStatus: CIStatus.FAILURE,
+      ciStatus: CIStatus.SUCCESS,
+      ciSignature: 'status:SUCCESS',
+      latestActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
       hasChangesRequested: false,
-      hasNewReviewComments: false,
-      failedChecks: [],
-      ciRunId: 'run-2',
-      reviews: [],
-      comments: [],
-      reviewComments: [],
-      newReviewComments: [],
-      newPRComments: [],
       prState: 'OPEN',
       prNumber: 3,
     });
@@ -211,25 +169,16 @@ describe('ratchet service (simplified loop)', () => {
       {
         id: 'chat-1',
         workflow: 'default-followup',
+        status: 'RUNNING',
       },
     ] as never);
-    vi.mocked(sessionService.isSessionRunning).mockImplementation(
-      (sessionId: string) => sessionId === 'chat-1'
-    );
-
-    const triggerSpy = vi.mocked(fixerSessionService.acquireAndDispatch);
 
     const result = await (
       ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
       }
-    ).processWorkspace(workspace, {
-      autoFixCi: true,
-      autoFixReviews: true,
-      allowedReviewers: [],
-    });
+    ).processWorkspace(workspace);
 
-    expect(triggerSpy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       action: {
         type: 'WAITING',
@@ -238,16 +187,16 @@ describe('ratchet service (simplified loop)', () => {
     });
   });
 
-  it('dispatches ratchet fixer for a new CI failure signature', async () => {
+  it('dispatches when PR state changed since last ratchet', async () => {
     const workspace = {
-      id: 'ws-ci',
+      id: 'ws-change',
       prUrl: 'https://github.com/example/repo/pull/4',
       prNumber: 4,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
-      ratchetLastCiRunId: 'old-sig',
-      prReviewLastCheckedAt: null,
+      ratchetLastCiRunId: 'status:SUCCESS',
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
     };
 
     vi.spyOn(
@@ -255,15 +204,9 @@ describe('ratchet service (simplified loop)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
+      ciSignature: 'status:FAILURE:unit:123',
+      latestActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
       hasChangesRequested: false,
-      hasNewReviewComments: false,
-      failedChecks: [],
-      ciRunId: 'new-sig',
-      reviews: [],
-      comments: [],
-      reviewComments: [],
-      newReviewComments: [],
-      newPRComments: [],
       prState: 'OPEN',
       prNumber: 4,
     });
@@ -279,154 +222,77 @@ describe('ratchet service (simplified loop)', () => {
 
     const result = await (
       ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
       }
-    ).processWorkspace(workspace, {
-      autoFixCi: true,
-      autoFixReviews: true,
-      allowedReviewers: [],
-    });
+    ).processWorkspace(workspace);
 
     expect(result).toMatchObject({
-      action: {
-        type: 'TRIGGERED_FIXER',
-        fixerType: 'ratchet',
-      },
+      action: { type: 'TRIGGERED_FIXER' },
     });
 
     const finalUpdatePayload = vi.mocked(workspaceAccessor.update).mock.calls.at(-1)?.[1] as Record<
       string,
       unknown
     >;
-    expect(finalUpdatePayload.ratchetLastCiRunId).toBe('new-sig');
+    expect(finalUpdatePayload.ratchetLastCiRunId).toBe('status:FAILURE:unit:123');
+    expect(finalUpdatePayload).toHaveProperty('prReviewLastCheckedAt');
   });
 
-  it('does not dispatch for already handled CI signature', async () => {
-    const result = (
-      ratchetService as unknown as {
-        determineRatchetState: (pr: unknown) => RatchetState;
-      }
-    ).determineRatchetState({
-      ciStatus: CIStatus.FAILURE,
-      hasChangesRequested: false,
-      hasNewReviewComments: false,
-      prState: 'OPEN',
-    });
-
-    expect(result).toBe(RatchetState.CI_FAILED);
-
+  it('does not dispatch when PR state unchanged since last dispatch', async () => {
     const workspace = {
-      id: 'ws-ci-dup',
+      id: 'ws-unchanged',
       prUrl: 'https://github.com/example/repo/pull/5',
       prNumber: 5,
       ratchetEnabled: true,
-      ratchetState: RatchetState.CI_FAILED,
+      ratchetState: RatchetState.READY,
       ratchetActiveSessionId: null,
-      ratchetLastCiRunId: 'same-sig',
-      prReviewLastCheckedAt: null,
+      ratchetLastCiRunId: 'status:SUCCESS',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
     };
 
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
 
     const action = await (
       ratchetService as unknown as {
-        evaluateAndDispatch: (
-          workspaceArg: typeof workspace,
-          prState: unknown,
-          settings: unknown
-        ) => Promise<unknown>;
+        evaluateAndDispatch: (workspaceArg: typeof workspace, prState: unknown) => Promise<unknown>;
       }
-    ).evaluateAndDispatch(
-      workspace,
-      {
-        ciStatus: CIStatus.FAILURE,
-        hasChangesRequested: false,
-        hasNewReviewComments: false,
-        failedChecks: [],
-        ciRunId: 'same-sig',
-        reviews: [],
-        comments: [],
-        reviewComments: [],
-        newReviewComments: [],
-        newPRComments: [],
-        prState: 'OPEN',
-        prNumber: 5,
-      },
-      {
-        autoFixCi: true,
-        autoFixReviews: true,
-        allowedReviewers: [],
-      }
-    );
+    ).evaluateAndDispatch(workspace, {
+      ciStatus: CIStatus.SUCCESS,
+      ciSignature: 'status:SUCCESS',
+      latestActivityAtMs: new Date('2026-01-01T00:00:00Z').getTime(),
+      hasChangesRequested: false,
+      prState: 'OPEN',
+      prNumber: 5,
+    });
 
     expect(action).toEqual({
       type: 'WAITING',
-      reason: 'No actionable CI failures or review activity',
+      reason: 'PR state unchanged since last ratchet dispatch',
     });
   });
 
-  it('treats closed PR as IDLE state and does not dispatch', async () => {
+  it('treats closed PR as IDLE and does not dispatch', () => {
     const state = (
       ratchetService as unknown as {
         determineRatchetState: (pr: unknown) => RatchetState;
       }
     ).determineRatchetState({
       ciStatus: CIStatus.SUCCESS,
+      ciSignature: 'status:SUCCESS',
+      latestActivityAtMs: 0,
       hasChangesRequested: false,
-      hasNewReviewComments: false,
       prState: 'CLOSED',
+      prNumber: 6,
     });
 
     expect(state).toBe(RatchetState.IDLE);
-
-    const action = await (
-      ratchetService as unknown as {
-        evaluateAndDispatch: (
-          workspace: unknown,
-          pr: unknown,
-          settings: unknown
-        ) => Promise<unknown>;
-      }
-    ).evaluateAndDispatch(
-      {
-        id: 'ws-closed',
-        prUrl: 'https://github.com/example/repo/pull/7',
-        prNumber: 7,
-        ratchetEnabled: true,
-        ratchetState: RatchetState.IDLE,
-        ratchetActiveSessionId: null,
-        ratchetLastCiRunId: null,
-        prReviewLastCheckedAt: null,
-      },
-      {
-        ciStatus: CIStatus.SUCCESS,
-        hasChangesRequested: false,
-        hasNewReviewComments: false,
-        failedChecks: [],
-        ciRunId: null,
-        reviews: [],
-        comments: [],
-        reviewComments: [],
-        newReviewComments: [],
-        newPRComments: [],
-        prState: 'CLOSED',
-        prNumber: 7,
-      },
-      {
-        autoFixCi: true,
-        autoFixReviews: true,
-        allowedReviewers: [],
-      }
-    );
-
-    expect(action).toEqual({ type: 'WAITING', reason: 'PR is not open' });
   });
 
-  it('only advances review cursor after a successful dispatch', async () => {
+  it('handles prompt delivery failure by clearing active session and stopping runner', async () => {
     const workspace = {
-      id: 'ws-review',
-      prUrl: 'https://github.com/example/repo/pull/8',
-      prNumber: 8,
+      id: 'ws-prompt-fail',
+      prUrl: 'https://github.com/example/repo/pull/7',
+      prNumber: 7,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
@@ -439,33 +305,16 @@ describe('ratchet service (simplified loop)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
-      hasChangesRequested: false,
-      hasNewReviewComments: true,
-      failedChecks: [],
-      ciRunId: null,
-      reviews: [],
-      comments: [],
-      reviewComments: [],
-      newReviewComments: [
-        {
-          id: 1,
-          author: { login: 'reviewer' },
-          body: 'please fix',
-          path: 'a.ts',
-          line: 1,
-          createdAt: '2026-01-01T00:00:00Z',
-          url: 'https://example.com',
-        },
-      ],
-      newPRComments: [],
+      ciSignature: 'status:SUCCESS',
+      latestActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      hasChangesRequested: true,
       prState: 'OPEN',
-      prNumber: 8,
+      prNumber: 7,
     });
 
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: true } as never);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
-
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'ratchet-session',
@@ -474,21 +323,15 @@ describe('ratchet service (simplified loop)', () => {
     vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
     vi.mocked(sessionService.stopClaudeSession).mockResolvedValue();
 
-    await (
+    const result = await (
       ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace, settings: unknown) => Promise<unknown>;
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
       }
-    ).processWorkspace(workspace, {
-      autoFixCi: true,
-      autoFixReviews: true,
-      allowedReviewers: [],
-    });
+    ).processWorkspace(workspace);
 
-    const finalUpdatePayload = vi.mocked(workspaceAccessor.update).mock.calls.at(-1)?.[1] as Record<
-      string,
-      unknown
-    >;
-    expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
+    expect(result).toMatchObject({
+      action: { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' },
+    });
     expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
       ratchetActiveSessionId: null,
     });
