@@ -120,6 +120,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 2,
     });
@@ -166,6 +167,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 3,
     });
@@ -215,6 +217,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 4,
     });
@@ -379,6 +382,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: true,
       latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 7,
     });

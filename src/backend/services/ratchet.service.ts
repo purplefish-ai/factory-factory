@@ -46,7 +46,6 @@ interface RatchetDecisionContext {
   previousState: RatchetState;
   newState: RatchetState;
   finalState: RatchetState;
-  hasNewReviewActivitySinceLastDispatch: boolean;
   hasStateChangedSinceLastDispatch: boolean;
   isCleanPrWithNoNewReviewActivity: boolean;
   activeRatchetSession: RatchetAction | null;
@@ -335,7 +334,7 @@ class RatchetService {
     return {
       ciSnapshotKey: this.computeCiSnapshotKey(prStateInfo.ciStatus, prStateInfo.statusCheckRollup),
       snapshotComparison: {
-        previousSnapshotKey: workspace.ratchetLastCiRunId,
+        previousDispatchSnapshotKey: workspace.ratchetLastCiRunId,
         currentSnapshotKey: prStateInfo.snapshotKey,
         changedSinceLastDispatch: this.hasStateChangedSinceLastDispatch(workspace, prStateInfo),
       },
@@ -431,10 +430,6 @@ class RatchetService {
     const previousState = workspace.ratchetState;
     const newState = this.determineRatchetState(prStateInfo);
     const finalState = workspace.ratchetEnabled ? newState : RatchetState.IDLE;
-    const hasNewReviewActivitySinceLastDispatch = this.hasNewReviewActivitySinceLastDispatch(
-      workspace,
-      prStateInfo
-    );
     const hasStateChangedSinceLastDispatch = this.hasStateChangedSinceLastDispatch(
       workspace,
       prStateInfo
@@ -453,7 +448,6 @@ class RatchetService {
       previousState,
       newState,
       finalState,
-      hasNewReviewActivitySinceLastDispatch,
       hasStateChangedSinceLastDispatch,
       isCleanPrWithNoNewReviewActivity,
       activeRatchetSession: activityChecks.activeRatchetSession,
