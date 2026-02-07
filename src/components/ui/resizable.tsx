@@ -1,7 +1,5 @@
 import { GripVertical } from 'lucide-react';
 import type { ComponentProps } from 'react';
-import { useCallback, useEffect, useState } from 'react';
-import type { Layout } from 'react-resizable-panels';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 
 import { cn } from '@/lib/utils';
@@ -9,65 +7,19 @@ import { cn } from '@/lib/utils';
 type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'> & {
   /** Alias for orientation to maintain shadcn API compatibility */
   direction?: 'horizontal' | 'vertical';
-  /** Unique ID for persisting layout to localStorage */
+  /** Unique ID for persisting layout to localStorage (native react-resizable-panels support) */
   autoSaveId?: string;
 };
-
-// Custom hook for localStorage persistence that's safe during SSR
-function useLayoutPersistence(autoSaveId: string | undefined) {
-  const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(undefined);
-
-  // Load layout from localStorage on mount
-  useEffect(() => {
-    if (!autoSaveId) {
-      return;
-    }
-    try {
-      const stored = localStorage.getItem(`resizable-panels:${autoSaveId}`);
-      if (stored) {
-        setDefaultLayout(JSON.parse(stored));
-      }
-    } catch {
-      // Ignore storage errors
-    }
-  }, [autoSaveId]);
-
-  // Save layout to localStorage when it changes
-  const onLayoutChanged = useCallback(
-    (layout: Layout) => {
-      if (!autoSaveId) {
-        return;
-      }
-      try {
-        localStorage.setItem(`resizable-panels:${autoSaveId}`, JSON.stringify(layout));
-      } catch {
-        // Ignore storage errors
-      }
-    },
-    [autoSaveId]
-  );
-
-  return { defaultLayout, onLayoutChanged };
-}
 
 const ResizablePanelGroup = ({
   className,
   direction = 'horizontal',
-  autoSaveId,
-  defaultLayout: defaultLayoutProp,
-  onLayoutChanged: onLayoutChangedProp,
   ...props
 }: ResizablePanelGroupProps) => {
-  const persistence = useLayoutPersistence(autoSaveId);
-
   return (
     <Group
       orientation={direction}
       className={cn('flex h-full w-full', direction === 'vertical' && 'flex-col', className)}
-      defaultLayout={
-        autoSaveId ? (persistence.defaultLayout ?? defaultLayoutProp) : defaultLayoutProp
-      }
-      onLayoutChanged={autoSaveId ? persistence.onLayoutChanged : onLayoutChangedProp}
       {...props}
     />
   );
