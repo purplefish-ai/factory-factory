@@ -5,7 +5,6 @@ vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findWithPRsForRatchet: vi.fn(),
     findForRatchetById: vi.fn(),
-    findById: vi.fn(),
     update: vi.fn(),
   },
 }));
@@ -21,7 +20,6 @@ vi.mock('./github-cli.service', () => ({
   githubCLIService: {
     extractPRInfo: vi.fn(),
     getPRFullDetails: vi.fn(),
-    getReviewComments: vi.fn(),
     computeCIStatus: vi.fn(),
   },
 }));
@@ -111,14 +109,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
-      ciSignature: 'status:FAILURE:run-1',
-      latestActivityAtMs: Date.now(),
+      snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       prState: 'OPEN',
       prNumber: 2,
     });
 
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: false } as never);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
     const triggerSpy = vi.spyOn(
@@ -156,14 +152,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
-      ciSignature: 'status:SUCCESS',
-      latestActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       prState: 'OPEN',
       prNumber: 3,
     });
 
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: true } as never);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
       {
@@ -195,7 +189,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
-      ratchetLastCiRunId: 'status:SUCCESS',
+      ratchetLastCiRunId: '2026-01-01T00:00:00Z',
       prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
     };
 
@@ -204,14 +198,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
-      ciSignature: 'status:FAILURE:unit:123',
-      latestActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       prState: 'OPEN',
       prNumber: 4,
     });
 
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: true } as never);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
@@ -234,7 +226,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       string,
       unknown
     >;
-    expect(finalUpdatePayload.ratchetLastCiRunId).toBe('status:FAILURE:unit:123');
+    expect(finalUpdatePayload.ratchetLastCiRunId).toBe('2026-01-02T00:00:00Z');
     expect(finalUpdatePayload).toHaveProperty('prReviewLastCheckedAt');
   });
 
@@ -246,7 +238,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
       ratchetActiveSessionId: null,
-      ratchetLastCiRunId: 'status:SUCCESS',
+      ratchetLastCiRunId: '2026-01-02T00:00:00Z',
       prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
     };
 
@@ -258,8 +250,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       }
     ).evaluateAndDispatch(workspace, {
       ciStatus: CIStatus.SUCCESS,
-      ciSignature: 'status:SUCCESS',
-      latestActivityAtMs: new Date('2026-01-01T00:00:00Z').getTime(),
+      snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       prState: 'OPEN',
       prNumber: 5,
@@ -278,8 +269,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       }
     ).determineRatchetState({
       ciStatus: CIStatus.SUCCESS,
-      ciSignature: 'status:SUCCESS',
-      latestActivityAtMs: 0,
+      snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       prState: 'CLOSED',
       prNumber: 6,
@@ -305,14 +295,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
-      ciSignature: 'status:SUCCESS',
-      latestActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: true,
       prState: 'OPEN',
       prNumber: 7,
     });
 
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ ratchetEnabled: true } as never);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({

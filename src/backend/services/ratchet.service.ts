@@ -9,6 +9,7 @@
 
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
+import { buildRatchetDispatchPrompt } from '../prompts/ratchet-dispatch';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { fixerSessionService } from './fixer-session.service';
@@ -25,8 +26,7 @@ const RATCHET_WORKFLOW = 'ratchet';
 
 interface PRStateInfo {
   ciStatus: CIStatus;
-  ciSignature: string;
-  latestActivityAtMs: number;
+  snapshotKey: string;
   hasChangesRequested: boolean;
   prState: string;
   prNumber: number;
@@ -177,10 +177,7 @@ class RatchetService {
       const previousState = workspace.ratchetState;
       const newState = this.determineRatchetState(prStateInfo);
 
-      const latestWorkspace = await workspaceAccessor.findById(workspace.id);
-      const shouldTakeAction = latestWorkspace?.ratchetEnabled ?? workspace.ratchetEnabled;
-
-      const action = shouldTakeAction
+      const action = workspace.ratchetEnabled
         ? await this.evaluateAndDispatch(workspace, prStateInfo)
         : { type: 'DISABLED' as const, reason: 'Workspace ratcheting disabled' };
 
@@ -188,13 +185,13 @@ class RatchetService {
         workspace,
         prStateInfo,
         action,
-        shouldTakeAction ? newState : RatchetState.IDLE
+        workspace.ratchetEnabled ? newState : RatchetState.IDLE
       );
 
       return {
         workspaceId: workspace.id,
         previousState,
-        newState: shouldTakeAction ? newState : RatchetState.IDLE,
+        newState: workspace.ratchetEnabled ? newState : RatchetState.IDLE,
         action,
       };
     } catch (error) {
@@ -247,15 +244,7 @@ class RatchetService {
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo
   ): boolean {
-    const ciChanged = workspace.ratchetLastCiRunId !== prStateInfo.ciSignature;
-
-    if (!workspace.prReviewLastCheckedAt) {
-      return true;
-    }
-
-    const reviewChanged =
-      prStateInfo.latestActivityAtMs > workspace.prReviewLastCheckedAt.getTime();
-    return ciChanged || reviewChanged;
+    return workspace.ratchetLastCiRunId !== prStateInfo.snapshotKey;
   }
 
   private async updateWorkspaceAfterCheck(
@@ -272,7 +261,7 @@ class RatchetService {
       ratchetLastCheckedAt: now,
       ...(dispatched
         ? {
-            ratchetLastCiRunId: prStateInfo.ciSignature,
+            ratchetLastCiRunId: prStateInfo.snapshotKey,
             prReviewLastCheckedAt: now,
           }
         : {}),
@@ -334,50 +323,6 @@ class RatchetService {
     };
   }
 
-  private computeLatestActivityTimestamp(
-    prDetails: {
-      reviews: Array<{ submittedAt: string }>;
-      comments: Array<{ updatedAt: string }>;
-    },
-    reviewComments: Array<{ updatedAt: string }>
-  ): number {
-    const timestamps: number[] = [];
-
-    for (const review of prDetails.reviews) {
-      timestamps.push(new Date(review.submittedAt).getTime());
-    }
-    for (const comment of prDetails.comments) {
-      timestamps.push(new Date(comment.updatedAt).getTime());
-    }
-    for (const reviewComment of reviewComments) {
-      timestamps.push(new Date(reviewComment.updatedAt).getTime());
-    }
-
-    return timestamps.length > 0 ? Math.max(...timestamps) : 0;
-  }
-
-  private computeCiSignature(
-    ciStatus: CIStatus,
-    failedChecks: Array<{ name: string; detailsUrl?: string }>
-  ): string {
-    if (ciStatus !== CIStatus.FAILURE) {
-      return `status:${ciStatus}`;
-    }
-
-    const failedEntries: string[] = [];
-    for (const check of failedChecks) {
-      const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
-      const runId = runIdMatch?.[1] ?? 'no-run-id';
-      failedEntries.push(`${check.name}:${runId}`);
-    }
-
-    if (failedEntries.length === 0) {
-      return 'status:FAILURE:no-check-signature';
-    }
-
-    return `status:FAILURE:${failedEntries.sort().join('|')}`;
-  }
-
   private async fetchPRState(workspace: WorkspaceWithPR): Promise<PRStateInfo | null> {
     const prContext = this.resolveRatchetPrContext(workspace);
     if (!prContext) {
@@ -385,10 +330,7 @@ class RatchetService {
     }
 
     try {
-      const [prDetails, reviewComments] = await Promise.all([
-        githubCLIService.getPRFullDetails(prContext.repo, prContext.prNumber),
-        githubCLIService.getReviewComments(prContext.repo, prContext.prNumber),
-      ]);
+      const prDetails = await githubCLIService.getPRFullDetails(prContext.repo, prContext.prNumber);
 
       const statusCheckRollup =
         prDetails.statusCheckRollup?.map((check) => ({
@@ -398,29 +340,12 @@ class RatchetService {
 
       const ciStatus = githubCLIService.computeCIStatus(statusCheckRollup);
 
-      const failedChecks =
-        prDetails.statusCheckRollup?.filter((check) => {
-          const conclusion = String(check.conclusion || check.status);
-          return (
-            conclusion === 'FAILURE' || conclusion === 'ACTION_REQUIRED' || conclusion === 'ERROR'
-          );
-        }) ?? [];
-
-      const ciSignature = this.computeCiSignature(
-        ciStatus,
-        failedChecks.map((check) => ({
-          name: check.name || 'Unknown check',
-          detailsUrl: check.detailsUrl,
-        }))
-      );
-
       const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
-      const latestActivityAtMs = this.computeLatestActivityTimestamp(prDetails, reviewComments);
+      const snapshotKey = prDetails.updatedAt;
 
       return {
         ciStatus,
-        ciSignature,
-        latestActivityAtMs,
+        snapshotKey,
         hasChangesRequested,
         prState: prDetails.state,
         prNumber: prDetails.number,
@@ -469,7 +394,7 @@ class RatchetService {
         sessionName: 'Ratchet',
         runningIdleAction: 'restart',
         dispatchMode: 'start_empty_and_send',
-        buildPrompt: () => this.buildDispatchPrompt(workspace.prUrl, prStateInfo.prNumber),
+        buildPrompt: () => buildRatchetDispatchPrompt(workspace.prUrl, prStateInfo.prNumber),
         beforeStart: ({ sessionId, prompt }) => {
           messageStateService.injectCommittedUserMessage(sessionId, prompt);
         },
@@ -517,22 +442,6 @@ class RatchetService {
       });
       return { type: 'ERROR', error: errorMessage };
     }
-  }
-
-  private buildDispatchPrompt(prUrl: string, prNumber: number): string {
-    return `PR #${prNumber} has changed since the last ratchet run.
-
-PR URL: ${prUrl}
-
-Execute autonomously in this order:
-1. First merge in the latest main and fix any conflicts.
-2. Check for CI failures.
-3. Check for any unaddressed code review comments.
-4. Build/lint/test.
-5. Push your changes.
-6. Comment briefly on and resolve the addressed code review comments.
-
-Do not ask for confirmation.`;
   }
 }
 
