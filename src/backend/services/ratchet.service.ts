@@ -664,9 +664,7 @@ class RatchetService {
       if (session.workflow === RATCHET_WORKFLOW) {
         return false;
       }
-      return (
-        session.status === SessionStatus.RUNNING || sessionService.isSessionRunning(session.id)
-      );
+      return sessionService.isSessionWorking(session.id);
     });
   }
 
