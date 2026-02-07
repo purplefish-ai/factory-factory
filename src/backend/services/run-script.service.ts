@@ -201,11 +201,33 @@ export class RunScriptService {
       });
 
       // Transition to RUNNING state AFTER registering all event handlers
-      // This ensures we don't miss any events that fire during the async DB operation
-      await runScriptStateMachine.markRunning(workspaceId, {
-        pid,
-        port,
-      });
+      // This ensures we don't miss any events that fire during the async DB operation.
+      // If the process exits very fast, the exit handler may have already transitioned
+      // STARTING → COMPLETED/FAILED before we get here. In that case, markRunning will
+      // fail because the CAS expects STARTING but finds COMPLETED/FAILED. That's fine —
+      // the process lifecycle completed correctly.
+      try {
+        await runScriptStateMachine.markRunning(workspaceId, {
+          pid,
+          port,
+        });
+      } catch (markRunningError) {
+        // Check if the process already exited and the exit handler transitioned the state
+        const ws = await workspaceAccessor.findById(workspaceId);
+        const currentStatus = ws?.runScriptStatus;
+        if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
+          logger.info(
+            'Process exited before markRunning — exit handler already transitioned state',
+            {
+              workspaceId,
+              pid,
+              currentStatus,
+            }
+          );
+          return { success: true, port, pid };
+        }
+        throw markRunningError;
+      }
 
       return {
         success: true,

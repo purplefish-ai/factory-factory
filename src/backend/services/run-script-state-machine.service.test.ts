@@ -48,6 +48,10 @@ describe('RunScriptStateMachineService', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'FAILED')).toBe(true);
     });
 
+    it('should allow STARTING → COMPLETED (fast process exit with code 0)', () => {
+      expect(runScriptStateMachine.isValidTransition('STARTING', 'COMPLETED')).toBe(true);
+    });
+
     it('should allow STARTING → STOPPING', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'STOPPING')).toBe(true);
     });
@@ -425,6 +429,19 @@ describe('RunScriptStateMachineService', () => {
   describe('markCompleted', () => {
     it('should transition from RUNNING to COMPLETED', async () => {
       const workspace = { id: 'ws-1', runScriptStatus: 'RUNNING' };
+      const updatedWorkspace = { ...workspace, runScriptStatus: 'COMPLETED' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await runScriptStateMachine.markCompleted('ws-1');
+
+      expect(result.runScriptStatus).toBe('COMPLETED');
+    });
+
+    it('should transition from STARTING to COMPLETED (fast process exit)', async () => {
+      const workspace = { id: 'ws-1', runScriptStatus: 'STARTING' };
       const updatedWorkspace = { ...workspace, runScriptStatus: 'COMPLETED' };
 
       mockFindUnique.mockResolvedValue(workspace);

@@ -8,6 +8,7 @@
  * State Diagram:
  *   IDLE → STARTING (start requested)
  *   STARTING → RUNNING (process spawned successfully)
+ *   STARTING → COMPLETED (process exited with code 0 before markRunning)
  *   STARTING → FAILED (spawn error)
  *   RUNNING → STOPPING (stop requested)
  *   RUNNING → COMPLETED (process exited with code 0)
@@ -28,7 +29,7 @@ const logger = createLogger('run-script-state-machine');
  */
 const VALID_TRANSITIONS: Record<RunScriptStatus, RunScriptStatus[]> = {
   IDLE: ['STARTING'],
-  STARTING: ['RUNNING', 'FAILED', 'STOPPING'],
+  STARTING: ['RUNNING', 'COMPLETED', 'FAILED', 'STOPPING'],
   RUNNING: ['STOPPING', 'COMPLETED', 'FAILED'],
   STOPPING: ['IDLE'],
   COMPLETED: ['IDLE', 'STARTING'],
