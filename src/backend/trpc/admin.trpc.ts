@@ -6,13 +6,14 @@
 
 import { type DecisionLog, SessionStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import {
   claudeSessionAccessor,
   decisionLogAccessor,
   terminalSessionAccessor,
   workspaceAccessor,
 } from '../resource_accessors/index';
-import { dataBackupService, exportDataSchema } from '../services';
+import { dataBackupService } from '../services';
 import { type Context, publicProcedure, router } from './trpc';
 
 const loggerName = 'admin-trpc';
