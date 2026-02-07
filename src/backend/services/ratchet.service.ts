@@ -591,7 +591,7 @@ class RatchetService {
         ciStatus,
         hasChangesRequested,
         latestReviewActivityAtMs,
-        prDetails.statusCheckRollup
+        statusCheckRollup
       );
 
       return {
@@ -599,7 +599,7 @@ class RatchetService {
         snapshotKey,
         hasChangesRequested,
         latestReviewActivityAtMs,
-        statusCheckRollup: prDetails.statusCheckRollup,
+        statusCheckRollup,
         prState: prDetails.state,
         prNumber: prDetails.number,
       };
