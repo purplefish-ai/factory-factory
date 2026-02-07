@@ -1,13 +1,17 @@
 import { Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { trpc } from '@/frontend/lib/trpc';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+
+type ParsedExportData = z.infer<typeof exportDataSchema>;
 
 interface ImportConfirmState {
   open: boolean;
-  data: unknown;
+  data: ParsedExportData | null;
   summary: string;
 }
 
@@ -58,16 +62,7 @@ export function DataImportButton({
     },
   });
 
-  const buildImportSummary = (data: {
-    data: {
-      projects: unknown[];
-      workspaces: unknown[];
-      claudeSessions: unknown[];
-      terminalSessions: unknown[];
-      userSettings: unknown;
-    };
-    meta: { exportedAt: string; version: string };
-  }): string => {
+  const buildImportSummary = (data: ParsedExportData): string => {
     return [
       `Exported: ${new Date(data.meta.exportedAt).toLocaleString()}`,
       `Version: ${data.meta.version}`,
@@ -87,16 +82,17 @@ export function DataImportButton({
     return 'Unknown error';
   };
 
-  const validateAndParseFile = async (file: File): Promise<unknown> => {
+  const validateAndParseFile = async (file: File): Promise<ParsedExportData> => {
     const text = await file.text();
-    const data = JSON.parse(text);
+    const json = JSON.parse(text);
 
-    // Basic validation
-    if (!(data.meta?.exportedAt && data.meta?.version && data.data)) {
-      throw new Error('Invalid backup file format');
+    // Validate using exportDataSchema
+    const result = exportDataSchema.safeParse(json);
+    if (!result.success) {
+      throw new Error(`Invalid backup file format: ${result.error.message}`);
     }
 
-    return data;
+    return result.data;
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,16 +102,7 @@ export function DataImportButton({
     }
 
     try {
-      const data = (await validateAndParseFile(file)) as {
-        data: {
-          projects: unknown[];
-          workspaces: unknown[];
-          claudeSessions: unknown[];
-          terminalSessions: unknown[];
-          userSettings: unknown;
-        };
-        meta: { exportedAt: string; version: string };
-      };
+      const data = await validateAndParseFile(file);
 
       // Show confirmation dialog with summary
       setConfirmState({
@@ -135,8 +122,7 @@ export function DataImportButton({
 
   const handleConfirmImport = () => {
     if (confirmState.data) {
-      // biome-ignore lint/suspicious/noExplicitAny: Dynamic import data
-      importData.mutate(confirmState.data as any);
+      importData.mutate(confirmState.data);
     }
   };
 
