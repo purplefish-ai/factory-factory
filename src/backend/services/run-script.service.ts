@@ -120,11 +120,31 @@ export class RunScriptService {
         RunScriptService.runningProcesses.delete(workspaceId);
         RunScriptService.outputListeners.delete(workspaceId);
 
-        // Transition to COMPLETED or FAILED via state machine
-        if (code === 0) {
-          await runScriptStateMachine.markCompleted(workspaceId);
-        } else {
-          await runScriptStateMachine.markFailed(workspaceId);
+        // Check current state - if STOPPING, the stopRunScript handler will complete the transition
+        // Otherwise, transition to COMPLETED or FAILED based on exit code
+        try {
+          const workspace = await workspaceAccessor.findById(workspaceId);
+          if (workspace?.runScriptStatus === 'STOPPING') {
+            // stopRunScript will call completeStopping to transition to IDLE
+            logger.debug(
+              'Process exited during stopping, letting stopRunScript complete transition',
+              {
+                workspaceId,
+              }
+            );
+            return;
+          }
+
+          // Normal exit from RUNNING state
+          if (code === 0) {
+            await runScriptStateMachine.markCompleted(workspaceId);
+          } else {
+            await runScriptStateMachine.markFailed(workspaceId);
+          }
+        } catch (error) {
+          logger.error('Failed to handle process exit state transition', error as Error, {
+            workspaceId,
+          });
         }
       });
 
@@ -179,6 +199,17 @@ export class RunScriptService {
       logger.error('Failed to start run script', error as Error, {
         workspaceId,
       });
+      // Transition to FAILED if we're stuck in STARTING state
+      try {
+        const workspace = await workspaceAccessor.findById(workspaceId);
+        if (workspace?.runScriptStatus === 'STARTING') {
+          await runScriptStateMachine.markFailed(workspaceId);
+        }
+      } catch (stateError) {
+        logger.error('Failed to transition to FAILED state', stateError as Error, {
+          workspaceId,
+        });
+      }
       return {
         success: false,
         error: (error as Error).message,
@@ -328,13 +359,19 @@ export class RunScriptService {
     // Verify process status via state machine (handles stale process detection)
     const status = await runScriptStateMachine.verifyRunning(workspaceId);
 
+    // Refetch workspace to get fresh data after potential state transition
+    const freshWorkspace = await workspaceAccessor.findById(workspaceId);
+    if (!freshWorkspace) {
+      throw new Error('Workspace not found');
+    }
+
     return {
       status,
-      pid: workspace.runScriptPid,
-      port: workspace.runScriptPort,
-      startedAt: workspace.runScriptStartedAt,
-      hasRunScript: !!workspace.runScriptCommand,
-      runScriptCommand: workspace.runScriptCommand,
+      pid: freshWorkspace.runScriptPid,
+      port: freshWorkspace.runScriptPort,
+      startedAt: freshWorkspace.runScriptStartedAt,
+      hasRunScript: !!freshWorkspace.runScriptCommand,
+      runScriptCommand: freshWorkspace.runScriptCommand,
     };
   }
 
