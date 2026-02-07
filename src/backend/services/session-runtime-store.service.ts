@@ -62,13 +62,6 @@ class SessionRuntimeStoreService {
     } satisfies SessionRuntimeEvent);
   }
 
-  markLoading(sessionId: string): SessionRuntimeState {
-    return this.updateRuntime(sessionId, {
-      phase: 'loading',
-      activity: 'IDLE',
-    });
-  }
-
   markStarting(sessionId: string): SessionRuntimeState {
     return this.updateRuntime(sessionId, {
       phase: 'starting',
@@ -103,6 +96,7 @@ class SessionRuntimeStoreService {
   markError(sessionId: string): SessionRuntimeState {
     return this.updateRuntime(sessionId, {
       phase: 'error',
+      processState: 'stopped',
       activity: 'IDLE',
     });
   }

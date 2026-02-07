@@ -47,6 +47,24 @@ function withRuntime(state: ChatState, runtime: ChatState['sessionRuntime']): Ch
   };
 }
 
+function shouldResetRuntimeTransientState(runtime: ChatState['sessionRuntime']): boolean {
+  return runtime.processState === 'stopped' || runtime.phase === 'error';
+}
+
+function applyRuntime(state: ChatState, runtime: ChatState['sessionRuntime']): ChatState {
+  const next = withRuntime(state, runtime);
+  if (!shouldResetRuntimeTransientState(runtime)) {
+    return next;
+  }
+
+  return {
+    ...next,
+    toolProgress: new Map(),
+    isCompacting: false,
+    activeHooks: new Map(),
+  };
+}
+
 function reduceLegacySessionEvent(state: ChatState, action: ChatAction): ChatState | null {
   switch (action.type) {
     case 'WS_STATUS':
@@ -125,9 +143,9 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
 
   switch (action.type) {
     case 'SESSION_RUNTIME_SNAPSHOT':
-      return withRuntime(state, action.payload.sessionRuntime);
+      return applyRuntime(state, action.payload.sessionRuntime);
     case 'SESSION_RUNTIME_UPDATED':
-      return withRuntime(state, action.payload.sessionRuntime);
+      return applyRuntime(state, action.payload.sessionRuntime);
     case 'WS_SESSIONS':
       return { ...state, availableSessions: action.payload.sessions };
     case 'SESSION_SWITCH_START':

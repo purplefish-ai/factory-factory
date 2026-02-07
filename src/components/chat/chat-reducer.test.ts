@@ -253,6 +253,49 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
+  // SESSION_RUNTIME_UPDATED Action
+  // -------------------------------------------------------------------------
+
+  describe('SESSION_RUNTIME_UPDATED action', () => {
+    it('clears transient UI state when runtime indicates process stopped', () => {
+      const state: ChatState = {
+        ...initialState,
+        isCompacting: true,
+        toolProgress: new Map([['tool-1', { toolName: 'Edit', elapsedSeconds: 5 }]]),
+        activeHooks: new Map([
+          [
+            'hook-1',
+            {
+              hookId: 'hook-1',
+              hookName: 'PostToolUse',
+              hookEvent: 'PostToolUse',
+              startedAt: '2026-02-07T00:00:00.000Z',
+            },
+          ],
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'SESSION_RUNTIME_UPDATED',
+        payload: {
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'stopped',
+            activity: 'IDLE',
+            updatedAt: '2026-02-07T00:00:01.000Z',
+          },
+        },
+      };
+
+      const newState = chatReducer(state, action);
+
+      expect(newState.isCompacting).toBe(false);
+      expect(newState.toolProgress.size).toBe(0);
+      expect(newState.activeHooks.size).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // WS_CLAUDE_MESSAGE Action
   // -------------------------------------------------------------------------
 
