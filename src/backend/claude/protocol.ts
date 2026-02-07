@@ -39,11 +39,12 @@ const logger = createLogger('protocol');
 
 /**
  * Pending request tracking for request/response correlation.
- * Generic type parameter allows type-safe response handling.
+ * Uses unknown for response to allow storage in a single Map, with runtime
+ * validation ensuring type safety before calling resolve.
  */
-export interface PendingRequest<T = unknown> {
+export interface PendingRequest {
   requestId: string;
-  resolve: (response: T) => void;
+  resolve: (response: unknown) => void;
   reject: (error: Error) => void;
   timeoutId?: NodeJS.Timeout;
   /** The subtype of the request, used to validate the response schema */
@@ -94,7 +95,7 @@ export type ControlResponseBody = ControlResponseData;
 export class ClaudeProtocol extends EventEmitter {
   private stdin: Writable;
   private stdout: Readable;
-  private pendingRequests: Map<string, PendingRequest<unknown>>;
+  private pendingRequests: Map<string, PendingRequest>;
   private rl: readline.Interface | null;
   private requestTimeout: number;
   private maxLineLength: number;
@@ -153,7 +154,9 @@ export class ClaudeProtocol extends EventEmitter {
 
       this.pendingRequests.set(requestId, {
         requestId,
-        resolve: resolve as (response: unknown) => void,
+        // Wrapper ensures type safety: response is validated in handleControlResponse
+        // via validateControlResponsePayload before being passed here
+        resolve: (response) => resolve(response as InitializeResponseData),
         reject,
         timeoutId,
         requestSubtype: 'initialize',
@@ -313,7 +316,9 @@ export class ClaudeProtocol extends EventEmitter {
 
       this.pendingRequests.set(requestId, {
         requestId,
-        resolve: resolve as (response: unknown) => void,
+        // Wrapper ensures type safety: response is validated in handleControlResponse
+        // via validateControlResponsePayload before being passed here
+        resolve: (response) => resolve(response as RewindFilesResponse),
         reject,
         timeoutId,
         requestSubtype: 'rewind_files',

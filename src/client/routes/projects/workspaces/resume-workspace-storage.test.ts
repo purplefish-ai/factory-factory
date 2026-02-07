@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resumeWorkspaceIdsSchema } from '@/shared/schemas/persisted-stores.schema';
 import {
   forgetResumeWorkspace,
   isResumeWorkspace,
@@ -118,7 +119,8 @@ describe('resume-workspace-storage', () => {
       const savedValue = mockLocalStorage.setItem.mock.calls[
         mockLocalStorage.setItem.mock.calls.length - 1
       ]![1] as string;
-      const savedIds = JSON.parse(savedValue) as string[];
+      const parsed = JSON.parse(savedValue);
+      const savedIds = resumeWorkspaceIdsSchema.parse(parsed);
       expect(savedIds).toHaveLength(200);
       expect(savedIds[savedIds.length - 1]).toBe('ws-new');
     });
