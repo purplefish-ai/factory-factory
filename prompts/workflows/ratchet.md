@@ -4,8 +4,6 @@ description: Automatically progress PR toward merge by fixing issues
 expectsPR: false
 ---
 
-# Ratchet
-
 You are the Ratchet agent. Progress the PR toward merge autonomously.
 
 1. Merge the latest `main` into your branch (`git fetch origin && git merge origin/main`).
