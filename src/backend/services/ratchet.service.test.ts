@@ -495,6 +495,72 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  it('decides to trigger fixer when context is actionable', () => {
+    const decision = (
+      ratchetService as unknown as {
+        decideRatchetAction: (context: unknown) => { type: string };
+      }
+    ).decideRatchetAction({
+      workspace: { ratchetEnabled: true },
+      prStateInfo: { prState: 'OPEN' },
+      isCleanPrWithNoNewReviewActivity: false,
+      activeRatchetSession: null,
+      hasStateChangedSinceLastDispatch: true,
+      hasOtherActiveSession: false,
+    });
+
+    expect(decision).toEqual({ type: 'TRIGGER_FIXER' });
+  });
+
+  it('prefers precomputed review-activity diagnostics from decision context', () => {
+    const workspace = {
+      id: 'ws-log-diag',
+      prUrl: 'https://github.com/example/repo/pull/10',
+      prNumber: 10,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'prev-snapshot',
+      prReviewLastCheckedAt: null,
+    };
+
+    const prStateInfo = {
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'next-snapshot',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 10,
+    };
+
+    const logContext = (
+      ratchetService as unknown as {
+        buildRatchetingLogContext: (
+          workspaceArg: typeof workspace,
+          previousState: RatchetState,
+          newState: RatchetState,
+          action: { type: 'WAITING'; reason: string },
+          prStateInfoArg: typeof prStateInfo,
+          prNumber: number,
+          decisionContext: { hasNewReviewActivitySinceLastDispatch: boolean }
+        ) => { reviewTimestampComparison: { hasNewReviewActivitySinceLastDispatch: boolean } };
+      }
+    ).buildRatchetingLogContext(
+      workspace,
+      RatchetState.READY,
+      RatchetState.READY,
+      { type: 'WAITING', reason: 'noop' },
+      prStateInfo,
+      10,
+      { hasNewReviewActivitySinceLastDispatch: true }
+    );
+
+    expect(logContext.reviewTimestampComparison.hasNewReviewActivitySinceLastDispatch).toBe(true);
+  });
+
   it('ignores review activity authored by the authenticated user', () => {
     const latestActivity = (
       ratchetService as unknown as {
