@@ -153,6 +153,9 @@ export class ClaudeProtocol extends EventEmitter {
 
       this.pendingRequests.set(requestId, {
         requestId,
+        // Cast required because pendingRequests Map stores generic PendingRequest<unknown>.
+        // Safety: validateControlResponsePayload validates with InitializeResponseDataSchema
+        // before calling resolve in handleControlResponse.
         resolve: resolve as (response: unknown) => void,
         reject,
         timeoutId,
@@ -313,6 +316,9 @@ export class ClaudeProtocol extends EventEmitter {
 
       this.pendingRequests.set(requestId, {
         requestId,
+        // Cast required because pendingRequests Map stores generic PendingRequest<unknown>.
+        // Safety: validateControlResponsePayload validates with RewindFilesResponseSchema
+        // before calling resolve in handleControlResponse.
         resolve: resolve as (response: unknown) => void,
         reject,
         timeoutId,

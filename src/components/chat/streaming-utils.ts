@@ -7,6 +7,7 @@
  * - Stream event extraction and validation
  */
 
+import { z } from 'zod';
 import type { ClaudeMessage, ClaudeStreamEvent, InputJsonDelta } from '@/lib/claude-types';
 import { isStreamEventMessage } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
@@ -87,7 +88,9 @@ function handleToolInputDelta(
 
   // Try to parse the accumulated JSON and create update action
   try {
-    const parsedInput = JSON.parse(newJson) as Record<string, unknown>;
+    const parsed = JSON.parse(newJson);
+    const ToolInputSchema = z.record(z.string(), z.unknown());
+    const parsedInput = ToolInputSchema.parse(parsed);
     debug.log('Tool input updated:', toolUseId, Object.keys(parsedInput));
     return { type: 'TOOL_INPUT_UPDATE', payload: { toolUseId, input: parsedInput } };
   } catch {

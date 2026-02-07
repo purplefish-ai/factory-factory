@@ -8,6 +8,17 @@ language js
 // Rationale: Casting resolve functions to accept unknown bypasses type safety
 // and can hide validation gaps. The resolve function should have proper types
 // derived from the Promise generic parameter.
+//
+// Known exceptions (with documented validation):
+// - src/backend/claude/protocol.ts: Validated by validateControlResponsePayload before resolve
+//
+// NOTE: This rule is NOT currently enabled in biome.json because Biome
+// GritQL plugins don't yet support per-file overrides (see biomejs/biome#8522).
+//
+// Once Biome supports this, add to biome.json plugins array:
+//   "biome-rules/no-unsafe-resolver-cast.grit"
+//
+// And add exception for protocol.ts which has proper validation.
 
 `resolve as ($params) => $return` where {
   $params <: contains `unknown`,
