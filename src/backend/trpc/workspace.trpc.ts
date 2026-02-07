@@ -159,7 +159,6 @@ export const workspaceRouter = router({
               ratchetEnabled: false,
               ratchetState: RatchetState.IDLE,
               ratchetActiveSessionId: null,
-              ratchetLastNotifiedState: null,
               ratchetLastCiRunId: null,
             }
       );

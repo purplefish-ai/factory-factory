@@ -452,7 +452,6 @@ class WorkspaceAccessor {
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
       ratchetLastCiRunId: string | null;
-      ratchetLastNotifiedState: RatchetState | null;
       prReviewLastCheckedAt: Date | null;
     }>
   > {
@@ -469,7 +468,6 @@ class WorkspaceAccessor {
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
-        ratchetLastNotifiedState: true,
         prReviewLastCheckedAt: true,
       },
       orderBy: { ratchetLastCheckedAt: 'asc' }, // Check oldest first
@@ -482,7 +480,6 @@ class WorkspaceAccessor {
         ratchetState: RatchetState;
         ratchetActiveSessionId: string | null;
         ratchetLastCiRunId: string | null;
-        ratchetLastNotifiedState: RatchetState | null;
         prReviewLastCheckedAt: Date | null;
       }>
     >;
@@ -499,7 +496,6 @@ class WorkspaceAccessor {
     ratchetState: RatchetState;
     ratchetActiveSessionId: string | null;
     ratchetLastCiRunId: string | null;
-    ratchetLastNotifiedState: RatchetState | null;
     prReviewLastCheckedAt: Date | null;
   } | null> {
     return prisma.workspace.findFirst({
@@ -516,7 +512,6 @@ class WorkspaceAccessor {
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
-        ratchetLastNotifiedState: true,
         prReviewLastCheckedAt: true,
       },
     }) as Promise<{
@@ -527,7 +522,6 @@ class WorkspaceAccessor {
       ratchetState: RatchetState;
       ratchetActiveSessionId: string | null;
       ratchetLastCiRunId: string | null;
-      ratchetLastNotifiedState: RatchetState | null;
       prReviewLastCheckedAt: Date | null;
     } | null>;
   }
