@@ -450,6 +450,76 @@ describe('chat message handlers', () => {
     );
   });
 
+  it('load_session replays pending permission request with toolInput', async () => {
+    mockedClaudeSessionAccessor.findById.mockResolvedValue({
+      id: 'session-1',
+      claudeSessionId: 'claude-1',
+    } as unknown as Awaited<ReturnType<typeof claudeSessionAccessor.findById>>);
+    mockedSessionService.getClient.mockReturnValue({
+      isRunning: () => true,
+      isWorking: () => false,
+    } as unknown as ClaudeClient);
+    mockedChatEventForwarderService.getPendingRequest.mockReturnValue({
+      requestId: 'req-perm-1',
+      toolName: 'ExitPlanMode',
+      toolUseId: 'tool-1',
+      input: { planFile: '/tmp/plan.md' },
+      planContent: '# Plan',
+      timestamp: new Date().toISOString(),
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'load_session', loadRequestId: 'load-perm' },
+    });
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'session_replay_batch',
+        replayEvents: [
+          { type: 'status', running: false, processAlive: true },
+          {
+            type: 'permission_request',
+            requestId: 'req-perm-1',
+            toolName: 'ExitPlanMode',
+            toolInput: { planFile: '/tmp/plan.md' },
+            planContent: '# Plan',
+          },
+        ],
+        loadRequestId: 'load-perm',
+      })
+    );
+  });
+
+  it('load_session forwards loadRequestId for non-running snapshot hydration', async () => {
+    mockedClaudeSessionAccessor.findById.mockResolvedValue({
+      id: 'session-1',
+      claudeSessionId: null,
+    } as unknown as Awaited<ReturnType<typeof claudeSessionAccessor.findById>>);
+    mockedSessionService.getClient.mockReturnValue(undefined);
+
+    const handler = createLoadSessionHandler();
+    const ws = createWs();
+
+    await handler({
+      ws,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'load_session', loadRequestId: 'load-snapshot' },
+    });
+
+    expect(mockedMessageStateService.sendSnapshot).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(Object),
+      { loadRequestId: 'load-snapshot', pendingInteractiveRequest: null }
+    );
+  });
+
   it('load_session sends cached slash commands when missing', async () => {
     mockedClaudeSessionAccessor.findById.mockResolvedValue({
       id: 'session-1',

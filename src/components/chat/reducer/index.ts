@@ -69,18 +69,18 @@ const chatReducerSlices: ReducerSlice[] = [
   reduceRewindExecutionSlice,
 ];
 
-export function chatReducer(state: ChatState, action: ChatAction): ChatState {
-  const reduceSingleAction = (currentState: ChatState, currentAction: ChatAction): ChatState => {
-    let nextState = currentState;
-    for (const reduce of chatReducerSlices) {
-      const updated = reduce(nextState, currentAction);
-      if (updated !== nextState) {
-        nextState = updated;
-      }
+function reduceSingleAction(currentState: ChatState, currentAction: ChatAction): ChatState {
+  let nextState = currentState;
+  for (const reduce of chatReducerSlices) {
+    const updated = reduce(nextState, currentAction);
+    if (updated !== nextState) {
+      nextState = updated;
     }
-    return nextState;
-  };
+  }
+  return nextState;
+}
 
+export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   if (action.type === 'SESSION_REPLAY_BATCH') {
     let nextState = state;
     for (const event of action.payload.replayEvents) {

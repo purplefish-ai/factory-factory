@@ -164,36 +164,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return viewingCount;
   }
 
-  function getInitialStatus(dbSessionId: string | null): {
-    type: 'status';
-    dbSessionId: string | null;
-    running: boolean;
-    processAlive: boolean;
-  } {
-    const client = dbSessionId ? sessionService.getClient(dbSessionId) : null;
-    const isRunning = client?.isWorking() ?? false;
-    const processAlive = client?.isRunning() ?? false;
-
-    return {
-      type: 'status',
-      dbSessionId,
-      running: isRunning,
-      processAlive,
-    };
-  }
-
-  function sendInitialStatus(
-    ws: WebSocket,
-    dbSessionId: string | null
-  ): { type: 'status'; dbSessionId: string | null; running: boolean; processAlive: boolean } {
-    const initialStatus = getInitialStatus(dbSessionId);
-    if (dbSessionId) {
-      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
-    }
-    ws.send(JSON.stringify(initialStatus));
-    return initialStatus;
-  }
-
   function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
     const rawMessage: unknown = JSON.parse(toMessageString(data));
     const parseResult = ChatMessageSchema.safeParse(rawMessage);
@@ -300,7 +270,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         });
       }
 
-      sendInitialStatus(ws, dbSessionId);
       // Session hydration is handled by explicit load_session from the client.
 
       ws.on('message', async (data) => {

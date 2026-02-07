@@ -673,7 +673,7 @@ class ChatEventForwarderService {
         type: 'permission_request',
         requestId: request.requestId,
         toolName: request.toolName,
-        input: request.input,
+        toolInput: request.input,
         planContent,
       });
       return;
@@ -685,7 +685,7 @@ class ChatEventForwarderService {
       requestId: request.requestId,
       toolName: request.toolName,
       toolUseId: request.toolUseId,
-      input: request.input,
+      toolInput: request.input,
     });
   }
 

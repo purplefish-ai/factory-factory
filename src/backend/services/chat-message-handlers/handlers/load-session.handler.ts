@@ -30,7 +30,12 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
     if (existingClient?.isRunning()) {
       replayEventsForRunningClient(ws, sessionId, existingClient, message.loadRequestId);
     } else {
-      await loadHistoryFromJSONL(sessionId, workingDir, dbSession.claudeSessionId);
+      await loadHistoryFromJSONL(
+        sessionId,
+        workingDir,
+        dbSession.claudeSessionId,
+        message.loadRequestId
+      );
     }
 
     await sendCachedSlashCommandsIfNeeded(sessionId);
@@ -56,7 +61,7 @@ function replayEventsForRunningClient(
     eventCompressionService.logCompressionStats(sessionId, stats);
   }
 
-  const replayEvents: Array<Record<string, unknown>> = compressed.map((event) => ({ ...event }));
+  const replayEvents: Record<string, unknown>[] = compressed.map((event) => ({ ...event }));
 
   // Send current status
   const isClientWorking = client.isWorking();
@@ -122,7 +127,7 @@ function createPendingInteractiveRequestEvent(
       type: 'permission_request',
       requestId: pendingRequest.requestId,
       toolName: pendingRequest.toolName,
-      input: pendingRequest.input,
+      toolInput: pendingRequest.input,
       planContent: pendingRequest.planContent,
     };
   }
@@ -133,7 +138,7 @@ function createPendingInteractiveRequestEvent(
     requestId: pendingRequest.requestId,
     toolName: pendingRequest.toolName,
     toolUseId: pendingRequest.toolUseId,
-    input: pendingRequest.input,
+    toolInput: pendingRequest.input,
   };
 }
 
@@ -146,14 +151,18 @@ function createPendingInteractiveRequestEvent(
 async function loadHistoryFromJSONL(
   sessionId: string,
   workingDir: string,
-  claudeSessionId: string | null
+  claudeSessionId: string | null,
+  loadRequestId?: string
 ): Promise<void> {
   if (claudeSessionId) {
     const history = await SessionManager.getHistory(claudeSessionId, workingDir);
     messageStateService.ensureHistoryLoaded(sessionId, history);
   }
   const sessionStatus = messageStateService.computeSessionStatus(sessionId, false);
-  messageStateService.sendSnapshot(sessionId, sessionStatus, null);
+  messageStateService.sendSnapshot(sessionId, sessionStatus, {
+    loadRequestId,
+    pendingInteractiveRequest: null,
+  });
 }
 
 async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void> {

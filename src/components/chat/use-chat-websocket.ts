@@ -149,9 +149,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         typeof data === 'object' &&
         data !== null &&
         'type' in data &&
-        (data as { type?: string }).type === 'session_replay_batch'
+        ((data as { type?: string }).type === 'session_replay_batch' ||
+          (data as { type?: string }).type === 'messages_snapshot')
       ) {
-        const batch = data as { loadRequestId?: string };
+        const batch = data as { loadRequestId?: string; type?: string };
         if (
           currentLoadRequestIdRef.current &&
           batch.loadRequestId &&
@@ -159,6 +160,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         ) {
           return;
         }
+        currentLoadRequestIdRef.current = null;
       }
       chat.handleMessage(data);
     },
