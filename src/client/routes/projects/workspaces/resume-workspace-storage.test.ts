@@ -118,7 +118,8 @@ describe('resume-workspace-storage', () => {
       const savedValue = mockLocalStorage.setItem.mock.calls[
         mockLocalStorage.setItem.mock.calls.length - 1
       ]![1] as string;
-      const savedIds = JSON.parse(savedValue) as string[];
+      const parsed = JSON.parse(savedValue);
+      const savedIds = parsed as string[];
       expect(savedIds).toHaveLength(200);
       expect(savedIds[savedIds.length - 1]).toBe('ws-new');
     });

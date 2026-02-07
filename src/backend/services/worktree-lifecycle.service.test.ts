@@ -57,7 +57,8 @@ describe('worktreeLifecycleService resume mode persistence', () => {
       await setWorkspaceInitMode('workspace-1', true, worktreeBasePath);
 
       const content = await fs.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content) as Record<string, boolean>;
+      const parsed = JSON.parse(content);
+      const data = parsed as Record<string, boolean>;
 
       // Should have the new entry (malformed data is ignored)
       expect(data['workspace-1']).toBe(true);
@@ -76,7 +77,8 @@ describe('worktreeLifecycleService resume mode persistence', () => {
       await setWorkspaceInitMode('workspace-1', true, worktreeBasePath);
 
       const content = await fs.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content) as Record<string, boolean>;
+      const parsed = JSON.parse(content);
+      const data = parsed as Record<string, boolean>;
 
       // Should have the new entry (corrupted data is ignored)
       expect(data['workspace-1']).toBe(true);
@@ -95,7 +97,8 @@ describe('worktreeLifecycleService resume mode persistence', () => {
       await setWorkspaceInitMode('workspace-1', true, worktreeBasePath);
 
       const content = await fs.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content) as Record<string, boolean>;
+      const parsed = JSON.parse(content);
+      const data = parsed as Record<string, boolean>;
 
       // Should have the new entry (array data is ignored)
       expect(data['workspace-1']).toBe(true);
