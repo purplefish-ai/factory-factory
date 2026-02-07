@@ -24,6 +24,8 @@ Execute autonomously in this order:
 5. Push your changes.
 6. Comment briefly on addressed review comments and resolve them.
 
+If review feedback is non-actionable, explain why in session output and exit without code changes.
+
 Do not ask for confirmation.`;
 
 let cachedTemplate: string | null = null;

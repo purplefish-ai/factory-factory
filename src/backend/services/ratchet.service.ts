@@ -23,7 +23,7 @@ const logger = createLogger('ratchet');
 const RATCHET_POLL_INTERVAL_MS = 60_000; // 1 minute
 const MAX_CONCURRENT_CHECKS = 5;
 const RATCHET_WORKFLOW = 'ratchet';
-const STALE_ACTIVE_RATCHET_SESSION_MS = 15 * 60_000;
+const AUTHENTICATED_USERNAME_CACHE_TTL_MS = 5 * 60_000;
 
 interface PRStateInfo {
   ciStatus: CIStatus;
@@ -71,6 +71,7 @@ class RatchetService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(MAX_CONCURRENT_CHECKS);
+  private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
 
   start(): void {
     if (this.monitorLoop) {
@@ -166,7 +167,8 @@ class RatchetService {
     }
 
     try {
-      const prStateInfo = await this.fetchPRState(workspace);
+      const authenticatedUsername = await this.getAuthenticatedUsernameCached();
+      const prStateInfo = await this.fetchPRState(workspace, authenticatedUsername);
       if (!prStateInfo) {
         return {
           workspaceId: workspace.id,
@@ -317,12 +319,8 @@ class RatchetService {
     }
 
     if (!sessionService.isSessionRunning(session.id)) {
-      const updatedAtMs = session.updatedAt.getTime();
-      const staleDurationMs = Date.now() - updatedAtMs;
-      if (staleDurationMs > STALE_ACTIVE_RATCHET_SESSION_MS) {
-        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
-        return null;
-      }
+      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      return null;
     }
 
     return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
@@ -364,7 +362,10 @@ class RatchetService {
     };
   }
 
-  private async fetchPRState(workspace: WorkspaceWithPR): Promise<PRStateInfo | null> {
+  private async fetchPRState(
+    workspace: WorkspaceWithPR,
+    authenticatedUsername: string | null
+  ): Promise<PRStateInfo | null> {
     const prContext = this.resolveRatchetPrContext(workspace);
     if (!prContext) {
       return null;
@@ -387,7 +388,8 @@ class RatchetService {
       const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
       const latestReviewActivityAtMs = this.computeLatestReviewActivityAtMs(
         prDetails,
-        reviewComments
+        reviewComments,
+        authenticatedUsername
       );
       const snapshotKey = this.computeDispatchSnapshotKey(
         ciStatus,
@@ -474,33 +476,57 @@ class RatchetService {
 
   private computeLatestReviewActivityAtMs(
     prDetails: {
-      reviews: Array<{ submittedAt: string }>;
-      comments: Array<{ updatedAt: string }>;
+      reviews: Array<{ submittedAt: string; author: { login: string } }>;
+      comments: Array<{ updatedAt: string; author: { login: string } }>;
     },
-    reviewComments: Array<{ updatedAt: string }>
+    reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
+    authenticatedUsername: string | null
   ): number | null {
-    const timestamps: number[] = [];
+    const entries = [
+      ...prDetails.reviews.map((review) => ({
+        authorLogin: review.author.login,
+        timestamp: review.submittedAt,
+      })),
+      ...prDetails.comments.map((comment) => ({
+        authorLogin: comment.author.login,
+        timestamp: comment.updatedAt,
+      })),
+      ...reviewComments.map((reviewComment) => ({
+        authorLogin: reviewComment.author.login,
+        timestamp: reviewComment.updatedAt,
+      })),
+    ];
 
-    for (const review of prDetails.reviews) {
-      const ts = Date.parse(review.submittedAt);
-      if (Number.isFinite(ts)) {
-        timestamps.push(ts);
-      }
-    }
-    for (const comment of prDetails.comments) {
-      const ts = Date.parse(comment.updatedAt);
-      if (Number.isFinite(ts)) {
-        timestamps.push(ts);
-      }
-    }
-    for (const reviewComment of reviewComments) {
-      const ts = Date.parse(reviewComment.updatedAt);
-      if (Number.isFinite(ts)) {
-        timestamps.push(ts);
-      }
-    }
+    const timestamps = entries
+      .filter((entry) => !this.isIgnoredReviewAuthor(entry.authorLogin, authenticatedUsername))
+      .map((entry) => Date.parse(entry.timestamp))
+      .filter((timestamp) => Number.isFinite(timestamp));
 
     return timestamps.length > 0 ? Math.max(...timestamps) : null;
+  }
+
+  private isIgnoredReviewAuthor(
+    authorLogin: string,
+    authenticatedUsername: string | null
+  ): boolean {
+    if (!authenticatedUsername) {
+      return false;
+    }
+    return authorLogin === authenticatedUsername;
+  }
+
+  private async getAuthenticatedUsernameCached(): Promise<string | null> {
+    const nowMs = Date.now();
+    if (this.cachedAuthenticatedUsername && this.cachedAuthenticatedUsername.expiresAtMs > nowMs) {
+      return this.cachedAuthenticatedUsername.value;
+    }
+
+    const username = await githubCLIService.getAuthenticatedUsername();
+    this.cachedAuthenticatedUsername = {
+      value: username,
+      expiresAtMs: nowMs + AUTHENTICATED_USERNAME_CACHE_TTL_MS,
+    };
+    return username;
   }
 
   private determineRatchetState(pr: PRStateInfo): RatchetState {

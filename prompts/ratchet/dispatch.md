@@ -13,6 +13,7 @@ Execution Rules:
 - Execute autonomously. Do not ask for confirmation.
 - Keep scope limited to work required for this PR.
 - If a step is not needed, continue to the next one.
+- If review feedback is non-actionable, document why and exit without code changes.
 - If you make changes, commit with a focused message and push.
 
 Required Sequence:

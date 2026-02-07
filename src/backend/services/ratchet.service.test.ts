@@ -22,6 +22,7 @@ vi.mock('./github-cli.service', () => ({
     getPRFullDetails: vi.fn(),
     getReviewComments: vi.fn(),
     computeCIStatus: vi.fn(),
+    getAuthenticatedUsername: vi.fn(),
   },
 }));
 
@@ -56,6 +57,7 @@ vi.mock('./logger.service', () => ({
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { fixerSessionService } from './fixer-session.service';
+import { githubCLIService } from './github-cli.service';
 import { ratchetService } from './ratchet.service';
 import { sessionService } from './session.service';
 
@@ -63,6 +65,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (ratchetService as unknown as { isShuttingDown: boolean }).isShuttingDown = false;
+    vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue(null);
   });
 
   it('checks workspaces and processes each', async () => {
@@ -425,7 +428,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
-  it('clears stale active ratchet session when runtime is not running past timeout', async () => {
+  it('clears active ratchet session immediately when runtime is not running', async () => {
     const workspace = {
       id: 'ws-stale-active',
       prUrl: 'https://github.com/example/repo/pull/9',
@@ -439,11 +442,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prReviewLastCheckedAt: null,
     };
 
-    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-01-01T00:30:00Z').getTime());
     vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
       id: 'ratchet-session',
       status: SessionStatus.RUNNING,
-      updatedAt: new Date('2026-01-01T00:00:00Z'),
     } as never);
     vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
@@ -458,5 +459,32 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
       ratchetActiveSessionId: null,
     });
+  });
+
+  it('ignores review activity authored by the authenticated user', () => {
+    const latestActivity = (
+      ratchetService as unknown as {
+        computeLatestReviewActivityAtMs: (
+          prDetails: {
+            reviews: Array<{ submittedAt: string; author: { login: string } }>;
+            comments: Array<{ updatedAt: string; author: { login: string } }>;
+          },
+          reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
+          authenticatedUsername: string | null
+        ) => number | null;
+      }
+    ).computeLatestReviewActivityAtMs(
+      {
+        reviews: [
+          { submittedAt: '2026-01-02T00:00:00Z', author: { login: 'ratchet-bot' } },
+          { submittedAt: '2026-01-01T00:00:00Z', author: { login: 'reviewer' } },
+        ],
+        comments: [{ updatedAt: '2026-01-02T01:00:00Z', author: { login: 'ratchet-bot' } }],
+      },
+      [{ updatedAt: '2026-01-01T02:00:00Z', author: { login: 'reviewer2' } }],
+      'ratchet-bot'
+    );
+
+    expect(latestActivity).toBe(new Date('2026-01-01T02:00:00Z').getTime());
   });
 });
