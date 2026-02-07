@@ -126,7 +126,7 @@ function WorkspaceCiStatus({
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   running: boolean;
 }) {
-  if (!workspace.prUrl || workspace.prState !== 'OPEN') {
+  if (!workspace.prUrl) {
     return null;
   }
 

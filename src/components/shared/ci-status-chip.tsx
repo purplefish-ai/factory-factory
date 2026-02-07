@@ -67,9 +67,11 @@ export function CiStatusChip({ ciState, prState, size = 'sm', className }: CiSta
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span
+        <button
+          type="button"
+          aria-label={getWorkspaceCiTooltip(ciState, prState ?? null)}
           className={cn(
-            'inline-flex w-fit items-center gap-1 rounded-sm font-medium uppercase tracking-wide',
+            'inline-flex w-fit items-center gap-1 rounded-sm font-medium uppercase tracking-wide cursor-default',
             sizeClasses,
             config.className,
             className
@@ -77,7 +79,7 @@ export function CiStatusChip({ ciState, prState, size = 'sm', className }: CiSta
         >
           <Icon className={cn(iconSize, ciState === 'RUNNING' && 'animate-pulse')} />
           <span>{getWorkspaceCiLabel(ciState)}</span>
-        </span>
+        </button>
       </TooltipTrigger>
       <TooltipContent side="right">
         {getWorkspaceCiTooltip(ciState, prState ?? null)}
