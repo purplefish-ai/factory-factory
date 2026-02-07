@@ -1,3 +1,6 @@
+import type { CIStatus, PRState, RatchetState } from '@prisma-gen/browser';
+import { deriveCiVisualStateFromPrCiStatus } from './ci-status';
+
 export type WorkspaceSidebarActivityState = 'WORKING' | 'IDLE';
 
 export type WorkspaceSidebarCiState =
@@ -16,9 +19,9 @@ export interface WorkspaceSidebarStatus {
 export interface WorkspaceSidebarStatusInput {
   isWorking: boolean;
   prUrl: string | null;
-  prState: string | null;
-  prCiStatus: string | null;
-  ratchetState: string | null;
+  prState: PRState | null;
+  prCiStatus: CIStatus | null;
+  ratchetState: RatchetState | null;
 }
 
 export function deriveWorkspaceSidebarStatus(
@@ -34,19 +37,15 @@ export function deriveWorkspaceSidebarStatus(
     return { activityState, ciState: 'MERGED' };
   }
 
-  if (input.ratchetState === 'CI_FAILED' || input.prCiStatus === 'FAILURE') {
+  if (input.ratchetState === 'CI_FAILED') {
     return { activityState, ciState: 'FAILING' };
   }
 
-  if (input.ratchetState === 'CI_RUNNING' || input.prCiStatus === 'PENDING') {
+  if (input.ratchetState === 'CI_RUNNING') {
     return { activityState, ciState: 'RUNNING' };
   }
 
-  if (input.prCiStatus === 'SUCCESS') {
-    return { activityState, ciState: 'PASSING' };
-  }
-
-  return { activityState, ciState: 'UNKNOWN' };
+  return { activityState, ciState: deriveCiVisualStateFromPrCiStatus(input.prCiStatus) };
 }
 
 export function getWorkspaceActivityTooltip(state: WorkspaceSidebarActivityState): string {
@@ -72,7 +71,7 @@ export function getWorkspaceCiLabel(state: WorkspaceSidebarCiState): string {
 
 export function getWorkspaceCiTooltip(
   ciState: WorkspaceSidebarCiState,
-  prState: string | null
+  prState: PRState | null
 ): string {
   if (ciState === 'RUNNING') {
     return 'CI checks are running';
@@ -94,7 +93,7 @@ export function getWorkspaceCiTooltip(
 
 export function getWorkspacePrTooltipSuffix(
   ciState: WorkspaceSidebarCiState,
-  prState: string | null
+  prState: PRState | null
 ): string {
   if (prState === 'CLOSED') {
     return ' · Closed';
