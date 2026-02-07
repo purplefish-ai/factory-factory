@@ -375,10 +375,15 @@ class RatchetService {
       const ciStatus = githubCLIService.computeCIStatus(statusCheckRollup);
 
       const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
-      const snapshotKey = prDetails.updatedAt;
       const latestReviewActivityAtMs = this.computeLatestReviewActivityAtMs(
         prDetails,
         reviewComments
+      );
+      const snapshotKey = this.computeDispatchSnapshotKey(
+        ciStatus,
+        hasChangesRequested,
+        latestReviewActivityAtMs,
+        prDetails.statusCheckRollup
       );
 
       return {
@@ -396,6 +401,59 @@ class RatchetService {
       });
       return null;
     }
+  }
+
+  private computeDispatchSnapshotKey(
+    ciStatus: CIStatus,
+    hasChangesRequested: boolean,
+    latestReviewActivityAtMs: number | null,
+    statusChecks: Array<{
+      name?: string;
+      status?: string;
+      conclusion?: string | null;
+      detailsUrl?: string;
+    }> | null
+  ): string {
+    const ciKey = this.computeCiSnapshotKey(ciStatus, statusChecks);
+    const reviewKey = `${hasChangesRequested ? 'changes-requested' : 'no-changes-requested'}:${
+      latestReviewActivityAtMs ?? 'none'
+    }`;
+    return `${ciKey}|${reviewKey}`;
+  }
+
+  private computeCiSnapshotKey(
+    ciStatus: CIStatus,
+    statusChecks: Array<{
+      name?: string;
+      status?: string;
+      conclusion?: string | null;
+      detailsUrl?: string;
+    }> | null
+  ): string {
+    if (ciStatus !== CIStatus.FAILURE) {
+      return `ci:${ciStatus}`;
+    }
+
+    const failedChecks =
+      statusChecks?.filter((check) => {
+        const conclusion = check.conclusion?.toUpperCase();
+        return conclusion === 'FAILURE' || conclusion === 'TIMED_OUT' || conclusion === 'CANCELLED';
+      }) ?? [];
+
+    if (failedChecks.length === 0) {
+      return 'ci:FAILURE:unknown';
+    }
+
+    const signature = failedChecks
+      .map((check) => {
+        const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
+        const runId = runIdMatch?.[1] ?? 'no-run-id';
+        return `${check.name ?? 'unknown'}:${check.conclusion ?? 'UNKNOWN'}:${runId}`;
+      })
+      .sort()
+      .join('|');
+
+    return `ci:FAILURE:${signature}`;
   }
 
   private computeLatestReviewActivityAtMs(

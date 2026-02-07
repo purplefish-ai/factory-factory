@@ -34,7 +34,11 @@ function getTemplate(): string {
   }
 
   try {
-    cachedTemplate = readFileSync(DISPATCH_PROMPT_PATH, 'utf-8').trim();
+    const template = readFileSync(DISPATCH_PROMPT_PATH, 'utf-8').trim();
+    if (!template) {
+      throw new Error('Ratchet dispatch prompt template is empty');
+    }
+    cachedTemplate = template;
     return cachedTemplate;
   } catch (error) {
     logger.error('Failed to load ratchet dispatch prompt template; using fallback', {

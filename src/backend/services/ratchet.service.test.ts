@@ -267,6 +267,44 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  it('does not dispatch repeatedly for unchanged CHANGES_REQUESTED state', async () => {
+    const workspace = {
+      id: 'ws-review-unchanged',
+      prUrl: 'https://github.com/example/repo/pull/55',
+      prNumber: 55,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.REVIEW_PENDING,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'ci:SUCCESS|changes-requested:1735776000000',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+    };
+
+    vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    const triggerSpy = vi.spyOn(
+      ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+      'triggerFixer'
+    );
+
+    const action = await (
+      ratchetService as unknown as {
+        evaluateAndDispatch: (workspaceArg: typeof workspace, prState: unknown) => Promise<unknown>;
+      }
+    ).evaluateAndDispatch(workspace, {
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'ci:SUCCESS|changes-requested:1735776000000',
+      hasChangesRequested: true,
+      latestReviewActivityAtMs: new Date('2026-01-02T00:00:00Z').getTime(),
+      prState: 'OPEN',
+      prNumber: 55,
+    });
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(action).toEqual({
+      type: 'WAITING',
+      reason: 'PR state unchanged since last ratchet dispatch',
+    });
+  });
+
   it('treats closed PR as IDLE and does not dispatch', () => {
     const state = (
       ratchetService as unknown as {
