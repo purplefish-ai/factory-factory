@@ -463,7 +463,8 @@ class RatchetService {
     const activityChecks = await this.collectRatchetingActivityChecks(
       workspace,
       prStateInfo,
-      isCleanPrWithNoNewReviewActivity
+      isCleanPrWithNoNewReviewActivity,
+      hasStateChangedSinceLastDispatch
     );
 
     return {
@@ -483,7 +484,8 @@ class RatchetService {
   private async collectRatchetingActivityChecks(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
-    isCleanPrWithNoNewReviewActivity: boolean
+    isCleanPrWithNoNewReviewActivity: boolean,
+    hasStateChangedSinceLastDispatch: boolean
   ): Promise<{
     activeRatchetSession: RatchetAction | null;
     hasOtherActiveSession: boolean;
@@ -503,6 +505,13 @@ class RatchetService {
     if (activeRatchetSession) {
       return {
         activeRatchetSession,
+        hasOtherActiveSession: false,
+      };
+    }
+
+    if (!hasStateChangedSinceLastDispatch) {
+      return {
+        activeRatchetSession: null,
         hasOtherActiveSession: false,
       };
     }

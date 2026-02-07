@@ -291,6 +291,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         reason: 'PR state unchanged since last ratchet dispatch',
       },
     });
+    expect(claudeSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
   });
 
   it('does not dispatch repeatedly for unchanged CHANGES_REQUESTED state', async () => {
@@ -341,6 +342,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         reason: 'PR state unchanged since last ratchet dispatch',
       },
     });
+    expect(claudeSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
   });
 
   it('treats closed PR as IDLE and does not dispatch', () => {
