@@ -868,7 +868,11 @@ describe('MessageStateService', () => {
         type: 'claude_message',
         data: {
           type: 'stream_event',
-          event: { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'tu_1', name: 'Read', input: {} } },
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'tool_use', id: 'tu_1', name: 'Read', input: {} },
+          },
         },
         order: 1,
       });
@@ -877,7 +881,11 @@ describe('MessageStateService', () => {
         type: 'claude_message',
         data: {
           type: 'stream_event',
-          event: { type: 'content_block_start', index: 1, content_block: { type: 'thinking', thinking: '' } },
+          event: {
+            type: 'content_block_start',
+            index: 1,
+            content_block: { type: 'thinking', thinking: '' },
+          },
         },
         order: 2,
       });
@@ -886,7 +894,11 @@ describe('MessageStateService', () => {
         type: 'claude_message',
         data: {
           type: 'stream_event',
-          event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } },
+          event: {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'text_delta', text: 'hi' },
+          },
         },
         order: 3,
       });
