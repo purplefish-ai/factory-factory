@@ -490,7 +490,6 @@ export interface WebSocketMessage {
     // Message state machine events (primary protocol)
     | 'message_state_changed'
     | 'messages_snapshot'
-    | 'session_replay_batch'
     // SDK message types
     | 'tool_progress'
     | 'tool_use_summary'

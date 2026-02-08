@@ -11,7 +11,7 @@
  */
 
 import type { ChatMessage, WebSocketMessage } from '@/lib/claude-types';
-import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
+import { isWsClaudeMessage } from '@/lib/claude-types';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
@@ -26,7 +26,7 @@ import { reduceSessionSlice } from './slices/session';
 import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
-import { createBaseResetState, createInitialChatState } from './state';
+import { createInitialChatState } from './state';
 import type { ChatAction, ChatState } from './types';
 
 export { createInitialChatState };
@@ -80,45 +80,7 @@ function reduceSingleAction(currentState: ChatState, currentAction: ChatAction):
   return nextState;
 }
 
-function createReplayBaseState(state: ChatState): ChatState {
-  return {
-    ...state,
-    ...createBaseResetState(),
-    // Preserve optimistic pending sends that are not yet reflected in replayed events.
-    pendingMessages: state.pendingMessages,
-    queuedMessages: new Map(),
-    sessionStatus: { phase: 'loading' },
-    processStatus: { state: 'unknown' },
-    sessionRuntime: {
-      ...state.sessionRuntime,
-      phase: 'loading',
-      processState: 'unknown',
-      activity: 'IDLE',
-      updatedAt: new Date().toISOString(),
-    },
-  };
-}
-
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
-  // NOTE: SESSION_REPLAY_BATCH is a legacy hydration path.
-  // The backend exclusively uses messages_snapshot for session hydration.
-  // This code path is preserved for backwards compatibility and testing,
-  // but is not actively used in production.
-  if (action.type === 'SESSION_REPLAY_BATCH') {
-    let nextState = createReplayBaseState(state);
-    for (const event of action.payload.replayEvents) {
-      if (event.type === 'session_replay_batch') {
-        continue;
-      }
-      const replayAction = createActionFromWebSocketMessage(event);
-      if (!replayAction || replayAction.type === 'SESSION_REPLAY_BATCH') {
-        continue;
-      }
-      nextState = reduceSingleAction(nextState, replayAction);
-    }
-    return nextState;
-  }
-
   return reduceSingleAction(state, action);
 }
 
@@ -216,18 +178,6 @@ function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
     payload: {
       messages: data.messages,
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
-    },
-  };
-}
-
-function handleSessionReplayBatch(data: WebSocketMessage): ChatAction | null {
-  if (!Array.isArray(data.replayEvents)) {
-    return null;
-  }
-  return {
-    type: 'SESSION_REPLAY_BATCH',
-    payload: {
-      replayEvents: data.replayEvents.filter(isWebSocketMessage),
     },
   };
 }
@@ -422,7 +372,6 @@ const messageHandlers: Record<string, MessageHandler> = {
   permission_cancelled: handlePermissionCancelledMessage,
   message_used_as_response: handleMessageUsedAsResponseMessage,
   messages_snapshot: handleMessagesSnapshot,
-  session_replay_batch: handleSessionReplayBatch,
   message_state_changed: handleMessageStateChanged,
   tool_progress: handleToolProgressMessage,
   tool_use_summary: handleToolUseSummaryMessage,

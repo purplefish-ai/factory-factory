@@ -14,7 +14,6 @@ import type {
   SessionRuntimeState,
   TokenStats,
   UserQuestionRequest,
-  WebSocketMessage,
 } from '@/lib/claude-types';
 
 // =============================================================================
@@ -239,12 +238,6 @@ export type ChatAction =
         /** Pre-built ChatMessages from backend - ready to use directly */
         messages: ChatMessage[];
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
-      };
-    }
-  | {
-      type: 'SESSION_REPLAY_BATCH';
-      payload: {
-        replayEvents: WebSocketMessage[];
       };
     }
   | {

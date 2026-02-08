@@ -1650,67 +1650,6 @@ describe('chatReducer', () => {
     });
   });
 
-  describe('SESSION_REPLAY_BATCH action', () => {
-    it('should apply replayed events in a single reducer action', () => {
-      const action: ChatAction = {
-        type: 'SESSION_REPLAY_BATCH',
-        payload: {
-          replayEvents: [
-            {
-              type: 'message_state_changed',
-              id: 'msg-1',
-              newState: MessageState.ACCEPTED,
-              userMessage: {
-                text: 'Hello',
-                timestamp: '2024-01-01T00:00:00.000Z',
-                order: 0,
-              },
-            },
-            { type: 'status', running: true, processAlive: true },
-          ],
-        },
-      };
-
-      const newState = chatReducer(initialState, action);
-
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.id).toBe('msg-1');
-      expect(newState.sessionStatus).toEqual({ phase: 'running' });
-      expect(newState.processStatus).toEqual({ state: 'alive' });
-    });
-
-    it('should replay onto a clean transcript to avoid duplicates on reconnect', () => {
-      const existingMessage: ChatMessage = {
-        id: 'old-msg',
-        source: 'claude',
-        message: createTestAssistantMessage(),
-        timestamp: '2024-01-01T00:00:00.000Z',
-        order: 0,
-      };
-
-      const state: ChatState = {
-        ...initialState,
-        messages: [existingMessage],
-      };
-
-      const action: ChatAction = {
-        type: 'SESSION_REPLAY_BATCH',
-        payload: {
-          replayEvents: [
-            { type: 'claude_message', data: createTestAssistantMessage(), order: 0 },
-            { type: 'status', running: true, processAlive: true },
-          ],
-        },
-      };
-
-      const newState = chatReducer(state, action);
-
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.id).not.toBe('old-msg');
-      expect(newState.sessionStatus).toEqual({ phase: 'running' });
-    });
-  });
-
   // -------------------------------------------------------------------------
   // MESSAGE_STATE_CHANGED Action (Message State Machine)
   // -------------------------------------------------------------------------
@@ -2246,21 +2185,6 @@ describe('createActionFromWebSocketMessage', () => {
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
-  });
-
-  it('should convert session_replay_batch to SESSION_REPLAY_BATCH action', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'session_replay_batch',
-      replayEvents: [{ type: 'status', running: true }],
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({
-      type: 'SESSION_REPLAY_BATCH',
-      payload: {
-        replayEvents: [{ type: 'status', running: true }],
-      },
-    });
   });
 
   it('should convert message_state_changed to MESSAGE_STATE_CHANGED action', () => {
