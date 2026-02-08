@@ -3,6 +3,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { createLogger } from '../services/logger.service';
+import {
+  isSystemContent,
+  shouldIncludeAssistantContentItem,
+  shouldIncludeJSONLEntry,
+  shouldIncludeUserContentItem,
+} from '../services/transcript-policy';
 import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
 
 const logger = createLogger('session');
@@ -299,11 +305,12 @@ function extractToolResultContent(item: ClaudeContentItem & { type: 'tool_result
  * Parse a user content item into a HistoryMessage
  */
 function parseUserContentItem(item: ClaudeContentItem, meta: EntryMetadata): HistoryMessage | null {
+  // Use centralized transcript policy
+  if (!shouldIncludeUserContentItem(item)) {
+    return null;
+  }
+
   if (item.type === 'text') {
-    // Skip system content in text items
-    if (isSystemContent(item.text)) {
-      return null;
-    }
     return { type: 'user', content: item.text, ...meta };
   }
   if (item.type === 'tool_result') {
@@ -325,6 +332,11 @@ function parseAssistantContentItem(
   item: ClaudeContentItem,
   meta: EntryMetadata
 ): HistoryMessage | null {
+  // Use centralized transcript policy
+  if (!shouldIncludeAssistantContentItem(item)) {
+    return null;
+  }
+
   if (item.type === 'text') {
     return { type: 'assistant', content: item.text, ...meta };
   }
@@ -387,21 +399,11 @@ function parseAssistantEntry(message: ClaudeMessage, meta: EntryMetadata): Histo
 }
 
 /**
- * Checks if content is system/meta content that shouldn't be shown in the UI.
- * These include:
- * - System instructions injected by Conductor
- * - Local command output (caveats, stdout, etc.)
- */
-function isSystemContent(text: string): boolean {
-  return text.startsWith('<system_instruction>') || text.startsWith('<local-command');
-}
-
-/**
  * Parse a single JSONL entry into HistoryMessage(s)
  */
 export function parseHistoryEntry(entry: Record<string, unknown>): HistoryMessage[] {
-  // Skip meta messages (local command caveats, etc.)
-  if (entry.isMeta === true) {
+  // Use centralized JSONL entry policy
+  if (!shouldIncludeJSONLEntry(entry)) {
     return [];
   }
 
