@@ -5,6 +5,37 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-02-08
+
+### Fixed
+
+- Fix #824: Skip branch rename for additional Claude sessions (#832)
+- Fix tool call message rendering (#834)
+- Fix session hydration and live message parity (#818)
+- Fix tool preview height clipping in live activity box (#817)
+- Fix #810: Adjust tool preview height in resizable live activity box (#813)
+- Fix #802: Indicate factory-factory.json detection during project import (#814)
+
+### Changed
+
+- Harden transcript hydration, lineage guards, and streaming consistency (#836)
+- Show workspace initialization status immediately after creation (#833)
+- Unify chat state with a single SessionStoreService (#827)
+- Simplify and clarify ratcheting UI and documentation (#821)
+- Disable partial assistant message streaming (#829)
+
+### Refactored
+
+- Remove legacy message state bypass APIs and protocol artifacts (#830)
+- Skip pre-commit hooks when archiving workspaces (#828)
+- Fix ratchet to only dispatch when CI is in terminal state (#823)
+- Treat idle non-ratchet sessions as idle for ratchet (#816)
+- Refactor ratchet decision flow and diagnostics (#811)
+
+### Added
+
+- Add visual indicators for pending plan approval and user questions (#771) (#815)
+
 ## [0.2.5] - 2026-02-07
 
 ### Added
