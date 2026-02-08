@@ -541,6 +541,18 @@ class RatchetService {
       };
     }
 
+    // Only dispatch when CI is in a terminal state (SUCCESS or FAILURE)
+    const isTerminalCIStatus =
+      context.prStateInfo.ciStatus === CIStatus.SUCCESS ||
+      context.prStateInfo.ciStatus === CIStatus.FAILURE;
+
+    if (!isTerminalCIStatus) {
+      return {
+        type: 'RETURN_ACTION',
+        action: { type: 'WAITING', reason: 'Waiting for CI to complete (not in terminal state)' },
+      };
+    }
+
     if (context.isCleanPrWithNoNewReviewActivity) {
       return {
         type: 'RETURN_ACTION',
