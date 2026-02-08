@@ -13,6 +13,7 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
+import type { AssistantMessage, UserMessage } from '../claude/types';
 import { WS_READY_STATE } from '../constants';
 import { interceptorRegistry } from '../interceptors';
 import {
@@ -29,6 +30,7 @@ import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
 import { sessionRuntimeStoreService } from './session-runtime-store.service';
 import { slashCommandCacheService } from './slash-command-cache.service';
+import { shouldIncludeAssistantMessage, shouldIncludeUserMessage } from './transcript-policy';
 import { workspaceActivityService } from './workspace-activity.service';
 
 const logger = createLogger('chat-event-forwarder');
@@ -661,20 +663,13 @@ class ChatEventForwarderService {
       message?: { content?: Array<{ type?: string; text?: string }> };
     }
   ): void {
-    const content = msgWithType.message?.content;
-    if (!Array.isArray(content)) {
-      sessionFileLogger.log(dbSessionId, 'INFO', {
-        action: 'skipped_message',
-        reason: 'assistant_no_array_content',
-      });
-      return;
-    }
-
-    const hasNarrativeText = content.some(
-      (item) => item.type === 'text' && typeof item.text === 'string'
-    );
-
-    if (!hasNarrativeText) {
+    // Use centralized transcript policy
+    if (
+      !(
+        msgWithType.message &&
+        shouldIncludeAssistantMessage(msgWithType.message as AssistantMessage['message'])
+      )
+    ) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
         reason: 'assistant_no_text_content',
@@ -714,30 +709,29 @@ class ChatEventForwarderService {
       }
     }
 
-    const content = msgWithType.message?.content;
-    if (!Array.isArray(content)) {
-      sessionFileLogger.log(dbSessionId, 'INFO', {
-        action: 'skipped_message',
-        reason: 'no_array_content',
-      });
-      return;
-    }
-
-    const hasToolResult = content.some((item) => item.type === 'tool_result');
-    if (!hasToolResult) {
+    // Use centralized transcript policy
+    if (
+      !(
+        msgWithType.message &&
+        shouldIncludeUserMessage(msgWithType.message as UserMessage['message'])
+      )
+    ) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
         reason: 'no_tool_result_content',
-        content_types: content.map((c) => c.type),
       });
       return;
     }
 
-    this.notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
-      sessionId: dbSessionId,
-      workspaceId: context.workspaceId,
-      workingDir: context.workingDir,
-    });
+    // Notify interceptors about tool results (if any)
+    const content = msgWithType.message.content;
+    if (Array.isArray(content)) {
+      this.notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
+        sessionId: dbSessionId,
+        workspaceId: context.workspaceId,
+        workingDir: context.workingDir,
+      });
+    }
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Forwarding user message with tool_result', { dbSessionId });
