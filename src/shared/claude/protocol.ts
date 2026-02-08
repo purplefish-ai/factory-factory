@@ -387,8 +387,7 @@ export function isRenderableAssistantContentItem(item: AssistantRenderableConten
     return (
       typeof item.id === 'string' &&
       typeof item.name === 'string' &&
-      typeof item.input === 'object' &&
-      item.input !== null
+      (item.input === undefined || (typeof item.input === 'object' && item.input !== null))
     );
   }
   if (item.type === 'tool_result') {

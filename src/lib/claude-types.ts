@@ -314,6 +314,12 @@ export function extractTextFromMessage(msg: ClaudeMessage): string {
 export function extractToolInfo(
   msg: ClaudeMessage
 ): { name: string; id: string; input: Record<string, unknown> } | null {
+  const normalizeToolInput = (input: unknown): Record<string, unknown> => {
+    return typeof input === 'object' && input !== null && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  };
+
   // Check stream events for tool use
   if (msg.type === 'stream_event' && msg.event) {
     if (msg.event.type === 'content_block_start') {
@@ -322,7 +328,7 @@ export function extractToolInfo(
         return {
           name: block.name,
           id: block.id,
-          input: block.input,
+          input: normalizeToolInput(block.input),
         };
       }
     }
@@ -336,7 +342,7 @@ export function extractToolInfo(
         return {
           name: item.name,
           id: item.id,
-          input: item.input,
+          input: normalizeToolInput(item.input),
         };
       }
     }

@@ -7,10 +7,7 @@ import {
 } from './protocol';
 
 describe('assistant renderability guards', () => {
-  it('rejects malformed tool_use blocks', () => {
-    expect(isRenderableAssistantContentItem({ type: 'tool_use', id: 'tool-1', name: 'Read' })).toBe(
-      false
-    );
+  it('rejects malformed tool_use blocks missing id/name', () => {
     expect(isRenderableAssistantContentItem({ type: 'tool_use', id: 'tool-1', input: {} })).toBe(
       false
     );
@@ -27,6 +24,9 @@ describe('assistant renderability guards', () => {
   });
 
   it('accepts valid non-text assistant content blocks', () => {
+    expect(isRenderableAssistantContentItem({ type: 'tool_use', id: 'tool-1', name: 'Read' })).toBe(
+      true
+    );
     expect(
       hasRenderableAssistantContent([
         { type: 'tool_use', id: 'tool-1', name: 'Read', input: { file_path: '/tmp/a' } },
@@ -38,7 +38,7 @@ describe('assistant renderability guards', () => {
     expect(hasRenderableAssistantContent([{ type: 'thinking', thinking: 'planning' }])).toBe(true);
   });
 
-  it('does not persist assistant message with malformed renderable blocks', () => {
+  it('persists assistant message with stream-compatible tool_use blocks', () => {
     expect(
       shouldPersistClaudeMessage({
         type: 'assistant',
@@ -49,10 +49,10 @@ describe('assistant renderability guards', () => {
           ],
         },
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it('does not persist malformed stream content_block_start blocks', () => {
+  it('persists stream tool_use content_block_start without initial input', () => {
     expect(
       shouldPersistClaudeMessage({
         type: 'stream_event',
@@ -66,6 +66,6 @@ describe('assistant renderability guards', () => {
           } as unknown as ClaudeContentItem,
         },
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });
