@@ -362,6 +362,7 @@ describe('WorkspaceCreationService', () => {
           workspaceId: 'ws-123',
           workflow: 'followup',
           name: 'Chat 1',
+          claudeProjectPath: null,
         });
       });
 

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -62,6 +63,11 @@ export class SessionManager {
    */
   static getSessionPathFromProjectPath(claudeSessionId: string, projectPath: string): string {
     return join(projectPath, `${claudeSessionId}.jsonl`);
+  }
+
+  static hasSessionFileFromProjectPath(claudeSessionId: string, projectPath: string): boolean {
+    const sessionPath = SessionManager.getSessionPathFromProjectPath(claudeSessionId, projectPath);
+    return existsSync(sessionPath);
   }
 
   private static async parseHistoryFromPath(

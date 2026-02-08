@@ -64,6 +64,29 @@ export class SessionRepository {
       Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'>
     >
   ): Promise<ClaudeSession> {
+    return this.updateSessionWithGuards(sessionId, data);
+  }
+
+  private async updateSessionWithGuards(
+    sessionId: string,
+    data: Partial<
+      Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'>
+    >
+  ): Promise<ClaudeSession> {
+    if (Object.hasOwn(data, 'claudeSessionId')) {
+      const current = await this.sessions.findById(sessionId);
+      if (!current) {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
+      const currentSessionId = current.claudeSessionId;
+      const nextSessionId = data.claudeSessionId ?? null;
+      if (currentSessionId && nextSessionId !== currentSessionId) {
+        throw new Error(
+          `claudeSessionId is immutable for session ${sessionId}: ${currentSessionId} -> ${String(nextSessionId)}`
+        );
+      }
+    }
+
     return this.sessions.update(sessionId, data);
   }
 

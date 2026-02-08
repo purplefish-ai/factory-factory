@@ -14,11 +14,25 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       return;
     }
 
-    const claudeProjectPath =
-      dbSession.claudeProjectPath ??
-      (dbSession.workspace.worktreePath
-        ? SessionManager.getProjectPath(dbSession.workspace.worktreePath)
-        : null);
+    const workspaceProjectPath = dbSession.workspace.worktreePath
+      ? SessionManager.getProjectPath(dbSession.workspace.worktreePath)
+      : null;
+    let claudeProjectPath = dbSession.claudeProjectPath ?? workspaceProjectPath;
+    if (
+      dbSession.claudeSessionId &&
+      dbSession.claudeProjectPath &&
+      workspaceProjectPath &&
+      dbSession.claudeProjectPath !== workspaceProjectPath &&
+      !SessionManager.hasSessionFileFromProjectPath(
+        dbSession.claudeSessionId,
+        dbSession.claudeProjectPath
+      ) &&
+      SessionManager.hasSessionFileFromProjectPath(dbSession.claudeSessionId, workspaceProjectPath)
+    ) {
+      // Persisted path can become stale after worktree moves; prefer live workspace path when it
+      // clearly contains the session file.
+      claudeProjectPath = workspaceProjectPath;
+    }
 
     const existingClient = sessionService.getClient(sessionId);
     await sessionStoreService.subscribe({

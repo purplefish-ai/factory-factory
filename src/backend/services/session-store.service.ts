@@ -27,6 +27,9 @@ interface SessionStore {
   sessionId: string;
   initialized: boolean;
   hydratePromise: Promise<void> | null;
+  hydratingKey: string | null;
+  hydratedKey: string | null;
+  hydrateGeneration: number;
   lastKnownProjectPath: string | null;
   lastKnownClaudeSessionId: string | null;
   transcript: ChatMessage[];
@@ -51,6 +54,9 @@ class SessionStoreService {
         sessionId,
         initialized: false,
         hydratePromise: null,
+        hydratingKey: null,
+        hydratedKey: null,
+        hydrateGeneration: 0,
         lastKnownProjectPath: null,
         lastKnownClaudeSessionId: null,
         transcript: [],
@@ -332,34 +338,50 @@ class SessionStoreService {
     store: SessionStore,
     options: { claudeSessionId: string | null; claudeProjectPath: string | null }
   ): Promise<void> {
-    if (store.initialized) {
+    const hydrateKey = `${options.claudeSessionId ?? 'none'}::${options.claudeProjectPath ?? 'none'}`;
+    if (store.initialized && store.hydratedKey === hydrateKey) {
       return;
     }
 
-    if (!store.hydratePromise) {
-      store.hydratePromise = (async () => {
-        // Rehydration always starts from a clean in-memory transcript state.
-        store.transcript = [];
-        store.nextOrder = 0;
-        store.lastHydratedAt = null;
-
-        if (options.claudeSessionId && options.claudeProjectPath) {
-          const history = await SessionManager.getHistoryFromProjectPath(
-            options.claudeSessionId,
-            options.claudeProjectPath
-          );
-          store.transcript = this.buildTranscriptFromHistory(history);
-          store.transcript.sort(messageSort);
-        }
-        this.setNextOrderFromTranscript(store);
-        store.initialized = true;
-        store.lastHydratedAt = new Date().toISOString();
-      })().finally(() => {
-        store.hydratePromise = null;
-      });
+    if (store.hydratePromise && store.hydratingKey === hydrateKey) {
+      await store.hydratePromise;
+      return;
     }
 
-    await store.hydratePromise;
+    const generation = store.hydrateGeneration + 1;
+    store.hydrateGeneration = generation;
+    store.hydratingKey = hydrateKey;
+
+    const hydratePromise = (async () => {
+      let transcript: ChatMessage[] = [];
+
+      if (options.claudeSessionId && options.claudeProjectPath) {
+        const history = await SessionManager.getHistoryFromProjectPath(
+          options.claudeSessionId,
+          options.claudeProjectPath
+        );
+        transcript = this.buildTranscriptFromHistory(history);
+        transcript.sort(messageSort);
+      }
+
+      if (store.hydrateGeneration !== generation) {
+        return;
+      }
+
+      store.transcript = transcript;
+      this.setNextOrderFromTranscript(store);
+      store.initialized = true;
+      store.hydratedKey = hydrateKey;
+      store.lastHydratedAt = new Date().toISOString();
+    })().finally(() => {
+      if (store.hydrateGeneration === generation) {
+        store.hydratePromise = null;
+        store.hydratingKey = null;
+      }
+    });
+
+    store.hydratePromise = hydratePromise;
+    await hydratePromise;
   }
 
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string } {
@@ -564,6 +586,8 @@ class SessionStoreService {
     store.nextOrder = 0;
     // Force fresh JSONL rehydration on next subscribe.
     store.initialized = false;
+    store.hydratedKey = null;
+    store.hydrateGeneration += 1;
     store.hydratePromise = null;
 
     this.markRuntime(store, {

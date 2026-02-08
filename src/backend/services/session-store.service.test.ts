@@ -271,6 +271,99 @@ describe('SessionStoreService', () => {
     expect(snapshots.at(-1)?.messages?.[0]?.text).toBe('hello from history');
   });
 
+  it('rehydrates when claudeSessionId changes for the same db session', async () => {
+    vi.mocked(SessionManager.getHistoryFromProjectPath)
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'history one',
+          timestamp: '2026-02-01T00:00:00.000Z',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'history two',
+          timestamp: '2026-02-01T00:01:00.000Z',
+        },
+      ]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s2',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
+    const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(latestSnapshot?.messages?.[0]?.text).toBe('history two');
+  });
+
+  it('ignores stale in-flight hydrate results when a newer hydrate starts', async () => {
+    type HydratedHistory = Array<{ type: 'user'; content: string; timestamp: string }>;
+    let resolveFirst!: (history: HydratedHistory) => void;
+    const firstHistoryPromise = new Promise<HydratedHistory>((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockImplementation((claudeSessionId) => {
+      if (claudeSessionId === 'claude-s1') {
+        return firstHistoryPromise;
+      }
+      return Promise.resolve([
+        {
+          type: 'user',
+          content: 'new hydrate',
+          timestamp: '2026-02-01T00:02:00.000Z',
+        },
+      ]);
+    });
+
+    const firstSubscribe = sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+    const secondSubscribe = sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s2',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    await secondSubscribe;
+    resolveFirst([
+      {
+        type: 'user',
+        content: 'stale hydrate',
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+    await firstSubscribe;
+
+    const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(latestSnapshot?.messages?.[0]?.text).toBe('new hydrate');
+  });
+
   it('uses deterministic fallback IDs for history entries without uuid', async () => {
     const history = [
       {
