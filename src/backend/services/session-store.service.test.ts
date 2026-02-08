@@ -113,6 +113,50 @@ describe('SessionStoreService', () => {
     expect(payload.messages?.[0]?.attachments?.[0]?.id).toBe('att-1');
   });
 
+  it('preserves tool_result is_error flag when hydrating history', async () => {
+    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+      {
+        type: 'tool_result',
+        content: 'Tool failed',
+        toolId: 'tool-1',
+        isError: true,
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
+      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
+    );
+    expect(snapshotCall).toBeDefined();
+    const payload = snapshotCall?.[1] as {
+      messages?: Array<{
+        source: string;
+        message?: {
+          type?: string;
+          message?: {
+            role?: string;
+            content?: Array<{ type?: string; is_error?: boolean }>;
+          };
+        };
+      }>;
+    };
+    const claudeMessage = payload.messages?.find((msg) => msg.source === 'claude')?.message;
+    expect(claudeMessage?.type).toBe('user');
+    expect(claudeMessage?.message?.role).toBe('user');
+    expect(claudeMessage?.message?.content?.[0]).toMatchObject({
+      type: 'tool_result',
+      is_error: true,
+    });
+  });
+
   it('subscribe does not emit session_delta before session_snapshot', async () => {
     vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
 

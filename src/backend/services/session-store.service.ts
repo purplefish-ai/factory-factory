@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   type ChatMessage,
   type ClaudeMessage,
+  QUEUED_MESSAGE_ORDER_BASE,
   type QueuedMessage,
   shouldPersistClaudeMessage,
   shouldSuppressDuplicateResultMessage,
@@ -21,8 +22,6 @@ import { createLogger } from './logger.service';
 const logger = createLogger('session-store-service');
 
 const MAX_QUEUE_SIZE = 100;
-const QUEUE_BASE_ORDER = 1_000_000_000;
-
 interface SessionStore {
   sessionId: string;
   initialized: boolean;
@@ -126,7 +125,14 @@ class SessionStoreService {
           type: 'user',
           message: {
             role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: msg.toolId || 'unknown', content }],
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: msg.toolId || 'unknown',
+                content,
+                ...(msg.isError !== undefined ? { is_error: msg.isError } : {}),
+              },
+            ],
           },
         };
       }
@@ -201,7 +207,7 @@ class SessionStoreService {
         text: queued.text,
         attachments: queued.attachments,
         timestamp: queued.timestamp,
-        order: QUEUE_BASE_ORDER + index,
+        order: QUEUED_MESSAGE_ORDER_BASE + index,
       });
     });
     snapshot.sort(messageSort);

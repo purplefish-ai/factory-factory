@@ -22,6 +22,7 @@ import type {
   ToolUseContent,
   WebSocketMessage,
 } from '@/shared/claude';
+import { WEBSOCKET_MESSAGE_TYPES } from '@/shared/claude';
 
 // =============================================================================
 // UI Chat Message Group Types
@@ -89,6 +90,8 @@ export function isImageContent(item: ClaudeContentItem): item is ImageContent {
   return item.type === 'image' && 'source' in item;
 }
 
+const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
+
 /**
  * Type guard to validate unknown data is a WebSocketMessage.
  * Used for type-safe parsing of incoming WebSocket data.
@@ -97,8 +100,21 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
   if (typeof data !== 'object' || data === null) {
     return false;
   }
-  const obj = data as { type?: unknown };
-  return typeof obj.type === 'string';
+  const obj = data as { type?: unknown; data?: unknown };
+  if (typeof obj.type !== 'string' || !wsMessageTypes.has(obj.type)) {
+    return false;
+  }
+
+  // session_delta must wrap another websocket event object.
+  if (obj.type === 'session_delta') {
+    if (typeof obj.data !== 'object' || obj.data === null) {
+      return false;
+    }
+    const nested = obj.data as { type?: unknown };
+    return typeof nested.type === 'string' && wsMessageTypes.has(nested.type);
+  }
+
+  return true;
 }
 
 /**

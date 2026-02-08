@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ClaudeMessage } from '@/lib/claude-types';
+import { type ClaudeMessage, isWebSocketMessage } from '@/lib/claude-types';
 import { handleThinkingStreaming, handleToolInputStreaming } from './streaming-utils';
 
 describe('handleToolInputStreaming', () => {
@@ -84,5 +84,22 @@ describe('handleThinkingStreaming', () => {
       type: 'THINKING_DELTA',
       payload: { thinking: 'step-by-step' },
     });
+  });
+});
+
+describe('isWebSocketMessage', () => {
+  it('rejects unknown websocket message types', () => {
+    expect(isWebSocketMessage({ type: 'not_real' })).toBe(false);
+  });
+
+  it('rejects session_delta payloads without nested websocket event', () => {
+    expect(isWebSocketMessage({ type: 'session_delta', data: { foo: 'bar' } })).toBe(false);
+    expect(isWebSocketMessage({ type: 'session_delta', data: null })).toBe(false);
+  });
+
+  it('accepts valid session_delta payloads', () => {
+    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'status_update' } })).toBe(
+      true
+    );
   });
 });

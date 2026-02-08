@@ -397,17 +397,23 @@ function handleRewindFilesErrorMessage(data: WebSocketMessage): ChatAction | nul
 // Handler map for WebSocket message types
 type MessageHandler = (data: WebSocketMessage) => ChatAction | null;
 
-const messageHandlers: Record<string, MessageHandler> = {
+type MessageHandlerMap = {
+  [K in WebSocketMessage['type']]: MessageHandler | null;
+};
+
+const messageHandlers: MessageHandlerMap = {
   session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
   session_runtime_updated: handleSessionRuntimeUpdatedMessage,
   claude_message: handleClaudeMessageAction,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,
+  agent_metadata: null,
   permission_request: handlePermissionRequestMessage,
   user_question: handleUserQuestionMessage,
   permission_cancelled: handlePermissionCancelledMessage,
   message_used_as_response: handleMessageUsedAsResponseMessage,
   session_snapshot: handleSessionSnapshot,
+  session_delta: null,
   session_replay_batch: handleSessionReplayBatch,
   message_state_changed: handleMessageStateChanged,
   tool_progress: handleToolProgressMessage,
@@ -420,6 +426,7 @@ const messageHandlers: Record<string, MessageHandler> = {
   hook_response: handleHookResponseMessage,
   compacting_start: () => ({ type: 'SDK_COMPACTING_START' }),
   compacting_end: () => ({ type: 'SDK_COMPACTING_END' }),
+  workspace_notification_request: null,
   slash_commands: handleSlashCommandsMessage,
   user_message_uuid: handleUserMessageUuidMessage,
   rewind_files_preview: handleRewindFilesPreviewMessage,

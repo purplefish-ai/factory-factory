@@ -610,7 +610,6 @@ export interface WebSocketMessage {
     | 'user_question'
     | 'permission_cancelled'
     // Queue error handling
-    | 'message_rejected'
     | 'message_used_as_response'
     // Message state machine events (primary protocol)
     | 'message_state_changed'
@@ -628,7 +627,6 @@ export interface WebSocketMessage {
     // Context compaction events
     | 'compacting_start'
     | 'compacting_end'
-    | 'queue'
     | 'workspace_notification_request'
     // Slash commands discovery
     | 'slash_commands'
@@ -722,6 +720,48 @@ export interface WebSocketMessage {
   sessionCount?: number;
   finishedAt?: string;
 }
+
+/**
+ * Canonical base order used for queued messages before dispatch assigns real order.
+ * Shared by backend snapshot generation and frontend optimistic queue rendering.
+ */
+export const QUEUED_MESSAGE_ORDER_BASE = 1_000_000_000;
+
+/**
+ * Canonical list of valid top-level WebSocket message types.
+ * Used by runtime type guards to reject malformed/unknown payloads early.
+ */
+export const WEBSOCKET_MESSAGE_TYPES = [
+  'session_snapshot',
+  'session_delta',
+  'session_runtime_snapshot',
+  'session_runtime_updated',
+  'claude_message',
+  'error',
+  'sessions',
+  'agent_metadata',
+  'permission_request',
+  'user_question',
+  'permission_cancelled',
+  'message_used_as_response',
+  'message_state_changed',
+  'session_replay_batch',
+  'tool_progress',
+  'tool_use_summary',
+  'status_update',
+  'task_notification',
+  'system_init',
+  'compact_boundary',
+  'hook_started',
+  'hook_response',
+  'compacting_start',
+  'compacting_end',
+  'workspace_notification_request',
+  'slash_commands',
+  'user_message_uuid',
+  'rewind_files_preview',
+  'rewind_files_error',
+] as const satisfies readonly WebSocketMessage['type'][];
 
 // =============================================================================
 // Queued Message Types
