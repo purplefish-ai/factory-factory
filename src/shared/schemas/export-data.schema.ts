@@ -155,11 +155,11 @@ const exportedUserSettingsSchemaV2 = z.object({
   // rebuild-able cache data (per design doc: "Excludes cached data")
   // Ratchet settings (Phase 3+)
   ratchetEnabled: z.boolean(),
-  ratchetAutoFixCi: z.boolean(),
-  ratchetAutoFixReviews: z.boolean(),
   // Removed fields - kept for backward compatibility during import
+  ratchetAutoFixCi: z.boolean().optional(),
+  ratchetAutoFixReviews: z.boolean().optional(),
   ratchetAutoFixConflicts: z.boolean().optional(),
-  ratchetAutoMerge: z.boolean(),
+  ratchetAutoMerge: z.boolean().optional(),
   ratchetAllowedReviewers: z.unknown().nullish(), // JSON field - allow undefined from DB
   // Deprecated fields - kept for backward compatibility during import
   autoFixCiIssues: z.boolean().optional(),

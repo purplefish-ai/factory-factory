@@ -9,7 +9,7 @@ describe('ratchet-state', () => {
   });
 
   it('returns a safe label for missing state', () => {
-    expect(getRatchetStateLabel(undefined)).toBe('Idle');
-    expect(getRatchetStateLabel(null)).toBe('Idle');
+    expect(getRatchetStateLabel(undefined)).toBe('Watching');
+    expect(getRatchetStateLabel(null)).toBe('Watching');
   });
 });

@@ -146,12 +146,8 @@ describe('DataBackupService', () => {
     notificationSoundPath: '/path/to/sound.mp3',
     workspaceOrder: { 'proj-1': ['ws-1', 'ws-2'] },
     cachedSlashCommands: { commands: [] },
-    // Phase 3+ ratchet settings
+    // Ratchet settings
     ratchetEnabled: true,
-    ratchetAutoFixCi: true,
-    ratchetAutoFixReviews: false,
-    ratchetAutoMerge: false,
-    ratchetAllowedReviewers: ['user1', 'user2'],
     createdAt: new Date('2025-01-01T00:00:00.000Z'),
     updatedAt: new Date('2025-01-01T00:00:00.000Z'),
   };
@@ -190,10 +186,6 @@ describe('DataBackupService', () => {
       const exportedSettings = result.data.userSettings;
       expect(exportedSettings).not.toBeNull();
       expect(exportedSettings?.ratchetEnabled).toBe(true);
-      expect(exportedSettings?.ratchetAutoFixCi).toBe(true);
-      expect(exportedSettings?.ratchetAutoFixReviews).toBe(false);
-      expect(exportedSettings?.ratchetAutoMerge).toBe(false);
-      expect(exportedSettings?.ratchetAllowedReviewers).toEqual(['user1', 'user2']);
 
       // Verify cached data is excluded
       expect('workspaceOrder' in (exportedSettings ?? {})).toBe(false);
@@ -311,10 +303,6 @@ describe('DataBackupService', () => {
             playSoundOnComplete: true,
             notificationSoundPath: '/path/to/sound.mp3',
             ratchetEnabled: true,
-            ratchetAutoFixCi: true,
-            ratchetAutoFixReviews: false,
-            ratchetAutoMerge: false,
-            ratchetAllowedReviewers: ['user1', 'user2'],
           },
         },
       };
@@ -347,13 +335,10 @@ describe('DataBackupService', () => {
         }),
       });
 
-      // Verify user settings was created with all ratchet fields
+      // Verify user settings was created with ratchet field
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetEnabled: true,
-          ratchetAutoFixCi: true,
-          ratchetAutoFixReviews: false,
-          ratchetAutoMerge: false,
         }),
       });
     });
@@ -479,9 +464,6 @@ describe('DataBackupService', () => {
         data: expect.objectContaining({
           preferredIde: 'cursor',
           ratchetEnabled: false,
-          ratchetAutoFixCi: true,
-          ratchetAutoFixReviews: true,
-          ratchetAutoMerge: false,
         }),
       });
     });

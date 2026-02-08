@@ -41,10 +41,6 @@ export const userSettingsRouter = router({
         notificationSoundPath: z.string().nullable().optional(),
         // Ratchet settings
         ratchetEnabled: z.boolean().optional(),
-        ratchetAutoFixCi: z.boolean().optional(),
-        ratchetAutoFixReviews: z.boolean().optional(),
-        ratchetAutoMerge: z.boolean().optional(),
-        ratchetAllowedReviewers: z.array(z.string()).nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -52,17 +48,7 @@ export const userSettingsRouter = router({
       if (input.preferredIde === 'custom' && !input.customIdeCommand) {
         throw new Error('Custom IDE command is required when using custom IDE');
       }
-      // Transform JSON array fields to match Prisma Json type
-      const { ratchetAllowedReviewers, ...rest } = input;
-      return await userSettingsAccessor.update({
-        ...rest,
-        ratchetAllowedReviewers:
-          ratchetAllowedReviewers === null
-            ? { set: null }
-            : ratchetAllowedReviewers !== undefined
-              ? ratchetAllowedReviewers
-              : undefined,
-      });
+      return await userSettingsAccessor.update(input);
     }),
 
   /**
