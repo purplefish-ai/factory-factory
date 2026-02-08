@@ -250,7 +250,7 @@ class ChatEventForwarderService {
 
       // Mark workspace as active
       workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
-      sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
+      this.syncRuntimeFromClient(dbSessionId, client);
     });
 
     // Hook into idle event to dispatch next queued message
@@ -462,7 +462,7 @@ class ChatEventForwarderService {
 
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
-      sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
+      this.syncRuntimeFromClient(dbSessionId, client);
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
@@ -828,6 +828,14 @@ class ChatEventForwarderService {
       pendingToolNames.delete(typedItem.tool_use_id);
       pendingToolInputs.delete(typedItem.tool_use_id);
     }
+  }
+
+  private syncRuntimeFromClient(dbSessionId: string, client: ClaudeClient): void {
+    if (client.isWorking()) {
+      sessionStoreService.markRunning(dbSessionId);
+      return;
+    }
+    sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
   }
 }
 

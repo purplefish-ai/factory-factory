@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ChatMessage, ClaudeMessage, QueuedMessage, WebSocketMessage } from '@/shared/claude';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import {
@@ -51,6 +52,21 @@ class SessionStoreService {
       this.stores.set(sessionId, store);
     }
     return store;
+  }
+
+  private buildDeterministicHistoryId(historyMsg: HistoryMessage, index: number): string {
+    const fingerprint = JSON.stringify({
+      index,
+      type: historyMsg.type,
+      timestamp: historyMsg.timestamp,
+      content: historyMsg.content,
+      toolName: historyMsg.toolName ?? null,
+      toolId: historyMsg.toolId ?? null,
+      toolInput: historyMsg.toolInput ?? null,
+      isError: historyMsg.isError ?? false,
+    });
+    const digest = createHash('sha1').update(fingerprint).digest('hex').slice(0, 12);
+    return `history-${index}-${digest}`;
   }
 
   private upsertTranscriptMessage(store: SessionStore, message: ChatMessage): void {
@@ -131,10 +147,9 @@ class SessionStoreService {
     const transcript: ChatMessage[] = [];
     let order = 0;
 
-    for (const historyMsg of history) {
-      const messageId =
-        historyMsg.uuid ||
-        `history-${historyMsg.timestamp}-${Math.random().toString(36).slice(2, 9)}`;
+    for (const [index, historyMsg] of history.entries()) {
+      const messageBaseId = historyMsg.uuid ?? this.buildDeterministicHistoryId(historyMsg, index);
+      const messageId = `${messageBaseId}-${order}`;
 
       if (historyMsg.type === 'user') {
         transcript.push({
@@ -155,7 +170,7 @@ class SessionStoreService {
         historyMsg.type === 'thinking'
       ) {
         transcript.push({
-          id: `${messageId}-0`,
+          id: messageId,
           source: 'claude',
           message: this.historyToClaudeMessage(historyMsg),
           timestamp: historyMsg.timestamp,
@@ -284,6 +299,11 @@ class SessionStoreService {
 
     if (!store.hydratePromise) {
       store.hydratePromise = (async () => {
+        // Rehydration always starts from a clean in-memory transcript state.
+        store.transcript = [];
+        store.nextOrder = 0;
+        store.lastHydratedAt = null;
+
         if (options.claudeSessionId) {
           const history = await SessionManager.getHistory(
             options.claudeSessionId,
@@ -342,16 +362,36 @@ class SessionStoreService {
 
   commitSentUserMessage(sessionId: string, message: QueuedMessage): void {
     const store = this.getOrCreate(sessionId);
+    const order = store.nextOrder;
+    store.nextOrder += 1;
+    this.commitSentUserMessageWithOrder(store, message, order);
+  }
+
+  commitSentUserMessageAtOrder(sessionId: string, message: QueuedMessage, order: number): void {
+    const store = this.getOrCreate(sessionId);
+    this.commitSentUserMessageWithOrder(store, message, order);
+  }
+
+  private commitSentUserMessageWithOrder(
+    store: SessionStore,
+    message: QueuedMessage,
+    order: number
+  ): void {
     const transcriptMessage: ChatMessage = {
       id: message.id,
       source: 'user',
       text: message.text,
       attachments: message.attachments,
       timestamp: message.timestamp,
-      order: store.nextOrder,
+      order,
     };
-    store.nextOrder += 1;
     this.upsertTranscriptMessage(store, transcriptMessage);
+
+    // Ensure nextOrder remains strictly greater than all committed message orders.
+    if (store.nextOrder <= order) {
+      store.nextOrder = order + 1;
+    }
+
     this.forwardSnapshot(store);
   }
 
@@ -457,19 +497,23 @@ class SessionStoreService {
 
   markProcessExit(sessionId: string, code: number | null): void {
     const store = this.getOrCreate(sessionId);
+    const unexpected = code !== null && code !== 0;
 
     // Queue is intentionally ephemeral and dropped on process exit.
     store.queue = [];
     store.pendingInteractiveRequest = null;
+    // Force fresh JSONL rehydration on next subscribe.
+    store.initialized = false;
+    store.hydratePromise = null;
 
     this.markRuntime(store, {
-      phase: 'idle',
+      phase: unexpected ? 'error' : 'idle',
       processState: 'stopped',
       activity: 'IDLE',
       lastExit: {
         code,
         timestamp: new Date().toISOString(),
-        unexpected: true,
+        unexpected,
       },
     });
 

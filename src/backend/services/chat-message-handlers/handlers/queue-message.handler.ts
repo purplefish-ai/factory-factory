@@ -69,6 +69,19 @@ export function createQueueMessageHandler(
       return;
     }
 
+    sessionStoreService.emitDelta(sessionId, {
+      type: 'message_state_changed',
+      id: messageId,
+      newState: MessageState.ACCEPTED,
+      queuePosition: result.position,
+      userMessage: {
+        text: queuedMsg.text,
+        timestamp: queuedMsg.timestamp,
+        attachments: queuedMsg.attachments,
+        settings: queuedMsg.settings,
+      },
+    });
+
     await deps.tryDispatchNextMessage(sessionId);
   };
 }

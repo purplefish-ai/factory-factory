@@ -138,6 +138,100 @@ describe('SessionStoreService', () => {
     expect(snapshots.at(-1)?.messages?.[0]?.text).toBe('hello from history');
   });
 
+  it('uses deterministic fallback IDs for history entries without uuid', async () => {
+    const history = [
+      {
+        type: 'user' as const,
+        content: 'hello',
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+      {
+        type: 'assistant' as const,
+        content: 'hi',
+        timestamp: '2026-02-01T00:00:01.000Z',
+      },
+    ];
+    vi.mocked(SessionManager.getHistory).mockResolvedValue(history);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    const firstSnapshot = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ id: string }> })
+      .find((payload) => payload.type === 'session_snapshot');
+    expect(firstSnapshot?.messages).toBeDefined();
+    const firstIds = firstSnapshot?.messages?.map((m) => m.id) ?? [];
+
+    mockedConnectionService.forwardToSession.mockClear();
+    sessionStoreService.clearSession('s1');
+    vi.mocked(SessionManager.getHistory).mockResolvedValue(history);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    const secondSnapshot = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ id: string }> })
+      .find((payload) => payload.type === 'session_snapshot');
+    const secondIds = secondSnapshot?.messages?.map((m) => m.id) ?? [];
+
+    expect(secondIds).toEqual(firstIds);
+  });
+
+  it('rehydrates from JSONL after process exit and replaces stale in-memory transcript', async () => {
+    vi.mocked(SessionManager.getHistory)
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'stale transcript',
+          timestamp: '2026-02-01T00:00:00.000Z',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'fresh transcript from jsonl',
+          timestamp: '2026-02-01T00:10:00.000Z',
+        },
+      ]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    sessionStoreService.markProcessExit('s1', 1);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    expect(SessionManager.getHistory).toHaveBeenCalledTimes(2);
+
+    const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(latestSnapshot?.messages).toHaveLength(1);
+    expect(latestSnapshot?.messages?.[0]?.text).toBe('fresh transcript from jsonl');
+  });
+
   it('enqueue adds queued message and emits updated snapshot', () => {
     const result = sessionStoreService.enqueue('s1', {
       id: 'm1',
@@ -196,5 +290,34 @@ describe('SessionStoreService', () => {
     expect(snapshotCall).toBeDefined();
     const payload = snapshotCall?.[1] as { queuedMessages?: unknown[] };
     expect(payload.queuedMessages).toEqual([]);
+  });
+
+  it('markProcessExit treats exit code 0 as expected and keeps idle phase', async () => {
+    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: null,
+      isRunning: true,
+      isWorking: true,
+    });
+
+    sessionStoreService.markProcessExit('s1', 0);
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; sessionRuntime?: unknown })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(snapshotCall).toBeDefined();
+    expect(snapshotCall?.sessionRuntime).toMatchObject({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      lastExit: {
+        code: 0,
+        unexpected: false,
+      },
+    });
   });
 });

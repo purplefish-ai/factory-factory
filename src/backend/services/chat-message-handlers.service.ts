@@ -12,6 +12,7 @@ import type { WebSocket } from 'ws';
 import {
   type ClaudeContentItem,
   DEFAULT_THINKING_BUDGET,
+  MessageState,
   type QueuedMessage,
 } from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
@@ -218,13 +219,33 @@ class ChatMessageHandlerService {
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
+    const order = sessionStoreService.allocateOrder(dbSessionId);
+
+    sessionStoreService.emitDelta(dbSessionId, {
+      type: 'message_state_changed',
+      id: msg.id,
+      newState: MessageState.DISPATCHED,
+      userMessage: {
+        text: msg.text,
+        timestamp: msg.timestamp,
+        attachments: msg.attachments,
+        settings: msg.settings,
+        order,
+      },
+    });
+
     if (isCompactCommand) {
       client.startCompaction();
     }
 
     try {
       await client.sendMessage(content);
-      sessionStoreService.commitSentUserMessage(dbSessionId, msg);
+      sessionStoreService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
+      sessionStoreService.emitDelta(dbSessionId, {
+        type: 'message_state_changed',
+        id: msg.id,
+        newState: MessageState.COMMITTED,
+      });
     } catch (error) {
       if (isCompactCommand) {
         client.endCompaction();
