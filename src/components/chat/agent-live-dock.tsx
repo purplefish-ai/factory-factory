@@ -183,6 +183,13 @@ export const AgentLiveDock = memo(function AgentLiveDock({
     return null;
   }
 
+  // Calculate max height for tool details based on available space
+  // Container has: py-3 (24px padding) + Header (~32px) + mt-3 (12px top margin)
+  // When thinking is present, also account for: thinking section (~60px) + space-y-3 gap (12px)
+  const baseOverhead = 68; // py-3 (24px) + header (~32px) + mt-3 (12px)
+  const thinkingReserve = hasThinking ? 72 : 0; // thinking height (~60px) + space-y-3 gap (12px)
+  const toolDetailsMaxHeight = Math.max(60, height - baseOverhead - thinkingReserve);
+
   return (
     <div className={cn('bg-muted/20 border-b relative', className)}>
       <div className="px-4 py-3 flex flex-col" style={{ height: `${height}px` }}>
@@ -201,7 +208,8 @@ export const AgentLiveDock = memo(function AgentLiveDock({
                 summaryOrder="latest-first"
                 open={toolWindowOpen}
                 onOpenChange={setToolWindowOpen}
-                toolDetailsClassName="max-h-24 overflow-y-auto"
+                toolDetailsClassName="overflow-y-auto"
+                toolDetailsMaxHeight={toolDetailsMaxHeight}
               />
             </div>
           )}
