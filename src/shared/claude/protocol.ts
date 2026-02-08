@@ -623,52 +623,7 @@ export interface AgentMetadata {
 // WebSocket Message Types
 // =============================================================================
 
-/**
- * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
- */
-export interface WebSocketMessage {
-  type: // Session lifecycle events
-    | 'session_snapshot'
-    | 'session_delta'
-    // Unified runtime events
-    | 'session_runtime_snapshot'
-    | 'session_runtime_updated'
-    // Message streaming
-    | 'claude_message'
-    // Errors and metadata
-    | 'error'
-    | 'sessions'
-    | 'agent_metadata'
-    // Interactive requests
-    | 'permission_request'
-    | 'user_question'
-    | 'permission_cancelled'
-    // Queue error handling
-    | 'message_used_as_response'
-    // Message state machine events (primary protocol)
-    | 'message_state_changed'
-    | 'session_replay_batch'
-    // SDK message types
-    | 'tool_progress'
-    | 'tool_use_summary'
-    | 'status_update'
-    | 'task_notification'
-    // System subtype events
-    | 'system_init'
-    | 'compact_boundary'
-    | 'hook_started'
-    | 'hook_response'
-    // Context compaction events
-    | 'compacting_start'
-    | 'compacting_end'
-    | 'workspace_notification_request'
-    // Slash commands discovery
-    | 'slash_commands'
-    // User message UUID tracking (for rewind functionality)
-    | 'user_message_uuid'
-    // Rewind files response events
-    | 'rewind_files_preview'
-    | 'rewind_files_error';
+interface WebSocketMessageCommon {
   sessionId?: string;
   dbSessionId?: string;
   message?: string;
@@ -676,91 +631,208 @@ export interface WebSocketMessage {
   data?: unknown;
   sessions?: SessionInfo[];
   agentMetadata?: AgentMetadata;
-  // Permission request fields
   requestId?: string;
   toolName?: string;
   toolUseId?: string;
   toolInput?: Record<string, unknown>;
-  // Plan content for ExitPlanMode permission requests
   planContent?: string | null;
-  // AskUserQuestion fields
   questions?: AskUserQuestion[];
-  // Message fields
   text?: string;
   id?: string;
-  /** Backend-assigned order for claude_message and message_used_as_response events */
   order?: number;
-  // Message state machine fields (primary protocol)
-  /** New state for message_state_changed events */
   newState?: MessageState;
-  /** Pre-built ChatMessages for session_snapshot events (ready for frontend to use directly) */
   messages?: ChatMessage[];
-  /** Unified runtime state for session_runtime_* events */
   sessionRuntime?: SessionRuntimeState;
-  /** Pending interactive request for session_snapshot events */
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
-  /** Queued messages included in session_snapshot */
   queuedMessages?: QueuedMessage[];
-  /** Client-generated ID for correlating load_session requests and responses */
   loadRequestId?: string;
-  /** Batch of WebSocket events for atomic session replay during hydration */
   replayEvents?: WebSocketMessage[];
-  /** Queue position for message_state_changed events */
   queuePosition?: number;
-  /** Error message for REJECTED/FAILED states in message_state_changed events */
   errorMessage?: string;
-  /** Full user message content for ACCEPTED state in message_state_changed events */
   userMessage?: {
     text: string;
     timestamp: string;
     attachments?: MessageAttachment[];
     settings?: ChatSettings;
-    /** Backend-assigned order for reliable sorting */
     order?: number;
   };
-  // Tool progress fields
-  /** Tool use ID for tool_progress events */
   tool_use_id?: string;
-  /** Tool name for tool_progress events */
   tool_name?: string;
-  /** Parent tool use ID for nested tool calls */
   parent_tool_use_id?: string;
-  /** Elapsed time in seconds for tool_progress events */
   elapsed_time_seconds?: number;
-  // Tool use summary fields
-  /** Summary text for tool_use_summary events */
   summary?: string;
-  /** Preceding tool use IDs for tool_use_summary events */
   preceding_tool_use_ids?: string[];
-  // Status update fields
-  /** Permission mode from status updates */
   permissionMode?: string;
-  /** Slash commands from CLI initialize response */
   slashCommands?: CommandInfo[];
-  // User message UUID tracking fields (for rewind functionality)
-  /** SDK-assigned UUID for user_message_uuid events */
   uuid?: string;
-  /** User message ID for rewind_files_preview/error events */
   userMessageId?: string;
-  /** Whether the rewind was a dry run */
   dryRun?: boolean;
-  /** Affected files list for rewind_files_preview events */
   affectedFiles?: string[];
-  /** Error message for rewind_files_error events */
   rewindError?: string;
-  // Workspace notification request fields
   workspaceId?: string;
   workspaceName?: string;
   sessionCount?: number;
   finishedAt?: string;
 }
 
+interface WebSocketMessagePayloadByType {
+  session_snapshot: {
+    messages: ChatMessage[];
+    queuedMessages: QueuedMessage[];
+    sessionRuntime: SessionRuntimeState;
+    pendingInteractiveRequest?: PendingInteractiveRequest | null;
+    loadRequestId?: string;
+  };
+  session_delta: {
+    data: SessionDeltaEvent;
+  };
+  session_runtime_snapshot: {
+    sessionRuntime: SessionRuntimeState;
+  };
+  session_runtime_updated: {
+    sessionRuntime: SessionRuntimeState;
+  };
+  claude_message: {
+    data: ClaudeMessage;
+    /** Backend-assigned order for claude_message and message_used_as_response events */
+    order?: number;
+  };
+  error: {
+    message: string;
+    code?: number;
+  };
+  sessions: {
+    sessions: SessionInfo[];
+  };
+  agent_metadata: {
+    agentMetadata: AgentMetadata;
+  };
+  permission_request: {
+    requestId?: string;
+    toolName?: string;
+    toolUseId?: string;
+    toolInput?: Record<string, unknown>;
+    planContent?: string | null;
+  };
+  user_question: {
+    requestId?: string;
+    questions?: AskUserQuestion[];
+  };
+  permission_cancelled: {
+    requestId?: string;
+  };
+  message_used_as_response: {
+    text?: string;
+    id?: string;
+    order?: number;
+  };
+  message_state_changed: {
+    id?: string;
+    newState?: MessageState;
+    queuePosition?: number;
+    errorMessage?: string;
+    userMessage?: {
+      text: string;
+      timestamp: string;
+      attachments?: MessageAttachment[];
+      settings?: ChatSettings;
+      /** Backend-assigned order for reliable sorting */
+      order?: number;
+    };
+  };
+  session_replay_batch: {
+    /** Batch of WebSocket events for atomic session replay during hydration */
+    replayEvents?: WebSocketMessage[];
+  };
+  tool_progress: {
+    tool_use_id?: string;
+    tool_name?: string;
+    parent_tool_use_id?: string;
+    elapsed_time_seconds?: number;
+  };
+  tool_use_summary: {
+    summary?: string;
+    preceding_tool_use_ids?: string[];
+  };
+  status_update: {
+    permissionMode?: string;
+  };
+  task_notification: {
+    message?: string;
+  };
+  system_init: {
+    data?: {
+      tools?: ToolDefinition[];
+      model?: string;
+      cwd?: string;
+      apiKeySource?: string;
+      slashCommands?: CommandInfo[];
+      plugins?: PluginInfo[];
+    };
+  };
+  compact_boundary: object;
+  hook_started: {
+    data?: {
+      hookId?: string;
+      hookName?: string;
+      hookEvent?: string;
+    };
+  };
+  hook_response: {
+    data?: {
+      hookId?: string;
+      output?: string;
+      stdout?: string;
+      stderr?: string;
+      exitCode?: number;
+      outcome?: string;
+    };
+  };
+  compacting_start: object;
+  compacting_end: object;
+  workspace_notification_request: {
+    workspaceId?: string;
+    workspaceName?: string;
+    sessionCount?: number;
+    finishedAt?: string;
+  };
+  slash_commands: {
+    slashCommands?: CommandInfo[];
+  };
+  user_message_uuid: {
+    uuid?: string;
+  };
+  rewind_files_preview: {
+    userMessageId?: string;
+    dryRun?: boolean;
+    affectedFiles?: string[];
+  };
+  rewind_files_error: {
+    userMessageId?: string;
+    rewindError?: string;
+  };
+}
+
+/**
+ * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
+ */
+type WebSocketMessageType = keyof WebSocketMessagePayloadByType;
+type SessionDeltaEventType = Exclude<WebSocketMessageType, 'session_delta'>;
+
 /**
  * Valid event payload forwarded within session_delta messages.
  */
-export type SessionDeltaEvent = Omit<WebSocketMessage, 'type'> & {
-  type: Exclude<WebSocketMessage['type'], 'session_delta'>;
-};
+export type SessionDeltaEvent = {
+  [K in SessionDeltaEventType]: WebSocketMessageCommon & {
+    type: K;
+  } & WebSocketMessagePayloadByType[K];
+}[SessionDeltaEventType];
+
+export type WebSocketMessage = {
+  [K in keyof WebSocketMessagePayloadByType]: WebSocketMessageCommon & {
+    type: K;
+  } & WebSocketMessagePayloadByType[K];
+}[keyof WebSocketMessagePayloadByType];
 
 /**
  * Canonical base order used for queued messages before dispatch assigns real order.

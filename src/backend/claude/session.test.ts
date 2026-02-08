@@ -183,9 +183,8 @@ describe('parseHistoryEntry', () => {
         },
       };
       const result = parseHistoryEntry(entry);
-      expect(result).toHaveLength(2);
-      expect(result[0]!.content).toBe('First message');
-      expect(result[1]!.content).toBe('Second message');
+      expect(result).toHaveLength(1);
+      expect(result[0]!.content).toBe('First message\n\nSecond message');
     });
 
     it('should parse user message with tool_result content', () => {
@@ -214,6 +213,35 @@ describe('parseHistoryEntry', () => {
       }
       expect(first.toolId).toBe('tool-123');
       expect(first.isError).toBe(false);
+    });
+
+    it('should preserve user content and tool_result as separate entries', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Please inspect this' },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-321',
+              content: 'Tool output',
+            },
+          ],
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        type: 'user',
+        content: 'Please inspect this',
+      });
+      expect(result[1]).toMatchObject({
+        type: 'tool_result',
+        content: 'Tool output',
+        toolId: 'tool-321',
+      });
     });
 
     it('should parse user image content into attachment metadata', () => {
@@ -251,7 +279,7 @@ describe('parseHistoryEntry', () => {
       expect(result[0]!.attachments?.[0]?.size).toBe(6);
     });
 
-    it('should parse text and image user content as separate history entries', () => {
+    it('should parse text and image user content into a single history entry', () => {
       const entry = {
         type: 'user',
         timestamp,
@@ -272,11 +300,10 @@ describe('parseHistoryEntry', () => {
       };
 
       const result = parseHistoryEntry(entry);
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(1);
       expect(result[0]!.type).toBe('user');
       expect(result[0]!.content).toBe('See screenshot');
-      expect(result[1]!.type).toBe('user');
-      expect(result[1]!.attachments?.[0]).toMatchObject({
+      expect(result[0]!.attachments?.[0]).toMatchObject({
         name: 'image-2.jpeg',
         type: 'image/jpeg',
         contentType: 'image',

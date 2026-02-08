@@ -693,7 +693,7 @@ class ChatEventForwarderService {
     const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
     // Preserve the full assistant payload (including tool_use blocks/ids)
     // so downstream tool progress/summary events can still correlate.
-    const wsMsg = { type: 'claude_message', data: msg, order } as const;
+    const wsMsg = { type: 'claude_message', data: msg as ClaudeMessage, order } as const;
     sessionStoreService.emitDelta(dbSessionId, wsMsg);
   }
 
@@ -753,7 +753,7 @@ class ChatEventForwarderService {
     });
 
     const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
-    const wsMsg = { type: 'claude_message', data: msg, order } as const;
+    const wsMsg = { type: 'claude_message', data: msg as ClaudeMessage, order } as const;
     sessionStoreService.emitDelta(dbSessionId, wsMsg);
   }
 

@@ -3,7 +3,6 @@
  *
  * This module contains helpers for:
  * - Tool input accumulation during streaming
- * - Thinking delta handling (extended thinking mode)
  * - Stream event extraction and validation
  */
 
@@ -117,34 +116,4 @@ export function handleToolInputStreaming(
 
   // Handle input JSON deltas
   return handleToolInputDelta(event, toolInputAccumulatorRef);
-}
-
-// =============================================================================
-// Thinking Streaming
-// =============================================================================
-
-/**
- * Handle thinking delta stream events (extended thinking mode).
- * Returns a THINKING_DELTA action for thinking deltas, THINKING_CLEAR for message_start, null otherwise.
- */
-export function handleThinkingStreaming(claudeMsg: ClaudeMessage): ChatAction | null {
-  const event = getStreamEvent(claudeMsg);
-  if (!event) {
-    return null;
-  }
-
-  // Clear thinking on new message start
-  if (event.type === 'message_start') {
-    return { type: 'THINKING_CLEAR' };
-  }
-
-  // Accumulate thinking delta
-  if (event.type === 'content_block_delta') {
-    const delta = event.delta;
-    if (delta.type === 'thinking_delta') {
-      return { type: 'THINKING_DELTA', payload: { thinking: delta.thinking } };
-    }
-  }
-
-  return null;
 }

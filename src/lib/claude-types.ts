@@ -122,8 +122,8 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
  */
 export function isWsClaudeMessage(
   msg: WebSocketMessage
-): msg is WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage } {
-  return msg.type === 'claude_message' && 'data' in msg && msg.data != null;
+): msg is Extract<WebSocketMessage, { type: 'claude_message' }> {
+  return msg.type === 'claude_message';
 }
 
 /**

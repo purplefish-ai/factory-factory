@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
-import type { ClaudeMessage, WebSocketMessage } from '@/lib/claude-types';
+import type { WebSocketMessage } from '@/lib/claude-types';
 import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import type { ChatAction, ChatState } from './chat-reducer';
 import { createActionFromWebSocketMessage } from './chat-reducer';
-import { handleThinkingStreaming, handleToolInputStreaming } from './streaming-utils';
+import { handleToolInputStreaming } from './streaming-utils';
 
 // =============================================================================
 // Debug Logging
@@ -33,7 +33,7 @@ export interface UseChatTransportReturn {
  * Expects a validated claude_message WebSocket message.
  */
 function handleClaudeMessageWithStreaming(
-  wsMessage: WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage },
+  wsMessage: Extract<WebSocketMessage, { type: 'claude_message' }>,
   toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>,
   dispatch: React.Dispatch<ChatAction>
 ): void {
@@ -44,13 +44,6 @@ function handleClaudeMessageWithStreaming(
   if (toolInputAction) {
     dispatch(toolInputAction);
     // Don't return - still need to dispatch the main action for content_block_start
-  }
-
-  // Handle thinking streaming (extended thinking mode)
-  const thinkingAction = handleThinkingStreaming(claudeMsg);
-  if (thinkingAction) {
-    dispatch(thinkingAction);
-    // Don't return - THINKING_CLEAR also needs the main action to process
   }
 }
 

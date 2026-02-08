@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type ClaudeMessage, isWebSocketMessage } from '@/lib/claude-types';
-import { handleThinkingStreaming, handleToolInputStreaming } from './streaming-utils';
+import { handleToolInputStreaming } from './streaming-utils';
 
 describe('handleToolInputStreaming', () => {
   it('accumulates input_json_delta and returns TOOL_INPUT_UPDATE when JSON is complete', () => {
@@ -54,36 +54,6 @@ describe('handleToolInputStreaming', () => {
 
     expect(handleToolInputStreaming(nonStream, toolInputAccumulatorRef)).toBeNull();
     expect(toolInputAccumulatorRef.current.size).toBe(0);
-  });
-});
-
-describe('handleThinkingStreaming', () => {
-  it('clears thinking on message_start', () => {
-    const msg: ClaudeMessage = {
-      type: 'stream_event',
-      event: {
-        type: 'message_start',
-        message: { role: 'assistant', content: '' },
-      },
-    };
-
-    expect(handleThinkingStreaming(msg)).toEqual({ type: 'THINKING_CLEAR' });
-  });
-
-  it('returns THINKING_DELTA for thinking_delta events', () => {
-    const msg: ClaudeMessage = {
-      type: 'stream_event',
-      event: {
-        type: 'content_block_delta',
-        index: 0,
-        delta: { type: 'thinking_delta', thinking: 'step-by-step' },
-      },
-    };
-
-    expect(handleThinkingStreaming(msg)).toEqual({
-      type: 'THINKING_DELTA',
-      payload: { thinking: 'step-by-step' },
-    });
   });
 });
 

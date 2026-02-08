@@ -212,6 +212,10 @@ export function handleClaudeMessage(
     }
   }
 
+  if (isStreamEventMessage(claudeMsg) && claudeMsg.event.type === 'message_start') {
+    baseState = { ...baseState, latestThinking: null };
+  }
+
   // Append thinking deltas to the most recent thinking content block
   if (
     isStreamEventMessage(claudeMsg) &&
@@ -223,6 +227,10 @@ export function handleClaudeMessage(
       claudeMsg.event.index,
       claudeMsg.event.delta.thinking
     );
+    baseState = {
+      ...baseState,
+      latestThinking: (baseState.latestThinking ?? '') + claudeMsg.event.delta.thinking,
+    };
   }
 
   // Check if message should be stored

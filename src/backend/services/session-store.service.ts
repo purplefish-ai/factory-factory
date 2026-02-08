@@ -98,7 +98,16 @@ class SessionStoreService {
   }
 
   private historyToClaudeMessage(msg: HistoryMessage): ClaudeMessage {
+    const assertNever = (value: never): never => {
+      throw new Error(`Unhandled history message type: ${JSON.stringify(value)}`);
+    };
+
     switch (msg.type) {
+      case 'user':
+        return {
+          type: 'user',
+          message: { role: 'user', content: msg.content },
+        };
       case 'tool_use':
         if (msg.toolName && msg.toolId) {
           return {
@@ -149,12 +158,9 @@ class SessionStoreService {
           type: 'assistant',
           message: { role: 'assistant', content: [{ type: 'text', text: msg.content }] },
         };
-      default:
-        return {
-          type: 'user',
-          message: { role: 'user', content: msg.content },
-        };
     }
+
+    return assertNever(msg);
   }
 
   private buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessage[] {

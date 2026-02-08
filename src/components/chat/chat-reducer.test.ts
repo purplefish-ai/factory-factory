@@ -566,16 +566,12 @@ describe('chatReducer', () => {
       expect(secondEvent?.content_block?.thinking).toBe('second');
     });
 
-    it('should not double-append thinking deltas when THINKING_DELTA and WS_CLAUDE_MESSAGE both run', () => {
+    it('should append latest thinking from stream events only', () => {
       let state = chatReducer(initialState, {
         type: 'WS_CLAUDE_MESSAGE',
         payload: { message: createTestThinkingMessage(), order: 0 },
       });
 
-      state = chatReducer(state, {
-        type: 'THINKING_DELTA',
-        payload: { thinking: ' +delta' },
-      });
       state = chatReducer(state, {
         type: 'WS_CLAUDE_MESSAGE',
         payload: {
@@ -1927,7 +1923,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for claude_message without data', () => {
-    const wsMessage: WebSocketMessage = { type: 'claude_message' };
+    const wsMessage = { type: 'claude_message' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -1941,7 +1937,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for error message without message field', () => {
-    const wsMessage: WebSocketMessage = { type: 'error' };
+    const wsMessage = { type: 'error' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -1963,7 +1959,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for sessions message without sessions field', () => {
-    const wsMessage: WebSocketMessage = { type: 'sessions' };
+    const wsMessage = { type: 'sessions' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();

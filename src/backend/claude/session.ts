@@ -267,6 +267,12 @@ interface EntryMetadata {
   uuid?: string;
 }
 
+interface ParsedUserContentAccumulator {
+  textParts: string[];
+  attachments: NonNullable<HistoryMessage['attachments']>;
+  toolResults: Extract<HistoryMessage, { type: 'tool_result' }>[];
+}
+
 function inferImageExtension(mediaType: string): string {
   const subtype = mediaType.split('/')[1];
   if (!subtype) {
@@ -282,56 +288,54 @@ function estimateBase64Bytes(base64: string): number {
   return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
 }
 
-/**
- * Parse a user content item into a HistoryMessage
- */
+function createImageAttachment(
+  item: Extract<ClaudeContentItem, { type: 'image' }>,
+  meta: EntryMetadata,
+  itemIndex: number
+): NonNullable<HistoryMessage['attachments']>[number] {
+  const mediaType = item.source.media_type || 'application/octet-stream';
+  const extension = inferImageExtension(mediaType);
+  const attachmentId = meta.uuid
+    ? `${meta.uuid}-image-${itemIndex}`
+    : `${meta.timestamp}-image-${itemIndex}`;
+
+  return {
+    id: attachmentId,
+    name: `image-${itemIndex + 1}.${extension}`,
+    type: mediaType,
+    size: estimateBase64Bytes(item.source.data),
+    data: item.source.data,
+    contentType: 'image',
+  };
+}
+
 function parseUserContentItem(
   item: ClaudeContentItem,
   meta: EntryMetadata,
-  itemIndex: number
-): HistoryMessage | null {
+  itemIndex: number,
+  acc: ParsedUserContentAccumulator
+): void {
   if (item.type === 'text') {
-    // Skip system content in text items
-    if (isSystemContent(item.text)) {
-      return null;
+    if (!isSystemContent(item.text)) {
+      acc.textParts.push(item.text);
     }
-    return { type: 'user', content: item.text, ...meta };
+    return;
   }
 
   if (item.type === 'image') {
-    const mediaType = item.source.media_type || 'application/octet-stream';
-    const extension = inferImageExtension(mediaType);
-    const attachmentId = meta.uuid
-      ? `${meta.uuid}-image-${itemIndex}`
-      : `${meta.timestamp}-image-${itemIndex}`;
-
-    return {
-      type: 'user',
-      content: '',
-      attachments: [
-        {
-          id: attachmentId,
-          name: `image-${itemIndex + 1}.${extension}`,
-          type: mediaType,
-          size: estimateBase64Bytes(item.source.data),
-          data: item.source.data,
-          contentType: 'image',
-        },
-      ],
-      ...meta,
-    };
+    acc.attachments.push(createImageAttachment(item, meta, itemIndex));
+    return;
   }
 
   if (item.type === 'tool_result') {
-    return {
+    acc.toolResults.push({
       type: 'tool_result',
       content: item.content,
       toolId: item.tool_use_id,
       isError: item.is_error,
       ...meta,
-    };
+    });
   }
-  return null;
 }
 
 /**
@@ -375,9 +379,27 @@ function parseUserEntry(message: ClaudeMessage, meta: EntryMetadata): HistoryMes
   }
 
   if (Array.isArray(content)) {
-    return (content as ClaudeContentItem[])
-      .map((item, index) => parseUserContentItem(item, meta, index))
-      .filter((m): m is HistoryMessage => m !== null);
+    const acc: ParsedUserContentAccumulator = {
+      textParts: [],
+      attachments: [],
+      toolResults: [],
+    };
+
+    for (const [index, item] of (content as ClaudeContentItem[]).entries()) {
+      parseUserContentItem(item, meta, index, acc);
+    }
+
+    const result: HistoryMessage[] = [];
+    if (acc.textParts.length > 0 || acc.attachments.length > 0) {
+      result.push({
+        type: 'user',
+        content: acc.textParts.join('\n\n'),
+        ...(acc.attachments.length > 0 ? { attachments: acc.attachments } : {}),
+        ...meta,
+      });
+    }
+    result.push(...acc.toolResults);
+    return result;
   }
 
   return [];
