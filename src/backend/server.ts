@@ -38,6 +38,7 @@ import {
   createDevLogsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
+import { migrateDataDirectory } from './services/migration.service';
 import { reconciliationService } from './services/reconciliation.service';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
@@ -270,6 +271,13 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           requestedPort: REQUESTED_PORT,
           actualPort,
         });
+      }
+
+      // Migrate data from old directory structure before starting server
+      try {
+        migrateDataDirectory();
+      } catch (error) {
+        logger.error('Failed to migrate data directory on startup', error as Error);
       }
 
       return new Promise((resolve, reject) => {
