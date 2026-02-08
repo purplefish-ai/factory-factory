@@ -77,7 +77,10 @@ class GitOpsService {
     }
 
     const commitMessage = `Archive workspace ${workspaceName}`;
-    const commitResult = await gitCommand(['commit', '-m', commitMessage], worktreePath);
+    const commitResult = await gitCommand(
+      ['commit', '-m', commitMessage, '--no-verify'],
+      worktreePath
+    );
     if (commitResult.code !== 0) {
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
