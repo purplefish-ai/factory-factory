@@ -279,7 +279,10 @@ class ChatEventForwarderService {
         .finally(() => {
           // Result events can arrive before the client flips to idle. Re-sync after
           // idle callback to avoid leaving runtime stuck in WORKING.
-          workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+          // Only mark workspace idle if the client stayed idle after dispatch.
+          if (!client.isWorking()) {
+            workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+          }
           this.syncRuntimeFromClient(dbSessionId, client);
         });
     });

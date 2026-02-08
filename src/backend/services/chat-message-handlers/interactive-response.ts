@@ -36,21 +36,6 @@ function handleMessageAsInteractiveResponse(
     return false;
   }
 
-  // Always clear the pending request to prevent stale state, regardless of success/failure
-  // This must happen before any operation that could fail
-  sessionStoreService.clearPendingInteractiveRequestIfMatches(sessionId, pendingRequest.requestId);
-
-  // Allocate an order for this message so it sorts correctly on the frontend
-  const order = sessionStoreService.allocateOrder(sessionId);
-
-  // Prepare the response event - we'll send it even on error to clear frontend state
-  const responseEvent = {
-    type: 'message_used_as_response',
-    id: messageId,
-    text,
-    order,
-  } as const;
-
   try {
     if (pendingRequest.toolName === 'AskUserQuestion') {
       handleAskUserQuestionResponse(client, sessionId, pendingRequest, text);
@@ -67,6 +52,24 @@ function handleMessageAsInteractiveResponse(
         requestId: pendingRequest.requestId,
       });
     }
+
+    // Clear the pending request only after successful delivery to Claude.
+    sessionStoreService.clearPendingInteractiveRequestIfMatches(
+      sessionId,
+      pendingRequest.requestId
+    );
+
+    // Allocate an order for this message so it sorts correctly on the frontend.
+    const order = sessionStoreService.allocateOrder(sessionId);
+
+    sessionStoreService.emitDelta(sessionId, {
+      type: 'message_used_as_response',
+      id: messageId,
+      text,
+      order,
+    });
+
+    return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to handle message as interactive response', {
@@ -75,24 +78,13 @@ function handleMessageAsInteractiveResponse(
       toolName: pendingRequest.toolName,
       error: errorMessage,
     });
-    // Continue to send the response event to clear frontend state
-    // The message will be displayed in chat even though sending to Claude failed
-  }
-
-  // Always notify frontend - clears pending state and displays the message
-  // This happens outside try/catch to ensure frontend state is always updated
-  try {
-    sessionStoreService.emitDelta(sessionId, responseEvent);
-  } catch (sendError) {
-    // Delta send failed - frontend will recover on reconnect
-    logger.warn('[Chat WS] Failed to send message_used_as_response event', {
-      sessionId,
-      messageId,
-      error: sendError instanceof Error ? sendError.message : String(sendError),
+    sessionStoreService.emitDelta(sessionId, {
+      type: 'error',
+      message: 'Failed to deliver interactive response. Please try again.',
     });
+    // Keep the pending request so the user can retry without losing context.
+    return true;
   }
-
-  return true;
 }
 
 function handleAskUserQuestionResponse(

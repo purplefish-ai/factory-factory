@@ -399,6 +399,10 @@ function parseUserEntry(message: ClaudeMessage, meta: EntryMetadata): HistoryMes
 
     for (const [index, item] of (content as ClaudeContentItem[]).entries()) {
       if (item.type === 'tool_result') {
+        // TODO(dual-write): This parser intentionally splits mixed user payloads
+        // (text/image + tool_result) into multiple HistoryMessage entries to preserve
+        // JSONL interleaving. Live forwarding currently emits the unsplit user payload.
+        // Keep these paths aligned if we ever observe restore-time transcript drift.
         flushUserAccumulator(result, acc, meta);
         result.push({
           type: 'tool_result',

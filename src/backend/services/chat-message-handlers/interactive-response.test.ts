@@ -55,6 +55,31 @@ describe('tryHandleAsInteractiveResponse', () => {
     });
   });
 
+  it('keeps pending request and emits error when interactive delivery fails', () => {
+    const denyInteractiveRequest = vi.fn(() => {
+      throw new Error('transport down');
+    });
+    mockGetClient.mockReturnValue({
+      denyInteractiveRequest,
+    });
+    mockGetPendingInteractiveRequest.mockReturnValue({
+      requestId: 'req-1',
+      toolName: 'ExitPlanMode',
+      input: {},
+    });
+
+    const handled = tryHandleAsInteractiveResponse('session-1', 'msg-1', 'response text');
+
+    expect(handled).toBe(true);
+    expect(mockClearPendingInteractiveRequestIfMatches).not.toHaveBeenCalled();
+    expect(mockAllocateOrder).not.toHaveBeenCalled();
+    expect(mockEmitDelta).toHaveBeenCalledTimes(1);
+    expect(mockEmitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'error',
+      message: 'Failed to deliver interactive response. Please try again.',
+    });
+  });
+
   it('returns false when there is no pending interactive request', () => {
     mockGetPendingInteractiveRequest.mockReturnValue(null);
 
