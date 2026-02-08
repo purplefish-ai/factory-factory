@@ -493,7 +493,6 @@ export interface WebSocketMessage {
     | 'message_used_as_response'
     // Message state machine events (primary protocol)
     | 'message_state_changed'
-    | 'messages_snapshot'
     | 'session_replay_batch'
     // SDK message types
     | 'tool_progress'
@@ -543,11 +542,11 @@ export interface WebSocketMessage {
   // Message state machine fields (primary protocol)
   /** New state for message_state_changed events */
   newState?: MessageState;
-  /** Pre-built ChatMessages for messages_snapshot events (ready for frontend to use directly) */
+  /** Pre-built ChatMessages for session_snapshot events (ready for frontend to use directly) */
   messages?: ChatMessage[];
   /** Unified runtime state for session_runtime_* events */
   sessionRuntime?: SessionRuntimeState;
-  /** Pending interactive request for messages_snapshot events */
+  /** Pending interactive request for session_snapshot events */
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
   /** Queued messages included in session_snapshot */
   queuedMessages?: QueuedMessage[];

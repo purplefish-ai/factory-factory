@@ -602,7 +602,7 @@ describe('session switching queue behavior', () => {
 
 describe('queue state transitions', () => {
   // Note: Queue is now managed on the backend. Frontend receives queue state via
-  // MESSAGES_SNAPSHOT action (on connect) and MESSAGE_STATE_CHANGED (for state updates).
+  // SESSION_SNAPSHOT action (on connect) and MESSAGE_STATE_CHANGED (for state updates).
 
   it('should not affect queue when receiving WS messages', () => {
     const queuedMsg = createQueuedMessage('Queued');

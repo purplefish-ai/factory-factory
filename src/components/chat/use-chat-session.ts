@@ -63,7 +63,7 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       toolInputAccumulatorRef.current.clear();
     }
 
-    // Load persisted data for the new session (queue comes from backend via messages_snapshot)
+    // Load persisted data for the new session (queue comes from backend via session_snapshot)
     if (newDbSessionId) {
       const persistedData = loadAllSessionData(newDbSessionId);
       loadedDraftRef.current = persistedData.draft;

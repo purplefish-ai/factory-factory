@@ -10,7 +10,7 @@
  *
  * Message queue is managed on the backend - frontend sends queue_message and
  * receives message_state_changed events for state transitions. On connect,
- * messages_snapshot restores full state.
+ * session_snapshot or session_replay_batch restores full state.
  *
  * Usage:
  * ```ts

@@ -1,6 +1,4 @@
 import type { ChatMessageInput } from '@/shared/websocket';
-import { createGetHistoryHandler } from './handlers/get-history.handler';
-import { createGetQueueHandler } from './handlers/get-queue.handler';
 import { createListSessionsHandler } from './handlers/list-sessions.handler';
 import { createLoadSessionHandler } from './handlers/load-session.handler';
 import { createPermissionResponseHandler } from './handlers/permission-response.handler';
@@ -33,9 +31,7 @@ export function createChatMessageHandlerRegistry(
     queue_message: createQueueMessageHandler(deps),
     remove_queued_message: createRemoveQueuedMessageHandler(),
     stop: createStopHandler(),
-    get_history: createGetHistoryHandler(),
     load_session: createLoadSessionHandler(),
-    get_queue: createGetQueueHandler(),
     question_response: createQuestionResponseHandler(),
     permission_response: createPermissionResponseHandler(),
     set_model: createSetModelHandler(),

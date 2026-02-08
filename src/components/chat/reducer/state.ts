@@ -26,7 +26,7 @@ function createBaseResetState(): Pick<
 > {
   // Note: slashCommands is intentionally NOT reset here.
   // - For CLEAR_CHAT: Commands persist because we're clearing messages in the same session.
-  // - For session switches: MESSAGES_SNAPSHOT handles clearing slashCommands separately,
+  // - For session switches: SESSION_SNAPSHOT handles clearing slashCommands separately,
   //   and the backend will replay the stored slash_commands event for the new session.
   return {
     messages: [],
