@@ -32,8 +32,64 @@ function messageSort(a: ChatMessage, b: ChatMessage): number {
   return a.order - b.order;
 }
 
+function extractAssistantText(message: ClaudeMessage): string {
+  if (message.type !== 'assistant' || !message.message) {
+    return '';
+  }
+
+  const content = message.message.content;
+  if (typeof content === 'string') {
+    return content.trim();
+  }
+
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  return content
+    .filter((item): item is { type: 'text'; text: string } => item.type === 'text')
+    .map((item) => item.text)
+    .join('')
+    .trim();
+}
+
 class SessionStoreService {
   private stores = new Map<string, SessionStore>();
+
+  private shouldSuppressDuplicateResultMessage(
+    store: SessionStore,
+    claudeMessage: ClaudeMessage
+  ): boolean {
+    if (claudeMessage.type !== 'result' || typeof claudeMessage.result !== 'string') {
+      return false;
+    }
+
+    const incomingText = claudeMessage.result.trim();
+    if (!incomingText) {
+      return true;
+    }
+
+    for (let i = store.transcript.length - 1; i >= 0; i -= 1) {
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const candidate = store.transcript[i]!;
+      if (
+        candidate.source !== 'claude' ||
+        !candidate.message ||
+        candidate.message.type === 'result'
+      ) {
+        continue;
+      }
+
+      const existingText = extractAssistantText(candidate.message);
+      if (!existingText) {
+        continue;
+      }
+
+      return existingText === incomingText;
+    }
+
+    return false;
+  }
 
   private getOrCreate(sessionId: string): SessionStore {
     let store = this.stores.get(sessionId);
@@ -401,6 +457,10 @@ class SessionStoreService {
     const store = this.getOrCreate(sessionId);
     const order = store.nextOrder;
     store.nextOrder += 1;
+
+    if (this.shouldSuppressDuplicateResultMessage(store, claudeMessage)) {
+      return order;
+    }
 
     const entry: ChatMessage = {
       id: `${sessionId}-${order}`,

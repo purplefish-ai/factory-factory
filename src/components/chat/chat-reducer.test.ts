@@ -67,13 +67,14 @@ function createTestAssistantMessage(): ClaudeMessage {
   };
 }
 
-function createTestResultMessage(): ClaudeMessage {
+function createTestResultMessage(result?: unknown): ClaudeMessage {
   return {
     type: 'result',
     usage: { input_tokens: 100, output_tokens: 50 },
     duration_ms: 1000,
     total_cost_usd: 0.01,
     num_turns: 1,
+    ...(result !== undefined ? { result } : {}),
   };
 }
 
@@ -370,6 +371,47 @@ describe('chatReducer', () => {
 
       expect(newState.sessionStatus).toEqual({ phase: 'running' });
       expect(newState.messages).toHaveLength(1);
+    });
+
+    it('suppresses result message when it duplicates the latest assistant text', () => {
+      const assistantMsg = createTestAssistantMessage();
+      const assistantAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: assistantMsg, order: 0 },
+      };
+      const withAssistant = chatReducer(initialState, assistantAction);
+
+      const duplicateResult = createTestResultMessage('Hello!');
+      const resultAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: duplicateResult, order: 1 },
+      };
+      const withResult = chatReducer(withAssistant, resultAction);
+
+      expect(withResult.messages).toHaveLength(1);
+      expect(withResult.messages[0]!.message).toEqual(assistantMsg);
+      // Token stats should still update from result messages
+      expect(withResult.tokenStats.inputTokens).toBe(100);
+      expect(withResult.tokenStats.outputTokens).toBe(50);
+    });
+
+    it('keeps result message when it differs from latest assistant text', () => {
+      const assistantMsg = createTestAssistantMessage();
+      const assistantAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: assistantMsg, order: 0 },
+      };
+      const withAssistant = chatReducer(initialState, assistantAction);
+
+      const distinctResult = createTestResultMessage('Different final text');
+      const resultAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: distinctResult, order: 1 },
+      };
+      const withResult = chatReducer(withAssistant, resultAction);
+
+      expect(withResult.messages).toHaveLength(2);
+      expect(withResult.messages[1]!.message).toEqual(distinctResult);
     });
 
     it('should store tool_use messages and track index for O(1) updates', () => {

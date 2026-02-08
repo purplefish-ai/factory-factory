@@ -429,4 +429,30 @@ describe('SessionStoreService', () => {
       },
     });
   });
+
+  it('does not persist duplicate result text when latest assistant text matches', () => {
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'There are **514 TypeScript files**.' }],
+      },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: 'There are **514 TypeScript files**.',
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ source: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(snapshotCall?.messages).toHaveLength(1);
+    expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
+  });
 });

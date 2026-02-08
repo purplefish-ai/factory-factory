@@ -260,12 +260,19 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Claude became idle, checking queue', { dbSessionId });
       }
       // Fire and forget - don't await
-      onDispatchNextMessage().catch((error) => {
-        logger.error('[Chat WS] Error dispatching queued message on idle', {
-          dbSessionId,
-          error: error instanceof Error ? error.message : String(error),
+      void onDispatchNextMessage()
+        .catch((error) => {
+          logger.error('[Chat WS] Error dispatching queued message on idle', {
+            dbSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          // Result events can arrive before the client flips to idle. Re-sync after
+          // idle callback to avoid leaving runtime stuck in WORKING.
+          workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+          this.syncRuntimeFromClient(dbSessionId, client);
         });
-      });
     });
 
     on('stream', (event) => {

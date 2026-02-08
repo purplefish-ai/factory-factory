@@ -6,6 +6,7 @@ import type {
   UserQuestionRequest,
 } from '@/lib/claude-types';
 import {
+  extractTextFromMessage,
   getToolUseIdFromEvent,
   isStreamEventMessage,
   updateTokenStatsFromResult,
@@ -162,6 +163,39 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
   return false;
 }
 
+function shouldSuppressDuplicateResultMessage(state: ChatState, claudeMsg: ClaudeMessage): boolean {
+  if (claudeMsg.type !== 'result' || typeof claudeMsg.result !== 'string') {
+    return false;
+  }
+
+  const incomingText = claudeMsg.result.trim();
+  if (!incomingText) {
+    return true;
+  }
+
+  // If the latest renderable Claude text already matches this result text,
+  // skip storing the result to avoid duplicate final assistant bubbles.
+  for (let i = state.messages.length - 1; i >= 0; i -= 1) {
+    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+    const candidate = state.messages[i]!;
+    if (
+      candidate.source !== 'claude' ||
+      !candidate.message ||
+      candidate.message.type === 'result'
+    ) {
+      continue;
+    }
+
+    const existingText = extractTextFromMessage(candidate.message).trim();
+    if (!existingText) {
+      continue;
+    }
+    return existingText === incomingText;
+  }
+
+  return false;
+}
+
 /**
  * Checks if a message is a tool_use message with the given ID.
  */
@@ -259,6 +293,10 @@ export function handleClaudeMessage(
       ...baseState,
       tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
     };
+
+    if (shouldSuppressDuplicateResultMessage(baseState, claudeMsg)) {
+      return baseState;
+    }
   }
 
   // Append thinking deltas to the most recent thinking content block
