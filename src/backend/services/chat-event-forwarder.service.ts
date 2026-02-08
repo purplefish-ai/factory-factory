@@ -465,72 +465,7 @@ class ChatEventForwarderService {
 
     on('message', (msg) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });
-
-      const msgWithType = msg as {
-        type?: string;
-        uuid?: string;
-        message?: { content?: Array<{ type?: string }> };
-      };
-      if (msgWithType.type !== 'user') {
-        sessionFileLogger.log(dbSessionId, 'INFO', {
-          action: 'skipped_message',
-          reason: 'not_user_type',
-          type: msgWithType.type,
-        });
-        return;
-      }
-
-      // Forward user message UUID for rewind functionality
-      // This allows the frontend to track which SDK-assigned UUID corresponds to each message
-      if (msgWithType.uuid) {
-        const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid };
-        messageStateService.storeEvent(dbSessionId, uuidMsg);
-        chatConnectionService.forwardToSession(dbSessionId, uuidMsg);
-        if (DEBUG_CHAT_WS) {
-          logger.info('[Chat WS] Forwarding user message UUID', {
-            dbSessionId,
-            uuid: msgWithType.uuid,
-          });
-        }
-      }
-
-      const content = msgWithType.message?.content;
-      if (!Array.isArray(content)) {
-        sessionFileLogger.log(dbSessionId, 'INFO', {
-          action: 'skipped_message',
-          reason: 'no_array_content',
-        });
-        return;
-      }
-
-      const hasToolResult = content.some((item) => item.type === 'tool_result');
-      if (!hasToolResult) {
-        sessionFileLogger.log(dbSessionId, 'INFO', {
-          action: 'skipped_message',
-          reason: 'no_tool_result_content',
-          content_types: content.map((c) => c.type),
-        });
-        return;
-      }
-
-      this.notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
-        sessionId: dbSessionId,
-        workspaceId: context.workspaceId,
-        workingDir: context.workingDir,
-      });
-
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Forwarding user message with tool_result', { dbSessionId });
-      }
-      sessionFileLogger.log(dbSessionId, 'INFO', {
-        action: 'forwarding_user_message_with_tool_result',
-      });
-      // Store-then-forward: store event for replay before forwarding
-      // Include order for consistent frontend message sorting
-      const order = messageStateService.allocateOrder(dbSessionId);
-      const wsMsg = { type: 'claude_message', data: msg, order };
-      messageStateService.storeEvent(dbSessionId, wsMsg);
-      chatConnectionService.forwardToSession(dbSessionId, wsMsg);
+      this.handleMessageEvent(dbSessionId, msg, pendingToolNames, pendingToolInputs, context);
     });
 
     on('result', (result) => {
@@ -680,6 +615,150 @@ class ChatEventForwarderService {
       toolUseId: request.toolUseId,
       toolInput: request.input,
     });
+  }
+
+  private handleMessageEvent(
+    dbSessionId: string,
+    msg: unknown,
+    pendingToolNames: Map<string, string>,
+    pendingToolInputs: Map<string, Record<string, unknown>>,
+    context: EventForwarderContext
+  ): void {
+    const msgWithType = msg as {
+      type?: string;
+      uuid?: string;
+      message?: { content?: Array<{ type?: string; text?: string }> };
+    };
+
+    if (msgWithType.type === 'assistant') {
+      this.forwardAssistantTextMessage(dbSessionId, msg, msgWithType);
+      return;
+    }
+
+    if (msgWithType.type !== 'user') {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'not_user_type',
+        type: msgWithType.type,
+      });
+      return;
+    }
+
+    this.forwardUserMessageWithToolResult(
+      dbSessionId,
+      msg,
+      msgWithType,
+      pendingToolNames,
+      pendingToolInputs,
+      context
+    );
+  }
+
+  private forwardAssistantTextMessage(
+    dbSessionId: string,
+    msg: unknown,
+    msgWithType: {
+      message?: { content?: Array<{ type?: string; text?: string }> };
+    }
+  ): void {
+    const content = msgWithType.message?.content;
+    if (!Array.isArray(content)) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'assistant_no_array_content',
+      });
+      return;
+    }
+
+    // Forward assistant narrative text so live transcript matches JSONL hydration.
+    const textBlocks = content
+      .filter((item) => item.type === 'text' && typeof item.text === 'string')
+      .map((item) => ({ type: 'text' as const, text: item.text as string }));
+
+    if (textBlocks.length === 0) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'assistant_no_text_content',
+      });
+      return;
+    }
+
+    const msgRecord = msg as Record<string, unknown>;
+    const messageRecord = (msgWithType.message as Record<string, unknown> | undefined) ?? {};
+    const assistantTextMsg = {
+      ...msgRecord,
+      message: {
+        ...messageRecord,
+        content: textBlocks,
+      },
+    };
+
+    const order = messageStateService.allocateOrder(dbSessionId);
+    const wsMsg = { type: 'claude_message', data: assistantTextMsg, order };
+    messageStateService.storeEvent(dbSessionId, wsMsg);
+    chatConnectionService.forwardToSession(dbSessionId, wsMsg);
+  }
+
+  private forwardUserMessageWithToolResult(
+    dbSessionId: string,
+    msg: unknown,
+    msgWithType: {
+      uuid?: string;
+      message?: { content?: Array<{ type?: string }> };
+    },
+    pendingToolNames: Map<string, string>,
+    pendingToolInputs: Map<string, Record<string, unknown>>,
+    context: EventForwarderContext
+  ): void {
+    // Forward user message UUID for rewind functionality.
+    if (msgWithType.uuid) {
+      const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid };
+      messageStateService.storeEvent(dbSessionId, uuidMsg);
+      chatConnectionService.forwardToSession(dbSessionId, uuidMsg);
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Forwarding user message UUID', {
+          dbSessionId,
+          uuid: msgWithType.uuid,
+        });
+      }
+    }
+
+    const content = msgWithType.message?.content;
+    if (!Array.isArray(content)) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'no_array_content',
+      });
+      return;
+    }
+
+    const hasToolResult = content.some((item) => item.type === 'tool_result');
+    if (!hasToolResult) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'no_tool_result_content',
+        content_types: content.map((c) => c.type),
+      });
+      return;
+    }
+
+    this.notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
+      sessionId: dbSessionId,
+      workspaceId: context.workspaceId,
+      workingDir: context.workingDir,
+    });
+
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Forwarding user message with tool_result', { dbSessionId });
+    }
+    sessionFileLogger.log(dbSessionId, 'INFO', {
+      action: 'forwarding_user_message_with_tool_result',
+    });
+
+    const order = messageStateService.allocateOrder(dbSessionId);
+    const wsMsg = { type: 'claude_message', data: msg, order };
+    messageStateService.storeEvent(dbSessionId, wsMsg);
+    chatConnectionService.forwardToSession(dbSessionId, wsMsg);
   }
 
   /**
