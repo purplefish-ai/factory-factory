@@ -117,7 +117,6 @@ class SessionStoreService {
           type: 'assistant',
           message: { role: 'assistant', content: [{ type: 'text', text: msg.content }] },
         };
-      case 'user':
       default:
         return {
           type: 'user',
@@ -207,7 +206,8 @@ class SessionStoreService {
     store: SessionStore,
     updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'> & {
       lastExit?: SessionRuntimeState['lastExit'];
-    }
+    },
+    options?: { emitDelta?: boolean }
   ): void {
     store.runtime = {
       ...store.runtime,
@@ -218,10 +218,12 @@ class SessionStoreService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.emitDelta(store.sessionId, {
-      type: 'session_runtime_updated',
-      sessionRuntime: store.runtime,
-    });
+    if (options?.emitDelta !== false) {
+      this.emitDelta(store.sessionId, {
+        type: 'session_runtime_updated',
+        sessionRuntime: store.runtime,
+      });
+    }
   }
 
   async subscribe(options: {
@@ -247,17 +249,25 @@ class SessionStoreService {
     }
 
     if (isRunning) {
-      this.markRuntime(store, {
-        phase: isWorking ? 'running' : 'idle',
-        processState: 'alive',
-        activity: isWorking ? 'WORKING' : 'IDLE',
-      });
+      this.markRuntime(
+        store,
+        {
+          phase: isWorking ? 'running' : 'idle',
+          processState: 'alive',
+          activity: isWorking ? 'WORKING' : 'IDLE',
+        },
+        { emitDelta: false }
+      );
     } else {
-      this.markRuntime(store, {
-        phase: 'idle',
-        processState: 'stopped',
-        activity: 'IDLE',
-      });
+      this.markRuntime(
+        store,
+        {
+          phase: 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
+        },
+        { emitDelta: false }
+      );
     }
 
     this.forwardSnapshot(store, { loadRequestId });

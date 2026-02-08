@@ -5,9 +5,10 @@ import { sessionStoreService } from '../../session-store.service';
 import type { ChatMessageHandler } from '../types';
 
 export function createGetQueueHandler(): ChatMessageHandler<GetQueueMessage> {
-  return async ({ sessionId, workingDir }) => {
+  return async ({ ws, sessionId, workingDir }) => {
     const dbSession = await claudeSessionAccessor.findById(sessionId);
     if (!dbSession) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
       return;
     }
     const existingClient = sessionService.getClient(sessionId);

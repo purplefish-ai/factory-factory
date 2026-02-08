@@ -1,4 +1,3 @@
-import type { WebSocket } from 'ws';
 import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import { AskUserQuestionInputSchema, safeParseToolInput } from '../../schemas/tool-inputs.schema';
 import { createLogger } from '../logger.service';
@@ -9,7 +8,6 @@ import { DEBUG_CHAT_WS } from './constants';
 const logger = createLogger('chat-message-handlers');
 
 export function tryHandleAsInteractiveResponse(
-  ws: WebSocket,
   sessionId: string,
   messageId: string,
   text: string
@@ -18,11 +16,10 @@ export function tryHandleAsInteractiveResponse(
   if (!pendingRequest) {
     return false;
   }
-  return handleMessageAsInteractiveResponse(ws, sessionId, messageId, text, pendingRequest);
+  return handleMessageAsInteractiveResponse(sessionId, messageId, text, pendingRequest);
 }
 
 function handleMessageAsInteractiveResponse(
-  ws: WebSocket,
   sessionId: string,
   messageId: string,
   text: string,
@@ -84,10 +81,9 @@ function handleMessageAsInteractiveResponse(
   // Always notify frontend - clears pending state and displays the message
   // This happens outside try/catch to ensure frontend state is always updated
   try {
-    ws.send(JSON.stringify(responseEvent));
     sessionStoreService.emitDelta(sessionId, responseEvent);
   } catch (sendError) {
-    // WebSocket send failed - frontend will recover on reconnect
+    // Delta send failed - frontend will recover on reconnect
     logger.warn('[Chat WS] Failed to send message_used_as_response event', {
       sessionId,
       messageId,

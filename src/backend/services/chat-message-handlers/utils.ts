@@ -1,9 +1,6 @@
 import type { QueuedMessage } from '@/shared/claude';
 import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
-import { createLogger } from '../logger.service';
-import { DEBUG_CHAT_WS, isValidModel } from './constants';
-
-const logger = createLogger('chat-message-handlers');
+import { isValidModel } from './constants';
 
 export function getValidModel(message: StartMessageInput): string | undefined {
   const requestedModel = message.selectedModel || message.model;
@@ -27,10 +24,4 @@ export function buildQueuedMessage(
       : { selectedModel: validModel, thinkingEnabled: false, planModeEnabled: false },
     timestamp: new Date().toISOString(),
   };
-}
-
-export function logMessageQueued(sessionId: string, queuedMsg: QueuedMessage): void {
-  if (DEBUG_CHAT_WS) {
-    logger.info('[Chat WS] Message queued', { sessionId, messageId: queuedMsg.id });
-  }
 }

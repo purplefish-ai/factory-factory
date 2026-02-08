@@ -52,6 +52,11 @@ describe('SessionStoreService', () => {
       loadRequestId: 'load-1',
     });
 
+    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
+    expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
+      type: 'session_snapshot',
+    });
+
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
       's1',
       expect.objectContaining({
@@ -67,6 +72,28 @@ describe('SessionStoreService', () => {
     const payload = snapshotCall?.[1] as { messages?: Array<{ text?: string }> };
     expect(payload.messages?.length).toBe(2);
     expect(payload.messages?.[0]?.text).toBe('hello');
+  });
+
+  it('subscribe does not emit session_delta before session_snapshot', async () => {
+    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: null,
+      isRunning: true,
+      isWorking: true,
+    });
+
+    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
+    expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
+      type: 'session_snapshot',
+      sessionRuntime: expect.objectContaining({
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+      }),
+    });
   });
 
   it('enqueue adds queued message and emits updated snapshot', () => {

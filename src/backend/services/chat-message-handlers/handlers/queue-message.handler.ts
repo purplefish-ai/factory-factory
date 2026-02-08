@@ -52,7 +52,7 @@ export function createQueueMessageHandler(
     // This handles the case where user pastes large text that becomes an attachment
     const messageId = message.id;
     const responseText = text || extractTextFromAttachments(message.attachments);
-    if (responseText && tryHandleAsInteractiveResponse(ws, sessionId, messageId, responseText)) {
+    if (responseText && tryHandleAsInteractiveResponse(sessionId, messageId, responseText)) {
       return;
     }
 
