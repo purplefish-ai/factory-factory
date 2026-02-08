@@ -113,9 +113,9 @@ export function insertMessageByOrder(
  * Uses centralized transcript policy for consistency.
  */
 function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
-  // User messages: use shared policy
-  if (claudeMsg.type === 'user' && claudeMsg.message) {
-    return shouldIncludeUserMessage(claudeMsg.message);
+  // User messages: use shared policy (no payload = exclude)
+  if (claudeMsg.type === 'user') {
+    return claudeMsg.message ? shouldIncludeUserMessage(claudeMsg.message) : false;
   }
 
   // Result messages are always stored
