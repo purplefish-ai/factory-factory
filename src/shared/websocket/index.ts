@@ -3,8 +3,6 @@ export {
   type ChatMessageInput,
   ChatMessageSchema,
   ChatSettingsSchema,
-  type GetHistoryMessage,
-  type GetQueueMessage,
   type ListSessionsMessage,
   type LoadSessionMessage,
   type PermissionResponseMessage,

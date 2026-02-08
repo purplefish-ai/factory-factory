@@ -234,14 +234,6 @@ export type ChatAction =
   | { type: 'RESET_FOR_SESSION_SWITCH' }
   // Message state machine actions (primary protocol)
   | {
-      type: 'MESSAGES_SNAPSHOT';
-      payload: {
-        /** Pre-built ChatMessages from backend - ready to use directly */
-        messages: ChatMessage[];
-        pendingInteractiveRequest?: PendingInteractiveRequest | null;
-      };
-    }
-  | {
       type: 'SESSION_SNAPSHOT';
       payload: {
         messages: ChatMessage[];

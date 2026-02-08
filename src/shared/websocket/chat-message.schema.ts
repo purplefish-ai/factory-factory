@@ -70,17 +70,11 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Stop the session
   z.object({ type: z.literal('stop') }),
 
-  // Get session history
-  z.object({ type: z.literal('get_history') }),
-
   // Load session data
   z.object({
     type: z.literal('load_session'),
     loadRequestId: z.string().min(1).optional(),
   }),
-
-  // Get queued messages (lightweight alternative to load_session)
-  z.object({ type: z.literal('get_queue') }),
 
   // Answer a question from AskUserQuestion tool
   z.object({
@@ -129,9 +123,7 @@ export type UserInputMessage = Extract<ChatMessageInput, { type: 'user_input' }>
 export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message' }>;
 export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove_queued_message' }>;
 export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;
-export type GetHistoryMessage = Extract<ChatMessageInput, { type: 'get_history' }>;
 export type LoadSessionMessage = Extract<ChatMessageInput, { type: 'load_session' }>;
-export type GetQueueMessage = Extract<ChatMessageInput, { type: 'get_queue' }>;
 export type QuestionResponseMessage = Extract<ChatMessageInput, { type: 'question_response' }>;
 export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permission_response' }>;
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;

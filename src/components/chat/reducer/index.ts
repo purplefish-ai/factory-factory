@@ -203,19 +203,6 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
   return null;
 }
 
-function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
-  if (!data.messages) {
-    return null;
-  }
-  return {
-    type: 'MESSAGES_SNAPSHOT',
-    payload: {
-      messages: data.messages,
-      pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
-    },
-  };
-}
-
 function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
   if (!(data.messages && data.queuedMessages && data.sessionRuntime)) {
     return null;
@@ -433,7 +420,6 @@ const messageHandlers: Record<string, MessageHandler> = {
   permission_cancelled: handlePermissionCancelledMessage,
   message_used_as_response: handleMessageUsedAsResponseMessage,
   session_snapshot: handleSessionSnapshot,
-  messages_snapshot: handleMessagesSnapshot,
   session_replay_batch: handleSessionReplayBatch,
   message_state_changed: handleMessageStateChanged,
   tool_progress: handleToolProgressMessage,
