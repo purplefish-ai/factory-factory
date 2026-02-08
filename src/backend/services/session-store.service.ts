@@ -27,7 +27,7 @@ interface SessionStore {
   sessionId: string;
   initialized: boolean;
   hydratePromise: Promise<void> | null;
-  lastKnownWorkingDir: string | null;
+  lastKnownProjectPath: string | null;
   lastKnownClaudeSessionId: string | null;
   transcript: ChatMessage[];
   queue: QueuedMessage[];
@@ -51,7 +51,7 @@ class SessionStoreService {
         sessionId,
         initialized: false,
         hydratePromise: null,
-        lastKnownWorkingDir: null,
+        lastKnownProjectPath: null,
         lastKnownClaudeSessionId: null,
         transcript: [],
         queue: [],
@@ -281,18 +281,19 @@ class SessionStoreService {
 
   async subscribe(options: {
     sessionId: string;
-    workingDir: string;
+    claudeProjectPath: string | null;
     claudeSessionId: string | null;
     isRunning: boolean;
     isWorking: boolean;
     loadRequestId?: string;
   }): Promise<void> {
-    const { sessionId, workingDir, claudeSessionId, isRunning, isWorking, loadRequestId } = options;
+    const { sessionId, claudeProjectPath, claudeSessionId, isRunning, isWorking, loadRequestId } =
+      options;
     const store = this.getOrCreate(sessionId);
-    store.lastKnownWorkingDir = workingDir;
+    store.lastKnownProjectPath = claudeProjectPath;
     store.lastKnownClaudeSessionId = claudeSessionId;
 
-    await this.ensureHydrated(store, { claudeSessionId, workingDir });
+    await this.ensureHydrated(store, { claudeSessionId, claudeProjectPath });
 
     if (isRunning) {
       this.markRuntime(
@@ -329,7 +330,7 @@ class SessionStoreService {
 
   private async ensureHydrated(
     store: SessionStore,
-    options: { claudeSessionId: string | null; workingDir: string }
+    options: { claudeSessionId: string | null; claudeProjectPath: string | null }
   ): Promise<void> {
     if (store.initialized) {
       return;
@@ -342,10 +343,10 @@ class SessionStoreService {
         store.nextOrder = 0;
         store.lastHydratedAt = null;
 
-        if (options.claudeSessionId) {
-          const history = await SessionManager.getHistory(
+        if (options.claudeSessionId && options.claudeProjectPath) {
+          const history = await SessionManager.getHistoryFromProjectPath(
             options.claudeSessionId,
-            options.workingDir
+            options.claudeProjectPath
           );
           store.transcript = this.buildTranscriptFromHistory(history);
           store.transcript.sort(messageSort);
@@ -580,10 +581,10 @@ class SessionStoreService {
 
     // Best-effort immediate refresh from JSONL so connected clients recover
     // without requiring a manual reload.
-    if (store.lastKnownWorkingDir && store.lastKnownClaudeSessionId) {
+    if (store.lastKnownProjectPath && store.lastKnownClaudeSessionId) {
       void this.ensureHydrated(store, {
         claudeSessionId: store.lastKnownClaudeSessionId,
-        workingDir: store.lastKnownWorkingDir,
+        claudeProjectPath: store.lastKnownProjectPath,
       })
         .then(() => {
           this.forwardSnapshot(store);

@@ -2,6 +2,7 @@ import { SessionStatus } from '@prisma-gen/client';
 import type { ClaudeClient, ClaudeClientOptions } from '../claude/index';
 import type { ResourceUsage } from '../claude/process';
 import type { RegisteredProcess } from '../claude/registry';
+import { SessionManager } from '../claude/session';
 import { createLogger } from './logger.service';
 import type {
   ClientCreatedCallback as ProcessClientCreatedCallback,
@@ -384,6 +385,8 @@ class SessionService {
     }
 
     await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
+    const claudeProjectPath = SessionManager.getProjectPath(sessionContext.workingDir);
+    await this.repository.updateSession(sessionId, { claudeProjectPath });
 
     const clientOptions: ClaudeClientOptions = {
       workingDir: sessionContext.workingDir,

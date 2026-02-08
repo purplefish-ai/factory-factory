@@ -58,10 +58,16 @@ export class SessionManager {
   }
 
   /**
-   * Get session history from JSONL file
+   * Get the path to a specific session file using a persisted Claude project path.
    */
-  static async getHistory(claudeSessionId: string, workingDir: string): Promise<HistoryMessage[]> {
-    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
+  static getSessionPathFromProjectPath(claudeSessionId: string, projectPath: string): string {
+    return join(projectPath, `${claudeSessionId}.jsonl`);
+  }
+
+  private static async parseHistoryFromPath(
+    claudeSessionId: string,
+    sessionPath: string
+  ): Promise<HistoryMessage[]> {
     const messages: HistoryMessage[] = [];
 
     try {
@@ -96,11 +102,30 @@ export class SessionManager {
     } catch (error) {
       // Return empty array if file doesn't exist or can't be read
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Error reading session', { claudeSessionId, error });
+        logger.warn('Error reading session', { claudeSessionId, sessionPath, error });
       }
     }
 
     return messages;
+  }
+
+  /**
+   * Get session history from JSONL file
+   */
+  static getHistory(claudeSessionId: string, workingDir: string): Promise<HistoryMessage[]> {
+    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
+    return SessionManager.parseHistoryFromPath(claudeSessionId, sessionPath);
+  }
+
+  /**
+   * Get session history using a persisted Claude project path.
+   */
+  static getHistoryFromProjectPath(
+    claudeSessionId: string,
+    projectPath: string
+  ): Promise<HistoryMessage[]> {
+    const sessionPath = SessionManager.getSessionPathFromProjectPath(claudeSessionId, projectPath);
+    return SessionManager.parseHistoryFromPath(claudeSessionId, sessionPath);
   }
 
   /**

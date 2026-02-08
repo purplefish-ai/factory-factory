@@ -9,7 +9,7 @@ vi.mock('../claude', async () => {
     ...actual,
     SessionManager: {
       ...actual.SessionManager,
-      getHistory: vi.fn(),
+      getHistoryFromProjectPath: vi.fn(),
     },
   };
 });
@@ -30,7 +30,7 @@ describe('SessionStoreService', () => {
   });
 
   it('hydrates from Claude history on first subscribe and emits session_snapshot', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'user',
         content: 'hello',
@@ -45,7 +45,7 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -75,7 +75,7 @@ describe('SessionStoreService', () => {
   });
 
   it('hydrates user attachments from Claude history into snapshot messages', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'user',
         content: '',
@@ -95,7 +95,7 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -114,7 +114,7 @@ describe('SessionStoreService', () => {
   });
 
   it('preserves tool_result is_error flag when hydrating history', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'tool_result',
         content: 'Tool failed',
@@ -126,7 +126,7 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -165,7 +165,7 @@ describe('SessionStoreService', () => {
       },
     ];
 
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'tool_result',
         content: structuredContent,
@@ -176,7 +176,7 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -208,11 +208,11 @@ describe('SessionStoreService', () => {
   });
 
   it('subscribe does not emit session_delta before session_snapshot', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
       isRunning: true,
       isWorking: true,
@@ -235,25 +235,25 @@ describe('SessionStoreService', () => {
     const historyPromise = new Promise<HydratedHistory>((resolve) => {
       resolveHistory = resolve;
     });
-    vi.mocked(SessionManager.getHistory).mockReturnValue(historyPromise);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockReturnValue(historyPromise);
 
     const firstSubscribe = sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
     const secondSubscribe = sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
 
     await Promise.resolve();
-    expect(SessionManager.getHistory).toHaveBeenCalledTimes(1);
+    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(1);
 
     resolveHistory([
       {
@@ -284,11 +284,11 @@ describe('SessionStoreService', () => {
         timestamp: '2026-02-01T00:00:01.000Z',
       },
     ];
-    vi.mocked(SessionManager.getHistory).mockResolvedValue(history);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -302,11 +302,11 @@ describe('SessionStoreService', () => {
 
     mockedConnectionService.forwardToSession.mockClear();
     sessionStoreService.clearSession('s1');
-    vi.mocked(SessionManager.getHistory).mockResolvedValue(history);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -321,7 +321,7 @@ describe('SessionStoreService', () => {
   });
 
   it('rehydrates from JSONL after process exit and replaces stale in-memory transcript', async () => {
-    vi.mocked(SessionManager.getHistory)
+    vi.mocked(SessionManager.getHistoryFromProjectPath)
       .mockResolvedValueOnce([
         {
           type: 'user',
@@ -339,7 +339,7 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -349,13 +349,13 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
 
-    expect(SessionManager.getHistory).toHaveBeenCalledTimes(2);
+    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
 
     const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
@@ -467,11 +467,11 @@ describe('SessionStoreService', () => {
   });
 
   it('markProcessExit treats exit code 0 as expected and keeps idle phase', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
       isRunning: true,
       isWorking: true,
@@ -496,11 +496,11 @@ describe('SessionStoreService', () => {
   });
 
   it('markProcessExit treats null exit code as unexpected and sets error phase', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
       isRunning: true,
       isWorking: true,
@@ -525,11 +525,11 @@ describe('SessionStoreService', () => {
   });
 
   it('clears stale lastExit after transitioning back to idle', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
       isRunning: true,
       isWorking: true,

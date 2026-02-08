@@ -145,6 +145,7 @@ describe('WorkspaceCreationService', () => {
       status: 'IDLE',
       model: 'sonnet',
       claudeSessionId: null,
+      claudeProjectPath: null,
       claudeProcessPid: null,
       createdAt: new Date(),
       updatedAt: new Date(),

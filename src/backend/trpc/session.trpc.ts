@@ -1,9 +1,11 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { SessionManager } from '../claude/session';
 import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
+import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
@@ -78,7 +80,14 @@ export const sessionRouter = router({
         });
       }
 
-      const session = await claudeSessionAccessor.create(input);
+      const workspace = await workspaceAccessor.findById(input.workspaceId);
+      const claudeProjectPath = workspace?.worktreePath
+        ? SessionManager.getProjectPath(workspace.worktreePath)
+        : null;
+      const session = await claudeSessionAccessor.create({
+        ...input,
+        claudeProjectPath,
+      });
       return session;
     }),
 

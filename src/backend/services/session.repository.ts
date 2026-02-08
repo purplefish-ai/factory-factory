@@ -10,7 +10,9 @@ type SessionAccessor = {
   findByWorkspaceId(workspaceId: string): Promise<ClaudeSession[]>;
   update(
     id: string,
-    data: Partial<Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId'>>
+    data: Partial<
+      Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'>
+    >
   ): Promise<ClaudeSession>;
   delete(id: string): Promise<ClaudeSession>;
 };
@@ -58,7 +60,9 @@ export class SessionRepository {
 
   updateSession(
     sessionId: string,
-    data: Partial<Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId'>>
+    data: Partial<
+      Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'>
+    >
   ): Promise<ClaudeSession> {
     return this.sessions.update(sessionId, data);
   }

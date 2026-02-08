@@ -117,6 +117,7 @@ const exportedClaudeSessionSchema = z.object({
   model: z.string(),
   status: SessionStatus,
   claudeSessionId: z.string().nullable(),
+  claudeProjectPath: z.string().nullable().optional(),
   claudeProcessPid: z.number().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
