@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { trpc } from '../lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '../lib/workspace-cache-helpers';
 
 /**
  * Shared hook for creating workspaces with consistent behavior across the app.
@@ -51,19 +52,7 @@ export function useCreateWorkspace(
           return old;
         }
 
-        // Set minimal workspace data with computed fields matching workspace.get endpoint
-        return {
-          ...workspace,
-          claudeSessions: [],
-          terminalSessions: [],
-          sidebarStatus: {
-            activityState: 'IDLE' as const,
-            ciState: 'NONE' as const,
-          },
-          ratchetButtonAnimated: false,
-          flowPhase: 'NO_PR' as const,
-          ciObservation: 'NOT_FETCHED' as const,
-        };
+        return createOptimisticWorkspaceCacheData(workspace);
       });
 
       utils.workspace.list.invalidate({ projectId });

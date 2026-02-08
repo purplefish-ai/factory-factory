@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 import type { GitHubIssue } from './kanban-context';
 
 interface IssueCardProps {
@@ -44,19 +45,7 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
           return old;
         }
 
-        // Set minimal workspace data with computed fields matching workspace.get endpoint
-        return {
-          ...workspace,
-          claudeSessions: [],
-          terminalSessions: [],
-          sidebarStatus: {
-            activityState: 'IDLE' as const,
-            ciState: 'NONE' as const,
-          },
-          ratchetButtonAnimated: false,
-          flowPhase: 'NO_PR' as const,
-          ciObservation: 'NOT_FETCHED' as const,
-        };
+        return createOptimisticWorkspaceCacheData(workspace);
       });
 
       // Invalidate workspace queries to refresh the board
