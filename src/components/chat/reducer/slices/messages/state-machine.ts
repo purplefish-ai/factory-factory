@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/lib/claude-types';
-import { MessageState } from '@/lib/claude-types';
+import { MessageState, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/claude-types';
 import { debugLog, insertMessageByOrder } from '../../helpers';
 import type { ChatAction, ChatState } from '../../types';
 
@@ -80,7 +80,7 @@ function handleAcceptedState(
     // Order is undefined for queued messages - use a large base value plus queuePosition
     // to ensure they appear at the end in queue order until dispatched with real order
     // Using 1 billion as base to leave room for real messages before queued messages
-    order: userMessage.order ?? 1_000_000_000 + (queuePosition ?? 0),
+    order: userMessage.order ?? QUEUED_MESSAGE_ORDER_BASE + (queuePosition ?? 0),
   };
 
   const newQueuedMessages = new Map(state.queuedMessages);
@@ -97,7 +97,11 @@ function handleAcceptedState(
   });
 
   const newLocalUserMessageIds = new Set(state.localUserMessageIds);
-  newLocalUserMessageIds.add(id);
+  // Replay hydration reuses ACCEPTED transitions to reconstruct UI state. Those
+  // messages are historical and must not be treated as locally-sent in this tab.
+  if (state.sessionStatus.phase !== 'loading') {
+    newLocalUserMessageIds.add(id);
+  }
 
   let newMessageIdToUuid = state.messageIdToUuid;
   let newPendingUuids = state.pendingUserMessageUuids;

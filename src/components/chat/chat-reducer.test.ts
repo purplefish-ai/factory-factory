@@ -67,13 +67,24 @@ function createTestAssistantMessage(): ClaudeMessage {
   };
 }
 
-function createTestResultMessage(): ClaudeMessage {
+function createTestThinkingAssistantMessage(): ClaudeMessage {
+  return {
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: 'Planning internally' }],
+    },
+  };
+}
+
+function createTestResultMessage(result?: unknown): ClaudeMessage {
   return {
     type: 'result',
     usage: { input_tokens: 100, output_tokens: 50 },
     duration_ms: 1000,
     total_cost_usd: 0.01,
     num_turns: 1,
+    ...(result !== undefined ? { result } : {}),
   };
 }
 
@@ -161,81 +172,59 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
-  // WS_STATUS Action
+  // Runtime Actions
   // -------------------------------------------------------------------------
 
-  describe('WS_STATUS action', () => {
-    it('should set sessionStatus to running when payload.running is true', () => {
-      const action: ChatAction = { type: 'WS_STATUS', payload: { running: true } };
-      const newState = chatReducer(initialState, action);
-
-      expect(newState.sessionStatus).toEqual({ phase: 'running' });
-    });
-
-    it('should set sessionStatus to ready when payload.running is false', () => {
-      const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
-      const action: ChatAction = { type: 'WS_STATUS', payload: { running: false } };
-      const newState = chatReducer(state, action);
-
-      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // WS_STARTING Action
-  // -------------------------------------------------------------------------
-
-  describe('WS_STARTING action', () => {
-    it('should set sessionStatus to starting', () => {
-      const action: ChatAction = { type: 'WS_STARTING' };
-      const newState = chatReducer(initialState, action);
-
-      expect(newState.sessionStatus).toEqual({ phase: 'starting' });
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // WS_STARTED Action
-  // -------------------------------------------------------------------------
-
-  describe('WS_STARTED action', () => {
-    it('should set sessionStatus to running', () => {
-      const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
-      const action: ChatAction = { type: 'WS_STARTED' };
-      const newState = chatReducer(state, action);
-
-      expect(newState.sessionStatus).toEqual({ phase: 'running' });
-    });
-
-    it('should clear latestThinking to prevent stale content flash', () => {
-      const state = {
-        ...initialState,
-        sessionStatus: { phase: 'starting' } as const,
-        latestThinking: 'Stale thinking from previous session',
+  describe('runtime actions', () => {
+    it('sets sessionStatus to running for SESSION_RUNTIME_UPDATED running payload', () => {
+      const action: ChatAction = {
+        type: 'SESSION_RUNTIME_UPDATED',
+        payload: {
+          sessionRuntime: {
+            phase: 'running',
+            processState: 'alive',
+            activity: 'WORKING',
+            updatedAt: '2026-02-08T00:00:00.000Z',
+          },
+        },
       };
-      const action: ChatAction = { type: 'WS_STARTED' };
-      const newState = chatReducer(state, action);
+      const newState = chatReducer(initialState, action);
 
-      expect(newState.latestThinking).toBeNull();
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
     });
-  });
 
-  // -------------------------------------------------------------------------
-  // WS_STOPPED Action
-  // -------------------------------------------------------------------------
-
-  describe('WS_STOPPED action', () => {
-    it('should set sessionStatus to ready', () => {
+    it('sets sessionStatus to ready for SESSION_RUNTIME_UPDATED idle payload', () => {
       const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
-      const action: ChatAction = { type: 'WS_STOPPED' };
+      const action: ChatAction = {
+        type: 'SESSION_RUNTIME_UPDATED',
+        payload: {
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-02-08T00:00:00.000Z',
+          },
+        },
+      };
       const newState = chatReducer(state, action);
 
       expect(newState.sessionStatus).toEqual({ phase: 'ready' });
     });
 
-    it('should clear lastExit info when receiving a plain stopped runtime event', () => {
+    it('clears lastExit info when runtime update omits lastExit', () => {
       const state = {
         ...initialState,
+        sessionRuntime: {
+          phase: 'error' as const,
+          processState: 'stopped' as const,
+          activity: 'IDLE' as const,
+          updatedAt: '2026-02-08T00:00:00.000Z',
+          lastExit: {
+            code: 1,
+            timestamp: '2026-02-03T12:00:00.000Z',
+            unexpected: true,
+          },
+        },
         processStatus: {
           state: 'stopped' as const,
           lastExit: {
@@ -245,7 +234,17 @@ describe('chatReducer', () => {
           },
         },
       };
-      const action: ChatAction = { type: 'WS_STOPPED' };
+      const action: ChatAction = {
+        type: 'SESSION_RUNTIME_UPDATED',
+        payload: {
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'stopped',
+            activity: 'IDLE',
+            updatedAt: '2026-02-08T00:00:00.000Z',
+          },
+        },
+      };
       const newState = chatReducer(state, action);
 
       expect(newState.processStatus).toEqual({ state: 'stopped' });
@@ -332,6 +331,21 @@ describe('chatReducer', () => {
       expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
+    it('should not duplicate Claude messages when the same order is received twice', () => {
+      const claudeMsg = createTestAssistantMessage();
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: claudeMsg, order: 42 },
+      };
+
+      const once = chatReducer(initialState, action);
+      const twice = chatReducer(once, action);
+
+      expect(twice.messages).toHaveLength(1);
+      expect(twice.messages[0]!.order).toBe(42);
+      expect(twice.messages[0]!.message).toEqual(claudeMsg);
+    });
+
     it('does not derive runtime phase changes from Claude message payloads', () => {
       const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();
@@ -357,6 +371,143 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(1);
     });
 
+    it('suppresses result message when it duplicates the latest assistant text', () => {
+      const assistantMsg = createTestAssistantMessage();
+      const assistantAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: assistantMsg, order: 0 },
+      };
+      const withAssistant = chatReducer(initialState, assistantAction);
+
+      const duplicateResult = createTestResultMessage('Hello!');
+      const resultAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: duplicateResult, order: 1 },
+      };
+      const withResult = chatReducer(withAssistant, resultAction);
+
+      expect(withResult.messages).toHaveLength(1);
+      expect(withResult.messages[0]!.message).toEqual(assistantMsg);
+      // Token stats should still update from result messages
+      expect(withResult.tokenStats.inputTokens).toBe(100);
+      expect(withResult.tokenStats.outputTokens).toBe(50);
+    });
+
+    it('suppresses duplicate result even when a queued placeholder is present', () => {
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'assistant',
+            message: { role: 'assistant', content: [{ type: 'text', text: 'Dup' }] },
+          },
+          order: 1,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'queued-1',
+          newState: MessageState.ACCEPTED,
+          queuePosition: 0,
+          userMessage: {
+            text: 'next question',
+            timestamp: '2026-02-08T00:00:02.000Z',
+          },
+        },
+      });
+
+      const withResult = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: createTestResultMessage('Dup'),
+          order: 2,
+        },
+      });
+
+      expect(withResult.messages).toHaveLength(2);
+      expect(withResult.messages[0]).toMatchObject({
+        source: 'claude',
+        message: { type: 'assistant' },
+      });
+      expect(withResult.messages[1]).toMatchObject({ source: 'user', text: 'next question' });
+    });
+
+    it('keeps result message when it differs from latest assistant text', () => {
+      const assistantMsg = createTestAssistantMessage();
+      const assistantAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: assistantMsg, order: 0 },
+      };
+      const withAssistant = chatReducer(initialState, assistantAction);
+
+      const distinctResult = createTestResultMessage('Different final text');
+      const resultAction: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: distinctResult, order: 1 },
+      };
+      const withResult = chatReducer(withAssistant, resultAction);
+
+      expect(withResult.messages).toHaveLength(2);
+      expect(withResult.messages[1]!.message).toEqual(distinctResult);
+    });
+
+    it('keeps result message when same text appeared only before latest user turn', () => {
+      let state = chatReducer(initialState, {
+        type: 'USER_MESSAGE_SENT',
+        payload: {
+          id: 'u1',
+          source: 'user',
+          text: 'first',
+          timestamp: '2026-02-08T00:00:00.000Z',
+          order: 0,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'assistant',
+            message: { role: 'assistant', content: [{ type: 'text', text: 'Same answer' }] },
+          },
+          order: 1,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'USER_MESSAGE_SENT',
+        payload: {
+          id: 'u2',
+          source: 'user',
+          text: 'second',
+          timestamp: '2026-02-08T00:00:01.000Z',
+          order: 2,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'assistant',
+            message: {
+              role: 'assistant',
+              content: [{ type: 'tool_use', id: 'tool-2', name: 'Bash', input: {} }],
+            },
+          },
+          order: 3,
+        },
+      });
+      const withResult = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: createTestResultMessage('Same answer'),
+          order: 4,
+        },
+      });
+
+      expect(withResult.messages).toHaveLength(5);
+      expect(withResult.messages[4]!.message).toMatchObject({ type: 'result' });
+    });
+
     it('should store tool_use messages and track index for O(1) updates', () => {
       const toolUseId = 'tool-use-123';
       const toolUseMsg = createTestToolUseMessage(toolUseId);
@@ -379,6 +530,18 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
+    });
+
+    it('should store assistant messages with thinking-only content', () => {
+      const thinkingAssistantMsg = createTestThinkingAssistantMessage();
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: thinkingAssistantMsg, order: 0 },
+      };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]!.message).toEqual(thinkingAssistantMsg);
     });
 
     it('should store tool_result messages from user type', () => {
@@ -499,16 +662,12 @@ describe('chatReducer', () => {
       expect(secondEvent?.content_block?.thinking).toBe('second');
     });
 
-    it('should not double-append thinking deltas when THINKING_DELTA and WS_CLAUDE_MESSAGE both run', () => {
+    it('should append latest thinking from stream events only', () => {
       let state = chatReducer(initialState, {
         type: 'WS_CLAUDE_MESSAGE',
         payload: { message: createTestThinkingMessage(), order: 0 },
       });
 
-      state = chatReducer(state, {
-        type: 'THINKING_DELTA',
-        payload: { thinking: ' +delta' },
-      });
       state = chatReducer(state, {
         type: 'WS_CLAUDE_MESSAGE',
         payload: {
@@ -1291,86 +1450,6 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
-  // THINKING_DELTA Action (Extended Thinking Mode)
-  // -------------------------------------------------------------------------
-
-  describe('THINKING_DELTA action', () => {
-    it('should accumulate thinking content from null', () => {
-      const state: ChatState = { ...initialState, latestThinking: null };
-      const action: ChatAction = {
-        type: 'THINKING_DELTA',
-        payload: { thinking: 'First thought' },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.latestThinking).toBe('First thought');
-    });
-
-    it('should accumulate thinking content from existing', () => {
-      const state: ChatState = { ...initialState, latestThinking: 'First thought' };
-      const action: ChatAction = {
-        type: 'THINKING_DELTA',
-        payload: { thinking: ' and second thought' },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.latestThinking).toBe('First thought and second thought');
-    });
-
-    it('should handle empty delta', () => {
-      const state: ChatState = { ...initialState, latestThinking: 'Existing' };
-      const action: ChatAction = {
-        type: 'THINKING_DELTA',
-        payload: { thinking: '' },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.latestThinking).toBe('Existing');
-    });
-
-    it('should not mutate stored thinking messages directly', () => {
-      const thinkingStart = createTestThinkingMessage();
-      let state = chatReducer(initialState, {
-        type: 'WS_CLAUDE_MESSAGE',
-        payload: { message: thinkingStart, order: 0 },
-      });
-
-      state = chatReducer(state, {
-        type: 'THINKING_DELTA',
-        payload: { thinking: ' +delta' },
-      });
-
-      const event = state.messages[0]?.message?.event as
-        | { content_block?: { thinking?: string } }
-        | undefined;
-      expect(event?.content_block?.thinking).toBe('Analyzing the problem...');
-      expect(state.latestThinking).toBe(' +delta');
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // THINKING_CLEAR Action
-  // -------------------------------------------------------------------------
-
-  describe('THINKING_CLEAR action', () => {
-    it('should clear thinking content', () => {
-      const state: ChatState = { ...initialState, latestThinking: 'Some thinking' };
-      const action: ChatAction = { type: 'THINKING_CLEAR' };
-      const newState = chatReducer(state, action);
-
-      expect(newState.latestThinking).toBeNull();
-    });
-
-    it('should handle clearing already null thinking', () => {
-      const state: ChatState = { ...initialState, latestThinking: null };
-      const action: ChatAction = { type: 'THINKING_CLEAR' };
-      const newState = chatReducer(state, action);
-
-      expect(newState.latestThinking).toBeNull();
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // CLEAR_CHAT Action
   // -------------------------------------------------------------------------
 
@@ -1492,7 +1571,15 @@ describe('chatReducer', () => {
                 order: 0,
               },
             },
-            { type: 'status', running: true, processAlive: true },
+            {
+              type: 'session_runtime_updated',
+              sessionRuntime: {
+                phase: 'running',
+                processState: 'alive',
+                activity: 'WORKING',
+                updatedAt: '2026-02-08T00:00:00.000Z',
+              },
+            },
           ],
         },
       };
@@ -1524,7 +1611,15 @@ describe('chatReducer', () => {
         payload: {
           replayEvents: [
             { type: 'claude_message', data: createTestResultMessage(), order: 0 },
-            { type: 'status', running: true, processAlive: true },
+            {
+              type: 'session_runtime_updated',
+              sessionRuntime: {
+                phase: 'running',
+                processState: 'alive',
+                activity: 'WORKING',
+                updatedAt: '2026-02-08T00:00:00.000Z',
+              },
+            },
           ],
         },
       };
@@ -1815,52 +1910,18 @@ describe('chatReducer', () => {
 // =============================================================================
 
 describe('createActionFromWebSocketMessage', () => {
-  it('should convert status message to WS_STATUS action', () => {
-    const wsMessage: WebSocketMessage = { type: 'status', running: true };
+  it('returns null for unknown legacy status-like message', () => {
+    const wsMessage = { type: 'status' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({
-      type: 'WS_STATUS',
-      payload: { running: true, processAlive: undefined },
-    });
+    expect(action).toBeNull();
   });
 
-  it('should default running to false if not provided in status message', () => {
-    const wsMessage: WebSocketMessage = { type: 'status' };
+  it('returns null for unknown legacy lifecycle-like messages', () => {
+    const wsMessage = { type: 'starting' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
-    expect(action).toEqual({
-      type: 'WS_STATUS',
-      payload: { running: false, processAlive: undefined },
-    });
-  });
-
-  it('should convert starting message to WS_STARTING action', () => {
-    const wsMessage: WebSocketMessage = { type: 'starting' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'WS_STARTING' });
-  });
-
-  it('should convert started message to WS_STARTED action', () => {
-    const wsMessage: WebSocketMessage = { type: 'started' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'WS_STARTED' });
-  });
-
-  it('should convert stopped message to WS_STOPPED action', () => {
-    const wsMessage: WebSocketMessage = { type: 'stopped' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'WS_STOPPED' });
-  });
-
-  it('should convert process_exit message to WS_PROCESS_EXIT action', () => {
-    const wsMessage: WebSocketMessage = { type: 'process_exit', code: 0 };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'WS_PROCESS_EXIT', payload: { code: 0 } });
+    expect(action).toBeNull();
   });
 
   it('should convert claude_message to WS_CLAUDE_MESSAGE action', () => {
@@ -1878,7 +1939,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for claude_message without data', () => {
-    const wsMessage: WebSocketMessage = { type: 'claude_message' };
+    const wsMessage = { type: 'claude_message' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -1892,7 +1953,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for error message without message field', () => {
-    const wsMessage: WebSocketMessage = { type: 'error' };
+    const wsMessage = { type: 'error' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -1914,7 +1975,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for sessions message without sessions field', () => {
-    const wsMessage: WebSocketMessage = { type: 'sessions' };
+    const wsMessage = { type: 'sessions' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -2042,14 +2103,14 @@ describe('createActionFromWebSocketMessage', () => {
   it('should convert session_replay_batch to SESSION_REPLAY_BATCH action', () => {
     const wsMessage: WebSocketMessage = {
       type: 'session_replay_batch',
-      replayEvents: [{ type: 'status', running: true }],
+      replayEvents: [{ type: 'error', message: 'legacy replay event' }],
     };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toEqual({
       type: 'SESSION_REPLAY_BATCH',
       payload: {
-        replayEvents: [{ type: 'status', running: true }],
+        replayEvents: [{ type: 'error', message: 'legacy replay event' }],
       },
     });
   });
@@ -2172,12 +2233,22 @@ describe('SDK Compaction Actions', () => {
     expect(newState.isCompacting).toBe(false);
   });
 
-  it('should reset isCompacting on WS_STOPPED', () => {
+  it('should reset isCompacting on stopped runtime update', () => {
     const state = createInitialChatState({
       isCompacting: true,
       sessionStatus: { phase: 'running' },
     });
-    const action: ChatAction = { type: 'WS_STOPPED' };
+    const action: ChatAction = {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:00.000Z',
+        },
+      },
+    };
 
     const newState = chatReducer(state, action);
 
@@ -2561,7 +2632,7 @@ describe('Token Stats Accumulation', () => {
   });
 
   describe('reducer slices', () => {
-    it('updates sessionStatus without touching messages for WS_STATUS', () => {
+    it('updates sessionStatus without touching messages for runtime updates', () => {
       const message: ChatMessage = {
         id: 'msg-1',
         source: 'user',
@@ -2574,7 +2645,17 @@ describe('Token Stats Accumulation', () => {
         sessionStatus: { phase: 'ready' },
       });
 
-      const action: ChatAction = { type: 'WS_STATUS', payload: { running: true } };
+      const action: ChatAction = {
+        type: 'SESSION_RUNTIME_UPDATED',
+        payload: {
+          sessionRuntime: {
+            phase: 'running',
+            processState: 'alive',
+            activity: 'WORKING',
+            updatedAt: '2026-02-08T00:00:00.000Z',
+          },
+        },
+      };
       const newState = chatReducer(state, action);
 
       expect(newState.sessionStatus.phase).toBe('running');

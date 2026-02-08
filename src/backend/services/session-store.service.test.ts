@@ -9,7 +9,7 @@ vi.mock('../claude', async () => {
     ...actual,
     SessionManager: {
       ...actual.SessionManager,
-      getHistory: vi.fn(),
+      getHistoryFromProjectPath: vi.fn(),
     },
   };
 });
@@ -23,14 +23,43 @@ vi.mock('./chat-connection.service', () => ({
 
 const mockedConnectionService = vi.mocked(chatConnectionService);
 
+function getReplayBatches(): Array<{
+  type?: string;
+  loadRequestId?: string;
+  replayEvents?: Record<string, unknown>[];
+}> {
+  return mockedConnectionService.forwardToSession.mock.calls
+    .map(
+      ([, payload]) =>
+        payload as {
+          type?: string;
+          loadRequestId?: string;
+          replayEvents?: Record<string, unknown>[];
+        }
+    )
+    .filter((payload) => payload.type === 'session_replay_batch');
+}
+
+function getLatestReplayBatch(): {
+  type?: string;
+  loadRequestId?: string;
+  replayEvents?: Record<string, unknown>[];
+} {
+  const latest = getReplayBatches().at(-1);
+  if (!latest) {
+    throw new Error('Expected at least one session_replay_batch payload');
+  }
+  return latest;
+}
+
 describe('SessionStoreService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStoreService.clearAllSessions();
   });
 
-  it('hydrates from Claude history on first subscribe and emits session_snapshot', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+  it('hydrates from Claude history on first subscribe and emits session_replay_batch', async () => {
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'user',
         content: 'hello',
@@ -45,7 +74,7 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -54,28 +83,42 @@ describe('SessionStoreService', () => {
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
     expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
-      type: 'session_snapshot',
+      type: 'session_replay_batch',
     });
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
       's1',
       expect.objectContaining({
-        type: 'session_snapshot',
+        type: 'session_replay_batch',
         loadRequestId: 'load-1',
       })
     );
 
-    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
-      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
+    const payload = getLatestReplayBatch();
+    const replayEvents = payload.replayEvents ?? [];
+    expect(replayEvents.length).toBeGreaterThan(0);
+    expect(replayEvents[0]).toMatchObject({
+      type: 'session_runtime_snapshot',
+    });
+    expect(replayEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'message_state_changed',
+          newState: 'ACCEPTED',
+          userMessage: expect.objectContaining({ text: 'hello' }),
+        }),
+        expect.objectContaining({
+          type: 'claude_message',
+          data: expect.objectContaining({
+            type: 'assistant',
+          }),
+        }),
+      ])
     );
-    expect(snapshotCall).toBeDefined();
-    const payload = snapshotCall?.[1] as { messages?: Array<{ text?: string }> };
-    expect(payload.messages?.length).toBe(2);
-    expect(payload.messages?.[0]?.text).toBe('hello');
   });
 
   it('hydrates user attachments from Claude history into snapshot messages', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'user',
         content: '',
@@ -95,38 +138,125 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
 
-    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
-      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
-    );
-    expect(snapshotCall).toBeDefined();
-    const payload = snapshotCall?.[1] as {
-      messages?: Array<{ source: string; attachments?: Array<{ id: string }> }>;
-    };
-    expect(payload.messages).toHaveLength(1);
-    expect(payload.messages?.[0]?.source).toBe('user');
-    expect(payload.messages?.[0]?.attachments?.[0]?.id).toBe('att-1');
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const accepted = replayEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === ''
+    ) as { userMessage?: { attachments?: Array<{ id?: string }> } } | undefined;
+    expect(accepted).toBeDefined();
+    expect(accepted?.userMessage?.attachments?.[0]?.id).toBe('att-1');
   });
 
-  it('subscribe does not emit session_delta before session_snapshot', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+  it('preserves tool_result is_error flag when hydrating history', async () => {
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
+      {
+        type: 'tool_result',
+        content: 'Tool failed',
+        toolId: 'tool-1',
+        isError: true,
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const claudeEvent = replayEvents.find(
+      (event) =>
+        event.type === 'claude_message' &&
+        (event.data as { type?: string } | undefined)?.type === 'user'
+    ) as
+      | {
+          data?: {
+            type?: string;
+            message?: { role?: string; content?: Array<{ type?: string; is_error?: boolean }> };
+          };
+        }
+      | undefined;
+    expect(claudeEvent).toBeDefined();
+    expect(claudeEvent?.data?.type).toBe('user');
+    expect(claudeEvent?.data?.message?.role).toBe('user');
+    expect(claudeEvent?.data?.message?.content?.[0]).toMatchObject({
+      type: 'tool_result',
+      is_error: true,
+    });
+  });
+
+  it('preserves structured tool_result content when hydrating history', async () => {
+    const structuredContent = [
+      {
+        type: 'image' as const,
+        source: { type: 'base64' as const, media_type: 'image/png', data: 'Zm9vYmFy' },
+      },
+    ];
+
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
+      {
+        type: 'tool_result',
+        content: structuredContent,
+        toolId: 'tool-2',
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const claudeEvent = replayEvents.find(
+      (event) =>
+        event.type === 'claude_message' &&
+        (event.data as { type?: string } | undefined)?.type === 'user'
+    ) as
+      | {
+          data?: {
+            message?: {
+              content?: Array<{ type?: string; content?: unknown }>;
+            };
+          };
+        }
+      | undefined;
+
+    expect(claudeEvent?.data?.message?.content?.[0]).toMatchObject({
+      type: 'tool_result',
+      content: structuredContent,
+    });
+  });
+
+  it('subscribe does not emit session_delta before session_replay_batch', async () => {
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
       isRunning: true,
       isWorking: true,
     });
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
-    expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
-      type: 'session_snapshot',
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    expect(replayEvents[0]).toMatchObject({
+      type: 'session_runtime_snapshot',
       sessionRuntime: expect.objectContaining({
         phase: 'running',
         processState: 'alive',
@@ -141,25 +271,25 @@ describe('SessionStoreService', () => {
     const historyPromise = new Promise<HydratedHistory>((resolve) => {
       resolveHistory = resolve;
     });
-    vi.mocked(SessionManager.getHistory).mockReturnValue(historyPromise);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockReturnValue(historyPromise);
 
     const firstSubscribe = sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
     const secondSubscribe = sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
 
     await Promise.resolve();
-    expect(SessionManager.getHistory).toHaveBeenCalledTimes(1);
+    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(1);
 
     resolveHistory([
       {
@@ -170,11 +300,115 @@ describe('SessionStoreService', () => {
     ]);
     await Promise.all([firstSubscribe, secondSubscribe]);
 
-    const snapshots = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
-      .filter((payload) => payload.type === 'session_snapshot');
-    expect(snapshots).toHaveLength(2);
-    expect(snapshots.at(-1)?.messages?.[0]?.text).toBe('hello from history');
+    const batches = getReplayBatches();
+    expect(batches).toHaveLength(2);
+    const latestEvents = batches.at(-1)?.replayEvents ?? [];
+    const accepted = latestEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === 'hello from history'
+    );
+    expect(accepted).toBeDefined();
+  });
+
+  it('rehydrates when claudeSessionId changes for the same db session', async () => {
+    vi.mocked(SessionManager.getHistoryFromProjectPath)
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'history one',
+          timestamp: '2026-02-01T00:00:00.000Z',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'history two',
+          timestamp: '2026-02-01T00:01:00.000Z',
+        },
+      ]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s2',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
+    const latestEvents = getLatestReplayBatch().replayEvents ?? [];
+    const accepted = latestEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === 'history two'
+    );
+    expect(accepted).toBeDefined();
+  });
+
+  it('ignores stale in-flight hydrate results when a newer hydrate starts', async () => {
+    type HydratedHistory = Array<{ type: 'user'; content: string; timestamp: string }>;
+    let resolveFirst!: (history: HydratedHistory) => void;
+    const firstHistoryPromise = new Promise<HydratedHistory>((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockImplementation((claudeSessionId) => {
+      if (claudeSessionId === 'claude-s1') {
+        return firstHistoryPromise;
+      }
+      return Promise.resolve([
+        {
+          type: 'user',
+          content: 'new hydrate',
+          timestamp: '2026-02-01T00:02:00.000Z',
+        },
+      ]);
+    });
+
+    const firstSubscribe = sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+    const secondSubscribe = sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s2',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    await secondSubscribe;
+    resolveFirst([
+      {
+        type: 'user',
+        content: 'stale hydrate',
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+    await firstSubscribe;
+
+    const latestEvents = getLatestReplayBatch().replayEvents ?? [];
+    const accepted = latestEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === 'new hydrate'
+    );
+    expect(accepted).toBeDefined();
   });
 
   it('uses deterministic fallback IDs for history entries without uuid', async () => {
@@ -190,44 +424,43 @@ describe('SessionStoreService', () => {
         timestamp: '2026-02-01T00:00:01.000Z',
       },
     ];
-    vi.mocked(SessionManager.getHistory).mockResolvedValue(history);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
 
-    const firstSnapshot = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ id: string }> })
-      .find((payload) => payload.type === 'session_snapshot');
-    expect(firstSnapshot?.messages).toBeDefined();
-    const firstIds = firstSnapshot?.messages?.map((m) => m.id) ?? [];
+    const firstEvents = getLatestReplayBatch().replayEvents ?? [];
+    const firstIds = firstEvents
+      .filter((event) => event.type === 'message_state_changed' && event.newState === 'ACCEPTED')
+      .map((event) => event.id as string);
 
     mockedConnectionService.forwardToSession.mockClear();
     sessionStoreService.clearSession('s1');
-    vi.mocked(SessionManager.getHistory).mockResolvedValue(history);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
 
-    const secondSnapshot = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ id: string }> })
-      .find((payload) => payload.type === 'session_snapshot');
-    const secondIds = secondSnapshot?.messages?.map((m) => m.id) ?? [];
+    const secondEvents = getLatestReplayBatch().replayEvents ?? [];
+    const secondIds = secondEvents
+      .filter((event) => event.type === 'message_state_changed' && event.newState === 'ACCEPTED')
+      .map((event) => event.id as string);
 
     expect(secondIds).toEqual(firstIds);
   });
 
   it('rehydrates from JSONL after process exit and replaces stale in-memory transcript', async () => {
-    vi.mocked(SessionManager.getHistory)
+    vi.mocked(SessionManager.getHistoryFromProjectPath)
       .mockResolvedValueOnce([
         {
           type: 'user',
@@ -245,7 +478,7 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
@@ -255,13 +488,13 @@ describe('SessionStoreService', () => {
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
       isRunning: false,
       isWorking: false,
     });
 
-    expect(SessionManager.getHistory).toHaveBeenCalledTimes(2);
+    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
 
     const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
@@ -269,6 +502,57 @@ describe('SessionStoreService', () => {
       .at(-1);
     expect(latestSnapshot?.messages).toHaveLength(1);
     expect(latestSnapshot?.messages?.[0]?.text).toBe('fresh transcript from jsonl');
+  });
+
+  it('emits reset snapshot first, then hydrated snapshot on process exit', async () => {
+    type HydratedHistory = Array<{ type: 'user'; content: string; timestamp: string }>;
+    let resolveRehydrate!: (history: HydratedHistory) => void;
+    const rehydratePromise = new Promise<HydratedHistory>((resolve) => {
+      resolveRehydrate = resolve;
+    });
+
+    vi.mocked(SessionManager.getHistoryFromProjectPath)
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'before exit',
+          timestamp: '2026-02-01T00:00:00.000Z',
+        },
+      ])
+      .mockReturnValueOnce(rehydratePromise);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    mockedConnectionService.forwardToSession.mockClear();
+    sessionStoreService.markProcessExit('s1', 1);
+
+    const immediateSnapshots = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: unknown[] })
+      .filter((payload) => payload.type === 'session_snapshot');
+    expect(immediateSnapshots).toHaveLength(1);
+    expect(immediateSnapshots[0]?.messages).toEqual([]);
+
+    resolveRehydrate([
+      {
+        type: 'user',
+        content: 'after exit',
+        timestamp: '2026-02-01T00:05:00.000Z',
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const snapshotsAfterRehydrate = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
+      .filter((payload) => payload.type === 'session_snapshot');
+    expect(snapshotsAfterRehydrate).toHaveLength(2);
+    const latestSnapshot = snapshotsAfterRehydrate.at(-1);
+    expect(latestSnapshot?.messages?.[0]?.text).toBe('after exit');
   });
 
   it('enqueue adds queued message and emits updated snapshot', () => {
@@ -373,11 +657,11 @@ describe('SessionStoreService', () => {
   });
 
   it('markProcessExit treats exit code 0 as expected and keeps idle phase', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
       isRunning: true,
       isWorking: true,
@@ -402,11 +686,11 @@ describe('SessionStoreService', () => {
   });
 
   it('markProcessExit treats null exit code as unexpected and sets error phase', async () => {
-    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
-      workingDir: '/tmp',
+      claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
       isRunning: true,
       isWorking: true,
@@ -428,5 +712,208 @@ describe('SessionStoreService', () => {
         unexpected: true,
       },
     });
+  });
+
+  it('clears stale lastExit after transitioning back to idle', async () => {
+    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: null,
+      isRunning: true,
+      isWorking: true,
+    });
+
+    sessionStoreService.markProcessExit('s1', 1);
+    sessionStoreService.markIdle('s1', 'alive');
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; sessionRuntime?: { lastExit?: unknown } })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(snapshotCall).toBeDefined();
+    expect(snapshotCall?.sessionRuntime).toBeDefined();
+    expect(snapshotCall?.sessionRuntime?.lastExit).toBeUndefined();
+  });
+
+  it('does not persist duplicate result text when latest assistant text matches', () => {
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'There are **514 TypeScript files**.' }],
+      },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: 'There are **514 TypeScript files**.',
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ source: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(snapshotCall?.messages).toHaveLength(1);
+    expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
+  });
+
+  it('does not consume order for filtered non-persisted events', () => {
+    const filteredOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'stream_event',
+      event: { type: 'message_start', message: { role: 'assistant', content: [] } },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+    const persistedOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    expect(filteredOrder).toBe(0);
+    expect(persistedOrder).toBe(1);
+  });
+
+  it('does not consume order for duplicate result suppression', () => {
+    const assistantOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'same text' }] },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+    const duplicateResultOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: 'same text',
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+    const nextAssistantOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'tool-1', name: 'Read', input: {} }],
+      },
+      timestamp: '2026-02-08T00:00:02.000Z',
+    });
+
+    expect(assistantOrder).toBe(0);
+    expect(duplicateResultOrder).toBe(1);
+    expect(nextAssistantOrder).toBe(2);
+  });
+
+  it('suppresses duplicate result when payload is structured object text', () => {
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'structured answer' }] },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+
+    const duplicateResultOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: { text: 'structured answer' },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ source: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(duplicateResultOrder).toBe(1);
+    expect(snapshotCall?.messages).toHaveLength(1);
+    expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
+  });
+
+  it('keeps result when matching text exists only in a previous turn', () => {
+    sessionStoreService.commitSentUserMessage('s1', {
+      id: 'u1',
+      text: 'first question',
+      timestamp: '2026-02-08T00:00:00.000Z',
+      settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+    });
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Same answer' }] },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.commitSentUserMessage('s1', {
+      id: 'u2',
+      text: 'second question',
+      timestamp: '2026-02-08T00:00:02.000Z',
+      settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+    });
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 't2', name: 'Bash', input: {} }],
+      },
+      timestamp: '2026-02-08T00:00:03.000Z',
+    });
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: 'Same answer',
+      timestamp: '2026-02-08T00:00:04.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(
+        ([, payload]) =>
+          payload as {
+            type?: string;
+            messages?: Array<{ source: string; message?: { type?: string } }>;
+          }
+      )
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+
+    expect(snapshotCall?.messages).toHaveLength(5);
+    expect(snapshotCall?.messages?.[4]).toMatchObject({
+      source: 'claude',
+      message: { type: 'result' },
+    });
+  });
+
+  it('does not persist non-renderable stream events in transcript snapshots', () => {
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'stream_event',
+      event: { type: 'message_start', message: { role: 'assistant', content: [] } },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'tool-1', name: 'Bash', input: {} },
+      },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(
+        ([, payload]) =>
+          payload as {
+            type?: string;
+            messages?: Array<{ message?: { type?: string; event?: { type?: string } } }>;
+          }
+      )
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+
+    expect(snapshotCall?.messages).toHaveLength(1);
+    expect(snapshotCall?.messages?.[0]?.message?.type).toBe('stream_event');
+    expect(snapshotCall?.messages?.[0]?.message?.event?.type).toBe('content_block_start');
   });
 });

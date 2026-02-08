@@ -80,10 +80,11 @@ class WorkspaceActivityService extends EventEmitter {
       return; // No state tracked for this workspace
     }
 
+    const wasActive = state.runningSessions.size > 0;
     state.runningSessions.delete(sessionId);
     state.lastActivityAt = new Date();
 
-    if (state.runningSessions.size === 0) {
+    if (wasActive && state.runningSessions.size === 0) {
       logger.info('All sessions finished in workspace', { workspaceId });
       this.emit('workspace_idle', {
         workspaceId,

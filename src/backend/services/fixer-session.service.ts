@@ -1,4 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
+import { SessionManager } from '../claude/session';
 import { prisma } from '../db';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
@@ -138,6 +139,13 @@ class FixerSessionService {
     });
 
     const model = recentSession?.model ?? 'sonnet';
+    const workspace = await tx.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { worktreePath: true },
+    });
+    const claudeProjectPath = workspace?.worktreePath
+      ? SessionManager.getProjectPath(workspace.worktreePath)
+      : null;
 
     const newSession = await tx.claudeSession.create({
       data: {
@@ -146,6 +154,7 @@ class FixerSessionService {
         name: input.sessionName,
         model,
         status: SessionStatus.IDLE,
+        claudeProjectPath,
       },
     });
 

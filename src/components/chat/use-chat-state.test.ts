@@ -610,14 +610,44 @@ describe('queue state transitions', () => {
       queuedMessages: toQueuedMessagesMap([queuedMsg]),
     });
 
-    // Simulate receiving various WS messages
-    let newState = chatReducer(state, { type: 'WS_STATUS', payload: { running: true } });
+    // Simulate receiving various runtime/session messages
+    let newState = chatReducer(state, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+          updatedAt: '2026-02-08T00:00:00.000Z',
+        },
+      },
+    });
     expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
 
-    newState = chatReducer(newState, { type: 'WS_STARTING' });
+    newState = chatReducer(newState, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'starting',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:01.000Z',
+        },
+      },
+    });
     expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
 
-    newState = chatReducer(newState, { type: 'WS_STOPPED' });
+    newState = chatReducer(newState, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:02.000Z',
+        },
+      },
+    });
     expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
   });
 });
@@ -686,11 +716,31 @@ describe('queue edge cases', () => {
     });
 
     // Start running
-    state = chatReducer(state, { type: 'WS_STATUS', payload: { running: true } });
+    state = chatReducer(state, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+          updatedAt: '2026-02-08T00:00:00.000Z',
+        },
+      },
+    });
     expect(shouldDrainOnStateChange('idle', state.sessionStatus.phase, 1)).toBe(false);
 
     // Stop running (becomes ready)
-    state = chatReducer(state, { type: 'WS_STATUS', payload: { running: false } });
+    state = chatReducer(state, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:01.000Z',
+        },
+      },
+    });
     expect(shouldDrainOnStateChange('running', state.sessionStatus.phase, 1)).toBe(true);
   });
 });

@@ -201,6 +201,7 @@ model ClaudeSession {
   model            String        @default("sonnet")
   status           SessionStatus @default(IDLE)
   claudeSessionId  String?       // For resume
+  claudeProjectPath String?      // Persisted ~/.claude/projects/<escaped-path> for history lookup
   claudeProcessPid Int?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt

@@ -22,6 +22,11 @@ import type {
   ToolUseContent,
   WebSocketMessage,
 } from '@/shared/claude';
+import {
+  CLAUDE_MESSAGE_TYPES,
+  SESSION_DELTA_EXCLUDED_MESSAGE_TYPES,
+  WEBSOCKET_MESSAGE_TYPES,
+} from '@/shared/claude';
 
 // =============================================================================
 // UI Chat Message Group Types
@@ -89,6 +94,10 @@ export function isImageContent(item: ClaudeContentItem): item is ImageContent {
   return item.type === 'image' && 'source' in item;
 }
 
+const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
+const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
+const claudeMessageTypes = new Set<string>(CLAUDE_MESSAGE_TYPES);
+
 /**
  * Type guard to validate unknown data is a WebSocketMessage.
  * Used for type-safe parsing of incoming WebSocket data.
@@ -97,8 +106,34 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
   if (typeof data !== 'object' || data === null) {
     return false;
   }
-  const obj = data as { type?: unknown };
-  return typeof obj.type === 'string';
+  const obj = data as { type?: unknown; data?: unknown };
+  if (typeof obj.type !== 'string' || !wsMessageTypes.has(obj.type)) {
+    return false;
+  }
+
+  // session_delta must wrap another websocket event object.
+  if (obj.type === 'session_delta') {
+    if (typeof obj.data !== 'object' || obj.data === null) {
+      return false;
+    }
+    const nested = obj.data as { type?: unknown };
+    return (
+      typeof nested.type === 'string' &&
+      wsMessageTypes.has(nested.type) &&
+      !sessionDeltaExcludedMessageTypes.has(nested.type)
+    );
+  }
+
+  // claude_message must include a minimally shaped Claude payload to avoid runtime crashes.
+  if (obj.type === 'claude_message') {
+    if (typeof obj.data !== 'object' || obj.data === null) {
+      return false;
+    }
+    const nested = obj.data as { type?: unknown };
+    return typeof nested.type === 'string' && claudeMessageTypes.has(nested.type);
+  }
+
+  return true;
 }
 
 /**
@@ -106,8 +141,8 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
  */
 export function isWsClaudeMessage(
   msg: WebSocketMessage
-): msg is WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage } {
-  return msg.type === 'claude_message' && 'data' in msg && msg.data != null;
+): msg is Extract<WebSocketMessage, { type: 'claude_message' }> {
+  return msg.type === 'claude_message' && typeof msg.data === 'object' && msg.data !== null;
 }
 
 /**
@@ -279,6 +314,12 @@ export function extractTextFromMessage(msg: ClaudeMessage): string {
 export function extractToolInfo(
   msg: ClaudeMessage
 ): { name: string; id: string; input: Record<string, unknown> } | null {
+  const normalizeToolInput = (input: unknown): Record<string, unknown> => {
+    return typeof input === 'object' && input !== null && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  };
+
   // Check stream events for tool use
   if (msg.type === 'stream_event' && msg.event) {
     if (msg.event.type === 'content_block_start') {
@@ -287,7 +328,7 @@ export function extractToolInfo(
         return {
           name: block.name,
           id: block.id,
-          input: block.input,
+          input: normalizeToolInput(block.input),
         };
       }
     }
@@ -301,7 +342,7 @@ export function extractToolInfo(
         return {
           name: item.name,
           id: item.id,
-          input: item.input,
+          input: normalizeToolInput(item.input),
         };
       }
     }

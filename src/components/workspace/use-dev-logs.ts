@@ -7,7 +7,7 @@ import { buildWebSocketUrl } from '@/lib/websocket-config';
 // =============================================================================
 
 interface DevLogsMessage {
-  type: 'output' | 'status';
+  type: 'output';
   data?: string;
 }
 
@@ -51,8 +51,6 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
         setOutput((prev) => prev + message.data);
         // Scroll to bottom after a short delay to allow render
         setTimeout(scrollToBottom, 10);
-      } else if (message.type === 'status') {
-        setOutput((prev) => `${prev}Status: ${JSON.stringify(message)}\n`);
       }
     },
     [scrollToBottom]

@@ -14,6 +14,7 @@ import {
   DEFAULT_THINKING_BUDGET,
   MessageState,
   type QueuedMessage,
+  resolveSelectedModel,
 } from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
 import type { ClaudeClient } from '../claude/index';
@@ -115,6 +116,11 @@ class ChatMessageHandlerService {
           error: error instanceof Error ? error.message : String(error),
         });
         sessionStoreService.requeueFront(dbSessionId, msg);
+        // Avoid clobbering markProcessExit() runtime/lastExit when the process
+        // has already stopped and exit handling is in flight.
+        if (client.isRunning()) {
+          sessionStoreService.markIdle(dbSessionId, 'alive');
+        }
       }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
@@ -229,7 +235,10 @@ class ChatMessageHandlerService {
         text: msg.text,
         timestamp: msg.timestamp,
         attachments: msg.attachments,
-        settings: msg.settings,
+        settings: {
+          ...msg.settings,
+          selectedModel: resolveSelectedModel(msg.settings.selectedModel),
+        },
         order,
       },
     });

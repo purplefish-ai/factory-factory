@@ -1,4 +1,5 @@
 import type { LoadSessionMessage } from '@/shared/websocket';
+import { SessionManager } from '../../../claude/session';
 import { claudeSessionAccessor } from '../../../resource_accessors/claude-session.accessor';
 import { sessionService } from '../../session.service';
 import { sessionStoreService } from '../../session-store.service';
@@ -6,17 +7,37 @@ import { slashCommandCacheService } from '../../slash-command-cache.service';
 import type { ChatMessageHandler } from '../types';
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
-  return async ({ ws, sessionId, workingDir, message }) => {
+  return async ({ ws, sessionId, message }) => {
     const dbSession = await claudeSessionAccessor.findById(sessionId);
     if (!dbSession) {
       ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
       return;
     }
 
+    const workspaceProjectPath = dbSession.workspace.worktreePath
+      ? SessionManager.getProjectPath(dbSession.workspace.worktreePath)
+      : null;
+    let claudeProjectPath = dbSession.claudeProjectPath ?? workspaceProjectPath;
+    if (
+      dbSession.claudeSessionId &&
+      dbSession.claudeProjectPath &&
+      workspaceProjectPath &&
+      dbSession.claudeProjectPath !== workspaceProjectPath &&
+      !SessionManager.hasSessionFileFromProjectPath(
+        dbSession.claudeSessionId,
+        dbSession.claudeProjectPath
+      ) &&
+      SessionManager.hasSessionFileFromProjectPath(dbSession.claudeSessionId, workspaceProjectPath)
+    ) {
+      // Persisted path can become stale after worktree moves; prefer live workspace path when it
+      // clearly contains the session file.
+      claudeProjectPath = workspaceProjectPath;
+    }
+
     const existingClient = sessionService.getClient(sessionId);
     await sessionStoreService.subscribe({
       sessionId,
-      workingDir,
+      claudeProjectPath,
       claudeSessionId: dbSession.claudeSessionId,
       isRunning: existingClient?.isRunning() ?? false,
       isWorking: existingClient?.isWorking() ?? false,
@@ -36,6 +57,6 @@ async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void>
   const slashCommandsMsg = {
     type: 'slash_commands',
     slashCommands: cached,
-  };
+  } as const;
   sessionStoreService.emitDelta(sessionId, slashCommandsMsg);
 }

@@ -6,6 +6,7 @@ interface CreateClaudeSessionInput {
   name?: string;
   workflow: string;
   model?: string;
+  claudeProjectPath?: string | null;
 }
 
 interface UpdateClaudeSessionInput {
@@ -14,6 +15,7 @@ interface UpdateClaudeSessionInput {
   model?: string;
   status?: SessionStatus;
   claudeSessionId?: string | null;
+  claudeProjectPath?: string | null;
   claudeProcessPid?: number | null;
 }
 
@@ -35,6 +37,7 @@ class ClaudeSessionAccessor {
         name: data.name,
         workflow: data.workflow,
         model: data.model ?? 'sonnet',
+        claudeProjectPath: data.claudeProjectPath ?? null,
       },
     });
   }

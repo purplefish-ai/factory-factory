@@ -145,6 +145,7 @@ describe('WorkspaceCreationService', () => {
       status: 'IDLE',
       model: 'sonnet',
       claudeSessionId: null,
+      claudeProjectPath: null,
       claudeProcessPid: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -361,6 +362,7 @@ describe('WorkspaceCreationService', () => {
           workspaceId: 'ws-123',
           workflow: 'followup',
           name: 'Chat 1',
+          claudeProjectPath: null,
         });
       });
 

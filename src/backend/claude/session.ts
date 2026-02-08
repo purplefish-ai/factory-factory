@@ -1,10 +1,13 @@
+import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { MessageAttachment } from '@/shared/claude';
+import type { HistoryMessage } from '@/shared/claude';
 import { createLogger } from '../services/logger.service';
 import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
+
+export type { HistoryMessage } from '@/shared/claude';
 
 const logger = createLogger('session');
 
@@ -22,22 +25,6 @@ const SessionJsonlEntrySchema = z
     message: z.any().optional(),
   })
   .passthrough();
-
-/**
- * Represents a message from session history
- */
-export interface HistoryMessage {
-  type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking';
-  content: string;
-  timestamp: string;
-  uuid?: string;
-  attachments?: MessageAttachment[];
-  // Tool-specific fields
-  toolName?: string;
-  toolId?: string;
-  toolInput?: Record<string, unknown>;
-  isError?: boolean;
-}
 
 /**
  * Information about a Claude CLI session (from ~/.claude/projects/).
@@ -72,10 +59,21 @@ export class SessionManager {
   }
 
   /**
-   * Get session history from JSONL file
+   * Get the path to a specific session file using a persisted Claude project path.
    */
-  static async getHistory(claudeSessionId: string, workingDir: string): Promise<HistoryMessage[]> {
-    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
+  static getSessionPathFromProjectPath(claudeSessionId: string, projectPath: string): string {
+    return join(projectPath, `${claudeSessionId}.jsonl`);
+  }
+
+  static hasSessionFileFromProjectPath(claudeSessionId: string, projectPath: string): boolean {
+    const sessionPath = SessionManager.getSessionPathFromProjectPath(claudeSessionId, projectPath);
+    return existsSync(sessionPath);
+  }
+
+  private static async parseHistoryFromPath(
+    claudeSessionId: string,
+    sessionPath: string
+  ): Promise<HistoryMessage[]> {
     const messages: HistoryMessage[] = [];
 
     try {
@@ -110,11 +108,30 @@ export class SessionManager {
     } catch (error) {
       // Return empty array if file doesn't exist or can't be read
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Error reading session', { claudeSessionId, error });
+        logger.warn('Error reading session', { claudeSessionId, sessionPath, error });
       }
     }
 
     return messages;
+  }
+
+  /**
+   * Get session history from JSONL file
+   */
+  static getHistory(claudeSessionId: string, workingDir: string): Promise<HistoryMessage[]> {
+    const sessionPath = SessionManager.getSessionPath(claudeSessionId, workingDir);
+    return SessionManager.parseHistoryFromPath(claudeSessionId, sessionPath);
+  }
+
+  /**
+   * Get session history using a persisted Claude project path.
+   */
+  static getHistoryFromProjectPath(
+    claudeSessionId: string,
+    projectPath: string
+  ): Promise<HistoryMessage[]> {
+    const sessionPath = SessionManager.getSessionPathFromProjectPath(claudeSessionId, projectPath);
+    return SessionManager.parseHistoryFromPath(claudeSessionId, sessionPath);
   }
 
   /**
@@ -281,6 +298,11 @@ interface EntryMetadata {
   uuid?: string;
 }
 
+interface ParsedUserContentAccumulator {
+  textParts: string[];
+  attachments: NonNullable<HistoryMessage['attachments']>;
+}
+
 function inferImageExtension(mediaType: string): string {
   const subtype = mediaType.split('/')[1];
   if (!subtype) {
@@ -296,72 +318,83 @@ function estimateBase64Bytes(base64: string): number {
   return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
 }
 
-/**
- * Extract text content from tool result
- */
-function extractToolResultContent(item: ClaudeContentItem & { type: 'tool_result' }): string {
-  if (typeof item.content === 'string') {
-    return item.content;
-  }
-  if (Array.isArray(item.content)) {
-    return item.content
-      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-      .map((c) => c.text)
-      .join('\n');
-  }
-  return '';
+function createImageAttachment(
+  item: Extract<ClaudeContentItem, { type: 'image' }>,
+  meta: EntryMetadata,
+  itemIndex: number
+): NonNullable<HistoryMessage['attachments']>[number] {
+  const mediaType = item.source.media_type || 'application/octet-stream';
+  const extension = inferImageExtension(mediaType);
+  const attachmentId = meta.uuid
+    ? `${meta.uuid}-image-${itemIndex}`
+    : `${meta.timestamp}-image-${itemIndex}`;
+
+  return {
+    id: attachmentId,
+    name: `image-${itemIndex + 1}.${extension}`,
+    type: mediaType,
+    size: estimateBase64Bytes(item.source.data),
+    data: item.source.data,
+    contentType: 'image',
+  };
 }
 
-/**
- * Parse a user content item into a HistoryMessage
- */
 function parseUserContentItem(
   item: ClaudeContentItem,
   meta: EntryMetadata,
-  itemIndex: number
-): HistoryMessage | null {
+  itemIndex: number,
+  acc: ParsedUserContentAccumulator
+): void {
   if (item.type === 'text') {
-    // Skip system content in text items
-    if (isSystemContent(item.text)) {
-      return null;
+    if (!isSystemContent(item.text)) {
+      acc.textParts.push(item.text);
     }
-    return { type: 'user', content: item.text, ...meta };
+    return;
   }
 
   if (item.type === 'image') {
-    const mediaType = item.source.media_type || 'application/octet-stream';
-    const extension = inferImageExtension(mediaType);
-    const attachmentId = meta.uuid
-      ? `${meta.uuid}-image-${itemIndex}`
-      : `${meta.timestamp}-image-${itemIndex}`;
-
-    return {
-      type: 'user',
-      content: '',
-      attachments: [
-        {
-          id: attachmentId,
-          name: `image-${itemIndex + 1}.${extension}`,
-          type: mediaType,
-          size: estimateBase64Bytes(item.source.data),
-          data: item.source.data,
-          contentType: 'image',
-        },
-      ],
-      ...meta,
-    };
+    acc.attachments.push(createImageAttachment(item, meta, itemIndex));
+    return;
   }
 
   if (item.type === 'tool_result') {
-    return {
-      type: 'tool_result',
-      content: extractToolResultContent(item),
-      toolId: item.tool_use_id,
-      isError: item.is_error,
-      ...meta,
-    };
+    // Handled by parseUserEntry.
+    return;
   }
-  return null;
+}
+
+function flushUserAccumulator(
+  result: HistoryMessage[],
+  acc: ParsedUserContentAccumulator,
+  meta: EntryMetadata
+): void {
+  if (acc.textParts.length === 0 && acc.attachments.length === 0) {
+    return;
+  }
+  result.push({
+    type: 'user',
+    content: acc.textParts.join('\n\n'),
+    ...(acc.attachments.length > 0 ? { attachments: [...acc.attachments] } : {}),
+    ...meta,
+  });
+  acc.textParts.length = 0;
+  acc.attachments.length = 0;
+}
+
+function normalizeUserContent(content: ClaudeContentItem[]): ClaudeContentItem[] {
+  const normalized: ClaudeContentItem[] = [];
+  for (const item of content) {
+    if (item.type === 'text') {
+      if (!isSystemContent(item.text)) {
+        normalized.push(item);
+      }
+      continue;
+    }
+    if (item.type === 'image' || item.type === 'tool_result') {
+      normalized.push(item);
+    }
+  }
+  return normalized;
 }
 
 /**
@@ -390,6 +423,70 @@ function parseAssistantContentItem(
   return null;
 }
 
+function parseUserStringContent(content: string, meta: EntryMetadata): HistoryMessage[] {
+  if (isSystemContent(content)) {
+    return [];
+  }
+  return [{ type: 'user', content, ...meta }];
+}
+
+function parseToolResultOnlyContent(
+  content: ClaudeContentItem[],
+  meta: EntryMetadata
+): HistoryMessage[] {
+  const result: HistoryMessage[] = [];
+  for (const item of content) {
+    if (item.type !== 'tool_result') {
+      continue;
+    }
+    result.push({
+      type: 'tool_result',
+      content: item.content,
+      toolId: item.tool_use_id,
+      isError: item.is_error,
+      ...meta,
+    });
+  }
+  return result;
+}
+
+function parseUserTextAndAttachmentContent(
+  content: ClaudeContentItem[],
+  meta: EntryMetadata
+): HistoryMessage[] {
+  const result: HistoryMessage[] = [];
+  const acc: ParsedUserContentAccumulator = {
+    textParts: [],
+    attachments: [],
+  };
+
+  for (const [index, item] of content.entries()) {
+    parseUserContentItem(item, meta, index, acc);
+  }
+
+  flushUserAccumulator(result, acc, meta);
+  return result;
+}
+
+function parseUserArrayContent(
+  content: ClaudeContentItem[],
+  meta: EntryMetadata
+): HistoryMessage[] {
+  const normalizedContent = normalizeUserContent(content);
+  const hasToolResult = normalizedContent.some((item) => item.type === 'tool_result');
+  const hasNonToolResult = normalizedContent.some((item) => item.type !== 'tool_result');
+
+  if (hasToolResult && hasNonToolResult) {
+    return [{ type: 'user_tool_result', content: normalizedContent, ...meta }];
+  }
+
+  if (hasToolResult) {
+    return parseToolResultOnlyContent(normalizedContent, meta);
+  }
+
+  return parseUserTextAndAttachmentContent(content, meta);
+}
+
 /**
  * Parse user message entry
  */
@@ -397,17 +494,11 @@ function parseUserEntry(message: ClaudeMessage, meta: EntryMetadata): HistoryMes
   const { content } = message;
 
   if (typeof content === 'string') {
-    // Skip system content (instructions, local command output)
-    if (isSystemContent(content)) {
-      return [];
-    }
-    return [{ type: 'user', content, ...meta }];
+    return parseUserStringContent(content, meta);
   }
 
   if (Array.isArray(content)) {
-    return (content as ClaudeContentItem[])
-      .map((item, index) => parseUserContentItem(item, meta, index))
-      .filter((m): m is HistoryMessage => m !== null);
+    return parseUserArrayContent(content as ClaudeContentItem[], meta);
   }
 
   return [];

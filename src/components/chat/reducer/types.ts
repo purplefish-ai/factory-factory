@@ -186,11 +186,6 @@ export interface ChatState {
 
 export type ChatAction =
   // WebSocket message actions
-  | { type: 'WS_STATUS'; payload: { running: boolean; processAlive?: boolean } }
-  | { type: 'WS_STARTING' }
-  | { type: 'WS_STARTED' }
-  | { type: 'WS_STOPPED' }
-  | { type: 'WS_PROCESS_EXIT'; payload: { code: number | null } }
   | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order: number } }
@@ -226,9 +221,6 @@ export type ChatAction =
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
-  // Thinking actions (extended thinking mode)
-  | { type: 'THINKING_DELTA'; payload: { thinking: string } }
-  | { type: 'THINKING_CLEAR' }
   // Clear/reset actions
   | { type: 'CLEAR_CHAT' }
   | { type: 'RESET_FOR_SESSION_SWITCH' }

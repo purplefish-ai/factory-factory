@@ -50,6 +50,9 @@ import { fixerSessionService } from './fixer-session.service';
 import { sessionService } from './session.service';
 
 type MockTransactionContext = {
+  workspace: {
+    findUnique: ReturnType<typeof vi.fn>;
+  };
   claudeSession: {
     findFirst: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
@@ -59,6 +62,9 @@ type MockTransactionContext = {
 
 function createTxContext(): MockTransactionContext {
   return {
+    workspace: {
+      findUnique: vi.fn().mockResolvedValue({ worktreePath: '/tmp/w' }),
+    },
     claudeSession: {
       findFirst: vi.fn(),
       findMany: vi.fn(),

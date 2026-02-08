@@ -8,6 +8,8 @@ import type {
 import {
   getToolUseIdFromEvent,
   isStreamEventMessage,
+  shouldPersistClaudeMessage,
+  shouldSuppressDuplicateResultMessage,
   updateTokenStatsFromResult,
 } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
@@ -108,61 +110,6 @@ export function insertMessageByOrder(
 }
 
 /**
- * Determines if a Claude message should be stored in state.
- * We filter out structural/delta events and only keep meaningful ones.
- */
-function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
-  // User messages with tool_result content should be stored
-  if (claudeMsg.type === 'user') {
-    const content = claudeMsg.message?.content;
-    if (Array.isArray(content)) {
-      return content.some(
-        (item) =>
-          typeof item === 'object' && item !== null && 'type' in item && item.type === 'tool_result'
-      );
-    }
-    return false;
-  }
-
-  // Assistant messages with tool_use, tool_result, or text content should be stored
-  // (These come from session history or when includePartialMessages is false)
-  if (claudeMsg.type === 'assistant') {
-    const content = claudeMsg.message?.content;
-    if (Array.isArray(content)) {
-      return content.some(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          (item.type === 'tool_use' || item.type === 'tool_result' || item.type === 'text')
-      );
-    }
-    return false;
-  }
-
-  // Result messages are always stored
-  if (claudeMsg.type === 'result') {
-    return true;
-  }
-
-  // For stream events, only store meaningful ones
-  if (!isStreamEventMessage(claudeMsg)) {
-    return true;
-  }
-
-  const event = claudeMsg.event;
-
-  // Only store content_block_start for tool_use, tool_result, and thinking
-  if (event.type === 'content_block_start') {
-    const blockType = event.content_block.type;
-    return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
-  }
-
-  // Skip all other stream events
-  return false;
-}
-
-/**
  * Checks if a message is a tool_use message with the given ID.
  */
 function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
@@ -192,6 +139,57 @@ function getToolUseIdFromMessage(claudeMsg: ClaudeMessage): string | null {
 }
 
 /**
+ * Update an existing Claude message in-place for a matching order.
+ * Returns null when no existing message was found.
+ */
+function upsertClaudeMessageAtOrder(
+  state: ChatState,
+  claudeMsg: ClaudeMessage,
+  order: number
+): ChatState | null {
+  const existingIndex = state.messages.findIndex(
+    (msg) => msg.source === 'claude' && msg.order === order
+  );
+  if (existingIndex < 0) {
+    return null;
+  }
+
+  // biome-ignore lint/style/noNonNullAssertion: existingIndex verified by findIndex check above
+  const existingMsg = state.messages[existingIndex]!;
+  const existingToolUseId = existingMsg.message
+    ? getToolUseIdFromMessage(existingMsg.message)
+    : null;
+  const incomingToolUseId = getToolUseIdFromMessage(claudeMsg);
+
+  const updatedMessages = [...state.messages];
+  updatedMessages[existingIndex] = {
+    ...existingMsg,
+    message: claudeMsg,
+    timestamp: claudeMsg.timestamp ?? existingMsg.timestamp,
+  };
+
+  if (existingToolUseId !== incomingToolUseId) {
+    const nextToolUseIdToIndex = new Map(state.toolUseIdToIndex);
+    if (existingToolUseId) {
+      nextToolUseIdToIndex.delete(existingToolUseId);
+    }
+    if (incomingToolUseId) {
+      nextToolUseIdToIndex.set(incomingToolUseId, existingIndex);
+    }
+    return {
+      ...state,
+      messages: updatedMessages,
+      toolUseIdToIndex: nextToolUseIdToIndex,
+    };
+  }
+
+  return {
+    ...state,
+    messages: updatedMessages,
+  };
+}
+
+/**
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
 export function handleClaudeMessage(
@@ -208,6 +206,14 @@ export function handleClaudeMessage(
       ...baseState,
       tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
     };
+
+    if (shouldSuppressDuplicateResultMessage(baseState.messages, claudeMsg)) {
+      return baseState;
+    }
+  }
+
+  if (isStreamEventMessage(claudeMsg) && claudeMsg.event.type === 'message_start') {
+    baseState = { ...baseState, latestThinking: null };
   }
 
   // Append thinking deltas to the most recent thinking content block
@@ -221,11 +227,23 @@ export function handleClaudeMessage(
       claudeMsg.event.index,
       claudeMsg.event.delta.thinking
     );
+    baseState = {
+      ...baseState,
+      latestThinking: (baseState.latestThinking ?? '') + claudeMsg.event.delta.thinking,
+    };
   }
 
   // Check if message should be stored
-  if (!shouldStoreMessage(claudeMsg)) {
+  if (!shouldPersistClaudeMessage(claudeMsg)) {
     return baseState;
+  }
+
+  // If this Claude message order already exists, update in place instead of appending.
+  // This prevents duplicate rendering when the same websocket event is delivered twice
+  // (for example during reconnect/replay overlap).
+  const upsertedState = upsertClaudeMessageAtOrder(baseState, claudeMsg, order);
+  if (upsertedState) {
+    return upsertedState;
   }
 
   // Create and add the message using order-based insertion

@@ -1,5 +1,18 @@
 import { createHash } from 'node:crypto';
-import type { ChatMessage, ClaudeMessage, QueuedMessage, WebSocketMessage } from '@/shared/claude';
+import {
+  type ChatMessage,
+  type ClaudeMessage,
+  DEFAULT_CHAT_SETTINGS,
+  MessageState,
+  QUEUED_MESSAGE_ORDER_BASE,
+  type QueuedMessage,
+  type WebSocketMessage as ReplayEventMessage,
+  resolveSelectedModel,
+  type SessionDeltaEvent,
+  shouldPersistClaudeMessage,
+  shouldSuppressDuplicateResultMessage,
+  type WebSocketMessage,
+} from '@/shared/claude';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import {
   createInitialSessionRuntimeState,
@@ -10,16 +23,20 @@ import { SessionManager } from '../claude';
 import type { ConnectionInfo } from './chat-connection.service';
 import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
+import { sessionFileLogger } from './session-file-logger.service';
 
 const logger = createLogger('session-store-service');
 
 const MAX_QUEUE_SIZE = 100;
-const QUEUE_BASE_ORDER = 1_000_000_000;
-
 interface SessionStore {
   sessionId: string;
   initialized: boolean;
   hydratePromise: Promise<void> | null;
+  hydratingKey: string | null;
+  hydratedKey: string | null;
+  hydrateGeneration: number;
+  lastKnownProjectPath: string | null;
+  lastKnownClaudeSessionId: string | null;
   transcript: ChatMessage[];
   queue: QueuedMessage[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;
@@ -28,12 +45,70 @@ interface SessionStore {
   lastHydratedAt: string | null;
 }
 
+type SnapshotReason =
+  | 'subscribe_load'
+  | 'enqueue'
+  | 'remove_queued_message'
+  | 'dequeue'
+  | 'requeue'
+  | 'commit_user_message'
+  | 'pending_request_set'
+  | 'pending_request_cleared'
+  | 'process_exit_reset'
+  | 'process_exit_rehydrate'
+  | 'manual_emit'
+  | 'inject_user_message';
+
 function messageSort(a: ChatMessage, b: ChatMessage): number {
   return a.order - b.order;
 }
 
 class SessionStoreService {
   private stores = new Map<string, SessionStore>();
+
+  private summarizeAttachment(attachment: NonNullable<ChatMessage['attachments']>[number]): {
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    contentType?: 'image' | 'text';
+  } {
+    return {
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+      ...(attachment.contentType ? { contentType: attachment.contentType } : {}),
+    };
+  }
+
+  private normalizeTranscriptMessage(message: ChatMessage): Record<string, unknown> {
+    if (message.source === 'user') {
+      return {
+        source: 'user',
+        order: message.order,
+        text: message.text,
+        attachments: message.attachments?.map((attachment) => this.summarizeAttachment(attachment)),
+      };
+    }
+
+    return {
+      source: 'claude',
+      order: message.order,
+      message: message.message,
+    };
+  }
+
+  private normalizeTranscript(messages: ChatMessage[]): Record<string, unknown>[] {
+    return messages.map((message) => this.normalizeTranscriptMessage(message));
+  }
+
+  private logParityTrace(sessionId: string, data: Record<string, unknown>): void {
+    sessionFileLogger.log(sessionId, 'INFO', {
+      type: 'parity_trace',
+      ...data,
+    });
+  }
 
   private getOrCreate(sessionId: string): SessionStore {
     let store = this.stores.get(sessionId);
@@ -42,6 +117,11 @@ class SessionStoreService {
         sessionId,
         initialized: false,
         hydratePromise: null,
+        hydratingKey: null,
+        hydratedKey: null,
+        hydrateGeneration: 0,
+        lastKnownProjectPath: null,
+        lastKnownClaudeSessionId: null,
         transcript: [],
         queue: [],
         pendingInteractiveRequest: null,
@@ -60,11 +140,12 @@ class SessionStoreService {
       type: historyMsg.type,
       timestamp: historyMsg.timestamp,
       content: historyMsg.content,
-      toolName: historyMsg.toolName ?? null,
-      toolId: historyMsg.toolId ?? null,
-      toolInput: historyMsg.toolInput ?? null,
-      isError: historyMsg.isError ?? false,
+      toolName: 'toolName' in historyMsg ? (historyMsg.toolName ?? null) : null,
+      toolId: 'toolId' in historyMsg ? (historyMsg.toolId ?? null) : null,
+      toolInput: 'toolInput' in historyMsg ? (historyMsg.toolInput ?? null) : null,
+      isError: 'isError' in historyMsg ? (historyMsg.isError ?? false) : false,
       attachments: historyMsg.attachments ?? null,
+      userToolResultContent: historyMsg.type === 'user_tool_result' ? historyMsg.content : null,
     });
     const digest = createHash('sha1').update(fingerprint).digest('hex').slice(0, 12);
     return `history-${index}-${digest}`;
@@ -80,6 +161,19 @@ class SessionStoreService {
     store.transcript.sort(messageSort);
   }
 
+  private hasPersistedToolUseStart(store: SessionStore, toolUseId: string): boolean {
+    return store.transcript.some((entry) => {
+      if (entry.source !== 'claude' || !entry.message || entry.message.type !== 'stream_event') {
+        return false;
+      }
+      const event = entry.message.event;
+      if (!event || event.type !== 'content_block_start') {
+        return false;
+      }
+      return event.content_block.type === 'tool_use' && event.content_block.id === toolUseId;
+    });
+  }
+
   private setNextOrderFromTranscript(store: SessionStore): void {
     let maxOrder = -1;
     for (const message of store.transcript) {
@@ -91,21 +185,29 @@ class SessionStoreService {
   }
 
   private historyToClaudeMessage(msg: HistoryMessage): ClaudeMessage {
+    const assertNever = (value: never): never => {
+      throw new Error(`Unhandled history message type: ${JSON.stringify(value)}`);
+    };
+
     switch (msg.type) {
+      case 'user':
+        return {
+          type: 'user',
+          message: { role: 'user', content: msg.content },
+        };
       case 'tool_use':
         if (msg.toolName && msg.toolId) {
           return {
-            type: 'assistant',
-            message: {
-              role: 'assistant',
-              content: [
-                {
-                  type: 'tool_use',
-                  id: msg.toolId,
-                  name: msg.toolName,
-                  input: msg.toolInput || {},
-                },
-              ],
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 0,
+              content_block: {
+                type: 'tool_use',
+                id: msg.toolId,
+                name: msg.toolName,
+                input: msg.toolInput || {},
+              },
             },
           };
         }
@@ -114,21 +216,36 @@ class SessionStoreService {
           message: { role: 'assistant', content: [{ type: 'text', text: msg.content }] },
         };
       case 'tool_result': {
-        const content: string | Array<{ type: 'text'; text: string }> = msg.content;
         return {
           type: 'user',
           message: {
             role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: msg.toolId || 'unknown', content }],
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: msg.toolId || 'unknown',
+                content: msg.content,
+                ...(msg.isError !== undefined ? { is_error: msg.isError } : {}),
+              },
+            ],
           },
         };
       }
+      case 'user_tool_result':
+        return {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: msg.content,
+          },
+        };
       case 'thinking':
         return {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: msg.content }],
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'thinking', thinking: msg.content },
           },
         };
       case 'assistant':
@@ -136,12 +253,9 @@ class SessionStoreService {
           type: 'assistant',
           message: { role: 'assistant', content: [{ type: 'text', text: msg.content }] },
         };
-      default:
-        return {
-          type: 'user',
-          message: { role: 'user', content: msg.content },
-        };
     }
+
+    return assertNever(msg);
   }
 
   private buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessage[] {
@@ -169,7 +283,8 @@ class SessionStoreService {
         historyMsg.type === 'assistant' ||
         historyMsg.type === 'tool_use' ||
         historyMsg.type === 'tool_result' ||
-        historyMsg.type === 'thinking'
+        historyMsg.type === 'thinking' ||
+        historyMsg.type === 'user_tool_result'
       ) {
         transcript.push({
           id: messageId,
@@ -194,26 +309,149 @@ class SessionStoreService {
         text: queued.text,
         attachments: queued.attachments,
         timestamp: queued.timestamp,
-        order: QUEUE_BASE_ORDER + index,
+        order: QUEUED_MESSAGE_ORDER_BASE + index,
       });
     });
     snapshot.sort(messageSort);
     return snapshot;
   }
 
-  private forwardSnapshot(store: SessionStore, options?: { loadRequestId?: string }): void {
+  private forwardSnapshot(
+    store: SessionStore,
+    options?: { loadRequestId?: string; reason?: SnapshotReason; includeParitySnapshot?: boolean }
+  ): void {
+    const snapshotMessages = this.buildSnapshotMessages(store);
     const payload: WebSocketMessage = {
       type: 'session_snapshot',
-      messages: this.buildSnapshotMessages(store),
+      messages: snapshotMessages,
       queuedMessages: [...store.queue],
       pendingInteractiveRequest: store.pendingInteractiveRequest,
       sessionRuntime: store.runtime,
       ...(options?.loadRequestId ? { loadRequestId: options.loadRequestId } : {}),
     };
+
+    if (options?.includeParitySnapshot) {
+      this.logParityTrace(store.sessionId, {
+        path: 'snapshot',
+        reason: options.reason ?? 'manual_emit',
+        loadRequestId: options.loadRequestId ?? null,
+        queuedCount: store.queue.length,
+        snapshot: this.normalizeTranscript(snapshotMessages),
+      });
+    }
+
     chatConnectionService.forwardToSession(store.sessionId, payload);
   }
 
-  emitDelta(sessionId: string, event: { type: string; [key: string]: unknown }): void {
+  private buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
+    const replayEvents: ReplayEventMessage[] = [
+      {
+        type: 'session_runtime_snapshot',
+        sessionRuntime: store.runtime,
+      },
+    ];
+
+    const transcript = [...store.transcript].sort(messageSort);
+    for (const message of transcript) {
+      if (message.source === 'user') {
+        replayEvents.push({
+          type: 'message_state_changed',
+          id: message.id,
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: message.text ?? '',
+            timestamp: message.timestamp,
+            attachments: message.attachments,
+            settings: {
+              selectedModel: resolveSelectedModel(DEFAULT_CHAT_SETTINGS.selectedModel),
+              thinkingEnabled: DEFAULT_CHAT_SETTINGS.thinkingEnabled,
+              planModeEnabled: DEFAULT_CHAT_SETTINGS.planModeEnabled,
+            },
+            order: message.order,
+          },
+        });
+        replayEvents.push({
+          type: 'message_state_changed',
+          id: message.id,
+          newState: MessageState.COMMITTED,
+        });
+        continue;
+      }
+
+      if (message.message) {
+        replayEvents.push({
+          type: 'claude_message',
+          data: message.message,
+          order: message.order,
+        });
+      }
+    }
+
+    for (const [queuePosition, queued] of store.queue.entries()) {
+      replayEvents.push({
+        type: 'message_state_changed',
+        id: queued.id,
+        newState: MessageState.ACCEPTED,
+        queuePosition,
+        userMessage: {
+          text: queued.text,
+          timestamp: queued.timestamp,
+          attachments: queued.attachments,
+          settings: {
+            selectedModel: resolveSelectedModel(queued.settings.selectedModel),
+            thinkingEnabled: queued.settings.thinkingEnabled,
+            planModeEnabled: queued.settings.planModeEnabled,
+          },
+        },
+      });
+    }
+
+    if (store.pendingInteractiveRequest) {
+      if (store.pendingInteractiveRequest.toolName === 'AskUserQuestion') {
+        replayEvents.push({
+          type: 'user_question',
+          requestId: store.pendingInteractiveRequest.requestId,
+          questions: ((store.pendingInteractiveRequest.input as { questions?: unknown[] })
+            .questions ?? []) as ReplayEventMessage['questions'],
+        });
+      } else {
+        replayEvents.push({
+          type: 'permission_request',
+          requestId: store.pendingInteractiveRequest.requestId,
+          toolName: store.pendingInteractiveRequest.toolName,
+          toolInput: store.pendingInteractiveRequest.input,
+          planContent: store.pendingInteractiveRequest.planContent,
+        });
+      }
+    }
+
+    return replayEvents;
+  }
+
+  private forwardReplayBatch(
+    store: SessionStore,
+    options?: { loadRequestId?: string; reason?: SnapshotReason; includeParitySnapshot?: boolean }
+  ): void {
+    const replayEvents = this.buildReplayEvents(store);
+    const payload: WebSocketMessage = {
+      type: 'session_replay_batch',
+      replayEvents,
+      ...(options?.loadRequestId ? { loadRequestId: options.loadRequestId } : {}),
+    };
+
+    if (options?.includeParitySnapshot) {
+      this.logParityTrace(store.sessionId, {
+        path: 'replay_batch',
+        reason: options.reason ?? 'manual_emit',
+        loadRequestId: options.loadRequestId ?? null,
+        replayEventCount: replayEvents.length,
+      });
+    }
+
+    chatConnectionService.forwardToSession(store.sessionId, payload);
+  }
+
+  emitDelta(sessionId: string, event: SessionDeltaEvent): void {
     const payload: WebSocketMessage = {
       type: 'session_delta',
       data: event,
@@ -228,12 +466,13 @@ class SessionStoreService {
     },
     options?: { emitDelta?: boolean }
   ): void {
+    const hasExplicitLastExit = Object.hasOwn(updates, 'lastExit');
     store.runtime = {
       ...store.runtime,
       phase: updates.phase,
       processState: updates.processState,
       activity: updates.activity,
-      ...(updates.lastExit ? { lastExit: updates.lastExit } : {}),
+      ...(hasExplicitLastExit ? { lastExit: updates.lastExit } : { lastExit: undefined }),
       updatedAt: new Date().toISOString(),
     };
 
@@ -247,16 +486,19 @@ class SessionStoreService {
 
   async subscribe(options: {
     sessionId: string;
-    workingDir: string;
+    claudeProjectPath: string | null;
     claudeSessionId: string | null;
     isRunning: boolean;
     isWorking: boolean;
     loadRequestId?: string;
   }): Promise<void> {
-    const { sessionId, workingDir, claudeSessionId, isRunning, isWorking, loadRequestId } = options;
+    const { sessionId, claudeProjectPath, claudeSessionId, isRunning, isWorking, loadRequestId } =
+      options;
     const store = this.getOrCreate(sessionId);
+    store.lastKnownProjectPath = claudeProjectPath;
+    store.lastKnownClaudeSessionId = claudeSessionId;
 
-    await this.ensureHydrated(store, { claudeSessionId, workingDir });
+    await this.ensureHydrated(store, { claudeSessionId, claudeProjectPath });
 
     if (isRunning) {
       this.markRuntime(
@@ -280,7 +522,11 @@ class SessionStoreService {
       );
     }
 
-    this.forwardSnapshot(store, { loadRequestId });
+    this.forwardReplayBatch(store, {
+      loadRequestId,
+      reason: 'subscribe_load',
+      includeParitySnapshot: true,
+    });
 
     logger.info('Session subscribed', {
       sessionId,
@@ -293,36 +539,60 @@ class SessionStoreService {
 
   private async ensureHydrated(
     store: SessionStore,
-    options: { claudeSessionId: string | null; workingDir: string }
+    options: { claudeSessionId: string | null; claudeProjectPath: string | null }
   ): Promise<void> {
-    if (store.initialized) {
+    const hydrateKey = `${options.claudeSessionId ?? 'none'}::${options.claudeProjectPath ?? 'none'}`;
+    if (store.initialized && store.hydratedKey === hydrateKey) {
       return;
     }
 
-    if (!store.hydratePromise) {
-      store.hydratePromise = (async () => {
-        // Rehydration always starts from a clean in-memory transcript state.
-        store.transcript = [];
-        store.nextOrder = 0;
-        store.lastHydratedAt = null;
-
-        if (options.claudeSessionId) {
-          const history = await SessionManager.getHistory(
-            options.claudeSessionId,
-            options.workingDir
-          );
-          store.transcript = this.buildTranscriptFromHistory(history);
-          store.transcript.sort(messageSort);
-        }
-        this.setNextOrderFromTranscript(store);
-        store.initialized = true;
-        store.lastHydratedAt = new Date().toISOString();
-      })().finally(() => {
-        store.hydratePromise = null;
-      });
+    if (store.hydratePromise && store.hydratingKey === hydrateKey) {
+      await store.hydratePromise;
+      return;
     }
 
-    await store.hydratePromise;
+    const generation = store.hydrateGeneration + 1;
+    store.hydrateGeneration = generation;
+    store.hydratingKey = hydrateKey;
+
+    const hydratePromise = (async () => {
+      let transcript: ChatMessage[] = [];
+
+      if (options.claudeSessionId && options.claudeProjectPath) {
+        const history = await SessionManager.getHistoryFromProjectPath(
+          options.claudeSessionId,
+          options.claudeProjectPath
+        );
+        transcript = this.buildTranscriptFromHistory(history);
+        transcript.sort(messageSort);
+        this.logParityTrace(store.sessionId, {
+          path: 'jsonl_hydrate',
+          claudeSessionId: options.claudeSessionId,
+          claudeProjectPath: options.claudeProjectPath,
+          historyCount: history.length,
+          transcriptCount: transcript.length,
+          transcript: this.normalizeTranscript(transcript),
+        });
+      }
+
+      if (store.hydrateGeneration !== generation) {
+        return;
+      }
+
+      store.transcript = transcript;
+      this.setNextOrderFromTranscript(store);
+      store.initialized = true;
+      store.hydratedKey = hydrateKey;
+      store.lastHydratedAt = new Date().toISOString();
+    })().finally(() => {
+      if (store.hydrateGeneration === generation) {
+        store.hydratePromise = null;
+        store.hydratingKey = null;
+      }
+    });
+
+    store.hydratePromise = hydratePromise;
+    await hydratePromise;
   }
 
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string } {
@@ -332,7 +602,7 @@ class SessionStoreService {
     }
 
     store.queue.push(message);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'enqueue' });
     return { position: store.queue.length - 1 };
   }
 
@@ -343,7 +613,7 @@ class SessionStoreService {
       return false;
     }
     store.queue.splice(idx, 1);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'remove_queued_message' });
     return true;
   }
 
@@ -351,7 +621,7 @@ class SessionStoreService {
     const store = this.getOrCreate(sessionId);
     const next = store.queue.shift();
     if (next && options?.emitSnapshot !== false) {
-      this.forwardSnapshot(store);
+      this.forwardSnapshot(store, { reason: 'dequeue' });
     }
     return next;
   }
@@ -359,25 +629,35 @@ class SessionStoreService {
   requeueFront(sessionId: string, message: QueuedMessage): void {
     const store = this.getOrCreate(sessionId);
     store.queue.unshift(message);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'requeue' });
   }
 
-  commitSentUserMessage(sessionId: string, message: QueuedMessage): void {
+  commitSentUserMessage(
+    sessionId: string,
+    message: QueuedMessage,
+    options?: { emitSnapshot?: boolean }
+  ): void {
     const store = this.getOrCreate(sessionId);
     const order = store.nextOrder;
     store.nextOrder += 1;
-    this.commitSentUserMessageWithOrder(store, message, order);
+    this.commitSentUserMessageWithOrder(store, message, order, options);
   }
 
-  commitSentUserMessageAtOrder(sessionId: string, message: QueuedMessage, order: number): void {
+  commitSentUserMessageAtOrder(
+    sessionId: string,
+    message: QueuedMessage,
+    order: number,
+    options?: { emitSnapshot?: boolean }
+  ): void {
     const store = this.getOrCreate(sessionId);
-    this.commitSentUserMessageWithOrder(store, message, order);
+    this.commitSentUserMessageWithOrder(store, message, order, options);
   }
 
   private commitSentUserMessageWithOrder(
     store: SessionStore,
     message: QueuedMessage,
-    order: number
+    order: number,
+    options?: { emitSnapshot?: boolean }
   ): void {
     const transcriptMessage: ChatMessage = {
       id: message.id,
@@ -394,13 +674,45 @@ class SessionStoreService {
       store.nextOrder = order + 1;
     }
 
-    this.forwardSnapshot(store);
+    if (options?.emitSnapshot !== false) {
+      this.forwardSnapshot(store, { reason: 'commit_user_message' });
+    }
   }
 
   appendClaudeEvent(sessionId: string, claudeMessage: ClaudeMessage): number {
     const store = this.getOrCreate(sessionId);
     const order = store.nextOrder;
     store.nextOrder += 1;
+
+    if (claudeMessage.type === 'stream_event') {
+      const event = claudeMessage.event;
+      if (
+        event &&
+        event.type === 'content_block_start' &&
+        event.content_block.type === 'tool_use' &&
+        this.hasPersistedToolUseStart(store, event.content_block.id)
+      ) {
+        this.logParityTrace(sessionId, {
+          path: 'live_stream_filtered',
+          reason: 'duplicate_tool_use_start_suppressed',
+          order,
+          claudeMessage,
+        });
+        return order;
+      }
+    }
+
+    const shouldPersist = shouldPersistClaudeMessage(claudeMessage);
+    const isDuplicateResult = shouldSuppressDuplicateResultMessage(store.transcript, claudeMessage);
+    if (!shouldPersist || isDuplicateResult) {
+      this.logParityTrace(sessionId, {
+        path: 'live_stream_filtered',
+        reason: !shouldPersist ? 'non_renderable_claude_message' : 'duplicate_result_suppressed',
+        order,
+        claudeMessage,
+      });
+      return order;
+    }
 
     const entry: ChatMessage = {
       id: `${sessionId}-${order}`,
@@ -411,7 +723,11 @@ class SessionStoreService {
     };
 
     store.transcript.push(entry);
-    store.transcript.sort(messageSort);
+    this.logParityTrace(sessionId, {
+      path: 'live_stream_persisted',
+      order,
+      claudeMessage,
+    });
 
     return order;
   }
@@ -426,7 +742,7 @@ class SessionStoreService {
   setPendingInteractiveRequest(sessionId: string, request: PendingInteractiveRequest): void {
     const store = this.getOrCreate(sessionId);
     store.pendingInteractiveRequest = request;
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'pending_request_set' });
   }
 
   getPendingInteractiveRequest(sessionId: string): PendingInteractiveRequest | null {
@@ -440,7 +756,7 @@ class SessionStoreService {
       return;
     }
     store.pendingInteractiveRequest = null;
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'pending_request_cleared' });
   }
 
   clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): void {
@@ -449,7 +765,7 @@ class SessionStoreService {
       return;
     }
     store.pendingInteractiveRequest = null;
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'pending_request_cleared' });
   }
 
   markStarting(sessionId: string): void {
@@ -504,8 +820,13 @@ class SessionStoreService {
     // Queue is intentionally ephemeral and dropped on process exit.
     store.queue = [];
     store.pendingInteractiveRequest = null;
+    // Drop in-memory transcript immediately to avoid serving stale state.
+    store.transcript = [];
+    store.nextOrder = 0;
     // Force fresh JSONL rehydration on next subscribe.
     store.initialized = false;
+    store.hydratedKey = null;
+    store.hydrateGeneration += 1;
     store.hydratePromise = null;
 
     this.markRuntime(store, {
@@ -519,12 +840,43 @@ class SessionStoreService {
       },
     });
 
-    this.forwardSnapshot(store);
+    // Always publish the reset state first. This makes process-exit behavior
+    // deterministic for all connected/reconnecting clients.
+    this.forwardSnapshot(store, {
+      reason: 'process_exit_reset',
+      includeParitySnapshot: true,
+    });
+
+    // Best-effort immediate refresh from JSONL after reset so connected clients
+    // converge to persisted transcript state without a manual reload.
+    const { lastKnownClaudeSessionId, lastKnownProjectPath } = store;
+    if (lastKnownClaudeSessionId && lastKnownProjectPath) {
+      void this.ensureHydrated(store, {
+        claudeSessionId: lastKnownClaudeSessionId,
+        claudeProjectPath: lastKnownProjectPath,
+      })
+        .then(() => {
+          this.forwardSnapshot(store, {
+            reason: 'process_exit_rehydrate',
+            includeParitySnapshot: true,
+          });
+        })
+        .catch((error) => {
+          logger.warn('Failed to rehydrate transcript after process exit', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
   }
 
   emitSessionSnapshot(sessionId: string, loadRequestId?: string): void {
     const store = this.getOrCreate(sessionId);
-    this.forwardSnapshot(store, { loadRequestId });
+    this.forwardSnapshot(store, {
+      loadRequestId,
+      reason: 'manual_emit',
+      includeParitySnapshot: true,
+    });
   }
 
   injectCommittedUserMessage(
@@ -543,7 +895,7 @@ class SessionStoreService {
     };
     store.nextOrder += 1;
     this.upsertTranscriptMessage(store, message);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'inject_user_message' });
   }
 
   getConnectionCount(sessionId: string): number {

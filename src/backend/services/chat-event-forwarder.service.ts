@@ -11,8 +11,12 @@
 
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import type { ClaudeMessage } from '@/shared/claude';
-import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
+import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
+import {
+  type InteractiveResponseTool,
+  isInteractiveResponseTool,
+  type PendingInteractiveRequest,
+} from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { WS_READY_STATE } from '../constants';
 import { interceptorRegistry } from '../interceptors';
@@ -76,6 +80,15 @@ class ChatEventForwarderService {
   private workspaceNotificationsSetup = false;
   /** Track last compact boundary per session to avoid duplicate indicators */
   private lastCompactBoundaryAt = new Map<string, number>();
+
+  private forwardClaudeMessage(dbSessionId: string, message: ClaudeMessage): void {
+    const order = sessionStoreService.appendClaudeEvent(dbSessionId, message);
+    const wsMsg =
+      order === undefined
+        ? ({ type: 'claude_message', data: message } as const)
+        : ({ type: 'claude_message', data: message, order } as const);
+    sessionStoreService.emitDelta(dbSessionId, wsMsg);
+  }
 
   /**
    * Remove only the specific listener functions that this service attached to a client.
@@ -216,7 +229,7 @@ class ChatEventForwarderService {
       const slashCommandsMsg = {
         type: 'slash_commands',
         slashCommands: initResponse.commands,
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, slashCommandsMsg);
       void slashCommandCacheService.setCachedCommands(initResponse.commands);
     }
@@ -259,12 +272,22 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Claude became idle, checking queue', { dbSessionId });
       }
       // Fire and forget - don't await
-      onDispatchNextMessage().catch((error) => {
-        logger.error('[Chat WS] Error dispatching queued message on idle', {
-          dbSessionId,
-          error: error instanceof Error ? error.message : String(error),
+      void onDispatchNextMessage()
+        .catch((error) => {
+          logger.error('[Chat WS] Error dispatching queued message on idle', {
+            dbSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          // Result events can arrive before the client flips to idle. Re-sync after
+          // idle callback to avoid leaving runtime stuck in WORKING.
+          // Only mark workspace idle if the client stayed idle after dispatch.
+          if (!client.isWorking()) {
+            workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+          }
+          this.syncRuntimeFromClient(dbSessionId, client);
         });
-      });
     });
 
     on('stream', (event) => {
@@ -279,9 +302,7 @@ class ChatEventForwarderService {
 
       // Store-then-forward: store event for replay before forwarding
       // Include order for consistent frontend message sorting
-      const order = sessionStoreService.appendClaudeEvent(dbSessionId, event as ClaudeMessage);
-      const msg = { type: 'claude_message', data: event, order };
-      sessionStoreService.emitDelta(dbSessionId, msg);
+      this.forwardClaudeMessage(dbSessionId, event as ClaudeMessage);
     });
 
     // SDK message types - forwarded as dedicated event types
@@ -293,8 +314,7 @@ class ChatEventForwarderService {
         eventType: 'tool_progress',
         data: event,
       });
-      const sdkEvent = event as unknown as { type: string };
-      sessionStoreService.emitDelta(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
     on('tool_use_summary', (event) => {
@@ -305,8 +325,7 @@ class ChatEventForwarderService {
         eventType: 'tool_use_summary',
         data: event,
       });
-      const sdkEvent = event as unknown as { type: string };
-      sessionStoreService.emitDelta(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
     // System subtype event handlers
@@ -332,7 +351,7 @@ class ChatEventForwarderService {
           slashCommands: event.slash_commands,
           plugins: event.plugins,
         },
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -351,7 +370,7 @@ class ChatEventForwarderService {
       const msg = {
         type: 'status_update',
         permissionMode: event.permission_mode,
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -369,7 +388,7 @@ class ChatEventForwarderService {
         return;
       }
       this.lastCompactBoundaryAt.set(dbSessionId, now);
-      const boundaryMsg = { type: 'compact_boundary' };
+      const boundaryMsg = { type: 'compact_boundary' } as const;
       sessionStoreService.emitDelta(dbSessionId, boundaryMsg);
     });
 
@@ -393,7 +412,7 @@ class ChatEventForwarderService {
           hookName: event.hook_name,
           hookEvent: event.hook_event,
         },
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -420,7 +439,7 @@ class ChatEventForwarderService {
           exitCode: event.exit_code,
           outcome: event.outcome,
         },
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -430,7 +449,7 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Context compaction started', { dbSessionId });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_start' });
-      const event = { type: 'compacting_start' };
+      const event = { type: 'compacting_start' } as const;
       sessionStoreService.emitDelta(dbSessionId, event);
     });
 
@@ -439,7 +458,7 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Context compaction ended', { dbSessionId });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_end' });
-      const event = { type: 'compacting_end' };
+      const event = { type: 'compacting_end' } as const;
       sessionStoreService.emitDelta(dbSessionId, event);
     });
 
@@ -456,9 +475,7 @@ class ChatEventForwarderService {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
       // Store-then-forward: store events for replay before forwarding
       // Include order for consistent frontend message sorting
-      const order = sessionStoreService.appendClaudeEvent(dbSessionId, result as ClaudeMessage);
-      const resultMsg = { type: 'claude_message', data: result, order };
-      sessionStoreService.emitDelta(dbSessionId, resultMsg);
+      this.forwardClaudeMessage(dbSessionId, result as ClaudeMessage);
 
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
@@ -479,7 +496,7 @@ class ChatEventForwarderService {
         data: request,
       });
 
-      this.routeInteractiveRequest(dbSessionId, request);
+      this.routeInteractiveRequest(dbSessionId, request, client);
     });
 
     on('exit', (result) => {
@@ -524,13 +541,129 @@ class ChatEventForwarderService {
       toolName: string;
       toolUseId: string;
       input: Record<string, unknown>;
-    }
+    },
+    client: ClaudeClient
   ): void {
-    // Compute planContent for ExitPlanMode, null for others
+    if (!isInteractiveResponseTool(request.toolName)) {
+      const reason = `Unsupported interactive tool: ${request.toolName}`;
+      logger.warn('[Chat WS] Denying unsupported interactive request', {
+        dbSessionId,
+        requestId: request.requestId,
+        toolName: request.toolName,
+      });
+      try {
+        client.denyInteractiveRequest(request.requestId, reason);
+      } catch (error) {
+        logger.error('[Chat WS] Failed to deny unsupported interactive request', {
+          dbSessionId,
+          requestId: request.requestId,
+          toolName: request.toolName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      sessionStoreService.emitDelta(dbSessionId, {
+        type: 'error',
+        message: reason,
+      });
+      return;
+    }
+
     const planContent =
       request.toolName === 'ExitPlanMode' ? this.extractPlanContent(request.input) : null;
 
-    // Store for session restore (single location for all request types)
+    this.routeSupportedInteractiveRequest(
+      dbSessionId,
+      { ...request, toolName: request.toolName as InteractiveResponseTool },
+      planContent,
+      client
+    );
+  }
+
+  private routeSupportedInteractiveRequest(
+    dbSessionId: string,
+    request: {
+      requestId: string;
+      toolName: InteractiveResponseTool;
+      toolUseId: string;
+      input: Record<string, unknown>;
+    },
+    planContent: string | null,
+    client: ClaudeClient
+  ): void {
+    switch (request.toolName) {
+      case 'AskUserQuestion': {
+        const parsed = safeParseToolInput(
+          AskUserQuestionInputSchema,
+          request.input,
+          'AskUserQuestion',
+          logger
+        );
+
+        if (!parsed.success || parsed.data.questions.length === 0) {
+          logger.warn('[Chat WS] Invalid or empty AskUserQuestion input', {
+            dbSessionId,
+            requestId: request.requestId,
+            validationSuccess: parsed.success,
+          });
+          try {
+            client.denyInteractiveRequest(
+              request.requestId,
+              'Invalid question format - unable to display question'
+            );
+          } catch (error) {
+            logger.error('[Chat WS] Failed to deny invalid AskUserQuestion request', {
+              dbSessionId,
+              requestId: request.requestId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          sessionStoreService.emitDelta(dbSessionId, {
+            type: 'error',
+            message: 'Received invalid question format from CLI',
+          });
+          return;
+        }
+
+        this.storePendingInteractiveRequest(dbSessionId, request, planContent);
+
+        sessionStoreService.emitDelta(dbSessionId, {
+          type: 'user_question',
+          requestId: request.requestId,
+          questions: parsed.data.questions,
+        });
+        return;
+      }
+      case 'ExitPlanMode':
+        this.storePendingInteractiveRequest(dbSessionId, request, planContent);
+        sessionStoreService.emitDelta(dbSessionId, {
+          type: 'permission_request',
+          requestId: request.requestId,
+          toolName: request.toolName,
+          toolInput: request.input,
+          planContent,
+        });
+        return;
+      default: {
+        const unreachable: never = request.toolName;
+        logger.error('[Chat WS] Unhandled interactive response tool', {
+          dbSessionId,
+          requestId: request.requestId,
+          toolName: unreachable,
+        });
+      }
+    }
+  }
+
+  private storePendingInteractiveRequest(
+    dbSessionId: string,
+    request: {
+      requestId: string;
+      toolName: InteractiveResponseTool;
+      toolUseId: string;
+      input: Record<string, unknown>;
+    },
+    planContent: string | null
+  ): void {
     sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
       requestId: request.requestId,
       toolName: request.toolName,
@@ -538,57 +671,6 @@ class ChatEventForwarderService {
       input: request.input,
       planContent,
       timestamp: new Date().toISOString(),
-    });
-
-    // Route to appropriate WebSocket message format
-    if (request.toolName === 'AskUserQuestion') {
-      const parsed = safeParseToolInput(
-        AskUserQuestionInputSchema,
-        request.input,
-        'AskUserQuestion',
-        logger
-      );
-
-      // Validate and extract questions
-      if (!parsed.success || parsed.data.questions.length === 0) {
-        logger.warn('[Chat WS] Invalid or empty AskUserQuestion input', {
-          dbSessionId,
-          requestId: request.requestId,
-          validationSuccess: parsed.success,
-        });
-        sessionStoreService.emitDelta(dbSessionId, {
-          type: 'error',
-          message: 'Received invalid question format from CLI',
-        });
-        return;
-      }
-
-      sessionStoreService.emitDelta(dbSessionId, {
-        type: 'user_question',
-        requestId: request.requestId,
-        questions: parsed.data.questions,
-      });
-      return;
-    }
-
-    if (request.toolName === 'ExitPlanMode') {
-      sessionStoreService.emitDelta(dbSessionId, {
-        type: 'permission_request',
-        requestId: request.requestId,
-        toolName: request.toolName,
-        toolInput: request.input,
-        planContent,
-      });
-      return;
-    }
-
-    // Fallback: send as generic interactive_request
-    sessionStoreService.emitDelta(dbSessionId, {
-      type: 'interactive_request',
-      requestId: request.requestId,
-      toolName: request.toolName,
-      toolUseId: request.toolUseId,
-      toolInput: request.input,
     });
   }
 
@@ -636,6 +718,12 @@ class ChatEventForwarderService {
       message?: { content?: Array<{ type?: string; text?: string }> };
     }
   ): void {
+    const assistantMsg = msg as ClaudeMessage;
+    const fallbackToolUseEvents = this.buildToolUseFallbackStreamEvents(assistantMsg);
+    for (const toolUseEvent of fallbackToolUseEvents) {
+      this.forwardClaudeMessage(dbSessionId, toolUseEvent);
+    }
+
     const content = msgWithType.message?.content;
     if (!Array.isArray(content)) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
@@ -648,7 +736,6 @@ class ChatEventForwarderService {
     const hasNarrativeText = content.some(
       (item) => item.type === 'text' && typeof item.text === 'string'
     );
-
     if (!hasNarrativeText) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
@@ -657,11 +744,67 @@ class ChatEventForwarderService {
       return;
     }
 
-    const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
-    // Preserve the full assistant payload (including tool_use blocks/ids)
-    // so downstream tool progress/summary events can still correlate.
-    const wsMsg = { type: 'claude_message', data: msg, order };
-    sessionStoreService.emitDelta(dbSessionId, wsMsg);
+    // Persist only narrative text from assistant message events.
+    const normalized = this.normalizeAssistantMessageToTextOnly(assistantMsg);
+    if (!normalized) {
+      return;
+    }
+    this.forwardClaudeMessage(dbSessionId, normalized);
+  }
+
+  private buildToolUseFallbackStreamEvents(message: ClaudeMessage): ClaudeMessage[] {
+    if (message.type !== 'assistant') {
+      return [];
+    }
+    const content = message.message?.content;
+    if (!Array.isArray(content)) {
+      return [];
+    }
+
+    const fallbackEvents: ClaudeMessage[] = [];
+    for (const [index, item] of content.entries()) {
+      if (item.type !== 'tool_use') {
+        continue;
+      }
+      fallbackEvents.push({
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index,
+          content_block: item,
+        },
+        timestamp: message.timestamp ?? new Date().toISOString(),
+      });
+    }
+
+    return fallbackEvents;
+  }
+
+  private normalizeAssistantMessageToTextOnly(message: ClaudeMessage): ClaudeMessage | null {
+    if (message.type !== 'assistant') {
+      return null;
+    }
+    const content = message.message?.content;
+    if (!Array.isArray(content)) {
+      return null;
+    }
+
+    const textBlocks = content.filter(
+      (item): item is ClaudeContentItem & { type: 'text'; text: string } =>
+        item.type === 'text' && typeof item.text === 'string'
+    );
+
+    if (textBlocks.length === 0) {
+      return null;
+    }
+
+    return {
+      ...message,
+      message: {
+        role: 'assistant',
+        content: textBlocks,
+      },
+    };
   }
 
   private forwardUserMessageWithToolResult(
@@ -677,7 +820,7 @@ class ChatEventForwarderService {
   ): void {
     // Forward user message UUID for rewind functionality.
     if (msgWithType.uuid) {
-      const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid };
+      const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid } as const;
       sessionStoreService.emitDelta(dbSessionId, uuidMsg);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Forwarding user message UUID', {
@@ -696,7 +839,7 @@ class ChatEventForwarderService {
       return;
     }
 
-    const hasToolResult = content.some((item) => item.type === 'tool_result');
+    const hasToolResult = hasToolResultContent(content as ClaudeContentItem[]);
     if (!hasToolResult) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
@@ -719,9 +862,7 @@ class ChatEventForwarderService {
       action: 'forwarding_user_message_with_tool_result',
     });
 
-    const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
-    const wsMsg = { type: 'claude_message', data: msg, order };
-    sessionStoreService.emitDelta(dbSessionId, wsMsg);
+    this.forwardClaudeMessage(dbSessionId, msg as ClaudeMessage);
   }
 
   /**

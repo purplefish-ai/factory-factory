@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { ClaudeMessage } from '@/lib/claude-types';
-import { handleThinkingStreaming, handleToolInputStreaming } from './streaming-utils';
+import { type ClaudeMessage, isWebSocketMessage } from '@/lib/claude-types';
+import { createToolInputAccumulatorState, handleToolInputStreaming } from './streaming-utils';
 
 describe('handleToolInputStreaming', () => {
   it('accumulates input_json_delta and returns TOOL_INPUT_UPDATE when JSON is complete', () => {
-    const toolInputAccumulatorRef = { current: new Map<string, string>() };
+    const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
 
     const startMsg: ClaudeMessage = {
       type: 'stream_event',
@@ -16,7 +16,8 @@ describe('handleToolInputStreaming', () => {
     };
 
     expect(handleToolInputStreaming(startMsg, toolInputAccumulatorRef)).toBeNull();
-    expect(toolInputAccumulatorRef.current.get('tool-1')).toBe('');
+    expect(toolInputAccumulatorRef.current.toolUseIdByIndex.get(0)).toBe('tool-1');
+    expect(toolInputAccumulatorRef.current.inputJsonByToolUseId.get('tool-1')).toBe('');
 
     const partialMsg: ClaudeMessage = {
       type: 'stream_event',
@@ -28,7 +29,9 @@ describe('handleToolInputStreaming', () => {
     };
 
     expect(handleToolInputStreaming(partialMsg, toolInputAccumulatorRef)).toBeNull();
-    expect(toolInputAccumulatorRef.current.get('tool-1')).toBe('{"query":"hi"');
+    expect(toolInputAccumulatorRef.current.inputJsonByToolUseId.get('tool-1')).toBe(
+      '{"query":"hi"'
+    );
 
     const finalMsg: ClaudeMessage = {
       type: 'stream_event',
@@ -45,44 +48,72 @@ describe('handleToolInputStreaming', () => {
     });
   });
 
+  it('cleans up accumulator entries on content_block_stop', () => {
+    const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
+    const startMsg: ClaudeMessage = {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 3,
+        content_block: { type: 'tool_use', id: 'tool-3', name: 'search', input: {} },
+      },
+    };
+    handleToolInputStreaming(startMsg, toolInputAccumulatorRef);
+
+    const stopMsg: ClaudeMessage = {
+      type: 'stream_event',
+      event: { type: 'content_block_stop', index: 3 },
+    };
+    handleToolInputStreaming(stopMsg, toolInputAccumulatorRef);
+
+    expect(toolInputAccumulatorRef.current.toolUseIdByIndex.has(3)).toBe(false);
+    expect(toolInputAccumulatorRef.current.inputJsonByToolUseId.has('tool-3')).toBe(false);
+  });
+
   it('returns null when message is not a stream_event', () => {
-    const toolInputAccumulatorRef = { current: new Map<string, string>() };
+    const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
     const nonStream: ClaudeMessage = {
       type: 'assistant',
       message: { role: 'assistant', content: 'ok' },
     };
 
     expect(handleToolInputStreaming(nonStream, toolInputAccumulatorRef)).toBeNull();
-    expect(toolInputAccumulatorRef.current.size).toBe(0);
+    expect(toolInputAccumulatorRef.current.toolUseIdByIndex.size).toBe(0);
+    expect(toolInputAccumulatorRef.current.inputJsonByToolUseId.size).toBe(0);
   });
 });
 
-describe('handleThinkingStreaming', () => {
-  it('clears thinking on message_start', () => {
-    const msg: ClaudeMessage = {
-      type: 'stream_event',
-      event: {
-        type: 'message_start',
-        message: { role: 'assistant', content: '' },
-      },
-    };
-
-    expect(handleThinkingStreaming(msg)).toEqual({ type: 'THINKING_CLEAR' });
+describe('isWebSocketMessage', () => {
+  it('rejects unknown websocket message types', () => {
+    expect(isWebSocketMessage({ type: 'not_real' })).toBe(false);
   });
 
-  it('returns THINKING_DELTA for thinking_delta events', () => {
-    const msg: ClaudeMessage = {
-      type: 'stream_event',
-      event: {
-        type: 'content_block_delta',
-        index: 0,
-        delta: { type: 'thinking_delta', thinking: 'step-by-step' },
-      },
-    };
+  it('rejects session_delta payloads without nested websocket event', () => {
+    expect(isWebSocketMessage({ type: 'session_delta', data: { foo: 'bar' } })).toBe(false);
+    expect(isWebSocketMessage({ type: 'session_delta', data: null })).toBe(false);
+  });
 
-    expect(handleThinkingStreaming(msg)).toEqual({
-      type: 'THINKING_DELTA',
-      payload: { thinking: 'step-by-step' },
-    });
+  it('accepts valid session_delta payloads', () => {
+    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'status_update' } })).toBe(
+      true
+    );
+  });
+
+  it('rejects non-delta nested payload types inside session_delta', () => {
+    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'session_snapshot' } })).toBe(
+      false
+    );
+    expect(
+      isWebSocketMessage({ type: 'session_delta', data: { type: 'session_replay_batch' } })
+    ).toBe(false);
+    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'session_delta' } })).toBe(
+      false
+    );
+  });
+
+  it('rejects claude_message without a nested Claude payload', () => {
+    expect(isWebSocketMessage({ type: 'claude_message' })).toBe(false);
+    expect(isWebSocketMessage({ type: 'claude_message', data: null })).toBe(false);
+    expect(isWebSocketMessage({ type: 'claude_message', data: { type: 'not_real' } })).toBe(false);
   });
 });

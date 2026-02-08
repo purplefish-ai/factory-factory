@@ -18,6 +18,7 @@ import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import { loadAllSessionData } from './chat-persistence';
 import type { ChatAction } from './chat-reducer';
+import { clearToolInputAccumulator, type ToolInputAccumulatorState } from './streaming-utils';
 
 const DEBUG_SESSION = false;
 const debug = createDebugLogger(DEBUG_SESSION);
@@ -28,7 +29,7 @@ export interface UseChatSessionOptions {
   /** Dispatch function from reducer */
   dispatch: React.Dispatch<ChatAction>;
   /** Tool input accumulator ref to clear on session switch */
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>;
 }
 
 export interface UseChatSessionReturn {
@@ -60,7 +61,7 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       dispatch({ type: 'SESSION_SWITCH_START' });
 
       // Clear tool input accumulator
-      toolInputAccumulatorRef.current.clear();
+      clearToolInputAccumulator(toolInputAccumulatorRef.current);
     }
 
     // Load persisted data for the new session (queue comes from backend via session_snapshot)

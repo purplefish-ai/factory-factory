@@ -3,7 +3,6 @@
  *
  * This module contains helpers for:
  * - Tool input accumulation during streaming
- * - Thinking delta handling (extended thinking mode)
  * - Stream event extraction and validation
  */
 
@@ -39,12 +38,29 @@ function getStreamEvent(claudeMsg: ClaudeMessage): ClaudeStreamEvent | null {
 // Tool Input Streaming
 // =============================================================================
 
+export interface ToolInputAccumulatorState {
+  toolUseIdByIndex: Map<number, string>;
+  inputJsonByToolUseId: Map<string, string>;
+}
+
+export function createToolInputAccumulatorState(): ToolInputAccumulatorState {
+  return {
+    toolUseIdByIndex: new Map(),
+    inputJsonByToolUseId: new Map(),
+  };
+}
+
+export function clearToolInputAccumulator(state: ToolInputAccumulatorState): void {
+  state.toolUseIdByIndex.clear();
+  state.inputJsonByToolUseId.clear();
+}
+
 /**
  * Handle tool_use block start - initialize accumulator.
  */
 function handleToolUseStart(
   event: ClaudeStreamEvent,
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
 ): void {
   if (event.type !== 'content_block_start') {
     return;
@@ -52,7 +68,8 @@ function handleToolUseStart(
   const block = event.content_block;
   if (block.type === 'tool_use' && block.id) {
     const toolUseId = block.id;
-    toolInputAccumulatorRef.current.set(toolUseId, '');
+    toolInputAccumulatorRef.current.toolUseIdByIndex.set(event.index, toolUseId);
+    toolInputAccumulatorRef.current.inputJsonByToolUseId.set(toolUseId, '');
     debug.log('Tool use started:', toolUseId, block.name);
   }
 }
@@ -63,7 +80,7 @@ function handleToolUseStart(
  */
 function handleToolInputDelta(
   event: ClaudeStreamEvent,
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
 ): ChatAction | null {
   if (event.type !== 'content_block_delta') {
     return null;
@@ -75,16 +92,14 @@ function handleToolInputDelta(
     return null;
   }
 
-  const accumulatorEntries = Array.from(toolInputAccumulatorRef.current.entries());
-  if (accumulatorEntries.length === 0) {
+  const toolUseId = toolInputAccumulatorRef.current.toolUseIdByIndex.get(event.index);
+  if (!toolUseId) {
     return null;
   }
 
-  // Get the last (most recent) tool_use_id
-  // biome-ignore lint/style/noNonNullAssertion: length > 0 checked above
-  const [toolUseId, currentJson] = accumulatorEntries[accumulatorEntries.length - 1]!;
+  const currentJson = toolInputAccumulatorRef.current.inputJsonByToolUseId.get(toolUseId) ?? '';
   const newJson = currentJson + delta.partial_json;
-  toolInputAccumulatorRef.current.set(toolUseId, newJson);
+  toolInputAccumulatorRef.current.inputJsonByToolUseId.set(toolUseId, newJson);
 
   // Try to parse the accumulated JSON and create update action
   try {
@@ -99,13 +114,29 @@ function handleToolInputDelta(
   }
 }
 
+function handleToolUseStop(
+  event: ClaudeStreamEvent,
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
+): void {
+  if (event.type !== 'content_block_stop') {
+    return;
+  }
+
+  const toolUseId = toolInputAccumulatorRef.current.toolUseIdByIndex.get(event.index);
+  if (!toolUseId) {
+    return;
+  }
+  toolInputAccumulatorRef.current.toolUseIdByIndex.delete(event.index);
+  toolInputAccumulatorRef.current.inputJsonByToolUseId.delete(toolUseId);
+}
+
 /**
  * Handle tool input accumulation from stream events.
  * Returns a TOOL_INPUT_UPDATE action if input was accumulated, null otherwise.
  */
 export function handleToolInputStreaming(
   claudeMsg: ClaudeMessage,
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
 ): ChatAction | null {
   const event = getStreamEvent(claudeMsg);
   if (!event) {
@@ -115,36 +146,9 @@ export function handleToolInputStreaming(
   // Initialize accumulator for tool_use start events
   handleToolUseStart(event, toolInputAccumulatorRef);
 
+  // Release per-tool buffers when tool_use streaming completes.
+  handleToolUseStop(event, toolInputAccumulatorRef);
+
   // Handle input JSON deltas
   return handleToolInputDelta(event, toolInputAccumulatorRef);
-}
-
-// =============================================================================
-// Thinking Streaming
-// =============================================================================
-
-/**
- * Handle thinking delta stream events (extended thinking mode).
- * Returns a THINKING_DELTA action for thinking deltas, THINKING_CLEAR for message_start, null otherwise.
- */
-export function handleThinkingStreaming(claudeMsg: ClaudeMessage): ChatAction | null {
-  const event = getStreamEvent(claudeMsg);
-  if (!event) {
-    return null;
-  }
-
-  // Clear thinking on new message start
-  if (event.type === 'message_start') {
-    return { type: 'THINKING_CLEAR' };
-  }
-
-  // Accumulate thinking delta
-  if (event.type === 'content_block_delta') {
-    const delta = event.delta;
-    if (delta.type === 'thinking_delta') {
-      return { type: 'THINKING_DELTA', payload: { thinking: delta.thinking } };
-    }
-  }
-
-  return null;
 }
