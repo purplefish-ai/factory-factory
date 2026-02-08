@@ -300,7 +300,26 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('WS_CLAUDE_MESSAGE action', () => {
-    it('should add assistant message to messages array', () => {
+    it('should add assistant message with tool content to messages array', () => {
+      const claudeMsg: ClaudeMessage = {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'tool-1', name: 'Read', input: { file: 'test.ts' } }],
+        },
+      };
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: claudeMsg, order: 0 },
+      };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]!.source).toBe('claude');
+      expect(newState.messages[0]!.message).toEqual(claudeMsg);
+    });
+
+    it('should store assistant message with text content', () => {
       const claudeMsg = createTestAssistantMessage();
       const action: ChatAction = {
         type: 'WS_CLAUDE_MESSAGE',
@@ -1490,7 +1509,7 @@ describe('chatReducer', () => {
       const existingMessage: ChatMessage = {
         id: 'old-msg',
         source: 'claude',
-        message: createTestAssistantMessage(),
+        message: createTestResultMessage(),
         timestamp: '2024-01-01T00:00:00.000Z',
         order: 0,
       };
@@ -1504,7 +1523,7 @@ describe('chatReducer', () => {
         type: 'SESSION_REPLAY_BATCH',
         payload: {
           replayEvents: [
-            { type: 'claude_message', data: createTestAssistantMessage(), order: 0 },
+            { type: 'claude_message', data: createTestResultMessage(), order: 0 },
             { type: 'status', running: true, processAlive: true },
           ],
         },
