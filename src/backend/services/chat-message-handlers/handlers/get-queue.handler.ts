@@ -1,20 +1,23 @@
 import type { GetQueueMessage } from '@/shared/websocket';
-import { chatEventForwarderService } from '../../chat-event-forwarder.service';
-import { messageStateService } from '../../message-state.service';
+import { claudeSessionAccessor } from '../../../resource_accessors/claude-session.accessor';
 import { sessionService } from '../../session.service';
-import { sessionRuntimeStoreService } from '../../session-runtime-store.service';
+import { sessionStoreService } from '../../session-store.service';
 import type { ChatMessageHandler } from '../types';
 
 export function createGetQueueHandler(): ChatMessageHandler<GetQueueMessage> {
-  return ({ sessionId }) => {
+  return async ({ ws, sessionId, workingDir }) => {
+    const dbSession = await claudeSessionAccessor.findById(sessionId);
+    if (!dbSession) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+      return;
+    }
     const existingClient = sessionService.getClient(sessionId);
-    sessionRuntimeStoreService.syncFromClient(sessionId, {
+    await sessionStoreService.subscribe({
+      sessionId,
+      workingDir,
+      claudeSessionId: dbSession.claudeSessionId,
       isRunning: existingClient?.isRunning() ?? false,
       isWorking: existingClient?.isWorking() ?? false,
     });
-    const pendingInteractiveRequest =
-      chatEventForwarderService.getPendingRequest(sessionId) ?? null;
-    messageStateService.sendSnapshot(sessionId, { pendingInteractiveRequest });
-    sessionRuntimeStoreService.emitSnapshot(sessionId);
   };
 }

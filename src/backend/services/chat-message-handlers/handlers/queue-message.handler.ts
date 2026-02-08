@@ -1,10 +1,10 @@
+import { MessageState } from '@/shared/claude';
 import type { QueueMessageInput } from '@/shared/websocket';
-import { messageQueueService } from '../../message-queue.service';
-import { messageStateService } from '../../message-state.service';
+import { sessionStoreService } from '../../session-store.service';
 import { resolveAttachmentContentType } from '../attachment-utils';
 import { tryHandleAsInteractiveResponse } from '../interactive-response';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
-import { buildQueuedMessage, notifyMessageAccepted } from '../utils';
+import { buildQueuedMessage } from '../utils';
 
 /**
  * Extract text content from text attachments.
@@ -52,20 +52,36 @@ export function createQueueMessageHandler(
     // This handles the case where user pastes large text that becomes an attachment
     const messageId = message.id;
     const responseText = text || extractTextFromAttachments(message.attachments);
-    if (responseText && tryHandleAsInteractiveResponse(ws, sessionId, messageId, responseText)) {
+    if (responseText && tryHandleAsInteractiveResponse(sessionId, messageId, responseText)) {
       return;
     }
 
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
-    const result = messageQueueService.enqueue(sessionId, queuedMsg);
+    const result = sessionStoreService.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
-      // Create rejected message in state service - emits message_state_changed event
-      messageStateService.createRejectedMessage(sessionId, messageId, result.error, text);
+      sessionStoreService.emitDelta(sessionId, {
+        type: 'message_state_changed',
+        id: messageId,
+        newState: MessageState.REJECTED,
+        errorMessage: result.error,
+      });
       return;
     }
 
-    notifyMessageAccepted(sessionId, queuedMsg);
+    sessionStoreService.emitDelta(sessionId, {
+      type: 'message_state_changed',
+      id: messageId,
+      newState: MessageState.ACCEPTED,
+      queuePosition: result.position,
+      userMessage: {
+        text: queuedMsg.text,
+        timestamp: queuedMsg.timestamp,
+        attachments: queuedMsg.attachments,
+        settings: queuedMsg.settings,
+      },
+    });
+
     await deps.tryDispatchNextMessage(sessionId);
   };
 }

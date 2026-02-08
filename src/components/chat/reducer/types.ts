@@ -242,6 +242,15 @@ export type ChatAction =
       };
     }
   | {
+      type: 'SESSION_SNAPSHOT';
+      payload: {
+        messages: ChatMessage[];
+        queuedMessages: QueuedMessage[];
+        sessionRuntime: SessionRuntimeState;
+        pendingInteractiveRequest?: PendingInteractiveRequest | null;
+      };
+    }
+  | {
       type: 'SESSION_REPLAY_BATCH';
       payload: {
         replayEvents: WebSocketMessage[];

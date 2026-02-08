@@ -10,8 +10,6 @@ export { type ConnectionInfo, chatConnectionService } from './chat-connection.se
 export { chatEventForwarderService } from './chat-event-forwarder.service';
 // Chat message handlers service
 export { type ChatMessage, chatMessageHandlerService } from './chat-message-handlers.service';
-// Chat transport adapter service
-export { chatTransportAdapterService } from './chat-transport-adapter.service';
 // CI fixer service
 export { type CIFailureDetails, type CIFixResult, ciFixerService } from './ci-fixer.service';
 // CLI health service
@@ -34,8 +32,6 @@ export { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.servi
 export { computeKanbanColumn, kanbanStateService } from './kanban-state.service';
 // Logger service
 export { createLogger } from './logger.service';
-// Message state service
-export { messageStateService } from './message-state.service';
 // Notification service
 export { notificationService } from './notification.service';
 // Port service
@@ -62,6 +58,8 @@ export { sessionService } from './session.service';
 export { SessionFileLogger, sessionFileLogger } from './session-file-logger.service';
 // Session runtime store service
 export { sessionRuntimeStoreService } from './session-runtime-store.service';
+// Session store service
+export { sessionStoreService } from './session-store.service';
 // Terminal service
 export { terminalService } from './terminal.service';
 // Workspace activity service

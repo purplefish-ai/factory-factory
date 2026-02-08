@@ -212,6 +212,73 @@ describe('parseHistoryEntry', () => {
       expect(result[0]!.isError).toBe(false);
     });
 
+    it('should parse user image content into attachment metadata', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        uuid: 'uuid-image-1',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'Zm9vYmFy',
+              },
+            },
+          ],
+        },
+      };
+
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('');
+      expect(result[0]!.attachments).toHaveLength(1);
+      expect(result[0]!.attachments?.[0]).toMatchObject({
+        id: 'uuid-image-1-image-0',
+        name: 'image-1.png',
+        type: 'image/png',
+        contentType: 'image',
+        data: 'Zm9vYmFy',
+      });
+      expect(result[0]!.attachments?.[0]?.size).toBe(6);
+    });
+
+    it('should parse text and image user content as separate history entries', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'See screenshot' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: '/9j/4AAQ',
+              },
+            },
+          ],
+        },
+      };
+
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(2);
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('See screenshot');
+      expect(result[1]!.type).toBe('user');
+      expect(result[1]!.attachments?.[0]).toMatchObject({
+        name: 'image-2.jpeg',
+        type: 'image/jpeg',
+        contentType: 'image',
+      });
+    });
+
     it('should parse user message with tool_result error', () => {
       const entry = {
         type: 'user',

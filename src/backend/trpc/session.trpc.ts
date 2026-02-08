@@ -127,11 +127,11 @@ export const sessionRouter = router({
   deleteClaudeSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { messageQueueService, sessionService } = ctx.appContext.services;
+      const { sessionService, sessionStoreService } = ctx.appContext.services;
       // Stop process first to prevent orphaned Claude processes
       await sessionService.stopClaudeSession(input.id);
-      // Clear any queued messages to prevent memory leak
-      messageQueueService.clear(input.id);
+      // Clear any in-memory session store state
+      sessionStoreService.clearSession(input.id);
       return claudeSessionAccessor.delete(input.id);
     }),
 

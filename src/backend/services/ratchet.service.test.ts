@@ -40,8 +40,8 @@ vi.mock('./session.service', () => ({
   },
 }));
 
-vi.mock('./message-state.service', () => ({
-  messageStateService: {
+vi.mock('./session-store.service', () => ({
+  sessionStoreService: {
     injectCommittedUserMessage: vi.fn(),
   },
 }));

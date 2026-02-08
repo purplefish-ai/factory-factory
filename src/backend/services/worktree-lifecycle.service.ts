@@ -10,9 +10,9 @@ import { FactoryConfigService } from './factory-config.service';
 import { gitOpsService } from './git-ops.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
-import { messageStateService } from './message-state.service';
 import { RunScriptService } from './run-script.service';
 import { sessionService } from './session.service';
+import { sessionStoreService } from './session-store.service';
 import { startupScriptService } from './startup-script.service';
 import { terminalService } from './terminal.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
@@ -537,7 +537,7 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
     // If we have a GitHub issue prompt, inject it into the message state
     // so it appears in the chat UI as a user message
     if (issuePrompt) {
-      messageStateService.injectCommittedUserMessage(session.id, issuePrompt);
+      sessionStoreService.injectCommittedUserMessage(session.id, issuePrompt);
     }
 
     // Start the session - pass empty string to start without any initial prompt

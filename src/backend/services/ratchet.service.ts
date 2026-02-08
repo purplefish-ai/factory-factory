@@ -15,8 +15,8 @@ import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { fixerSessionService } from './fixer-session.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
-import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
+import { sessionStoreService } from './session-store.service';
 
 const logger = createLogger('ratchet');
 
@@ -912,7 +912,7 @@ class RatchetService {
         dispatchMode: 'start_empty_and_send',
         buildPrompt: () => buildRatchetDispatchPrompt(workspace.prUrl, prStateInfo.prNumber),
         beforeStart: ({ sessionId, prompt }) => {
-          messageStateService.injectCommittedUserMessage(sessionId, prompt);
+          sessionStoreService.injectCommittedUserMessage(sessionId, prompt);
         },
       });
 

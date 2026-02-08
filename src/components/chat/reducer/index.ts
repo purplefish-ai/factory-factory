@@ -216,6 +216,21 @@ function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
   };
 }
 
+function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
+  if (!(data.messages && data.queuedMessages && data.sessionRuntime)) {
+    return null;
+  }
+  return {
+    type: 'SESSION_SNAPSHOT',
+    payload: {
+      messages: data.messages,
+      queuedMessages: data.queuedMessages,
+      sessionRuntime: data.sessionRuntime,
+      pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+    },
+  };
+}
+
 function handleSessionReplayBatch(data: WebSocketMessage): ChatAction | null {
   if (!Array.isArray(data.replayEvents)) {
     return null;
@@ -417,6 +432,7 @@ const messageHandlers: Record<string, MessageHandler> = {
   user_question: handleUserQuestionMessage,
   permission_cancelled: handlePermissionCancelledMessage,
   message_used_as_response: handleMessageUsedAsResponseMessage,
+  session_snapshot: handleSessionSnapshot,
   messages_snapshot: handleMessagesSnapshot,
   session_replay_batch: handleSessionReplayBatch,
   message_state_changed: handleMessageStateChanged,

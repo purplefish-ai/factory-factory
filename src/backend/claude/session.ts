@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
+import type { MessageAttachment } from '@/shared/claude';
 import { createLogger } from '../services/logger.service';
 import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
 
@@ -30,6 +31,7 @@ export interface HistoryMessage {
   content: string;
   timestamp: string;
   uuid?: string;
+  attachments?: MessageAttachment[];
   // Tool-specific fields
   toolName?: string;
   toolId?: string;
@@ -279,6 +281,21 @@ interface EntryMetadata {
   uuid?: string;
 }
 
+function inferImageExtension(mediaType: string): string {
+  const subtype = mediaType.split('/')[1];
+  if (!subtype) {
+    return 'bin';
+  }
+  return subtype.split('+')[0] || 'bin';
+}
+
+function estimateBase64Bytes(base64: string): number {
+  const normalized = base64.replace(/\s/g, '');
+  const paddingMatch = normalized.match(/=+$/);
+  const padding = paddingMatch ? paddingMatch[0].length : 0;
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
+}
+
 /**
  * Extract text content from tool result
  */
@@ -298,7 +315,11 @@ function extractToolResultContent(item: ClaudeContentItem & { type: 'tool_result
 /**
  * Parse a user content item into a HistoryMessage
  */
-function parseUserContentItem(item: ClaudeContentItem, meta: EntryMetadata): HistoryMessage | null {
+function parseUserContentItem(
+  item: ClaudeContentItem,
+  meta: EntryMetadata,
+  itemIndex: number
+): HistoryMessage | null {
   if (item.type === 'text') {
     // Skip system content in text items
     if (isSystemContent(item.text)) {
@@ -306,6 +327,31 @@ function parseUserContentItem(item: ClaudeContentItem, meta: EntryMetadata): His
     }
     return { type: 'user', content: item.text, ...meta };
   }
+
+  if (item.type === 'image') {
+    const mediaType = item.source.media_type || 'application/octet-stream';
+    const extension = inferImageExtension(mediaType);
+    const attachmentId = meta.uuid
+      ? `${meta.uuid}-image-${itemIndex}`
+      : `${meta.timestamp}-image-${itemIndex}`;
+
+    return {
+      type: 'user',
+      content: '',
+      attachments: [
+        {
+          id: attachmentId,
+          name: `image-${itemIndex + 1}.${extension}`,
+          type: mediaType,
+          size: estimateBase64Bytes(item.source.data),
+          data: item.source.data,
+          contentType: 'image',
+        },
+      ],
+      ...meta,
+    };
+  }
+
   if (item.type === 'tool_result') {
     return {
       type: 'tool_result',
@@ -360,7 +406,7 @@ function parseUserEntry(message: ClaudeMessage, meta: EntryMetadata): HistoryMes
 
   if (Array.isArray(content)) {
     return (content as ClaudeContentItem[])
-      .map((item) => parseUserContentItem(item, meta))
+      .map((item, index) => parseUserContentItem(item, meta, index))
       .filter((m): m is HistoryMessage => m !== null);
   }
 
