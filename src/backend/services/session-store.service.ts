@@ -64,6 +64,7 @@ class SessionStoreService {
       toolId: historyMsg.toolId ?? null,
       toolInput: historyMsg.toolInput ?? null,
       isError: historyMsg.isError ?? false,
+      attachments: historyMsg.attachments ?? null,
     });
     const digest = createHash('sha1').update(fingerprint).digest('hex').slice(0, 12);
     return `history-${index}-${digest}`;
@@ -156,6 +157,7 @@ class SessionStoreService {
           id: messageId,
           source: 'user',
           text: historyMsg.content,
+          attachments: historyMsg.attachments,
           timestamp: historyMsg.timestamp,
           order,
         });
@@ -345,10 +347,10 @@ class SessionStoreService {
     return true;
   }
 
-  dequeueNext(sessionId: string): QueuedMessage | undefined {
+  dequeueNext(sessionId: string, options?: { emitSnapshot?: boolean }): QueuedMessage | undefined {
     const store = this.getOrCreate(sessionId);
     const next = store.queue.shift();
-    if (next) {
+    if (next && options?.emitSnapshot !== false) {
       this.forwardSnapshot(store);
     }
     return next;

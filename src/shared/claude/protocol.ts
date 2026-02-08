@@ -407,6 +407,7 @@ export interface HistoryMessage {
   content: string;
   timestamp: string;
   uuid?: string;
+  attachments?: MessageAttachment[];
   toolName?: string;
   toolId?: string;
   toolInput?: Record<string, unknown>;

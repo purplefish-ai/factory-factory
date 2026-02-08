@@ -75,7 +75,7 @@ class ChatMessageHandlerService {
     this.dispatchInProgress.set(dbSessionId, true);
 
     // Dequeue first to claim the message atomically before any async operations.
-    const msg = sessionStoreService.dequeueNext(dbSessionId);
+    const msg = sessionStoreService.dequeueNext(dbSessionId, { emitSnapshot: false });
     if (!msg) {
       this.dispatchInProgress.set(dbSessionId, false);
       return;

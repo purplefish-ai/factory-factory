@@ -74,6 +74,45 @@ describe('SessionStoreService', () => {
     expect(payload.messages?.[0]?.text).toBe('hello');
   });
 
+  it('hydrates user attachments from Claude history into snapshot messages', async () => {
+    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+      {
+        type: 'user',
+        content: '',
+        timestamp: '2026-02-01T00:00:00.000Z',
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'image-1.png',
+            type: 'image/png',
+            size: 123,
+            data: 'Zm9v',
+            contentType: 'image',
+          },
+        ],
+      },
+    ]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
+      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
+    );
+    expect(snapshotCall).toBeDefined();
+    const payload = snapshotCall?.[1] as {
+      messages?: Array<{ source: string; attachments?: Array<{ id: string }> }>;
+    };
+    expect(payload.messages).toHaveLength(1);
+    expect(payload.messages?.[0]?.source).toBe('user');
+    expect(payload.messages?.[0]?.attachments?.[0]?.id).toBe('att-1');
+  });
+
   it('subscribe does not emit session_delta before session_snapshot', async () => {
     vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
 
@@ -256,6 +295,47 @@ describe('SessionStoreService', () => {
     };
     expect(payload.queuedMessages?.map((msg) => msg.id)).toEqual(['m1']);
     expect(payload.messages?.some((msg) => msg.id === 'm1')).toBe(true);
+  });
+
+  it('dequeueNext emits snapshot by default', () => {
+    sessionStoreService.enqueue('s1', {
+      id: 'm1',
+      text: 'queued',
+      timestamp: '2026-02-01T00:00:00.000Z',
+      settings: {
+        selectedModel: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+
+    mockedConnectionService.forwardToSession.mockClear();
+    const next = sessionStoreService.dequeueNext('s1');
+
+    expect(next?.id).toBe('m1');
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
+      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
+    );
+    expect(snapshotCall).toBeDefined();
+  });
+
+  it('dequeueNext can skip snapshot emission to avoid transient UI gaps during dispatch', () => {
+    sessionStoreService.enqueue('s1', {
+      id: 'm1',
+      text: 'queued',
+      timestamp: '2026-02-01T00:00:00.000Z',
+      settings: {
+        selectedModel: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+
+    mockedConnectionService.forwardToSession.mockClear();
+    const next = sessionStoreService.dequeueNext('s1', { emitSnapshot: false });
+
+    expect(next?.id).toBe('m1');
+    expect(mockedConnectionService.forwardToSession).not.toHaveBeenCalled();
   });
 
   it('markProcessExit drops queued messages and pending interactive request', () => {
