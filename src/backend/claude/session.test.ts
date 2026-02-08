@@ -244,6 +244,34 @@ describe('parseHistoryEntry', () => {
       });
     });
 
+    it('should preserve interleaving order between user content and tool_result entries', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Before tool' },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-321',
+              content: 'Tool output',
+            },
+            { type: 'text', text: 'After tool' },
+          ],
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(3);
+      expect(result[0]).toMatchObject({ type: 'user', content: 'Before tool' });
+      expect(result[1]).toMatchObject({
+        type: 'tool_result',
+        content: 'Tool output',
+        toolId: 'tool-321',
+      });
+      expect(result[2]).toMatchObject({ type: 'user', content: 'After tool' });
+    });
+
     it('should parse user image content into attachment metadata', () => {
       const entry = {
         type: 'user',

@@ -618,14 +618,7 @@ class ChatEventForwarderService {
           return;
         }
 
-        sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
-          requestId: request.requestId,
-          toolName: request.toolName,
-          toolUseId: request.toolUseId,
-          input: request.input,
-          planContent,
-          timestamp: new Date().toISOString(),
-        });
+        this.storePendingInteractiveRequest(dbSessionId, request, planContent);
 
         sessionStoreService.emitDelta(dbSessionId, {
           type: 'user_question',
@@ -635,14 +628,7 @@ class ChatEventForwarderService {
         return;
       }
       case 'ExitPlanMode':
-        sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
-          requestId: request.requestId,
-          toolName: request.toolName,
-          toolUseId: request.toolUseId,
-          input: request.input,
-          planContent,
-          timestamp: new Date().toISOString(),
-        });
+        this.storePendingInteractiveRequest(dbSessionId, request, planContent);
         sessionStoreService.emitDelta(dbSessionId, {
           type: 'permission_request',
           requestId: request.requestId,
@@ -660,6 +646,26 @@ class ChatEventForwarderService {
         });
       }
     }
+  }
+
+  private storePendingInteractiveRequest(
+    dbSessionId: string,
+    request: {
+      requestId: string;
+      toolName: InteractiveResponseTool;
+      toolUseId: string;
+      input: Record<string, unknown>;
+    },
+    planContent: string | null
+  ): void {
+    sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
+      requestId: request.requestId,
+      toolName: request.toolName,
+      toolUseId: request.toolUseId,
+      input: request.input,
+      planContent,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private handleMessageEvent(

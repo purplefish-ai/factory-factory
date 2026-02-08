@@ -524,6 +524,30 @@ describe('SessionStoreService', () => {
     });
   });
 
+  it('clears stale lastExit after transitioning back to idle', async () => {
+    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: null,
+      isRunning: true,
+      isWorking: true,
+    });
+
+    sessionStoreService.markProcessExit('s1', 1);
+    sessionStoreService.markIdle('s1', 'alive');
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; sessionRuntime?: { lastExit?: unknown } })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(snapshotCall).toBeDefined();
+    expect(snapshotCall?.sessionRuntime).toBeDefined();
+    expect(snapshotCall?.sessionRuntime?.lastExit).toBeUndefined();
+  });
+
   it('does not persist duplicate result text when latest assistant text matches', () => {
     sessionStoreService.appendClaudeEvent('s1', {
       type: 'assistant',

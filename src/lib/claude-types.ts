@@ -22,7 +22,11 @@ import type {
   ToolUseContent,
   WebSocketMessage,
 } from '@/shared/claude';
-import { SESSION_DELTA_EXCLUDED_MESSAGE_TYPES, WEBSOCKET_MESSAGE_TYPES } from '@/shared/claude';
+import {
+  CLAUDE_MESSAGE_TYPES,
+  SESSION_DELTA_EXCLUDED_MESSAGE_TYPES,
+  WEBSOCKET_MESSAGE_TYPES,
+} from '@/shared/claude';
 
 // =============================================================================
 // UI Chat Message Group Types
@@ -92,14 +96,7 @@ export function isImageContent(item: ClaudeContentItem): item is ImageContent {
 
 const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
 const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
-const claudeMessageTypes = new Set<string>([
-  'system',
-  'assistant',
-  'user',
-  'stream_event',
-  'result',
-  'error',
-]);
+const claudeMessageTypes = new Set<string>(CLAUDE_MESSAGE_TYPES);
 
 /**
  * Type guard to validate unknown data is a WebSocketMessage.

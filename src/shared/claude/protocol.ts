@@ -344,6 +344,20 @@ export interface ClaudeMessage {
   status?: string;
 }
 
+const CLAUDE_MESSAGE_TYPE_MAP: Record<ClaudeMessage['type'], true> = {
+  system: true,
+  assistant: true,
+  user: true,
+  stream_event: true,
+  result: true,
+  error: true,
+};
+
+/**
+ * Canonical list of valid Claude payload types nested in claude_message events.
+ */
+export const CLAUDE_MESSAGE_TYPES = Object.keys(CLAUDE_MESSAGE_TYPE_MAP) as ClaudeMessage['type'][];
+
 /**
  * Narrow shape used to evaluate whether assistant content blocks should be rendered/stored.
  * Shared across backend forwarding and frontend reducer filtering to prevent drift.

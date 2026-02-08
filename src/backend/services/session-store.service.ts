@@ -247,12 +247,13 @@ class SessionStoreService {
     },
     options?: { emitDelta?: boolean }
   ): void {
+    const hasExplicitLastExit = Object.hasOwn(updates, 'lastExit');
     store.runtime = {
       ...store.runtime,
       phase: updates.phase,
       processState: updates.processState,
       activity: updates.activity,
-      ...(updates.lastExit ? { lastExit: updates.lastExit } : {}),
+      ...(hasExplicitLastExit ? { lastExit: updates.lastExit } : { lastExit: undefined }),
       updatedAt: new Date().toISOString(),
     };
 

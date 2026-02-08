@@ -270,7 +270,6 @@ interface EntryMetadata {
 interface ParsedUserContentAccumulator {
   textParts: string[];
   attachments: NonNullable<HistoryMessage['attachments']>;
-  toolResults: Extract<HistoryMessage, { type: 'tool_result' }>[];
 }
 
 function inferImageExtension(mediaType: string): string {
@@ -328,14 +327,27 @@ function parseUserContentItem(
   }
 
   if (item.type === 'tool_result') {
-    acc.toolResults.push({
-      type: 'tool_result',
-      content: item.content,
-      toolId: item.tool_use_id,
-      isError: item.is_error,
-      ...meta,
-    });
+    // Handled by parseUserEntry so we can preserve original interleaving order.
+    return;
   }
+}
+
+function flushUserAccumulator(
+  result: HistoryMessage[],
+  acc: ParsedUserContentAccumulator,
+  meta: EntryMetadata
+): void {
+  if (acc.textParts.length === 0 && acc.attachments.length === 0) {
+    return;
+  }
+  result.push({
+    type: 'user',
+    content: acc.textParts.join('\n\n'),
+    ...(acc.attachments.length > 0 ? { attachments: [...acc.attachments] } : {}),
+    ...meta,
+  });
+  acc.textParts.length = 0;
+  acc.attachments.length = 0;
 }
 
 /**
@@ -379,26 +391,28 @@ function parseUserEntry(message: ClaudeMessage, meta: EntryMetadata): HistoryMes
   }
 
   if (Array.isArray(content)) {
+    const result: HistoryMessage[] = [];
     const acc: ParsedUserContentAccumulator = {
       textParts: [],
       attachments: [],
-      toolResults: [],
     };
 
     for (const [index, item] of (content as ClaudeContentItem[]).entries()) {
+      if (item.type === 'tool_result') {
+        flushUserAccumulator(result, acc, meta);
+        result.push({
+          type: 'tool_result',
+          content: item.content,
+          toolId: item.tool_use_id,
+          isError: item.is_error,
+          ...meta,
+        });
+        continue;
+      }
       parseUserContentItem(item, meta, index, acc);
     }
 
-    const result: HistoryMessage[] = [];
-    if (acc.textParts.length > 0 || acc.attachments.length > 0) {
-      result.push({
-        type: 'user',
-        content: acc.textParts.join('\n\n'),
-        ...(acc.attachments.length > 0 ? { attachments: acc.attachments } : {}),
-        ...meta,
-      });
-    }
-    result.push(...acc.toolResults);
+    flushUserAccumulator(result, acc, meta);
     return result;
   }
 
