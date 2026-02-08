@@ -148,6 +148,10 @@ describe('DataBackupService', () => {
     cachedSlashCommands: { commands: [] },
     // Ratchet settings
     ratchetEnabled: true,
+    ratchetAutoFixCi: true,
+    ratchetAutoFixReviews: true,
+    ratchetAutoMerge: false,
+    ratchetAllowedReviewers: null,
     createdAt: new Date('2025-01-01T00:00:00.000Z'),
     updatedAt: new Date('2025-01-01T00:00:00.000Z'),
   };

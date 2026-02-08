@@ -1,7 +1,6 @@
+import type { QueuedMessage } from '@/shared/claude';
 import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
 import { createLogger } from '../logger.service';
-import type { QueuedMessage } from '../message-queue.service';
-import { messageStateService } from '../message-state.service';
 import { DEBUG_CHAT_WS, isValidModel } from './constants';
 
 const logger = createLogger('chat-message-handlers');
@@ -30,9 +29,7 @@ export function buildQueuedMessage(
   };
 }
 
-export function notifyMessageAccepted(sessionId: string, queuedMsg: QueuedMessage): void {
-  messageStateService.createUserMessage(sessionId, queuedMsg);
-
+export function logMessageQueued(sessionId: string, queuedMsg: QueuedMessage): void {
   if (DEBUG_CHAT_WS) {
     logger.info('[Chat WS] Message queued', { sessionId, messageId: queuedMsg.id });
   }

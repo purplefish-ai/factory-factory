@@ -466,6 +466,8 @@ export interface AgentMetadata {
  */
 export interface WebSocketMessage {
   type: // Session lifecycle events
+    | 'session_snapshot'
+    | 'session_delta'
     | 'status'
     | 'starting'
     | 'started'
@@ -483,6 +485,7 @@ export interface WebSocketMessage {
     // Interactive requests
     | 'permission_request'
     | 'user_question'
+    | 'interactive_request'
     | 'permission_cancelled'
     // Queue error handling
     | 'message_rejected'
@@ -525,6 +528,7 @@ export interface WebSocketMessage {
   // Permission request fields
   requestId?: string;
   toolName?: string;
+  toolUseId?: string;
   toolInput?: Record<string, unknown>;
   // Plan content for ExitPlanMode permission requests
   planContent?: string | null;
@@ -544,6 +548,8 @@ export interface WebSocketMessage {
   sessionRuntime?: SessionRuntimeState;
   /** Pending interactive request for messages_snapshot events */
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
+  /** Queued messages included in session_snapshot */
+  queuedMessages?: QueuedMessage[];
   /** Client-generated ID for correlating load_session requests and responses */
   loadRequestId?: string;
   /** Batch of WebSocket events for atomic session replay during hydration */

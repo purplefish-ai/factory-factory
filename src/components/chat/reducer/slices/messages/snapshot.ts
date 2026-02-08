@@ -29,6 +29,36 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         rewindPreview: null,
       };
     }
+    case 'SESSION_SNAPSHOT': {
+      const snapshotMessages = action.payload.messages;
+      const snapshotIds = new Set(snapshotMessages.map((m) => m.id));
+      const newPendingMessages = new Map<string, PendingMessageContent>();
+      for (const [id, content] of state.pendingMessages) {
+        if (!snapshotIds.has(id)) {
+          newPendingMessages.set(id, content);
+        }
+      }
+
+      const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
+      const queuedMessages = new Map(
+        action.payload.queuedMessages.map((queued) => [queued.id, queued] as const)
+      );
+
+      return {
+        ...state,
+        messages: snapshotMessages,
+        queuedMessages,
+        pendingRequest,
+        sessionRuntime: action.payload.sessionRuntime,
+        toolUseIdToIndex: new Map(),
+        pendingMessages: newPendingMessages,
+        lastRejectedMessage: null,
+        messageIdToUuid: new Map(),
+        pendingUserMessageUuids: [],
+        localUserMessageIds: new Set(),
+        rewindPreview: null,
+      };
+    }
     default:
       return state;
   }

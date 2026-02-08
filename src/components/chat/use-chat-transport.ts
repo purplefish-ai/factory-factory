@@ -93,6 +93,12 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
       }
       const wsMessage = data;
 
+      // session_delta wraps an inner websocket event from the SessionStore stream
+      if (wsMessage.type === 'session_delta' && isWebSocketMessage(wsMessage.data)) {
+        handleMessage(wsMessage.data);
+        return;
+      }
+
       // Handle workspace notification requests
       if (wsMessage.type === 'workspace_notification_request') {
         // Dispatch custom event for WorkspaceNotificationManager

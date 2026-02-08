@@ -1,11 +1,9 @@
 import type { WebSocket } from 'ws';
 import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
 import { AskUserQuestionInputSchema, safeParseToolInput } from '../../schemas/tool-inputs.schema';
-import { chatConnectionService } from '../chat-connection.service';
-import { chatEventForwarderService } from '../chat-event-forwarder.service';
 import { createLogger } from '../logger.service';
-import { messageStateService } from '../message-state.service';
 import { sessionService } from '../session.service';
+import { sessionStoreService } from '../session-store.service';
 import { DEBUG_CHAT_WS } from './constants';
 
 const logger = createLogger('chat-message-handlers');
@@ -16,7 +14,7 @@ export function tryHandleAsInteractiveResponse(
   messageId: string,
   text: string
 ): boolean {
-  const pendingRequest = chatEventForwarderService.getPendingRequest(sessionId);
+  const pendingRequest = sessionStoreService.getPendingInteractiveRequest(sessionId);
   if (!pendingRequest) {
     return false;
   }
@@ -47,10 +45,10 @@ function handleMessageAsInteractiveResponse(
 
   // Always clear the pending request to prevent stale state, regardless of success/failure
   // This must happen before any operation that could fail
-  chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
+  sessionStoreService.clearPendingInteractiveRequestIfMatches(sessionId, pendingRequest.requestId);
 
   // Allocate an order for this message so it sorts correctly on the frontend
-  const order = messageStateService.allocateOrder(sessionId);
+  const order = sessionStoreService.allocateOrder(sessionId);
 
   // Prepare the response event - we'll send it even on error to clear frontend state
   const responseEvent = { type: 'message_used_as_response', id: messageId, text, order };
@@ -87,7 +85,7 @@ function handleMessageAsInteractiveResponse(
   // This happens outside try/catch to ensure frontend state is always updated
   try {
     ws.send(JSON.stringify(responseEvent));
-    chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
+    sessionStoreService.emitDelta(sessionId, responseEvent);
   } catch (sendError) {
     // WebSocket send failed - frontend will recover on reconnect
     logger.warn('[Chat WS] Failed to send message_used_as_response event', {

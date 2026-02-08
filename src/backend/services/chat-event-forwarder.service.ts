@@ -11,6 +11,7 @@
 
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
+import type { ClaudeMessage } from '@/shared/claude';
 import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { WS_READY_STATE } from '../constants';
@@ -25,9 +26,8 @@ import {
 import { chatConnectionService } from './chat-connection.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
-import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
-import { sessionRuntimeStoreService } from './session-runtime-store.service';
+import { sessionStoreService } from './session-store.service';
 import { slashCommandCacheService } from './slash-command-cache.service';
 import { workspaceActivityService } from './workspace-activity.service';
 
@@ -72,9 +72,6 @@ class ChatEventForwarderService {
   /** Stores the specific listener references this service attached, for precise teardown */
   private registeredListeners = new Map<string, RegisteredListener[]>();
 
-  /** Pending interactive requests by session ID (for restore on reconnect) */
-  private pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
-
   /** Guard to prevent multiple workspace notification setups */
   private workspaceNotificationsSetup = false;
   /** Track last compact boundary per session to avoid duplicate indicators */
@@ -105,7 +102,7 @@ class ChatEventForwarderService {
    * Get pending interactive request for a session.
    */
   getPendingRequest(dbSessionId: string): PendingInteractiveRequest | undefined {
-    return this.pendingInteractiveRequests.get(dbSessionId);
+    return sessionStoreService.getPendingInteractiveRequest(dbSessionId) ?? undefined;
   }
 
   /**
@@ -113,7 +110,7 @@ class ChatEventForwarderService {
    * Used when stopping a session - the pending request is no longer valid.
    */
   clearPendingRequest(dbSessionId: string): void {
-    this.pendingInteractiveRequests.delete(dbSessionId);
+    sessionStoreService.clearPendingInteractiveRequest(dbSessionId);
   }
 
   /**
@@ -121,10 +118,7 @@ class ChatEventForwarderService {
    * Prevents clearing a newer request when responding to a stale one.
    */
   clearPendingRequestIfMatches(dbSessionId: string, requestId: string): void {
-    const pending = this.pendingInteractiveRequests.get(dbSessionId);
-    if (pending?.requestId === requestId) {
-      this.pendingInteractiveRequests.delete(dbSessionId);
-    }
+    sessionStoreService.clearPendingInteractiveRequestIfMatches(dbSessionId, requestId);
   }
 
   /**
@@ -191,7 +185,7 @@ class ChatEventForwarderService {
       this.removeForwardingListeners(dbSessionId, existingClient);
       // Clear stale interactive requests from the old client so the UI
       // doesn't try to respond to a request the new client knows nothing about
-      this.pendingInteractiveRequests.delete(dbSessionId);
+      sessionStoreService.clearPendingInteractiveRequest(dbSessionId);
     }
 
     this.clientEventSetup.set(dbSessionId, client);
@@ -223,8 +217,7 @@ class ChatEventForwarderService {
         type: 'slash_commands',
         slashCommands: initResponse.commands,
       };
-      messageStateService.storeEvent(dbSessionId, slashCommandsMsg);
-      chatConnectionService.forwardToSession(dbSessionId, slashCommandsMsg);
+      sessionStoreService.emitDelta(dbSessionId, slashCommandsMsg);
       void slashCommandCacheService.setCachedCommands(initResponse.commands);
     }
 
@@ -257,10 +250,7 @@ class ChatEventForwarderService {
 
       // Mark workspace as active
       workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
-      sessionRuntimeStoreService.syncFromClient(dbSessionId, {
-        isRunning: client.isRunning(),
-        isWorking: client.isWorking(),
-      });
+      sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
     });
 
     // Hook into idle event to dispatch next queued message
@@ -289,10 +279,9 @@ class ChatEventForwarderService {
 
       // Store-then-forward: store event for replay before forwarding
       // Include order for consistent frontend message sorting
-      const order = messageStateService.allocateOrder(dbSessionId);
+      const order = sessionStoreService.appendClaudeEvent(dbSessionId, event as ClaudeMessage);
       const msg = { type: 'claude_message', data: event, order };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
     // SDK message types - forwarded as dedicated event types
@@ -305,8 +294,7 @@ class ChatEventForwarderService {
         data: event,
       });
       const sdkEvent = event as unknown as { type: string };
-      messageStateService.storeEvent(dbSessionId, sdkEvent);
-      chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, sdkEvent);
     });
 
     on('tool_use_summary', (event) => {
@@ -318,8 +306,7 @@ class ChatEventForwarderService {
         data: event,
       });
       const sdkEvent = event as unknown as { type: string };
-      messageStateService.storeEvent(dbSessionId, sdkEvent);
-      chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, sdkEvent);
     });
 
     // System subtype event handlers
@@ -346,8 +333,7 @@ class ChatEventForwarderService {
           plugins: event.plugins,
         },
       };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
     on('system_status', (event) => {
@@ -366,8 +352,7 @@ class ChatEventForwarderService {
         type: 'status_update',
         permissionMode: event.permission_mode,
       };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
     on('compact_boundary', (event) => {
@@ -385,8 +370,7 @@ class ChatEventForwarderService {
       }
       this.lastCompactBoundaryAt.set(dbSessionId, now);
       const boundaryMsg = { type: 'compact_boundary' };
-      messageStateService.storeEvent(dbSessionId, boundaryMsg);
-      chatConnectionService.forwardToSession(dbSessionId, boundaryMsg);
+      sessionStoreService.emitDelta(dbSessionId, boundaryMsg);
     });
 
     on('hook_started', (event) => {
@@ -410,8 +394,7 @@ class ChatEventForwarderService {
           hookEvent: event.hook_event,
         },
       };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
     on('hook_response', (event) => {
@@ -438,8 +421,7 @@ class ChatEventForwarderService {
           outcome: event.outcome,
         },
       };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
     // Context compaction events
@@ -449,8 +431,7 @@ class ChatEventForwarderService {
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_start' });
       const event = { type: 'compacting_start' };
-      messageStateService.storeEvent(dbSessionId, event);
-      chatConnectionService.forwardToSession(dbSessionId, event);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
     on('compacting_end', () => {
@@ -459,8 +440,7 @@ class ChatEventForwarderService {
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_end' });
       const event = { type: 'compacting_end' };
-      messageStateService.storeEvent(dbSessionId, event);
-      chatConnectionService.forwardToSession(dbSessionId, event);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
     on('message', (msg) => {
@@ -476,14 +456,13 @@ class ChatEventForwarderService {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
       // Store-then-forward: store events for replay before forwarding
       // Include order for consistent frontend message sorting
-      const order = messageStateService.allocateOrder(dbSessionId);
+      const order = sessionStoreService.appendClaudeEvent(dbSessionId, result as ClaudeMessage);
       const resultMsg = { type: 'claude_message', data: result, order };
-      messageStateService.storeEvent(dbSessionId, resultMsg);
-      chatConnectionService.forwardToSession(dbSessionId, resultMsg);
+      sessionStoreService.emitDelta(dbSessionId, resultMsg);
 
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
-      sessionRuntimeStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
+      sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
@@ -504,16 +483,12 @@ class ChatEventForwarderService {
     });
 
     on('exit', (result) => {
-      sessionRuntimeStoreService.markProcessExit(dbSessionId, result.code);
+      sessionStoreService.markProcessExit(dbSessionId, result.code);
       this.removeForwardingListeners(dbSessionId, client);
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);
-      // Note: We intentionally do NOT clear the message queue on exit
-      // Queue is preserved so messages can be sent when user starts next interaction
-      // Clear any pending interactive requests when process exits
-      this.pendingInteractiveRequests.delete(dbSessionId);
-      // Clear message state to prevent memory leak
-      messageStateService.clearSession(dbSessionId);
+      // Queue and pending interactive request are intentionally dropped on process exit.
+      // Transcript remains in-memory and is always recoverable from Claude JSONL.
     });
 
     // Forward request cancellation to frontend (e.g., when CLI cancels during permission or question prompt)
@@ -524,14 +499,14 @@ class ChatEventForwarderService {
       });
       // Only clear if the requestId matches to avoid race conditions with newer requests
       this.clearPendingRequestIfMatches(dbSessionId, requestId);
-      chatConnectionService.forwardToSession(dbSessionId, {
+      sessionStoreService.emitDelta(dbSessionId, {
         type: 'permission_cancelled',
         requestId,
       });
     });
 
     on('error', (error) => {
-      chatConnectionService.forwardToSession(dbSessionId, {
+      sessionStoreService.emitDelta(dbSessionId, {
         type: 'error',
         message: error.message,
       });
@@ -556,7 +531,7 @@ class ChatEventForwarderService {
       request.toolName === 'ExitPlanMode' ? this.extractPlanContent(request.input) : null;
 
     // Store for session restore (single location for all request types)
-    this.pendingInteractiveRequests.set(dbSessionId, {
+    sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
       requestId: request.requestId,
       toolName: request.toolName,
       toolUseId: request.toolUseId,
@@ -581,14 +556,14 @@ class ChatEventForwarderService {
           requestId: request.requestId,
           validationSuccess: parsed.success,
         });
-        chatConnectionService.forwardToSession(dbSessionId, {
+        sessionStoreService.emitDelta(dbSessionId, {
           type: 'error',
           message: 'Received invalid question format from CLI',
         });
         return;
       }
 
-      chatConnectionService.forwardToSession(dbSessionId, {
+      sessionStoreService.emitDelta(dbSessionId, {
         type: 'user_question',
         requestId: request.requestId,
         questions: parsed.data.questions,
@@ -597,7 +572,7 @@ class ChatEventForwarderService {
     }
 
     if (request.toolName === 'ExitPlanMode') {
-      chatConnectionService.forwardToSession(dbSessionId, {
+      sessionStoreService.emitDelta(dbSessionId, {
         type: 'permission_request',
         requestId: request.requestId,
         toolName: request.toolName,
@@ -608,7 +583,7 @@ class ChatEventForwarderService {
     }
 
     // Fallback: send as generic interactive_request
-    chatConnectionService.forwardToSession(dbSessionId, {
+    sessionStoreService.emitDelta(dbSessionId, {
       type: 'interactive_request',
       requestId: request.requestId,
       toolName: request.toolName,
@@ -682,12 +657,11 @@ class ChatEventForwarderService {
       return;
     }
 
-    const order = messageStateService.allocateOrder(dbSessionId);
+    const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
     // Preserve the full assistant payload (including tool_use blocks/ids)
     // so downstream tool progress/summary events can still correlate.
     const wsMsg = { type: 'claude_message', data: msg, order };
-    messageStateService.storeEvent(dbSessionId, wsMsg);
-    chatConnectionService.forwardToSession(dbSessionId, wsMsg);
+    sessionStoreService.emitDelta(dbSessionId, wsMsg);
   }
 
   private forwardUserMessageWithToolResult(
@@ -704,8 +678,7 @@ class ChatEventForwarderService {
     // Forward user message UUID for rewind functionality.
     if (msgWithType.uuid) {
       const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid };
-      messageStateService.storeEvent(dbSessionId, uuidMsg);
-      chatConnectionService.forwardToSession(dbSessionId, uuidMsg);
+      sessionStoreService.emitDelta(dbSessionId, uuidMsg);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Forwarding user message UUID', {
           dbSessionId,
@@ -746,10 +719,9 @@ class ChatEventForwarderService {
       action: 'forwarding_user_message_with_tool_result',
     });
 
-    const order = messageStateService.allocateOrder(dbSessionId);
+    const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
     const wsMsg = { type: 'claude_message', data: msg, order };
-    messageStateService.storeEvent(dbSessionId, wsMsg);
-    chatConnectionService.forwardToSession(dbSessionId, wsMsg);
+    sessionStoreService.emitDelta(dbSessionId, wsMsg);
   }
 
   /**
@@ -811,7 +783,7 @@ class ChatEventForwarderService {
    * Used by workspace query service to determine which workspaces have pending requests.
    */
   getAllPendingRequests(): Map<string, PendingInteractiveRequest> {
-    return new Map(this.pendingInteractiveRequests);
+    return sessionStoreService.getAllPendingRequests();
   }
 
   /**

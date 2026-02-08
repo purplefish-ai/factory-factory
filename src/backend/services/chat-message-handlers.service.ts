@@ -9,19 +9,20 @@
  */
 
 import type { WebSocket } from 'ws';
-import { DEFAULT_THINKING_BUDGET, MessageState } from '@/shared/claude';
+import {
+  type ClaudeContentItem,
+  DEFAULT_THINKING_BUDGET,
+  type QueuedMessage,
+} from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
 import type { ClaudeClient } from '../claude/index';
-import type { ClaudeContentItem } from '../claude/types';
 import { processAttachmentsAndBuildContent } from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
 import type { ClientCreator } from './chat-message-handlers/types';
 import { createLogger } from './logger.service';
-import { messageQueueService, type QueuedMessage } from './message-queue.service';
-import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
-import { sessionRuntimeStoreService } from './session-runtime-store.service';
+import { sessionStoreService } from './session-store.service';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -73,7 +74,7 @@ class ChatMessageHandlerService {
     this.dispatchInProgress.set(dbSessionId, true);
 
     // Dequeue first to claim the message atomically before any async operations.
-    const msg = messageQueueService.dequeue(dbSessionId);
+    const msg = sessionStoreService.dequeueNext(dbSessionId);
     if (!msg) {
       this.dispatchInProgress.set(dbSessionId, false);
       return;
@@ -84,13 +85,13 @@ class ChatMessageHandlerService {
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
-        sessionRuntimeStoreService.markStarting(dbSessionId);
+        sessionStoreService.markStarting(dbSessionId);
 
         const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
         if (!newClient) {
           // Re-queue the message at the front so it's not lost
-          messageQueueService.requeue(dbSessionId, msg);
-          sessionRuntimeStoreService.markError(dbSessionId);
+          sessionStoreService.requeueFront(dbSessionId, msg);
+          sessionStoreService.markError(dbSessionId);
           return;
         }
         client = newClient;
@@ -112,7 +113,7 @@ class ChatMessageHandlerService {
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
         });
-        messageQueueService.requeue(dbSessionId, msg);
+        sessionStoreService.requeueFront(dbSessionId, msg);
       }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
@@ -213,10 +214,7 @@ class ChatMessageHandlerService {
     const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
     await client.setMaxThinkingTokens(thinkingTokens);
 
-    // Now that thinking budget is set, update state to DISPATCHED
-    messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
-
-    sessionRuntimeStoreService.markRunning(dbSessionId);
+    sessionStoreService.markRunning(dbSessionId);
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
@@ -226,6 +224,7 @@ class ChatMessageHandlerService {
 
     try {
       await client.sendMessage(content);
+      sessionStoreService.commitSentUserMessage(dbSessionId, msg);
     } catch (error) {
       if (isCompactCommand) {
         client.endCompaction();
@@ -237,7 +236,7 @@ class ChatMessageHandlerService {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
         dbSessionId,
         messageId: msg.id,
-        remainingInQueue: messageQueueService.getQueueLength(dbSessionId),
+        remainingInQueue: sessionStoreService.getQueueLength(dbSessionId),
       });
     }
   }
@@ -265,7 +264,7 @@ class ChatMessageHandlerService {
     } else if (reason === 'stopped') {
       logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
     }
-    messageQueueService.requeue(dbSessionId, msg);
+    sessionStoreService.requeueFront(dbSessionId, msg);
   }
 
   private isCompactCommand(text: string): boolean {

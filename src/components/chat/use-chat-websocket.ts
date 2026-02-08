@@ -150,6 +150,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         data !== null &&
         'type' in data &&
         ((data as { type?: string }).type === 'session_replay_batch' ||
+          (data as { type?: string }).type === 'session_snapshot' ||
           (data as { type?: string }).type === 'messages_snapshot')
       ) {
         const batch = data as { loadRequestId?: string; type?: string };

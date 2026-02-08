@@ -142,6 +142,8 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
   }
 
   switch (action.type) {
+    case 'SESSION_SNAPSHOT':
+      return applyRuntime(state, action.payload.sessionRuntime);
     case 'SESSION_RUNTIME_SNAPSHOT':
       return applyRuntime(state, action.payload.sessionRuntime);
     case 'SESSION_RUNTIME_UPDATED':
