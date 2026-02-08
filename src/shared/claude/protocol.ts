@@ -351,6 +351,12 @@ export interface ClaudeMessage {
 export interface AssistantRenderableContentLike {
   type?: string;
   text?: string;
+  thinking?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+  tool_use_id?: string;
+  content?: unknown;
 }
 
 /**
@@ -360,7 +366,24 @@ export function isRenderableAssistantContentItem(item: AssistantRenderableConten
   if (item.type === 'text') {
     return typeof item.text === 'string';
   }
-  return item.type === 'tool_use' || item.type === 'tool_result' || item.type === 'thinking';
+  if (item.type === 'thinking') {
+    return typeof item.thinking === 'string';
+  }
+  if (item.type === 'tool_use') {
+    return (
+      typeof item.id === 'string' &&
+      typeof item.name === 'string' &&
+      typeof item.input === 'object' &&
+      item.input !== null
+    );
+  }
+  if (item.type === 'tool_result') {
+    return (
+      typeof item.tool_use_id === 'string' &&
+      (typeof item.content === 'string' || Array.isArray(item.content))
+    );
+  }
+  return false;
 }
 
 /**
@@ -409,8 +432,11 @@ export function shouldPersistClaudeMessage(claudeMsg: ClaudeMessage): boolean {
     return false;
   }
 
-  const blockType = claudeMsg.event.content_block.type;
-  return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
+  const block = claudeMsg.event.content_block as AssistantRenderableContentLike;
+  if (block.type === 'text') {
+    return false;
+  }
+  return isRenderableAssistantContentItem(block);
 }
 
 function extractTextForResultDedup(message: ClaudeMessage): string {
