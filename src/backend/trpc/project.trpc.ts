@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { gitCommandC } from '../lib/shell';
 import { projectAccessor } from '../resource_accessors/project.accessor';
+import { FactoryConfigService } from '../services/factory-config.service';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
@@ -234,4 +235,16 @@ export const projectRouter = router({
   validateRepoPath: publicProcedure.input(z.object({ repoPath: z.string() })).query(({ input }) => {
     return projectAccessor.validateRepoPath(input.repoPath);
   }),
+
+  // Check if factory-factory.json exists in the repository
+  checkFactoryConfig: publicProcedure
+    .input(z.object({ repoPath: z.string() }))
+    .query(async ({ input }) => {
+      try {
+        const config = await FactoryConfigService.readConfig(input.repoPath);
+        return { exists: config !== null };
+      } catch {
+        return { exists: false };
+      }
+    }),
 });
