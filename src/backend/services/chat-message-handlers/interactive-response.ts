@@ -1,4 +1,4 @@
-import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
+import { isInteractiveResponseTool } from '@/shared/pending-request-types';
 import { AskUserQuestionInputSchema, safeParseToolInput } from '../../schemas/tool-inputs.schema';
 import { createLogger } from '../logger.service';
 import { sessionService } from '../session.service';
@@ -32,11 +32,7 @@ function handleMessageAsInteractiveResponse(
   }
 
   // Only handle known interactive request types
-  if (
-    !INTERACTIVE_RESPONSE_TOOLS.includes(
-      pendingRequest.toolName as (typeof INTERACTIVE_RESPONSE_TOOLS)[number]
-    )
-  ) {
+  if (!isInteractiveResponseTool(pendingRequest.toolName)) {
     return false;
   }
 

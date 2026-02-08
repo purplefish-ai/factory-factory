@@ -11,12 +11,7 @@
 
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import {
-  type ClaudeContentItem,
-  type ClaudeMessage,
-  hasRenderableAssistantContent,
-  hasToolResultContent,
-} from '@/shared/claude';
+import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
 import {
   type InteractiveResponseTool,
   isInteractiveResponseTool,
@@ -567,24 +562,14 @@ class ChatEventForwarderService {
       return;
     }
 
-    // Compute planContent for ExitPlanMode, null for others
     const planContent =
       request.toolName === 'ExitPlanMode' ? this.extractPlanContent(request.input) : null;
-
-    // Store for session restore (single location for all request types)
-    sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
-      requestId: request.requestId,
-      toolName: request.toolName,
-      toolUseId: request.toolUseId,
-      input: request.input,
-      planContent,
-      timestamp: new Date().toISOString(),
-    });
 
     this.routeSupportedInteractiveRequest(
       dbSessionId,
       { ...request, toolName: request.toolName as InteractiveResponseTool },
-      planContent
+      planContent,
+      client
     );
   }
 
@@ -596,7 +581,8 @@ class ChatEventForwarderService {
       toolUseId: string;
       input: Record<string, unknown>;
     },
-    planContent: string | null
+    planContent: string | null,
+    client: ClaudeClient
   ): void {
     switch (request.toolName) {
       case 'AskUserQuestion': {
@@ -613,12 +599,33 @@ class ChatEventForwarderService {
             requestId: request.requestId,
             validationSuccess: parsed.success,
           });
+          try {
+            client.denyInteractiveRequest(
+              request.requestId,
+              'Invalid question format - unable to display question'
+            );
+          } catch (error) {
+            logger.error('[Chat WS] Failed to deny invalid AskUserQuestion request', {
+              dbSessionId,
+              requestId: request.requestId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
           sessionStoreService.emitDelta(dbSessionId, {
             type: 'error',
             message: 'Received invalid question format from CLI',
           });
           return;
         }
+
+        sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
+          requestId: request.requestId,
+          toolName: request.toolName,
+          toolUseId: request.toolUseId,
+          input: request.input,
+          planContent,
+          timestamp: new Date().toISOString(),
+        });
 
         sessionStoreService.emitDelta(dbSessionId, {
           type: 'user_question',
@@ -628,6 +635,14 @@ class ChatEventForwarderService {
         return;
       }
       case 'ExitPlanMode':
+        sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
+          requestId: request.requestId,
+          toolName: request.toolName,
+          toolUseId: request.toolUseId,
+          input: request.input,
+          planContent,
+          timestamp: new Date().toISOString(),
+        });
         sessionStoreService.emitDelta(dbSessionId, {
           type: 'permission_request',
           requestId: request.requestId,
@@ -700,16 +715,19 @@ class ChatEventForwarderService {
       return;
     }
 
-    if (!hasRenderableAssistantContent(content)) {
+    const hasNarrativeText = content.some(
+      (item) => item.type === 'text' && typeof item.text === 'string'
+    );
+    if (!hasNarrativeText) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
-        reason: 'assistant_no_renderable_content',
+        reason: 'assistant_no_text_content',
       });
       return;
     }
 
-    // Preserve the full assistant payload (including tool_use blocks/ids)
-    // so downstream tool progress/summary events can still correlate.
+    // Persist assistant narrative text from message events.
+    // Tool/thinking blocks are persisted through stream_event forwarding.
     this.forwardClaudeMessage(dbSessionId, msg as ClaudeMessage);
   }
 
