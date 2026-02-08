@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 import type { GitHubIssue } from './kanban-context';
 
 interface IssueCardProps {
@@ -35,7 +36,18 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
   }, [ratchetPreferenceKey, userSettings?.ratchetEnabled]);
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (workspace) => {
+      // Optimistically populate the workspace detail query cache so the status
+      // is immediately visible when navigating to the detail page
+      utils.workspace.get.setData({ id: workspace.id }, (old) => {
+        // If there's already data (shouldn't happen for a new workspace), keep it
+        if (old) {
+          return old;
+        }
+
+        return createOptimisticWorkspaceCacheData(workspace);
+      });
+
       // Invalidate workspace queries to refresh the board
       utils.workspace.listWithKanbanState.invalidate({ projectId });
     },
