@@ -289,11 +289,11 @@ describe('WebSocket transport patterns', () => {
       };
 
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'status', running: true });
+      ws.simulateMessage({ type: 'output', data: 'hello' });
       ws.simulateMessage({ type: 'claude_message', data: 'hello' });
 
       expect(messages).toHaveLength(2);
-      expect(messages[0]).toEqual({ type: 'status', running: true });
+      expect(messages[0]).toEqual({ type: 'output', data: 'hello' });
       expect(messages[1]).toEqual({ type: 'claude_message', data: 'hello' });
     });
 

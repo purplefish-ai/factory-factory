@@ -816,7 +816,6 @@ class SessionStoreService {
   markProcessExit(sessionId: string, code: number | null): void {
     const store = this.getOrCreate(sessionId);
     const unexpected = code === null || code !== 0;
-    const canRehydrateNow = Boolean(store.lastKnownProjectPath && store.lastKnownClaudeSessionId);
 
     // Queue is intentionally ephemeral and dropped on process exit.
     store.queue = [];
@@ -841,19 +840,17 @@ class SessionStoreService {
       },
     });
 
-    // If we can immediately rehydrate from JSONL, keep the existing transcript on
-    // connected clients until the refreshed snapshot arrives to avoid a visible empty flash.
-    if (!canRehydrateNow) {
-      this.forwardSnapshot(store, {
-        reason: 'process_exit_reset',
-        includeParitySnapshot: true,
-      });
-    }
+    // Always publish the reset state first. This makes process-exit behavior
+    // deterministic for all connected/reconnecting clients.
+    this.forwardSnapshot(store, {
+      reason: 'process_exit_reset',
+      includeParitySnapshot: true,
+    });
 
-    // Best-effort immediate refresh from JSONL so connected clients recover
-    // without requiring a manual reload.
+    // Best-effort immediate refresh from JSONL after reset so connected clients
+    // converge to persisted transcript state without a manual reload.
     const { lastKnownClaudeSessionId, lastKnownProjectPath } = store;
-    if (canRehydrateNow && lastKnownClaudeSessionId && lastKnownProjectPath) {
+    if (lastKnownClaudeSessionId && lastKnownProjectPath) {
       void this.ensureHydrated(store, {
         claudeSessionId: lastKnownClaudeSessionId,
         claudeProjectPath: lastKnownProjectPath,

@@ -504,7 +504,7 @@ describe('SessionStoreService', () => {
     expect(latestSnapshot?.messages?.[0]?.text).toBe('fresh transcript from jsonl');
   });
 
-  it('does not emit an empty snapshot on process exit when immediate rehydrate is possible', async () => {
+  it('emits reset snapshot first, then hydrated snapshot on process exit', async () => {
     type HydratedHistory = Array<{ type: 'user'; content: string; timestamp: string }>;
     let resolveRehydrate!: (history: HydratedHistory) => void;
     const rehydratePromise = new Promise<HydratedHistory>((resolve) => {
@@ -533,9 +533,10 @@ describe('SessionStoreService', () => {
     sessionStoreService.markProcessExit('s1', 1);
 
     const immediateSnapshots = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string })
+      .map(([, payload]) => payload as { type?: string; messages?: unknown[] })
       .filter((payload) => payload.type === 'session_snapshot');
-    expect(immediateSnapshots).toHaveLength(0);
+    expect(immediateSnapshots).toHaveLength(1);
+    expect(immediateSnapshots[0]?.messages).toEqual([]);
 
     resolveRehydrate([
       {
@@ -546,10 +547,11 @@ describe('SessionStoreService', () => {
     ]);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
+    const snapshotsAfterRehydrate = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
-      .filter((payload) => payload.type === 'session_snapshot')
-      .at(-1);
+      .filter((payload) => payload.type === 'session_snapshot');
+    expect(snapshotsAfterRehydrate).toHaveLength(2);
+    const latestSnapshot = snapshotsAfterRehydrate.at(-1);
     expect(latestSnapshot?.messages?.[0]?.text).toBe('after exit');
   });
 

@@ -62,8 +62,7 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
       }
       devLogsConnections.get(workspaceId)?.add(ws);
 
-      logger.debug('Sending initial status message', { workspaceId });
-      ws.send(JSON.stringify({ type: 'status', connected: true }));
+      logger.debug('Dev logs WebSocket connected', { workspaceId });
 
       // Send existing output buffer
       const outputBuffer = runScriptService.getOutputBuffer(workspaceId);

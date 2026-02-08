@@ -69,13 +69,11 @@ function addTerminalCleanupMap(ws: WebSocket): Map<string, TerminalUnsubscribers
   return cleanupMap;
 }
 
-function sendInitialStatus(
-  ws: WebSocket,
+function logConnectionEstablished(
   workspaceId: string,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): void {
-  logger.debug('Sending initial status message', { workspaceId });
-  ws.send(JSON.stringify({ type: 'status', connected: true }));
+  logger.debug('Terminal WebSocket connected', { workspaceId });
 }
 
 function sendExistingTerminals(
@@ -406,7 +404,7 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
 
       ensureWorkspaceConnections(workspaceId).add(ws);
       addTerminalCleanupMap(ws);
-      sendInitialStatus(ws, workspaceId, logger);
+      logConnectionEstablished(workspaceId, logger);
       sendExistingTerminals(ws, workspaceId, terminalService, logger);
 
       ws.on('message', async (data) => {
