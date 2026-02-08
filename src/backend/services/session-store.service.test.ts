@@ -23,13 +23,42 @@ vi.mock('./chat-connection.service', () => ({
 
 const mockedConnectionService = vi.mocked(chatConnectionService);
 
+function getReplayBatches(): Array<{
+  type?: string;
+  loadRequestId?: string;
+  replayEvents?: Record<string, unknown>[];
+}> {
+  return mockedConnectionService.forwardToSession.mock.calls
+    .map(
+      ([, payload]) =>
+        payload as {
+          type?: string;
+          loadRequestId?: string;
+          replayEvents?: Record<string, unknown>[];
+        }
+    )
+    .filter((payload) => payload.type === 'session_replay_batch');
+}
+
+function getLatestReplayBatch(): {
+  type?: string;
+  loadRequestId?: string;
+  replayEvents?: Record<string, unknown>[];
+} {
+  const latest = getReplayBatches().at(-1);
+  if (!latest) {
+    throw new Error('Expected at least one session_replay_batch payload');
+  }
+  return latest;
+}
+
 describe('SessionStoreService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStoreService.clearAllSessions();
   });
 
-  it('hydrates from Claude history on first subscribe and emits session_snapshot', async () => {
+  it('hydrates from Claude history on first subscribe and emits session_replay_batch', async () => {
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'user',
@@ -54,24 +83,38 @@ describe('SessionStoreService', () => {
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
     expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
-      type: 'session_snapshot',
+      type: 'session_replay_batch',
     });
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
       's1',
       expect.objectContaining({
-        type: 'session_snapshot',
+        type: 'session_replay_batch',
         loadRequestId: 'load-1',
       })
     );
 
-    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
-      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
+    const payload = getLatestReplayBatch();
+    const replayEvents = payload.replayEvents ?? [];
+    expect(replayEvents.length).toBeGreaterThan(0);
+    expect(replayEvents[0]).toMatchObject({
+      type: 'session_runtime_snapshot',
+    });
+    expect(replayEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'message_state_changed',
+          newState: 'ACCEPTED',
+          userMessage: expect.objectContaining({ text: 'hello' }),
+        }),
+        expect.objectContaining({
+          type: 'claude_message',
+          data: expect.objectContaining({
+            type: 'assistant',
+          }),
+        }),
+      ])
     );
-    expect(snapshotCall).toBeDefined();
-    const payload = snapshotCall?.[1] as { messages?: Array<{ text?: string }> };
-    expect(payload.messages?.length).toBe(2);
-    expect(payload.messages?.[0]?.text).toBe('hello');
   });
 
   it('hydrates user attachments from Claude history into snapshot messages', async () => {
@@ -101,16 +144,15 @@ describe('SessionStoreService', () => {
       isWorking: false,
     });
 
-    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
-      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
-    );
-    expect(snapshotCall).toBeDefined();
-    const payload = snapshotCall?.[1] as {
-      messages?: Array<{ source: string; attachments?: Array<{ id: string }> }>;
-    };
-    expect(payload.messages).toHaveLength(1);
-    expect(payload.messages?.[0]?.source).toBe('user');
-    expect(payload.messages?.[0]?.attachments?.[0]?.id).toBe('att-1');
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const accepted = replayEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === ''
+    ) as { userMessage?: { attachments?: Array<{ id?: string }> } } | undefined;
+    expect(accepted).toBeDefined();
+    expect(accepted?.userMessage?.attachments?.[0]?.id).toBe('att-1');
   });
 
   it('preserves tool_result is_error flag when hydrating history', async () => {
@@ -132,26 +174,23 @@ describe('SessionStoreService', () => {
       isWorking: false,
     });
 
-    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
-      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
-    );
-    expect(snapshotCall).toBeDefined();
-    const payload = snapshotCall?.[1] as {
-      messages?: Array<{
-        source: string;
-        message?: {
-          type?: string;
-          message?: {
-            role?: string;
-            content?: Array<{ type?: string; is_error?: boolean }>;
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const claudeEvent = replayEvents.find(
+      (event) =>
+        event.type === 'claude_message' &&
+        (event.data as { type?: string } | undefined)?.type === 'user'
+    ) as
+      | {
+          data?: {
+            type?: string;
+            message?: { role?: string; content?: Array<{ type?: string; is_error?: boolean }> };
           };
-        };
-      }>;
-    };
-    const claudeMessage = payload.messages?.find((msg) => msg.source === 'claude')?.message;
-    expect(claudeMessage?.type).toBe('user');
-    expect(claudeMessage?.message?.role).toBe('user');
-    expect(claudeMessage?.message?.content?.[0]).toMatchObject({
+        }
+      | undefined;
+    expect(claudeEvent).toBeDefined();
+    expect(claudeEvent?.data?.type).toBe('user');
+    expect(claudeEvent?.data?.message?.role).toBe('user');
+    expect(claudeEvent?.data?.message?.content?.[0]).toMatchObject({
       type: 'tool_result',
       is_error: true,
     });
@@ -182,32 +221,28 @@ describe('SessionStoreService', () => {
       isWorking: false,
     });
 
-    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
-      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
-    );
-    expect(snapshotCall).toBeDefined();
-    const payload = snapshotCall?.[1] as {
-      messages?: Array<{
-        source: string;
-        message?: {
-          type?: string;
-          message?: {
-            role?: string;
-            content?: Array<{ type?: string; content?: unknown }>;
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const claudeEvent = replayEvents.find(
+      (event) =>
+        event.type === 'claude_message' &&
+        (event.data as { type?: string } | undefined)?.type === 'user'
+    ) as
+      | {
+          data?: {
+            message?: {
+              content?: Array<{ type?: string; content?: unknown }>;
+            };
           };
-        };
-      }>;
-    };
+        }
+      | undefined;
 
-    const claudeMessage = payload.messages?.find((msg) => msg.source === 'claude')?.message;
-    expect(claudeMessage?.type).toBe('user');
-    expect(claudeMessage?.message?.content?.[0]).toMatchObject({
+    expect(claudeEvent?.data?.message?.content?.[0]).toMatchObject({
       type: 'tool_result',
       content: structuredContent,
     });
   });
 
-  it('subscribe does not emit session_delta before session_snapshot', async () => {
+  it('subscribe does not emit session_delta before session_replay_batch', async () => {
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionStoreService.subscribe({
@@ -219,8 +254,9 @@ describe('SessionStoreService', () => {
     });
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
-    expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
-      type: 'session_snapshot',
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    expect(replayEvents[0]).toMatchObject({
+      type: 'session_runtime_snapshot',
       sessionRuntime: expect.objectContaining({
         phase: 'running',
         processState: 'alive',
@@ -264,11 +300,16 @@ describe('SessionStoreService', () => {
     ]);
     await Promise.all([firstSubscribe, secondSubscribe]);
 
-    const snapshots = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
-      .filter((payload) => payload.type === 'session_snapshot');
-    expect(snapshots).toHaveLength(2);
-    expect(snapshots.at(-1)?.messages?.[0]?.text).toBe('hello from history');
+    const batches = getReplayBatches();
+    expect(batches).toHaveLength(2);
+    const latestEvents = batches.at(-1)?.replayEvents ?? [];
+    const accepted = latestEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === 'hello from history'
+    );
+    expect(accepted).toBeDefined();
   });
 
   it('rehydrates when claudeSessionId changes for the same db session', async () => {
@@ -305,11 +346,14 @@ describe('SessionStoreService', () => {
     });
 
     expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
-    const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
-      .filter((payload) => payload.type === 'session_snapshot')
-      .at(-1);
-    expect(latestSnapshot?.messages?.[0]?.text).toBe('history two');
+    const latestEvents = getLatestReplayBatch().replayEvents ?? [];
+    const accepted = latestEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === 'history two'
+    );
+    expect(accepted).toBeDefined();
   });
 
   it('ignores stale in-flight hydrate results when a newer hydrate starts', async () => {
@@ -357,11 +401,14 @@ describe('SessionStoreService', () => {
     ]);
     await firstSubscribe;
 
-    const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
-      .filter((payload) => payload.type === 'session_snapshot')
-      .at(-1);
-    expect(latestSnapshot?.messages?.[0]?.text).toBe('new hydrate');
+    const latestEvents = getLatestReplayBatch().replayEvents ?? [];
+    const accepted = latestEvents.find(
+      (event) =>
+        event.type === 'message_state_changed' &&
+        event.newState === 'ACCEPTED' &&
+        (event.userMessage as { text?: string } | undefined)?.text === 'new hydrate'
+    );
+    expect(accepted).toBeDefined();
   });
 
   it('uses deterministic fallback IDs for history entries without uuid', async () => {
@@ -387,11 +434,10 @@ describe('SessionStoreService', () => {
       isWorking: false,
     });
 
-    const firstSnapshot = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ id: string }> })
-      .find((payload) => payload.type === 'session_snapshot');
-    expect(firstSnapshot?.messages).toBeDefined();
-    const firstIds = firstSnapshot?.messages?.map((m) => m.id) ?? [];
+    const firstEvents = getLatestReplayBatch().replayEvents ?? [];
+    const firstIds = firstEvents
+      .filter((event) => event.type === 'message_state_changed' && event.newState === 'ACCEPTED')
+      .map((event) => event.id as string);
 
     mockedConnectionService.forwardToSession.mockClear();
     sessionStoreService.clearSession('s1');
@@ -405,10 +451,10 @@ describe('SessionStoreService', () => {
       isWorking: false,
     });
 
-    const secondSnapshot = mockedConnectionService.forwardToSession.mock.calls
-      .map(([, payload]) => payload as { type?: string; messages?: Array<{ id: string }> })
-      .find((payload) => payload.type === 'session_snapshot');
-    const secondIds = secondSnapshot?.messages?.map((m) => m.id) ?? [];
+    const secondEvents = getLatestReplayBatch().replayEvents ?? [];
+    const secondIds = secondEvents
+      .filter((event) => event.type === 'message_state_changed' && event.newState === 'ACCEPTED')
+      .map((event) => event.id as string);
 
     expect(secondIds).toEqual(firstIds);
   });

@@ -97,7 +97,11 @@ function handleAcceptedState(
   });
 
   const newLocalUserMessageIds = new Set(state.localUserMessageIds);
-  newLocalUserMessageIds.add(id);
+  // Replay hydration reuses ACCEPTED transitions to reconstruct UI state. Those
+  // messages are historical and must not be treated as locally-sent in this tab.
+  if (state.sessionStatus.phase !== 'loading') {
+    newLocalUserMessageIds.add(id);
+  }
 
   let newMessageIdToUuid = state.messageIdToUuid;
   let newPendingUuids = state.pendingUserMessageUuids;

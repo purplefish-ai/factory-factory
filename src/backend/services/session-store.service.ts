@@ -2,8 +2,12 @@ import { createHash } from 'node:crypto';
 import {
   type ChatMessage,
   type ClaudeMessage,
+  DEFAULT_CHAT_SETTINGS,
+  MessageState,
   QUEUED_MESSAGE_ORDER_BASE,
   type QueuedMessage,
+  type WebSocketMessage as ReplayEventMessage,
+  resolveSelectedModel,
   type SessionDeltaEvent,
   shouldPersistClaudeMessage,
   shouldSuppressDuplicateResultMessage,
@@ -19,6 +23,7 @@ import { SessionManager } from '../claude';
 import type { ConnectionInfo } from './chat-connection.service';
 import { chatConnectionService } from './chat-connection.service';
 import { createLogger } from './logger.service';
+import { sessionFileLogger } from './session-file-logger.service';
 
 const logger = createLogger('session-store-service');
 
@@ -40,12 +45,70 @@ interface SessionStore {
   lastHydratedAt: string | null;
 }
 
+type SnapshotReason =
+  | 'subscribe_load'
+  | 'enqueue'
+  | 'remove_queued_message'
+  | 'dequeue'
+  | 'requeue'
+  | 'commit_user_message'
+  | 'pending_request_set'
+  | 'pending_request_cleared'
+  | 'process_exit_reset'
+  | 'process_exit_rehydrate'
+  | 'manual_emit'
+  | 'inject_user_message';
+
 function messageSort(a: ChatMessage, b: ChatMessage): number {
   return a.order - b.order;
 }
 
 class SessionStoreService {
   private stores = new Map<string, SessionStore>();
+
+  private summarizeAttachment(attachment: NonNullable<ChatMessage['attachments']>[number]): {
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    contentType?: 'image' | 'text';
+  } {
+    return {
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+      ...(attachment.contentType ? { contentType: attachment.contentType } : {}),
+    };
+  }
+
+  private normalizeTranscriptMessage(message: ChatMessage): Record<string, unknown> {
+    if (message.source === 'user') {
+      return {
+        source: 'user',
+        order: message.order,
+        text: message.text,
+        attachments: message.attachments?.map((attachment) => this.summarizeAttachment(attachment)),
+      };
+    }
+
+    return {
+      source: 'claude',
+      order: message.order,
+      message: message.message,
+    };
+  }
+
+  private normalizeTranscript(messages: ChatMessage[]): Record<string, unknown>[] {
+    return messages.map((message) => this.normalizeTranscriptMessage(message));
+  }
+
+  private logParityTrace(sessionId: string, data: Record<string, unknown>): void {
+    sessionFileLogger.log(sessionId, 'INFO', {
+      type: 'parity_trace',
+      ...data,
+    });
+  }
 
   private getOrCreate(sessionId: string): SessionStore {
     let store = this.stores.get(sessionId);
@@ -98,6 +161,19 @@ class SessionStoreService {
     store.transcript.sort(messageSort);
   }
 
+  private hasPersistedToolUseStart(store: SessionStore, toolUseId: string): boolean {
+    return store.transcript.some((entry) => {
+      if (entry.source !== 'claude' || !entry.message || entry.message.type !== 'stream_event') {
+        return false;
+      }
+      const event = entry.message.event;
+      if (!event || event.type !== 'content_block_start') {
+        return false;
+      }
+      return event.content_block.type === 'tool_use' && event.content_block.id === toolUseId;
+    });
+  }
+
   private setNextOrderFromTranscript(store: SessionStore): void {
     let maxOrder = -1;
     for (const message of store.transcript) {
@@ -122,17 +198,16 @@ class SessionStoreService {
       case 'tool_use':
         if (msg.toolName && msg.toolId) {
           return {
-            type: 'assistant',
-            message: {
-              role: 'assistant',
-              content: [
-                {
-                  type: 'tool_use',
-                  id: msg.toolId,
-                  name: msg.toolName,
-                  input: msg.toolInput || {},
-                },
-              ],
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 0,
+              content_block: {
+                type: 'tool_use',
+                id: msg.toolId,
+                name: msg.toolName,
+                input: msg.toolInput || {},
+              },
             },
           };
         }
@@ -166,10 +241,11 @@ class SessionStoreService {
         };
       case 'thinking':
         return {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: msg.content }],
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'thinking', thinking: msg.content },
           },
         };
       case 'assistant':
@@ -240,15 +316,138 @@ class SessionStoreService {
     return snapshot;
   }
 
-  private forwardSnapshot(store: SessionStore, options?: { loadRequestId?: string }): void {
+  private forwardSnapshot(
+    store: SessionStore,
+    options?: { loadRequestId?: string; reason?: SnapshotReason; includeParitySnapshot?: boolean }
+  ): void {
+    const snapshotMessages = this.buildSnapshotMessages(store);
     const payload: WebSocketMessage = {
       type: 'session_snapshot',
-      messages: this.buildSnapshotMessages(store),
+      messages: snapshotMessages,
       queuedMessages: [...store.queue],
       pendingInteractiveRequest: store.pendingInteractiveRequest,
       sessionRuntime: store.runtime,
       ...(options?.loadRequestId ? { loadRequestId: options.loadRequestId } : {}),
     };
+
+    if (options?.includeParitySnapshot) {
+      this.logParityTrace(store.sessionId, {
+        path: 'snapshot',
+        reason: options.reason ?? 'manual_emit',
+        loadRequestId: options.loadRequestId ?? null,
+        queuedCount: store.queue.length,
+        snapshot: this.normalizeTranscript(snapshotMessages),
+      });
+    }
+
+    chatConnectionService.forwardToSession(store.sessionId, payload);
+  }
+
+  private buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
+    const replayEvents: ReplayEventMessage[] = [
+      {
+        type: 'session_runtime_snapshot',
+        sessionRuntime: store.runtime,
+      },
+    ];
+
+    const transcript = [...store.transcript].sort(messageSort);
+    for (const message of transcript) {
+      if (message.source === 'user') {
+        replayEvents.push({
+          type: 'message_state_changed',
+          id: message.id,
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: message.text ?? '',
+            timestamp: message.timestamp,
+            attachments: message.attachments,
+            settings: {
+              selectedModel: resolveSelectedModel(DEFAULT_CHAT_SETTINGS.selectedModel),
+              thinkingEnabled: DEFAULT_CHAT_SETTINGS.thinkingEnabled,
+              planModeEnabled: DEFAULT_CHAT_SETTINGS.planModeEnabled,
+            },
+            order: message.order,
+          },
+        });
+        replayEvents.push({
+          type: 'message_state_changed',
+          id: message.id,
+          newState: MessageState.COMMITTED,
+        });
+        continue;
+      }
+
+      if (message.message) {
+        replayEvents.push({
+          type: 'claude_message',
+          data: message.message,
+          order: message.order,
+        });
+      }
+    }
+
+    for (const [queuePosition, queued] of store.queue.entries()) {
+      replayEvents.push({
+        type: 'message_state_changed',
+        id: queued.id,
+        newState: MessageState.ACCEPTED,
+        queuePosition,
+        userMessage: {
+          text: queued.text,
+          timestamp: queued.timestamp,
+          attachments: queued.attachments,
+          settings: {
+            selectedModel: resolveSelectedModel(queued.settings.selectedModel),
+            thinkingEnabled: queued.settings.thinkingEnabled,
+            planModeEnabled: queued.settings.planModeEnabled,
+          },
+        },
+      });
+    }
+
+    if (store.pendingInteractiveRequest) {
+      if (store.pendingInteractiveRequest.toolName === 'AskUserQuestion') {
+        replayEvents.push({
+          type: 'user_question',
+          requestId: store.pendingInteractiveRequest.requestId,
+          questions: ((store.pendingInteractiveRequest.input as { questions?: unknown[] })
+            .questions ?? []) as ReplayEventMessage['questions'],
+        });
+      } else {
+        replayEvents.push({
+          type: 'permission_request',
+          requestId: store.pendingInteractiveRequest.requestId,
+          toolName: store.pendingInteractiveRequest.toolName,
+          toolInput: store.pendingInteractiveRequest.input,
+          planContent: store.pendingInteractiveRequest.planContent,
+        });
+      }
+    }
+
+    return replayEvents;
+  }
+
+  private forwardReplayBatch(
+    store: SessionStore,
+    options?: { loadRequestId?: string; reason?: SnapshotReason; includeParitySnapshot?: boolean }
+  ): void {
+    const replayEvents = this.buildReplayEvents(store);
+    const payload: WebSocketMessage = {
+      type: 'session_replay_batch',
+      replayEvents,
+      ...(options?.loadRequestId ? { loadRequestId: options.loadRequestId } : {}),
+    };
+
+    if (options?.includeParitySnapshot) {
+      this.logParityTrace(store.sessionId, {
+        path: 'replay_batch',
+        reason: options.reason ?? 'manual_emit',
+        loadRequestId: options.loadRequestId ?? null,
+        replayEventCount: replayEvents.length,
+      });
+    }
+
     chatConnectionService.forwardToSession(store.sessionId, payload);
   }
 
@@ -323,7 +522,11 @@ class SessionStoreService {
       );
     }
 
-    this.forwardSnapshot(store, { loadRequestId });
+    this.forwardReplayBatch(store, {
+      loadRequestId,
+      reason: 'subscribe_load',
+      includeParitySnapshot: true,
+    });
 
     logger.info('Session subscribed', {
       sessionId,
@@ -362,6 +565,14 @@ class SessionStoreService {
         );
         transcript = this.buildTranscriptFromHistory(history);
         transcript.sort(messageSort);
+        this.logParityTrace(store.sessionId, {
+          path: 'jsonl_hydrate',
+          claudeSessionId: options.claudeSessionId,
+          claudeProjectPath: options.claudeProjectPath,
+          historyCount: history.length,
+          transcriptCount: transcript.length,
+          transcript: this.normalizeTranscript(transcript),
+        });
       }
 
       if (store.hydrateGeneration !== generation) {
@@ -391,7 +602,7 @@ class SessionStoreService {
     }
 
     store.queue.push(message);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'enqueue' });
     return { position: store.queue.length - 1 };
   }
 
@@ -402,7 +613,7 @@ class SessionStoreService {
       return false;
     }
     store.queue.splice(idx, 1);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'remove_queued_message' });
     return true;
   }
 
@@ -410,7 +621,7 @@ class SessionStoreService {
     const store = this.getOrCreate(sessionId);
     const next = store.queue.shift();
     if (next && options?.emitSnapshot !== false) {
-      this.forwardSnapshot(store);
+      this.forwardSnapshot(store, { reason: 'dequeue' });
     }
     return next;
   }
@@ -418,7 +629,7 @@ class SessionStoreService {
   requeueFront(sessionId: string, message: QueuedMessage): void {
     const store = this.getOrCreate(sessionId);
     store.queue.unshift(message);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'requeue' });
   }
 
   commitSentUserMessage(
@@ -464,7 +675,7 @@ class SessionStoreService {
     }
 
     if (options?.emitSnapshot !== false) {
-      this.forwardSnapshot(store);
+      this.forwardSnapshot(store, { reason: 'commit_user_message' });
     }
   }
 
@@ -473,10 +684,33 @@ class SessionStoreService {
     const order = store.nextOrder;
     store.nextOrder += 1;
 
-    if (
-      !shouldPersistClaudeMessage(claudeMessage) ||
-      shouldSuppressDuplicateResultMessage(store.transcript, claudeMessage)
-    ) {
+    if (claudeMessage.type === 'stream_event') {
+      const event = claudeMessage.event;
+      if (
+        event &&
+        event.type === 'content_block_start' &&
+        event.content_block.type === 'tool_use' &&
+        this.hasPersistedToolUseStart(store, event.content_block.id)
+      ) {
+        this.logParityTrace(sessionId, {
+          path: 'live_stream_filtered',
+          reason: 'duplicate_tool_use_start_suppressed',
+          order,
+          claudeMessage,
+        });
+        return order;
+      }
+    }
+
+    const shouldPersist = shouldPersistClaudeMessage(claudeMessage);
+    const isDuplicateResult = shouldSuppressDuplicateResultMessage(store.transcript, claudeMessage);
+    if (!shouldPersist || isDuplicateResult) {
+      this.logParityTrace(sessionId, {
+        path: 'live_stream_filtered',
+        reason: !shouldPersist ? 'non_renderable_claude_message' : 'duplicate_result_suppressed',
+        order,
+        claudeMessage,
+      });
       return order;
     }
 
@@ -489,6 +723,11 @@ class SessionStoreService {
     };
 
     store.transcript.push(entry);
+    this.logParityTrace(sessionId, {
+      path: 'live_stream_persisted',
+      order,
+      claudeMessage,
+    });
 
     return order;
   }
@@ -503,7 +742,7 @@ class SessionStoreService {
   setPendingInteractiveRequest(sessionId: string, request: PendingInteractiveRequest): void {
     const store = this.getOrCreate(sessionId);
     store.pendingInteractiveRequest = request;
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'pending_request_set' });
   }
 
   getPendingInteractiveRequest(sessionId: string): PendingInteractiveRequest | null {
@@ -517,7 +756,7 @@ class SessionStoreService {
       return;
     }
     store.pendingInteractiveRequest = null;
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'pending_request_cleared' });
   }
 
   clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): void {
@@ -526,7 +765,7 @@ class SessionStoreService {
       return;
     }
     store.pendingInteractiveRequest = null;
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'pending_request_cleared' });
   }
 
   markStarting(sessionId: string): void {
@@ -601,7 +840,10 @@ class SessionStoreService {
       },
     });
 
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, {
+      reason: 'process_exit_reset',
+      includeParitySnapshot: true,
+    });
 
     // Best-effort immediate refresh from JSONL so connected clients recover
     // without requiring a manual reload.
@@ -611,7 +853,10 @@ class SessionStoreService {
         claudeProjectPath: store.lastKnownProjectPath,
       })
         .then(() => {
-          this.forwardSnapshot(store);
+          this.forwardSnapshot(store, {
+            reason: 'process_exit_rehydrate',
+            includeParitySnapshot: true,
+          });
         })
         .catch((error) => {
           logger.warn('Failed to rehydrate transcript after process exit', {
@@ -624,7 +869,11 @@ class SessionStoreService {
 
   emitSessionSnapshot(sessionId: string, loadRequestId?: string): void {
     const store = this.getOrCreate(sessionId);
-    this.forwardSnapshot(store, { loadRequestId });
+    this.forwardSnapshot(store, {
+      loadRequestId,
+      reason: 'manual_emit',
+      includeParitySnapshot: true,
+    });
   }
 
   injectCommittedUserMessage(
@@ -643,7 +892,7 @@ class SessionStoreService {
     };
     store.nextOrder += 1;
     this.upsertTranscriptMessage(store, message);
-    this.forwardSnapshot(store);
+    this.forwardSnapshot(store, { reason: 'inject_user_message' });
   }
 
   getConnectionCount(sessionId: string): number {

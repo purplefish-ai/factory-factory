@@ -715,6 +715,12 @@ class ChatEventForwarderService {
       message?: { content?: Array<{ type?: string; text?: string }> };
     }
   ): void {
+    const assistantMsg = msg as ClaudeMessage;
+    const fallbackToolUseEvents = this.buildToolUseFallbackStreamEvents(assistantMsg);
+    for (const toolUseEvent of fallbackToolUseEvents) {
+      this.forwardClaudeMessage(dbSessionId, toolUseEvent);
+    }
+
     const content = msgWithType.message?.content;
     if (!Array.isArray(content)) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
@@ -736,13 +742,39 @@ class ChatEventForwarderService {
     }
 
     // Persist only narrative text from assistant message events.
-    // Tool/thinking blocks are persisted through stream_event forwarding.
-    const assistantMsg = msg as ClaudeMessage;
     const normalized = this.normalizeAssistantMessageToTextOnly(assistantMsg);
     if (!normalized) {
       return;
     }
     this.forwardClaudeMessage(dbSessionId, normalized);
+  }
+
+  private buildToolUseFallbackStreamEvents(message: ClaudeMessage): ClaudeMessage[] {
+    if (message.type !== 'assistant') {
+      return [];
+    }
+    const content = message.message?.content;
+    if (!Array.isArray(content)) {
+      return [];
+    }
+
+    const fallbackEvents: ClaudeMessage[] = [];
+    for (const [index, item] of content.entries()) {
+      if (item.type !== 'tool_use') {
+        continue;
+      }
+      fallbackEvents.push({
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index,
+          content_block: item,
+        },
+        timestamp: message.timestamp ?? new Date().toISOString(),
+      });
+    }
+
+    return fallbackEvents;
   }
 
   private normalizeAssistantMessageToTextOnly(message: ClaudeMessage): ClaudeMessage | null {

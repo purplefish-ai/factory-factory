@@ -119,4 +119,56 @@ describe('ChatEventForwarderService', () => {
     expect(mockMarkWorkspaceIdle).not.toHaveBeenCalled();
     expect(mockMarkRunning).toHaveBeenCalledWith('session-idle-race');
   });
+
+  it('forwards tool_use blocks from assistant message events during live streaming', () => {
+    mockAppendClaudeEvent.mockReturnValue(41);
+
+    const client = new MockClaudeClient();
+    chatEventForwarderService.setupClientEvents(
+      'session-tool-use-fallback',
+      client as never,
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' },
+      vi.fn(async () => {
+        // no-op
+      })
+    );
+
+    client.emit('message', {
+      type: 'assistant',
+      timestamp: '2026-02-08T00:00:00.000Z',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'tool_use', id: 'tool-123', name: 'Read', input: { file_path: 'README.md' } },
+        ],
+      },
+    });
+
+    expect(mockAppendClaudeEvent).toHaveBeenCalledWith(
+      'session-tool-use-fallback',
+      expect.objectContaining({
+        type: 'stream_event',
+        event: expect.objectContaining({
+          type: 'content_block_start',
+          content_block: expect.objectContaining({
+            type: 'tool_use',
+            id: 'tool-123',
+          }),
+        }),
+      })
+    );
+
+    expect(mockEmitDelta).toHaveBeenCalledWith(
+      'session-tool-use-fallback',
+      expect.objectContaining({
+        type: 'claude_message',
+        data: expect.objectContaining({
+          type: 'stream_event',
+          event: expect.objectContaining({
+            type: 'content_block_start',
+          }),
+        }),
+      })
+    );
+  });
 });
