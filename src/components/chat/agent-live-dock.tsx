@@ -184,8 +184,11 @@ export const AgentLiveDock = memo(function AgentLiveDock({
   }
 
   // Calculate max height for tool details based on available space
-  // Header is ~32px, spacing is 12px, leaving the rest for content
-  const toolDetailsMaxHeight = Math.max(60, height - 44);
+  // Container: py-3 (24px) + Header (~32px) + mt-3 (12px) + space-y-3 (12px between items if thinking present)
+  // When thinking is present, reserve ~60px for it, otherwise use more space for tools
+  const baseOverhead = 68; // padding + header + margins
+  const thinkingReserve = hasThinking ? 60 : 0;
+  const toolDetailsMaxHeight = Math.max(60, height - baseOverhead - thinkingReserve);
 
   return (
     <div className={cn('bg-muted/20 border-b relative', className)}>
