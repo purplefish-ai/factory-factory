@@ -670,12 +670,11 @@ class ChatEventForwarderService {
       return;
     }
 
-    // Forward assistant narrative text so live transcript matches JSONL hydration.
-    const textBlocks = content
-      .filter((item) => item.type === 'text' && typeof item.text === 'string')
-      .map((item) => ({ type: 'text' as const, text: item.text as string }));
+    const hasNarrativeText = content.some(
+      (item) => item.type === 'text' && typeof item.text === 'string'
+    );
 
-    if (textBlocks.length === 0) {
+    if (!hasNarrativeText) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
         reason: 'assistant_no_text_content',
@@ -683,18 +682,10 @@ class ChatEventForwarderService {
       return;
     }
 
-    const msgRecord = msg as Record<string, unknown>;
-    const messageRecord = (msgWithType.message as Record<string, unknown> | undefined) ?? {};
-    const assistantTextMsg = {
-      ...msgRecord,
-      message: {
-        ...messageRecord,
-        content: textBlocks,
-      },
-    };
-
     const order = messageStateService.allocateOrder(dbSessionId);
-    const wsMsg = { type: 'claude_message', data: assistantTextMsg, order };
+    // Preserve the full assistant payload (including tool_use blocks/ids)
+    // so downstream tool progress/summary events can still correlate.
+    const wsMsg = { type: 'claude_message', data: msg, order };
     messageStateService.storeEvent(dbSessionId, wsMsg);
     chatConnectionService.forwardToSession(dbSessionId, wsMsg);
   }

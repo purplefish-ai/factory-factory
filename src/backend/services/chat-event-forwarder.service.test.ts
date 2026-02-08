@@ -81,7 +81,7 @@ describe('chatEventForwarderService assistant message forwarding', () => {
     vi.clearAllMocks();
   });
 
-  it('forwards assistant text blocks as claude_message events', () => {
+  it('forwards assistant messages with text and preserves mixed content blocks', () => {
     mockedMessageStateService.allocateOrder.mockReturnValue(77);
 
     const sessionId = 'session-assistant-text';
@@ -104,14 +104,18 @@ describe('chatEventForwarderService assistant message forwarding', () => {
       },
     });
 
+    const mixedAssistantMessage = {
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'tool_use', id: 'tool-1', name: 'Read', input: { file_path: 'a.ts' } },
+          { type: 'text', text: 'Aha! Found the issue.' },
+        ],
+      },
+    };
     const expectedWsMessage = {
       type: 'claude_message',
-      data: {
-        type: 'assistant',
-        message: {
-          content: [{ type: 'text', text: 'Aha! Found the issue.' }],
-        },
-      },
+      data: mixedAssistantMessage,
       order: 77,
     };
 
