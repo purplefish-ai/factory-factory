@@ -139,7 +139,7 @@ export default function NewProjectPage() {
                       </Button>
                     )}
                   </div>
-                  {factoryConfig?.exists && (
+                  {factoryConfig?.exists && repoPath.trim() && (
                     <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                       <CheckCircle2Icon className="h-4 w-4" />
                       <span>factory-factory.json detected</span>
@@ -237,7 +237,7 @@ export default function NewProjectPage() {
                   </Button>
                 )}
               </div>
-              {factoryConfig?.exists && (
+              {factoryConfig?.exists && repoPath.trim() && (
                 <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                   <CheckCircle2Icon className="h-4 w-4" />
                   <span>factory-factory.json detected</span>

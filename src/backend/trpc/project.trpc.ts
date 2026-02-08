@@ -242,9 +242,9 @@ export const projectRouter = router({
     .query(async ({ input }) => {
       try {
         const config = await FactoryConfigService.readConfig(input.repoPath);
-        return { exists: config !== null, hasScripts: config?.scripts !== undefined };
+        return { exists: config !== null };
       } catch {
-        return { exists: false, hasScripts: false };
+        return { exists: false };
       }
     }),
 });

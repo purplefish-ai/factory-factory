@@ -69,12 +69,12 @@ describe('FactoryConfigService', () => {
   describe('checkFactoryConfig endpoint behavior', () => {
     it('should return exists: false when no config file', async () => {
       const config = await FactoryConfigService.readConfig(testDir);
-      const result = { exists: config !== null, hasScripts: config?.scripts !== undefined };
+      const result = { exists: config !== null };
 
-      expect(result).toEqual({ exists: false, hasScripts: false });
+      expect(result).toEqual({ exists: false });
     });
 
-    it('should return exists: true and hasScripts: true when valid config', async () => {
+    it('should return exists: true when valid config', async () => {
       const configContent = {
         scripts: {
           run: 'npm start',
@@ -84,9 +84,9 @@ describe('FactoryConfigService', () => {
       await writeFile(join(testDir, 'factory-factory.json'), JSON.stringify(configContent));
 
       const config = await FactoryConfigService.readConfig(testDir);
-      const result = { exists: config !== null, hasScripts: config?.scripts !== undefined };
+      const result = { exists: config !== null };
 
-      expect(result).toEqual({ exists: true, hasScripts: true });
+      expect(result).toEqual({ exists: true });
     });
   });
 });
