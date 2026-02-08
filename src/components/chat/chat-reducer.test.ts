@@ -319,7 +319,7 @@ describe('chatReducer', () => {
       expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
-    it('should not store assistant message with only text content', () => {
+    it('should store assistant message with text content', () => {
       const claudeMsg = createTestAssistantMessage();
       const action: ChatAction = {
         type: 'WS_CLAUDE_MESSAGE',
@@ -327,7 +327,9 @@ describe('chatReducer', () => {
       };
       const newState = chatReducer(initialState, action);
 
-      expect(newState.messages).toHaveLength(0);
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]!.source).toBe('claude');
+      expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
     it('does not derive runtime phase changes from Claude message payloads', () => {

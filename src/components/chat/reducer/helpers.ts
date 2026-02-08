@@ -124,7 +124,7 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
     return false;
   }
 
-  // Assistant messages with tool_use or tool_result content should be stored
+  // Assistant messages with tool_use, tool_result, or text content should be stored
   // (These come from session history or when includePartialMessages is false)
   if (claudeMsg.type === 'assistant') {
     const content = claudeMsg.message?.content;
@@ -134,7 +134,7 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
           typeof item === 'object' &&
           item !== null &&
           'type' in item &&
-          (item.type === 'tool_use' || item.type === 'tool_result')
+          (item.type === 'tool_use' || item.type === 'tool_result' || item.type === 'text')
       );
     }
     return false;
