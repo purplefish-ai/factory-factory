@@ -561,7 +561,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       }
     ).decideRatchetAction({
       workspace: { ratchetEnabled: true },
-      prStateInfo: { prState: 'OPEN' },
+      prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
       isCleanPrWithNoNewReviewActivity: false,
       activeRatchetSession: null,
       hasStateChangedSinceLastDispatch: true,
@@ -569,6 +569,52 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     expect(decision).toEqual({ type: 'TRIGGER_FIXER' });
+  });
+
+  it('waits when CI is not in terminal state (PENDING)', () => {
+    const decision = (
+      ratchetService as unknown as {
+        decideRatchetAction: (context: unknown) => {
+          type: string;
+          action?: { type: string; reason: string };
+        };
+      }
+    ).decideRatchetAction({
+      workspace: { ratchetEnabled: true },
+      prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.PENDING },
+      isCleanPrWithNoNewReviewActivity: false,
+      activeRatchetSession: null,
+      hasStateChangedSinceLastDispatch: true,
+      hasOtherActiveSession: false,
+    });
+
+    expect(decision).toEqual({
+      type: 'RETURN_ACTION',
+      action: { type: 'WAITING', reason: 'Waiting for CI to complete (not in terminal state)' },
+    });
+  });
+
+  it('waits when CI is not in terminal state (UNKNOWN)', () => {
+    const decision = (
+      ratchetService as unknown as {
+        decideRatchetAction: (context: unknown) => {
+          type: string;
+          action?: { type: string; reason: string };
+        };
+      }
+    ).decideRatchetAction({
+      workspace: { ratchetEnabled: true },
+      prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.UNKNOWN },
+      isCleanPrWithNoNewReviewActivity: false,
+      activeRatchetSession: null,
+      hasStateChangedSinceLastDispatch: true,
+      hasOtherActiveSession: false,
+    });
+
+    expect(decision).toEqual({
+      type: 'RETURN_ACTION',
+      action: { type: 'WAITING', reason: 'Waiting for CI to complete (not in terminal state)' },
+    });
   });
 
   it('prefers precomputed review-activity diagnostics from decision context', () => {
