@@ -400,4 +400,33 @@ describe('SessionStoreService', () => {
       },
     });
   });
+
+  it('markProcessExit treats null exit code as unexpected and sets error phase', async () => {
+    vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: null,
+      isRunning: true,
+      isWorking: true,
+    });
+
+    sessionStoreService.markProcessExit('s1', null);
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; sessionRuntime?: unknown })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(snapshotCall).toBeDefined();
+    expect(snapshotCall?.sessionRuntime).toMatchObject({
+      phase: 'error',
+      processState: 'stopped',
+      activity: 'IDLE',
+      lastExit: {
+        code: null,
+        unexpected: true,
+      },
+    });
+  });
 });

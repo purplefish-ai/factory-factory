@@ -499,7 +499,7 @@ class SessionStoreService {
 
   markProcessExit(sessionId: string, code: number | null): void {
     const store = this.getOrCreate(sessionId);
-    const unexpected = code !== null && code !== 0;
+    const unexpected = code === null || code !== 0;
 
     // Queue is intentionally ephemeral and dropped on process exit.
     store.queue = [];
