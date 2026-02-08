@@ -550,6 +550,59 @@ describe('SessionStoreService', () => {
     expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
   });
 
+  it('keeps result when matching text exists only in a previous turn', () => {
+    sessionStoreService.commitSentUserMessage('s1', {
+      id: 'u1',
+      text: 'first question',
+      timestamp: '2026-02-08T00:00:00.000Z',
+      settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+    });
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Same answer' }] },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.commitSentUserMessage('s1', {
+      id: 'u2',
+      text: 'second question',
+      timestamp: '2026-02-08T00:00:02.000Z',
+      settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+    });
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 't2', name: 'Bash', input: {} }],
+      },
+      timestamp: '2026-02-08T00:00:03.000Z',
+    });
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: 'Same answer',
+      timestamp: '2026-02-08T00:00:04.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(
+        ([, payload]) =>
+          payload as {
+            type?: string;
+            messages?: Array<{ source: string; message?: { type?: string } }>;
+          }
+      )
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+
+    expect(snapshotCall?.messages).toHaveLength(5);
+    expect(snapshotCall?.messages?.[4]).toMatchObject({
+      source: 'claude',
+      message: { type: 'result' },
+    });
+  });
+
   it('does not persist non-renderable stream events in transcript snapshots', () => {
     sessionStoreService.appendClaudeEvent('s1', {
       type: 'stream_event',

@@ -11,7 +11,12 @@
 
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import type { ClaudeContentItem, ClaudeMessage } from '@/shared/claude';
+import {
+  type ClaudeContentItem,
+  type ClaudeMessage,
+  hasRenderableAssistantContent,
+  hasToolResultContent,
+} from '@/shared/claude';
 import {
   INTERACTIVE_RESPONSE_TOOLS,
   type PendingInteractiveRequest,
@@ -27,10 +32,6 @@ import {
   safeParseToolInput,
 } from '../schemas/tool-inputs.schema';
 import { chatConnectionService } from './chat-connection.service';
-import {
-  hasRenderableAssistantContent,
-  hasToolResultContent,
-} from './chat-event-forwarder.helpers';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { sessionFileLogger } from './session-file-logger.service';

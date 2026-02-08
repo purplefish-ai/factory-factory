@@ -14,6 +14,7 @@ import {
   DEFAULT_THINKING_BUDGET,
   MessageState,
   type QueuedMessage,
+  resolveSelectedModel,
 } from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
 import type { ClaudeClient } from '../claude/index';
@@ -232,7 +233,7 @@ class ChatMessageHandlerService {
         attachments: msg.attachments,
         settings: {
           ...msg.settings,
-          selectedModel: msg.settings.selectedModel ?? 'opus',
+          selectedModel: resolveSelectedModel(msg.settings.selectedModel),
         },
         order,
       },

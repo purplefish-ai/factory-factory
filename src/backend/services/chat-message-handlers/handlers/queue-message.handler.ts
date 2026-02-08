@@ -1,4 +1,4 @@
-import { MessageState } from '@/shared/claude';
+import { MessageState, resolveSelectedModel } from '@/shared/claude';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { sessionStoreService } from '../../session-store.service';
 import { resolveAttachmentContentType } from '../attachment-utils';
@@ -80,7 +80,7 @@ export function createQueueMessageHandler(
         attachments: queuedMsg.attachments,
         settings: {
           ...queuedMsg.settings,
-          selectedModel: queuedMsg.settings.selectedModel ?? 'opus',
+          selectedModel: resolveSelectedModel(queuedMsg.settings.selectedModel),
         },
       },
     });

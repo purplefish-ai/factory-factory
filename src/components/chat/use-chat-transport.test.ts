@@ -110,4 +110,10 @@ describe('isWebSocketMessage', () => {
       false
     );
   });
+
+  it('rejects claude_message without a nested Claude payload', () => {
+    expect(isWebSocketMessage({ type: 'claude_message' })).toBe(false);
+    expect(isWebSocketMessage({ type: 'claude_message', data: null })).toBe(false);
+    expect(isWebSocketMessage({ type: 'claude_message', data: { type: 'not_real' } })).toBe(false);
+  });
 });

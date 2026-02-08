@@ -92,6 +92,14 @@ export function isImageContent(item: ClaudeContentItem): item is ImageContent {
 
 const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
 const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
+const claudeMessageTypes = new Set<string>([
+  'system',
+  'assistant',
+  'user',
+  'stream_event',
+  'result',
+  'error',
+]);
 
 /**
  * Type guard to validate unknown data is a WebSocketMessage.
@@ -119,6 +127,15 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
     );
   }
 
+  // claude_message must include a minimally shaped Claude payload to avoid runtime crashes.
+  if (obj.type === 'claude_message') {
+    if (typeof obj.data !== 'object' || obj.data === null) {
+      return false;
+    }
+    const nested = obj.data as { type?: unknown };
+    return typeof nested.type === 'string' && claudeMessageTypes.has(nested.type);
+  }
+
   return true;
 }
 
@@ -128,7 +145,7 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
 export function isWsClaudeMessage(
   msg: WebSocketMessage
 ): msg is Extract<WebSocketMessage, { type: 'claude_message' }> {
-  return msg.type === 'claude_message';
+  return msg.type === 'claude_message' && typeof msg.data === 'object' && msg.data !== null;
 }
 
 /**

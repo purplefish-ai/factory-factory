@@ -412,6 +412,62 @@ describe('chatReducer', () => {
       expect(withResult.messages[1]!.message).toEqual(distinctResult);
     });
 
+    it('keeps result message when same text appeared only before latest user turn', () => {
+      let state = chatReducer(initialState, {
+        type: 'USER_MESSAGE_SENT',
+        payload: {
+          id: 'u1',
+          source: 'user',
+          text: 'first',
+          timestamp: '2026-02-08T00:00:00.000Z',
+          order: 0,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'assistant',
+            message: { role: 'assistant', content: [{ type: 'text', text: 'Same answer' }] },
+          },
+          order: 1,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'USER_MESSAGE_SENT',
+        payload: {
+          id: 'u2',
+          source: 'user',
+          text: 'second',
+          timestamp: '2026-02-08T00:00:01.000Z',
+          order: 2,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'assistant',
+            message: {
+              role: 'assistant',
+              content: [{ type: 'tool_use', id: 'tool-2', name: 'Bash', input: {} }],
+            },
+          },
+          order: 3,
+        },
+      });
+      const withResult = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: createTestResultMessage('Same answer'),
+          order: 4,
+        },
+      });
+
+      expect(withResult.messages).toHaveLength(5);
+      expect(withResult.messages[4]!.message).toMatchObject({ type: 'result' });
+    });
+
     it('should store tool_use messages and track index for O(1) updates', () => {
       const toolUseId = 'tool-use-123';
       const toolUseMsg = createTestToolUseMessage(toolUseId);

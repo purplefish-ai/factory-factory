@@ -63,6 +63,13 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 };
 
 /**
+ * Resolve nullable/optional model selection to the canonical default.
+ */
+export function resolveSelectedModel(selectedModel: string | null | undefined): string {
+  return selectedModel ?? DEFAULT_CHAT_SETTINGS.selectedModel;
+}
+
+/**
  * Default thinking budget (tokens) for extended thinking mode.
  * Used with the SDK's set_max_thinking_tokens control request.
  */
@@ -445,6 +452,12 @@ export function shouldSuppressDuplicateResultMessage(
   for (let i = transcript.length - 1; i >= 0; i -= 1) {
     // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
     const candidate = transcript[i]!;
+    // Only dedupe against assistant content in the current turn.
+    // Crossing a user message boundary can suppress legitimate repeated answers.
+    if (candidate.source === 'user') {
+      return false;
+    }
+
     if (
       candidate.source !== 'claude' ||
       !candidate.message ||
