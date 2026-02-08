@@ -123,7 +123,7 @@ describe('SessionService', () => {
         systemPrompt: 'system',
         model: 'sonnet',
         permissionMode: 'bypassPermissions',
-        includePartialMessages: true,
+        includePartialMessages: false,
         sessionId: 'session-1',
       }),
       expect.any(Object),

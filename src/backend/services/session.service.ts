@@ -391,7 +391,7 @@ class SessionService {
       systemPrompt: sessionContext.systemPrompt,
       model: options?.model ?? sessionContext.model,
       permissionMode: options?.permissionMode ?? 'bypassPermissions',
-      includePartialMessages: true,
+      includePartialMessages: false,
       thinkingEnabled: options?.thinkingEnabled,
       initialPrompt: options?.initialPrompt,
       sessionId,
