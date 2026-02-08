@@ -18,6 +18,7 @@ const QUEUE_BASE_ORDER = 1_000_000_000;
 interface SessionStore {
   sessionId: string;
   initialized: boolean;
+  hydratePromise: Promise<void> | null;
   transcript: ChatMessage[];
   queue: QueuedMessage[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;
@@ -39,6 +40,7 @@ class SessionStoreService {
       store = {
         sessionId,
         initialized: false,
+        hydratePromise: null,
         transcript: [],
         queue: [],
         pendingInteractiveRequest: null,
@@ -237,16 +239,7 @@ class SessionStoreService {
     const { sessionId, workingDir, claudeSessionId, isRunning, isWorking, loadRequestId } = options;
     const store = this.getOrCreate(sessionId);
 
-    if (!store.initialized) {
-      if (claudeSessionId) {
-        const history = await SessionManager.getHistory(claudeSessionId, workingDir);
-        store.transcript = this.buildTranscriptFromHistory(history);
-        store.transcript.sort(messageSort);
-      }
-      this.setNextOrderFromTranscript(store);
-      store.initialized = true;
-      store.lastHydratedAt = new Date().toISOString();
-    }
+    await this.ensureHydrated(store, { claudeSessionId, workingDir });
 
     if (isRunning) {
       this.markRuntime(
@@ -279,6 +272,35 @@ class SessionStoreService {
       transcriptCount: store.transcript.length,
       queueCount: store.queue.length,
     });
+  }
+
+  private async ensureHydrated(
+    store: SessionStore,
+    options: { claudeSessionId: string | null; workingDir: string }
+  ): Promise<void> {
+    if (store.initialized) {
+      return;
+    }
+
+    if (!store.hydratePromise) {
+      store.hydratePromise = (async () => {
+        if (options.claudeSessionId) {
+          const history = await SessionManager.getHistory(
+            options.claudeSessionId,
+            options.workingDir
+          );
+          store.transcript = this.buildTranscriptFromHistory(history);
+          store.transcript.sort(messageSort);
+        }
+        this.setNextOrderFromTranscript(store);
+        store.initialized = true;
+        store.lastHydratedAt = new Date().toISOString();
+      })().finally(() => {
+        store.hydratePromise = null;
+      });
+    }
+
+    await store.hydratePromise;
   }
 
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string } {

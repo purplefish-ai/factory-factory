@@ -96,6 +96,48 @@ describe('SessionStoreService', () => {
     });
   });
 
+  it('deduplicates concurrent hydration so history is loaded once', async () => {
+    type HydratedHistory = Array<{ type: 'user'; content: string; timestamp: string }>;
+    let resolveHistory!: (history: HydratedHistory) => void;
+    const historyPromise = new Promise<HydratedHistory>((resolve) => {
+      resolveHistory = resolve;
+    });
+    vi.mocked(SessionManager.getHistory).mockReturnValue(historyPromise);
+
+    const firstSubscribe = sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+    const secondSubscribe = sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    await Promise.resolve();
+    expect(SessionManager.getHistory).toHaveBeenCalledTimes(1);
+
+    resolveHistory([
+      {
+        type: 'user',
+        content: 'hello from history',
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+    await Promise.all([firstSubscribe, secondSubscribe]);
+
+    const snapshots = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
+      .filter((payload) => payload.type === 'session_snapshot');
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots.at(-1)?.messages?.[0]?.text).toBe('hello from history');
+  });
+
   it('enqueue adds queued message and emits updated snapshot', () => {
     const result = sessionStoreService.enqueue('s1', {
       id: 'm1',
