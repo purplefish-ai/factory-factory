@@ -855,6 +855,122 @@ describe('MessageStateService', () => {
       expect(snapshot.data.messages[0]!.order).toBe(5);
     });
 
+    it('should filter transient stream events from snapshot to match live client behavior', () => {
+      const { events, unsubscribe } = collectEvents();
+
+      // Store stream events as the forwarder would during a live session.
+      // The client's shouldStoreMessage filters stream_event via shouldIncludeStreamEvent,
+      // only keeping content_block_start for tool_use/tool_result/thinking.
+      // The snapshot must apply the same filtering.
+
+      // Should be INCLUDED: content_block_start with tool_use
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: {
+          type: 'stream_event',
+          event: { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'tu_1', name: 'Read', input: {} } },
+        },
+        order: 1,
+      });
+      // Should be INCLUDED: content_block_start with thinking
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: {
+          type: 'stream_event',
+          event: { type: 'content_block_start', index: 1, content_block: { type: 'thinking', thinking: '' } },
+        },
+        order: 2,
+      });
+      // Should be EXCLUDED: content_block_delta (transient)
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: {
+          type: 'stream_event',
+          event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } },
+        },
+        order: 3,
+      });
+      // Should be EXCLUDED: content_block_stop (transient)
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: {
+          type: 'stream_event',
+          event: { type: 'content_block_stop', index: 0 },
+        },
+        order: 4,
+      });
+      // Should be EXCLUDED: message_delta (transient)
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: {
+          type: 'stream_event',
+          event: { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+        },
+        order: 5,
+      });
+      // Should be INCLUDED: non-stream_event message (assistant)
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: { type: 'assistant', message: { role: 'assistant', content: 'Hello' } },
+        order: 6,
+      });
+
+      messageStateService.sendSnapshot('session-1');
+      unsubscribe();
+
+      const snapshot = events.find((e) => e.type === 'messages_snapshot');
+      if (!snapshot || snapshot.type !== 'messages_snapshot') {
+        expect.fail('Expected messages_snapshot event');
+      }
+
+      const { messages } = snapshot.data;
+      // tool_use start (1) + thinking start (2) + assistant (6) = 3
+      expect(messages).toHaveLength(3);
+      expect(messages[0]!.order).toBe(1);
+      expect(messages[1]!.order).toBe(2);
+      expect(messages[2]!.order).toBe(6);
+    });
+
+    it('should sort snapshot messages by order when event store messages precede queued users', () => {
+      const { events, unsubscribe } = collectEvents();
+
+      // Dispatched user message gets order 0
+      const msg1 = createTestQueuedMessage('msg-1', 'First');
+      messageStateService.createUserMessage('session-1', msg1);
+      messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
+      messageStateService.updateState('session-1', 'msg-1', MessageState.COMMITTED);
+
+      // Queued user message has no order yet → gets BASE_ORDER (1_000_000_000)
+      const msg2 = createTestQueuedMessage('msg-2', 'Queued');
+      messageStateService.createUserMessage('session-1', msg2);
+
+      // Event store messages with order values between user messages
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: { type: 'assistant', message: { role: 'assistant', content: 'Reply' } },
+        order: 5,
+      });
+
+      messageStateService.sendSnapshot('session-1');
+      unsubscribe();
+
+      const snapshot = events.find((e) => e.type === 'messages_snapshot');
+      if (!snapshot || snapshot.type !== 'messages_snapshot') {
+        expect.fail('Expected messages_snapshot event');
+      }
+
+      const { messages } = snapshot.data;
+      expect(messages).toHaveLength(3);
+
+      // Order should be: msg-1 (order 0), event store (order 5), msg-2 (order 1_000_000_000)
+      expect(messages[0]!.id).toBe('msg-1');
+      expect(messages[0]!.order).toBe(0);
+      expect(messages[1]!.source).toBe('claude');
+      expect(messages[1]!.order).toBe(5);
+      expect(messages[2]!.id).toBe('msg-2');
+      expect(messages[2]!.order).toBe(1_000_000_000);
+    });
+
     it('reconnect snapshot should match live session messages', () => {
       // Simulate what happens during a live session:
       // 1. User sends a message

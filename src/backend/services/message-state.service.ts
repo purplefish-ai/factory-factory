@@ -25,6 +25,7 @@ import {
   type QueuedMessage,
   type UserMessageWithState,
 } from '@/shared/claude';
+import { shouldIncludeStreamEvent } from '@/shared/transcript-policy';
 import { createLogger } from './logger.service';
 import { MessageEventStore, type StoredEvent } from './message-event-store';
 import { isValidTransition, MessageStateMachine } from './message-state-machine';
@@ -483,6 +484,10 @@ class MessageStateService {
     // clients see the full transcript.
     chatMessages.push(...this.buildChatMessagesFromEventStore(sessionId));
 
+    // Sort by order so the snapshot is delivered in the correct sequence.
+    // Event-store messages can have lower order values than queued user messages.
+    chatMessages.sort((a, b) => a.order - b.order);
+
     this.emitter.emit('event', {
       type: 'messages_snapshot',
       sessionId,
@@ -511,6 +516,12 @@ class MessageStateService {
   /**
    * Convert stored event-store claude_message events into ChatMessage[].
    * Used by sendSnapshot to include live session events that are not yet in the state machine.
+   *
+   * Applies the same stream event filtering as the client's shouldStoreMessage:
+   * stream_event messages are only included if shouldIncludeStreamEvent passes
+   * (content_block_start for tool_use/tool_result/thinking). Without this,
+   * reconnect snapshots would contain transient deltas/stops that the live
+   * client filters out, causing a parity mismatch.
    */
   private buildChatMessagesFromEventStore(sessionId: string): ChatMessage[] {
     const storedEvents = this.eventStore.getStoredEvents(sessionId);
@@ -518,6 +529,19 @@ class MessageStateService {
     let eventCounter = 0;
     for (const event of storedEvents) {
       if (event.type === 'claude_message' && event.data != null && event.order != null) {
+        // Filter stream events to match client-side shouldStoreMessage behavior
+        const data = event.data as {
+          type?: string;
+          event?: { type: string; content_block?: { type: string } };
+        };
+        if (data.type === 'stream_event' && data.event != null) {
+          if (
+            !shouldIncludeStreamEvent(data.event as Parameters<typeof shouldIncludeStreamEvent>[0])
+          ) {
+            continue;
+          }
+        }
+
         result.push({
           id: `evt-${sessionId}-${eventCounter++}`,
           source: 'claude',
