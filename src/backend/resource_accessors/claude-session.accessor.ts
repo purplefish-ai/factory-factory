@@ -15,6 +15,7 @@ interface UpdateClaudeSessionInput {
   status?: SessionStatus;
   claudeSessionId?: string | null;
   claudeProcessPid?: number | null;
+  planFilePath?: string | null;
 }
 
 interface FindByWorkspaceIdFilters {
