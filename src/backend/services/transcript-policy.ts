@@ -37,8 +37,8 @@ export function shouldIncludeJSONLEntry(entry: Record<string, unknown>): boolean
     return false;
   }
 
-  // Skip entries without a message payload
-  if (!entry.message) {
+  // Skip entries without a message payload (null or undefined)
+  if (entry.message == null) {
     return false;
   }
 

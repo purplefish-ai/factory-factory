@@ -766,6 +766,158 @@ describe('MessageStateService', () => {
         )
       ).toBe(true);
     });
+
+    it('should include event store claude_message events in snapshot', () => {
+      const { events, unsubscribe } = collectEvents();
+
+      // Simulate a live session: user message dispatched + claude_message events stored
+      const msg = createTestQueuedMessage('msg-1', 'Hello');
+      messageStateService.createUserMessage('session-1', msg);
+      messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
+
+      // Store claude_message events as the event forwarder would
+      const assistantData = {
+        type: 'assistant',
+        message: { role: 'assistant', content: 'Hi there!' },
+      };
+      const toolUseData = {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'tu_1', name: 'Read', input: {} }],
+        },
+      };
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: assistantData,
+        order: 100,
+      });
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: toolUseData,
+        order: 101,
+      });
+
+      messageStateService.sendSnapshot('session-1');
+      unsubscribe();
+
+      const snapshot = events.find((e) => e.type === 'messages_snapshot');
+      if (!snapshot || snapshot.type !== 'messages_snapshot') {
+        expect.fail('Expected messages_snapshot event');
+      }
+
+      const { messages } = snapshot.data;
+      // Should have: 1 user message + 2 event store messages = 3 total
+      expect(messages).toHaveLength(3);
+
+      // User message from state machine
+      expect(messages[0]!.source).toBe('user');
+      expect(messages[0]!.id).toBe('msg-1');
+
+      // Event store messages
+      expect(messages[1]!.source).toBe('claude');
+      expect(messages[1]!.message).toBe(assistantData);
+      expect(messages[1]!.order).toBe(100);
+
+      expect(messages[2]!.source).toBe('claude');
+      expect(messages[2]!.message).toBe(toolUseData);
+      expect(messages[2]!.order).toBe(101);
+    });
+
+    it('should skip event store entries without order or data', () => {
+      const { events, unsubscribe } = collectEvents();
+
+      // Store events with missing fields - should be skipped
+      messageStateService.storeEvent('session-1', { type: 'claude_message' }); // no data, no order
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: { type: 'assistant' },
+      }); // no order
+      messageStateService.storeEvent('session-1', { type: 'tool_progress', order: 1 }); // wrong type
+      // Valid event
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: { type: 'assistant', message: { role: 'assistant', content: 'ok' } },
+        order: 5,
+      });
+
+      messageStateService.sendSnapshot('session-1');
+      unsubscribe();
+
+      const snapshot = events.find((e) => e.type === 'messages_snapshot');
+      if (!snapshot || snapshot.type !== 'messages_snapshot') {
+        expect.fail('Expected messages_snapshot event');
+      }
+
+      // Only the valid claude_message event should appear
+      expect(snapshot.data.messages).toHaveLength(1);
+      expect(snapshot.data.messages[0]!.source).toBe('claude');
+      expect(snapshot.data.messages[0]!.order).toBe(5);
+    });
+
+    it('reconnect snapshot should match live session messages', () => {
+      // Simulate what happens during a live session:
+      // 1. User sends a message
+      // 2. Claude responds with events stored in event store
+      // 3. Client disconnects and reconnects
+      // 4. Snapshot should contain the same messages the client originally saw
+
+      const msg = createTestQueuedMessage('msg-1', 'What is 2+2?');
+      messageStateService.createUserMessage('session-1', msg);
+      messageStateService.updateState('session-1', 'msg-1', MessageState.DISPATCHED);
+      messageStateService.updateState('session-1', 'msg-1', MessageState.COMMITTED);
+
+      // Simulate claude_message events being stored during live streaming
+      const liveEvents = [
+        {
+          type: 'claude_message' as const,
+          data: { type: 'assistant', message: { role: 'assistant', content: 'The answer is 4.' } },
+          order: 10,
+        },
+        {
+          type: 'claude_message' as const,
+          data: {
+            type: 'result',
+            usage: { input_tokens: 10, output_tokens: 5 },
+            duration_ms: 100,
+          },
+          order: 11,
+        },
+      ];
+
+      // Store events as the chat-event-forwarder would during live session
+      for (const event of liveEvents) {
+        messageStateService.storeEvent('session-1', event);
+      }
+
+      // Now simulate reconnect: sendSnapshot should include both
+      // state machine messages AND event store messages
+      const { events, unsubscribe } = collectEvents();
+      messageStateService.sendSnapshot('session-1');
+      unsubscribe();
+
+      const snapshot = events.find((e) => e.type === 'messages_snapshot');
+      if (!snapshot || snapshot.type !== 'messages_snapshot') {
+        expect.fail('Expected messages_snapshot event');
+      }
+
+      const { messages } = snapshot.data;
+
+      // Verify user message is present
+      const userMessages = messages.filter((m) => m.source === 'user');
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0]!.text).toBe('What is 2+2?');
+
+      // Verify claude messages from event store are present
+      const claudeMessages = messages.filter((m) => m.source === 'claude');
+      expect(claudeMessages).toHaveLength(2);
+      expect(claudeMessages[0]!.order).toBe(10);
+      expect(claudeMessages[1]!.order).toBe(11);
+
+      // Verify the event data is preserved
+      expect(claudeMessages[0]!.message?.type).toBe('assistant');
+      expect(claudeMessages[1]!.message?.type).toBe('result');
+    });
   });
 
   // ---------------------------------------------------------------------------

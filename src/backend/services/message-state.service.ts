@@ -26,7 +26,7 @@ import {
   type UserMessageWithState,
 } from '@/shared/claude';
 import { createLogger } from './logger.service';
-import { MessageEventStore } from './message-event-store';
+import { MessageEventStore, type StoredEvent } from './message-event-store';
 import { isValidTransition, MessageStateMachine } from './message-state-machine';
 
 const logger = createLogger('message-state-service');
@@ -295,14 +295,14 @@ class MessageStateService {
    * Store a raw WebSocket event for replay on reconnect.
    * Called by chatEventForwarderService for every event sent to WebSocket.
    */
-  storeEvent(sessionId: string, event: { type: string; data?: unknown }): void {
+  storeEvent(sessionId: string, event: StoredEvent): void {
     this.eventStore.storeEvent(sessionId, event);
   }
 
   /**
    * Get all stored events for a session (for replay on reconnect).
    */
-  getStoredEvents(sessionId: string): Array<{ type: string; data?: unknown }> {
+  getStoredEvents(sessionId: string): StoredEvent[] {
     return this.eventStore.getStoredEvents(sessionId);
   }
 
@@ -477,6 +477,12 @@ class MessageStateService {
       }
     }
 
+    // Include live session events from the event store.
+    // During a running session, claude_message events are stored in the event store
+    // but not in the state machine. Convert them to ChatMessage format so reconnecting
+    // clients see the full transcript.
+    chatMessages.push(...this.buildChatMessagesFromEventStore(sessionId));
+
     this.emitter.emit('event', {
       type: 'messages_snapshot',
       sessionId,
@@ -500,6 +506,28 @@ class MessageStateService {
       sessionId,
       messageCount: chatMessages.length,
     });
+  }
+
+  /**
+   * Convert stored event-store claude_message events into ChatMessage[].
+   * Used by sendSnapshot to include live session events that are not yet in the state machine.
+   */
+  private buildChatMessagesFromEventStore(sessionId: string): ChatMessage[] {
+    const storedEvents = this.eventStore.getStoredEvents(sessionId);
+    const result: ChatMessage[] = [];
+    let eventCounter = 0;
+    for (const event of storedEvents) {
+      if (event.type === 'claude_message' && event.data != null && event.order != null) {
+        result.push({
+          id: `evt-${sessionId}-${eventCounter++}`,
+          source: 'claude',
+          message: event.data as ChatMessage['message'],
+          timestamp: new Date().toISOString(),
+          order: event.order,
+        });
+      }
+    }
+    return result;
   }
 
   /**

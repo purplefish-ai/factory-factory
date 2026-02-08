@@ -723,8 +723,10 @@ class ChatEventForwarderService {
       return;
     }
 
-    // Notify interceptors about tool results (if any)
-    const content = msgWithType.message.content;
+    // Notify interceptors about tool results.
+    // shouldIncludeUserMessage guarantees content is an array with tool_result items,
+    // but guard defensively since we're working with a loosely-typed runtime payload.
+    const content = msgWithType.message?.content;
     if (Array.isArray(content)) {
       this.notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
         sessionId: dbSessionId,
