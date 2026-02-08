@@ -24,6 +24,7 @@ import {
   safeParseToolInput,
 } from '../schemas/tool-inputs.schema';
 import { chatConnectionService } from './chat-connection.service';
+import { hasRenderableAssistantContent } from './chat-event-forwarder.helpers';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { sessionFileLogger } from './session-file-logger.service';
@@ -645,14 +646,10 @@ class ChatEventForwarderService {
       return;
     }
 
-    const hasNarrativeText = content.some(
-      (item) => item.type === 'text' && typeof item.text === 'string'
-    );
-
-    if (!hasNarrativeText) {
+    if (!hasRenderableAssistantContent(content)) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',
-        reason: 'assistant_no_text_content',
+        reason: 'assistant_no_renderable_content',
       });
       return;
     }
