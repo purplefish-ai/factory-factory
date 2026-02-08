@@ -93,19 +93,21 @@ function migrateWorkspaceV1ToV2(
 /**
  * Migrates v1 user settings to v2 format by adding default values for new fields.
  * Uses ?? to preserve any existing v2 fields in forward-filled/mixed backups.
+ * Note: ratchetAutoFixCi, ratchetAutoFixReviews, ratchetAutoMerge, and ratchetAllowedReviewers
+ * were removed in later versions but are preserved here for backward compatibility with old exports.
  */
 function migrateUserSettingsV1ToV2(
-  v1: ExportedUserSettingsV1 | (ExportedUserSettingsV1 & Partial<ExportedUserSettingsV2>)
+  v1:
+    | ExportedUserSettingsV1
+    | (ExportedUserSettingsV1 & Partial<ExportedUserSettingsV2> & Record<string, unknown>)
 ): ExportedUserSettingsV2 {
-  const partial = v1 as Partial<ExportedUserSettingsV2>;
+  const partial = v1 as Partial<ExportedUserSettingsV2> & Record<string, unknown>;
   return {
     ...v1,
     // Set defaults for Phase 3+ ratchet settings (preserve if present, match schema defaults)
     ratchetEnabled: partial.ratchetEnabled ?? false,
-    ratchetAutoFixCi: partial.ratchetAutoFixCi ?? true,
-    ratchetAutoFixReviews: partial.ratchetAutoFixReviews ?? true,
-    ratchetAutoMerge: partial.ratchetAutoMerge ?? false,
-    ratchetAllowedReviewers: partial.ratchetAllowedReviewers ?? null,
+    // The following fields were removed from the schema but are kept here for importing old backups
+    // They will be ignored when creating the UserSettings record
   };
 }
 
@@ -155,15 +157,9 @@ function ensureWorkspaceV2Defaults(w: ExportedWorkspaceV2): ExportedWorkspaceV2 
  */
 function ensureUserSettingsV2Defaults(s: ExportedUserSettingsV2): ExportedUserSettingsV2 {
   // Validate required v2 fields are present (not undefined)
-  if (
-    s.ratchetEnabled === undefined ||
-    s.ratchetAutoFixCi === undefined ||
-    s.ratchetAutoFixReviews === undefined ||
-    s.ratchetAutoMerge === undefined
-  ) {
+  if (s.ratchetEnabled === undefined) {
     logger.warn('V2 user settings missing required ratchet fields, applying migration', {
       hasRatchetEnabled: s.ratchetEnabled !== undefined,
-      hasRatchetAutoFixCi: s.ratchetAutoFixCi !== undefined,
     });
     // Fallback to migration if required fields are missing
     return migrateUserSettingsV1ToV2(s as unknown as ExportedUserSettingsV1);
@@ -420,15 +416,8 @@ async function importUserSettings(
       customIdeCommand: s.customIdeCommand,
       playSoundOnComplete: s.playSoundOnComplete,
       notificationSoundPath: s.notificationSoundPath,
-      // Phase 3+ ratchet settings
+      // Ratchet settings
       ratchetEnabled: s.ratchetEnabled,
-      ratchetAutoFixCi: s.ratchetAutoFixCi,
-      ratchetAutoFixReviews: s.ratchetAutoFixReviews,
-      ratchetAutoMerge: s.ratchetAutoMerge,
-      ratchetAllowedReviewers:
-        s.ratchetAllowedReviewers != null
-          ? (s.ratchetAllowedReviewers as Prisma.InputJsonValue)
-          : undefined,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
       // as they are rebuild-able cache data
       // Deprecated fields are ignored - they no longer exist in the schema
@@ -561,12 +550,8 @@ class DataBackupService {
               customIdeCommand: userSettings.customIdeCommand,
               playSoundOnComplete: userSettings.playSoundOnComplete,
               notificationSoundPath: userSettings.notificationSoundPath,
-              // Phase 3+ ratchet settings
+              // Ratchet settings
               ratchetEnabled: userSettings.ratchetEnabled,
-              ratchetAutoFixCi: userSettings.ratchetAutoFixCi,
-              ratchetAutoFixReviews: userSettings.ratchetAutoFixReviews,
-              ratchetAutoMerge: userSettings.ratchetAutoMerge,
-              ratchetAllowedReviewers: userSettings.ratchetAllowedReviewers,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
               // as they are rebuild-able cache data (per design doc)
             }
