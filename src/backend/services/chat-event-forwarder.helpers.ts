@@ -1,1 +1,1 @@
-export { hasRenderableAssistantContent } from '@/shared/claude';
+export { hasRenderableAssistantContent, hasToolResultContent } from '@/shared/claude';

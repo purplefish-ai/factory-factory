@@ -1898,15 +1898,15 @@ describe('chatReducer', () => {
 // =============================================================================
 
 describe('createActionFromWebSocketMessage', () => {
-  it('returns null for legacy status message', () => {
-    const wsMessage: WebSocketMessage = { type: 'status', running: true };
+  it('returns null for unknown legacy status-like message', () => {
+    const wsMessage = { type: 'status' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
   });
 
-  it('returns null for legacy lifecycle messages', () => {
-    const wsMessage: WebSocketMessage = { type: 'starting' };
+  it('returns null for unknown legacy lifecycle-like messages', () => {
+    const wsMessage = { type: 'starting' } as unknown as WebSocketMessage;
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -2091,14 +2091,14 @@ describe('createActionFromWebSocketMessage', () => {
   it('should convert session_replay_batch to SESSION_REPLAY_BATCH action', () => {
     const wsMessage: WebSocketMessage = {
       type: 'session_replay_batch',
-      replayEvents: [{ type: 'status', running: true }],
+      replayEvents: [{ type: 'error', message: 'legacy replay event' }],
     };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toEqual({
       type: 'SESSION_REPLAY_BATCH',
       payload: {
-        replayEvents: [{ type: 'status', running: true }],
+        replayEvents: [{ type: 'error', message: 'legacy replay event' }],
       },
     });
   });

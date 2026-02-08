@@ -11,8 +11,11 @@
 
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import type { ClaudeMessage } from '@/shared/claude';
-import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
+import type { ClaudeContentItem, ClaudeMessage } from '@/shared/claude';
+import {
+  INTERACTIVE_RESPONSE_TOOLS,
+  type PendingInteractiveRequest,
+} from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { WS_READY_STATE } from '../constants';
 import { interceptorRegistry } from '../interceptors';
@@ -24,7 +27,10 @@ import {
   safeParseToolInput,
 } from '../schemas/tool-inputs.schema';
 import { chatConnectionService } from './chat-connection.service';
-import { hasRenderableAssistantContent } from './chat-event-forwarder.helpers';
+import {
+  hasRenderableAssistantContent,
+  hasToolResultContent,
+} from './chat-event-forwarder.helpers';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { sessionFileLogger } from './session-file-logger.service';
@@ -487,7 +493,7 @@ class ChatEventForwarderService {
         data: request,
       });
 
-      this.routeInteractiveRequest(dbSessionId, request);
+      this.routeInteractiveRequest(dbSessionId, request, client);
     });
 
     on('exit', (result) => {
@@ -532,8 +538,36 @@ class ChatEventForwarderService {
       toolName: string;
       toolUseId: string;
       input: Record<string, unknown>;
-    }
+    },
+    client: ClaudeClient
   ): void {
+    const supportsUiRouting = INTERACTIVE_RESPONSE_TOOLS.includes(
+      request.toolName as (typeof INTERACTIVE_RESPONSE_TOOLS)[number]
+    );
+    if (!supportsUiRouting) {
+      const reason = `Unsupported interactive tool: ${request.toolName}`;
+      logger.warn('[Chat WS] Denying unsupported interactive request', {
+        dbSessionId,
+        requestId: request.requestId,
+        toolName: request.toolName,
+      });
+      try {
+        client.denyInteractiveRequest(request.requestId, reason);
+      } catch (error) {
+        logger.error('[Chat WS] Failed to deny unsupported interactive request', {
+          dbSessionId,
+          requestId: request.requestId,
+          toolName: request.toolName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      sessionStoreService.emitDelta(dbSessionId, {
+        type: 'error',
+        message: reason,
+      });
+      return;
+    }
+
     // Compute planContent for ExitPlanMode, null for others
     const planContent =
       request.toolName === 'ExitPlanMode' ? this.extractPlanContent(request.input) : null;
@@ -590,13 +624,10 @@ class ChatEventForwarderService {
       return;
     }
 
-    // Fallback: send as generic interactive_request
-    sessionStoreService.emitDelta(dbSessionId, {
-      type: 'interactive_request',
+    logger.warn('[Chat WS] Unexpected interactive request type reached fallback', {
+      dbSessionId,
       requestId: request.requestId,
       toolName: request.toolName,
-      toolUseId: request.toolUseId,
-      toolInput: request.input,
     });
   }
 
@@ -700,7 +731,7 @@ class ChatEventForwarderService {
       return;
     }
 
-    const hasToolResult = content.some((item) => item.type === 'tool_result');
+    const hasToolResult = hasToolResultContent(content as ClaudeContentItem[]);
     if (!hasToolResult) {
       sessionFileLogger.log(dbSessionId, 'INFO', {
         action: 'skipped_message',

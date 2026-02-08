@@ -596,11 +596,6 @@ export interface WebSocketMessage {
   type: // Session lifecycle events
     | 'session_snapshot'
     | 'session_delta'
-    | 'status'
-    | 'starting'
-    | 'started'
-    | 'stopped'
-    | 'process_exit'
     // Unified runtime events
     | 'session_runtime_snapshot'
     | 'session_runtime_updated'
@@ -613,7 +608,6 @@ export interface WebSocketMessage {
     // Interactive requests
     | 'permission_request'
     | 'user_question'
-    | 'interactive_request'
     | 'permission_cancelled'
     // Queue error handling
     | 'message_rejected'
@@ -645,8 +639,6 @@ export interface WebSocketMessage {
     | 'rewind_files_error';
   sessionId?: string;
   dbSessionId?: string;
-  running?: boolean;
-  processAlive?: boolean;
   message?: string;
   code?: number;
   data?: unknown;

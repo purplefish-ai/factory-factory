@@ -115,6 +115,7 @@ class ChatMessageHandlerService {
           error: error instanceof Error ? error.message : String(error),
         });
         sessionStoreService.requeueFront(dbSessionId, msg);
+        sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
       }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
