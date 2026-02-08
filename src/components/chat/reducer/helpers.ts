@@ -11,6 +11,7 @@ import {
   updateTokenStatsFromResult,
 } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
+import { shouldIncludeStreamEvent, shouldIncludeUserMessage } from '@/shared/transcript-policy';
 import type { ChatState, PendingRequest } from './types';
 
 // Debug logger for chat reducer - set to true during development to see ignored state transitions
@@ -109,19 +110,12 @@ export function insertMessageByOrder(
 
 /**
  * Determines if a Claude message should be stored in state.
- * We filter out structural/delta events and only keep meaningful ones.
+ * Uses centralized transcript policy for consistency.
  */
 function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
-  // User messages with tool_result content should be stored
-  if (claudeMsg.type === 'user') {
-    const content = claudeMsg.message?.content;
-    if (Array.isArray(content)) {
-      return content.some(
-        (item) =>
-          typeof item === 'object' && item !== null && 'type' in item && item.type === 'tool_result'
-      );
-    }
-    return false;
+  // User messages: use shared policy
+  if (claudeMsg.type === 'user' && claudeMsg.message) {
+    return shouldIncludeUserMessage(claudeMsg.message);
   }
 
   // Result messages are always stored
@@ -129,21 +123,13 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
     return true;
   }
 
-  // For stream events, only store meaningful ones
-  if (!isStreamEventMessage(claudeMsg)) {
-    return true;
+  // For stream events, use shared policy
+  if (isStreamEventMessage(claudeMsg)) {
+    return shouldIncludeStreamEvent(claudeMsg.event);
   }
 
-  const event = claudeMsg.event;
-
-  // Only store content_block_start for tool_use, tool_result, and thinking
-  if (event.type === 'content_block_start') {
-    const blockType = event.content_block.type;
-    return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
-  }
-
-  // Skip all other stream events
-  return false;
+  // All other message types should be stored (assistant, system, etc.)
+  return true;
 }
 
 /**
