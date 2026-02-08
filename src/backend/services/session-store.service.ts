@@ -679,9 +679,10 @@ class SessionStoreService {
     }
   }
 
-  appendClaudeEvent(sessionId: string, claudeMessage: ClaudeMessage): number | undefined {
+  appendClaudeEvent(sessionId: string, claudeMessage: ClaudeMessage): number {
     const store = this.getOrCreate(sessionId);
-    const nextOrder = store.nextOrder;
+    const order = store.nextOrder;
+    store.nextOrder += 1;
 
     if (claudeMessage.type === 'stream_event') {
       const event = claudeMessage.event;
@@ -694,10 +695,10 @@ class SessionStoreService {
         this.logParityTrace(sessionId, {
           path: 'live_stream_filtered',
           reason: 'duplicate_tool_use_start_suppressed',
-          order: nextOrder,
+          order,
           claudeMessage,
         });
-        return undefined;
+        return order;
       }
     }
 
@@ -707,14 +708,11 @@ class SessionStoreService {
       this.logParityTrace(sessionId, {
         path: 'live_stream_filtered',
         reason: !shouldPersist ? 'non_renderable_claude_message' : 'duplicate_result_suppressed',
-        order: nextOrder,
+        order,
         claudeMessage,
       });
-      return undefined;
+      return order;
     }
-
-    const order = store.nextOrder;
-    store.nextOrder += 1;
 
     const entry: ChatMessage = {
       id: `${sessionId}-${order}`,

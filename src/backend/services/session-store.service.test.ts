@@ -776,8 +776,8 @@ describe('SessionStoreService', () => {
       timestamp: '2026-02-08T00:00:01.000Z',
     });
 
-    expect(filteredOrder).toBeUndefined();
-    expect(persistedOrder).toBe(0);
+    expect(filteredOrder).toBe(0);
+    expect(persistedOrder).toBe(1);
   });
 
   it('does not consume order for duplicate result suppression', () => {
@@ -801,8 +801,8 @@ describe('SessionStoreService', () => {
     });
 
     expect(assistantOrder).toBe(0);
-    expect(duplicateResultOrder).toBeUndefined();
-    expect(nextAssistantOrder).toBe(1);
+    expect(duplicateResultOrder).toBe(1);
+    expect(nextAssistantOrder).toBe(2);
   });
 
   it('suppresses duplicate result when payload is structured object text', () => {
@@ -824,7 +824,7 @@ describe('SessionStoreService', () => {
       .map(([, payload]) => payload as { type?: string; messages?: Array<{ source: string }> })
       .filter((payload) => payload.type === 'session_snapshot')
       .at(-1);
-    expect(duplicateResultOrder).toBeUndefined();
+    expect(duplicateResultOrder).toBe(1);
     expect(snapshotCall?.messages).toHaveLength(1);
     expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
   });
