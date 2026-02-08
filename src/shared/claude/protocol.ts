@@ -455,6 +455,11 @@ export function shouldSuppressDuplicateResultMessage(
     // Only dedupe against assistant content in the current turn.
     // Crossing a user message boundary can suppress legitimate repeated answers.
     if (candidate.source === 'user') {
+      // ACCEPTED queued placeholders render as user messages but are not part of
+      // the committed transcript turn boundary.
+      if (candidate.order >= QUEUED_MESSAGE_ORDER_BASE) {
+        continue;
+      }
       return false;
     }
 

@@ -393,6 +393,46 @@ describe('chatReducer', () => {
       expect(withResult.tokenStats.outputTokens).toBe(50);
     });
 
+    it('suppresses duplicate result even when a queued placeholder is present', () => {
+      let state = chatReducer(initialState, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: {
+            type: 'assistant',
+            message: { role: 'assistant', content: [{ type: 'text', text: 'Dup' }] },
+          },
+          order: 1,
+        },
+      });
+      state = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'queued-1',
+          newState: MessageState.ACCEPTED,
+          queuePosition: 0,
+          userMessage: {
+            text: 'next question',
+            timestamp: '2026-02-08T00:00:02.000Z',
+          },
+        },
+      });
+
+      const withResult = chatReducer(state, {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: {
+          message: createTestResultMessage('Dup'),
+          order: 2,
+        },
+      });
+
+      expect(withResult.messages).toHaveLength(2);
+      expect(withResult.messages[0]).toMatchObject({
+        source: 'claude',
+        message: { type: 'assistant' },
+      });
+      expect(withResult.messages[1]).toMatchObject({ source: 'user', text: 'next question' });
+    });
+
     it('keeps result message when it differs from latest assistant text', () => {
       const assistantMsg = createTestAssistantMessage();
       const assistantAction: ChatAction = {
