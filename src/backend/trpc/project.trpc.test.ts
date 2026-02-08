@@ -1,4 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FactoryConfigService } from '../services/factory-config.service';
@@ -7,7 +8,7 @@ describe('FactoryConfigService', () => {
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = join('/tmp', `factory-test-${Date.now()}`);
+    testDir = join(tmpdir(), `factory-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
   });
 
