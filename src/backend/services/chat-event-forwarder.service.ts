@@ -735,9 +735,41 @@ class ChatEventForwarderService {
       return;
     }
 
-    // Persist assistant narrative text from message events.
+    // Persist only narrative text from assistant message events.
     // Tool/thinking blocks are persisted through stream_event forwarding.
-    this.forwardClaudeMessage(dbSessionId, msg as ClaudeMessage);
+    const assistantMsg = msg as ClaudeMessage;
+    const normalized = this.normalizeAssistantMessageToTextOnly(assistantMsg);
+    if (!normalized) {
+      return;
+    }
+    this.forwardClaudeMessage(dbSessionId, normalized);
+  }
+
+  private normalizeAssistantMessageToTextOnly(message: ClaudeMessage): ClaudeMessage | null {
+    if (message.type !== 'assistant') {
+      return null;
+    }
+    const content = message.message?.content;
+    if (!Array.isArray(content)) {
+      return null;
+    }
+
+    const textBlocks = content.filter(
+      (item): item is ClaudeContentItem & { type: 'text'; text: string } =>
+        item.type === 'text' && typeof item.text === 'string'
+    );
+
+    if (textBlocks.length === 0) {
+      return null;
+    }
+
+    return {
+      ...message,
+      message: {
+        role: 'assistant',
+        content: textBlocks,
+      },
+    };
   }
 
   private forwardUserMessageWithToolResult(

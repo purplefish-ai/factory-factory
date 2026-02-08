@@ -623,6 +623,11 @@ export interface ToolResultHistoryMessage extends HistoryMessageBase {
   isError?: boolean;
 }
 
+export interface UserToolResultHistoryMessage extends HistoryMessageBase {
+  type: 'user_tool_result';
+  content: ClaudeContentItem[];
+}
+
 /**
  * Message from session history.
  */
@@ -631,7 +636,8 @@ export type HistoryMessage =
   | AssistantHistoryMessage
   | ThinkingHistoryMessage
   | ToolUseHistoryMessage
-  | ToolResultHistoryMessage;
+  | ToolResultHistoryMessage
+  | UserToolResultHistoryMessage;
 
 // =============================================================================
 // Agent Metadata Types

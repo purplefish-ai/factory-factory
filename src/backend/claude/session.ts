@@ -327,7 +327,7 @@ function parseUserContentItem(
   }
 
   if (item.type === 'tool_result') {
-    // Handled by parseUserEntry so we can preserve original interleaving order.
+    // Handled by parseUserEntry.
     return;
   }
 }
@@ -348,6 +348,22 @@ function flushUserAccumulator(
   });
   acc.textParts.length = 0;
   acc.attachments.length = 0;
+}
+
+function normalizeUserContent(content: ClaudeContentItem[]): ClaudeContentItem[] {
+  const normalized: ClaudeContentItem[] = [];
+  for (const item of content) {
+    if (item.type === 'text') {
+      if (!isSystemContent(item.text)) {
+        normalized.push(item);
+      }
+      continue;
+    }
+    if (item.type === 'image' || item.type === 'tool_result') {
+      normalized.push(item);
+    }
+  }
+  return normalized;
 }
 
 /**
@@ -376,6 +392,73 @@ function parseAssistantContentItem(
   return null;
 }
 
+function parseUserStringContent(content: string, meta: EntryMetadata): HistoryMessage[] {
+  if (isSystemContent(content)) {
+    return [];
+  }
+  return [{ type: 'user', content, ...meta }];
+}
+
+function parseToolResultOnlyContent(
+  content: ClaudeContentItem[],
+  meta: EntryMetadata
+): HistoryMessage[] {
+  const result: HistoryMessage[] = [];
+  for (const item of content) {
+    if (item.type !== 'tool_result') {
+      continue;
+    }
+    result.push({
+      type: 'tool_result',
+      content: item.content,
+      toolId: item.tool_use_id,
+      isError: item.is_error,
+      ...meta,
+    });
+  }
+  return result;
+}
+
+function parseUserTextAndAttachmentContent(
+  content: ClaudeContentItem[],
+  meta: EntryMetadata
+): HistoryMessage[] {
+  const result: HistoryMessage[] = [];
+  const acc: ParsedUserContentAccumulator = {
+    textParts: [],
+    attachments: [],
+  };
+
+  for (const [index, item] of content.entries()) {
+    parseUserContentItem(item, meta, index, acc);
+  }
+
+  flushUserAccumulator(result, acc, meta);
+  return result;
+}
+
+function parseUserArrayContent(
+  content: ClaudeContentItem[],
+  meta: EntryMetadata
+): HistoryMessage[] {
+  const hasToolResult = content.some((item) => item.type === 'tool_result');
+  const hasNonToolResult = content.some((item) => item.type !== 'tool_result');
+
+  if (hasToolResult && hasNonToolResult) {
+    const normalizedContent = normalizeUserContent(content);
+    if (normalizedContent.length === 0) {
+      return [];
+    }
+    return [{ type: 'user_tool_result', content: normalizedContent, ...meta }];
+  }
+
+  if (hasToolResult) {
+    return parseToolResultOnlyContent(content, meta);
+  }
+
+  return parseUserTextAndAttachmentContent(content, meta);
+}
+
 /**
  * Parse user message entry
  */
@@ -383,41 +466,11 @@ function parseUserEntry(message: ClaudeMessage, meta: EntryMetadata): HistoryMes
   const { content } = message;
 
   if (typeof content === 'string') {
-    // Skip system content (instructions, local command output)
-    if (isSystemContent(content)) {
-      return [];
-    }
-    return [{ type: 'user', content, ...meta }];
+    return parseUserStringContent(content, meta);
   }
 
   if (Array.isArray(content)) {
-    const result: HistoryMessage[] = [];
-    const acc: ParsedUserContentAccumulator = {
-      textParts: [],
-      attachments: [],
-    };
-
-    for (const [index, item] of (content as ClaudeContentItem[]).entries()) {
-      if (item.type === 'tool_result') {
-        // TODO(dual-write): This parser intentionally splits mixed user payloads
-        // (text/image + tool_result) into multiple HistoryMessage entries to preserve
-        // JSONL interleaving. Live forwarding currently emits the unsplit user payload.
-        // Keep these paths aligned if we ever observe restore-time transcript drift.
-        flushUserAccumulator(result, acc, meta);
-        result.push({
-          type: 'tool_result',
-          content: item.content,
-          toolId: item.tool_use_id,
-          isError: item.is_error,
-          ...meta,
-        });
-        continue;
-      }
-      parseUserContentItem(item, meta, index, acc);
-    }
-
-    flushUserAccumulator(result, acc, meta);
-    return result;
+    return parseUserArrayContent(content as ClaudeContentItem[], meta);
   }
 
   return [];

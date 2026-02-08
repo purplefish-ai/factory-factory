@@ -27,6 +27,8 @@ interface SessionStore {
   sessionId: string;
   initialized: boolean;
   hydratePromise: Promise<void> | null;
+  lastKnownWorkingDir: string | null;
+  lastKnownClaudeSessionId: string | null;
   transcript: ChatMessage[];
   queue: QueuedMessage[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;
@@ -49,6 +51,8 @@ class SessionStoreService {
         sessionId,
         initialized: false,
         hydratePromise: null,
+        lastKnownWorkingDir: null,
+        lastKnownClaudeSessionId: null,
         transcript: [],
         queue: [],
         pendingInteractiveRequest: null,
@@ -72,6 +76,7 @@ class SessionStoreService {
       toolInput: 'toolInput' in historyMsg ? (historyMsg.toolInput ?? null) : null,
       isError: 'isError' in historyMsg ? (historyMsg.isError ?? false) : false,
       attachments: historyMsg.attachments ?? null,
+      userToolResultContent: historyMsg.type === 'user_tool_result' ? historyMsg.content : null,
     });
     const digest = createHash('sha1').update(fingerprint).digest('hex').slice(0, 12);
     return `history-${index}-${digest}`;
@@ -145,6 +150,14 @@ class SessionStoreService {
           },
         };
       }
+      case 'user_tool_result':
+        return {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: msg.content,
+          },
+        };
       case 'thinking':
         return {
           type: 'assistant',
@@ -188,7 +201,8 @@ class SessionStoreService {
         historyMsg.type === 'assistant' ||
         historyMsg.type === 'tool_use' ||
         historyMsg.type === 'tool_result' ||
-        historyMsg.type === 'thinking'
+        historyMsg.type === 'thinking' ||
+        historyMsg.type === 'user_tool_result'
       ) {
         transcript.push({
           id: messageId,
@@ -275,6 +289,8 @@ class SessionStoreService {
   }): Promise<void> {
     const { sessionId, workingDir, claudeSessionId, isRunning, isWorking, loadRequestId } = options;
     const store = this.getOrCreate(sessionId);
+    store.lastKnownWorkingDir = workingDir;
+    store.lastKnownClaudeSessionId = claudeSessionId;
 
     await this.ensureHydrated(store, { claudeSessionId, workingDir });
 
@@ -382,22 +398,32 @@ class SessionStoreService {
     this.forwardSnapshot(store);
   }
 
-  commitSentUserMessage(sessionId: string, message: QueuedMessage): void {
+  commitSentUserMessage(
+    sessionId: string,
+    message: QueuedMessage,
+    options?: { emitSnapshot?: boolean }
+  ): void {
     const store = this.getOrCreate(sessionId);
     const order = store.nextOrder;
     store.nextOrder += 1;
-    this.commitSentUserMessageWithOrder(store, message, order);
+    this.commitSentUserMessageWithOrder(store, message, order, options);
   }
 
-  commitSentUserMessageAtOrder(sessionId: string, message: QueuedMessage, order: number): void {
+  commitSentUserMessageAtOrder(
+    sessionId: string,
+    message: QueuedMessage,
+    order: number,
+    options?: { emitSnapshot?: boolean }
+  ): void {
     const store = this.getOrCreate(sessionId);
-    this.commitSentUserMessageWithOrder(store, message, order);
+    this.commitSentUserMessageWithOrder(store, message, order, options);
   }
 
   private commitSentUserMessageWithOrder(
     store: SessionStore,
     message: QueuedMessage,
-    order: number
+    order: number,
+    options?: { emitSnapshot?: boolean }
   ): void {
     const transcriptMessage: ChatMessage = {
       id: message.id,
@@ -414,7 +440,9 @@ class SessionStoreService {
       store.nextOrder = order + 1;
     }
 
-    this.forwardSnapshot(store);
+    if (options?.emitSnapshot !== false) {
+      this.forwardSnapshot(store);
+    }
   }
 
   appendClaudeEvent(sessionId: string, claudeMessage: ClaudeMessage): number {
@@ -438,7 +466,6 @@ class SessionStoreService {
     };
 
     store.transcript.push(entry);
-    store.transcript.sort(messageSort);
 
     return order;
   }
@@ -531,6 +558,9 @@ class SessionStoreService {
     // Queue is intentionally ephemeral and dropped on process exit.
     store.queue = [];
     store.pendingInteractiveRequest = null;
+    // Drop in-memory transcript immediately to avoid serving stale state.
+    store.transcript = [];
+    store.nextOrder = 0;
     // Force fresh JSONL rehydration on next subscribe.
     store.initialized = false;
     store.hydratePromise = null;
@@ -547,6 +577,24 @@ class SessionStoreService {
     });
 
     this.forwardSnapshot(store);
+
+    // Best-effort immediate refresh from JSONL so connected clients recover
+    // without requiring a manual reload.
+    if (store.lastKnownWorkingDir && store.lastKnownClaudeSessionId) {
+      void this.ensureHydrated(store, {
+        claudeSessionId: store.lastKnownClaudeSessionId,
+        workingDir: store.lastKnownWorkingDir,
+      })
+        .then(() => {
+          this.forwardSnapshot(store);
+        })
+        .catch((error) => {
+          logger.warn('Failed to rehydrate transcript after process exit', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
   }
 
   emitSessionSnapshot(sessionId: string, loadRequestId?: string): void {

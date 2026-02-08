@@ -61,6 +61,24 @@ function handleMessageAsInteractiveResponse(
 
     // Allocate an order for this message so it sorts correctly on the frontend.
     const order = sessionStoreService.allocateOrder(sessionId);
+    const timestamp = new Date().toISOString();
+
+    // Persist interactive response in transcript so live/reload views stay consistent.
+    sessionStoreService.commitSentUserMessageAtOrder(
+      sessionId,
+      {
+        id: messageId,
+        text,
+        timestamp,
+        settings: {
+          selectedModel: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+      order,
+      { emitSnapshot: false }
+    );
 
     sessionStoreService.emitDelta(sessionId, {
       type: 'message_used_as_response',

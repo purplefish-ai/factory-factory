@@ -215,7 +215,7 @@ describe('parseHistoryEntry', () => {
       expect(first.isError).toBe(false);
     });
 
-    it('should preserve user content and tool_result as separate entries', () => {
+    it('should preserve mixed user/tool_result payload as a single canonical entry', () => {
       const entry = {
         type: 'user',
         timestamp,
@@ -232,19 +232,24 @@ describe('parseHistoryEntry', () => {
         },
       };
       const result = parseHistoryEntry(entry);
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
-        type: 'user',
-        content: 'Please inspect this',
+        type: 'user_tool_result',
       });
-      expect(result[1]).toMatchObject({
-        type: 'tool_result',
-        content: 'Tool output',
-        toolId: 'tool-321',
-      });
+      if (result[0]?.type !== 'user_tool_result') {
+        throw new Error('Expected user_tool_result message');
+      }
+      expect(result[0].content).toEqual([
+        { type: 'text', text: 'Please inspect this' },
+        {
+          type: 'tool_result',
+          tool_use_id: 'tool-321',
+          content: 'Tool output',
+        },
+      ]);
     });
 
-    it('should preserve interleaving order between user content and tool_result entries', () => {
+    it('should preserve mixed user/tool_result interleaving within canonical content', () => {
       const entry = {
         type: 'user',
         timestamp,
@@ -262,14 +267,20 @@ describe('parseHistoryEntry', () => {
         },
       };
       const result = parseHistoryEntry(entry);
-      expect(result).toHaveLength(3);
-      expect(result[0]).toMatchObject({ type: 'user', content: 'Before tool' });
-      expect(result[1]).toMatchObject({
-        type: 'tool_result',
-        content: 'Tool output',
-        toolId: 'tool-321',
-      });
-      expect(result[2]).toMatchObject({ type: 'user', content: 'After tool' });
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ type: 'user_tool_result' });
+      if (result[0]?.type !== 'user_tool_result') {
+        throw new Error('Expected user_tool_result message');
+      }
+      expect(result[0].content).toEqual([
+        { type: 'text', text: 'Before tool' },
+        {
+          type: 'tool_result',
+          tool_use_id: 'tool-321',
+          content: 'Tool output',
+        },
+        { type: 'text', text: 'After tool' },
+      ]);
     });
 
     it('should parse user image content into attachment metadata', () => {
