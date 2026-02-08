@@ -28,8 +28,32 @@ export default function NewWorkspacePage() {
     { enabled: !!project?.id }
   );
 
+  const utils = trpc.useUtils();
   const createWorkspace = trpc.workspace.create.useMutation({
     onSuccess: (workspace: Workspace) => {
+      // Optimistically populate the workspace detail query cache so the status
+      // is immediately visible when navigating to the detail page
+      utils.workspace.get.setData({ id: workspace.id }, (old) => {
+        // If there's already data (shouldn't happen for a new workspace), keep it
+        if (old) {
+          return old;
+        }
+
+        // Set minimal workspace data with computed fields matching workspace.get endpoint
+        return {
+          ...workspace,
+          claudeSessions: [],
+          terminalSessions: [],
+          sidebarStatus: {
+            activityState: 'IDLE' as const,
+            ciState: 'NONE' as const,
+          },
+          ratchetButtonAnimated: false,
+          flowPhase: 'NO_PR' as const,
+          ciObservation: 'NOT_FETCHED' as const,
+        };
+      });
+
       navigate(`/projects/${slug}/workspaces/${workspace.id}`);
     },
     onError: (err) => {
