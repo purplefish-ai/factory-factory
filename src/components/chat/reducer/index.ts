@@ -134,13 +134,6 @@ function handleSessionRuntimeSnapshotMessage(data: WebSocketMessage): ChatAction
   };
 }
 
-function handleStatusMessage(data: WebSocketMessage): ChatAction {
-  return {
-    type: 'WS_STATUS',
-    payload: { running: data.running ?? false, processAlive: data.processAlive },
-  };
-}
-
 function handleSessionRuntimeUpdatedMessage(data: WebSocketMessage): ChatAction | null {
   if (!data.sessionRuntime) {
     return null;
@@ -405,11 +398,6 @@ function handleRewindFilesErrorMessage(data: WebSocketMessage): ChatAction | nul
 type MessageHandler = (data: WebSocketMessage) => ChatAction | null;
 
 const messageHandlers: Record<string, MessageHandler> = {
-  status: handleStatusMessage,
-  starting: () => ({ type: 'WS_STARTING' }),
-  started: () => ({ type: 'WS_STARTED' }),
-  stopped: () => ({ type: 'WS_STOPPED' }),
-  process_exit: (data) => ({ type: 'WS_PROCESS_EXIT', payload: { code: data.code ?? null } }),
   session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
   session_runtime_updated: handleSessionRuntimeUpdatedMessage,
   claude_message: handleClaudeMessageAction,

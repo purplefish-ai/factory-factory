@@ -363,6 +363,107 @@ export function hasRenderableAssistantContent(content: AssistantRenderableConten
   return content.some(isRenderableAssistantContentItem);
 }
 
+/**
+ * True when user message content contains a tool_result block.
+ */
+export function hasToolResultContent(content: ClaudeContentItem[] | string): boolean {
+  if (!Array.isArray(content)) {
+    return false;
+  }
+  return content.some((item) => item.type === 'tool_result');
+}
+
+/**
+ * Canonical predicate for whether a Claude message should be persisted in transcript state.
+ * Shared by backend session store and frontend reducer to prevent drift.
+ */
+export function shouldPersistClaudeMessage(claudeMsg: ClaudeMessage): boolean {
+  if (claudeMsg.type === 'user') {
+    if (!claudeMsg.message) {
+      return false;
+    }
+    return hasToolResultContent(claudeMsg.message.content);
+  }
+
+  if (claudeMsg.type === 'assistant') {
+    const content = claudeMsg.message?.content;
+    return Array.isArray(content) && hasRenderableAssistantContent(content);
+  }
+
+  if (claudeMsg.type === 'result') {
+    return true;
+  }
+
+  if (claudeMsg.type !== 'stream_event') {
+    return true;
+  }
+
+  if (!claudeMsg.event || claudeMsg.event.type !== 'content_block_start') {
+    return false;
+  }
+
+  const blockType = claudeMsg.event.content_block.type;
+  return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
+}
+
+function extractTextForResultDedup(message: ClaudeMessage): string {
+  if (message.type === 'assistant' && message.message && Array.isArray(message.message.content)) {
+    return message.message.content
+      .filter((item): item is TextContent => item.type === 'text')
+      .map((item) => item.text)
+      .join('')
+      .trim();
+  }
+
+  if (
+    message.type === 'stream_event' &&
+    message.event?.type === 'content_block_start' &&
+    message.event.content_block.type === 'text'
+  ) {
+    return message.event.content_block.text.trim();
+  }
+
+  return '';
+}
+
+/**
+ * Checks whether an incoming result message duplicates the latest assistant text already present.
+ */
+export function shouldSuppressDuplicateResultMessage(
+  transcript: ChatMessage[],
+  claudeMessage: ClaudeMessage
+): boolean {
+  if (claudeMessage.type !== 'result' || typeof claudeMessage.result !== 'string') {
+    return false;
+  }
+
+  const incomingText = claudeMessage.result.trim();
+  if (!incomingText) {
+    return true;
+  }
+
+  for (let i = transcript.length - 1; i >= 0; i -= 1) {
+    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+    const candidate = transcript[i]!;
+    if (
+      candidate.source !== 'claude' ||
+      !candidate.message ||
+      candidate.message.type === 'result'
+    ) {
+      continue;
+    }
+
+    const existingText = extractTextForResultDedup(candidate.message);
+    if (!existingText) {
+      continue;
+    }
+
+    return existingText === incomingText;
+  }
+
+  return false;
+}
+
 // =============================================================================
 // AskUserQuestion Types (Phase 11)
 // =============================================================================

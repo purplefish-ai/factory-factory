@@ -186,11 +186,6 @@ export interface ChatState {
 
 export type ChatAction =
   // WebSocket message actions
-  | { type: 'WS_STATUS'; payload: { running: boolean; processAlive?: boolean } }
-  | { type: 'WS_STARTING' }
-  | { type: 'WS_STARTED' }
-  | { type: 'WS_STOPPED' }
-  | { type: 'WS_PROCESS_EXIT'; payload: { code: number | null } }
   | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order: number } }

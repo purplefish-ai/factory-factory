@@ -455,4 +455,39 @@ describe('SessionStoreService', () => {
     expect(snapshotCall?.messages).toHaveLength(1);
     expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
   });
+
+  it('does not persist non-renderable stream events in transcript snapshots', () => {
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'stream_event',
+      event: { type: 'message_start', message: { role: 'assistant', content: [] } },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'tool-1', name: 'Bash', input: {} },
+      },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(
+        ([, payload]) =>
+          payload as {
+            type?: string;
+            messages?: Array<{ message?: { type?: string; event?: { type?: string } } }>;
+          }
+      )
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+
+    expect(snapshotCall?.messages).toHaveLength(1);
+    expect(snapshotCall?.messages?.[0]?.message?.type).toBe('stream_event');
+    expect(snapshotCall?.messages?.[0]?.message?.event?.type).toBe('content_block_start');
+  });
 });

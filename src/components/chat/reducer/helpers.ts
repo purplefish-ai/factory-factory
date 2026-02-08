@@ -6,10 +6,10 @@ import type {
   UserQuestionRequest,
 } from '@/lib/claude-types';
 import {
-  extractTextFromMessage,
   getToolUseIdFromEvent,
-  hasRenderableAssistantContent,
   isStreamEventMessage,
+  shouldPersistClaudeMessage,
+  shouldSuppressDuplicateResultMessage,
   updateTokenStatsFromResult,
 } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
@@ -110,85 +110,6 @@ export function insertMessageByOrder(
 }
 
 /**
- * Determines if a Claude message should be stored in state.
- * We filter out structural/delta events and only keep meaningful ones.
- */
-function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
-  // User messages with tool_result content should be stored
-  if (claudeMsg.type === 'user') {
-    const content = claudeMsg.message?.content;
-    if (Array.isArray(content)) {
-      return content.some(
-        (item) =>
-          typeof item === 'object' && item !== null && 'type' in item && item.type === 'tool_result'
-      );
-    }
-    return false;
-  }
-
-  // Assistant messages with tool_use, tool_result, or text content should be stored
-  // (These come from session history or when includePartialMessages is false)
-  if (claudeMsg.type === 'assistant') {
-    const content = claudeMsg.message?.content;
-    return Array.isArray(content) && hasRenderableAssistantContent(content);
-  }
-
-  // Result messages are always stored
-  if (claudeMsg.type === 'result') {
-    return true;
-  }
-
-  // For stream events, only store meaningful ones
-  if (!isStreamEventMessage(claudeMsg)) {
-    return true;
-  }
-
-  const event = claudeMsg.event;
-
-  // Only store content_block_start for tool_use, tool_result, and thinking
-  if (event.type === 'content_block_start') {
-    const blockType = event.content_block.type;
-    return blockType === 'tool_use' || blockType === 'tool_result' || blockType === 'thinking';
-  }
-
-  // Skip all other stream events
-  return false;
-}
-
-function shouldSuppressDuplicateResultMessage(state: ChatState, claudeMsg: ClaudeMessage): boolean {
-  if (claudeMsg.type !== 'result' || typeof claudeMsg.result !== 'string') {
-    return false;
-  }
-
-  const incomingText = claudeMsg.result.trim();
-  if (!incomingText) {
-    return true;
-  }
-
-  // If the latest renderable Claude text already matches this result text,
-  // skip storing the result to avoid duplicate final assistant bubbles.
-  for (let i = state.messages.length - 1; i >= 0; i -= 1) {
-    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
-    const candidate = state.messages[i]!;
-    if (
-      candidate.source !== 'claude' ||
-      !candidate.message ||
-      candidate.message.type === 'result'
-    ) {
-      continue;
-    }
-
-    const existingText = extractTextFromMessage(candidate.message).trim();
-    if (!existingText) {
-      continue;
-    }
-    return existingText === incomingText;
-  }
-
-  return false;
-}
-
-/**
  * Checks if a message is a tool_use message with the given ID.
  */
 function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
@@ -286,7 +207,7 @@ export function handleClaudeMessage(
       tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
     };
 
-    if (shouldSuppressDuplicateResultMessage(baseState, claudeMsg)) {
+    if (shouldSuppressDuplicateResultMessage(baseState.messages, claudeMsg)) {
       return baseState;
     }
   }
@@ -305,7 +226,7 @@ export function handleClaudeMessage(
   }
 
   // Check if message should be stored
-  if (!shouldStoreMessage(claudeMsg)) {
+  if (!shouldPersistClaudeMessage(claudeMsg)) {
     return baseState;
   }
 
