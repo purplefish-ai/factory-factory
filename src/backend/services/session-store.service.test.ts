@@ -764,6 +764,71 @@ describe('SessionStoreService', () => {
     expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
   });
 
+  it('does not consume order for filtered non-persisted events', () => {
+    const filteredOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'stream_event',
+      event: { type: 'message_start', message: { role: 'assistant', content: [] } },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+    const persistedOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    expect(filteredOrder).toBeUndefined();
+    expect(persistedOrder).toBe(0);
+  });
+
+  it('does not consume order for duplicate result suppression', () => {
+    const assistantOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'same text' }] },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+    const duplicateResultOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: 'same text',
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+    const nextAssistantOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'tool-1', name: 'Read', input: {} }],
+      },
+      timestamp: '2026-02-08T00:00:02.000Z',
+    });
+
+    expect(assistantOrder).toBe(0);
+    expect(duplicateResultOrder).toBeUndefined();
+    expect(nextAssistantOrder).toBe(1);
+  });
+
+  it('suppresses duplicate result when payload is structured object text', () => {
+    sessionStoreService.appendClaudeEvent('s1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'structured answer' }] },
+      timestamp: '2026-02-08T00:00:00.000Z',
+    });
+
+    const duplicateResultOrder = sessionStoreService.appendClaudeEvent('s1', {
+      type: 'result',
+      result: { text: 'structured answer' },
+      timestamp: '2026-02-08T00:00:01.000Z',
+    });
+
+    sessionStoreService.emitSessionSnapshot('s1');
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ source: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(duplicateResultOrder).toBeUndefined();
+    expect(snapshotCall?.messages).toHaveLength(1);
+    expect(snapshotCall?.messages?.[0]?.source).toBe('claude');
+  });
+
   it('keeps result when matching text exists only in a previous turn', () => {
     sessionStoreService.commitSentUserMessage('s1', {
       id: 'u1',

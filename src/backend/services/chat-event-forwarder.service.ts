@@ -83,7 +83,10 @@ class ChatEventForwarderService {
 
   private forwardClaudeMessage(dbSessionId: string, message: ClaudeMessage): void {
     const order = sessionStoreService.appendClaudeEvent(dbSessionId, message);
-    const wsMsg = { type: 'claude_message', data: message, order } as const;
+    const wsMsg =
+      order === undefined
+        ? ({ type: 'claude_message', data: message } as const)
+        : ({ type: 'claude_message', data: message, order } as const);
     sessionStoreService.emitDelta(dbSessionId, wsMsg);
   }
 

@@ -472,6 +472,44 @@ function extractTextForResultDedup(message: ClaudeMessage): string {
   return '';
 }
 
+function extractResultTextFromUnknown(value: unknown, depth = 0): string | null {
+  if (depth > 4 || value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractResultTextFromUnknown(item, depth + 1);
+      if (extracted !== null) {
+        return extracted;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const preferredKeys = ['result', 'text', 'output_text', 'output', 'message', 'content'];
+  for (const key of preferredKeys) {
+    if (!(key in record)) {
+      continue;
+    }
+    const extracted = extractResultTextFromUnknown(record[key], depth + 1);
+    if (extracted !== null) {
+      return extracted;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Checks whether an incoming result message duplicates the latest assistant text already present.
  */
@@ -479,11 +517,15 @@ export function shouldSuppressDuplicateResultMessage(
   transcript: ChatMessage[],
   claudeMessage: ClaudeMessage
 ): boolean {
-  if (claudeMessage.type !== 'result' || typeof claudeMessage.result !== 'string') {
+  if (claudeMessage.type !== 'result') {
     return false;
   }
 
-  const incomingText = claudeMessage.result.trim();
+  const incomingText = extractResultTextFromUnknown(claudeMessage.result);
+  if (incomingText === null) {
+    return false;
+  }
+
   if (!incomingText) {
     return true;
   }

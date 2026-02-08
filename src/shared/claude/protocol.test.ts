@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type ChatMessage,
   type ClaudeContentItem,
   hasRenderableAssistantContent,
   isRenderableAssistantContentItem,
   shouldPersistClaudeMessage,
+  shouldSuppressDuplicateResultMessage,
 } from './protocol';
 
 describe('assistant renderability guards', () => {
@@ -67,5 +69,38 @@ describe('assistant renderability guards', () => {
         },
       })
     ).toBe(true);
+  });
+});
+
+describe('result dedup', () => {
+  const transcript: ChatMessage[] = [
+    {
+      id: 'm1',
+      source: 'claude',
+      message: {
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'final answer' }] },
+      },
+      timestamp: '2026-02-08T00:00:00.000Z',
+      order: 0,
+    },
+  ];
+
+  it('suppresses duplicate result when payload is structured object', () => {
+    expect(
+      shouldSuppressDuplicateResultMessage(transcript, {
+        type: 'result',
+        result: { text: 'final answer' },
+      })
+    ).toBe(true);
+  });
+
+  it('keeps result when structured payload has no extractable text', () => {
+    expect(
+      shouldSuppressDuplicateResultMessage(transcript, {
+        type: 'result',
+        result: { ok: true },
+      })
+    ).toBe(false);
   });
 });
