@@ -243,10 +243,6 @@ model UserSettings {
 
   // Ratchet Settings (unified PR progression)
   ratchetEnabled            Boolean  @default(false)  // Default for new GitHub-issue-created workspaces
-  ratchetAutoFixCi          Boolean  @default(true)   // Auto-fix CI failures
-  ratchetAutoFixReviews     Boolean  @default(true)   // Auto-address review comments
-  ratchetAutoMerge          Boolean  @default(false)  // Auto-merge when ready
-  ratchetAllowedReviewers   Json?                     // GitHub usernames whose reviews trigger auto-fix
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

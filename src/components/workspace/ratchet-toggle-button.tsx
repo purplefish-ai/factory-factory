@@ -15,11 +15,11 @@ interface RatchetToggleButtonProps {
 }
 
 function getTooltip(enabled: boolean, state: RatchetStateLike): string {
-  const stateLabel = getRatchetStateLabel(state);
   if (!enabled) {
-    return 'Ratcheting is off. Click to enable.';
+    return 'Auto-fix is off. Click to enable automatic fixes for CI failures and review comments.';
   }
-  return `Ratcheting is on (${stateLabel}). Click to disable.`;
+  const stateLabel = getRatchetStateLabel(state);
+  return `Auto-fix is on (${stateLabel}). Click to disable.`;
 }
 
 export function RatchetToggleButton({
@@ -51,7 +51,7 @@ export function RatchetToggleButton({
             onToggle(!enabled);
           }}
           disabled={disabled}
-          aria-label={enabled ? 'Disable ratcheting' : 'Enable ratcheting'}
+          aria-label={enabled ? 'Disable auto-fix' : 'Enable auto-fix'}
           aria-pressed={enabled}
           className={cn('h-7 w-7 p-0', className)}
         >
