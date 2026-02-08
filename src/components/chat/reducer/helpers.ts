@@ -8,6 +8,7 @@ import type {
 import {
   extractTextFromMessage,
   getToolUseIdFromEvent,
+  hasRenderableAssistantContent,
   isStreamEventMessage,
   updateTokenStatsFromResult,
 } from '@/lib/claude-types';
@@ -129,16 +130,7 @@ function shouldStoreMessage(claudeMsg: ClaudeMessage): boolean {
   // (These come from session history or when includePartialMessages is false)
   if (claudeMsg.type === 'assistant') {
     const content = claudeMsg.message?.content;
-    if (Array.isArray(content)) {
-      return content.some(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          (item.type === 'tool_use' || item.type === 'tool_result' || item.type === 'text')
-      );
-    }
-    return false;
+    return Array.isArray(content) && hasRenderableAssistantContent(content);
   }
 
   // Result messages are always stored

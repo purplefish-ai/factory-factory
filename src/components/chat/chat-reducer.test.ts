@@ -67,6 +67,16 @@ function createTestAssistantMessage(): ClaudeMessage {
   };
 }
 
+function createTestThinkingAssistantMessage(): ClaudeMessage {
+  return {
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: 'Planning internally' }],
+    },
+  };
+}
+
 function createTestResultMessage(result?: unknown): ClaudeMessage {
   return {
     type: 'result',
@@ -436,6 +446,18 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
+    });
+
+    it('should store assistant messages with thinking-only content', () => {
+      const thinkingAssistantMsg = createTestThinkingAssistantMessage();
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: thinkingAssistantMsg, order: 0 },
+      };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]!.message).toEqual(thinkingAssistantMsg);
     });
 
     it('should store tool_result messages from user type', () => {

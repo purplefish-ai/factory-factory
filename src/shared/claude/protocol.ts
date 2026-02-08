@@ -337,6 +337,32 @@ export interface ClaudeMessage {
   status?: string;
 }
 
+/**
+ * Narrow shape used to evaluate whether assistant content blocks should be rendered/stored.
+ * Shared across backend forwarding and frontend reducer filtering to prevent drift.
+ */
+export interface AssistantRenderableContentLike {
+  type?: string;
+  text?: string;
+}
+
+/**
+ * True when a single assistant content block is renderable in chat UI.
+ */
+export function isRenderableAssistantContentItem(item: AssistantRenderableContentLike): boolean {
+  if (item.type === 'text') {
+    return typeof item.text === 'string';
+  }
+  return item.type === 'tool_use' || item.type === 'tool_result' || item.type === 'thinking';
+}
+
+/**
+ * True when assistant content includes at least one renderable block.
+ */
+export function hasRenderableAssistantContent(content: AssistantRenderableContentLike[]): boolean {
+  return content.some(isRenderableAssistantContentItem);
+}
+
 // =============================================================================
 // AskUserQuestion Types (Phase 11)
 // =============================================================================
