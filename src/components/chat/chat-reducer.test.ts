@@ -332,6 +332,21 @@ describe('chatReducer', () => {
       expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
+    it('should not duplicate Claude messages when the same order is received twice', () => {
+      const claudeMsg = createTestAssistantMessage();
+      const action: ChatAction = {
+        type: 'WS_CLAUDE_MESSAGE',
+        payload: { message: claudeMsg, order: 42 },
+      };
+
+      const once = chatReducer(initialState, action);
+      const twice = chatReducer(once, action);
+
+      expect(twice.messages).toHaveLength(1);
+      expect(twice.messages[0]!.order).toBe(42);
+      expect(twice.messages[0]!.message).toEqual(claudeMsg);
+    });
+
     it('does not derive runtime phase changes from Claude message payloads', () => {
       const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();

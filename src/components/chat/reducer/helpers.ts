@@ -192,6 +192,57 @@ function getToolUseIdFromMessage(claudeMsg: ClaudeMessage): string | null {
 }
 
 /**
+ * Update an existing Claude message in-place for a matching order.
+ * Returns null when no existing message was found.
+ */
+function upsertClaudeMessageAtOrder(
+  state: ChatState,
+  claudeMsg: ClaudeMessage,
+  order: number
+): ChatState | null {
+  const existingIndex = state.messages.findIndex(
+    (msg) => msg.source === 'claude' && msg.order === order
+  );
+  if (existingIndex < 0) {
+    return null;
+  }
+
+  // biome-ignore lint/style/noNonNullAssertion: existingIndex verified by findIndex check above
+  const existingMsg = state.messages[existingIndex]!;
+  const existingToolUseId = existingMsg.message
+    ? getToolUseIdFromMessage(existingMsg.message)
+    : null;
+  const incomingToolUseId = getToolUseIdFromMessage(claudeMsg);
+
+  const updatedMessages = [...state.messages];
+  updatedMessages[existingIndex] = {
+    ...existingMsg,
+    message: claudeMsg,
+    timestamp: claudeMsg.timestamp ?? existingMsg.timestamp,
+  };
+
+  if (existingToolUseId !== incomingToolUseId) {
+    const nextToolUseIdToIndex = new Map(state.toolUseIdToIndex);
+    if (existingToolUseId) {
+      nextToolUseIdToIndex.delete(existingToolUseId);
+    }
+    if (incomingToolUseId) {
+      nextToolUseIdToIndex.set(incomingToolUseId, existingIndex);
+    }
+    return {
+      ...state,
+      messages: updatedMessages,
+      toolUseIdToIndex: nextToolUseIdToIndex,
+    };
+  }
+
+  return {
+    ...state,
+    messages: updatedMessages,
+  };
+}
+
+/**
  * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
  */
 export function handleClaudeMessage(
@@ -226,6 +277,14 @@ export function handleClaudeMessage(
   // Check if message should be stored
   if (!shouldStoreMessage(claudeMsg)) {
     return baseState;
+  }
+
+  // If this Claude message order already exists, update in place instead of appending.
+  // This prevents duplicate rendering when the same websocket event is delivered twice
+  // (for example during reconnect/replay overlap).
+  const upsertedState = upsertClaudeMessageAtOrder(baseState, claudeMsg, order);
+  if (upsertedState) {
+    return upsertedState;
   }
 
   // Create and add the message using order-based insertion
