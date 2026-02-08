@@ -4,7 +4,11 @@ import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import type { ChatAction, ChatState } from './chat-reducer';
 import { createActionFromWebSocketMessage } from './chat-reducer';
-import { handleToolInputStreaming } from './streaming-utils';
+import {
+  clearToolInputAccumulator,
+  handleToolInputStreaming,
+  type ToolInputAccumulatorState,
+} from './streaming-utils';
 
 // =============================================================================
 // Debug Logging
@@ -20,7 +24,7 @@ const debug = createDebugLogger(DEBUG_CHAT_TRANSPORT);
 export interface UseChatTransportOptions {
   dispatch: React.Dispatch<ChatAction>;
   stateRef: React.MutableRefObject<ChatState>;
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>;
   rewindTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
 }
 
@@ -34,7 +38,7 @@ export interface UseChatTransportReturn {
  */
 function handleClaudeMessageWithStreaming(
   wsMessage: Extract<WebSocketMessage, { type: 'claude_message' }>,
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>,
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>,
   dispatch: React.Dispatch<ChatAction>
 ): void {
   const claudeMsg = wsMessage.data;
@@ -90,6 +94,10 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
       if (wsMessage.type === 'session_delta' && isWebSocketMessage(wsMessage.data)) {
         handleMessage(wsMessage.data);
         return;
+      }
+
+      if (wsMessage.type === 'session_snapshot' || wsMessage.type === 'session_replay_batch') {
+        clearToolInputAccumulator(toolInputAccumulatorRef.current);
       }
 
       // Handle workspace notification requests

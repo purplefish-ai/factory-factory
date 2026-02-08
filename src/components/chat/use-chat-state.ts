@@ -32,6 +32,7 @@ import {
   chatReducer,
   createInitialChatState,
 } from './chat-reducer';
+import { createToolInputAccumulatorState } from './streaming-utils';
 import { useChatActions } from './use-chat-actions';
 import { useChatPersistence } from './use-chat-persistence';
 import { useChatSession } from './use-chat-session';
@@ -106,7 +107,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track dbSessionId in a ref to use without stale closures
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   // Track accumulated tool input JSON per tool_use_id for streaming
-  const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
+  const toolInputAccumulatorRef = useRef(createToolInputAccumulatorState());
   // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
   const stateRef = useRef(state);
   stateRef.current = state;

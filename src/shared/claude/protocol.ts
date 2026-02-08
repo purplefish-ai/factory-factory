@@ -817,7 +817,13 @@ interface WebSocketMessagePayloadByType {
  * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
  */
 type WebSocketMessageType = keyof WebSocketMessagePayloadByType;
-type SessionDeltaEventType = Exclude<WebSocketMessageType, 'session_delta'>;
+export const SESSION_DELTA_EXCLUDED_MESSAGE_TYPES = [
+  'session_delta',
+  'session_snapshot',
+  'session_replay_batch',
+] as const;
+type SessionDeltaExcludedMessageType = (typeof SESSION_DELTA_EXCLUDED_MESSAGE_TYPES)[number];
+type SessionDeltaEventType = Exclude<WebSocketMessageType, SessionDeltaExcludedMessageType>;
 
 /**
  * Valid event payload forwarded within session_delta messages.

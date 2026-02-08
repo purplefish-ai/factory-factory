@@ -221,9 +221,6 @@ export type ChatAction =
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
-  // Thinking actions (extended thinking mode)
-  | { type: 'THINKING_DELTA'; payload: { thinking: string } }
-  | { type: 'THINKING_CLEAR' }
   // Clear/reset actions
   | { type: 'CLEAR_CHAT' }
   | { type: 'RESET_FOR_SESSION_SWITCH' }
