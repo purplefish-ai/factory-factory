@@ -504,6 +504,55 @@ describe('SessionStoreService', () => {
     expect(latestSnapshot?.messages?.[0]?.text).toBe('fresh transcript from jsonl');
   });
 
+  it('does not emit an empty snapshot on process exit when immediate rehydrate is possible', async () => {
+    type HydratedHistory = Array<{ type: 'user'; content: string; timestamp: string }>;
+    let resolveRehydrate!: (history: HydratedHistory) => void;
+    const rehydratePromise = new Promise<HydratedHistory>((resolve) => {
+      resolveRehydrate = resolve;
+    });
+
+    vi.mocked(SessionManager.getHistoryFromProjectPath)
+      .mockResolvedValueOnce([
+        {
+          type: 'user',
+          content: 'before exit',
+          timestamp: '2026-02-01T00:00:00.000Z',
+        },
+      ])
+      .mockReturnValueOnce(rehydratePromise);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      claudeProjectPath: '/tmp/project-path',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    mockedConnectionService.forwardToSession.mockClear();
+    sessionStoreService.markProcessExit('s1', 1);
+
+    const immediateSnapshots = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string })
+      .filter((payload) => payload.type === 'session_snapshot');
+    expect(immediateSnapshots).toHaveLength(0);
+
+    resolveRehydrate([
+      {
+        type: 'user',
+        content: 'after exit',
+        timestamp: '2026-02-01T00:05:00.000Z',
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
+      .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
+      .filter((payload) => payload.type === 'session_snapshot')
+      .at(-1);
+    expect(latestSnapshot?.messages?.[0]?.text).toBe('after exit');
+  });
+
   it('enqueue adds queued message and emits updated snapshot', () => {
     const result = sessionStoreService.enqueue('s1', {
       id: 'm1',

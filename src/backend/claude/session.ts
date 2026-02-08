@@ -472,19 +472,16 @@ function parseUserArrayContent(
   content: ClaudeContentItem[],
   meta: EntryMetadata
 ): HistoryMessage[] {
-  const hasToolResult = content.some((item) => item.type === 'tool_result');
-  const hasNonToolResult = content.some((item) => item.type !== 'tool_result');
+  const normalizedContent = normalizeUserContent(content);
+  const hasToolResult = normalizedContent.some((item) => item.type === 'tool_result');
+  const hasNonToolResult = normalizedContent.some((item) => item.type !== 'tool_result');
 
   if (hasToolResult && hasNonToolResult) {
-    const normalizedContent = normalizeUserContent(content);
-    if (normalizedContent.length === 0) {
-      return [];
-    }
     return [{ type: 'user_tool_result', content: normalizedContent, ...meta }];
   }
 
   if (hasToolResult) {
-    return parseToolResultOnlyContent(content, meta);
+    return parseToolResultOnlyContent(normalizedContent, meta);
   }
 
   return parseUserTextAndAttachmentContent(content, meta);

@@ -249,6 +249,35 @@ describe('parseHistoryEntry', () => {
       ]);
     });
 
+    it('should treat system-text + tool_result content as tool_result-only payload', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: '<system_instruction>internal note</system_instruction>' },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-999',
+              content: 'Tool output',
+              is_error: true,
+            },
+          ],
+        },
+      };
+
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.type).toBe('tool_result');
+      if (result[0]?.type !== 'tool_result') {
+        throw new Error('Expected tool_result message');
+      }
+      expect(result[0].toolId).toBe('tool-999');
+      expect(result[0].isError).toBe(true);
+      expect(result[0].content).toBe('Tool output');
+    });
+
     it('should preserve mixed user/tool_result interleaving within canonical content', () => {
       const entry = {
         type: 'user',
