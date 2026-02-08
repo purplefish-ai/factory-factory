@@ -457,7 +457,7 @@ describe('chat message handlers', () => {
     );
   });
 
-  it('load_session sends replay batch with runtime snapshot when client running', async () => {
+  it('load_session sends snapshot hydration and runtime snapshot when client running', async () => {
     mockedClaudeSessionAccessor.findById.mockResolvedValue({
       id: 'session-1',
       claudeSessionId: 'claude-1',
@@ -478,26 +478,25 @@ describe('chat message handlers', () => {
       message: { type: 'load_session', loadRequestId: 'load-123' },
     });
 
+    expect(mockedMessageStateService.sendSnapshot).toHaveBeenCalledWith('session-1', {
+      loadRequestId: 'load-123',
+      pendingInteractiveRequest: null,
+    });
+
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
-        type: 'session_replay_batch',
-        replayEvents: [
-          {
-            type: 'session_runtime_snapshot',
-            sessionRuntime: {
-              phase: 'idle',
-              processState: 'alive',
-              activity: 'IDLE',
-              updatedAt: '2026-02-07T00:00:00.000Z',
-            },
-          },
-        ],
-        loadRequestId: 'load-123',
+        type: 'session_runtime_snapshot',
+        sessionRuntime: {
+          phase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-02-07T00:00:00.000Z',
+        },
       })
     );
   });
 
-  it('load_session replays pending permission request with toolInput', async () => {
+  it('load_session includes pending permission request in snapshot hydration', async () => {
     mockedClaudeSessionAccessor.findById.mockResolvedValue({
       id: 'session-1',
       claudeSessionId: 'claude-1',
@@ -525,30 +524,16 @@ describe('chat message handlers', () => {
       message: { type: 'load_session', loadRequestId: 'load-perm' },
     });
 
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'session_replay_batch',
-        replayEvents: [
-          {
-            type: 'session_runtime_snapshot',
-            sessionRuntime: {
-              phase: 'idle',
-              processState: 'alive',
-              activity: 'IDLE',
-              updatedAt: '2026-02-07T00:00:00.000Z',
-            },
-          },
-          {
-            type: 'permission_request',
-            requestId: 'req-perm-1',
-            toolName: 'ExitPlanMode',
-            toolInput: { planFile: '/tmp/plan.md' },
-            planContent: '# Plan',
-          },
-        ],
-        loadRequestId: 'load-perm',
-      })
-    );
+    expect(mockedMessageStateService.sendSnapshot).toHaveBeenCalledWith('session-1', {
+      loadRequestId: 'load-perm',
+      pendingInteractiveRequest: {
+        requestId: 'req-perm-1',
+        toolName: 'ExitPlanMode',
+        input: { planFile: '/tmp/plan.md' },
+        planContent: '# Plan',
+        timestamp: expect.any(String),
+      },
+    });
   });
 
   it('load_session forwards loadRequestId for non-running snapshot hydration', async () => {
