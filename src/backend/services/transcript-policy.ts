@@ -9,6 +9,11 @@
  * - JSONL parsing (claude/session.ts)
  */
 
+import {
+  shouldIncludeAssistantMessage,
+  shouldIncludeStreamEvent,
+  shouldIncludeUserMessage,
+} from '@/shared/transcript-policy';
 import type { ClaudeJson, ClaudeMessage, ClaudeStreamEvent } from '../claude/types';
 
 // Re-export shared policies for convenience
@@ -46,13 +51,6 @@ export function shouldIncludeInTranscript(claudeMsg: ClaudeJson): {
   include: boolean;
   reason?: string;
 } {
-  // Import shared policies here to avoid circular dependency
-  const {
-    shouldIncludeAssistantMessage,
-    shouldIncludeUserMessage,
-    shouldIncludeStreamEvent,
-  } = require('@/shared/transcript-policy');
-
   switch (claudeMsg.type) {
     case 'system':
       return { include: true };

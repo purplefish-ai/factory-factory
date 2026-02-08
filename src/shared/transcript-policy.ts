@@ -99,10 +99,12 @@ export function shouldIncludeUserMessage(message: ClaudeMessagePayload): boolean
  *
  * Current policy:
  * - String content: Always include
- * - Array content: Include if has at least one text/tool_use/thinking block
+ * - Array content: Include only if has at least one text block
  *
- * Note: Pure tool-use-only messages (no narrative text) are currently excluded
- * to reduce UI noise, but this is configurable.
+ * Rationale: Pure tool-use-only messages (without narrative text) are excluded
+ * to reduce UI noise. Tool use blocks are already represented via tool_progress
+ * and tool_use_summary events. Assistant messages with narrative text are the
+ * primary content users need to see.
  */
 export function shouldIncludeAssistantMessage(message: ClaudeMessagePayload): boolean {
   const { content } = message;
@@ -112,8 +114,8 @@ export function shouldIncludeAssistantMessage(message: ClaudeMessagePayload): bo
   }
 
   if (Array.isArray(content)) {
-    // Include if has any narrative text blocks
-    // This excludes pure tool-use-only messages
+    // Include only if has narrative text blocks
+    // Excludes pure tool-use-only messages (no text)
     return content.some((item) => item.type === 'text');
   }
 
