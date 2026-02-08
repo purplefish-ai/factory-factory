@@ -71,19 +71,24 @@ export function shouldIncludeAssistantContentItem(item: ClaudeContentItem): bool
  * Determines if a user message should be included in the transcript.
  *
  * Current policy:
- * - String content: Include if not system content
- * - Array content: Include if has at least one non-system item
- * - Tool results: Always include
+ * - String content: Exclude (user text input is not stored separately)
+ * - Array content: Include only if has tool_result items
+ *
+ * Rationale: User messages are already captured as part of the conversation
+ * flow. We only store user messages that contain tool results, which represent
+ * the outcomes of tool executions that need to be preserved.
  */
 export function shouldIncludeUserMessage(message: ClaudeMessagePayload): boolean {
   const { content } = message;
 
+  // String content is not stored (user text is implicit in conversation flow)
   if (typeof content === 'string') {
-    return !isSystemContent(content);
+    return false;
   }
 
+  // Array content: only store if it contains tool results
   if (Array.isArray(content)) {
-    return content.some((item) => shouldIncludeUserContentItem(item));
+    return content.some((item) => item.type === 'tool_result');
   }
 
   return false;
