@@ -100,6 +100,10 @@ function createReplayBaseState(state: ChatState): ChatState {
 }
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
+  // NOTE: SESSION_REPLAY_BATCH is a legacy hydration path.
+  // The backend exclusively uses messages_snapshot for session hydration.
+  // This code path is preserved for backwards compatibility and testing,
+  // but is not actively used in production.
   if (action.type === 'SESSION_REPLAY_BATCH') {
     let nextState = createReplayBaseState(state);
     for (const event of action.payload.replayEvents) {
