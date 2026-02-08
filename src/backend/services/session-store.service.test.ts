@@ -157,6 +157,56 @@ describe('SessionStoreService', () => {
     });
   });
 
+  it('preserves structured tool_result content when hydrating history', async () => {
+    const structuredContent = [
+      {
+        type: 'image' as const,
+        source: { type: 'base64' as const, media_type: 'image/png', data: 'Zm9vYmFy' },
+      },
+    ];
+
+    vi.mocked(SessionManager.getHistory).mockResolvedValue([
+      {
+        type: 'tool_result',
+        content: structuredContent,
+        toolId: 'tool-2',
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+
+    await sessionStoreService.subscribe({
+      sessionId: 's1',
+      workingDir: '/tmp',
+      claudeSessionId: 'claude-s1',
+      isRunning: false,
+      isWorking: false,
+    });
+
+    const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
+      ([, payload]) => (payload as { type?: string }).type === 'session_snapshot'
+    );
+    expect(snapshotCall).toBeDefined();
+    const payload = snapshotCall?.[1] as {
+      messages?: Array<{
+        source: string;
+        message?: {
+          type?: string;
+          message?: {
+            role?: string;
+            content?: Array<{ type?: string; content?: unknown }>;
+          };
+        };
+      }>;
+    };
+
+    const claudeMessage = payload.messages?.find((msg) => msg.source === 'claude')?.message;
+    expect(claudeMessage?.type).toBe('user');
+    expect(claudeMessage?.message?.content?.[0]).toMatchObject({
+      type: 'tool_result',
+      content: structuredContent,
+    });
+  });
+
   it('subscribe does not emit session_delta before session_snapshot', async () => {
     vi.mocked(SessionManager.getHistory).mockResolvedValue([]);
 

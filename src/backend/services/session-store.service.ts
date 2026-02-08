@@ -4,6 +4,7 @@ import {
   type ClaudeMessage,
   QUEUED_MESSAGE_ORDER_BASE,
   type QueuedMessage,
+  type SessionDeltaEvent,
   shouldPersistClaudeMessage,
   shouldSuppressDuplicateResultMessage,
   type WebSocketMessage,
@@ -66,10 +67,10 @@ class SessionStoreService {
       type: historyMsg.type,
       timestamp: historyMsg.timestamp,
       content: historyMsg.content,
-      toolName: historyMsg.toolName ?? null,
-      toolId: historyMsg.toolId ?? null,
-      toolInput: historyMsg.toolInput ?? null,
-      isError: historyMsg.isError ?? false,
+      toolName: 'toolName' in historyMsg ? (historyMsg.toolName ?? null) : null,
+      toolId: 'toolId' in historyMsg ? (historyMsg.toolId ?? null) : null,
+      toolInput: 'toolInput' in historyMsg ? (historyMsg.toolInput ?? null) : null,
+      isError: 'isError' in historyMsg ? (historyMsg.isError ?? false) : false,
       attachments: historyMsg.attachments ?? null,
     });
     const digest = createHash('sha1').update(fingerprint).digest('hex').slice(0, 12);
@@ -120,7 +121,6 @@ class SessionStoreService {
           message: { role: 'assistant', content: [{ type: 'text', text: msg.content }] },
         };
       case 'tool_result': {
-        const content: string | Array<{ type: 'text'; text: string }> = msg.content;
         return {
           type: 'user',
           message: {
@@ -129,7 +129,7 @@ class SessionStoreService {
               {
                 type: 'tool_result',
                 tool_use_id: msg.toolId || 'unknown',
-                content,
+                content: msg.content,
                 ...(msg.isError !== undefined ? { is_error: msg.isError } : {}),
               },
             ],
@@ -226,7 +226,7 @@ class SessionStoreService {
     chatConnectionService.forwardToSession(store.sessionId, payload);
   }
 
-  emitDelta(sessionId: string, event: { type: string; [key: string]: unknown }): void {
+  emitDelta(sessionId: string, event: SessionDeltaEvent): void {
     const payload: WebSocketMessage = {
       type: 'session_delta',
       data: event,

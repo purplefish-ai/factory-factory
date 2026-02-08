@@ -19,7 +19,6 @@ export function createSetModelHandler(): ChatMessageHandler<SetModelMessage> {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Set model', { sessionId, model: message.model });
       }
-      ws.send(JSON.stringify({ type: 'model_set', model: message.model }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to set model', {

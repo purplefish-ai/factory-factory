@@ -48,7 +48,12 @@ function handleMessageAsInteractiveResponse(
   const order = sessionStoreService.allocateOrder(sessionId);
 
   // Prepare the response event - we'll send it even on error to clear frontend state
-  const responseEvent = { type: 'message_used_as_response', id: messageId, text, order };
+  const responseEvent = {
+    type: 'message_used_as_response',
+    id: messageId,
+    text,
+    order,
+  } as const;
 
   try {
     if (pendingRequest.toolName === 'AskUserQuestion') {

@@ -78,7 +78,10 @@ export function createQueueMessageHandler(
         text: queuedMsg.text,
         timestamp: queuedMsg.timestamp,
         attachments: queuedMsg.attachments,
-        settings: queuedMsg.settings,
+        settings: {
+          ...queuedMsg.settings,
+          selectedModel: queuedMsg.settings.selectedModel ?? 'opus',
+        },
       },
     });
 

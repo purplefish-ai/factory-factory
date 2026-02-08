@@ -36,6 +36,6 @@ async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void>
   const slashCommandsMsg = {
     type: 'slash_commands',
     slashCommands: cached,
-  };
+  } as const;
   sessionStoreService.emitDelta(sessionId, slashCommandsMsg);
 }

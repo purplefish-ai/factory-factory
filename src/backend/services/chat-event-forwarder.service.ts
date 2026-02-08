@@ -223,7 +223,7 @@ class ChatEventForwarderService {
       const slashCommandsMsg = {
         type: 'slash_commands',
         slashCommands: initResponse.commands,
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, slashCommandsMsg);
       void slashCommandCacheService.setCachedCommands(initResponse.commands);
     }
@@ -294,7 +294,7 @@ class ChatEventForwarderService {
       // Store-then-forward: store event for replay before forwarding
       // Include order for consistent frontend message sorting
       const order = sessionStoreService.appendClaudeEvent(dbSessionId, event as ClaudeMessage);
-      const msg = { type: 'claude_message', data: event, order };
+      const msg = { type: 'claude_message', data: event, order } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -307,8 +307,7 @@ class ChatEventForwarderService {
         eventType: 'tool_progress',
         data: event,
       });
-      const sdkEvent = event as unknown as { type: string };
-      sessionStoreService.emitDelta(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
     on('tool_use_summary', (event) => {
@@ -319,8 +318,7 @@ class ChatEventForwarderService {
         eventType: 'tool_use_summary',
         data: event,
       });
-      const sdkEvent = event as unknown as { type: string };
-      sessionStoreService.emitDelta(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
     // System subtype event handlers
@@ -346,7 +344,7 @@ class ChatEventForwarderService {
           slashCommands: event.slash_commands,
           plugins: event.plugins,
         },
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -365,7 +363,7 @@ class ChatEventForwarderService {
       const msg = {
         type: 'status_update',
         permissionMode: event.permission_mode,
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -383,7 +381,7 @@ class ChatEventForwarderService {
         return;
       }
       this.lastCompactBoundaryAt.set(dbSessionId, now);
-      const boundaryMsg = { type: 'compact_boundary' };
+      const boundaryMsg = { type: 'compact_boundary' } as const;
       sessionStoreService.emitDelta(dbSessionId, boundaryMsg);
     });
 
@@ -407,7 +405,7 @@ class ChatEventForwarderService {
           hookName: event.hook_name,
           hookEvent: event.hook_event,
         },
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -434,7 +432,7 @@ class ChatEventForwarderService {
           exitCode: event.exit_code,
           outcome: event.outcome,
         },
-      };
+      } as const;
       sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
@@ -444,7 +442,7 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Context compaction started', { dbSessionId });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_start' });
-      const event = { type: 'compacting_start' };
+      const event = { type: 'compacting_start' } as const;
       sessionStoreService.emitDelta(dbSessionId, event);
     });
 
@@ -453,7 +451,7 @@ class ChatEventForwarderService {
         logger.info('[Chat WS] Context compaction ended', { dbSessionId });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_end' });
-      const event = { type: 'compacting_end' };
+      const event = { type: 'compacting_end' } as const;
       sessionStoreService.emitDelta(dbSessionId, event);
     });
 
@@ -471,7 +469,7 @@ class ChatEventForwarderService {
       // Store-then-forward: store events for replay before forwarding
       // Include order for consistent frontend message sorting
       const order = sessionStoreService.appendClaudeEvent(dbSessionId, result as ClaudeMessage);
-      const resultMsg = { type: 'claude_message', data: result, order };
+      const resultMsg = { type: 'claude_message', data: result, order } as const;
       sessionStoreService.emitDelta(dbSessionId, resultMsg);
 
       // Mark session as idle
@@ -695,7 +693,7 @@ class ChatEventForwarderService {
     const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
     // Preserve the full assistant payload (including tool_use blocks/ids)
     // so downstream tool progress/summary events can still correlate.
-    const wsMsg = { type: 'claude_message', data: msg, order };
+    const wsMsg = { type: 'claude_message', data: msg, order } as const;
     sessionStoreService.emitDelta(dbSessionId, wsMsg);
   }
 
@@ -712,7 +710,7 @@ class ChatEventForwarderService {
   ): void {
     // Forward user message UUID for rewind functionality.
     if (msgWithType.uuid) {
-      const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid };
+      const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid } as const;
       sessionStoreService.emitDelta(dbSessionId, uuidMsg);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Forwarding user message UUID', {
@@ -755,7 +753,7 @@ class ChatEventForwarderService {
     });
 
     const order = sessionStoreService.appendClaudeEvent(dbSessionId, msg as ClaudeMessage);
-    const wsMsg = { type: 'claude_message', data: msg, order };
+    const wsMsg = { type: 'claude_message', data: msg, order } as const;
     sessionStoreService.emitDelta(dbSessionId, wsMsg);
   }
 

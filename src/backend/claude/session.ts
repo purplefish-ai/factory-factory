@@ -2,9 +2,11 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { MessageAttachment } from '@/shared/claude';
+import type { HistoryMessage } from '@/shared/claude';
 import { createLogger } from '../services/logger.service';
 import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
+
+export type { HistoryMessage } from '@/shared/claude';
 
 const logger = createLogger('session');
 
@@ -22,22 +24,6 @@ const SessionJsonlEntrySchema = z
     message: z.any().optional(),
   })
   .passthrough();
-
-/**
- * Represents a message from session history
- */
-export interface HistoryMessage {
-  type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking';
-  content: string;
-  timestamp: string;
-  uuid?: string;
-  attachments?: MessageAttachment[];
-  // Tool-specific fields
-  toolName?: string;
-  toolId?: string;
-  toolInput?: Record<string, unknown>;
-  isError?: boolean;
-}
 
 /**
  * Information about a Claude CLI session (from ~/.claude/projects/).
@@ -297,22 +283,6 @@ function estimateBase64Bytes(base64: string): number {
 }
 
 /**
- * Extract text content from tool result
- */
-function extractToolResultContent(item: ClaudeContentItem & { type: 'tool_result' }): string {
-  if (typeof item.content === 'string') {
-    return item.content;
-  }
-  if (Array.isArray(item.content)) {
-    return item.content
-      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-      .map((c) => c.text)
-      .join('\n');
-  }
-  return '';
-}
-
-/**
  * Parse a user content item into a HistoryMessage
  */
 function parseUserContentItem(
@@ -355,7 +325,7 @@ function parseUserContentItem(
   if (item.type === 'tool_result') {
     return {
       type: 'tool_result',
-      content: extractToolResultContent(item),
+      content: item.content,
       toolId: item.tool_use_id,
       isError: item.is_error,
       ...meta,

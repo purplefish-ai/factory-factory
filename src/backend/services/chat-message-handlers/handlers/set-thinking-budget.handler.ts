@@ -22,7 +22,6 @@ export function createSetThinkingBudgetHandler(): ChatMessageHandler<SetThinking
           maxTokens: message.max_tokens,
         });
       }
-      ws.send(JSON.stringify({ type: 'thinking_budget_set', max_tokens: message.max_tokens }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to set thinking budget', {

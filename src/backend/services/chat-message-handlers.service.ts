@@ -230,7 +230,10 @@ class ChatMessageHandlerService {
         text: msg.text,
         timestamp: msg.timestamp,
         attachments: msg.attachments,
-        settings: msg.settings,
+        settings: {
+          ...msg.settings,
+          selectedModel: msg.settings.selectedModel ?? 'opus',
+        },
         order,
       },
     });

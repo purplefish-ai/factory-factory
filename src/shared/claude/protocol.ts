@@ -527,19 +527,53 @@ export interface SessionInfo {
 }
 
 /**
- * Message from session history.
+ * Base fields for messages parsed from Claude session history.
  */
-export interface HistoryMessage {
-  type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking';
-  content: string;
+interface HistoryMessageBase {
   timestamp: string;
   uuid?: string;
   attachments?: MessageAttachment[];
+}
+
+export interface UserHistoryMessage extends HistoryMessageBase {
+  type: 'user';
+  content: string;
+}
+
+export interface AssistantHistoryMessage extends HistoryMessageBase {
+  type: 'assistant';
+  content: string;
+}
+
+export interface ThinkingHistoryMessage extends HistoryMessageBase {
+  type: 'thinking';
+  content: string;
+}
+
+export interface ToolUseHistoryMessage extends HistoryMessageBase {
+  type: 'tool_use';
+  content: string;
   toolName?: string;
   toolId?: string;
   toolInput?: Record<string, unknown>;
+}
+
+export interface ToolResultHistoryMessage extends HistoryMessageBase {
+  type: 'tool_result';
+  content: ToolResultContentValue;
+  toolId?: string;
   isError?: boolean;
 }
+
+/**
+ * Message from session history.
+ */
+export type HistoryMessage =
+  | UserHistoryMessage
+  | AssistantHistoryMessage
+  | ThinkingHistoryMessage
+  | ToolUseHistoryMessage
+  | ToolResultHistoryMessage;
 
 // =============================================================================
 // Agent Metadata Types
@@ -722,6 +756,13 @@ export interface WebSocketMessage {
 }
 
 /**
+ * Valid event payload forwarded within session_delta messages.
+ */
+export type SessionDeltaEvent = Omit<WebSocketMessage, 'type'> & {
+  type: Exclude<WebSocketMessage['type'], 'session_delta'>;
+};
+
+/**
  * Canonical base order used for queued messages before dispatch assigns real order.
  * Shared by backend snapshot generation and frontend optimistic queue rendering.
  */
@@ -731,37 +772,41 @@ export const QUEUED_MESSAGE_ORDER_BASE = 1_000_000_000;
  * Canonical list of valid top-level WebSocket message types.
  * Used by runtime type guards to reject malformed/unknown payloads early.
  */
-export const WEBSOCKET_MESSAGE_TYPES = [
-  'session_snapshot',
-  'session_delta',
-  'session_runtime_snapshot',
-  'session_runtime_updated',
-  'claude_message',
-  'error',
-  'sessions',
-  'agent_metadata',
-  'permission_request',
-  'user_question',
-  'permission_cancelled',
-  'message_used_as_response',
-  'message_state_changed',
-  'session_replay_batch',
-  'tool_progress',
-  'tool_use_summary',
-  'status_update',
-  'task_notification',
-  'system_init',
-  'compact_boundary',
-  'hook_started',
-  'hook_response',
-  'compacting_start',
-  'compacting_end',
-  'workspace_notification_request',
-  'slash_commands',
-  'user_message_uuid',
-  'rewind_files_preview',
-  'rewind_files_error',
-] as const satisfies readonly WebSocketMessage['type'][];
+const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
+  session_snapshot: true,
+  session_delta: true,
+  session_runtime_snapshot: true,
+  session_runtime_updated: true,
+  claude_message: true,
+  error: true,
+  sessions: true,
+  agent_metadata: true,
+  permission_request: true,
+  user_question: true,
+  permission_cancelled: true,
+  message_used_as_response: true,
+  message_state_changed: true,
+  session_replay_batch: true,
+  tool_progress: true,
+  tool_use_summary: true,
+  status_update: true,
+  task_notification: true,
+  system_init: true,
+  compact_boundary: true,
+  hook_started: true,
+  hook_response: true,
+  compacting_start: true,
+  compacting_end: true,
+  workspace_notification_request: true,
+  slash_commands: true,
+  user_message_uuid: true,
+  rewind_files_preview: true,
+  rewind_files_error: true,
+};
+
+export const WEBSOCKET_MESSAGE_TYPES = Object.keys(
+  WEBSOCKET_MESSAGE_TYPE_MAP
+) as WebSocketMessage['type'][];
 
 // =============================================================================
 // Queued Message Types
