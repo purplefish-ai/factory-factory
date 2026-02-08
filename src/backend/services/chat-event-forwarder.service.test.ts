@@ -117,6 +117,7 @@ describe('chatEventForwarderService assistant message forwarding', () => {
       type: 'claude_message',
       data: mixedAssistantMessage,
       order: 77,
+      timestamp: expect.any(String),
     };
 
     expect(mockedMessageStateService.storeEvent).toHaveBeenCalledWith(sessionId, expectedWsMessage);

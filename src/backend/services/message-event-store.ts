@@ -1,4 +1,4 @@
-export type StoredEvent = { type: string; data?: unknown; order?: number };
+export type StoredEvent = { type: string; data?: unknown; order?: number; timestamp?: string };
 
 /**
  * Stores raw WebSocket events per session for replay on reconnect.

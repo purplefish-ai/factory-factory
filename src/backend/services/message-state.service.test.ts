@@ -1046,6 +1046,64 @@ describe('MessageStateService', () => {
       expect(claudeMessages[0]!.message?.type).toBe('assistant');
       expect(claudeMessages[1]!.message?.type).toBe('result');
     });
+
+    it('should produce stable IDs across multiple sendSnapshot calls', () => {
+      // Store events
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: { type: 'assistant', message: { role: 'assistant', content: 'Hello' } },
+        order: 1,
+      });
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: { type: 'result', usage: {} },
+        order: 2,
+      });
+
+      // First snapshot
+      const { events: events1, unsubscribe: unsub1 } = collectEvents();
+      messageStateService.sendSnapshot('session-1');
+      unsub1();
+
+      // Second snapshot
+      const { events: events2, unsubscribe: unsub2 } = collectEvents();
+      messageStateService.sendSnapshot('session-1');
+      unsub2();
+
+      const snap1 = events1.find((e) => e.type === 'messages_snapshot');
+      const snap2 = events2.find((e) => e.type === 'messages_snapshot');
+      if (!snap1 || snap1.type !== 'messages_snapshot') {
+        expect.fail('Missing snapshot 1');
+      }
+      if (!snap2 || snap2.type !== 'messages_snapshot') {
+        expect.fail('Missing snapshot 2');
+      }
+
+      // IDs should be identical across snapshots (deterministic based on store index)
+      expect(snap1.data.messages[0]!.id).toBe(snap2.data.messages[0]!.id);
+      expect(snap1.data.messages[1]!.id).toBe(snap2.data.messages[1]!.id);
+    });
+
+    it('should preserve original timestamps from stored events', () => {
+      const originalTimestamp = '2025-01-15T10:30:00.000Z';
+      messageStateService.storeEvent('session-1', {
+        type: 'claude_message',
+        data: { type: 'assistant', message: { role: 'assistant', content: 'Hello' } },
+        order: 1,
+        timestamp: originalTimestamp,
+      });
+
+      const { events, unsubscribe } = collectEvents();
+      messageStateService.sendSnapshot('session-1');
+      unsubscribe();
+
+      const snapshot = events.find((e) => e.type === 'messages_snapshot');
+      if (!snapshot || snapshot.type !== 'messages_snapshot') {
+        expect.fail('Expected messages_snapshot event');
+      }
+
+      expect(snapshot.data.messages[0]!.timestamp).toBe(originalTimestamp);
+    });
   });
 
   // ---------------------------------------------------------------------------

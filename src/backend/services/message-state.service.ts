@@ -526,8 +526,9 @@ class MessageStateService {
   private buildChatMessagesFromEventStore(sessionId: string): ChatMessage[] {
     const storedEvents = this.eventStore.getStoredEvents(sessionId);
     const result: ChatMessage[] = [];
-    let eventCounter = 0;
-    for (const event of storedEvents) {
+    for (let i = 0; i < storedEvents.length; i++) {
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const event = storedEvents[i]!;
       if (event.type === 'claude_message' && event.data != null && event.order != null) {
         // Filter stream events to match client-side shouldStoreMessage behavior
         const data = event.data as {
@@ -543,10 +544,10 @@ class MessageStateService {
         }
 
         result.push({
-          id: `evt-${sessionId}-${eventCounter++}`,
+          id: `evt-${sessionId}-${i}`,
           source: 'claude',
           message: event.data as ChatMessage['message'],
-          timestamp: new Date().toISOString(),
+          timestamp: event.timestamp ?? new Date().toISOString(),
           order: event.order,
         });
       }

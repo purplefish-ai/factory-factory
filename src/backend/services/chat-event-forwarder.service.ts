@@ -290,9 +290,10 @@ class ChatEventForwarderService {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'stream', data: event });
 
       // Store-then-forward: store event for replay before forwarding
-      // Include order for consistent frontend message sorting
+      // Include order and timestamp for consistent frontend message sorting and display
       const order = messageStateService.allocateOrder(dbSessionId);
-      const msg = { type: 'claude_message', data: event, order };
+      const timestamp = new Date().toISOString();
+      const msg = { type: 'claude_message', data: event, order, timestamp };
       messageStateService.storeEvent(dbSessionId, msg);
       chatConnectionService.forwardToSession(dbSessionId, msg);
     });
@@ -477,9 +478,10 @@ class ChatEventForwarderService {
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
       // Store-then-forward: store events for replay before forwarding
-      // Include order for consistent frontend message sorting
+      // Include order and timestamp for consistent frontend message sorting and display
       const order = messageStateService.allocateOrder(dbSessionId);
-      const resultMsg = { type: 'claude_message', data: result, order };
+      const timestamp = new Date().toISOString();
+      const resultMsg = { type: 'claude_message', data: result, order, timestamp };
       messageStateService.storeEvent(dbSessionId, resultMsg);
       chatConnectionService.forwardToSession(dbSessionId, resultMsg);
 
@@ -678,9 +680,10 @@ class ChatEventForwarderService {
     }
 
     const order = messageStateService.allocateOrder(dbSessionId);
+    const timestamp = new Date().toISOString();
     // Preserve the full assistant payload (including tool_use blocks/ids)
     // so downstream tool progress/summary events can still correlate.
-    const wsMsg = { type: 'claude_message', data: msg, order };
+    const wsMsg = { type: 'claude_message', data: msg, order, timestamp };
     messageStateService.storeEvent(dbSessionId, wsMsg);
     chatConnectionService.forwardToSession(dbSessionId, wsMsg);
   }
@@ -743,7 +746,8 @@ class ChatEventForwarderService {
     });
 
     const order = messageStateService.allocateOrder(dbSessionId);
-    const wsMsg = { type: 'claude_message', data: msg, order };
+    const timestamp = new Date().toISOString();
+    const wsMsg = { type: 'claude_message', data: msg, order, timestamp };
     messageStateService.storeEvent(dbSessionId, wsMsg);
     chatConnectionService.forwardToSession(dbSessionId, wsMsg);
   }
