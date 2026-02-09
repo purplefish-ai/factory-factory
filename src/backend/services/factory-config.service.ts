@@ -1,20 +1,11 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { type FactoryConfig, FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 
 /**
  * Schema for factory-factory.json configuration file
  */
-const FactoryConfigSchema = z.object({
-  scripts: z.object({
-    setup: z.string().optional(),
-    run: z.string().optional(),
-    cleanup: z.string().optional(),
-  }),
-});
-
-export type FactoryConfig = z.infer<typeof FactoryConfigSchema>;
-
 /**
  * Service for reading and parsing factory-factory.json configuration
  */

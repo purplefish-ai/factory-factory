@@ -1,6 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { SessionManager } from '../claude/session';
-import { prisma } from '../db';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from './config.service';
@@ -85,9 +84,7 @@ class FixerSessionService {
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
       }
 
-      const acquisitionResult = await prisma.$transaction(async (tx) =>
-        this.acquireSessionDecision(tx, input)
-      );
+      const acquisitionResult = await this.acquireSessionDecision(input, workspace.worktreePath);
 
       if (acquisitionResult.action === 'limit_reached') {
         return { status: 'skipped', reason: 'Workspace session limit reached' };
@@ -105,62 +102,31 @@ class FixerSessionService {
   }
 
   private async acquireSessionDecision(
-    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-    input: AcquireAndDispatchInput
+    input: AcquireAndDispatchInput,
+    worktreePath: string
   ): Promise<SessionAcquisitionDecision> {
-    const { workspaceId, workflow } = input;
-    const existingSession = await tx.claudeSession.findFirst({
-      where: {
-        workspaceId,
-        workflow,
-        status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
-      },
-      orderBy: { createdAt: 'desc' },
+    const acquisition = await claudeSessionAccessor.acquireFixerSession({
+      workspaceId: input.workspaceId,
+      workflow: input.workflow,
+      sessionName: input.sessionName,
+      maxSessions: configService.getMaxSessionsPerWorkspace(),
+      claudeProjectPath: SessionManager.getProjectPath(worktreePath),
     });
 
-    if (existingSession) {
-      return this.decideExistingSessionAction(existingSession, input.runningIdleAction);
-    }
-
-    const allSessions = await tx.claudeSession.findMany({
-      where: { workspaceId },
-      select: { id: true },
-    });
-
-    const maxSessions = configService.getMaxSessionsPerWorkspace();
-    if (allSessions.length >= maxSessions) {
+    if (acquisition.outcome === 'limit_reached') {
       return { action: 'limit_reached' };
     }
 
-    const recentSession = await tx.claudeSession.findFirst({
-      where: { workspaceId, workflow: { not: workflow } },
-      orderBy: { updatedAt: 'desc' },
-      select: { model: true },
-    });
-
-    const model = recentSession?.model ?? 'sonnet';
-    const workspace = await tx.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { worktreePath: true },
-    });
-    const claudeProjectPath = workspace?.worktreePath
-      ? SessionManager.getProjectPath(workspace.worktreePath)
-      : null;
-
-    const newSession = await tx.claudeSession.create({
-      data: {
-        workspaceId,
-        workflow,
-        name: input.sessionName,
-        model,
-        status: SessionStatus.IDLE,
-        claudeProjectPath,
-      },
-    });
+    if (acquisition.outcome === 'existing') {
+      return this.decideExistingSessionAction(
+        { id: acquisition.sessionId, status: acquisition.status },
+        input.runningIdleAction
+      );
+    }
 
     return {
       action: 'start',
-      sessionId: newSession.id,
+      sessionId: acquisition.sessionId,
     };
   }
 

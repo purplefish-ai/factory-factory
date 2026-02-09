@@ -18,8 +18,8 @@
  *   FAILED → IDLE (user acknowledgment or restart)
  */
 
-import type { RunScriptStatus, Workspace } from '@prisma-gen/client';
-import { prisma } from '../db';
+import type { Prisma, RunScriptStatus, Workspace } from '@prisma-gen/client';
+import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('run-script-state-machine');
@@ -82,9 +82,7 @@ class RunScriptStateMachineService {
     options?: TransitionOptions
   ): Promise<Workspace> {
     // First read to validate the transition and get current status for logging
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-    });
+    const workspace = await workspaceAccessor.findRawById(workspaceId);
 
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
@@ -96,7 +94,7 @@ class RunScriptStateMachineService {
       throw new RunScriptStateMachineError(workspaceId, currentStatus, targetStatus);
     }
 
-    const updateData: Parameters<typeof prisma.workspace.update>[0]['data'] = {
+    const updateData: Prisma.WorkspaceUpdateManyMutationInput = {
       runScriptStatus: targetStatus,
     };
 
@@ -137,14 +135,15 @@ class RunScriptStateMachineService {
 
     // Atomic compare-and-swap: only update if status hasn't changed since we read it.
     // This prevents two concurrent callers from both passing validation and racing to write.
-    const result = await prisma.workspace.updateMany({
-      where: { id: workspaceId, runScriptStatus: currentStatus },
-      data: updateData,
-    });
+    const result = await workspaceAccessor.casRunScriptStatusUpdate(
+      workspaceId,
+      currentStatus,
+      updateData
+    );
 
     if (result.count === 0) {
       // Status changed between read and write — refetch to report the actual conflict
-      const refreshed = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+      const refreshed = await workspaceAccessor.findRawById(workspaceId);
       throw new RunScriptStateMachineError(
         workspaceId,
         refreshed?.runScriptStatus ?? currentStatus,
@@ -160,9 +159,7 @@ class RunScriptStateMachineService {
     });
 
     // Fetch and return the updated workspace (updateMany doesn't return the record)
-    const updated = await prisma.workspace.findUniqueOrThrow({
-      where: { id: workspaceId },
-    });
+    const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
 
     return updated;
   }
@@ -242,9 +239,7 @@ class RunScriptStateMachineService {
    * @returns Current status (possibly updated)
    */
   async verifyRunning(workspaceId: string): Promise<RunScriptStatus> {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-    });
+    const workspace = await workspaceAccessor.findRawById(workspaceId);
 
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
@@ -273,7 +268,7 @@ class RunScriptStateMachineService {
             error: stateError,
           });
           // Refetch to get current state
-          const updated = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+          const updated = await workspaceAccessor.findRawById(workspaceId);
           return updated?.runScriptStatus ?? workspace.runScriptStatus;
         }
       }

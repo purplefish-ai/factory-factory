@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { type AppContext, createAppContext } from '../../app-context';
 import { HTTP_STATUS } from '../../constants';
-import { prisma } from '../../db';
+import { healthService } from '../../services/health.service';
 
 // ============================================================================
 // Health Check Routes
@@ -31,7 +31,7 @@ export function createHealthRouter(appContext: AppContext): Router {
    */
   router.get('/database', async (_req, res) => {
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      await healthService.checkDatabaseConnection();
       res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -56,7 +56,7 @@ export function createHealthRouter(appContext: AppContext): Router {
     const checks: Record<string, { status: string; details?: unknown }> = {};
 
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      await healthService.checkDatabaseConnection();
       checks.database = { status: 'ok' };
     } catch (error) {
       checks.database = {

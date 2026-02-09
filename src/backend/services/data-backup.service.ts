@@ -20,10 +20,13 @@ import {
   type exportedWorkspaceSchemaV1,
   type exportedWorkspaceSchemaV2,
 } from '@/shared/schemas/export-data.schema';
-import { prisma } from '../db';
+import {
+  type DataBackupTransactionClient,
+  dataBackupAccessor,
+} from '../resource_accessors/data-backup.accessor';
 import { createLogger } from './logger.service';
 
-type TransactionClient = Prisma.TransactionClient;
+type TransactionClient = DataBackupTransactionClient;
 
 const logger = createLogger('data-backup');
 
@@ -443,14 +446,8 @@ class DataBackupService {
     logger.info('Exporting database data');
 
     // Fetch all data
-    const [projects, workspaces, claudeSessions, terminalSessions, userSettings] =
-      await Promise.all([
-        prisma.project.findMany({ orderBy: { createdAt: 'asc' } }),
-        prisma.workspace.findMany({ orderBy: { createdAt: 'asc' } }),
-        prisma.claudeSession.findMany({ orderBy: { createdAt: 'asc' } }),
-        prisma.terminalSession.findMany({ orderBy: { createdAt: 'asc' } }),
-        prisma.userSettings.findFirst({ where: { userId: 'default' } }),
-      ]);
+    const { projects, workspaces, claudeSessions, terminalSessions, userSettings } =
+      await dataBackupAccessor.getSnapshotForExport();
 
     const exportData: ExportData = {
       meta: {
@@ -587,7 +584,7 @@ class DataBackupService {
     });
 
     // Import in dependency order within a transaction for atomicity
-    const results = await prisma.$transaction(async (tx) => {
+    const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const schemaVersion = input.meta.schemaVersion;
       const projects = await importProjects(input.data.projects, tx);
       const workspaces = await importWorkspaces(input.data.workspaces, schemaVersion, tx);
