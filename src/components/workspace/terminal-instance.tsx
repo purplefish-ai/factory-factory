@@ -3,8 +3,6 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
 
-import { cn } from '@/lib/utils';
-
 // =============================================================================
 // Types
 // =============================================================================
@@ -29,7 +27,7 @@ export function TerminalInstance({
   className,
   isActive,
 }: TerminalInstanceProps) {
-  const containerRef = useRef<HTMLButtonElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -161,16 +159,5 @@ export function TerminalInstance({
     }
   }, [isActive]);
 
-  return (
-    <button
-      type="button"
-      ref={containerRef}
-      className={cn(className, 'text-left')}
-      style={{ width: '100%', height: '100%' }}
-      aria-label="Terminal"
-      onClick={() => {
-        terminalRef.current?.focus();
-      }}
-    />
-  );
+  return <div ref={containerRef} className={className} style={{ width: '100%', height: '100%' }} />;
 }
