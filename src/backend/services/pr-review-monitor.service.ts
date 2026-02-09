@@ -11,6 +11,7 @@ import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from './constants';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { prReviewFixerService, type ReviewCommentDetails } from './pr-review-fixer.service';
+import { RateLimitBackoff } from './rate-limit-backoff';
 
 const logger = createLogger('pr-review-monitor');
 
@@ -24,9 +25,7 @@ class PRReviewMonitorService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.prReviewMonitorWorkspaceChecks);
-  private backoffMultiplier = 1;
-  private rateLimitHitThisCycle = false;
-  private readonly maxBackoffMultiplier = 4;
+  private readonly backoff = new RateLimitBackoff();
 
   /**
    * Start the PR review monitor
@@ -68,25 +67,19 @@ class PRReviewMonitorService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
-        this.rateLimitHitThisCycle = false;
+        this.backoff.beginCycle();
         await this.checkAllWorkspaces();
-        if (this.backoffMultiplier > 1 && !this.rateLimitHitThisCycle) {
-          logger.info('PR review monitor check succeeded, resetting backoff', {
-            previousMultiplier: this.backoffMultiplier,
-          });
-          this.backoffMultiplier = 1;
-        }
+        this.backoff.resetIfCleanCycle(logger, 'PR review monitor');
       } catch (err) {
         logger.error('PR review monitor check failed', err as Error);
       }
 
-      // Wait for the interval before next check (unless shutting down)
       if (!this.isShuttingDown) {
-        const delayMs = SERVICE_INTERVAL_MS.prReviewMonitorPoll * this.backoffMultiplier;
-        if (this.backoffMultiplier > 1) {
+        const delayMs = this.backoff.computeDelay(SERVICE_INTERVAL_MS.prReviewMonitorPoll);
+        if (this.backoff.currentMultiplier > 1) {
           logger.debug('Using backoff delay for next PR review monitor check', {
             baseIntervalMs: SERVICE_INTERVAL_MS.prReviewMonitorPoll,
-            backoffMultiplier: this.backoffMultiplier,
+            backoffMultiplier: this.backoff.currentMultiplier,
             delayMs,
           });
         }
@@ -95,41 +88,8 @@ class PRReviewMonitorService {
     }
   }
 
-  /**
-   * Sleep for specified milliseconds
-   */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Handle GitHub API rate limit error and apply backoff
-   */
-  private handleRateLimitError(error: unknown, workspaceId: string, prUrl: string): void {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const lowerMessage = errorMessage.toLowerCase();
-    const isRateLimit =
-      lowerMessage.includes('429') ||
-      lowerMessage.includes('rate limit') ||
-      lowerMessage.includes('throttl');
-
-    if (isRateLimit) {
-      this.rateLimitHitThisCycle = true;
-      if (this.backoffMultiplier < this.maxBackoffMultiplier) {
-        this.backoffMultiplier = Math.min(this.backoffMultiplier * 2, this.maxBackoffMultiplier);
-      }
-      logger.warn('GitHub rate limit hit in PR review monitor, backing off', {
-        workspaceId,
-        prUrl,
-        backoffMultiplier: this.backoffMultiplier,
-        nextDelayMs: SERVICE_INTERVAL_MS.prReviewMonitorPoll * this.backoffMultiplier,
-      });
-    } else {
-      logger.error('PR review check failed for workspace', error as Error, {
-        workspaceId,
-        prUrl,
-      });
-    }
   }
 
   /**
@@ -359,7 +319,13 @@ class PRReviewMonitorService {
 
       return { hasNewComments: true, triggered: false };
     } catch (error) {
-      this.handleRateLimitError(error, workspace.id, workspace.prUrl);
+      this.backoff.handleError(
+        error,
+        logger,
+        'PR review monitor',
+        { workspaceId: workspace.id, prUrl: workspace.prUrl },
+        SERVICE_INTERVAL_MS.prReviewMonitorPoll
+      );
       return { hasNewComments: false, triggered: false };
     }
   }
