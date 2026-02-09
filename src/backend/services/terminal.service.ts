@@ -11,12 +11,13 @@
  * Resource monitoring here is purely informational for the admin dashboard.
  */
 
+import { createRequire } from 'node:module';
 import type { IPty } from 'node-pty';
-import * as nodePty from 'node-pty';
 import pidusage from 'pidusage';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('terminal');
+const require = createRequire(import.meta.url);
 
 // =============================================================================
 // Types
@@ -202,10 +203,24 @@ class TerminalService {
   }
 
   /**
+   * Lazy load node-pty to handle cases where it's not installed.
+   */
+  private getNodePty(): typeof import('node-pty') {
+    try {
+      // Runtime require allows graceful fallback when the native module isn't installed.
+      return require('node-pty') as typeof import('node-pty');
+    } catch (error) {
+      logger.error('node-pty not available', error as Error);
+      throw new Error('node-pty is not installed. Please run: pnpm add node-pty');
+    }
+  }
+
+  /**
    * Create a new terminal instance for a workspace
    */
   createTerminal(options: CreateTerminalOptions): Promise<CreateTerminalResult> {
     const { workspaceId, workingDir, cols = 80, rows = 24, shell } = options;
+    const nodePty = this.getNodePty();
 
     // Generate unique terminal ID
     const terminalId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;

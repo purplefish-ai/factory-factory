@@ -82,9 +82,7 @@ export function PRDetailPanel({
   useEffect(() => {
     if (prKey) {
       setActiveTab('info');
-      return;
     }
-    setActiveTab('info');
   }, [prKey]);
 
   // Fetch diff when diff tab is selected

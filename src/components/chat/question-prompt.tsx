@@ -128,7 +128,7 @@ function SingleQuestionLayout({
     <PromptCard
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
-      aria-label="Question from Claude"
+      label="Question from Claude"
       actions={
         <div className="self-end">
           <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
@@ -186,7 +186,7 @@ function MultiQuestionLayout({
     <PromptCard
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
-      aria-label="Questions from Claude"
+      label="Questions from Claude"
       actions={
         <div className="self-end flex items-center gap-1">
           <Button
