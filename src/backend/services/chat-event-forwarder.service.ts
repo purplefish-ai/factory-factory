@@ -12,6 +12,7 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import type { EventEmitterListener } from '@/backend/lib/event-emitter-types';
 import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
 import {
   type InteractiveResponseTool,
@@ -57,11 +58,9 @@ interface EventForLogging {
 // Constants
 // ============================================================================
 
-type AnyListener = Parameters<EventEmitter['on']>[1];
-
 interface RegisteredListener {
   event: string;
-  handler: AnyListener;
+  handler: EventEmitterListener;
 }
 
 // ============================================================================
@@ -210,7 +209,7 @@ class ChatEventForwarderService {
     // Uses EventEmitter.prototype.on to bypass ClaudeClient's typed overloads.
     const emitterOn = EventEmitter.prototype.on.bind(client);
     const listeners: RegisteredListener[] = [];
-    const on = (event: string, handler: AnyListener) => {
+    const on = (event: string, handler: EventEmitterListener) => {
       emitterOn(event, handler);
       listeners.push({ event, handler });
     };

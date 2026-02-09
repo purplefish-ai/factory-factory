@@ -8,6 +8,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import type { EventEmitterEmitArgs, EventEmitterListener } from '../lib/event-emitter-types';
 import { createLogger } from '../services/logger.service';
 import { CLAUDE_TIMEOUT_MS } from './constants';
 import { ClaudeProcessMonitor, type ResourceMonitoringOptions } from './monitoring';
@@ -691,6 +692,3 @@ export class ClaudeProcess extends EventEmitter {
     monitor.on('hung_process', (data) => this.emit('hung_process', data));
   }
 }
-type EventEmitterListener = Parameters<EventEmitter['on']>[1];
-type EventEmitterEmitArgs =
-  Parameters<EventEmitter['emit']> extends [unknown, ...infer Args] ? Args : never;

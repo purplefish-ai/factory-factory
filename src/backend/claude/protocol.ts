@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import * as readline from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
+import type { EventEmitterEmitArgs, EventEmitterListener } from '../lib/event-emitter-types';
 import { createLogger } from '../services/logger.service';
 import { CLAUDE_LIMITS, CLAUDE_TIMEOUT_MS } from './constants';
 import {
@@ -715,6 +716,3 @@ export class ClaudeProtocol extends EventEmitter {
     return super.emit(event, ...args);
   }
 }
-type EventEmitterListener = Parameters<EventEmitter['on']>[1];
-type EventEmitterEmitArgs =
-  Parameters<EventEmitter['emit']> extends [unknown, ...infer Args] ? Args : never;

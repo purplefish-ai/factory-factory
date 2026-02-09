@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import type { EventEmitterEmitArgs, EventEmitterListener } from '../lib/event-emitter-types';
 import type { ControlResponseBody } from './protocol';
 import type {
   AllowResponseData,
@@ -613,6 +614,3 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     return super.emit(_event, ..._args);
   }
 }
-type EventEmitterListener = Parameters<EventEmitter['on']>[1];
-type EventEmitterEmitArgs =
-  Parameters<EventEmitter['emit']> extends [unknown, ...infer Args] ? Args : never;

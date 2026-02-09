@@ -549,6 +549,66 @@ describe('GitHubCLIService', () => {
     });
 
     describe('getPRFullDetails with malformed data', () => {
+      it('should accept StatusContext entries in statusCheckRollup', async () => {
+        const fullPRData = {
+          number: 123,
+          title: 'Test PR',
+          url: 'https://github.com/owner/repo/pull/123',
+          author: { login: 'octocat' },
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-02T00:00:00Z',
+          isDraft: false,
+          state: 'OPEN',
+          reviewDecision: null,
+          statusCheckRollup: [
+            {
+              __typename: 'StatusContext',
+              context: 'ci/legacy-status',
+              state: 'PENDING',
+              targetUrl: 'https://example.com/checks/legacy-status',
+            },
+            {
+              __typename: 'StatusContext',
+              context: 'ci/legacy-required',
+              state: 'ERROR',
+            },
+          ],
+          reviews: [],
+          comments: [],
+          labels: [],
+          additions: 10,
+          deletions: 2,
+          changedFiles: 1,
+          headRefName: 'feature-branch',
+          baseRefName: 'main',
+          mergeStateStatus: 'CLEAN',
+        };
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(fullPRData),
+          stderr: '',
+        });
+
+        const result = await githubCLIService.getPRFullDetails('owner/repo', 123);
+
+        expect(result.statusCheckRollup).toEqual([
+          {
+            __typename: 'StatusContext',
+            name: 'ci/legacy-status',
+            status: 'PENDING',
+            conclusion: null,
+            detailsUrl: 'https://example.com/checks/legacy-status',
+          },
+          {
+            __typename: 'StatusContext',
+            name: 'ci/legacy-required',
+            status: 'COMPLETED',
+            conclusion: 'FAILURE',
+            detailsUrl: undefined,
+          },
+        ]);
+      });
+
       it('should throw error when full PR details are incomplete', async () => {
         const malformedData = {
           number: 123,

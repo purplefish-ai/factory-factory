@@ -31,11 +31,15 @@ const GH_MAX_BUFFER_BYTES = Object.freeze({
 /**
  * Zod schemas for gh CLI JSON responses
  */
-const statusCheckRollupItemSchema = z.object({
-  status: z.string(),
-  conclusion: z.string().optional(),
-  state: z.string().optional(),
-});
+const statusCheckRollupItemSchema = z
+  .object({
+    status: z.string().optional(),
+    conclusion: z.string().optional(),
+    state: z.string().optional(),
+  })
+  .refine((item) => item.status !== undefined || item.state !== undefined, {
+    message: 'statusCheckRollup items must include status or state',
+  });
 
 /**
  * Transform empty string to null for reviewDecision field.
@@ -88,6 +92,22 @@ const prListItemSchema = z.object({
   state: z.string(),
 });
 
+const fullPRCheckRunSchema = z.object({
+  __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
+  name: z.string(),
+  status: z.string(),
+  conclusion: z.string().nullable().optional(),
+  detailsUrl: z.string().optional(),
+});
+
+const fullPRStatusContextSchema = z.object({
+  __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
+  context: z.string(),
+  state: z.string(),
+  targetUrl: z.string().optional(),
+  detailsUrl: z.string().optional(),
+});
+
 const fullPRDetailsSchema = z.object({
   number: z.number(),
   title: z.string(),
@@ -98,19 +118,7 @@ const fullPRDetailsSchema = z.object({
   isDraft: z.boolean(),
   state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
   reviewDecision: reviewDecisionSchema,
-  statusCheckRollup: z
-    .array(
-      z
-        .object({
-          __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
-          name: z.string(),
-          status: z.string(),
-          conclusion: z.string().nullable().optional(),
-          detailsUrl: z.string().optional(),
-        })
-        .passthrough()
-    )
-    .nullable(),
+  statusCheckRollup: z.array(z.union([fullPRCheckRunSchema, fullPRStatusContextSchema])).nullable(),
   reviews: z.array(
     z
       .object({
@@ -186,6 +194,33 @@ function normalizeCheckConclusion(
     : null;
 }
 
+function normalizeStatusContextStatus(state: string): GitHubStatusCheck['status'] {
+  if (state === 'PENDING' || state === 'EXPECTED') {
+    return 'PENDING';
+  }
+  return 'COMPLETED';
+}
+
+function normalizeStatusContextConclusion(state: string): GitHubStatusCheck['conclusion'] {
+  switch (state) {
+    case 'SUCCESS':
+      return 'SUCCESS';
+    case 'FAILURE':
+    case 'ERROR':
+      return 'FAILURE';
+    case 'TIMED_OUT':
+      return 'TIMED_OUT';
+    case 'ACTION_REQUIRED':
+      return 'ACTION_REQUIRED';
+    case 'CANCELLED':
+      return 'CANCELLED';
+    case 'SKIPPED':
+      return 'SKIPPED';
+    default:
+      return null;
+  }
+}
+
 function normalizeReviewState(state: string): GitHubReview['state'] {
   return (REVIEW_STATE_VALUES as readonly string[]).includes(state)
     ? (state as GitHubReview['state'])
@@ -195,13 +230,25 @@ function normalizeReviewState(state: string): GitHubReview['state'] {
 function mapStatusChecks(
   checks: NonNullable<z.infer<typeof fullPRDetailsSchema>['statusCheckRollup']>
 ): GitHubStatusCheck[] {
-  return checks.map((check) => ({
-    __typename: check.__typename ?? 'CheckRun',
-    name: check.name,
-    status: normalizeCheckStatus(check.status),
-    conclusion: normalizeCheckConclusion(check.conclusion),
-    detailsUrl: check.detailsUrl,
-  }));
+  return checks.map((check) => {
+    if ('context' in check) {
+      return {
+        __typename: 'StatusContext',
+        name: check.context,
+        status: normalizeStatusContextStatus(check.state),
+        conclusion: normalizeStatusContextConclusion(check.state),
+        detailsUrl: check.targetUrl ?? check.detailsUrl,
+      };
+    }
+
+    return {
+      __typename: check.__typename ?? 'CheckRun',
+      name: check.name,
+      status: normalizeCheckStatus(check.status),
+      conclusion: normalizeCheckConclusion(check.conclusion),
+      detailsUrl: check.detailsUrl,
+    };
+  });
 }
 
 function mapReviews(reviews: z.infer<typeof fullPRDetailsSchema>['reviews']): GitHubReview[] {
@@ -323,7 +370,7 @@ export interface PRStatusFromGitHub {
   mergedAt: string | null;
   updatedAt: string;
   statusCheckRollup: Array<{
-    status: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
+    status?: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
     conclusion?: string; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, etc.
     state?: string; // Legacy format support
   }> | null;
@@ -581,7 +628,7 @@ class GitHubCLIService {
    */
   computeCIStatus(
     statusCheckRollup: Array<{
-      status: string;
+      status?: string;
       conclusion?: string;
       state?: string;
     }> | null
@@ -592,7 +639,7 @@ class GitHubCLIService {
 
     // Helper to get the effective state from a check
     const getEffectiveState = (check: {
-      status: string;
+      status?: string;
       conclusion?: string;
       state?: string;
     }): string => {
@@ -601,7 +648,7 @@ class GitHubCLIService {
         return check.conclusion;
       }
       // For legacy format or non-completed checks
-      return check.state || check.status;
+      return check.state || check.status || 'PENDING';
     };
 
     // Check for any failures first
