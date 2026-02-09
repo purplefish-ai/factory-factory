@@ -93,6 +93,22 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
     stopSession.mutate({ sessionId });
   };
 
+  // Calculate the highest session count per workspace
+  const maxSessionsPerWorkspace =
+    processes?.claude && processes.claude.length > 0
+      ? Math.max(
+          ...Object.values(
+            processes.claude.reduce(
+              (acc, process) => {
+                acc[process.workspaceId] = (acc[process.workspaceId] || 0) + 1;
+                return acc;
+              },
+              {} as Record<string, number>
+            )
+          )
+        )
+      : 0;
+
   return (
     <Card>
       <CardHeader>
@@ -103,13 +119,11 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
               <Badge variant="secondary" className="ml-2">
                 {processes.summary.totalClaude} Claude sessions
               </Badge>
-              {maxSessions !== undefined && (
+              {maxSessions !== undefined && maxSessionsPerWorkspace > 0 && (
                 <Badge
-                  variant={
-                    processes.summary.totalClaude >= maxSessions * 0.8 ? 'destructive' : 'outline'
-                  }
+                  variant={maxSessionsPerWorkspace >= maxSessions * 0.8 ? 'destructive' : 'outline'}
                 >
-                  Max: {maxSessions} per workspace
+                  Max per workspace: {maxSessionsPerWorkspace}/{maxSessions}
                 </Badge>
               )}
             </>
