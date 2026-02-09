@@ -55,8 +55,12 @@ module.exports = {
     {
       name: "no-frontend-importing-backend",
       severity: "error",
-      comment: "Frontend (src/app) should not import backend directly - use API calls instead",
-      from: { path: "^src/app" },
+      comment:
+        "Frontend UI layers should not import backend directly - use API contracts/shared schemas instead",
+      from: {
+        path: "^src/(client|components|frontend)",
+        pathNot: "^src/frontend/lib/trpc\\.ts$",
+      },
       to: { path: "^src/backend" },
     },
     {

@@ -1,6 +1,6 @@
 import { CheckCircle2, FileJson } from 'lucide-react';
-import type { FactoryConfig } from '@/backend/services/factory-config.service';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 
 interface FactoryConfigScriptsProps {
   factoryConfig: FactoryConfig;
