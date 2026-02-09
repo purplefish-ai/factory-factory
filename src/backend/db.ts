@@ -5,9 +5,11 @@ import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from '@prisma-gen/client';
 import { getDatabasePath } from './lib/env';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+declare global {
+  var prismaGlobal: PrismaClient | undefined;
+}
+
+const globalForPrisma = globalThis;
 
 /**
  * Ensure the directory for the database file exists
@@ -43,10 +45,10 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+export const prisma = globalForPrisma.prismaGlobal ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaGlobal = prisma;
 }
 
 /**

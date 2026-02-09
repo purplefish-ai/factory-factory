@@ -7,14 +7,12 @@
 
 import pLimit from 'p-limit';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from './constants';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { prReviewFixerService, type ReviewCommentDetails } from './pr-review-fixer.service';
 
 const logger = createLogger('pr-review-monitor');
-
-const PR_REVIEW_MONITOR_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
-const MAX_CONCURRENT_CHECKS = 5;
 
 interface PRReviewSettings {
   autoFixEnabled: boolean;
@@ -25,7 +23,7 @@ interface PRReviewSettings {
 class PRReviewMonitorService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
-  private readonly checkLimit = pLimit(MAX_CONCURRENT_CHECKS);
+  private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.prReviewMonitorWorkspaceChecks);
 
   /**
    * Start the PR review monitor
@@ -41,7 +39,9 @@ class PRReviewMonitorService {
     // Start the continuous monitoring loop
     this.monitorLoop = this.runContinuousLoop();
 
-    logger.info('PR review monitor started', { intervalMs: PR_REVIEW_MONITOR_INTERVAL_MS });
+    logger.info('PR review monitor started', {
+      intervalMs: SERVICE_INTERVAL_MS.prReviewMonitorPoll,
+    });
   }
 
   /**
@@ -72,7 +72,7 @@ class PRReviewMonitorService {
 
       // Wait for the interval before next check (unless shutting down)
       if (!this.isShuttingDown) {
-        await this.sleep(PR_REVIEW_MONITOR_INTERVAL_MS);
+        await this.sleep(SERVICE_INTERVAL_MS.prReviewMonitorPoll);
       }
     }
   }

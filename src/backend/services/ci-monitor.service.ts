@@ -10,20 +10,17 @@ import pLimit from 'p-limit';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { ciFixerService } from './ci-fixer.service';
+import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from './constants';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
 
 const logger = createLogger('ci-monitor');
 
-const CI_MONITOR_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
-const MAX_CONCURRENT_CHECKS = 5;
-const MIN_NOTIFICATION_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes - don't spam sessions
-
 class CIMonitorService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
-  private readonly checkLimit = pLimit(MAX_CONCURRENT_CHECKS);
+  private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ciMonitorWorkspaceChecks);
 
   /**
    * Start the CI monitor
@@ -39,7 +36,7 @@ class CIMonitorService {
     // Start the continuous monitoring loop
     this.monitorLoop = this.runContinuousLoop();
 
-    logger.info('CI monitor started', { intervalMs: CI_MONITOR_INTERVAL_MS });
+    logger.info('CI monitor started', { intervalMs: SERVICE_INTERVAL_MS.ciMonitorPoll });
   }
 
   /**
@@ -70,7 +67,7 @@ class CIMonitorService {
 
       // Wait for the interval before next check (unless shutting down)
       if (!this.isShuttingDown) {
-        await this.sleep(CI_MONITOR_INTERVAL_MS);
+        await this.sleep(SERVICE_INTERVAL_MS.ciMonitorPoll);
       }
     }
   }
@@ -289,7 +286,7 @@ class CIMonitorService {
 
     // Check if enough time has passed since last notification
     const timeSinceLastNotification = Date.now() - lastNotifiedAt.getTime();
-    return timeSinceLastNotification >= MIN_NOTIFICATION_INTERVAL_MS;
+    return timeSinceLastNotification >= SERVICE_INTERVAL_MS.ciMonitorMinNotification;
   }
 
   /**

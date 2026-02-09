@@ -116,6 +116,7 @@
     "biome-rules/no-await-import.grit",
     "biome-rules/no-native-dialogs.grit",
     "biome-rules/no-next-directives.grit",
+    "biome-rules/no-zod-any.grit",
     "biome-rules/no-unsafe-json-parse-cast.grit",
     "biome-rules/no-unsafe-resolver-cast.grit"
   ],

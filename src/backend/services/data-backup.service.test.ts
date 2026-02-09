@@ -496,8 +496,8 @@ describe('DataBackupService', () => {
               runScriptPid: null,
               runScriptPort: null,
               runScriptStartedAt: null,
-              // Cast to RunScriptStatus to simulate old v1 data with PAUSED value
-              runScriptStatus: 'PAUSED' as unknown as RunScriptStatus,
+              // v1 exports can contain legacy PAUSED status
+              runScriptStatus: 'PAUSED',
               prUrl: null,
               githubIssueNumber: null,
               githubIssueUrl: null,

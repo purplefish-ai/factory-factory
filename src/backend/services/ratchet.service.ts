@@ -13,6 +13,7 @@ import { sessionDomainService } from '@/backend/domains/session/session-domain.s
 import { buildRatchetDispatchPrompt } from '../prompts/ratchet-dispatch';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { SERVICE_CACHE_TTL_MS, SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from './constants';
 import { fixerSessionService } from './fixer-session.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
@@ -20,10 +21,7 @@ import { sessionService } from './session.service';
 
 const logger = createLogger('ratchet');
 
-const RATCHET_POLL_INTERVAL_MS = 60_000; // 1 minute
-const MAX_CONCURRENT_CHECKS = 5;
 const RATCHET_WORKFLOW = 'ratchet';
-const AUTHENTICATED_USERNAME_CACHE_TTL_MS = 5 * 60_000;
 
 interface PRStateInfo {
   ciStatus: CIStatus;
@@ -91,7 +89,7 @@ interface WorkspaceWithPR {
 class RatchetService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
-  private readonly checkLimit = pLimit(MAX_CONCURRENT_CHECKS);
+  private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
 
   start(): void {
@@ -102,7 +100,7 @@ class RatchetService {
     this.isShuttingDown = false;
     this.monitorLoop = this.runContinuousLoop();
 
-    logger.info('Ratchet service started', { intervalMs: RATCHET_POLL_INTERVAL_MS });
+    logger.info('Ratchet service started', { intervalMs: SERVICE_INTERVAL_MS.ratchetPoll });
   }
 
   async stop(): Promise<void> {
@@ -126,7 +124,7 @@ class RatchetService {
       }
 
       if (!this.isShuttingDown) {
-        await this.sleep(RATCHET_POLL_INTERVAL_MS);
+        await this.sleep(SERVICE_INTERVAL_MS.ratchetPoll);
       }
     }
   }
@@ -865,7 +863,7 @@ class RatchetService {
     const username = await githubCLIService.getAuthenticatedUsername();
     this.cachedAuthenticatedUsername = {
       value: username,
-      expiresAtMs: nowMs + AUTHENTICATED_USERNAME_CACHE_TTL_MS,
+      expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
     };
     return username;
   }

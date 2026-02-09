@@ -16,6 +16,7 @@ import type {
   WebSocketMessage,
 } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS, MessageState } from '@/lib/claude-types';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   type ChatAction,
   type ChatState,
@@ -1544,7 +1545,7 @@ describe('chatReducer', () => {
 
   describe('unknown action', () => {
     it('should return state unchanged for unknown action', () => {
-      const unknownAction = { type: 'UNKNOWN_ACTION' } as unknown as ChatAction;
+      const unknownAction = unsafeCoerce<ChatAction>({ type: 'UNKNOWN_ACTION' });
       const newState = chatReducer(initialState, unknownAction);
 
       expect(newState).toBe(initialState);
@@ -1911,14 +1912,14 @@ describe('chatReducer', () => {
 
 describe('createActionFromWebSocketMessage', () => {
   it('returns null for unknown legacy status-like message', () => {
-    const wsMessage = { type: 'status' } as unknown as WebSocketMessage;
+    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'status' });
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
   });
 
   it('returns null for unknown legacy lifecycle-like messages', () => {
-    const wsMessage = { type: 'starting' } as unknown as WebSocketMessage;
+    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'starting' });
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -1939,7 +1940,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for claude_message without data', () => {
-    const wsMessage = { type: 'claude_message' } as unknown as WebSocketMessage;
+    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'claude_message' });
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -1953,7 +1954,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for error message without message field', () => {
-    const wsMessage = { type: 'error' } as unknown as WebSocketMessage;
+    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'error' });
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -1975,7 +1976,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for sessions message without sessions field', () => {
-    const wsMessage = { type: 'sessions' } as unknown as WebSocketMessage;
+    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'sessions' });
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -2058,7 +2059,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should return null for unknown message type', () => {
-    const wsMessage = { type: 'unknown_type' } as unknown as WebSocketMessage;
+    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'unknown_type' });
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();

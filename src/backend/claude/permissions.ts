@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import type { EventEmitterEmitArgs, EventEmitterListener } from '../lib/event-emitter-types';
 import type { ControlResponseBody } from './protocol';
 import type {
   AllowResponseData,
@@ -590,8 +591,7 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     event: 'request_timeout',
     handler: (requestId: string, request: CanUseToolRequest | HookCallbackRequest) => void
   ): this;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
-  override on(event: string, handler: (...args: any[]) => void): this {
+  override on(event: string, handler: EventEmitterListener): this {
     return super.on(event, handler);
   }
 
@@ -607,10 +607,8 @@ export class DeferredHandler extends EventEmitter implements PermissionHandler {
     requestId: string,
     request: CanUseToolRequest | HookCallbackRequest
   ): boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
-  override emit(event: string, ...args: any[]): boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
-  override emit(_event: string, ..._args: any[]): boolean {
+  override emit(event: string, ...args: EventEmitterEmitArgs): boolean;
+  override emit(_event: string, ..._args: EventEmitterEmitArgs): boolean {
     // The _event and _args are forwarded to super but need underscore prefix
     // to satisfy TypeScript for overload resolution
     return super.emit(_event, ..._args);

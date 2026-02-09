@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { ClaudeClientOptions, ClaudeClient as ClaudeClientType } from '../claude/index';
 import { ClaudeClient } from '../claude/index';
 import { SessionProcessManager } from './session.process-manager';
@@ -37,7 +38,7 @@ describe('SessionProcessManager', () => {
 
     expect(createSpy).toHaveBeenCalledTimes(1);
 
-    resolveCreate(client as unknown as ClaudeClientType);
+    resolveCreate(unsafeCoerce<ClaudeClientType>(client));
 
     const [client1, client2] = await Promise.all([first, second]);
     expect(client1).toBe(client);
@@ -50,7 +51,7 @@ describe('SessionProcessManager', () => {
     const context = { workspaceId: 'w1', workingDir: '/tmp' };
     const client = new MockClaudeClient();
 
-    vi.spyOn(ClaudeClient, 'create').mockResolvedValue(client as unknown as ClaudeClientType);
+    vi.spyOn(ClaudeClient, 'create').mockResolvedValue(unsafeCoerce<ClaudeClientType>(client));
 
     const onSessionId = vi.fn().mockResolvedValue(undefined);
     const onExit = vi.fn().mockResolvedValue(undefined);
