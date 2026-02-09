@@ -34,13 +34,12 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       claudeProjectPath = workspaceProjectPath;
     }
 
-    const existingClient = sessionService.getClient(sessionId);
+    const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
       sessionId,
       claudeProjectPath,
       claudeSessionId: dbSession.claudeSessionId,
-      isRunning: existingClient?.isRunning() ?? false,
-      isWorking: existingClient?.isWorking() ?? false,
+      sessionRuntime,
       loadRequestId: message.loadRequestId,
     });
 

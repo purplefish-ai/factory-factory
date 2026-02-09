@@ -3,10 +3,12 @@ import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { MessageState } from '@/shared/claude';
 import { resumeModesSchema } from '@/shared/schemas/persisted-stores.schema';
 import { pathExists } from '../lib/file-helpers';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { chatMessageHandlerService } from './chat-message-handlers.service';
 import { FactoryConfigService } from './factory-config.service';
 import { gitOpsService } from './git-ops.service';
 import { githubCLIService } from './github-cli.service';
@@ -534,39 +536,43 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
     // Build the initial prompt - use GitHub issue content if available
     const issuePrompt = await buildInitialPromptFromGitHubIssue(workspaceId);
 
-    // If we have a GitHub issue prompt, inject it into the message state
-    // so it appears in the chat UI as a user message
-    if (issuePrompt) {
-      sessionDomainService.injectCommittedUserMessage(session.id, issuePrompt);
-    }
-
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')
     await sessionService.startClaudeSession(session.id, { initialPrompt: '' });
 
-    // If we have a GitHub issue prompt, send it via sendMessage so it goes through
-    // the normal event pipeline and responses are properly captured
+    // Route the issue prompt through the queue pipeline so runtime and replay remain consistent.
     if (issuePrompt) {
-      const client = sessionService.getClient(session.id);
-      if (client) {
-        try {
-          await client.sendMessage(issuePrompt);
-        } catch (error) {
-          logger.warn('Failed to send GitHub issue prompt to session', {
-            workspaceId,
-            sessionId: session.id,
-            error,
-          });
-        }
-        logger.info('Sent GitHub issue prompt to session via sendMessage', {
+      const messageId = `auto-issue-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const queued = {
+        id: messageId,
+        text: issuePrompt,
+        timestamp: new Date().toISOString(),
+        settings: {
+          selectedModel: session.model,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      };
+      const enqueueResult = sessionDomainService.enqueue(session.id, queued);
+      if ('error' in enqueueResult) {
+        logger.warn('Failed to enqueue GitHub issue prompt for auto-started session', {
           workspaceId,
           sessionId: session.id,
+          error: enqueueResult.error,
         });
       } else {
-        logger.warn('Could not get client to send GitHub issue prompt', {
-          workspaceId,
-          sessionId: session.id,
+        sessionDomainService.emitDelta(session.id, {
+          type: 'message_state_changed',
+          id: messageId,
+          newState: MessageState.ACCEPTED,
+          queuePosition: enqueueResult.position,
+          userMessage: {
+            text: queued.text,
+            timestamp: queued.timestamp,
+            settings: queued.settings,
+          },
         });
+        await chatMessageHandlerService.tryDispatchNextMessage(session.id);
       }
     }
 

@@ -499,8 +499,7 @@ class ChatEventForwarderService {
       this.routeInteractiveRequest(dbSessionId, request, client);
     });
 
-    on('exit', (result) => {
-      sessionDomainService.markProcessExit(dbSessionId, result.code);
+    on('exit', () => {
       this.removeForwardingListeners(dbSessionId, client);
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);

@@ -463,9 +463,28 @@ class SessionStoreService {
     store: SessionStore,
     updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'> & {
       lastExit?: SessionRuntimeState['lastExit'];
+      updatedAt?: string;
     },
-    options?: { emitDelta?: boolean }
+    options?: { emitDelta?: boolean; replace?: boolean }
   ): void {
+    if (options?.replace) {
+      store.runtime = {
+        phase: updates.phase,
+        processState: updates.processState,
+        activity: updates.activity,
+        ...(Object.hasOwn(updates, 'lastExit') ? { lastExit: updates.lastExit } : {}),
+        updatedAt: updates.updatedAt ?? new Date().toISOString(),
+      };
+
+      if (options?.emitDelta !== false) {
+        this.emitDelta(store.sessionId, {
+          type: 'session_runtime_updated',
+          sessionRuntime: store.runtime,
+        });
+      }
+      return;
+    }
+
     const hasExplicitLastExit = Object.hasOwn(updates, 'lastExit');
     store.runtime = {
       ...store.runtime,
@@ -473,7 +492,7 @@ class SessionStoreService {
       processState: updates.processState,
       activity: updates.activity,
       ...(hasExplicitLastExit ? { lastExit: updates.lastExit } : { lastExit: undefined }),
-      updatedAt: new Date().toISOString(),
+      updatedAt: updates.updatedAt ?? new Date().toISOString(),
     };
 
     if (options?.emitDelta !== false) {
@@ -488,39 +507,27 @@ class SessionStoreService {
     sessionId: string;
     claudeProjectPath: string | null;
     claudeSessionId: string | null;
-    isRunning: boolean;
-    isWorking: boolean;
+    sessionRuntime: SessionRuntimeState;
     loadRequestId?: string;
   }): Promise<void> {
-    const { sessionId, claudeProjectPath, claudeSessionId, isRunning, isWorking, loadRequestId } =
+    const { sessionId, claudeProjectPath, claudeSessionId, sessionRuntime, loadRequestId } =
       options;
     const store = this.getOrCreate(sessionId);
     store.lastKnownProjectPath = claudeProjectPath;
     store.lastKnownClaudeSessionId = claudeSessionId;
 
     await this.ensureHydrated(store, { claudeSessionId, claudeProjectPath });
-
-    if (isRunning) {
-      this.markRuntime(
-        store,
-        {
-          phase: isWorking ? 'running' : 'idle',
-          processState: 'alive',
-          activity: isWorking ? 'WORKING' : 'IDLE',
-        },
-        { emitDelta: false }
-      );
-    } else {
-      this.markRuntime(
-        store,
-        {
-          phase: 'idle',
-          processState: 'stopped',
-          activity: 'IDLE',
-        },
-        { emitDelta: false }
-      );
-    }
+    this.markRuntime(
+      store,
+      {
+        phase: sessionRuntime.phase,
+        processState: sessionRuntime.processState,
+        activity: sessionRuntime.activity,
+        ...(Object.hasOwn(sessionRuntime, 'lastExit') ? { lastExit: sessionRuntime.lastExit } : {}),
+        updatedAt: sessionRuntime.updatedAt,
+      },
+      { emitDelta: false, replace: true }
+    );
 
     this.forwardReplayBatch(store, {
       loadRequestId,
@@ -530,8 +537,7 @@ class SessionStoreService {
 
     logger.info('Session subscribed', {
       sessionId,
-      isRunning,
-      isWorking,
+      sessionRuntime,
       transcriptCount: store.transcript.length,
       queueCount: store.queue.length,
     });
@@ -868,6 +874,25 @@ class SessionStoreService {
           });
         });
     }
+  }
+
+  getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
+    return { ...this.getOrCreate(sessionId).runtime };
+  }
+
+  setRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeState, emitDelta = true): void {
+    const store = this.getOrCreate(sessionId);
+    this.markRuntime(
+      store,
+      {
+        phase: runtime.phase,
+        processState: runtime.processState,
+        activity: runtime.activity,
+        ...(Object.hasOwn(runtime, 'lastExit') ? { lastExit: runtime.lastExit } : {}),
+        updatedAt: runtime.updatedAt,
+      },
+      { emitDelta, replace: true }
+    );
   }
 
   emitSessionSnapshot(sessionId: string, loadRequestId?: string): void {
