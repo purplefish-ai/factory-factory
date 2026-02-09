@@ -155,4 +155,5 @@ echo "  - $OUTPUT_DIR/deps-$TIMESTAMP.json (raw dependency data)"
 echo "  - $OUTPUT_DIR/metrics-$TIMESTAMP.json (analysis report)"
 echo
 echo "To compare with previous months:"
-echo "  diff <(jq .metrics .architecture/metrics-$(date -v-1m +%Y-%m).json) <(jq .metrics .architecture/metrics-$TIMESTAMP.json)"
+echo "  # Replace YYYY-MM with the previous month"
+echo "  diff <(jq .metrics .architecture/metrics-YYYY-MM.json) <(jq .metrics .architecture/metrics-$TIMESTAMP.json)"

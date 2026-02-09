@@ -1,7 +1,7 @@
 # Factory Factory Backend Architecture Analysis
 
 **Generated:** 2026-02-09
-**Total Modules Analyzed:** 202
+**Backend Modules Analyzed:** 202
 **Circular Dependencies:** 0 ✓
 
 ---
