@@ -9,9 +9,9 @@ const mockGetEnvironment = vi.fn();
 const mockGetAppVersion = vi.fn();
 const mockGetApiUsageStats = vi.fn();
 
-vi.mock('../../db', () => ({
-  prisma: {
-    $queryRaw: () => mockQueryRaw(),
+vi.mock('../../resource_accessors/health.accessor', () => ({
+  healthAccessor: {
+    checkDatabaseConnection: () => mockQueryRaw(),
   },
 }));
 

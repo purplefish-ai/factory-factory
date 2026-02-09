@@ -89,11 +89,10 @@ module.exports = {
       name: "only-accessors-import-db",
       severity: "error",
       comment:
-        "Database client should be imported only by resource accessors (plus temporary allowlist while migrating legacy services)",
+        "Database client should be imported only by resource accessors",
       from: {
         path: "^src/backend",
-        pathNot:
-          "^src/backend/(db\\.ts|server\\.ts|resource_accessors/)|^src/backend/routers/api/health\\.router\\.ts$|^src/backend/services/(workspace-state-machine|run-script-state-machine|fixer-session|data-backup)\\.service\\.ts$|^src/backend/services/.*\\.test\\.ts$",
+        pathNot: "^src/backend/(db\\.ts|server\\.ts|resource_accessors/)|^src/backend/.*\\.test\\.ts$",
       },
       to: { path: "^src/backend/db\\.ts$" },
     },
