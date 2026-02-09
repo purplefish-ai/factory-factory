@@ -73,6 +73,8 @@ export function SlashCommandPalette({
   const containerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedIndexRef = useRef(selectedIndex);
+  const prevFilterRef = useRef(filter);
 
   // Filter commands based on the filter text (case-insensitive)
   const filteredCommands = useMemo(
@@ -80,12 +82,21 @@ export function SlashCommandPalette({
     [commands, filter]
   );
 
-  // Reset selection when filtered results change or palette opens.
+  // Reset selection when filter changes or palette opens
   useEffect(() => {
-    if (isOpen && filteredCommands.length > 0) {
+    const filterChanged = prevFilterRef.current !== filter;
+    prevFilterRef.current = filter;
+
+    if (isOpen && filterChanged) {
       setSelectedIndex(0);
+      selectedIndexRef.current = 0; // Update ref immediately to avoid stale reads
     }
-  }, [isOpen, filteredCommands]);
+  }, [isOpen, filter]);
+
+  // Keep selectedIndex ref in sync with state
+  useEffect(() => {
+    selectedIndexRef.current = selectedIndex;
+  }, [selectedIndex]);
 
   // Keep refs array in sync with filtered list length
   useEffect(() => {
@@ -149,12 +160,13 @@ export function SlashCommandPalette({
    */
   const selectCurrentCommand = useCallback(() => {
     const hasMatches = filteredCommands.length > 0;
-    if (hasMatches && filteredCommands[selectedIndex]) {
-      onSelect(filteredCommands[selectedIndex]);
+    const currentIndex = selectedIndexRef.current;
+    if (hasMatches && filteredCommands[currentIndex]) {
+      onSelect(filteredCommands[currentIndex]);
       return true;
     }
     return false;
-  }, [filteredCommands, selectedIndex, onSelect]);
+  }, [filteredCommands, onSelect]);
 
   /**
    * Handle Enter key - select command or close and passthrough
