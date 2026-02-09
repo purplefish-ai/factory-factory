@@ -5,6 +5,7 @@ import { Root } from './root';
 import AdminPage from './routes/admin';
 // Route components
 import HomePage from './routes/home';
+import LogsPage from './routes/logs';
 import ProjectsListPage from './routes/projects/list';
 import NewProjectPage from './routes/projects/new';
 import ProjectRedirectPage from './routes/projects/redirect';
@@ -73,6 +74,10 @@ export const router = createBrowserRouter([
       {
         path: 'admin',
         element: <AdminPage />,
+      },
+      {
+        path: 'logs',
+        element: <LogsPage />,
       },
     ],
   },

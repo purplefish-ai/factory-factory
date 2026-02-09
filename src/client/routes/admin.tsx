@@ -1,5 +1,6 @@
-import { Download, FileJson, RefreshCw } from 'lucide-react';
+import { Download, FileJson, FileText, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { FactoryConfigScripts } from '@/components/factory-config-scripts';
@@ -456,6 +457,53 @@ function DataBackupSection() {
   );
 }
 
+function ServerLogsSection() {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const utils = trpc.useUtils();
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const content = await utils.admin.downloadLogFile.fetch();
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `server-${new Date().toISOString().split('T')[0]}.log`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Log file downloaded');
+    } catch (error) {
+      toast.error(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="w-5 h-5" />
+          Server Logs
+        </CardTitle>
+        <CardDescription>View and search structured server log entries</CardDescription>
+      </CardHeader>
+      <CardContent className="flex gap-3">
+        <Link to="/logs">
+          <Button variant="outline">View Logs</Button>
+        </Link>
+        <Button variant="outline" onClick={handleDownload} disabled={isDownloading}>
+          <Download className="w-4 h-4 mr-2" />
+          {isDownloading ? 'Downloading...' : 'Download Log File'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboardPage() {
   const {
     data: stats,
@@ -527,6 +575,9 @@ export default function AdminDashboardPage() {
 
         {/* Data Backup */}
         <DataBackupSection />
+
+        {/* Server Logs */}
+        <ServerLogsSection />
       </div>
     </div>
   );
