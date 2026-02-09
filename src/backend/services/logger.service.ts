@@ -56,26 +56,29 @@ function getLogLevelPriority(level: LogLevel): number {
  * the console and the file.
  */
 let _logFileStream: WriteStream | null = null;
-let _logFileInitialized = false;
 let _logFilePath: string | null = null;
 
-function getLogFileStream(): WriteStream | null {
-  if (!_logFileInitialized) {
-    _logFileInitialized = true;
-    try {
-      const baseDir = process.env.BASE_DIR || join(homedir(), 'factory-factory');
-      const logsDir = join(baseDir, 'logs');
-      if (!existsSync(logsDir)) {
-        mkdirSync(logsDir, { recursive: true });
-      }
-      _logFilePath = join(logsDir, 'server.log');
-      _logFileStream = createWriteStream(_logFilePath, { flags: 'a' });
-      _logFileStream.on('error', () => {
-        _logFileStream = null;
-      });
-    } catch {
-      // If we can't create the log file, fall back to console-only
+function initLogFileStream(): WriteStream | null {
+  try {
+    const baseDir = process.env.BASE_DIR || join(homedir(), 'factory-factory');
+    const logsDir = join(baseDir, 'logs');
+    if (!existsSync(logsDir)) {
+      mkdirSync(logsDir, { recursive: true });
     }
+    _logFilePath = join(logsDir, 'server.log');
+    const stream = createWriteStream(_logFilePath, { flags: 'a' });
+    stream.on('error', () => {
+      _logFileStream = null;
+    });
+    return stream;
+  } catch {
+    return null;
+  }
+}
+
+function getLogFileStream(): WriteStream | null {
+  if (!_logFileStream) {
+    _logFileStream = initLogFileStream();
   }
   return _logFileStream;
 }

@@ -12,6 +12,7 @@ import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import { getLogFilePath } from '@/backend/services/logger.service';
 
 const execPromise = promisify(exec);
 
@@ -354,8 +355,7 @@ function printReadyBanner(opts: {
   }
   console.log(chalk.gray(`  Database:  ${opts.databasePath}`));
   console.log(chalk.gray(`  Mode:      ${opts.isDev ? 'development' : 'production'}`));
-  const baseDir = process.env.BASE_DIR || join(homedir(), 'factory-factory');
-  console.log(chalk.gray(`  Logs:      ${join(baseDir, 'logs', 'server.log')}`));
+  console.log(chalk.gray(`  Logs:      ${getLogFilePath()}`));
   console.log(chalk.gray('  ─────────────────────────────────────'));
 }
 
