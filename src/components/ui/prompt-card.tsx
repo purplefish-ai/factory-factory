@@ -13,8 +13,8 @@ interface PromptCardProps {
   actions?: React.ReactNode;
   /** ARIA role for the card (default: 'alertdialog') */
   role?: 'alertdialog' | 'form' | 'dialog';
-  /** ARIA label for accessibility */
-  'aria-label'?: string;
+  /** Accessible name for the card when needed */
+  label?: string;
   /** Additional class names */
   className?: string;
 }
@@ -33,13 +33,13 @@ export function PromptCard({
   children,
   actions,
   role = 'alertdialog',
-  'aria-label': ariaLabel,
+  label,
   className,
 }: PromptCardProps) {
   return (
-    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-label is valid for alertdialog/dialog/form roles which are the supported role values
-    <div className={cn('border-b bg-muted/50 p-3', className)} role={role} aria-label={ariaLabel}>
+    <div className={cn('border-b bg-muted/50 p-3', className)} role={role}>
       <div className="flex items-start gap-3">
+        {label && <span className="sr-only">{label}</span>}
         <div className="shrink-0 mt-0.5">{icon}</div>
         <div className="flex-1 min-w-0">{children}</div>
         {actions && <div className="flex gap-2 shrink-0">{actions}</div>}

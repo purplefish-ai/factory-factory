@@ -331,8 +331,10 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       return;
     }
     if (projects && projects.length > 0 && !selectedProjectSlug) {
-      // biome-ignore lint/style/noNonNullAssertion: length > 0 checked above
-      const firstSlug = projects[0]!.slug;
+      const firstSlug = projects[0]?.slug;
+      if (!firstSlug) {
+        return;
+      }
       setSelectedProjectSlug(firstSlug);
       localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
     }

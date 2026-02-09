@@ -130,8 +130,11 @@ export function useTodoTracker(messages: ChatMessage[]): TodoState {
   return useMemo(() => {
     // Find the most recent TodoWrite tool call by scanning messages in reverse
     for (let i = messages.length - 1; i >= 0; i--) {
-      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
-      const todoState = extractTodosFromMessage(messages[i]!);
+      const message = messages[i];
+      if (!message) {
+        continue;
+      }
+      const todoState = extractTodosFromMessage(message);
       if (todoState) {
         return todoState;
       }

@@ -61,12 +61,11 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
 
   if (message.message && Array.isArray(message.message.content)) {
     const contentItems = message.message.content;
-    // biome-ignore lint/style/noNonNullAssertion: length === 1 checked
-    if (contentItems.length === 1 && isThinkingContent(contentItems[0]!)) {
+    const firstContent = contentItems[0];
+    if (contentItems.length === 1 && firstContent && isThinkingContent(firstContent)) {
       return (
         <ThinkingRenderer
-          // biome-ignore lint/style/noNonNullAssertion: length === 1 checked
-          text={contentItems[0]!.thinking}
+          text={firstContent.thinking}
           messageId={messageId}
           className={className}
         />
