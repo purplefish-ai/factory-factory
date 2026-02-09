@@ -8,6 +8,19 @@ import { createLogger } from './logger.service';
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
+const GH_TIMEOUT_MS = {
+  healthVersion: 5000,
+  healthAuth: 10_000,
+  userLookup: 10_000,
+  default: 30_000,
+  reviewDetails: 10_000,
+  diff: 60_000,
+} as const;
+
+const GH_MAX_BUFFER_BYTES = {
+  diff: 10 * 1024 * 1024, // 10MB buffer for large diffs
+} as const;
+
 /**
  * Zod schemas for gh CLI JSON responses
  */
@@ -332,7 +345,7 @@ class GitHubCLIService {
   async getAuthenticatedUsername(): Promise<string | null> {
     try {
       const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login'], {
-        timeout: 10_000,
+        timeout: GH_TIMEOUT_MS.userLookup,
       });
       return stdout.trim() || null;
     } catch {
@@ -346,13 +359,15 @@ class GitHubCLIService {
   async checkHealth(): Promise<GitHubCLIHealthStatus> {
     // Check if gh is installed
     try {
-      const { stdout: versionOutput } = await execFileAsync('gh', ['--version'], { timeout: 5000 });
+      const { stdout: versionOutput } = await execFileAsync('gh', ['--version'], {
+        timeout: GH_TIMEOUT_MS.healthVersion,
+      });
       const versionMatch = versionOutput.match(/gh version ([\d.]+)/);
       const version = versionMatch?.[1];
 
       // Check if authenticated
       try {
-        await execFileAsync('gh', ['auth', 'status'], { timeout: 10_000 });
+        await execFileAsync('gh', ['auth', 'status'], { timeout: GH_TIMEOUT_MS.healthAuth });
         return { isInstalled: true, isAuthenticated: true, version };
       } catch {
         return {
@@ -420,7 +435,7 @@ class GitHubCLIService {
           '--json',
           'number,state,isDraft,reviewDecision,mergedAt,updatedAt,statusCheckRollup',
         ],
-        { timeout: 30_000 }
+        { timeout: GH_TIMEOUT_MS.default }
       );
 
       return parseGhJson(prStatusSchema, stdout, 'getPRStatus');
@@ -572,7 +587,7 @@ class GitHubCLIService {
         '--json',
         'number,title,url,repository,author,createdAt,isDraft',
       ],
-      { timeout: 30_000 }
+      { timeout: GH_TIMEOUT_MS.default }
     );
 
     const basePRs = parseGhJson(z.array(basePRSchema), stdout, 'listReviewRequests');
@@ -593,7 +608,7 @@ class GitHubCLIService {
               '--json',
               'reviewDecision,additions,deletions,changedFiles',
             ],
-            { timeout: 10_000 }
+            { timeout: GH_TIMEOUT_MS.reviewDetails }
           );
           const details = parseGhJson(prDetailsSchema, prDetails, 'listReviewRequests:prDetails');
           return {
@@ -642,7 +657,7 @@ class GitHubCLIService {
           '--limit',
           '10',
         ],
-        { timeout: 30_000 }
+        { timeout: GH_TIMEOUT_MS.default }
       );
 
       const prs = parseGhJson(z.array(prListItemSchema), stdout, 'findPRForBranch');
@@ -679,7 +694,7 @@ class GitHubCLIService {
     const args = ['pr', 'review', String(prNumber), '--repo', `${owner}/${repo}`, '--approve'];
 
     try {
-      await execFileAsync('gh', args, { timeout: 30_000 });
+      await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
       logger.info('PR approved successfully', { owner, repo, prNumber });
     } catch (error) {
       const errorType = this.classifyError(error);
@@ -727,7 +742,7 @@ class GitHubCLIService {
       const { stdout } = await execFileAsync(
         'gh',
         ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
-        { timeout: 30_000 }
+        { timeout: GH_TIMEOUT_MS.default }
       );
 
       const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');
@@ -783,7 +798,7 @@ class GitHubCLIService {
       const { stdout } = await execFileAsync(
         'gh',
         ['pr', 'diff', String(prNumber), '--repo', repo],
-        { timeout: 60_000, maxBuffer: 10 * 1024 * 1024 } // 10MB buffer for large diffs
+        { timeout: GH_TIMEOUT_MS.diff, maxBuffer: GH_MAX_BUFFER_BYTES.diff }
       );
 
       return stdout;
@@ -824,7 +839,7 @@ class GitHubCLIService {
     }
 
     try {
-      await execFileAsync('gh', args, { timeout: 30_000 });
+      await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
       logger.info('PR review submitted successfully', { repo, prNumber, action });
     } catch (error) {
       const errorType = this.classifyError(error);
@@ -871,7 +886,7 @@ class GitHubCLIService {
         args.push('--assignee', assignee);
       }
 
-      const { stdout } = await execFileAsync('gh', args, { timeout: 30_000 });
+      const { stdout } = await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
 
       return parseGhJson(z.array(issueSchema), stdout, 'listIssues');
     } catch (error) {
@@ -912,7 +927,7 @@ class GitHubCLIService {
       const { stdout } = await execFileAsync(
         'gh',
         ['api', `repos/${repo}/pulls/${prNumber}/comments`, '--paginate'],
-        { timeout: 30_000 }
+        { timeout: GH_TIMEOUT_MS.default }
       );
 
       if (!stdout.trim()) {
@@ -954,7 +969,7 @@ class GitHubCLIService {
         'gh',
         ['pr', 'comment', String(prNumber), '--repo', repo, '--body', body],
         {
-          timeout: 30_000,
+          timeout: GH_TIMEOUT_MS.default,
         }
       );
       logger.info('PR comment added successfully', { repo, prNumber });
@@ -986,7 +1001,7 @@ class GitHubCLIService {
       await execFileAsync(
         'gh',
         ['issue', 'comment', String(issueNumber), '--repo', `${owner}/${repo}`, '--body', body],
-        { timeout: 30_000 }
+        { timeout: GH_TIMEOUT_MS.default }
       );
       logger.info('Issue comment added successfully', { owner, repo, issueNumber });
     } catch (error) {
@@ -1021,7 +1036,7 @@ class GitHubCLIService {
           '--json',
           'number,title,body,url,state,createdAt,author',
         ],
-        { timeout: 30_000 }
+        { timeout: GH_TIMEOUT_MS.default }
       );
 
       return parseGhJson(issueSchema, stdout, 'getIssue');
@@ -1050,7 +1065,7 @@ class GitHubCLIService {
       await execFileAsync(
         'gh',
         ['issue', 'close', String(issueNumber), '--repo', `${owner}/${repo}`],
-        { timeout: 30_000 }
+        { timeout: GH_TIMEOUT_MS.default }
       );
       logger.info('Issue closed successfully', { owner, repo, issueNumber });
     } catch (error) {
