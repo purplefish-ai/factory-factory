@@ -1,4 +1,4 @@
-import type { CIStatus, PRState, RatchetState } from '@prisma-gen/browser';
+import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@prisma-gen/browser';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
@@ -30,6 +30,7 @@ export interface ServerWorkspace {
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   ciObservation?: string | null;
+  runScriptStatus?: RunScriptStatus | null;
   cachedKanbanColumn?: string | null;
   stateComputedAt?: string | null;
   sidebarStatus?: WorkspaceSidebarStatus;

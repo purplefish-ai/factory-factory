@@ -164,6 +164,7 @@ class WorkspaceQueryService {
           ratchetButtonAnimated: flowState?.shouldAnimateRatchetButton ?? false,
           flowPhase: flowState?.phase ?? 'NO_PR',
           ciObservation: flowState?.ciObservation ?? 'CHECKS_UNKNOWN',
+          runScriptStatus: w.runScriptStatus,
           cachedKanbanColumn: w.cachedKanbanColumn,
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
           pendingRequestType: pendingRequestByWorkspace.get(w.id) ?? null,

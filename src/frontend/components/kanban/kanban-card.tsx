@@ -1,9 +1,17 @@
 import type { KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
-import { Archive, FileCheck, GitBranch, GitPullRequest, MessageCircleQuestion } from 'lucide-react';
+import {
+  Archive,
+  FileCheck,
+  GitBranch,
+  GitPullRequest,
+  MessageCircleQuestion,
+  Play,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
 import { cn } from '@/lib/utils';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -163,12 +171,24 @@ export function KanbanCard({
             <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
               {workspace.name}
             </CardTitle>
-            <CardStatusIndicator
-              isArchived={isArchived}
-              isWorking={workspace.isWorking}
-              status={workspace.status}
-              errorMessage={workspace.initErrorMessage}
-            />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {workspace.runScriptStatus === 'RUNNING' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Play className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Dev server running</TooltipContent>
+                </Tooltip>
+              )}
+              <CardStatusIndicator
+                isArchived={isArchived}
+                isWorking={workspace.isWorking}
+                status={workspace.status}
+                errorMessage={workspace.initErrorMessage}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

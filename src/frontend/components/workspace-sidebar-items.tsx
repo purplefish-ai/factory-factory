@@ -6,6 +6,7 @@ import {
   GitPullRequest,
   GripVertical,
   MessageCircleQuestion,
+  Play,
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
@@ -181,6 +182,16 @@ export function ActiveWorkspaceItem({
                   toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
                 }}
               />
+              {workspace.runScriptStatus === 'RUNNING' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Play className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Dev server running</TooltipContent>
+                </Tooltip>
+              )}
             </div>
 
             <div className="min-w-0 flex-1 space-y-0 self-start">
