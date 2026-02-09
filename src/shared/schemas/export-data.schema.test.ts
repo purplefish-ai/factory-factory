@@ -18,24 +18,40 @@ import {
 import { describe, expect, it } from 'vitest';
 import { exportedClaudeSessionSchema, exportedWorkspaceSchemaV2 } from './export-data.schema';
 
+type DefWithType = {
+  def?: {
+    type?: string;
+    innerType?: unknown;
+    options?: unknown[];
+    entries?: Record<string, string>;
+  };
+};
+
 describe('Enum sync with Prisma schema', () => {
   // Helper to extract Zod enum options from a Zod enum schema
-  // biome-ignore lint/suspicious/noExplicitAny: Zod schema introspection requires accessing internal structure
-  const getEnumOptions = (zodEnum: any): string[] => {
-    let enumSchema = zodEnum;
+  const getEnumOptions = (zodEnum: unknown): string[] => {
+    let enumSchema = zodEnum as DefWithType;
 
     // Unwrap optional/nullable wrappers (they use .def.type and .def.innerType)
     while (enumSchema.def?.type === 'optional' || enumSchema.def?.type === 'nullable') {
-      enumSchema = enumSchema.def.innerType;
+      enumSchema = enumSchema.def.innerType as DefWithType;
     }
 
     // Handle union types (like runScriptStatus which is z.union([RunScriptStatus, z.literal('PAUSED')]))
     if (enumSchema.def?.type === 'union') {
-      enumSchema = enumSchema.def.options[0];
+      const firstOption = enumSchema.def.options?.[0];
+      if (!firstOption) {
+        throw new Error('Expected union schema to contain at least one option');
+      }
+      enumSchema = firstOption as DefWithType;
     }
 
     // Extract enum values from the def property
-    return Object.keys(enumSchema.def.entries);
+    const entries = enumSchema.def?.entries;
+    if (!entries) {
+      throw new Error('Expected enum schema entries to be present');
+    }
+    return Object.keys(entries);
   };
 
   it('WorkspaceStatus matches Prisma', () => {

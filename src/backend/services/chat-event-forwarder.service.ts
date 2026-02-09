@@ -57,8 +57,7 @@ interface EventForLogging {
 // Constants
 // ============================================================================
 
-// biome-ignore lint/suspicious/noExplicitAny: EventEmitter listeners accept any arguments
-type AnyListener = (...args: any[]) => void;
+type AnyListener = Parameters<EventEmitter['on']>[1];
 
 interface RegisteredListener {
   event: string;

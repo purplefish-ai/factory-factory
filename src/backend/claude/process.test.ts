@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { ClaudeProcess } from './process';
 
 type TestClaudeProcess = EventEmitter & {
@@ -18,7 +19,7 @@ describe('ClaudeProcess', () => {
     const protocol = new EventEmitter();
     const recordActivity = vi.fn();
 
-    const claudeProcess = new EventEmitter() as unknown as TestClaudeProcess;
+    const claudeProcess = unsafeCoerce<TestClaudeProcess>(new EventEmitter());
     Object.setPrototypeOf(claudeProcess, ClaudeProcess.prototype);
 
     claudeProcess.protocol = protocol;

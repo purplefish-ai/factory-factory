@@ -1,4 +1,3 @@
-import type { WriteStream } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -56,7 +55,7 @@ function createMockStream() {
     once: vi.fn(),
     on: vi.fn(), // Add error handler registration
     writtenData,
-  } as unknown as WriteStream & { writtenData: string[] };
+  };
   return mockStream;
 }
 

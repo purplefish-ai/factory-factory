@@ -70,7 +70,10 @@ function normalizeRunScriptStatus(
  * Uses ?? to preserve any existing v2 fields in forward-filled/mixed backups.
  */
 function migrateWorkspaceV1ToV2(
-  v1: ExportedWorkspaceV1 | (ExportedWorkspaceV1 & Partial<ExportedWorkspaceV2>)
+  v1:
+    | ExportedWorkspaceV1
+    | (ExportedWorkspaceV1 & Partial<ExportedWorkspaceV2>)
+    | (ExportedWorkspaceV2 & Partial<ExportedWorkspaceV1>)
 ): ExportedWorkspaceV2 {
   const partial = v1 as Partial<ExportedWorkspaceV2>;
   return {
@@ -103,6 +106,7 @@ function migrateUserSettingsV1ToV2(
   v1:
     | ExportedUserSettingsV1
     | (ExportedUserSettingsV1 & Partial<ExportedUserSettingsV2> & Record<string, unknown>)
+    | (ExportedUserSettingsV2 & Partial<ExportedUserSettingsV1> & Record<string, unknown>)
 ): ExportedUserSettingsV2 {
   const partial = v1 as Partial<ExportedUserSettingsV2> & Record<string, unknown>;
   return {
@@ -142,7 +146,7 @@ function ensureWorkspaceV2Defaults(w: ExportedWorkspaceV2): ExportedWorkspaceV2 
       hasPrReviewLastCommentId: w.prReviewLastCommentId !== undefined,
     });
     // Fallback to migration if required fields are missing
-    return migrateWorkspaceV1ToV2(w as unknown as ExportedWorkspaceV1);
+    return migrateWorkspaceV1ToV2(w);
   }
 
   // Ensure optional Phase 3 fields have defaults
@@ -165,7 +169,7 @@ function ensureUserSettingsV2Defaults(s: ExportedUserSettingsV2): ExportedUserSe
       hasRatchetEnabled: s.ratchetEnabled !== undefined,
     });
     // Fallback to migration if required fields are missing
-    return migrateUserSettingsV1ToV2(s as unknown as ExportedUserSettingsV1);
+    return migrateUserSettingsV1ToV2(s);
   }
 
   return s;

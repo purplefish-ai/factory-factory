@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AppContext } from '../../app-context';
 
 // Mock dependencies before importing the router
@@ -23,7 +24,7 @@ describe('healthRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     app = express();
-    const appContext = {
+    const appContext = unsafeCoerce<AppContext>({
       services: {
         configService: {
           getEnvironment: () => mockGetEnvironment(),
@@ -39,7 +40,7 @@ describe('healthRouter', () => {
           getApiUsageStats: () => mockGetApiUsageStats(),
         },
       },
-    } as unknown as AppContext;
+    });
 
     app.use('/health', createHealthRouter(appContext));
 

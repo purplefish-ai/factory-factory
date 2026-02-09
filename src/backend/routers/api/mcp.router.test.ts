@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AppContext } from '../../app-context';
 
 // Mock dependencies before importing the router
@@ -17,10 +18,10 @@ function createMockReqRes(body: Record<string, unknown> = {}) {
     body,
   } as Request;
 
-  const res = {
+  const res = unsafeCoerce<Response>({
     status: vi.fn().mockReturnThis(),
     json: vi.fn().mockReturnThis(),
-  } as unknown as Response;
+  });
 
   const next = vi.fn() as NextFunction;
 
@@ -51,7 +52,7 @@ describe('mcpRouter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const appContext = {
+    const appContext = unsafeCoerce<AppContext>({
       services: {
         createLogger: () => ({
           info: vi.fn(),
@@ -60,7 +61,7 @@ describe('mcpRouter', () => {
           error: vi.fn(),
         }),
       },
-    } as unknown as AppContext;
+    });
     router = createMcpRouter(appContext);
     executeHandler = getExecuteHandler(router);
   });
