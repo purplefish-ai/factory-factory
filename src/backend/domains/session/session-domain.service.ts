@@ -1,5 +1,5 @@
 import { sessionStoreService } from '@/backend/services/session-store.service';
-import type { ChatMessage, ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
+import type { ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 
 class SessionDomainService {
@@ -137,5 +137,3 @@ class SessionDomainService {
 }
 
 export const sessionDomainService = new SessionDomainService();
-
-export type { ChatMessage };
