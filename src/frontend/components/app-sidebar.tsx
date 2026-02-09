@@ -60,6 +60,51 @@ import {
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
+/**
+ * Hook that suppresses stale clicks fired by @dnd-kit after a drag ends.
+ * When the PointerSensor releases, the browser fires a click on the underlying
+ * <a> which bypasses React Router and causes a full-page navigation.  This hook
+ * attaches a capture-phase click listener to a container ref that blocks clicks
+ * while a drag is active.  It also pauses a polling flag during the drag.
+ */
+function useDragClickSuppression() {
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const suppress = (e: MouseEvent) => {
+      if (isDraggingRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    container.addEventListener('click', suppress, true);
+    return () => container.removeEventListener('click', suppress, true);
+  }, []);
+
+  const onDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+    setIsDragActive(true);
+  }, []);
+
+  const onDragEnd = useCallback(() => {
+    setTimeout(() => {
+      isDraggingRef.current = false;
+    }, 0);
+    setTimeout(() => {
+      setIsDragActive(false);
+    }, 500);
+  }, []);
+
+  return { containerRef, isDragActive, onDragStart, onDragEnd };
+}
+
 function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
   return match ? (match[1] as string) : null;
@@ -74,6 +119,7 @@ type AppSidebarMockData = {
   };
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: drag-pause ternary pushes score to 16
 export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const location = useLocation();
   const pathname = location.pathname;
@@ -101,10 +147,21 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
   const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
 
+  // Suppress stale clicks from @dnd-kit drag-end and pause polling during drag
+  const {
+    containerRef: dndContainerRef,
+    isDragActive,
+    onDragStart: handleDragStart,
+    onDragEnd: handleDragEndCleanup,
+  } = useDragClickSuppression();
+
   // Fetch unified project summary state (workspaces + working status + git stats + review count)
   const { data: projectStateData } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
-    { enabled: !!selectedProjectId && !isMocked, refetchInterval: isMocked ? false : 2000 }
+    {
+      enabled: !!selectedProjectId && !isMocked,
+      refetchInterval: isMocked || isDragActive ? false : 2000,
+    }
   );
   const projectState = mockData?.projectState ?? projectStateData;
 
@@ -192,6 +249,8 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   // Handle drag end - persist new order
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      handleDragEndCleanup();
+
       const { active, over } = event;
 
       if (!over || active.id === over.id || !selectedProjectId) {
@@ -219,7 +278,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         workspaceIds: newOrder,
       });
     },
-    [workspaceList, selectedProjectId, updateWorkspaceOrder]
+    [workspaceList, selectedProjectId, updateWorkspaceOrder, handleDragEndCleanup]
   );
 
   // Use shared workspace creation hook, passing sidebar's existing names to avoid a redundant query
@@ -407,46 +466,49 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
               </button>
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
-                  strategy={verticalListSortingStrategy}
+              <div ref={dndContainerRef}>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
                 >
-                  <SidebarMenu className="gap-2 p-1">
-                    {workspaceList.map((workspace) => {
-                      const isCreatingItem = workspace.uiState === 'creating';
+                  <SortableContext
+                    items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <SidebarMenu className="gap-2 p-1">
+                      {workspaceList.map((workspace) => {
+                        const isCreatingItem = workspace.uiState === 'creating';
 
-                      // Creating placeholder - non-clickable, not sortable
-                      if (isCreatingItem) {
-                        return <CreatingWorkspaceItem key={workspace.id} />;
-                      }
+                        // Creating placeholder - non-clickable, not sortable
+                        if (isCreatingItem) {
+                          return <CreatingWorkspaceItem key={workspace.id} />;
+                        }
 
-                      return (
-                        <SortableWorkspaceItem
-                          key={workspace.id}
-                          workspace={workspace}
-                          isActive={currentWorkspaceId === workspace.id}
-                          selectedProjectId={selectedProjectId}
-                          selectedProjectSlug={selectedProjectSlug}
-                          onArchiveRequest={handleArchiveRequest}
-                          disableRatchetAnimation={isKanbanView}
-                          needsAttention={needsAttention}
-                          clearAttention={clearAttention}
-                        />
-                      );
-                    })}
-                    {workspaceList.length === 0 && (
-                      <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                        No active workspaces
-                      </div>
-                    )}
-                  </SidebarMenu>
-                </SortableContext>
-              </DndContext>
+                        return (
+                          <SortableWorkspaceItem
+                            key={workspace.id}
+                            workspace={workspace}
+                            isActive={currentWorkspaceId === workspace.id}
+                            selectedProjectId={selectedProjectId}
+                            selectedProjectSlug={selectedProjectSlug}
+                            onArchiveRequest={handleArchiveRequest}
+                            disableRatchetAnimation={isKanbanView}
+                            needsAttention={needsAttention}
+                            clearAttention={clearAttention}
+                          />
+                        );
+                      })}
+                      {workspaceList.length === 0 && (
+                        <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                          No active workspaces
+                        </div>
+                      )}
+                    </SidebarMenu>
+                  </SortableContext>
+                </DndContext>
+              </div>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

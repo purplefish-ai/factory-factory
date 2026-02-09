@@ -1,3 +1,6 @@
+// DEBUG: detect what triggers full-page refreshes (remove when done)
+import './debug-page-refresh';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './globals.css';
