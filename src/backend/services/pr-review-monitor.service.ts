@@ -2,7 +2,7 @@
  * PR Review Monitor Service
  *
  * Watches all PRs for new review comments and triggers auto-fix sessions.
- * Runs on a 2-minute polling interval.
+ * Runs on a 3-minute polling interval with adaptive backoff on rate limits.
  */
 
 import pLimit from 'p-limit';
@@ -67,9 +67,10 @@ class PRReviewMonitorService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
-        const result = await this.checkAllWorkspaces();
-        // Reset backoff on successful check
-        if (result.checked > 0 && this.backoffMultiplier > 1) {
+        const backoffBefore = this.backoffMultiplier;
+        await this.checkAllWorkspaces();
+        // Reset backoff only if no rate limit errors increased it during this cycle
+        if (backoffBefore > 1 && this.backoffMultiplier === backoffBefore) {
           logger.info('PR review monitor check succeeded, resetting backoff', {
             previousMultiplier: this.backoffMultiplier,
           });
@@ -106,17 +107,20 @@ class PRReviewMonitorService {
    */
   private handleRateLimitError(error: unknown, workspaceId: string, prUrl: string): void {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const isRateLimitError =
-      errorMessage.toLowerCase().includes('429') ||
-      errorMessage.toLowerCase().includes('rate limit') ||
-      errorMessage.toLowerCase().includes('throttl');
+    const lowerMessage = errorMessage.toLowerCase();
+    const isRateLimit =
+      lowerMessage.includes('429') ||
+      lowerMessage.includes('rate limit') ||
+      lowerMessage.includes('throttl');
 
-    if (isRateLimitError && this.backoffMultiplier < this.maxBackoffMultiplier) {
-      this.backoffMultiplier = Math.min(this.backoffMultiplier * 2, this.maxBackoffMultiplier);
+    if (isRateLimit) {
+      if (this.backoffMultiplier < this.maxBackoffMultiplier) {
+        this.backoffMultiplier = Math.min(this.backoffMultiplier * 2, this.maxBackoffMultiplier);
+      }
       logger.warn('GitHub rate limit hit in PR review monitor, increasing backoff', {
         workspaceId,
         prUrl,
-        newBackoffMultiplier: this.backoffMultiplier,
+        backoffMultiplier: this.backoffMultiplier,
         nextDelayMs: SERVICE_INTERVAL_MS.prReviewMonitorPoll * this.backoffMultiplier,
       });
     } else {
