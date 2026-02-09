@@ -114,6 +114,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
       nextState = reduceSingleAction(nextState, replayAction);
     }
+    // Clear loading state after replay completes
+    // Only clear if still in loading phase (runtime updates during replay may have already changed it)
+    if (nextState.sessionStatus.phase === 'loading') {
+      nextState = reduceSingleAction(nextState, { type: 'SESSION_LOADING_END' });
+    }
     return nextState;
   }
 
