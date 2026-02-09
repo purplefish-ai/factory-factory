@@ -1,7 +1,10 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, Terminal } from 'lucide-react';
+import { Bot, Terminal, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -14,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { formatBytes, formatCpu, formatIdleTime } from '@/lib/formatters';
 import type { AppRouter } from '../../../frontend/lib/trpc';
+import { trpc } from '../../../frontend/lib/trpc';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 export type ProcessesData = RouterOutputs['admin']['getActiveProcesses'];
@@ -66,6 +70,28 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
   const hasClaudeProcesses = processes?.claude && processes.claude.length > 0;
   const hasTerminalProcesses = processes?.terminal && processes.terminal.length > 0;
   const hasNoProcesses = !(hasClaudeProcesses || hasTerminalProcesses);
+  const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(null);
+
+  const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
+  const utils = trpc.useUtils();
+
+  const stopSession = trpc.admin.stopClaudeSession.useMutation({
+    onSuccess: () => {
+      toast.success('Session stopped successfully');
+      utils.admin.getActiveProcesses.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to stop session: ${error.message}`);
+    },
+    onSettled: () => {
+      setStoppingSessionId(null);
+    },
+  });
+
+  const handleStopSession = (sessionId: string) => {
+    setStoppingSessionId(sessionId);
+    stopSession.mutate({ sessionId });
+  };
 
   return (
     <Card>
@@ -73,9 +99,20 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         <CardTitle className="flex items-center gap-2">
           Active Processes
           {processes?.summary && (
-            <Badge variant="secondary" className="ml-2">
-              {processes.summary.total} total
-            </Badge>
+            <>
+              <Badge variant="secondary" className="ml-2">
+                {processes.summary.totalClaude} Claude sessions
+              </Badge>
+              {maxSessions !== undefined && (
+                <Badge
+                  variant={
+                    processes.summary.totalClaude >= maxSessions * 0.8 ? 'destructive' : 'outline'
+                  }
+                >
+                  Max: {maxSessions} per workspace
+                </Badge>
+              )}
+            </>
           )}
         </CardTitle>
         <CardDescription>Claude and Terminal processes currently running</CardDescription>
@@ -99,6 +136,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                     <TableHead>PID</TableHead>
                     <TableHead>Resources</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -156,6 +194,21 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                               </span>
                             )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStopSession(process.sessionId)}
+                          disabled={
+                            stoppingSessionId === process.sessionId ||
+                            process.status === 'COMPLETED' ||
+                            process.status === 'FAILED'
+                          }
+                          title="Stop session"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
