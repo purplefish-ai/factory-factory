@@ -36,6 +36,9 @@ describe('SessionProcessManager', () => {
     const first = manager.getOrCreateClient('s1', options, handlers, context);
     const second = manager.getOrCreateClient('s1', options, handlers, context);
 
+    // Give the mutex time to queue and execute the first call
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     expect(createSpy).toHaveBeenCalledTimes(1);
 
     resolveCreate(unsafeCoerce<ClaudeClientType>(client));

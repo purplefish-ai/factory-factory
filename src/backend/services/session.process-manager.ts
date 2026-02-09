@@ -1,3 +1,4 @@
+import pLimit from 'p-limit';
 import { ClaudeClient, type ClaudeClientOptions } from '../claude/index';
 import type { ResourceUsage } from '../claude/process';
 import {
@@ -27,6 +28,7 @@ export class SessionProcessManager {
   private readonly clients = new Map<string, ClaudeClient>();
   private readonly pendingCreation = new Map<string, Promise<ClaudeClient>>();
   private readonly stoppingInProgress = new Set<string>();
+  private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private onClientCreatedCallback: ClientCreatedCallback | null = null;
 
   setOnClientCreated(callback: ClientCreatedCallback): void {
@@ -37,33 +39,47 @@ export class SessionProcessManager {
     return this.stoppingInProgress.has(sessionId);
   }
 
-  async getOrCreateClient(
+  getOrCreateClient(
     sessionId: string,
     options: ClaudeClientOptions,
     handlers: ClientEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<ClaudeClient> {
-    const existing = this.clients.get(sessionId);
-    if (existing?.isRunning()) {
-      logger.debug('Returning existing running client', { sessionId });
-      return existing;
+    // Get or create a per-session mutex with concurrency=1
+    // This ensures only one caller can proceed with creation at a time
+    let lock = this.creationLocks.get(sessionId);
+    if (!lock) {
+      lock = pLimit(1);
+      this.creationLocks.set(sessionId, lock);
     }
 
-    const pending = this.pendingCreation.get(sessionId);
-    if (pending) {
-      logger.debug('Waiting for pending client creation', { sessionId });
-      return pending;
-    }
+    // Atomically check and create within the lock to prevent race conditions
+    return lock(async () => {
+      // Check for existing running client
+      const existing = this.clients.get(sessionId);
+      if (existing?.isRunning()) {
+        logger.debug('Returning existing running client', { sessionId });
+        return existing;
+      }
 
-    logger.info('Creating new ClaudeClient', { sessionId, options });
-    const createPromise = this.createClient(sessionId, options, handlers, context);
-    this.pendingCreation.set(sessionId, createPromise);
+      // Check for pending creation
+      const pending = this.pendingCreation.get(sessionId);
+      if (pending) {
+        logger.debug('Waiting for pending client creation', { sessionId });
+        return pending;
+      }
 
-    try {
-      return await createPromise;
-    } finally {
-      this.pendingCreation.delete(sessionId);
-    }
+      // No existing or pending - create new client
+      logger.info('Creating new ClaudeClient', { sessionId, options });
+      const createPromise = this.createClient(sessionId, options, handlers, context);
+      this.pendingCreation.set(sessionId, createPromise);
+
+      try {
+        return await createPromise;
+      } finally {
+        this.pendingCreation.delete(sessionId);
+      }
+    });
   }
 
   getClient(sessionId: string): ClaudeClient | undefined {
@@ -122,6 +138,7 @@ export class SessionProcessManager {
     } finally {
       this.stoppingInProgress.delete(sessionId);
       this.clients.delete(sessionId);
+      this.creationLocks.delete(sessionId);
     }
   }
 
@@ -169,6 +186,7 @@ export class SessionProcessManager {
       client.removeAllListeners();
     }
     this.clients.clear();
+    this.creationLocks.clear();
 
     logger.info('All clients stopped and cleaned up');
   }
