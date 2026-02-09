@@ -26,8 +26,8 @@ export interface SessionRuntimeState {
 
 export function createInitialSessionRuntimeState(): SessionRuntimeState {
   return {
-    phase: 'loading',
-    processState: 'unknown',
+    phase: 'idle',
+    processState: 'stopped',
     activity: 'IDLE',
     updatedAt: new Date().toISOString(),
   };
