@@ -45,7 +45,7 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
 
   const prevDbSessionIdRef = useRef<string | null>(null);
   const loadedDraftRef = useRef<string>('');
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const prevDbSessionId = prevDbSessionIdRef.current;
