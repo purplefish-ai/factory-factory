@@ -1,6 +1,14 @@
 import { keepPreviousData } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeft, CalendarIcon, Download, Search, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  CalendarIcon,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Search,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -138,6 +146,7 @@ export default function LogsPage() {
   const [untilDate, setUntilDate] = useState<Date | undefined>();
   const [offset, setOffset] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Debounce search input
   useEffect(() => {
@@ -220,6 +229,18 @@ export default function LogsPage() {
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+
+  const toggleRow = (rowId: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) {
+        next.delete(rowId);
+      } else {
+        next.add(rowId);
+      }
+      return next;
+    });
+  };
 
   if (isLoading && !data) {
     return <Loading message="Loading logs..." />;
@@ -335,20 +356,58 @@ export default function LogsPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {data?.entries.map((entry, i) => (
-                <TableRow key={`${entry.timestamp}-${i}`}>
-                  <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(entry.timestamp).toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getLevelBadgeVariant(entry.level)}>{entry.level}</Badge>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{entry.component}</TableCell>
-                  <TableCell className="max-w-md truncate" title={entry.message}>
-                    {entry.message}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {data?.entries.map((entry, i) => {
+                const rowId = `${entry.timestamp}-${i}`;
+                const isExpanded = expandedRows.has(rowId);
+                // Reconstruct full log entry for JSON display
+                const fullEntry = {
+                  level: entry.level,
+                  timestamp: entry.timestamp,
+                  message: entry.message,
+                  context: entry.context,
+                };
+                return (
+                  <>
+                    <TableRow
+                      key={rowId}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => toggleRow(rowId)}
+                    >
+                      <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          {isExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getLevelBadgeVariant(entry.level)}>{entry.level}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{entry.component}</TableCell>
+                      <TableCell className="max-w-md truncate" title={entry.message}>
+                        {entry.message}
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && (
+                      <TableRow key={`${rowId}-expanded`}>
+                        <TableCell colSpan={4} className="bg-muted/30 p-4">
+                          <div className="space-y-2">
+                            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                              Raw JSON
+                            </div>
+                            <pre className="bg-background border rounded-md p-3 text-xs overflow-x-auto max-h-96 overflow-y-auto">
+                              {JSON.stringify(fullEntry, null, 2)}
+                            </pre>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
