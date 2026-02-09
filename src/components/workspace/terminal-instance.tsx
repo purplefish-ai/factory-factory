@@ -171,13 +171,6 @@ export function TerminalInstance({
       onClick={() => {
         terminalRef.current?.focus();
       }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') {
-          return;
-        }
-        event.preventDefault();
-        terminalRef.current?.focus();
-      }}
     />
   );
 }
