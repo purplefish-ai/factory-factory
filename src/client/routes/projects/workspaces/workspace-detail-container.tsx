@@ -153,8 +153,20 @@ export function WorkspaceDetailContainer() {
   );
 
   const handleArchiveRequest = useCallback(() => {
+    // If PR is merged, skip confirmation and archive immediately
+    if (workspace?.prState === 'MERGED') {
+      archiveWorkspace.mutate(
+        { id: workspaceId, commitUncommitted: hasUncommitted },
+        {
+          onError: handleArchiveError,
+        }
+      );
+      return;
+    }
+
+    // Otherwise show confirmation dialog
     setArchiveDialogOpen(true);
-  }, []);
+  }, [workspace?.prState, workspaceId, hasUncommitted, archiveWorkspace, handleArchiveError]);
 
   const handleBackToWorkspaces = useCallback(
     () => navigate(`/projects/${slug}/workspaces`),
