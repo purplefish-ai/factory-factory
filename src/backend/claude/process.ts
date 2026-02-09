@@ -9,6 +9,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { createLogger } from '../services/logger.service';
+import { CLAUDE_TIMEOUT_MS } from './constants';
 import { ClaudeProcessMonitor, type ResourceMonitoringOptions } from './monitoring';
 import { ClaudeProtocolIO } from './protocol-io';
 import { registerProcess, unregisterProcess } from './registry';
@@ -96,9 +97,6 @@ export interface ExitResult {
  */
 export class ClaudeProcess extends EventEmitter {
   readonly protocol: ClaudeProtocolIO;
-
-  /** Timeout for spawn/initialization in milliseconds */
-  private static readonly SPAWN_TIMEOUT = 30_000;
 
   private process: ChildProcess;
   private claudeSessionId: string | null = null;
@@ -202,7 +200,7 @@ export class ClaudeProcess extends EventEmitter {
     try {
       await ClaudeProcess.withTimeout(
         claudeProcess.initialize(options),
-        ClaudeProcess.SPAWN_TIMEOUT,
+        CLAUDE_TIMEOUT_MS.processSpawn,
         'Claude process spawn/initialization timed out'
       );
     } catch (error) {

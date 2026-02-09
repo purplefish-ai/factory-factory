@@ -87,13 +87,10 @@ class ChatMessageHandlerService {
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
-        sessionDomainService.markStarting(dbSessionId);
-
         const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
         if (!newClient) {
           // Re-queue the message at the front so it's not lost
           sessionDomainService.requeueFront(dbSessionId, msg);
-          sessionDomainService.markError(dbSessionId);
           return;
         }
         client = newClient;
@@ -115,12 +112,12 @@ class ChatMessageHandlerService {
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
         });
-        sessionDomainService.requeueFront(dbSessionId, msg);
         // Avoid clobbering markProcessExit() runtime/lastExit when the process
         // has already stopped and exit handling is in flight.
         if (client.isRunning()) {
           sessionDomainService.markIdle(dbSessionId, 'alive');
         }
+        sessionDomainService.requeueFront(dbSessionId, msg);
       }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
@@ -183,6 +180,7 @@ class ChatMessageHandlerService {
   ): Promise<ClaudeClient | null> {
     if (!this.clientCreator) {
       logger.error('[Chat WS] Client creator not set');
+      sessionDomainService.markError(dbSessionId);
       return null;
     }
 

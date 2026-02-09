@@ -1,4 +1,9 @@
 import { SessionStatus } from '@prisma-gen/client';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import {
+  createInitialSessionRuntimeState,
+  type SessionRuntimeState,
+} from '@/shared/session-runtime';
 import type { ClaudeClient, ClaudeClientOptions } from '../claude/index';
 import type { ResourceUsage } from '../claude/process';
 import type { RegisteredProcess } from '../claude/registry';
@@ -27,6 +32,10 @@ class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
   private readonly processManager: SessionProcessManager;
+
+  private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
+    return typeof client.isWorking === 'function' ? client.isWorking() : false;
+  }
 
   /**
    * Register a callback to be called when a client is created.
@@ -90,11 +99,29 @@ class SessionService {
       return;
     }
 
+    const current = this.getRuntimeSnapshot(sessionId);
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      ...current,
+      phase: 'stopping',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
+
     await this.processManager.stopClient(sessionId);
 
     await this.repository.updateSession(sessionId, {
       status: SessionStatus.IDLE,
       claudeProcessPid: null,
+    });
+
+    sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
+
+    // Manual stops can complete without an exit callback race; normalize state explicitly.
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
     });
 
     logger.info('Claude session stopped', { sessionId });
@@ -136,32 +163,64 @@ class SessionService {
     // Check for existing client first - fast path
     const existing = this.processManager.getClient(sessionId);
     if (existing) {
+      const isWorking = this.getClientWorkingState(existing);
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: isWorking ? 'running' : 'idle',
+        processState: 'alive',
+        activity: isWorking ? 'WORKING' : 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
       return existing;
     }
 
-    // Use processManager.getOrCreateClient() for race protection
-    // Build options first, then delegate to processManager
-    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-      thinkingEnabled: options?.thinkingEnabled,
-      permissionMode: options?.permissionMode,
-      model: options?.model,
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: 'starting',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
     });
 
-    const client = await this.processManager.getOrCreateClient(
-      sessionId,
-      clientOptions,
-      handlers,
-      context
-    );
+    try {
+      // Use processManager.getOrCreateClient() for race protection
+      // Build options first, then delegate to processManager
+      const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
+        thinkingEnabled: options?.thinkingEnabled,
+        permissionMode: options?.permissionMode,
+        model: options?.model,
+      });
 
-    // Update DB with running status and PID
-    // This is idempotent and safe even if called by concurrent callers
-    await this.repository.updateSession(sessionId, {
-      status: SessionStatus.RUNNING,
-      claudeProcessPid: client.getPid() ?? null,
-    });
+      const client = await this.processManager.getOrCreateClient(
+        sessionId,
+        clientOptions,
+        handlers,
+        context
+      );
 
-    return client;
+      // Update DB with running status and PID
+      // This is idempotent and safe even if called by concurrent callers
+      await this.repository.updateSession(sessionId, {
+        status: SessionStatus.RUNNING,
+        claudeProcessPid: client.getPid() ?? null,
+      });
+
+      const isWorking = this.getClientWorkingState(client);
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: isWorking ? 'running' : 'idle',
+        processState: 'alive',
+        activity: isWorking ? 'WORKING' : 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+
+      return client;
+    } catch (error) {
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'error',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      throw error;
+    }
   }
 
   /**
@@ -172,6 +231,42 @@ class SessionService {
    */
   getClient(sessionId: string): ClaudeClient | undefined {
     return this.processManager.getClient(sessionId);
+  }
+
+  getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
+    const fallback = createInitialSessionRuntimeState();
+    const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
+    const base = persisted ?? fallback;
+
+    const client = this.processManager.getClient(sessionId);
+    if (client) {
+      const isWorking = this.getClientWorkingState(client);
+      return {
+        phase: isWorking ? 'running' : 'idle',
+        processState: 'alive',
+        activity: isWorking ? 'WORKING' : 'IDLE',
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (this.processManager.getPendingClient(sessionId)) {
+      return {
+        phase: 'starting',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (this.processManager.isStopInProgress(sessionId)) {
+      return {
+        ...base,
+        phase: 'stopping',
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    return base;
   }
 
   /**
@@ -191,8 +286,9 @@ class SessionService {
           });
         }
       },
-      onExit: async (sessionId: string) => {
+      onExit: async (sessionId: string, exitCode: number | null) => {
         try {
+          sessionDomainService.markProcessExit(sessionId, exitCode);
           const session = await this.repository.updateSession(sessionId, {
             status: SessionStatus.COMPLETED,
             claudeProcessPid: null,

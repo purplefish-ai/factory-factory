@@ -7,6 +7,7 @@
 import { exec } from 'node:child_process';
 import { createServer as createNetServer } from 'node:net';
 import { promisify } from 'node:util';
+import { SERVICE_TIMEOUT_MS } from './constants';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('port-service');
@@ -24,7 +25,7 @@ async function isPortInUse(port: number): Promise<boolean> {
       // lsof -i :PORT -sTCP:LISTEN checks for processes listening on the port
       // -t returns just PIDs (suppresses errors if no process found)
       const { stdout } = await execAsync(`lsof -i :${port} -sTCP:LISTEN -t`, {
-        timeout: 2000,
+        timeout: SERVICE_TIMEOUT_MS.portLsof,
       });
       // If we get output, port is in use
       return stdout.trim().length > 0;

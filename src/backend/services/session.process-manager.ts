@@ -19,7 +19,7 @@ export type ClientCreatedCallback = (
 
 export type ClientEventHandlers = {
   onSessionId?: (sessionId: string, claudeSessionId: string) => Promise<void>;
-  onExit?: (sessionId: string) => Promise<void>;
+  onExit?: (sessionId: string, code: number | null) => Promise<void>;
   onError?: (sessionId: string, error: Error) => Promise<void> | void;
 };
 
@@ -241,7 +241,7 @@ export class SessionProcessManager {
       }
     });
 
-    client.on('exit', async () => {
+    client.on('exit', async (result) => {
       this.clients.delete(sessionId);
 
       if (this.stoppingInProgress.has(sessionId)) {
@@ -254,7 +254,7 @@ export class SessionProcessManager {
       }
 
       try {
-        await handlers.onExit(sessionId);
+        await handlers.onExit(sessionId, result.code);
       } catch (error) {
         logger.warn('Failed to handle exit event', {
           sessionId,

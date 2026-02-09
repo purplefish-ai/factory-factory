@@ -5,12 +5,11 @@ import {
   workspaceAccessor,
 } from '../resource_accessors/index';
 import { initializeWorkspaceWorktree } from '../trpc/workspace/init.trpc';
+import { SERVICE_INTERVAL_MS } from './constants';
 import { createLogger } from './logger.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
 
 const logger = createLogger('reconciliation');
-
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 class ReconciliationService {
   private cleanupInterval: NodeJS.Timeout | null = null;
@@ -45,9 +44,11 @@ class ReconciliationService {
         .finally(() => {
           this.cleanupInProgress = null;
         });
-    }, CLEANUP_INTERVAL_MS);
+    }, SERVICE_INTERVAL_MS.reconciliationCleanup);
 
-    logger.info('Started periodic orphan cleanup', { intervalMs: CLEANUP_INTERVAL_MS });
+    logger.info('Started periodic orphan cleanup', {
+      intervalMs: SERVICE_INTERVAL_MS.reconciliationCleanup,
+    });
   }
 
   /**

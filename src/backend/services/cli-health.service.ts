@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from './constants';
 import { type GitHubCLIHealthStatus, githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 
@@ -25,14 +26,15 @@ export interface CLIHealthStatus {
 class CLIHealthService {
   private cachedStatus: CLIHealthStatus | null = null;
   private cacheTimestamp = 0;
-  private readonly CACHE_TTL_MS = 30_000; // Cache for 30 seconds
 
   /**
    * Check if Claude CLI is installed.
    */
   async checkClaudeCLI(): Promise<ClaudeCLIHealthStatus> {
     try {
-      const { stdout } = await execFileAsync('claude', ['--version'], { timeout: 5000 });
+      const { stdout } = await execFileAsync('claude', ['--version'], {
+        timeout: SERVICE_TIMEOUT_MS.claudeCliVersionCheck,
+      });
       const versionMatch = stdout.match(/claude[- ]?(?:code[- ]?)?(?:v?(\d+\.\d+\.\d+))?/i);
       const version = versionMatch?.[1] || stdout.trim().split('\n')[0];
 
@@ -58,7 +60,11 @@ class CLIHealthService {
     const now = Date.now();
 
     // Return cached result if still valid
-    if (!forceRefresh && this.cachedStatus && now - this.cacheTimestamp < this.CACHE_TTL_MS) {
+    if (
+      !forceRefresh &&
+      this.cachedStatus &&
+      now - this.cacheTimestamp < SERVICE_CACHE_TTL_MS.cliHealth
+    ) {
       return this.cachedStatus;
     }
 

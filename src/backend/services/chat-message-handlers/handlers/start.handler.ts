@@ -16,8 +16,6 @@ export function createStartHandler(
       ws.send(JSON.stringify({ type: 'error', message: 'Client creator not configured' }));
       return;
     }
-    sessionDomainService.markStarting(sessionId);
-
     const sessionOpts = await sessionService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
@@ -31,6 +29,5 @@ export function createStartHandler(
       planModeEnabled: message.planModeEnabled,
       model: getValidModel(message),
     });
-    sessionDomainService.markIdle(sessionId, 'alive');
   };
 }

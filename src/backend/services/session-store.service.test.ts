@@ -76,8 +76,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
       loadRequestId: 'load-1',
     });
 
@@ -140,8 +144,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     const replayEvents = getLatestReplayBatch().replayEvents ?? [];
@@ -170,8 +178,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     const replayEvents = getLatestReplayBatch().replayEvents ?? [];
@@ -217,8 +229,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     const replayEvents = getLatestReplayBatch().replayEvents ?? [];
@@ -249,8 +265,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
-      isRunning: true,
-      isWorking: true,
+      sessionRuntime: {
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
@@ -277,15 +297,23 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
     const secondSubscribe = sessionStoreService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     await Promise.resolve();
@@ -333,16 +361,24 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     await sessionStoreService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s2',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
@@ -380,15 +416,23 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
     const secondSubscribe = sessionStoreService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s2',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     await secondSubscribe;
@@ -430,8 +474,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     const firstEvents = getLatestReplayBatch().replayEvents ?? [];
@@ -447,8 +495,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     const secondEvents = getLatestReplayBatch().replayEvents ?? [];
@@ -480,8 +532,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     sessionStoreService.markProcessExit('s1', 1);
@@ -490,8 +546,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
@@ -525,8 +585,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
-      isRunning: false,
-      isWorking: false,
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     mockedConnectionService.forwardToSession.mockClear();
@@ -663,8 +727,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
-      isRunning: true,
-      isWorking: true,
+      sessionRuntime: {
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     sessionStoreService.markProcessExit('s1', 0);
@@ -692,8 +760,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
-      isRunning: true,
-      isWorking: true,
+      sessionRuntime: {
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     sessionStoreService.markProcessExit('s1', null);
@@ -721,8 +793,12 @@ describe('SessionStoreService', () => {
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
-      isRunning: true,
-      isWorking: true,
+      sessionRuntime: {
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     sessionStoreService.markProcessExit('s1', 1);
