@@ -518,7 +518,7 @@ class RatchetService {
 
     return {
       activeRatchetSession: null,
-      hasOtherActiveSession: await this.hasNonRatchetActiveSession(workspace.id),
+      hasOtherActiveSession: await this.hasActiveSession(workspace.id),
     };
   }
 
@@ -576,7 +576,7 @@ class RatchetService {
         type: 'RETURN_ACTION',
         action: {
           type: 'WAITING',
-          reason: 'Workspace is not idle (active non-ratchet chat session)',
+          reason: 'Workspace is not idle (active session)',
         },
       };
     }
@@ -670,14 +670,9 @@ class RatchetService {
     return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
   }
 
-  private async hasNonRatchetActiveSession(workspaceId: string): Promise<boolean> {
+  private async hasActiveSession(workspaceId: string): Promise<boolean> {
     const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
-    return sessions.some((session) => {
-      if (session.workflow === RATCHET_WORKFLOW) {
-        return false;
-      }
-      return sessionService.isSessionWorking(session.id);
-    });
+    return sessions.some((session) => sessionService.isSessionWorking(session.id));
   }
 
   private resolveRatchetPrContext(
