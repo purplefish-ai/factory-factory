@@ -40,7 +40,11 @@ function createLockCleanup(
 ): () => Promise<void> {
   return async () => {
     try {
-      await fileHandle?.close();
+      // Close the file handle (ignore errors - file may already be closed)
+      await fileHandle?.close().catch(() => {
+        // Ignore close errors
+      });
+      // Unlink the lock file (ignore errors - file may already be deleted)
       await fs.unlink(lockPath).catch(() => {
         // Lock file may already be deleted; ignore error
       });
@@ -62,8 +66,8 @@ async function tryRemoveStaleLock(lockPath: string): Promise<boolean> {
     const stats = await fs.stat(lockPath);
     const lockAge = Date.now() - stats.mtimeMs;
 
-    // If lock is older than timeout, consider it stale and remove it
-    if (lockAge > LOCK_ACQUIRE_TIMEOUT_MS) {
+    // If lock is older than or equal to timeout, consider it stale and remove it
+    if (lockAge >= LOCK_ACQUIRE_TIMEOUT_MS) {
       logger.warn('Removing stale lock file', {
         lockPath,
         lockAgeMs: lockAge,
@@ -138,6 +142,8 @@ async function withResumeModeLock<T>(
   let releaseLock: (() => Promise<void>) | undefined;
 
   try {
+    // Ensure directory exists before creating lock file
+    await fs.mkdir(worktreeBasePath, { recursive: true });
     releaseLock = await acquireFileLock(lockPath);
     return await handler();
   } finally {
