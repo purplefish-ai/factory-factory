@@ -138,12 +138,59 @@ interface WorkspaceContext {
   worktreePath: string;
 }
 
-class FileLockService {
+export class FileLockService {
   // In-memory storage: workspaceId -> WorkspaceLockStore
   private stores = new Map<string, WorkspaceLockStore>();
 
   // Cleanup interval handle
   private cleanupInterval?: NodeJS.Timeout;
+
+  constructor() {
+    this.warnIfMultiProcessRuntime();
+  }
+
+  /**
+   * Warn when runtime hints indicate multiple Node.js processes.
+   * Advisory locks are in-memory and only safe within a single process.
+   */
+  private warnIfMultiProcessRuntime(): void {
+    const nodeUniqueId = this.readEnvSignal('NODE_UNIQUE_ID');
+    const pmId = this.readEnvSignal('pm_id');
+    const nodeAppInstance = this.readEnvSignal('NODE_APP_INSTANCE');
+
+    const webConcurrencyRaw = process.env.WEB_CONCURRENCY;
+    const webConcurrency =
+      webConcurrencyRaw && Number.isFinite(Number(webConcurrencyRaw))
+        ? Number(webConcurrencyRaw)
+        : undefined;
+
+    const isLikelyMultiProcess =
+      nodeUniqueId !== undefined ||
+      pmId !== undefined ||
+      nodeAppInstance !== undefined ||
+      (webConcurrency !== undefined && webConcurrency > 1);
+
+    if (!isLikelyMultiProcess) {
+      return;
+    }
+
+    logger.warn('File lock service detected likely multi-process runtime', {
+      nodeUniqueId,
+      pmId,
+      nodeAppInstance,
+      webConcurrency,
+      impact:
+        'Advisory locks are process-local only; use a distributed lock for cross-process coordination.',
+    });
+  }
+
+  private readEnvSignal(key: string): string | undefined {
+    const value = process.env[key]?.trim();
+    if (!value || value === 'undefined' || value === 'null') {
+      return undefined;
+    }
+    return value;
+  }
 
   /**
    * Resolve workspace context from agentId (session ID)
