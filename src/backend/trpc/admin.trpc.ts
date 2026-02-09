@@ -4,11 +4,13 @@
  * Provides admin operations for managing system health.
  */
 
+import { readFile } from 'node:fs/promises';
 import { type DecisionLog, SessionStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { dataBackupService } from '../services';
 import { decisionLogQueryService } from '../services/decision-log-query.service';
+import { getLogFilePath } from '../services/logger.service';
 import { sessionDataService } from '../services/session-data.service';
 import { workspaceDataService } from '../services/workspace-data.service';
 import { type Context, publicProcedure, router } from './trpc';
@@ -16,6 +18,71 @@ import { type Context, publicProcedure, router } from './trpc';
 const loggerName = 'admin-trpc';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
+
+export interface ParsedLogEntry {
+  level: string;
+  timestamp: string;
+  message: string;
+  component: string;
+  context: Record<string, unknown>;
+}
+
+interface LogFilter {
+  level?: string;
+  search?: string;
+  sinceMs?: number | null;
+  untilMs?: number | null;
+}
+
+function matchesTimestamp(timestamp: string | undefined, filter: LogFilter): boolean {
+  if (!(timestamp && (filter.sinceMs || filter.untilMs))) {
+    return true;
+  }
+  const ts = new Date(timestamp).getTime();
+  if (filter.sinceMs && ts < filter.sinceMs) {
+    return false;
+  }
+  return !(filter.untilMs && ts > filter.untilMs);
+}
+
+function matchesLogFilter(entry: Record<string, unknown>, filter: LogFilter): boolean {
+  if (filter.level && entry.level !== filter.level) {
+    return false;
+  }
+  if (!matchesTimestamp(entry.timestamp as string | undefined, filter)) {
+    return false;
+  }
+  if (filter.search) {
+    const msg = (entry.message as string)?.toLowerCase() ?? '';
+    const comp = (entry.context as Record<string, unknown>)?.component as string | undefined;
+    if (!(msg.includes(filter.search) || comp?.toLowerCase().includes(filter.search))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function parseLogLines(lines: string[], filter: LogFilter): ParsedLogEntry[] {
+  const entries: ParsedLogEntry[] = [];
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (!matchesLogFilter(entry, filter)) {
+        continue;
+      }
+      entries.push({
+        level: entry.level,
+        timestamp: entry.timestamp,
+        message: entry.message,
+        component: entry.context?.component ?? '',
+        context: entry.context ?? {},
+      });
+    } catch {
+      // skip malformed lines
+    }
+  }
+  return entries;
+}
 
 export const adminRouter = router({
   /**
@@ -306,5 +373,55 @@ export const adminRouter = router({
       success: true,
       results,
     };
+  }),
+
+  /**
+   * Get parsed log entries from server.log with filtering and pagination.
+   */
+  getLogs: publicProcedure
+    .input(
+      z.object({
+        search: z.string().optional(),
+        level: z.enum(['error', 'warn', 'info', 'debug']).optional(),
+        since: z.string().optional(), // ISO date string
+        until: z.string().optional(), // ISO date string
+        limit: z.number().min(1).max(1000).default(200),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const filePath = getLogFilePath();
+      let raw: string;
+      try {
+        raw = await readFile(filePath, 'utf-8');
+      } catch {
+        return { entries: [], total: 0, filePath };
+      }
+
+      const lines = raw.split('\n').filter(Boolean);
+      const filtered = parseLogLines(lines, {
+        level: input.level,
+        search: input.search?.toLowerCase(),
+        sinceMs: input.since ? new Date(input.since).getTime() : null,
+        untilMs: input.until ? new Date(input.until).getTime() : null,
+      });
+
+      // Reverse so newest entries come first, then paginate
+      filtered.reverse();
+      const page = filtered.slice(input.offset, input.offset + input.limit);
+
+      return { entries: page, total: filtered.length, filePath };
+    }),
+
+  /**
+   * Download the raw log file content.
+   */
+  downloadLogFile: publicProcedure.query(async () => {
+    const filePath = getLogFilePath();
+    try {
+      return await readFile(filePath, 'utf-8');
+    } catch {
+      return '';
+    }
   }),
 });
