@@ -128,6 +128,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
               {maxSessions !== undefined && maxSessionsPerWorkspace > 0 && (
                 <Badge
                   variant={maxSessionsPerWorkspace >= maxSessions * 0.8 ? 'destructive' : 'outline'}
+                  title={`Highest session count across all workspaces. Limit is ${maxSessions} per workspace.`}
                 >
                   Max per workspace: {maxSessionsPerWorkspace}/{maxSessions}
                 </Badge>
