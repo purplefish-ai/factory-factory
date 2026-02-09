@@ -9,6 +9,7 @@
 
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { buildRatchetDispatchPrompt } from '../prompts/ratchet-dispatch';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
@@ -16,7 +17,6 @@ import { fixerSessionService } from './fixer-session.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
-import { sessionStoreService } from './session-store.service';
 
 const logger = createLogger('ratchet');
 
@@ -907,7 +907,7 @@ class RatchetService {
         dispatchMode: 'start_empty_and_send',
         buildPrompt: () => buildRatchetDispatchPrompt(workspace.prUrl, prStateInfo.prNumber),
         beforeStart: ({ sessionId, prompt }) => {
-          sessionStoreService.injectCommittedUserMessage(sessionId, prompt);
+          sessionDomainService.injectCommittedUserMessage(sessionId, prompt);
         },
       });
 

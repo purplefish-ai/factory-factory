@@ -4,6 +4,8 @@
  * Central export point for all backend services.
  */
 
+// Session store service
+export { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 // Chat connection service
 export { type ConnectionInfo, chatConnectionService } from './chat-connection.service';
 // Chat event forwarder service
@@ -56,8 +58,6 @@ export { serverInstanceService } from './server-instance.service';
 export { sessionService } from './session.service';
 // Session file logger service
 export { SessionFileLogger, sessionFileLogger } from './session-file-logger.service';
-// Session store service
-export { sessionStoreService } from './session-store.service';
 // Terminal service
 export { terminalService } from './terminal.service';
 // Workspace activity service

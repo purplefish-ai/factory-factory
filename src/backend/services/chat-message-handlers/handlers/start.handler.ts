@@ -1,7 +1,7 @@
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { StartMessageInput } from '@/shared/websocket';
 import { createLogger } from '../../logger.service';
 import { sessionService } from '../../session.service';
-import { sessionStoreService } from '../../session-store.service';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
 import { getValidModel } from '../utils';
 
@@ -16,12 +16,12 @@ export function createStartHandler(
       ws.send(JSON.stringify({ type: 'error', message: 'Client creator not configured' }));
       return;
     }
-    sessionStoreService.markStarting(sessionId);
+    sessionDomainService.markStarting(sessionId);
 
     const sessionOpts = await sessionService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
-      sessionStoreService.markError(sessionId);
+      sessionDomainService.markError(sessionId);
       ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
       return;
     }
@@ -31,6 +31,6 @@ export function createStartHandler(
       planModeEnabled: message.planModeEnabled,
       model: getValidModel(message),
     });
-    sessionStoreService.markIdle(sessionId, 'alive');
+    sessionDomainService.markIdle(sessionId, 'alive');
   };
 }

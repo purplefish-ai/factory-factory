@@ -1,3 +1,4 @@
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { chatConnectionService } from './services/chat-connection.service';
 import { chatEventForwarderService } from './services/chat-event-forwarder.service';
 import { chatMessageHandlerService } from './services/chat-message-handlers.service';
@@ -15,7 +16,6 @@ import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
 import { sessionService } from './services/session.service';
 import { type SessionFileLogger, sessionFileLogger } from './services/session-file-logger.service';
-import { sessionStoreService } from './services/session-store.service';
 import { startupScriptService } from './services/startup-script.service';
 import { terminalService } from './services/terminal.service';
 import { workspaceStateMachine } from './services/workspace-state-machine.service';
@@ -38,7 +38,7 @@ export type AppServices = {
   serverInstanceService: typeof serverInstanceService;
   sessionFileLogger: SessionFileLogger;
   sessionService: typeof sessionService;
-  sessionStoreService: typeof sessionStoreService;
+  sessionDomainService: typeof sessionDomainService;
   startupScriptService: typeof startupScriptService;
   terminalService: typeof terminalService;
   workspaceStateMachine: typeof workspaceStateMachine;
@@ -70,7 +70,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     serverInstanceService,
     sessionFileLogger,
     sessionService,
-    sessionStoreService,
+    sessionDomainService,
     startupScriptService,
     terminalService,
     workspaceStateMachine,

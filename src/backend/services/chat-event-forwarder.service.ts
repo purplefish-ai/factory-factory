@@ -11,6 +11,7 @@
 
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
 import {
   type InteractiveResponseTool,
@@ -31,7 +32,6 @@ import { chatConnectionService } from './chat-connection.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
 import { sessionFileLogger } from './session-file-logger.service';
-import { sessionStoreService } from './session-store.service';
 import { slashCommandCacheService } from './slash-command-cache.service';
 import { workspaceActivityService } from './workspace-activity.service';
 
@@ -82,12 +82,12 @@ class ChatEventForwarderService {
   private lastCompactBoundaryAt = new Map<string, number>();
 
   private forwardClaudeMessage(dbSessionId: string, message: ClaudeMessage): void {
-    const order = sessionStoreService.appendClaudeEvent(dbSessionId, message);
+    const order = sessionDomainService.appendClaudeEvent(dbSessionId, message);
     const wsMsg =
       order === undefined
         ? ({ type: 'claude_message', data: message } as const)
         : ({ type: 'claude_message', data: message, order } as const);
-    sessionStoreService.emitDelta(dbSessionId, wsMsg);
+    sessionDomainService.emitDelta(dbSessionId, wsMsg);
   }
 
   /**
@@ -115,7 +115,7 @@ class ChatEventForwarderService {
    * Get pending interactive request for a session.
    */
   getPendingRequest(dbSessionId: string): PendingInteractiveRequest | undefined {
-    return sessionStoreService.getPendingInteractiveRequest(dbSessionId) ?? undefined;
+    return sessionDomainService.getPendingInteractiveRequest(dbSessionId) ?? undefined;
   }
 
   /**
@@ -123,7 +123,7 @@ class ChatEventForwarderService {
    * Used when stopping a session - the pending request is no longer valid.
    */
   clearPendingRequest(dbSessionId: string): void {
-    sessionStoreService.clearPendingInteractiveRequest(dbSessionId);
+    sessionDomainService.clearPendingInteractiveRequest(dbSessionId);
   }
 
   /**
@@ -131,7 +131,7 @@ class ChatEventForwarderService {
    * Prevents clearing a newer request when responding to a stale one.
    */
   clearPendingRequestIfMatches(dbSessionId: string, requestId: string): void {
-    sessionStoreService.clearPendingInteractiveRequestIfMatches(dbSessionId, requestId);
+    sessionDomainService.clearPendingInteractiveRequestIfMatches(dbSessionId, requestId);
   }
 
   /**
@@ -198,7 +198,7 @@ class ChatEventForwarderService {
       this.removeForwardingListeners(dbSessionId, existingClient);
       // Clear stale interactive requests from the old client so the UI
       // doesn't try to respond to a request the new client knows nothing about
-      sessionStoreService.clearPendingInteractiveRequest(dbSessionId);
+      sessionDomainService.clearPendingInteractiveRequest(dbSessionId);
     }
 
     this.clientEventSetup.set(dbSessionId, client);
@@ -230,7 +230,7 @@ class ChatEventForwarderService {
         type: 'slash_commands',
         slashCommands: initResponse.commands,
       } as const;
-      sessionStoreService.emitDelta(dbSessionId, slashCommandsMsg);
+      sessionDomainService.emitDelta(dbSessionId, slashCommandsMsg);
       void slashCommandCacheService.setCachedCommands(initResponse.commands);
     }
 
@@ -314,7 +314,7 @@ class ChatEventForwarderService {
         eventType: 'tool_progress',
         data: event,
       });
-      sessionStoreService.emitDelta(dbSessionId, event);
+      sessionDomainService.emitDelta(dbSessionId, event);
     });
 
     on('tool_use_summary', (event) => {
@@ -325,7 +325,7 @@ class ChatEventForwarderService {
         eventType: 'tool_use_summary',
         data: event,
       });
-      sessionStoreService.emitDelta(dbSessionId, event);
+      sessionDomainService.emitDelta(dbSessionId, event);
     });
 
     // System subtype event handlers
@@ -352,7 +352,7 @@ class ChatEventForwarderService {
           plugins: event.plugins,
         },
       } as const;
-      sessionStoreService.emitDelta(dbSessionId, msg);
+      sessionDomainService.emitDelta(dbSessionId, msg);
     });
 
     on('system_status', (event) => {
@@ -371,7 +371,7 @@ class ChatEventForwarderService {
         type: 'status_update',
         permissionMode: event.permission_mode,
       } as const;
-      sessionStoreService.emitDelta(dbSessionId, msg);
+      sessionDomainService.emitDelta(dbSessionId, msg);
     });
 
     on('compact_boundary', (event) => {
@@ -389,7 +389,7 @@ class ChatEventForwarderService {
       }
       this.lastCompactBoundaryAt.set(dbSessionId, now);
       const boundaryMsg = { type: 'compact_boundary' } as const;
-      sessionStoreService.emitDelta(dbSessionId, boundaryMsg);
+      sessionDomainService.emitDelta(dbSessionId, boundaryMsg);
     });
 
     on('hook_started', (event) => {
@@ -413,7 +413,7 @@ class ChatEventForwarderService {
           hookEvent: event.hook_event,
         },
       } as const;
-      sessionStoreService.emitDelta(dbSessionId, msg);
+      sessionDomainService.emitDelta(dbSessionId, msg);
     });
 
     on('hook_response', (event) => {
@@ -440,7 +440,7 @@ class ChatEventForwarderService {
           outcome: event.outcome,
         },
       } as const;
-      sessionStoreService.emitDelta(dbSessionId, msg);
+      sessionDomainService.emitDelta(dbSessionId, msg);
     });
 
     // Context compaction events
@@ -450,7 +450,7 @@ class ChatEventForwarderService {
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_start' });
       const event = { type: 'compacting_start' } as const;
-      sessionStoreService.emitDelta(dbSessionId, event);
+      sessionDomainService.emitDelta(dbSessionId, event);
     });
 
     on('compacting_end', () => {
@@ -459,7 +459,7 @@ class ChatEventForwarderService {
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_end' });
       const event = { type: 'compacting_end' } as const;
-      sessionStoreService.emitDelta(dbSessionId, event);
+      sessionDomainService.emitDelta(dbSessionId, event);
     });
 
     on('message', (msg) => {
@@ -500,7 +500,7 @@ class ChatEventForwarderService {
     });
 
     on('exit', (result) => {
-      sessionStoreService.markProcessExit(dbSessionId, result.code);
+      sessionDomainService.markProcessExit(dbSessionId, result.code);
       this.removeForwardingListeners(dbSessionId, client);
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);
@@ -516,14 +516,14 @@ class ChatEventForwarderService {
       });
       // Only clear if the requestId matches to avoid race conditions with newer requests
       this.clearPendingRequestIfMatches(dbSessionId, requestId);
-      sessionStoreService.emitDelta(dbSessionId, {
+      sessionDomainService.emitDelta(dbSessionId, {
         type: 'permission_cancelled',
         requestId,
       });
     });
 
     on('error', (error) => {
-      sessionStoreService.emitDelta(dbSessionId, {
+      sessionDomainService.emitDelta(dbSessionId, {
         type: 'error',
         message: error.message,
       });
@@ -561,7 +561,7 @@ class ChatEventForwarderService {
           error: error instanceof Error ? error.message : String(error),
         });
       }
-      sessionStoreService.emitDelta(dbSessionId, {
+      sessionDomainService.emitDelta(dbSessionId, {
         type: 'error',
         message: reason,
       });
@@ -617,7 +617,7 @@ class ChatEventForwarderService {
               error: error instanceof Error ? error.message : String(error),
             });
           }
-          sessionStoreService.emitDelta(dbSessionId, {
+          sessionDomainService.emitDelta(dbSessionId, {
             type: 'error',
             message: 'Received invalid question format from CLI',
           });
@@ -626,7 +626,7 @@ class ChatEventForwarderService {
 
         this.storePendingInteractiveRequest(dbSessionId, request, planContent);
 
-        sessionStoreService.emitDelta(dbSessionId, {
+        sessionDomainService.emitDelta(dbSessionId, {
           type: 'user_question',
           requestId: request.requestId,
           questions: parsed.data.questions,
@@ -635,7 +635,7 @@ class ChatEventForwarderService {
       }
       case 'ExitPlanMode':
         this.storePendingInteractiveRequest(dbSessionId, request, planContent);
-        sessionStoreService.emitDelta(dbSessionId, {
+        sessionDomainService.emitDelta(dbSessionId, {
           type: 'permission_request',
           requestId: request.requestId,
           toolName: request.toolName,
@@ -664,7 +664,7 @@ class ChatEventForwarderService {
     },
     planContent: string | null
   ): void {
-    sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
+    sessionDomainService.setPendingInteractiveRequest(dbSessionId, {
       requestId: request.requestId,
       toolName: request.toolName,
       toolUseId: request.toolUseId,
@@ -821,7 +821,7 @@ class ChatEventForwarderService {
     // Forward user message UUID for rewind functionality.
     if (msgWithType.uuid) {
       const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid } as const;
-      sessionStoreService.emitDelta(dbSessionId, uuidMsg);
+      sessionDomainService.emitDelta(dbSessionId, uuidMsg);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Forwarding user message UUID', {
           dbSessionId,
@@ -924,7 +924,7 @@ class ChatEventForwarderService {
    * Used by workspace query service to determine which workspaces have pending requests.
    */
   getAllPendingRequests(): Map<string, PendingInteractiveRequest> {
-    return sessionStoreService.getAllPendingRequests();
+    return sessionDomainService.getAllPendingRequests();
   }
 
   /**
@@ -973,10 +973,10 @@ class ChatEventForwarderService {
 
   private syncRuntimeFromClient(dbSessionId: string, client: ClaudeClient): void {
     if (client.isWorking()) {
-      sessionStoreService.markRunning(dbSessionId);
+      sessionDomainService.markRunning(dbSessionId);
       return;
     }
-    sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
+    sessionDomainService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
   }
 }
 

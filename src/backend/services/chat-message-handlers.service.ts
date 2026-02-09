@@ -9,6 +9,7 @@
  */
 
 import type { WebSocket } from 'ws';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import {
   type ClaudeContentItem,
   DEFAULT_THINKING_BUDGET,
@@ -24,7 +25,6 @@ import { createChatMessageHandlerRegistry } from './chat-message-handlers/regist
 import type { ClientCreator } from './chat-message-handlers/types';
 import { createLogger } from './logger.service';
 import { sessionService } from './session.service';
-import { sessionStoreService } from './session-store.service';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -76,7 +76,7 @@ class ChatMessageHandlerService {
     this.dispatchInProgress.set(dbSessionId, true);
 
     // Dequeue first to claim the message atomically before any async operations.
-    const msg = sessionStoreService.dequeueNext(dbSessionId, { emitSnapshot: false });
+    const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
     if (!msg) {
       this.dispatchInProgress.set(dbSessionId, false);
       return;
@@ -87,13 +87,13 @@ class ChatMessageHandlerService {
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
-        sessionStoreService.markStarting(dbSessionId);
+        sessionDomainService.markStarting(dbSessionId);
 
         const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
         if (!newClient) {
           // Re-queue the message at the front so it's not lost
-          sessionStoreService.requeueFront(dbSessionId, msg);
-          sessionStoreService.markError(dbSessionId);
+          sessionDomainService.requeueFront(dbSessionId, msg);
+          sessionDomainService.markError(dbSessionId);
           return;
         }
         client = newClient;
@@ -115,11 +115,11 @@ class ChatMessageHandlerService {
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
         });
-        sessionStoreService.requeueFront(dbSessionId, msg);
+        sessionDomainService.requeueFront(dbSessionId, msg);
         // Avoid clobbering markProcessExit() runtime/lastExit when the process
         // has already stopped and exit handling is in flight.
         if (client.isRunning()) {
-          sessionStoreService.markIdle(dbSessionId, 'alive');
+          sessionDomainService.markIdle(dbSessionId, 'alive');
         }
       }
     } finally {
@@ -221,13 +221,13 @@ class ChatMessageHandlerService {
     const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
     await client.setMaxThinkingTokens(thinkingTokens);
 
-    sessionStoreService.markRunning(dbSessionId);
+    sessionDomainService.markRunning(dbSessionId);
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
-    const order = sessionStoreService.allocateOrder(dbSessionId);
+    const order = sessionDomainService.allocateOrder(dbSessionId);
 
-    sessionStoreService.emitDelta(dbSessionId, {
+    sessionDomainService.emitDelta(dbSessionId, {
       type: 'message_state_changed',
       id: msg.id,
       newState: MessageState.DISPATCHED,
@@ -249,8 +249,8 @@ class ChatMessageHandlerService {
 
     try {
       await client.sendMessage(content);
-      sessionStoreService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
-      sessionStoreService.emitDelta(dbSessionId, {
+      sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
+      sessionDomainService.emitDelta(dbSessionId, {
         type: 'message_state_changed',
         id: msg.id,
         newState: MessageState.COMMITTED,
@@ -266,7 +266,7 @@ class ChatMessageHandlerService {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
         dbSessionId,
         messageId: msg.id,
-        remainingInQueue: sessionStoreService.getQueueLength(dbSessionId),
+        remainingInQueue: sessionDomainService.getQueueLength(dbSessionId),
       });
     }
   }
@@ -294,7 +294,7 @@ class ChatMessageHandlerService {
     } else if (reason === 'stopped') {
       logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
     }
-    sessionStoreService.requeueFront(dbSessionId, msg);
+    sessionDomainService.requeueFront(dbSessionId, msg);
   }
 
   private isCompactCommand(text: string): boolean {
