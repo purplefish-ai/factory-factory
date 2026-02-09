@@ -1,6 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import { Bot, Terminal, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -70,7 +70,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
   const hasClaudeProcesses = processes?.claude && processes.claude.length > 0;
   const hasTerminalProcesses = processes?.terminal && processes.terminal.length > 0;
   const hasNoProcesses = !(hasClaudeProcesses || hasTerminalProcesses);
-  const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(null);
+  const [stoppingSessionIds, setStoppingSessionIds] = useState<Set<string>>(new Set());
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
   const utils = trpc.useUtils();
@@ -83,15 +83,26 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
     onError: (error) => {
       toast.error(`Failed to stop session: ${error.message}`);
     },
-    onSettled: () => {
-      setStoppingSessionId(null);
-    },
   });
 
-  const handleStopSession = (sessionId: string) => {
-    setStoppingSessionId(sessionId);
-    stopSession.mutate({ sessionId });
-  };
+  const handleStopSession = useCallback(
+    (sessionId: string) => {
+      setStoppingSessionIds((prev) => new Set(prev).add(sessionId));
+      stopSession.mutate(
+        { sessionId },
+        {
+          onSettled: () => {
+            setStoppingSessionIds((prev) => {
+              const next = new Set(prev);
+              next.delete(sessionId);
+              return next;
+            });
+          },
+        }
+      );
+    },
+    [stopSession]
+  );
 
   // Calculate the highest session count per workspace
   const maxSessionsPerWorkspace =
@@ -215,7 +226,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                           size="sm"
                           onClick={() => handleStopSession(process.sessionId)}
                           disabled={
-                            stoppingSessionId === process.sessionId ||
+                            stoppingSessionIds.has(process.sessionId) ||
                             process.status === 'COMPLETED' ||
                             process.status === 'FAILED'
                           }
