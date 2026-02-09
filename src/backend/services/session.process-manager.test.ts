@@ -25,25 +25,30 @@ describe('SessionProcessManager', () => {
 
     const client = new MockClaudeClient();
     let resolveCreate: (value: ClaudeClientType) => void = () => undefined;
-    const createPromise = new Promise<ClaudeClientType>((resolve) => {
-      resolveCreate = resolve;
+    let createCallCount = 0;
+
+    const createSpy = vi.spyOn(ClaudeClient, 'create').mockImplementation(() => {
+      createCallCount++;
+      return new Promise<ClaudeClientType>((resolve) => {
+        resolveCreate = resolve;
+      });
     });
 
-    const createSpy = vi
-      .spyOn(ClaudeClient, 'create')
-      .mockImplementation(async () => createPromise);
-
+    // Start two concurrent creation requests
     const first = manager.getOrCreateClient('s1', options, handlers, context);
     const second = manager.getOrCreateClient('s1', options, handlers, context);
 
-    // Give the mutex time to queue and execute the first call
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Wait for at least one microtask to ensure mutex has processed
+    await Promise.resolve();
 
-    expect(createSpy).toHaveBeenCalledTimes(1);
-
+    // Both calls should eventually resolve to the same client
     resolveCreate(unsafeCoerce<ClaudeClientType>(client));
 
     const [client1, client2] = await Promise.all([first, second]);
+
+    // Should only have called create once due to mutex
+    expect(createCallCount).toBe(1);
+    expect(createSpy).toHaveBeenCalledTimes(1);
     expect(client1).toBe(client);
     expect(client2).toBe(client);
   });

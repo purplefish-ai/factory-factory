@@ -261,6 +261,8 @@ export class SessionProcessManager {
 
     client.on('exit', async (result) => {
       this.clients.delete(sessionId);
+      this.creationLocks.delete(sessionId);
+      this.pendingCreation.delete(sessionId);
 
       if (this.stoppingInProgress.has(sessionId)) {
         logger.debug('Skipping exit handler status update - stop in progress', { sessionId });
