@@ -10,6 +10,7 @@ import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Project, Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from './constants';
 import { createLogger } from './logger.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
 
@@ -74,7 +75,7 @@ class StartupScriptService {
         project.startupScriptCommand,
         project.startupScriptPath,
         timeoutMs,
-        5000,
+        SERVICE_TIMEOUT_MS.startupScriptForceKillGrace,
         outputCallback
       );
 
@@ -222,8 +223,8 @@ class StartupScriptService {
 
       const appendOutput = (target: 'stdout' | 'stderr', data: Buffer): void => {
         const str = data.toString();
-        const maxSize = 1024 * 1024;
-        const keepSize = 512 * 1024;
+        const maxSize = SERVICE_LIMITS.startupScriptOutputMaxBytes;
+        const keepSize = SERVICE_LIMITS.startupScriptOutputTailBytes;
 
         // Stream output via callback if provided
         if (onOutput) {

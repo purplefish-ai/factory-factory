@@ -8,6 +8,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { expandEnvVars } from '../lib/env';
+import { SERVICE_TIMEOUT_MS } from './constants';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('config');
@@ -277,17 +278,16 @@ function buildCorsConfig(): CorsConfig {
  * Build Claude process configuration from environment with validation
  */
 function buildClaudeProcessConfig(): ClaudeProcessConfig {
-  const DEFAULT_HUNG_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
   const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
 
   if (!envValue) {
-    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+    return { hungTimeoutMs: SERVICE_TIMEOUT_MS.configDefaultClaudeHung };
   }
 
   const parsed = Number.parseInt(envValue, 10);
   if (Number.isNaN(parsed) || parsed <= 0) {
     logger.warn(`Invalid CLAUDE_HUNG_TIMEOUT_MS value: ${envValue}, using default (60 minutes)`);
-    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+    return { hungTimeoutMs: SERVICE_TIMEOUT_MS.configDefaultClaudeHung };
   }
 
   return { hungTimeoutMs: parsed };

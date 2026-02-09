@@ -21,15 +21,10 @@ import * as path from 'node:path';
 import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
 import { persistedLockStoreSchema } from '@/shared/schemas/persisted-stores.schema';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from './constants';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('file-lock');
-
-// Default TTL in seconds (30 minutes)
-const DEFAULT_TTL_SECONDS = 30 * 60;
-
-// Cleanup interval in milliseconds (5 minutes)
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 // Lock persistence file name
 const LOCK_FILE_NAME = 'advisory-locks.json';
@@ -418,7 +413,7 @@ export class FileLockService {
     }
 
     // Acquire the lock
-    const ttlSeconds = input.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+    const ttlSeconds = input.ttlSeconds ?? SERVICE_TTL_SECONDS.fileLockDefault;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
@@ -611,7 +606,7 @@ export class FileLockService {
   /**
    * Start the periodic cleanup interval
    */
-  startCleanupInterval(intervalMs = CLEANUP_INTERVAL_MS): void {
+  startCleanupInterval(intervalMs = SERVICE_INTERVAL_MS.fileLockCleanup): void {
     if (this.cleanupInterval) {
       return; // Already running
     }

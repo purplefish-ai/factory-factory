@@ -7,21 +7,18 @@
 
 import pLimit from 'p-limit';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from './constants';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { prSnapshotService } from './pr-snapshot.service';
 
 const logger = createLogger('scheduler');
 
-const PR_SYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
-const STALE_THRESHOLD_MINUTES = 2;
-const MAX_CONCURRENT_PR_SYNCS = 5;
-
 class SchedulerService {
   private syncInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
   private syncInProgress: Promise<unknown> | null = null;
-  private readonly prSyncLimit = pLimit(MAX_CONCURRENT_PR_SYNCS);
+  private readonly prSyncLimit = pLimit(SERVICE_CONCURRENCY.schedulerPrSyncs);
 
   /**
    * Start the scheduler
@@ -49,9 +46,9 @@ class SchedulerService {
       ]).finally(() => {
         this.syncInProgress = null;
       });
-    }, PR_SYNC_INTERVAL_MS);
+    }, SERVICE_INTERVAL_MS.schedulerPrSync);
 
-    logger.info('Scheduler started', { prSyncIntervalMs: PR_SYNC_INTERVAL_MS });
+    logger.info('Scheduler started', { prSyncIntervalMs: SERVICE_INTERVAL_MS.schedulerPrSync });
   }
 
   /**
@@ -83,7 +80,9 @@ class SchedulerService {
       return { synced: 0, failed: 0 };
     }
 
-    const workspaces = await workspaceAccessor.findNeedingPRSync(STALE_THRESHOLD_MINUTES);
+    const workspaces = await workspaceAccessor.findNeedingPRSync(
+      SERVICE_THRESHOLDS.schedulerStaleMinutes
+    );
 
     logger.info('Starting batch PR sync', { count: workspaces.length });
 
