@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { SessionManager } from '../claude';
 import { chatConnectionService } from './chat-connection.service';
-import { sessionStoreService } from './session-store.service';
 
 vi.mock('../claude', async () => {
   const actual = await vi.importActual<typeof import('../claude')>('../claude');
@@ -52,10 +52,10 @@ function getLatestReplayBatch(): {
   return latest;
 }
 
-describe('SessionStoreService', () => {
+describe('SessionDomainService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sessionStoreService.clearAllSessions();
+    sessionDomainService.clearAllSessions();
   });
 
   it('hydrates from Claude history on first subscribe and emits session_replay_batch', async () => {
@@ -72,7 +72,7 @@ describe('SessionStoreService', () => {
       },
     ]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -140,7 +140,7 @@ describe('SessionStoreService', () => {
       },
     ]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -174,7 +174,7 @@ describe('SessionStoreService', () => {
       },
     ]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -225,7 +225,7 @@ describe('SessionStoreService', () => {
       },
     ]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -261,7 +261,7 @@ describe('SessionStoreService', () => {
   it('subscribe does not emit session_delta before session_replay_batch', async () => {
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
@@ -293,7 +293,7 @@ describe('SessionStoreService', () => {
     });
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockReturnValue(historyPromise);
 
-    const firstSubscribe = sessionStoreService.subscribe({
+    const firstSubscribe = sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -304,7 +304,7 @@ describe('SessionStoreService', () => {
         updatedAt: new Date().toISOString(),
       },
     });
-    const secondSubscribe = sessionStoreService.subscribe({
+    const secondSubscribe = sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -357,7 +357,7 @@ describe('SessionStoreService', () => {
         },
       ]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -369,7 +369,7 @@ describe('SessionStoreService', () => {
       },
     });
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s2',
@@ -412,7 +412,7 @@ describe('SessionStoreService', () => {
       ]);
     });
 
-    const firstSubscribe = sessionStoreService.subscribe({
+    const firstSubscribe = sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -423,7 +423,7 @@ describe('SessionStoreService', () => {
         updatedAt: new Date().toISOString(),
       },
     });
-    const secondSubscribe = sessionStoreService.subscribe({
+    const secondSubscribe = sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s2',
@@ -470,7 +470,7 @@ describe('SessionStoreService', () => {
     ];
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -488,10 +488,10 @@ describe('SessionStoreService', () => {
       .map((event) => event.id as string);
 
     mockedConnectionService.forwardToSession.mockClear();
-    sessionStoreService.clearSession('s1');
+    sessionDomainService.clearSession('s1');
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -528,7 +528,7 @@ describe('SessionStoreService', () => {
         },
       ]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -540,9 +540,9 @@ describe('SessionStoreService', () => {
       },
     });
 
-    sessionStoreService.markProcessExit('s1', 1);
+    sessionDomainService.markProcessExit('s1', 1);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -581,7 +581,7 @@ describe('SessionStoreService', () => {
       ])
       .mockReturnValueOnce(rehydratePromise);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: 'claude-s1',
@@ -594,7 +594,7 @@ describe('SessionStoreService', () => {
     });
 
     mockedConnectionService.forwardToSession.mockClear();
-    sessionStoreService.markProcessExit('s1', 1);
+    sessionDomainService.markProcessExit('s1', 1);
 
     const immediateSnapshots = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; messages?: unknown[] })
@@ -620,7 +620,7 @@ describe('SessionStoreService', () => {
   });
 
   it('enqueue adds queued message and emits updated snapshot', () => {
-    const result = sessionStoreService.enqueue('s1', {
+    const result = sessionDomainService.enqueue('s1', {
       id: 'm1',
       text: 'queued',
       timestamp: '2026-02-01T00:00:00.000Z',
@@ -646,7 +646,7 @@ describe('SessionStoreService', () => {
   });
 
   it('dequeueNext emits snapshot by default', () => {
-    sessionStoreService.enqueue('s1', {
+    sessionDomainService.enqueue('s1', {
       id: 'm1',
       text: 'queued',
       timestamp: '2026-02-01T00:00:00.000Z',
@@ -658,7 +658,7 @@ describe('SessionStoreService', () => {
     });
 
     mockedConnectionService.forwardToSession.mockClear();
-    const next = sessionStoreService.dequeueNext('s1');
+    const next = sessionDomainService.dequeueNext('s1');
 
     expect(next?.id).toBe('m1');
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls.find(
@@ -668,7 +668,7 @@ describe('SessionStoreService', () => {
   });
 
   it('dequeueNext can skip snapshot emission to avoid transient UI gaps during dispatch', () => {
-    sessionStoreService.enqueue('s1', {
+    sessionDomainService.enqueue('s1', {
       id: 'm1',
       text: 'queued',
       timestamp: '2026-02-01T00:00:00.000Z',
@@ -680,14 +680,14 @@ describe('SessionStoreService', () => {
     });
 
     mockedConnectionService.forwardToSession.mockClear();
-    const next = sessionStoreService.dequeueNext('s1', { emitSnapshot: false });
+    const next = sessionDomainService.dequeueNext('s1', { emitSnapshot: false });
 
     expect(next?.id).toBe('m1');
     expect(mockedConnectionService.forwardToSession).not.toHaveBeenCalled();
   });
 
   it('markProcessExit drops queued messages and pending interactive request', () => {
-    sessionStoreService.enqueue('s1', {
+    sessionDomainService.enqueue('s1', {
       id: 'm1',
       text: 'queued',
       timestamp: '2026-02-01T00:00:00.000Z',
@@ -698,7 +698,7 @@ describe('SessionStoreService', () => {
       },
     });
 
-    sessionStoreService.setPendingInteractiveRequest('s1', {
+    sessionDomainService.setPendingInteractiveRequest('s1', {
       requestId: 'req-1',
       toolName: 'ExitPlanMode',
       toolUseId: 'tool-1',
@@ -707,10 +707,10 @@ describe('SessionStoreService', () => {
       timestamp: '2026-02-01T00:00:00.000Z',
     });
 
-    sessionStoreService.markProcessExit('s1', 1);
+    sessionDomainService.markProcessExit('s1', 1);
 
-    expect(sessionStoreService.getQueueLength('s1')).toBe(0);
-    expect(sessionStoreService.getPendingInteractiveRequest('s1')).toBeNull();
+    expect(sessionDomainService.getQueueLength('s1')).toBe(0);
+    expect(sessionDomainService.getPendingInteractiveRequest('s1')).toBeNull();
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .filter(([, payload]) => (payload as { type?: string }).type === 'session_snapshot')
@@ -723,7 +723,7 @@ describe('SessionStoreService', () => {
   it('markProcessExit treats exit code 0 as expected and keeps idle phase', async () => {
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
@@ -735,7 +735,7 @@ describe('SessionStoreService', () => {
       },
     });
 
-    sessionStoreService.markProcessExit('s1', 0);
+    sessionDomainService.markProcessExit('s1', 0);
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; sessionRuntime?: unknown })
@@ -756,7 +756,7 @@ describe('SessionStoreService', () => {
   it('markProcessExit treats null exit code as unexpected and sets error phase', async () => {
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
@@ -768,7 +768,7 @@ describe('SessionStoreService', () => {
       },
     });
 
-    sessionStoreService.markProcessExit('s1', null);
+    sessionDomainService.markProcessExit('s1', null);
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; sessionRuntime?: unknown })
@@ -789,7 +789,7 @@ describe('SessionStoreService', () => {
   it('clears stale lastExit after transitioning back to idle', async () => {
     vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
 
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId: 's1',
       claudeProjectPath: '/tmp/project-path',
       claudeSessionId: null,
@@ -801,9 +801,9 @@ describe('SessionStoreService', () => {
       },
     });
 
-    sessionStoreService.markProcessExit('s1', 1);
-    sessionStoreService.markIdle('s1', 'alive');
-    sessionStoreService.emitSessionSnapshot('s1');
+    sessionDomainService.markProcessExit('s1', 1);
+    sessionDomainService.markIdle('s1', 'alive');
+    sessionDomainService.emitSessionSnapshot('s1');
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; sessionRuntime?: { lastExit?: unknown } })
@@ -815,7 +815,7 @@ describe('SessionStoreService', () => {
   });
 
   it('does not persist duplicate result text when latest assistant text matches', () => {
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
       message: {
         role: 'assistant',
@@ -824,13 +824,13 @@ describe('SessionStoreService', () => {
       timestamp: '2026-02-08T00:00:00.000Z',
     });
 
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'result',
       result: 'There are **514 TypeScript files**.',
       timestamp: '2026-02-08T00:00:01.000Z',
     });
 
-    sessionStoreService.emitSessionSnapshot('s1');
+    sessionDomainService.emitSessionSnapshot('s1');
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; messages?: Array<{ source: string }> })
@@ -841,12 +841,12 @@ describe('SessionStoreService', () => {
   });
 
   it('does not consume order for filtered non-persisted events', () => {
-    const filteredOrder = sessionStoreService.appendClaudeEvent('s1', {
+    const filteredOrder = sessionDomainService.appendClaudeEvent('s1', {
       type: 'stream_event',
       event: { type: 'message_start', message: { role: 'assistant', content: [] } },
       timestamp: '2026-02-08T00:00:00.000Z',
     });
-    const persistedOrder = sessionStoreService.appendClaudeEvent('s1', {
+    const persistedOrder = sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
       timestamp: '2026-02-08T00:00:01.000Z',
@@ -857,17 +857,17 @@ describe('SessionStoreService', () => {
   });
 
   it('does not consume order for duplicate result suppression', () => {
-    const assistantOrder = sessionStoreService.appendClaudeEvent('s1', {
+    const assistantOrder = sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text: 'same text' }] },
       timestamp: '2026-02-08T00:00:00.000Z',
     });
-    const duplicateResultOrder = sessionStoreService.appendClaudeEvent('s1', {
+    const duplicateResultOrder = sessionDomainService.appendClaudeEvent('s1', {
       type: 'result',
       result: 'same text',
       timestamp: '2026-02-08T00:00:01.000Z',
     });
-    const nextAssistantOrder = sessionStoreService.appendClaudeEvent('s1', {
+    const nextAssistantOrder = sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
       message: {
         role: 'assistant',
@@ -882,19 +882,19 @@ describe('SessionStoreService', () => {
   });
 
   it('suppresses duplicate result when payload is structured object text', () => {
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text: 'structured answer' }] },
       timestamp: '2026-02-08T00:00:00.000Z',
     });
 
-    const duplicateResultOrder = sessionStoreService.appendClaudeEvent('s1', {
+    const duplicateResultOrder = sessionDomainService.appendClaudeEvent('s1', {
       type: 'result',
       result: { text: 'structured answer' },
       timestamp: '2026-02-08T00:00:01.000Z',
     });
 
-    sessionStoreService.emitSessionSnapshot('s1');
+    sessionDomainService.emitSessionSnapshot('s1');
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; messages?: Array<{ source: string }> })
@@ -906,25 +906,25 @@ describe('SessionStoreService', () => {
   });
 
   it('keeps result when matching text exists only in a previous turn', () => {
-    sessionStoreService.commitSentUserMessage('s1', {
+    sessionDomainService.commitSentUserMessage('s1', {
       id: 'u1',
       text: 'first question',
       timestamp: '2026-02-08T00:00:00.000Z',
       settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
     });
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text: 'Same answer' }] },
       timestamp: '2026-02-08T00:00:01.000Z',
     });
 
-    sessionStoreService.commitSentUserMessage('s1', {
+    sessionDomainService.commitSentUserMessage('s1', {
       id: 'u2',
       text: 'second question',
       timestamp: '2026-02-08T00:00:02.000Z',
       settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
     });
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
       message: {
         role: 'assistant',
@@ -932,13 +932,13 @@ describe('SessionStoreService', () => {
       },
       timestamp: '2026-02-08T00:00:03.000Z',
     });
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'result',
       result: 'Same answer',
       timestamp: '2026-02-08T00:00:04.000Z',
     });
 
-    sessionStoreService.emitSessionSnapshot('s1');
+    sessionDomainService.emitSessionSnapshot('s1');
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .map(
@@ -959,13 +959,13 @@ describe('SessionStoreService', () => {
   });
 
   it('does not persist non-renderable stream events in transcript snapshots', () => {
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'stream_event',
       event: { type: 'message_start', message: { role: 'assistant', content: [] } },
       timestamp: '2026-02-08T00:00:00.000Z',
     });
 
-    sessionStoreService.appendClaudeEvent('s1', {
+    sessionDomainService.appendClaudeEvent('s1', {
       type: 'stream_event',
       event: {
         type: 'content_block_start',
@@ -975,7 +975,7 @@ describe('SessionStoreService', () => {
       timestamp: '2026-02-08T00:00:01.000Z',
     });
 
-    sessionStoreService.emitSessionSnapshot('s1');
+    sessionDomainService.emitSessionSnapshot('s1');
 
     const snapshotCall = mockedConnectionService.forwardToSession.mock.calls
       .map(

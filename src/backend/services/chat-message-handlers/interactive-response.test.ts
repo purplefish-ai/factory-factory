@@ -14,8 +14,8 @@ vi.mock('../session.service', () => ({
   },
 }));
 
-vi.mock('../session-store.service', () => ({
-  sessionStoreService: {
+vi.mock('@/backend/domains/session/session-domain.service', () => ({
+  sessionDomainService: {
     getPendingInteractiveRequest: (...args: unknown[]) => mockGetPendingInteractiveRequest(...args),
     clearPendingInteractiveRequestIfMatches: (...args: unknown[]) =>
       mockClearPendingInteractiveRequestIfMatches(...args),
