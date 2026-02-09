@@ -63,7 +63,7 @@ graph TB
 
     Loop --> Check[checkAllWorkspaces]
     Check --> Query[Query: Find READY workspaces with PRs]
-    Query --> Batch[Process with p-limit 5]
+    Query --> Batch[Process with p-limit 20]
 
     Batch --> W1[Workspace 1]
     Batch --> W2[Workspace 2]
@@ -131,7 +131,7 @@ stateDiagram-v2
 - **Global state:**
   - `monitorLoop`: Promise tracking the continuous loop
   - `isShuttingDown`: Flag to exit loop gracefully
-  - `checkLimit`: p-limit(5) concurrency limiter
+  - `checkLimit`: p-limit(20) concurrency limiter
 
 ### 2. Polling Loop Details
 
@@ -140,7 +140,7 @@ sequenceDiagram
     participant Loop as Async Loop
     participant Service as CIMonitorService
     participant DB as Database
-    participant Limiter as p-limit(5)
+    participant Limiter as p-limit(20)
     participant GitHub as GitHub API
     participant Session as ClaudeSession
 
@@ -434,7 +434,7 @@ Query DB → 0 results → Complete in ~10ms
 ```
 Query DB (50ms)
   ↓
-Process 20 workspaces with p-limit(5) (~4 batches)
+Process 20 workspaces with p-limit(20) (1 batch, all concurrent)
   ↓
 GitHub API: ~200ms per request × 4 batches = ~800ms
   ↓
@@ -635,7 +635,7 @@ The CI Monitoring System uses a **global singleton cron with wait-then-sleep** t
 - ✅ Checks all workspaces in one polling loop (not per-workspace crons)
 - ✅ Uses async loop with wait-then-sleep (not setInterval)
 - ✅ Guarantees no overlapping executions
-- ✅ Processes workspaces concurrently with p-limit(5)
+- ✅ Processes workspaces concurrently with p-limit(20)
 - ✅ Notifies active Claude sessions when CI fails
 - ✅ Throttles notifications to prevent spam (10-minute cooldown)
 - ✅ Gracefully handles shutdown (exits loop cleanly)
