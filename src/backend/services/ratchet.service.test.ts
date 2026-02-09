@@ -193,7 +193,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(result).toMatchObject({
       action: {
         type: 'WAITING',
-        reason: 'Workspace is not idle (active non-ratchet chat session)',
+        reason: 'Workspace is not idle (active session)',
       },
     });
   });
@@ -251,7 +251,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(finalUpdatePayload).toHaveProperty('prReviewLastCheckedAt');
   });
 
-  it('does dispatch when non-ratchet session is running but idle', async () => {
+  it('does dispatch when session is running but idle', async () => {
     const workspace = {
       id: 'ws-idle-session',
       prUrl: 'https://github.com/example/repo/pull/44',
