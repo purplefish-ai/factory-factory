@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from 'react';
+import { createElement } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SidebarProvider, useSidebar } from './sidebar';
@@ -61,7 +62,7 @@ function renderInDom(render: (root: Root, container: HTMLDivElement) => void): (
   const root = createRoot(container);
   render(root, container);
   return () => {
-    act(() => root.unmount());
+    root.unmount();
     container.remove();
   };
 }
@@ -84,7 +85,7 @@ describe('SidebarProvider persistence', () => {
     localStorage.setItem('sidebar_state', 'false');
 
     const cleanup = renderInDom((root, container) => {
-      act(() => {
+      flushSync(() => {
         root.render(createElement(SidebarProvider, null, createElement(SidebarProbe)));
       });
 
@@ -99,13 +100,13 @@ describe('SidebarProvider persistence', () => {
 
   it('writes localStorage when open state changes', () => {
     const cleanup = renderInDom((root, container) => {
-      act(() => {
+      flushSync(() => {
         root.render(createElement(SidebarProvider, null, createElement(SidebarProbe)));
       });
 
       const collapseButton = container.querySelector('button');
       expect(collapseButton).not.toBeNull();
-      act(() => {
+      flushSync(() => {
         collapseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
 
