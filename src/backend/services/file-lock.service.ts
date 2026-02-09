@@ -139,10 +139,7 @@ export class FileLockService {
 
   // Cleanup interval handle
   private cleanupInterval?: NodeJS.Timeout;
-
-  constructor() {
-    this.warnIfMultiProcessRuntime();
-  }
+  private hasCheckedRuntime = false;
 
   /**
    * Warn when runtime hints indicate multiple Node.js processes.
@@ -177,6 +174,14 @@ export class FileLockService {
       impact:
         'Advisory locks are process-local only; use a distributed lock for cross-process coordination.',
     });
+  }
+
+  private ensureRuntimeWarningChecked(): void {
+    if (this.hasCheckedRuntime) {
+      return;
+    }
+    this.hasCheckedRuntime = true;
+    this.warnIfMultiProcessRuntime();
   }
 
   private readEnvSignal(key: string): string | undefined {
@@ -315,6 +320,8 @@ export class FileLockService {
    * Get or create lock store for a workspace
    */
   private async getOrCreateStore(context: WorkspaceContext): Promise<WorkspaceLockStore> {
+    this.ensureRuntimeWarningChecked();
+
     let store = this.stores.get(context.workspaceId);
 
     if (!store) {
@@ -607,6 +614,8 @@ export class FileLockService {
    * Start the periodic cleanup interval
    */
   startCleanupInterval(intervalMs = SERVICE_INTERVAL_MS.fileLockCleanup): void {
+    this.ensureRuntimeWarningChecked();
+
     if (this.cleanupInterval) {
       return; // Already running
     }

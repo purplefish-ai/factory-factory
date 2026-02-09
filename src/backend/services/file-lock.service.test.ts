@@ -777,10 +777,11 @@ describe('FileLockService', () => {
       restoreEnv('WEB_CONCURRENCY', originalWebConcurrency);
     });
 
-    it('warns when cluster-like runtime is detected', () => {
+    it('warns when cluster-like runtime is detected', async () => {
       process.env.NODE_UNIQUE_ID = '1';
 
-      new FileLockService();
+      const service = new FileLockService();
+      await service.checkLock(mockAgentId, { filePath: 'src/index.ts' });
 
       expect(mockLoggerWarn).toHaveBeenCalledWith(
         'File lock service detected likely multi-process runtime',
@@ -790,14 +791,15 @@ describe('FileLockService', () => {
       );
     });
 
-    it('does not warn in single-process runtime', () => {
+    it('does not warn in single-process runtime', async () => {
       Reflect.deleteProperty(process.env, 'NODE_UNIQUE_ID');
       Reflect.deleteProperty(process.env, 'pm_id');
       Reflect.deleteProperty(process.env, 'NODE_APP_INSTANCE');
       process.env.WEB_CONCURRENCY = '1';
 
       mockLoggerWarn.mockClear();
-      new FileLockService();
+      const service = new FileLockService();
+      await service.checkLock(mockAgentId, { filePath: 'src/index.ts' });
 
       expect(mockLoggerWarn).not.toHaveBeenCalledWith(
         'File lock service detected likely multi-process runtime',
