@@ -1,4 +1,4 @@
-import { decisionLogAccessor } from '../../resource_accessors/index';
+import { decisionLogQueryService } from '../../services/decision-log-query.service';
 import { createLogger } from '../../services/logger.service';
 import { CRITICAL_TOOLS, isTransientError } from './errors';
 import type { McpToolContext, McpToolRegistryEntry, McpToolResponse } from './types';
@@ -85,7 +85,7 @@ async function safeLogToDecisionLog(
   data: unknown
 ): Promise<void> {
   try {
-    await decisionLogAccessor.createAutomatic(agentId, toolName, type, data);
+    await decisionLogQueryService.createAutomatic(agentId, toolName, type, data);
   } catch (logError) {
     logger.warn(`Failed to log tool ${type}`, {
       agentId,

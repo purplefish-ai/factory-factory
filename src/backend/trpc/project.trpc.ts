@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { prisma } from '../db';
 import { gitCommandC } from '../lib/shell';
-import { projectAccessor } from '../resource_accessors/project.accessor';
 import { FactoryConfigService } from '../services/factory-config.service';
+import { projectManagementService } from '../services/project-management.service';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
@@ -70,12 +70,12 @@ export const projectRouter = router({
         .optional()
     )
     .query(({ input }) => {
-      return projectAccessor.list(input);
+      return projectManagementService.list(input);
     }),
 
   // Get project by ID
   getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const project = await projectAccessor.findById(input.id);
+    const project = await projectManagementService.findById(input.id);
     if (!project) {
       throw new Error(`Project not found: ${input.id}`);
     }
@@ -84,7 +84,7 @@ export const projectRouter = router({
 
   // Get project by slug
   getBySlug: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ input }) => {
-    const project = await projectAccessor.findBySlug(input.slug);
+    const project = await projectManagementService.findBySlug(input.slug);
     if (!project) {
       throw new Error(`Project not found: ${input.slug}`);
     }
@@ -95,7 +95,7 @@ export const projectRouter = router({
   listBranches: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
-      const project = await projectAccessor.findById(input.projectId);
+      const project = await projectManagementService.findById(input.projectId);
       if (!project) {
         throw new Error(`Project not found: ${input.projectId}`);
       }
@@ -140,7 +140,7 @@ export const projectRouter = router({
       }
 
       // Validate repo path
-      const repoValidation = await projectAccessor.validateRepoPath(input.repoPath);
+      const repoValidation = await projectManagementService.validateRepoPath(input.repoPath);
       if (!repoValidation.valid) {
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
@@ -148,7 +148,7 @@ export const projectRouter = router({
       // Use transaction to ensure atomic creation with startup script config
       return prisma.$transaction(async (tx) => {
         // Create the project
-        const project = await projectAccessor.create(createInput, {
+        const project = await projectManagementService.create(createInput, {
           worktreeBaseDir: configService.getWorktreeBaseDir(),
         });
 
@@ -189,7 +189,7 @@ export const projectRouter = router({
 
       // Validate new repo path if provided
       if (updates.repoPath) {
-        const repoValidation = await projectAccessor.validateRepoPath(updates.repoPath);
+        const repoValidation = await projectManagementService.validateRepoPath(updates.repoPath);
         if (!repoValidation.valid) {
           throw new Error(`Invalid repository path: ${repoValidation.error}`);
         }
@@ -223,17 +223,17 @@ export const projectRouter = router({
         }
       }
 
-      return projectAccessor.update(id, updates);
+      return projectManagementService.update(id, updates);
     }),
 
   // Archive a project (soft delete)
   archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
-    return projectAccessor.archive(input.id);
+    return projectManagementService.archive(input.id);
   }),
 
   // Validate repo path
   validateRepoPath: publicProcedure.input(z.object({ repoPath: z.string() })).query(({ input }) => {
-    return projectAccessor.validateRepoPath(input.repoPath);
+    return projectManagementService.validateRepoPath(input.repoPath);
   }),
 
   // Check if factory-factory.json exists in the repository

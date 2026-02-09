@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { isPathSafe } from '../../lib/file-helpers';
 import { getMergeBase, parseGitStatusOutput } from '../../lib/git-helpers';
 import { gitCommand } from '../../lib/shell';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
+import { workspaceDataService } from '../../services/workspace-data.service';
 import { type Context, publicProcedure, router } from '../trpc';
 import {
   getWorkspaceWithProjectAndWorktreeOrThrow,
@@ -59,7 +59,7 @@ export const workspaceGitRouter = router({
     .query(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
       // Use findByIdWithProject directly since we need project info
-      const workspace = await workspaceAccessor.findByIdWithProject(input.workspaceId);
+      const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
       if (!workspace) {
         throw new Error(`Workspace not found: ${input.workspaceId}`);
       }

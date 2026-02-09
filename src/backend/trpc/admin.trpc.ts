@@ -7,13 +7,10 @@
 import { type DecisionLog, SessionStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
-import {
-  claudeSessionAccessor,
-  decisionLogAccessor,
-  terminalSessionAccessor,
-  workspaceAccessor,
-} from '../resource_accessors/index';
 import { dataBackupService } from '../services';
+import { decisionLogQueryService } from '../services/decision-log-query.service';
+import { sessionDataService } from '../services/session-data.service';
+import { workspaceDataService } from '../services/workspace-data.service';
 import { type Context, publicProcedure, router } from './trpc';
 
 const loggerName = 'admin-trpc';
@@ -63,7 +60,7 @@ export const adminRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const logs = await decisionLogAccessor.list({
+      const logs = await decisionLogQueryService.list({
         agentId: input.agentId,
         limit: input.limit,
       });
@@ -158,10 +155,10 @@ export const adminRouter = router({
     const activeTerminals = terminalService.getAllTerminals();
 
     // Get Claude sessions with PIDs from database for enriched info
-    const claudeSessionsWithPid = await claudeSessionAccessor.findWithPid();
+    const claudeSessionsWithPid = await sessionDataService.findClaudeSessionsWithPid();
 
     // Get terminal sessions with PIDs from database
-    const terminalSessionsWithPid = await terminalSessionAccessor.findWithPid();
+    const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([
@@ -169,7 +166,7 @@ export const adminRouter = router({
       ...terminalSessionsWithPid.map((s) => s.workspaceId),
       ...activeTerminals.map((t) => t.workspaceId),
     ]);
-    const workspaces = await workspaceAccessor.findByIdsWithProject(Array.from(workspaceIds));
+    const workspaces = await workspaceDataService.findByIdsWithProject(Array.from(workspaceIds));
     const workspaceMap = new Map(workspaces.map((w) => [w.id, w]));
 
     // Build enriched Claude process list from DB sessions
