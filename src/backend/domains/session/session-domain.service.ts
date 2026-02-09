@@ -79,6 +79,10 @@ class SessionDomainService {
     sessionStoreService.markProcessExit(sessionId, code);
   }
 
+  clearQueuedWork(sessionId: string, options?: { emitSnapshot?: boolean }): void {
+    sessionStoreService.clearQueuedWork(sessionId, options);
+  }
+
   markStarting(sessionId: string): void {
     sessionStoreService.markStarting(sessionId);
   }

@@ -114,6 +114,8 @@ class SessionService {
       claudeProcessPid: null,
     });
 
+    sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
+
     // Manual stops can complete without an exit callback race; normalize state explicitly.
     sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'idle',
@@ -189,10 +191,10 @@ class SessionService {
     const client = await this.processManager
       .getOrCreateClient(sessionId, clientOptions, handlers, context)
       .catch((error) => {
-        const current = this.getRuntimeSnapshot(sessionId);
         sessionDomainService.setRuntimeSnapshot(sessionId, {
-          ...current,
           phase: 'error',
+          processState: 'stopped',
+          activity: 'IDLE',
           updatedAt: new Date().toISOString(),
         });
         throw error;

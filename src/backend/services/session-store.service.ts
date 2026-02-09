@@ -56,6 +56,7 @@ type SnapshotReason =
   | 'pending_request_cleared'
   | 'process_exit_reset'
   | 'process_exit_rehydrate'
+  | 'queue_cleared'
   | 'manual_emit'
   | 'inject_user_message';
 
@@ -874,6 +875,17 @@ class SessionStoreService {
           });
         });
     }
+  }
+
+  clearQueuedWork(sessionId: string, options?: { emitSnapshot?: boolean }): void {
+    const store = this.getOrCreate(sessionId);
+    const hadQueuedWork = store.queue.length > 0 || store.pendingInteractiveRequest !== null;
+    store.queue = [];
+    store.pendingInteractiveRequest = null;
+    if (!hadQueuedWork || options?.emitSnapshot === false) {
+      return;
+    }
+    this.forwardSnapshot(store, { reason: 'queue_cleared' });
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {

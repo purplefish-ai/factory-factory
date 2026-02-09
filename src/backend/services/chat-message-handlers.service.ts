@@ -112,6 +112,7 @@ class ChatMessageHandlerService {
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
         });
+        sessionDomainService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
         sessionDomainService.requeueFront(dbSessionId, msg);
       }
     } finally {
