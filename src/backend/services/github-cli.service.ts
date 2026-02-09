@@ -137,7 +137,7 @@ const fullPRDetailsSchema = z.object({
         author: z.object({ login: z.string() }),
         body: z.string(),
         createdAt: z.string(),
-        updatedAt: z.string(),
+        updatedAt: z.string().optional(),
         url: z.string(),
       })
       .passthrough()
@@ -267,7 +267,7 @@ function mapComments(comments: z.infer<typeof fullPRDetailsSchema>['comments']):
     author: comment.author,
     body: comment.body,
     createdAt: comment.createdAt,
-    updatedAt: comment.updatedAt,
+    updatedAt: comment.updatedAt ?? comment.createdAt,
     url: comment.url,
   }));
 }
