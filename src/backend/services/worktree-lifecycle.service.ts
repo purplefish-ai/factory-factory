@@ -23,12 +23,107 @@ import { workspaceStateMachine } from './workspace-state-machine.service';
 const logger = createLogger('worktree-lifecycle');
 const workspaceInitModes = new Map<string, boolean>();
 const RESUME_MODE_FILENAME = '.ff-resume-modes.json';
+const RESUME_MODE_LOCK_FILENAME = '.ff-resume-modes.json.lock';
 const resumeModeLocks = new Map<string, Promise<void>>();
+
+// File-based lock configuration
+const LOCK_ACQUIRE_TIMEOUT_MS = 5000; // Maximum time to wait for lock
+const LOCK_RETRY_DELAY_MS = 50; // Initial retry delay
+const LOCK_MAX_RETRY_DELAY_MS = 500; // Maximum retry delay
+
+/**
+ * Create cleanup function for file lock.
+ */
+function createLockCleanup(
+  fileHandle: fs.FileHandle | undefined,
+  lockPath: string
+): () => Promise<void> {
+  return async () => {
+    try {
+      await fileHandle?.close();
+      await fs.unlink(lockPath).catch(() => {
+        // Lock file may already be deleted; ignore error
+      });
+    } catch (error) {
+      logger.warn('Failed to clean up lock file', {
+        lockPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+}
+
+/**
+ * Check if lock file is stale and remove it if so.
+ * Returns true if lock was removed or doesn't exist.
+ */
+async function tryRemoveStaleLock(lockPath: string): Promise<boolean> {
+  try {
+    const stats = await fs.stat(lockPath);
+    const lockAge = Date.now() - stats.mtimeMs;
+
+    // If lock is older than timeout, consider it stale and remove it
+    if (lockAge > LOCK_ACQUIRE_TIMEOUT_MS) {
+      logger.warn('Removing stale lock file', {
+        lockPath,
+        lockAgeMs: lockAge,
+      });
+      await fs.unlink(lockPath).catch(() => {
+        // Lock may have been removed by another process; ignore
+      });
+      return true;
+    }
+    return false;
+  } catch (_error) {
+    // Lock file disappeared - another process cleaned it up
+    return true;
+  }
+}
+
+/**
+ * Acquire a cross-process file lock using atomic file creation.
+ * Returns a cleanup function to release the lock.
+ */
+async function acquireFileLock(lockPath: string): Promise<() => Promise<void>> {
+  const startTime = Date.now();
+  let retryDelay = LOCK_RETRY_DELAY_MS;
+
+  while (true) {
+    try {
+      // Try to create lock file exclusively (atomic operation)
+      const fileHandle = await fs.open(lockPath, 'wx');
+      return createLockCleanup(fileHandle, lockPath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+
+      // EEXIST means lock file already exists (another process holds the lock)
+      if (code !== 'EEXIST') {
+        // Other errors (permissions, disk full, etc.) - propagate
+        throw error;
+      }
+
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= LOCK_ACQUIRE_TIMEOUT_MS) {
+        const removed = await tryRemoveStaleLock(lockPath);
+        if (removed) {
+          // Retry immediately after removing stale lock
+          continue;
+        }
+        throw new Error(`Failed to acquire lock after ${LOCK_ACQUIRE_TIMEOUT_MS}ms: ${lockPath}`);
+      }
+
+      // Wait before retrying (exponential backoff)
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      retryDelay = Math.min(retryDelay * 2, LOCK_MAX_RETRY_DELAY_MS);
+    }
+  }
+}
 
 async function withResumeModeLock<T>(
   worktreeBasePath: string,
   handler: () => Promise<T>
 ): Promise<T> {
+  // First acquire in-process lock (for same-process coordination)
   const previous = resumeModeLocks.get(worktreeBasePath) ?? Promise.resolve();
   let release: (() => void) | undefined;
   const next = new Promise<void>((resolve) => {
@@ -37,9 +132,26 @@ async function withResumeModeLock<T>(
   const lock = previous.then(() => next);
   resumeModeLocks.set(worktreeBasePath, lock);
   await previous;
+
+  // Then acquire cross-process file lock
+  const lockPath = path.join(worktreeBasePath, RESUME_MODE_LOCK_FILENAME);
+  let releaseLock: (() => Promise<void>) | undefined;
+
   try {
+    releaseLock = await acquireFileLock(lockPath);
     return await handler();
   } finally {
+    // Release file lock first
+    if (releaseLock) {
+      await releaseLock().catch((error) => {
+        logger.warn('Error releasing file lock', {
+          lockPath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
+    // Then release in-process lock
     release?.();
     if (resumeModeLocks.get(worktreeBasePath) === lock) {
       resumeModeLocks.delete(worktreeBasePath);
