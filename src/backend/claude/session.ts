@@ -22,7 +22,7 @@ const SessionJsonlEntrySchema = z
     uuid: z.string().optional(),
     isMeta: z.boolean().optional(),
     gitBranch: z.string().optional(),
-    message: z.any().optional(),
+    message: z.unknown().optional(),
   })
   .passthrough();
 

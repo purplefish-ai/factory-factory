@@ -46,9 +46,7 @@ describe('assistant renderability guards', () => {
         type: 'assistant',
         message: {
           role: 'assistant',
-          content: [
-            { type: 'tool_use', id: 'tool-1', name: 'Read' } as unknown as ClaudeContentItem,
-          ],
+          content: [{ type: 'tool_use', id: 'tool-1', name: 'Read' } as ClaudeContentItem],
         },
       })
     ).toBe(true);
@@ -65,7 +63,7 @@ describe('assistant renderability guards', () => {
             type: 'tool_use',
             id: 'tool-1',
             name: 'Read',
-          } as unknown as ClaudeContentItem,
+          } as ClaudeContentItem,
         },
       })
     ).toBe(true);

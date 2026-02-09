@@ -8,6 +8,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import type { EventEmitterEmitArgs, EventEmitterListener } from '../lib/event-emitter-types';
 import { createLogger } from '../services/logger.service';
 import { CLAUDE_TIMEOUT_MS } from './constants';
 import { ClaudeProcessMonitor, type ResourceMonitoringOptions } from './monitoring';
@@ -443,8 +444,7 @@ export class ClaudeProcess extends EventEmitter {
   ): this;
   override on(event: 'hung_process', handler: (data: { lastActivity: number }) => void): this;
   override on(event: 'resource_usage', handler: (usage: ResourceUsage) => void): this;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
-  override on(event: string, handler: (...args: any[]) => void): this {
+  override on(event: string, handler: EventEmitterListener): this {
     return super.on(event, handler);
   }
 
@@ -464,8 +464,7 @@ export class ClaudeProcess extends EventEmitter {
   ): boolean;
   override emit(event: 'hung_process', data: { lastActivity: number }): boolean;
   override emit(event: 'resource_usage', usage: ResourceUsage): boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
-  override emit(event: string, ...args: any[]): boolean {
+  override emit(event: string, ...args: EventEmitterEmitArgs): boolean {
     return super.emit(event, ...args);
   }
 

@@ -1,5 +1,6 @@
 import type { ClaudeSession, Project, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionRepository } from './session.repository';
 
 const createSession = (overrides?: Partial<ClaudeSession>): ClaudeSession =>
@@ -37,20 +38,7 @@ describe('SessionRepository', () => {
   };
 
   const repository = new SessionRepository(
-    sessions as unknown as {
-      findById(id: string): Promise<ClaudeSession | null>;
-      findByWorkspaceId(workspaceId: string): Promise<ClaudeSession[]>;
-      update(
-        id: string,
-        data: Partial<
-          Pick<
-            ClaudeSession,
-            'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'
-          >
-        >
-      ): Promise<ClaudeSession>;
-      delete(id: string): Promise<ClaudeSession>;
-    },
+    unsafeCoerce<ConstructorParameters<typeof SessionRepository>[0]>(sessions),
     workspaces,
     projects
   );

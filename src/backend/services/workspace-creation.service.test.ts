@@ -1,5 +1,6 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import * as claudeSessionAccessorModule from '../resource_accessors/claude-session.accessor';
 import * as projectAccessorModule from '../resource_accessors/project.accessor';
 import * as userSettingsAccessorModule from '../resource_accessors/user-settings.accessor';
@@ -101,16 +102,16 @@ describe('WorkspaceCreationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockLogger = {
+    mockLogger = unsafeCoerce<Logger>({
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-    } as unknown as Logger;
+    });
 
-    mockConfigService = {
+    mockConfigService = unsafeCoerce<ConfigService>({
       getMaxSessionsPerWorkspace: vi.fn().mockReturnValue(5),
-    } as unknown as ConfigService;
+    });
 
     service = new WorkspaceCreationService({
       logger: mockLogger,

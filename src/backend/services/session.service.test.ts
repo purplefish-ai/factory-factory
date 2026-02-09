@@ -1,6 +1,7 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { ClaudeClient } from '../claude';
 
 vi.mock('./logger.service', () => ({
@@ -65,16 +66,18 @@ describe('SessionService', () => {
   });
 
   it('starts a session via process manager and updates DB state', async () => {
-    const session = {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
       id: 'session-1',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
       workflow: 'default',
       model: 'sonnet',
       claudeSessionId: null,
-    } as unknown as NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>;
+    });
 
-    const workspace = {
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
       branchName: 'auto-branch',
@@ -83,17 +86,19 @@ describe('SessionService', () => {
       name: 'Workspace A',
       description: null,
       projectId: 'project-1',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>;
+    });
 
-    const project = {
+    const project = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getProjectById>>>({
       id: 'project-1',
       githubOwner: 'owner',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getProjectById>>;
+    });
 
-    const client = {
+    const client = unsafeCoerce<
+      Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>
+    >({
       getPid: vi.fn().mockReturnValue(123),
       sendMessage: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
+    });
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
@@ -140,9 +145,9 @@ describe('SessionService', () => {
   });
 
   it('returns existing client without loading options', async () => {
-    const client = { isRunning: vi.fn().mockReturnValue(true) } as unknown as Awaited<
-      ReturnType<typeof sessionProcessManager.getClient>
-    >;
+    const client = unsafeCoerce<Awaited<ReturnType<typeof sessionProcessManager.getClient>>>({
+      isRunning: vi.fn().mockReturnValue(true),
+    });
 
     vi.mocked(sessionProcessManager.getClient).mockReturnValue(client);
 
@@ -154,16 +159,18 @@ describe('SessionService', () => {
   });
 
   it('delegates to processManager.getOrCreateClient for race protection', async () => {
-    const session = {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
       id: 'session-1',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
       workflow: 'default',
       model: 'sonnet',
       claudeSessionId: null,
-    } as unknown as NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>;
+    });
 
-    const workspace = {
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
       branchName: 'feature-branch',
@@ -171,11 +178,13 @@ describe('SessionService', () => {
       name: 'Workspace A',
       description: null,
       projectId: 'project-1',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>;
+    });
 
-    const client = {
+    const client = unsafeCoerce<
+      Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>
+    >({
       getPid: vi.fn().mockReturnValue(456),
-    } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
+    });
 
     vi.mocked(sessionProcessManager.getClient).mockReturnValue(undefined);
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
@@ -298,14 +307,14 @@ describe('SessionService', () => {
   });
 
   it('returns null session options when workspace is missing', async () => {
-    const session = {
+    const session = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>({
       id: 'session-1',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
       workflow: 'default',
       model: 'sonnet',
       claudeSessionId: null,
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getSessionById>>;
+    });
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(null);
@@ -316,16 +325,18 @@ describe('SessionService', () => {
   });
 
   it('clears ratchetActiveSessionId and deletes session on ratchet exit', async () => {
-    const session = {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
       id: 'session-1',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
       workflow: 'ratchet',
       model: 'sonnet',
       claudeSessionId: null,
-    } as unknown as NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>;
+    });
 
-    const workspace = {
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
       branchName: 'fix-branch',
@@ -333,17 +344,19 @@ describe('SessionService', () => {
       name: 'Workspace A',
       description: null,
       projectId: 'project-1',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>;
+    });
 
-    const project = {
+    const project = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getProjectById>>>({
       id: 'project-1',
       githubOwner: 'owner',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getProjectById>>;
+    });
 
-    const client = {
+    const client = unsafeCoerce<
+      Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>
+    >({
       getPid: vi.fn().mockReturnValue(456),
       sendMessage: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
+    });
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
@@ -383,16 +396,18 @@ describe('SessionService', () => {
   });
 
   it('does not delete session on exit for non-ratchet workflows', async () => {
-    const session = {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
       id: 'session-2',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
       workflow: 'default',
       model: 'sonnet',
       claudeSessionId: null,
-    } as unknown as NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>;
+    });
 
-    const workspace = {
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
       branchName: 'fix-branch',
@@ -400,12 +415,14 @@ describe('SessionService', () => {
       name: 'Workspace A',
       description: null,
       projectId: 'project-1',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>;
+    });
 
-    const client = {
+    const client = unsafeCoerce<
+      Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>
+    >({
       getPid: vi.fn().mockReturnValue(789),
       sendMessage: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
+    });
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
@@ -438,16 +455,16 @@ describe('SessionService', () => {
   });
 
   it('stops sessions that are still starting when stopping a workspace', async () => {
-    const session = {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionsByWorkspaceId>>>[number]
+    >({
       id: 'session-1',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
-    } as unknown as NonNullable<
-      Awaited<ReturnType<typeof sessionRepository.getSessionsByWorkspaceId>>
-    >[number];
+    });
 
     const client = { isRunning: vi.fn().mockReturnValue(true) };
-    const pendingClient = Promise.resolve(client as unknown as ClaudeClient);
+    const pendingClient = Promise.resolve(unsafeCoerce<ClaudeClient>(client));
 
     vi.mocked(sessionRepository.getSessionsByWorkspaceId).mockResolvedValue([session]);
     vi.mocked(sessionProcessManager.getPendingClient).mockReturnValue(pendingClient);
@@ -467,16 +484,18 @@ describe('SessionService', () => {
   });
 
   it('updates DB status when getOrCreateClient creates new client', async () => {
-    const session = {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
       id: 'session-1',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
       workflow: 'default',
       model: 'sonnet',
       claudeSessionId: null,
-    } as unknown as NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>;
+    });
 
-    const workspace = {
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
       branchName: 'feature-branch',
@@ -484,11 +503,13 @@ describe('SessionService', () => {
       name: 'Workspace A',
       description: null,
       projectId: 'project-1',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>;
+    });
 
-    const client = {
+    const client = unsafeCoerce<
+      Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>
+    >({
       getPid: vi.fn().mockReturnValue(999),
-    } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
+    });
 
     vi.mocked(sessionProcessManager.getClient).mockReturnValue(undefined);
     vi.mocked(sessionProcessManager.getPendingClient).mockReturnValue(undefined);
@@ -516,16 +537,18 @@ describe('SessionService', () => {
   });
 
   it('getOrCreateClient and startClaudeSession produce identical DB state', async () => {
-    const session = {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
       id: 'session-1',
       workspaceId: 'workspace-1',
       status: SessionStatus.IDLE,
       workflow: 'default',
       model: 'sonnet',
       claudeSessionId: null,
-    } as unknown as NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>;
+    });
 
-    const workspace = {
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
       branchName: 'feature-branch',
@@ -533,12 +556,14 @@ describe('SessionService', () => {
       name: 'Workspace A',
       description: null,
       projectId: 'project-1',
-    } as unknown as Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>;
+    });
 
-    const client = {
+    const client = unsafeCoerce<
+      Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>
+    >({
       getPid: vi.fn().mockReturnValue(888),
       sendMessage: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Awaited<ReturnType<typeof sessionProcessManager.getOrCreateClient>>;
+    });
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);

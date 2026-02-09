@@ -2,7 +2,14 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { CIStatus, PRState } from '@prisma-gen/client';
 import { z } from 'zod';
-import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
+import type {
+  GitHubComment,
+  GitHubLabel,
+  GitHubReview,
+  GitHubStatusCheck,
+  PRWithFullDetails,
+  ReviewAction,
+} from '@/shared/github-types';
 import { createLogger } from './logger.service';
 
 const execFileAsync = promisify(execFile);
@@ -24,11 +31,15 @@ const GH_MAX_BUFFER_BYTES = Object.freeze({
 /**
  * Zod schemas for gh CLI JSON responses
  */
-const statusCheckRollupItemSchema = z.object({
-  status: z.string(),
-  conclusion: z.string().optional(),
-  state: z.string().optional(),
-});
+const statusCheckRollupItemSchema = z
+  .object({
+    status: z.string().optional(),
+    conclusion: z.string().optional(),
+    state: z.string().optional(),
+  })
+  .refine((item) => item.status !== undefined || item.state !== undefined, {
+    message: 'statusCheckRollup items must include status or state',
+  });
 
 /**
  * Transform empty string to null for reviewDecision field.
@@ -81,6 +92,22 @@ const prListItemSchema = z.object({
   state: z.string(),
 });
 
+const fullPRCheckRunSchema = z.object({
+  __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
+  name: z.string(),
+  status: z.string(),
+  conclusion: z.string().nullable().optional(),
+  detailsUrl: z.string().optional(),
+});
+
+const fullPRStatusContextSchema = z.object({
+  __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
+  context: z.string(),
+  state: z.string(),
+  targetUrl: z.string().optional(),
+  detailsUrl: z.string().optional(),
+});
+
 const fullPRDetailsSchema = z.object({
   number: z.number(),
   title: z.string(),
@@ -91,10 +118,38 @@ const fullPRDetailsSchema = z.object({
   isDraft: z.boolean(),
   state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
   reviewDecision: reviewDecisionSchema,
-  statusCheckRollup: z.array(z.any()).nullable(),
-  reviews: z.array(z.any()),
-  comments: z.array(z.any()),
-  labels: z.array(z.any()),
+  statusCheckRollup: z.array(z.union([fullPRCheckRunSchema, fullPRStatusContextSchema])).nullable(),
+  reviews: z.array(
+    z
+      .object({
+        id: z.string(),
+        author: z.object({ login: z.string() }),
+        state: z.string(),
+        submittedAt: z.string(),
+        body: z.string().optional(),
+      })
+      .passthrough()
+  ),
+  comments: z.array(
+    z
+      .object({
+        id: z.string(),
+        author: z.object({ login: z.string() }),
+        body: z.string(),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+        url: z.string(),
+      })
+      .passthrough()
+  ),
+  labels: z.array(
+    z
+      .object({
+        name: z.string(),
+        color: z.string(),
+      })
+      .passthrough()
+  ),
   additions: z.number().optional(),
   deletions: z.number().optional(),
   changedFiles: z.number().optional(),
@@ -104,6 +159,125 @@ const fullPRDetailsSchema = z.object({
     .enum(['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'])
     .optional(),
 });
+
+const CHECK_STATUS_VALUES = ['COMPLETED', 'IN_PROGRESS', 'PENDING', 'QUEUED'] as const;
+const CHECK_CONCLUSION_VALUES = [
+  'SUCCESS',
+  'FAILURE',
+  'SKIPPED',
+  'CANCELLED',
+  'TIMED_OUT',
+  'ACTION_REQUIRED',
+] as const;
+const REVIEW_STATE_VALUES = [
+  'APPROVED',
+  'CHANGES_REQUESTED',
+  'COMMENTED',
+  'PENDING',
+  'DISMISSED',
+] as const;
+
+function normalizeCheckStatus(status: string): GitHubStatusCheck['status'] {
+  return (CHECK_STATUS_VALUES as readonly string[]).includes(status)
+    ? (status as GitHubStatusCheck['status'])
+    : 'PENDING';
+}
+
+function normalizeCheckConclusion(
+  conclusion: string | null | undefined
+): GitHubStatusCheck['conclusion'] {
+  if (conclusion === null || conclusion === undefined) {
+    return null;
+  }
+  return (CHECK_CONCLUSION_VALUES as readonly string[]).includes(conclusion)
+    ? (conclusion as NonNullable<GitHubStatusCheck['conclusion']>)
+    : null;
+}
+
+function normalizeStatusContextStatus(state: string): GitHubStatusCheck['status'] {
+  if (state === 'PENDING' || state === 'EXPECTED') {
+    return 'PENDING';
+  }
+  return 'COMPLETED';
+}
+
+function normalizeStatusContextConclusion(state: string): GitHubStatusCheck['conclusion'] {
+  switch (state) {
+    case 'SUCCESS':
+      return 'SUCCESS';
+    case 'FAILURE':
+    case 'ERROR':
+      return 'FAILURE';
+    case 'TIMED_OUT':
+      return 'TIMED_OUT';
+    case 'ACTION_REQUIRED':
+      return 'ACTION_REQUIRED';
+    case 'CANCELLED':
+      return 'CANCELLED';
+    case 'SKIPPED':
+      return 'SKIPPED';
+    default:
+      return null;
+  }
+}
+
+function normalizeReviewState(state: string): GitHubReview['state'] {
+  return (REVIEW_STATE_VALUES as readonly string[]).includes(state)
+    ? (state as GitHubReview['state'])
+    : 'PENDING';
+}
+
+function mapStatusChecks(
+  checks: NonNullable<z.infer<typeof fullPRDetailsSchema>['statusCheckRollup']>
+): GitHubStatusCheck[] {
+  return checks.map((check) => {
+    if ('context' in check) {
+      return {
+        __typename: 'StatusContext',
+        name: check.context,
+        status: normalizeStatusContextStatus(check.state),
+        conclusion: normalizeStatusContextConclusion(check.state),
+        detailsUrl: check.targetUrl ?? check.detailsUrl,
+      };
+    }
+
+    return {
+      __typename: check.__typename ?? 'CheckRun',
+      name: check.name,
+      status: normalizeCheckStatus(check.status),
+      conclusion: normalizeCheckConclusion(check.conclusion),
+      detailsUrl: check.detailsUrl,
+    };
+  });
+}
+
+function mapReviews(reviews: z.infer<typeof fullPRDetailsSchema>['reviews']): GitHubReview[] {
+  return reviews.map((review) => ({
+    id: review.id,
+    author: review.author,
+    state: normalizeReviewState(review.state),
+    submittedAt: review.submittedAt,
+    body: review.body,
+  }));
+}
+
+function mapComments(comments: z.infer<typeof fullPRDetailsSchema>['comments']): GitHubComment[] {
+  return comments.map((comment) => ({
+    id: comment.id,
+    author: comment.author,
+    body: comment.body,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+    url: comment.url,
+  }));
+}
+
+function mapLabels(labels: z.infer<typeof fullPRDetailsSchema>['labels']): GitHubLabel[] {
+  return labels.map((label) => ({
+    name: label.name,
+    color: label.color,
+  }));
+}
 
 const issueSchema = z.object({
   number: z.number(),
@@ -196,7 +370,7 @@ export interface PRStatusFromGitHub {
   mergedAt: string | null;
   updatedAt: string;
   statusCheckRollup: Array<{
-    status: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
+    status?: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
     conclusion?: string; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, etc.
     state?: string; // Legacy format support
   }> | null;
@@ -454,7 +628,7 @@ class GitHubCLIService {
    */
   computeCIStatus(
     statusCheckRollup: Array<{
-      status: string;
+      status?: string;
       conclusion?: string;
       state?: string;
     }> | null
@@ -465,7 +639,7 @@ class GitHubCLIService {
 
     // Helper to get the effective state from a check
     const getEffectiveState = (check: {
-      status: string;
+      status?: string;
       conclusion?: string;
       state?: string;
     }): string => {
@@ -474,7 +648,7 @@ class GitHubCLIService {
         return check.conclusion;
       }
       // For legacy format or non-completed checks
-      return check.state || check.status;
+      return check.state || check.status || 'PENDING';
     };
 
     // Check for any failures first
@@ -764,10 +938,10 @@ class GitHubCLIService {
         isDraft: data.isDraft,
         state: data.state,
         reviewDecision: data.reviewDecision,
-        statusCheckRollup: data.statusCheckRollup || null,
-        reviews: data.reviews || [],
-        comments: data.comments || [],
-        labels: data.labels || [],
+        statusCheckRollup: data.statusCheckRollup ? mapStatusChecks(data.statusCheckRollup) : null,
+        reviews: mapReviews(data.reviews),
+        comments: mapComments(data.comments),
+        labels: mapLabels(data.labels),
         additions: data.additions || 0,
         deletions: data.deletions || 0,
         changedFiles: data.changedFiles || 0,

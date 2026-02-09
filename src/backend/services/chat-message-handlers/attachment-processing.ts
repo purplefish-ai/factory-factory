@@ -136,14 +136,15 @@ export function buildContentArray(
   }
 
   for (const attachment of imageAttachments) {
-    content.push({
+    const imageContent: Extract<ClaudeContentItem, { type: 'image' }> = {
       type: 'image',
       source: {
         type: 'base64',
         media_type: attachment.type,
         data: attachment.data,
       },
-    } as unknown as ClaudeContentItem);
+    };
+    content.push(imageContent);
   }
 
   return content;

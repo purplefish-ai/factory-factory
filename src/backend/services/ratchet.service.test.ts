@@ -1,5 +1,6 @@
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -65,7 +66,7 @@ import { sessionService } from './session.service';
 describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (ratchetService as unknown as { isShuttingDown: boolean }).isShuttingDown = false;
+    unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
     vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
   });
@@ -87,7 +88,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     ]);
 
     vi.spyOn(
-      ratchetService as unknown as { processWorkspace: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ processWorkspace: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'processWorkspace'
     ).mockResolvedValue({
       workspaceId: 'ws-1',
@@ -115,7 +116,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
@@ -130,15 +131,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
     const triggerSpy = vi.spyOn(
-      ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
     );
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(triggerSpy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
@@ -162,7 +161,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
@@ -184,11 +183,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     ] as never);
     vi.mocked(sessionService.isSessionWorking).mockReturnValue(true);
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(result).toMatchObject({
       action: {
@@ -213,7 +210,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
@@ -233,11 +230,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       promptSent: true,
     } as never);
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(result).toMatchObject({
       action: { type: 'TRIGGERED_FIXER' },
@@ -266,7 +261,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
@@ -294,11 +289,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       promptSent: true,
     } as never);
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(result).toMatchObject({
       action: { type: 'TRIGGERED_FIXER', sessionId: 'ratchet-session-idle-ok' },
@@ -320,9 +313,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as {
+      unsafeCoerce<{
         fetchPRState: (...args: unknown[]) => Promise<unknown>;
-      },
+      }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.FAILURE,
@@ -336,11 +329,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(result).toMatchObject({
       action: {
@@ -366,9 +357,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as {
+      unsafeCoerce<{
         fetchPRState: (...args: unknown[]) => Promise<unknown>;
-      },
+      }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
@@ -382,15 +373,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     const triggerSpy = vi.spyOn(
-      ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
     );
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(triggerSpy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
@@ -403,11 +392,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('treats closed PR as IDLE and does not dispatch', () => {
-    const state = (
-      ratchetService as unknown as {
-        determineRatchetState: (pr: unknown) => RatchetState;
-      }
-    ).determineRatchetState({
+    const state = unsafeCoerce<{
+      determineRatchetState: (pr: unknown) => RatchetState;
+    }>(ratchetService).determineRatchetState({
       ciStatus: CIStatus.SUCCESS,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
@@ -434,7 +421,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as { fetchPRState: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
@@ -456,11 +443,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
     vi.mocked(sessionService.stopClaudeSession).mockResolvedValue();
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(result).toMatchObject({
       action: { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' },
@@ -486,9 +471,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     };
 
     vi.spyOn(
-      ratchetService as unknown as {
+      unsafeCoerce<{
         fetchPRState: (...args: unknown[]) => Promise<unknown>;
-      },
+      }>(ratchetService),
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
@@ -502,15 +487,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     const triggerSpy = vi.spyOn(
-      ratchetService as unknown as { triggerFixer: (...args: unknown[]) => Promise<unknown> },
+      unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
     );
 
-    const result = await (
-      ratchetService as unknown as {
-        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).processWorkspace(workspace);
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
 
     expect(triggerSpy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
@@ -542,11 +525,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
-    const action = await (
-      ratchetService as unknown as {
-        getActiveRatchetSession: (workspaceArg: typeof workspace) => Promise<unknown>;
-      }
-    ).getActiveRatchetSession(workspace);
+    const action = await unsafeCoerce<{
+      getActiveRatchetSession: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).getActiveRatchetSession(workspace);
 
     expect(action).toBeNull();
     expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
@@ -555,11 +536,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('decides to trigger fixer when context is actionable', () => {
-    const decision = (
-      ratchetService as unknown as {
-        decideRatchetAction: (context: unknown) => { type: string };
-      }
-    ).decideRatchetAction({
+    const decision = unsafeCoerce<{
+      decideRatchetAction: (context: unknown) => { type: string };
+    }>(ratchetService).decideRatchetAction({
       workspace: { ratchetEnabled: true },
       prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
       isCleanPrWithNoNewReviewActivity: false,
@@ -572,14 +551,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('waits when CI is not in terminal state (PENDING)', () => {
-    const decision = (
-      ratchetService as unknown as {
-        decideRatchetAction: (context: unknown) => {
-          type: string;
-          action?: { type: string; reason: string };
-        };
-      }
-    ).decideRatchetAction({
+    const decision = unsafeCoerce<{
+      decideRatchetAction: (context: unknown) => {
+        type: string;
+        action?: { type: string; reason: string };
+      };
+    }>(ratchetService).decideRatchetAction({
       workspace: { ratchetEnabled: true },
       prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.PENDING },
       isCleanPrWithNoNewReviewActivity: false,
@@ -595,14 +572,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('waits when CI is not in terminal state (UNKNOWN)', () => {
-    const decision = (
-      ratchetService as unknown as {
-        decideRatchetAction: (context: unknown) => {
-          type: string;
-          action?: { type: string; reason: string };
-        };
-      }
-    ).decideRatchetAction({
+    const decision = unsafeCoerce<{
+      decideRatchetAction: (context: unknown) => {
+        type: string;
+        action?: { type: string; reason: string };
+      };
+    }>(ratchetService).decideRatchetAction({
       workspace: { ratchetEnabled: true },
       prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.UNKNOWN },
       isCleanPrWithNoNewReviewActivity: false,
@@ -641,19 +616,17 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 10,
     };
 
-    const logContext = (
-      ratchetService as unknown as {
-        buildRatchetingLogContext: (
-          workspaceArg: typeof workspace,
-          previousState: RatchetState,
-          newState: RatchetState,
-          action: { type: 'WAITING'; reason: string },
-          prStateInfoArg: typeof prStateInfo,
-          prNumber: number,
-          decisionContext: { hasNewReviewActivitySinceLastDispatch: boolean }
-        ) => { reviewTimestampComparison: { hasNewReviewActivitySinceLastDispatch: boolean } };
-      }
-    ).buildRatchetingLogContext(
+    const logContext = unsafeCoerce<{
+      buildRatchetingLogContext: (
+        workspaceArg: typeof workspace,
+        previousState: RatchetState,
+        newState: RatchetState,
+        action: { type: 'WAITING'; reason: string },
+        prStateInfoArg: typeof prStateInfo,
+        prNumber: number,
+        decisionContext: { hasNewReviewActivitySinceLastDispatch: boolean }
+      ) => { reviewTimestampComparison: { hasNewReviewActivitySinceLastDispatch: boolean } };
+    }>(ratchetService).buildRatchetingLogContext(
       workspace,
       RatchetState.READY,
       RatchetState.READY,
@@ -667,18 +640,16 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('ignores review activity authored by the authenticated user', () => {
-    const latestActivity = (
-      ratchetService as unknown as {
-        computeLatestReviewActivityAtMs: (
-          prDetails: {
-            reviews: Array<{ submittedAt: string; author: { login: string } }>;
-            comments: Array<{ updatedAt: string; author: { login: string } }>;
-          },
-          reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
-          authenticatedUsername: string | null
-        ) => number | null;
-      }
-    ).computeLatestReviewActivityAtMs(
+    const latestActivity = unsafeCoerce<{
+      computeLatestReviewActivityAtMs: (
+        prDetails: {
+          reviews: Array<{ submittedAt: string; author: { login: string } }>;
+          comments: Array<{ updatedAt: string; author: { login: string } }>;
+        },
+        reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
+        authenticatedUsername: string | null
+      ) => number | null;
+    }>(ratchetService).computeLatestReviewActivityAtMs(
       {
         reviews: [
           { submittedAt: '2026-01-02T00:00:00Z', author: { login: 'ratchet-bot' } },

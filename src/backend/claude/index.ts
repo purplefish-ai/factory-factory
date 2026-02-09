@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import type { EventEmitterEmitArgs, EventEmitterListener } from '../lib/event-emitter-types';
 import {
   ClaudePermissionCoordinator,
   type PendingInteractiveRequest,
@@ -455,8 +456,7 @@ export class ClaudeClient extends EventEmitter {
   override on(event: 'compacting_start', handler: () => void): this;
   override on(event: 'compacting_end', handler: () => void): this;
   override on(event: 'permission_cancelled', handler: (requestId: string) => void): this;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
-  override on(event: string, handler: (...args: any[]) => void): this {
+  override on(event: string, handler: EventEmitterListener): this {
     return super.on(event, handler);
   }
 
@@ -482,8 +482,7 @@ export class ClaudeClient extends EventEmitter {
   override emit(event: 'compacting_start'): boolean;
   override emit(event: 'compacting_end'): boolean;
   override emit(event: 'permission_cancelled', requestId: string): boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
-  override emit(event: string, ...args: any[]): boolean {
+  override emit(event: string, ...args: EventEmitterEmitArgs): boolean {
     return super.emit(event, ...args);
   }
 

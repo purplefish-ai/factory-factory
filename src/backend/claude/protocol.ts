@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import * as readline from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
+import type { EventEmitterEmitArgs, EventEmitterListener } from '../lib/event-emitter-types';
 import { createLogger } from '../services/logger.service';
 import { CLAUDE_LIMITS, CLAUDE_TIMEOUT_MS } from './constants';
 import {
@@ -699,8 +700,7 @@ export class ClaudeProtocol extends EventEmitter {
   override on(event: 'sending', handler: () => void): this;
   override on(event: 'error', handler: (error: Error) => void): this;
   override on(event: 'close', handler: () => void): this;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic handler
-  override on(event: string, handler: (...args: any[]) => void): this {
+  override on(event: string, handler: EventEmitterListener): this {
     return super.on(event, handler);
   }
 
@@ -712,8 +712,7 @@ export class ClaudeProtocol extends EventEmitter {
   override emit(event: 'sending'): boolean;
   override emit(event: 'error', error: Error): boolean;
   override emit(event: 'close'): boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter requires any[] for generic emit
-  override emit(event: string, ...args: any[]): boolean {
+  override emit(event: string, ...args: EventEmitterEmitArgs): boolean {
     return super.emit(event, ...args);
   }
 }
