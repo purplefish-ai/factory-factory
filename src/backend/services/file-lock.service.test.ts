@@ -762,11 +762,19 @@ describe('FileLockService', () => {
     const originalNodeAppInstance = process.env.NODE_APP_INSTANCE;
     const originalWebConcurrency = process.env.WEB_CONCURRENCY;
 
+    const restoreEnv = (key: string, value: string | undefined): void => {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+        return;
+      }
+      process.env[key] = value;
+    };
+
     afterEach(() => {
-      process.env.NODE_UNIQUE_ID = originalNodeUniqueId;
-      process.env.pm_id = originalPmId;
-      process.env.NODE_APP_INSTANCE = originalNodeAppInstance;
-      process.env.WEB_CONCURRENCY = originalWebConcurrency;
+      restoreEnv('NODE_UNIQUE_ID', originalNodeUniqueId);
+      restoreEnv('pm_id', originalPmId);
+      restoreEnv('NODE_APP_INSTANCE', originalNodeAppInstance);
+      restoreEnv('WEB_CONCURRENCY', originalWebConcurrency);
     });
 
     it('warns when cluster-like runtime is detected', () => {
@@ -783,9 +791,9 @@ describe('FileLockService', () => {
     });
 
     it('does not warn in single-process runtime', () => {
-      process.env.NODE_UNIQUE_ID = undefined;
-      process.env.pm_id = undefined;
-      process.env.NODE_APP_INSTANCE = undefined;
+      Reflect.deleteProperty(process.env, 'NODE_UNIQUE_ID');
+      Reflect.deleteProperty(process.env, 'pm_id');
+      Reflect.deleteProperty(process.env, 'NODE_APP_INSTANCE');
       process.env.WEB_CONCURRENCY = '1';
 
       mockLoggerWarn.mockClear();
