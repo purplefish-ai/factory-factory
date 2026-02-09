@@ -22,12 +22,12 @@ import type { HistoryMessage } from '../claude';
 import { SessionManager } from '../claude';
 import type { ConnectionInfo } from './chat-connection.service';
 import { chatConnectionService } from './chat-connection.service';
+import { SERVICE_LIMITS } from './constants';
 import { createLogger } from './logger.service';
 import { sessionFileLogger } from './session-file-logger.service';
 
 const logger = createLogger('session-store-service');
 
-const MAX_QUEUE_SIZE = 100;
 interface SessionStore {
   sessionId: string;
   initialized: boolean;
@@ -604,8 +604,8 @@ class SessionStoreService {
 
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string } {
     const store = this.getOrCreate(sessionId);
-    if (store.queue.length >= MAX_QUEUE_SIZE) {
-      return { error: `Queue full (max ${MAX_QUEUE_SIZE} messages)` };
+    if (store.queue.length >= SERVICE_LIMITS.sessionStoreMaxQueueSize) {
+      return { error: `Queue full (max ${SERVICE_LIMITS.sessionStoreMaxQueueSize} messages)` };
     }
 
     store.queue.push(message);

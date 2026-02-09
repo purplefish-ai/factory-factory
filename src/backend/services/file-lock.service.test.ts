@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the service
 const mockFindById = vi.fn();
+const mockLoggerInfo = vi.fn();
+const mockLoggerDebug = vi.fn();
+const mockLoggerWarn = vi.fn();
+const mockLoggerError = vi.fn();
 
 vi.mock('../resource_accessors/claude-session.accessor', () => ({
   claudeSessionAccessor: {
@@ -13,10 +17,18 @@ vi.mock('../resource_accessors/claude-session.accessor', () => ({
 
 vi.mock('./logger.service', () => ({
   createLogger: () => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
+    get info() {
+      return mockLoggerInfo;
+    },
+    get debug() {
+      return mockLoggerDebug;
+    },
+    get warn() {
+      return mockLoggerWarn;
+    },
+    get error() {
+      return mockLoggerError;
+    },
   }),
 }));
 
@@ -28,7 +40,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 // Import after mocks are set up
-import { fileLockService } from './file-lock.service';
+import { FileLockService, fileLockService } from './file-lock.service';
 
 describe('FileLockService', () => {
   const mockWorkspaceId = 'workspace-123';
@@ -741,6 +753,58 @@ describe('FileLockService', () => {
       expect(result.acquired).toBe(false);
       expect(result.existingLock?.ownerId).toBe('other-agent');
       expect(result.existingLock?.ownerLabel).toBe('Agent 2');
+    });
+  });
+
+  describe('runtime warnings', () => {
+    const originalNodeUniqueId = process.env.NODE_UNIQUE_ID;
+    const originalPmId = process.env.pm_id;
+    const originalNodeAppInstance = process.env.NODE_APP_INSTANCE;
+    const originalWebConcurrency = process.env.WEB_CONCURRENCY;
+
+    const restoreEnv = (key: string, value: string | undefined): void => {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+        return;
+      }
+      process.env[key] = value;
+    };
+
+    afterEach(() => {
+      restoreEnv('NODE_UNIQUE_ID', originalNodeUniqueId);
+      restoreEnv('pm_id', originalPmId);
+      restoreEnv('NODE_APP_INSTANCE', originalNodeAppInstance);
+      restoreEnv('WEB_CONCURRENCY', originalWebConcurrency);
+    });
+
+    it('warns when cluster-like runtime is detected', async () => {
+      process.env.NODE_UNIQUE_ID = '1';
+
+      const service = new FileLockService();
+      await service.checkLock(mockAgentId, { filePath: 'src/index.ts' });
+
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        'File lock service detected likely multi-process runtime',
+        expect.objectContaining({
+          nodeUniqueId: '1',
+        })
+      );
+    });
+
+    it('does not warn in single-process runtime', async () => {
+      Reflect.deleteProperty(process.env, 'NODE_UNIQUE_ID');
+      Reflect.deleteProperty(process.env, 'pm_id');
+      Reflect.deleteProperty(process.env, 'NODE_APP_INSTANCE');
+      process.env.WEB_CONCURRENCY = '1';
+
+      mockLoggerWarn.mockClear();
+      const service = new FileLockService();
+      await service.checkLock(mockAgentId, { filePath: 'src/index.ts' });
+
+      expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+        'File lock service detected likely multi-process runtime',
+        expect.anything()
+      );
     });
   });
 });

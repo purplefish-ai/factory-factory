@@ -10,6 +10,7 @@ import { EventEmitter } from 'node:events';
 import * as readline from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 import { createLogger } from '../services/logger.service';
+import { CLAUDE_LIMITS, CLAUDE_TIMEOUT_MS } from './constants';
 import {
   type ClaudeContentItem,
   type ClaudeJson,
@@ -113,8 +114,8 @@ export class ClaudeProtocol extends EventEmitter {
     this.stdout = stdout;
     this.pendingRequests = new Map();
     this.rl = null;
-    this.requestTimeout = options?.requestTimeout ?? 60_000;
-    this.maxLineLength = options?.maxLineLength ?? 1_000_000; // 1MB default
+    this.requestTimeout = options?.requestTimeout ?? CLAUDE_TIMEOUT_MS.protocolRequestDefault;
+    this.maxLineLength = options?.maxLineLength ?? CLAUDE_LIMITS.protocolMaxLineLengthBytes;
     this.started = false;
     this.drainPromise = null;
     this.drainReject = null;

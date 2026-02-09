@@ -13,6 +13,7 @@
 
 import { exec, type SpawnOptions, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { LIB_LIMITS } from './constants';
 
 const execAsync = promisify(exec);
 
@@ -63,7 +64,7 @@ function escapeForOsascript(str: string): string {
     .replace(/\\/g, '\\\\') // Escape backslashes for AppleScript
     .replace(/"/g, '\\"') // Escape double quotes for AppleScript
     .replace(/'/g, "'\\''") // Escape single quotes for shell
-    .slice(0, 200); // Truncate to prevent buffer overflow
+    .slice(0, LIB_LIMITS.osascriptEscapedMaxChars); // Truncate to prevent buffer overflow
 }
 
 // ============================================================================
@@ -172,7 +173,7 @@ export async function execShell(
     cwd: options?.cwd,
     timeout: options?.timeout,
     env: options?.env,
-    maxBuffer: options?.maxBuffer ?? 10 * 1024 * 1024, // 10MB default
+    maxBuffer: options?.maxBuffer ?? LIB_LIMITS.shellDefaultMaxBufferBytes,
   });
   return { stdout, stderr };
 }

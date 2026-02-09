@@ -21,15 +21,10 @@ import * as path from 'node:path';
 import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
 import { persistedLockStoreSchema } from '@/shared/schemas/persisted-stores.schema';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
+import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from './constants';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('file-lock');
-
-// Default TTL in seconds (30 minutes)
-const DEFAULT_TTL_SECONDS = 30 * 60;
-
-// Cleanup interval in milliseconds (5 minutes)
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 // Lock persistence file name
 const LOCK_FILE_NAME = 'advisory-locks.json';
@@ -138,12 +133,64 @@ interface WorkspaceContext {
   worktreePath: string;
 }
 
-class FileLockService {
+export class FileLockService {
   // In-memory storage: workspaceId -> WorkspaceLockStore
   private stores = new Map<string, WorkspaceLockStore>();
 
   // Cleanup interval handle
   private cleanupInterval?: NodeJS.Timeout;
+  private hasCheckedRuntime = false;
+
+  /**
+   * Warn when runtime hints indicate multiple Node.js processes.
+   * Advisory locks are in-memory and only safe within a single process.
+   */
+  private warnIfMultiProcessRuntime(): void {
+    const nodeUniqueId = this.readEnvSignal('NODE_UNIQUE_ID');
+    const pmId = this.readEnvSignal('pm_id');
+    const nodeAppInstance = this.readEnvSignal('NODE_APP_INSTANCE');
+
+    const webConcurrencyRaw = process.env.WEB_CONCURRENCY;
+    const webConcurrency =
+      webConcurrencyRaw && Number.isFinite(Number(webConcurrencyRaw))
+        ? Number(webConcurrencyRaw)
+        : undefined;
+
+    const isLikelyMultiProcess =
+      nodeUniqueId !== undefined ||
+      pmId !== undefined ||
+      nodeAppInstance !== undefined ||
+      (webConcurrency !== undefined && webConcurrency > 1);
+
+    if (!isLikelyMultiProcess) {
+      return;
+    }
+
+    logger.warn('File lock service detected likely multi-process runtime', {
+      nodeUniqueId,
+      pmId,
+      nodeAppInstance,
+      webConcurrency,
+      impact:
+        'Advisory locks are process-local only; use a distributed lock for cross-process coordination.',
+    });
+  }
+
+  private ensureRuntimeWarningChecked(): void {
+    if (this.hasCheckedRuntime) {
+      return;
+    }
+    this.hasCheckedRuntime = true;
+    this.warnIfMultiProcessRuntime();
+  }
+
+  private readEnvSignal(key: string): string | undefined {
+    const value = process.env[key]?.trim();
+    if (!value || value === 'undefined' || value === 'null') {
+      return undefined;
+    }
+    return value;
+  }
 
   /**
    * Resolve workspace context from agentId (session ID)
@@ -273,6 +320,8 @@ class FileLockService {
    * Get or create lock store for a workspace
    */
   private async getOrCreateStore(context: WorkspaceContext): Promise<WorkspaceLockStore> {
+    this.ensureRuntimeWarningChecked();
+
     let store = this.stores.get(context.workspaceId);
 
     if (!store) {
@@ -371,7 +420,7 @@ class FileLockService {
     }
 
     // Acquire the lock
-    const ttlSeconds = input.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+    const ttlSeconds = input.ttlSeconds ?? SERVICE_TTL_SECONDS.fileLockDefault;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
@@ -564,7 +613,9 @@ class FileLockService {
   /**
    * Start the periodic cleanup interval
    */
-  startCleanupInterval(intervalMs = CLEANUP_INTERVAL_MS): void {
+  startCleanupInterval(intervalMs = SERVICE_INTERVAL_MS.fileLockCleanup): void {
+    this.ensureRuntimeWarningChecked();
+
     if (this.cleanupInterval) {
       return; // Already running
     }
