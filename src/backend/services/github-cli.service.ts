@@ -137,7 +137,7 @@ const fullPRDetailsSchema = z.object({
         author: z.object({ login: z.string() }),
         body: z.string(),
         createdAt: z.string(),
-        updatedAt: z.string(),
+        updatedAt: z.string().optional(),
         url: z.string(),
       })
       .passthrough()
@@ -267,7 +267,7 @@ function mapComments(comments: z.infer<typeof fullPRDetailsSchema>['comments']):
     author: comment.author,
     body: comment.body,
     createdAt: comment.createdAt,
-    updatedAt: comment.updatedAt,
+    updatedAt: comment.updatedAt ?? comment.createdAt,
     url: comment.url,
   }));
 }
@@ -343,8 +343,11 @@ async function mapWithConcurrencyLimit<T, R>(
   async function worker(): Promise<void> {
     while (nextIndex < items.length) {
       const index = nextIndex++;
-      // biome-ignore lint/style/noNonNullAssertion: index bounded by while loop condition
-      results[index] = await fn(items[index]!);
+      const item = items[index];
+      if (item === undefined) {
+        throw new Error(`Unexpected undefined item at index ${index}`);
+      }
+      results[index] = await fn(item);
     }
   }
 

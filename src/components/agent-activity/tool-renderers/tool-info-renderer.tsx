@@ -35,7 +35,6 @@ export interface ToolInfoRendererProps {
 /**
  * Renders tool use or tool result information.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but readable conditional rendering
 export const ToolInfoRenderer = memo(function ToolInfoRenderer({
   message,
   defaultOpen = false,
@@ -185,10 +184,13 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
 
   // Single tool call - render inline without grouping wrapper
   if (pairedCalls.length === 1) {
+    const firstCall = summaryCalls[0];
+    if (!firstCall) {
+      return null;
+    }
     return (
       <PairedToolCallRenderer
-        // biome-ignore lint/style/noNonNullAssertion: pairedCalls.length === 1 checked above
-        call={summaryCalls[0]!}
+        call={firstCall}
         defaultOpen={isControlled ? undefined : defaultOpen}
         open={isOpen}
         onOpenChange={setIsOpen}

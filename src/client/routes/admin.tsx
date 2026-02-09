@@ -563,8 +563,9 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Factory Configuration */}
-        {/* biome-ignore lint/style/noNonNullAssertion: length > 0 checked */}
-        {projects && projects.length > 0 && <FactoryConfigSection projectId={projects[0]!.id} />}
+        {projects && projects.length > 0 && projects[0] && (
+          <FactoryConfigSection projectId={projects[0].id} />
+        )}
 
         {/* User Settings */}
         <NotificationSettingsSection />

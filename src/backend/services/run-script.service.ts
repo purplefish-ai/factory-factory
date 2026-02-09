@@ -28,7 +28,6 @@ export class RunScriptService {
    * @param workspaceId - Workspace ID
    * @returns Object with success status, port (if allocated), and pid
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex state machine transitions and error handling required
   static async startRunScript(workspaceId: string): Promise<{
     success: boolean;
     port?: number;
@@ -286,7 +285,6 @@ export class RunScriptService {
    * @param workspaceId - Workspace ID
    * @returns Object with success status
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complex state checks and cleanup logic required
   static async stopRunScript(workspaceId: string): Promise<{
     success: boolean;
     error?: string;

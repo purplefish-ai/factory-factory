@@ -76,11 +76,9 @@ function Field({
   className,
   orientation = 'vertical',
   ...props
-}: React.ComponentProps<'div'> & VariantProps<typeof fieldVariants>) {
+}: React.ComponentProps<'fieldset'> & VariantProps<typeof fieldVariants>) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Using div with role="group" for field grouping pattern
-    <div
-      role="group"
+    <fieldset
       data-slot="field"
       data-orientation={orientation}
       className={cn(fieldVariants({ orientation }), className)}
@@ -193,13 +191,21 @@ function FieldError({
       return errors[0].message;
     }
 
+    const messageCounts = new Map<string, number>();
+    const errorItems = errors
+      .map((error) => error?.message)
+      .filter((message): message is string => Boolean(message))
+      .map((message) => {
+        const count = (messageCounts.get(message) ?? 0) + 1;
+        messageCounts.set(message, count);
+        return { key: `${message}-${count}`, message };
+      });
+
     return (
       <ul className="ml-4 flex list-disc flex-col gap-1">
-        {errors.map(
-          (error, index) =>
-            // biome-ignore lint/suspicious/noArrayIndexKey: Error messages don't have unique IDs
-            error?.message && <li key={index}>{error.message}</li>
-        )}
+        {errorItems.map((item) => (
+          <li key={item.key}>{item.message}</li>
+        ))}
       </ul>
     );
   }, [children, errors]);

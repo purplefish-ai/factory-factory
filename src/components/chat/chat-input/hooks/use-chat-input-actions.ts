@@ -276,7 +276,6 @@ export function useChatInputActions({
 
   // Handle file selection
   const handleFileSelect = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: File handling requires multiple checks
     async (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) {
