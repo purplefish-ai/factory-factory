@@ -1,11 +1,11 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { SessionManager } from '../claude/session';
 import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { planFileService } from '../services/plan-file.service';
+import { sessionDataService } from '../services/session-data.service';
+import { workspaceDataService } from '../services/workspace-data.service';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
@@ -40,7 +40,10 @@ export const sessionRouter = router({
     .query(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
-      const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
+      const sessions = await sessionDataService.findClaudeSessionsByWorkspaceId(
+        workspaceId,
+        filters
+      );
       // Augment sessions with real-time working status from in-memory process state
       return sessions.map((session) => ({
         ...session,
@@ -50,7 +53,7 @@ export const sessionRouter = router({
 
   // Get claude session by ID
   getClaudeSession: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const session = await claudeSessionAccessor.findById(input.id);
+    const session = await sessionDataService.findClaudeSessionById(input.id);
     if (!session) {
       throw new Error(`Claude session not found: ${input.id}`);
     }
@@ -71,7 +74,9 @@ export const sessionRouter = router({
       const { configService } = ctx.appContext.services;
       // Check per-workspace session limit
       const maxSessions = configService.getMaxSessionsPerWorkspace();
-      const existingSessions = await claudeSessionAccessor.findByWorkspaceId(input.workspaceId);
+      const existingSessions = await sessionDataService.findClaudeSessionsByWorkspaceId(
+        input.workspaceId
+      );
 
       if (existingSessions.length >= maxSessions) {
         throw new TRPCError({
@@ -80,28 +85,34 @@ export const sessionRouter = router({
         });
       }
 
-      const session = await claudeSessionAccessor.create(input);
+      const workspace = await workspaceDataService.findById(input.workspaceId);
+      const claudeProjectPath = workspace?.worktreePath
+        ? SessionManager.getProjectPath(workspace.worktreePath)
+        : null;
+      const session = await sessionDataService.createClaudeSession({
+        ...input,
+        claudeProjectPath,
+      });
 
       // For plan workflow sessions, create the plan file and store its path
-      if (input.workflow === 'plan') {
-        const workspace = await workspaceAccessor.findById(input.workspaceId);
-        if (workspace?.worktreePath) {
-          try {
-            const planFilePath = await planFileService.createPlanFile(
-              workspace.worktreePath,
-              workspace.branchName
-            );
-            await claudeSessionAccessor.update(session.id, { planFilePath });
-            return { ...session, planFilePath };
-          } catch (error) {
-            // Clean up session if plan file creation fails
-            await claudeSessionAccessor.delete(session.id);
-            throw new TRPCError({
-              code: 'INTERNAL_SERVER_ERROR',
-              message: 'Failed to create plan file',
-              cause: error,
-            });
-          }
+      if (input.workflow === 'plan' && workspace?.worktreePath) {
+        try {
+          const planFilePath = await planFileService.createPlanFile(
+            workspace.worktreePath,
+            workspace.branchName
+          );
+          const updatedSession = await sessionDataService.updateClaudeSession(session.id, {
+            planFilePath,
+          });
+          return updatedSession;
+        } catch (error) {
+          // Clean up session if plan file creation fails
+          await sessionDataService.deleteClaudeSession(session.id);
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Failed to create plan file',
+            cause: error,
+          });
         }
       }
 
@@ -121,7 +132,7 @@ export const sessionRouter = router({
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
-      return claudeSessionAccessor.update(id, updates);
+      return sessionDataService.updateClaudeSession(id, updates);
     }),
 
   // Start a claude session (spawns the Claude process)
@@ -137,7 +148,7 @@ export const sessionRouter = router({
       await sessionService.startClaudeSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
-      return claudeSessionAccessor.findById(input.id);
+      return sessionDataService.findClaudeSessionById(input.id);
     }),
 
   // Stop a claude session (gracefully stops the process)
@@ -146,19 +157,19 @@ export const sessionRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
       await sessionService.stopClaudeSession(input.id);
-      return claudeSessionAccessor.findById(input.id);
+      return sessionDataService.findClaudeSessionById(input.id);
     }),
 
   // Delete a claude session
   deleteClaudeSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { messageQueueService, sessionService } = ctx.appContext.services;
+      const { sessionService, sessionStoreService } = ctx.appContext.services;
       // Stop process first to prevent orphaned Claude processes
       await sessionService.stopClaudeSession(input.id);
-      // Clear any queued messages to prevent memory leak
-      messageQueueService.clear(input.id);
-      return claudeSessionAccessor.delete(input.id);
+      // Clear any in-memory session store state
+      sessionStoreService.clearSession(input.id);
+      return sessionDataService.deleteClaudeSession(input.id);
     }),
 
   // Terminal Sessions
@@ -174,14 +185,14 @@ export const sessionRouter = router({
     )
     .query(({ input }) => {
       const { workspaceId, ...filters } = input;
-      return terminalSessionAccessor.findByWorkspaceId(workspaceId, filters);
+      return sessionDataService.findTerminalSessionsByWorkspaceId(workspaceId, filters);
     }),
 
   // Get terminal session by ID
   getTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
-      const session = await terminalSessionAccessor.findById(input.id);
+      const session = await sessionDataService.findTerminalSessionById(input.id);
       if (!session) {
         throw new Error(`Terminal session not found: ${input.id}`);
       }
@@ -197,7 +208,7 @@ export const sessionRouter = router({
       })
     )
     .mutation(({ input }) => {
-      return terminalSessionAccessor.create(input);
+      return sessionDataService.createTerminalSession(input);
     }),
 
   // Update a terminal session
@@ -212,13 +223,13 @@ export const sessionRouter = router({
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
-      return terminalSessionAccessor.update(id, updates);
+      return sessionDataService.updateTerminalSession(id, updates);
     }),
 
   // Delete a terminal session
   deleteTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ input }) => {
-      return terminalSessionAccessor.delete(input.id);
+      return sessionDataService.deleteTerminalSession(input.id);
     }),
 });

@@ -6,6 +6,7 @@
  */
 
 import type { PendingInteractiveRequest } from '../pending-request-types';
+import type { SessionRuntimeState } from '../session-runtime';
 
 export type { PendingInteractiveRequest } from '../pending-request-types';
 
@@ -60,6 +61,13 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   thinkingEnabled: false,
   planModeEnabled: false,
 };
+
+/**
+ * Resolve nullable/optional model selection to the canonical default.
+ */
+export function resolveSelectedModel(selectedModel: string | null | undefined): string {
+  return selectedModel ?? DEFAULT_CHAT_SETTINGS.selectedModel;
+}
 
 /**
  * Default thinking budget (tokens) for extended thinking mode.
@@ -336,6 +344,225 @@ export interface ClaudeMessage {
   status?: string;
 }
 
+const CLAUDE_MESSAGE_TYPE_MAP: Record<ClaudeMessage['type'], true> = {
+  system: true,
+  assistant: true,
+  user: true,
+  stream_event: true,
+  result: true,
+  error: true,
+};
+
+/**
+ * Canonical list of valid Claude payload types nested in claude_message events.
+ */
+export const CLAUDE_MESSAGE_TYPES = Object.keys(CLAUDE_MESSAGE_TYPE_MAP) as ClaudeMessage['type'][];
+
+/**
+ * Narrow shape used to evaluate whether assistant content blocks should be rendered/stored.
+ * Shared across backend forwarding and frontend reducer filtering to prevent drift.
+ */
+export interface AssistantRenderableContentLike {
+  type?: string;
+  text?: string;
+  thinking?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+  tool_use_id?: string;
+  content?: unknown;
+}
+
+/**
+ * True when a single assistant content block is renderable in chat UI.
+ */
+export function isRenderableAssistantContentItem(item: AssistantRenderableContentLike): boolean {
+  if (item.type === 'text') {
+    return typeof item.text === 'string';
+  }
+  if (item.type === 'thinking') {
+    return typeof item.thinking === 'string';
+  }
+  if (item.type === 'tool_use') {
+    return (
+      typeof item.id === 'string' &&
+      typeof item.name === 'string' &&
+      (item.input === undefined || (typeof item.input === 'object' && item.input !== null))
+    );
+  }
+  if (item.type === 'tool_result') {
+    return (
+      typeof item.tool_use_id === 'string' &&
+      (typeof item.content === 'string' || Array.isArray(item.content))
+    );
+  }
+  return false;
+}
+
+/**
+ * True when assistant content includes at least one renderable block.
+ */
+export function hasRenderableAssistantContent(content: AssistantRenderableContentLike[]): boolean {
+  return content.some(isRenderableAssistantContentItem);
+}
+
+/**
+ * True when user message content contains a tool_result block.
+ */
+export function hasToolResultContent(content: ClaudeContentItem[] | string): boolean {
+  if (!Array.isArray(content)) {
+    return false;
+  }
+  return content.some((item) => item.type === 'tool_result');
+}
+
+/**
+ * Canonical predicate for whether a Claude message should be persisted in transcript state.
+ * Shared by backend session store and frontend reducer to prevent drift.
+ */
+export function shouldPersistClaudeMessage(claudeMsg: ClaudeMessage): boolean {
+  if (claudeMsg.type === 'user') {
+    if (!claudeMsg.message) {
+      return false;
+    }
+    return hasToolResultContent(claudeMsg.message.content);
+  }
+
+  if (claudeMsg.type === 'assistant') {
+    const content = claudeMsg.message?.content;
+    return Array.isArray(content) && hasRenderableAssistantContent(content);
+  }
+
+  if (claudeMsg.type === 'result') {
+    return true;
+  }
+
+  if (claudeMsg.type !== 'stream_event') {
+    return true;
+  }
+
+  if (!claudeMsg.event || claudeMsg.event.type !== 'content_block_start') {
+    return false;
+  }
+
+  const block = claudeMsg.event.content_block as AssistantRenderableContentLike;
+  if (block.type === 'text') {
+    return false;
+  }
+  return isRenderableAssistantContentItem(block);
+}
+
+function extractTextForResultDedup(message: ClaudeMessage): string {
+  if (message.type === 'assistant' && message.message && Array.isArray(message.message.content)) {
+    return message.message.content
+      .filter((item): item is TextContent => item.type === 'text')
+      .map((item) => item.text)
+      .join('')
+      .trim();
+  }
+
+  if (
+    message.type === 'stream_event' &&
+    message.event?.type === 'content_block_start' &&
+    message.event.content_block.type === 'text'
+  ) {
+    return message.event.content_block.text.trim();
+  }
+
+  return '';
+}
+
+function extractResultTextFromUnknown(value: unknown, depth = 0): string | null {
+  if (depth > 4 || value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractResultTextFromUnknown(item, depth + 1);
+      if (extracted !== null) {
+        return extracted;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const preferredKeys = ['result', 'text', 'output_text', 'output', 'message', 'content'];
+  for (const key of preferredKeys) {
+    if (!(key in record)) {
+      continue;
+    }
+    const extracted = extractResultTextFromUnknown(record[key], depth + 1);
+    if (extracted !== null) {
+      return extracted;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether an incoming result message duplicates the latest assistant text already present.
+ */
+export function shouldSuppressDuplicateResultMessage(
+  transcript: ChatMessage[],
+  claudeMessage: ClaudeMessage
+): boolean {
+  if (claudeMessage.type !== 'result') {
+    return false;
+  }
+
+  const incomingText = extractResultTextFromUnknown(claudeMessage.result);
+  if (incomingText === null) {
+    return false;
+  }
+
+  if (!incomingText) {
+    return true;
+  }
+
+  for (let i = transcript.length - 1; i >= 0; i -= 1) {
+    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+    const candidate = transcript[i]!;
+    // Only dedupe against assistant content in the current turn.
+    // Crossing a user message boundary can suppress legitimate repeated answers.
+    if (candidate.source === 'user') {
+      // ACCEPTED queued placeholders render as user messages but are not part of
+      // the committed transcript turn boundary.
+      if (candidate.order >= QUEUED_MESSAGE_ORDER_BASE) {
+        continue;
+      }
+      return false;
+    }
+
+    if (
+      candidate.source !== 'claude' ||
+      !candidate.message ||
+      candidate.message.type === 'result'
+    ) {
+      continue;
+    }
+
+    const existingText = extractTextForResultDedup(candidate.message);
+    if (!existingText) {
+      continue;
+    }
+
+    return existingText === incomingText;
+  }
+
+  return false;
+}
+
 // =============================================================================
 // AskUserQuestion Types (Phase 11)
 // =============================================================================
@@ -399,18 +626,59 @@ export interface SessionInfo {
 }
 
 /**
- * Message from session history.
+ * Base fields for messages parsed from Claude session history.
  */
-export interface HistoryMessage {
-  type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking';
-  content: string;
+interface HistoryMessageBase {
   timestamp: string;
   uuid?: string;
+  attachments?: MessageAttachment[];
+}
+
+export interface UserHistoryMessage extends HistoryMessageBase {
+  type: 'user';
+  content: string;
+}
+
+export interface AssistantHistoryMessage extends HistoryMessageBase {
+  type: 'assistant';
+  content: string;
+}
+
+export interface ThinkingHistoryMessage extends HistoryMessageBase {
+  type: 'thinking';
+  content: string;
+}
+
+export interface ToolUseHistoryMessage extends HistoryMessageBase {
+  type: 'tool_use';
+  content: string;
   toolName?: string;
   toolId?: string;
   toolInput?: Record<string, unknown>;
+}
+
+export interface ToolResultHistoryMessage extends HistoryMessageBase {
+  type: 'tool_result';
+  content: ToolResultContentValue;
+  toolId?: string;
   isError?: boolean;
 }
+
+export interface UserToolResultHistoryMessage extends HistoryMessageBase {
+  type: 'user_tool_result';
+  content: ClaudeContentItem[];
+}
+
+/**
+ * Message from session history.
+ */
+export type HistoryMessage =
+  | UserHistoryMessage
+  | AssistantHistoryMessage
+  | ThinkingHistoryMessage
+  | ToolUseHistoryMessage
+  | ToolResultHistoryMessage
+  | UserToolResultHistoryMessage;
 
 // =============================================================================
 // Agent Metadata Types
@@ -460,134 +728,268 @@ export interface AgentMetadata {
 // WebSocket Message Types
 // =============================================================================
 
-/**
- * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
- */
-export interface WebSocketMessage {
-  type: // Session lifecycle events
-    | 'status'
-    | 'starting'
-    | 'started'
-    | 'stopped'
-    | 'process_exit'
-    // Message streaming
-    | 'claude_message'
-    // Errors and metadata
-    | 'error'
-    | 'sessions'
-    | 'agent_metadata'
-    // Interactive requests
-    | 'permission_request'
-    | 'user_question'
-    | 'permission_cancelled'
-    // Queue error handling
-    | 'message_rejected'
-    | 'message_used_as_response'
-    // Message state machine events (primary protocol)
-    | 'message_state_changed'
-    | 'messages_snapshot'
-    // SDK message types
-    | 'tool_progress'
-    | 'tool_use_summary'
-    | 'status_update'
-    | 'task_notification'
-    // System subtype events
-    | 'system_init'
-    | 'compact_boundary'
-    | 'hook_started'
-    | 'hook_response'
-    // Context compaction events
-    | 'compacting_start'
-    | 'compacting_end'
-    | 'queue'
-    | 'workspace_notification_request'
-    // Slash commands discovery
-    | 'slash_commands'
-    // User message UUID tracking (for rewind functionality)
-    | 'user_message_uuid'
-    // Rewind files response events
-    | 'rewind_files_preview'
-    | 'rewind_files_error';
+interface WebSocketMessageCommon {
   sessionId?: string;
   dbSessionId?: string;
-  running?: boolean;
-  processAlive?: boolean;
   message?: string;
   code?: number;
   data?: unknown;
   sessions?: SessionInfo[];
   agentMetadata?: AgentMetadata;
-  // Permission request fields
   requestId?: string;
   toolName?: string;
+  toolUseId?: string;
   toolInput?: Record<string, unknown>;
-  // Plan content for ExitPlanMode permission requests
   planContent?: string | null;
-  // AskUserQuestion fields
   questions?: AskUserQuestion[];
-  // Message fields
   text?: string;
   id?: string;
-  /** Backend-assigned order for claude_message and message_used_as_response events */
   order?: number;
-  // Message state machine fields (primary protocol)
-  /** New state for message_state_changed events */
   newState?: MessageState;
-  /** Pre-built ChatMessages for messages_snapshot events (ready for frontend to use directly) */
   messages?: ChatMessage[];
-  /** Session status for messages_snapshot events */
-  sessionStatus?: SessionStatus;
-  /** Pending interactive request for messages_snapshot events */
+  sessionRuntime?: SessionRuntimeState;
   pendingInteractiveRequest?: PendingInteractiveRequest | null;
-  /** Queue position for message_state_changed events */
+  queuedMessages?: QueuedMessage[];
+  loadRequestId?: string;
+  replayEvents?: WebSocketMessage[];
   queuePosition?: number;
-  /** Error message for REJECTED/FAILED states in message_state_changed events */
   errorMessage?: string;
-  /** Full user message content for ACCEPTED state in message_state_changed events */
   userMessage?: {
     text: string;
     timestamp: string;
     attachments?: MessageAttachment[];
     settings?: ChatSettings;
-    /** Backend-assigned order for reliable sorting */
     order?: number;
   };
-  // Tool progress fields
-  /** Tool use ID for tool_progress events */
   tool_use_id?: string;
-  /** Tool name for tool_progress events */
   tool_name?: string;
-  /** Parent tool use ID for nested tool calls */
   parent_tool_use_id?: string;
-  /** Elapsed time in seconds for tool_progress events */
   elapsed_time_seconds?: number;
-  // Tool use summary fields
-  /** Summary text for tool_use_summary events */
   summary?: string;
-  /** Preceding tool use IDs for tool_use_summary events */
   preceding_tool_use_ids?: string[];
-  // Status update fields
-  /** Permission mode from status updates */
   permissionMode?: string;
-  /** Slash commands from CLI initialize response */
   slashCommands?: CommandInfo[];
-  // User message UUID tracking fields (for rewind functionality)
-  /** SDK-assigned UUID for user_message_uuid events */
   uuid?: string;
-  /** User message ID for rewind_files_preview/error events */
   userMessageId?: string;
-  /** Whether the rewind was a dry run */
   dryRun?: boolean;
-  /** Affected files list for rewind_files_preview events */
   affectedFiles?: string[];
-  /** Error message for rewind_files_error events */
   rewindError?: string;
-  // Workspace notification request fields
   workspaceId?: string;
   workspaceName?: string;
   sessionCount?: number;
   finishedAt?: string;
 }
+
+interface WebSocketMessagePayloadByType {
+  session_snapshot: {
+    messages: ChatMessage[];
+    queuedMessages: QueuedMessage[];
+    sessionRuntime: SessionRuntimeState;
+    pendingInteractiveRequest?: PendingInteractiveRequest | null;
+    loadRequestId?: string;
+  };
+  session_delta: {
+    data: SessionDeltaEvent;
+  };
+  session_runtime_snapshot: {
+    sessionRuntime: SessionRuntimeState;
+  };
+  session_runtime_updated: {
+    sessionRuntime: SessionRuntimeState;
+  };
+  claude_message: {
+    data: ClaudeMessage;
+    /** Backend-assigned order for claude_message and message_used_as_response events */
+    order?: number;
+  };
+  error: {
+    message: string;
+    code?: number;
+  };
+  sessions: {
+    sessions: SessionInfo[];
+  };
+  agent_metadata: {
+    agentMetadata: AgentMetadata;
+  };
+  permission_request: {
+    requestId?: string;
+    toolName?: string;
+    toolUseId?: string;
+    toolInput?: Record<string, unknown>;
+    planContent?: string | null;
+  };
+  user_question: {
+    requestId?: string;
+    questions?: AskUserQuestion[];
+  };
+  permission_cancelled: {
+    requestId?: string;
+  };
+  message_used_as_response: {
+    text?: string;
+    id?: string;
+    order?: number;
+  };
+  message_state_changed: {
+    id?: string;
+    newState?: MessageState;
+    queuePosition?: number;
+    errorMessage?: string;
+    userMessage?: {
+      text: string;
+      timestamp: string;
+      attachments?: MessageAttachment[];
+      settings?: ChatSettings;
+      /** Backend-assigned order for reliable sorting */
+      order?: number;
+    };
+  };
+  session_replay_batch: {
+    /** Batch of WebSocket events for atomic session replay during hydration */
+    replayEvents?: WebSocketMessage[];
+  };
+  tool_progress: {
+    tool_use_id?: string;
+    tool_name?: string;
+    parent_tool_use_id?: string;
+    elapsed_time_seconds?: number;
+  };
+  tool_use_summary: {
+    summary?: string;
+    preceding_tool_use_ids?: string[];
+  };
+  status_update: {
+    permissionMode?: string;
+  };
+  task_notification: {
+    message?: string;
+  };
+  system_init: {
+    data?: {
+      tools?: ToolDefinition[];
+      model?: string;
+      cwd?: string;
+      apiKeySource?: string;
+      slashCommands?: CommandInfo[];
+      plugins?: PluginInfo[];
+    };
+  };
+  compact_boundary: object;
+  hook_started: {
+    data?: {
+      hookId?: string;
+      hookName?: string;
+      hookEvent?: string;
+    };
+  };
+  hook_response: {
+    data?: {
+      hookId?: string;
+      output?: string;
+      stdout?: string;
+      stderr?: string;
+      exitCode?: number;
+      outcome?: string;
+    };
+  };
+  compacting_start: object;
+  compacting_end: object;
+  workspace_notification_request: {
+    workspaceId?: string;
+    workspaceName?: string;
+    sessionCount?: number;
+    finishedAt?: string;
+  };
+  slash_commands: {
+    slashCommands?: CommandInfo[];
+  };
+  user_message_uuid: {
+    uuid?: string;
+  };
+  rewind_files_preview: {
+    userMessageId?: string;
+    dryRun?: boolean;
+    affectedFiles?: string[];
+  };
+  rewind_files_error: {
+    userMessageId?: string;
+    rewindError?: string;
+  };
+}
+
+/**
+ * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
+ */
+type WebSocketMessageType = keyof WebSocketMessagePayloadByType;
+export const SESSION_DELTA_EXCLUDED_MESSAGE_TYPES = [
+  'session_delta',
+  'session_snapshot',
+  'session_replay_batch',
+] as const;
+type SessionDeltaExcludedMessageType = (typeof SESSION_DELTA_EXCLUDED_MESSAGE_TYPES)[number];
+type SessionDeltaEventType = Exclude<WebSocketMessageType, SessionDeltaExcludedMessageType>;
+
+/**
+ * Valid event payload forwarded within session_delta messages.
+ */
+export type SessionDeltaEvent = {
+  [K in SessionDeltaEventType]: WebSocketMessageCommon & {
+    type: K;
+  } & WebSocketMessagePayloadByType[K];
+}[SessionDeltaEventType];
+
+export type WebSocketMessage = {
+  [K in keyof WebSocketMessagePayloadByType]: WebSocketMessageCommon & {
+    type: K;
+  } & WebSocketMessagePayloadByType[K];
+}[keyof WebSocketMessagePayloadByType];
+
+/**
+ * Canonical base order used for queued messages before dispatch assigns real order.
+ * Shared by backend snapshot generation and frontend optimistic queue rendering.
+ */
+export const QUEUED_MESSAGE_ORDER_BASE = 1_000_000_000;
+
+/**
+ * Canonical list of valid top-level WebSocket message types.
+ * Used by runtime type guards to reject malformed/unknown payloads early.
+ */
+const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
+  session_snapshot: true,
+  session_delta: true,
+  session_runtime_snapshot: true,
+  session_runtime_updated: true,
+  claude_message: true,
+  error: true,
+  sessions: true,
+  agent_metadata: true,
+  permission_request: true,
+  user_question: true,
+  permission_cancelled: true,
+  message_used_as_response: true,
+  message_state_changed: true,
+  session_replay_batch: true,
+  tool_progress: true,
+  tool_use_summary: true,
+  status_update: true,
+  task_notification: true,
+  system_init: true,
+  compact_boundary: true,
+  hook_started: true,
+  hook_response: true,
+  compacting_start: true,
+  compacting_end: true,
+  workspace_notification_request: true,
+  slash_commands: true,
+  user_message_uuid: true,
+  rewind_files_preview: true,
+  rewind_files_error: true,
+};
+
+export const WEBSOCKET_MESSAGE_TYPES = Object.keys(
+  WEBSOCKET_MESSAGE_TYPE_MAP
+) as WebSocketMessage['type'][];
 
 // =============================================================================
 // Queued Message Types
@@ -701,8 +1103,10 @@ export interface UserMessageWithState {
   queuePosition?: number;
   /** Error message for REJECTED/FAILED states */
   errorMessage?: string;
-  /** Backend-assigned order for reliable sorting (monotonically increasing per session) */
-  order: number;
+  /** Backend-assigned order for reliable sorting (monotonically increasing per session).
+   * Assigned when message transitions to DISPATCHED state (when sent to agent),
+   * not when queued. Undefined for ACCEPTED (queued) messages. */
+  order?: number;
 }
 
 /**

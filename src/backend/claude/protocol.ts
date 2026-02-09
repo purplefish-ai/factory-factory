@@ -13,11 +13,13 @@ import { createLogger } from '../services/logger.service';
 import {
   type ClaudeContentItem,
   type ClaudeJson,
+  ClaudeJsonSchema,
   type ControlCancelRequest,
   type ControlRequest,
   type ControlResponseData,
   type HooksConfig,
   type InitializeResponseData,
+  InitializeResponseDataSchema,
   isControlCancelRequest,
   isControlRequest,
   isKeepAliveMessage,
@@ -25,6 +27,7 @@ import {
   type KeepAliveMessage,
   type PermissionMode,
   type RewindFilesResponse,
+  RewindFilesResponseSchema,
   type StreamEventMessage,
 } from './types';
 
@@ -36,12 +39,16 @@ const logger = createLogger('protocol');
 
 /**
  * Pending request tracking for request/response correlation.
+ * Uses unknown for response to allow storage in a single Map, with runtime
+ * validation ensuring type safety before calling resolve.
  */
 export interface PendingRequest {
   requestId: string;
   resolve: (response: unknown) => void;
   reject: (error: Error) => void;
   timeoutId?: NodeJS.Timeout;
+  /** The subtype of the request, used to validate the response schema */
+  requestSubtype?: string;
 }
 
 /**
@@ -147,9 +154,12 @@ export class ClaudeProtocol extends EventEmitter {
 
       this.pendingRequests.set(requestId, {
         requestId,
-        resolve: resolve as (response: unknown) => void,
+        // Wrapper ensures type safety: response is validated in handleControlResponse
+        // via validateControlResponsePayload before being passed here
+        resolve: (response) => resolve(response as InitializeResponseData),
         reject,
         timeoutId,
+        requestSubtype: 'initialize',
       });
 
       // Fire-and-forget the send - backpressure handled internally
@@ -306,9 +316,12 @@ export class ClaudeProtocol extends EventEmitter {
 
       this.pendingRequests.set(requestId, {
         requestId,
-        resolve: resolve as (response: unknown) => void,
+        // Wrapper ensures type safety: response is validated in handleControlResponse
+        // via validateControlResponsePayload before being passed here
+        resolve: (response) => resolve(response as RewindFilesResponse),
         reject,
         timeoutId,
+        requestSubtype: 'rewind_files',
       });
 
       // Fire-and-forget the send - backpressure handled internally
@@ -482,7 +495,18 @@ export class ClaudeProtocol extends EventEmitter {
 
     let parsed: ClaudeJson;
     try {
-      parsed = JSON.parse(trimmed) as ClaudeJson;
+      const rawData = JSON.parse(trimmed);
+      const validationResult = ClaudeJsonSchema.safeParse(rawData);
+
+      if (!validationResult.success) {
+        logger.error('Invalid Claude JSON message', new Error('Schema validation failed'), {
+          rawLine: trimmed.slice(0, 200),
+          errors: validationResult.error.format(),
+        });
+        return;
+      }
+
+      parsed = validationResult.data as ClaudeJson;
     } catch (error) {
       // Log and skip malformed JSON
       logger.error('Failed to parse JSON', error as Error, {
@@ -533,7 +557,61 @@ export class ClaudeProtocol extends EventEmitter {
   }
 
   /**
+   * Safely format raw response for logging, handling undefined case.
+   */
+  private formatResponseForLogging(rawResponse: unknown): string {
+    return rawResponse === undefined ? 'undefined' : JSON.stringify(rawResponse).slice(0, 500);
+  }
+
+  /**
+   * Validate a control response payload against its schema.
+   */
+  private validateControlResponsePayload(
+    rawResponse: unknown,
+    requestSubtype: string | null | undefined,
+    requestId: string
+  ): unknown {
+    if (requestSubtype === 'initialize') {
+      const parseResult = InitializeResponseDataSchema.safeParse(rawResponse);
+      if (!parseResult.success) {
+        logger.error('Invalid initialize response payload', parseResult.error, {
+          requestId,
+          rawResponse: this.formatResponseForLogging(rawResponse),
+        });
+        throw new Error(
+          `Invalid initialize response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
+        );
+      }
+      return parseResult.data;
+    }
+
+    if (requestSubtype === 'rewind_files') {
+      const parseResult = RewindFilesResponseSchema.safeParse(rawResponse);
+      if (!parseResult.success) {
+        logger.error('Invalid rewind files response payload', parseResult.error, {
+          requestId,
+          rawResponse: this.formatResponseForLogging(rawResponse),
+        });
+        throw new Error(
+          `Invalid rewind files response: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
+        );
+      }
+      return parseResult.data;
+    }
+
+    // No validation schema for this request subtype - reject to prevent bypass
+    const noSchemaError = new Error('Control response has no validation schema');
+    logger.error('Control response has no validation schema', noSchemaError, {
+      requestId,
+      requestSubtype: requestSubtype ?? 'unknown',
+      rawResponse: this.formatResponseForLogging(rawResponse),
+    });
+    throw noSchemaError;
+  }
+
+  /**
    * Handle a control response from the CLI.
+   * Validates response payload against expected schema before resolving.
    */
   private handleControlResponse(msg: {
     type: 'control_response';
@@ -546,12 +624,27 @@ export class ClaudeProtocol extends EventEmitter {
     const requestId = msg.response.request_id;
     const pending = this.pendingRequests.get(requestId);
 
-    if (pending) {
-      if (pending.timeoutId) {
-        clearTimeout(pending.timeoutId);
-      }
-      this.pendingRequests.delete(requestId);
-      pending.resolve(msg.response.response);
+    if (!pending) {
+      return;
+    }
+
+    if (pending.timeoutId) {
+      clearTimeout(pending.timeoutId);
+    }
+    this.pendingRequests.delete(requestId);
+
+    const rawResponse = msg.response.response;
+
+    try {
+      const validatedResponse = this.validateControlResponsePayload(
+        rawResponse,
+        pending.requestSubtype,
+        requestId
+      );
+      pending.resolve(validatedResponse);
+    } catch (error) {
+      // validateControlResponsePayload already logs detailed errors before throwing
+      pending.reject(error instanceof Error ? error : new Error('Unknown validation error'));
     }
   }
 

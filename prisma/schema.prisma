@@ -55,7 +55,6 @@ enum RatchetState {
   IDLE              // No PR or ratchet not active for this workspace
   CI_RUNNING        // CI checks in progress
   CI_FAILED         // CI checks failed
-  MERGE_CONFLICT    // Has merge conflicts with base branch
   REVIEW_PENDING    // Has unaddressed review comments
   READY             // Ready to merge (CI green, no conflicts, no pending reviews)
   MERGED            // PR has been merged
@@ -202,6 +201,7 @@ model ClaudeSession {
   model            String        @default("sonnet")
   status           SessionStatus @default(IDLE)
   claudeSessionId  String?       // For resume
+  claudeProjectPath String?      // Persisted ~/.claude/projects/<escaped-path> for history lookup
   claudeProcessPid Int?
   planFilePath     String?       // Relative path to plan file (e.g. "planning/2025-01-15-1430-my-branch.md")
   createdAt        DateTime      @default(now())
@@ -245,11 +245,6 @@ model UserSettings {
 
   // Ratchet Settings (unified PR progression)
   ratchetEnabled            Boolean  @default(false)  // Default for new GitHub-issue-created workspaces
-  ratchetAutoFixCi          Boolean  @default(true)   // Auto-fix CI failures
-  ratchetAutoFixConflicts   Boolean  @default(true)   // Auto-resolve merge conflicts
-  ratchetAutoFixReviews     Boolean  @default(true)   // Auto-address review comments
-  ratchetAutoMerge          Boolean  @default(false)  // Auto-merge when ready
-  ratchetAllowedReviewers   Json?                     // GitHub usernames whose reviews trigger auto-fix
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

@@ -231,13 +231,13 @@ describe('FileLockService', () => {
       });
       expect(fs.writeFile).toHaveBeenCalled();
 
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]!;
       expect(writeCall[0]).toBe(path.join(mockWorktreePath, '.context', 'advisory-locks.json'));
 
       const persisted = JSON.parse(writeCall[1] as string);
       expect(persisted.version).toBe(1);
       expect(persisted.locks).toHaveLength(1);
-      expect(persisted.locks[0].filePath).toBe('src/index.ts');
+      expect(persisted.locks[0]!.filePath).toBe('src/index.ts');
     });
   });
 
@@ -314,7 +314,7 @@ describe('FileLockService', () => {
       });
 
       expect(fs.writeFile).toHaveBeenCalled();
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]!;
       const persisted = JSON.parse(writeCall[1] as string);
       expect(persisted.locks).toHaveLength(0);
     });
@@ -416,7 +416,7 @@ describe('FileLockService', () => {
       const result = await fileLockService.listLocks(mockAgentId, {});
 
       expect(result.locks).toHaveLength(1);
-      expect(result.locks[0].filePath).toBe('src/utils.ts');
+      expect(result.locks[0]!.filePath).toBe('src/utils.ts');
     });
 
     it('should include expired locks when requested', async () => {
@@ -520,7 +520,7 @@ describe('FileLockService', () => {
       // The expired lock should be cleaned up
       const list = await fileLockService.listLocks(mockAgentId, { includeExpired: true });
       expect(list.locks).toHaveLength(1);
-      expect(list.locks[0].filePath).toBe('src/utils.ts');
+      expect(list.locks[0]!.filePath).toBe('src/utils.ts');
     });
 
     it('should not start interval twice', () => {
@@ -654,6 +654,93 @@ describe('FileLockService', () => {
       });
 
       expect(result.acquired).toBe(true);
+    });
+  });
+
+  describe('loadFromDisk schema validation', () => {
+    it('should handle malformed lock store JSON gracefully', async () => {
+      // Mock malformed JSON (wrong types)
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({ version: 1, workspaceId: 'ws-1', locks: [{ filePath: 123 }] })
+      );
+
+      // Should not throw and return empty locks
+      const result = await fileLockService.acquireLock(mockAgentId, {
+        filePath: 'src/index.ts',
+      });
+
+      expect(result.acquired).toBe(true);
+    });
+
+    it('should handle corrupted lock store JSON gracefully', async () => {
+      // Mock corrupted JSON
+      vi.mocked(fs.readFile).mockResolvedValue('{invalid json');
+
+      // Should not throw and return empty locks
+      const result = await fileLockService.acquireLock(mockAgentId, {
+        filePath: 'src/index.ts',
+      });
+
+      expect(result.acquired).toBe(true);
+    });
+
+    it('should handle non-object lock store JSON gracefully', async () => {
+      // Mock non-object JSON
+      vi.mocked(fs.readFile).mockResolvedValue('["array", "not", "object"]');
+
+      // Should not throw and return empty locks
+      const result = await fileLockService.acquireLock(mockAgentId, {
+        filePath: 'src/index.ts',
+      });
+
+      expect(result.acquired).toBe(true);
+    });
+
+    it('should handle wrong version gracefully', async () => {
+      // Mock wrong version (this is checked before schema validation)
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({ version: 2, workspaceId: 'ws-1', locks: [] })
+      );
+
+      // Should not throw and return empty locks
+      const result = await fileLockService.acquireLock(mockAgentId, {
+        filePath: 'src/index.ts',
+      });
+
+      expect(result.acquired).toBe(true);
+    });
+
+    it('should load valid persisted locks successfully', async () => {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 60_000);
+      const acquiredAt = new Date(now.getTime() - 1000);
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          version: 1,
+          workspaceId: mockWorkspaceId,
+          locks: [
+            {
+              filePath: 'src/test.ts',
+              ownerId: 'other-agent',
+              ownerLabel: 'Agent 2',
+              acquiredAt: acquiredAt.toISOString(),
+              expiresAt: expiresAt.toISOString(),
+              metadata: { test: 'data' },
+            },
+          ],
+        })
+      );
+
+      // Try to acquire a file that's already locked
+      const result = await fileLockService.acquireLock(mockAgentId, {
+        filePath: 'src/test.ts',
+      });
+
+      // Should fail because the lock is held by another agent
+      expect(result.acquired).toBe(false);
+      expect(result.existingLock?.ownerId).toBe('other-agent');
+      expect(result.existingLock?.ownerLabel).toBe('Agent 2');
     });
   });
 });

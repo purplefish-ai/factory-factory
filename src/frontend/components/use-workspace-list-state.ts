@@ -1,4 +1,6 @@
+import type { CIStatus, PRState, RatchetState } from '@prisma-gen/browser';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 // =============================================================================
 // Types
@@ -13,8 +15,8 @@ export interface ServerWorkspace {
   branchName?: string | null;
   prUrl?: string | null;
   prNumber?: number | null;
-  prState?: string | null;
-  prCiStatus?: string | null;
+  prState?: PRState | null;
+  prCiStatus?: CIStatus | null;
   isWorking: boolean;
   gitStats: {
     total: number;
@@ -24,12 +26,14 @@ export interface ServerWorkspace {
   } | null;
   lastActivityAt?: string | null;
   ratchetEnabled?: boolean;
-  ratchetState?: string | null;
+  ratchetState?: RatchetState | null;
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   ciObservation?: string | null;
   cachedKanbanColumn?: string | null;
   stateComputedAt?: string | null;
+  sidebarStatus?: WorkspaceSidebarStatus;
+  pendingRequestType?: 'plan_approval' | 'user_question' | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {

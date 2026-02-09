@@ -1,11 +1,12 @@
 import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
 import { RefreshCw } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { IssueCard } from './issue-card';
+import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { type ColumnConfig, KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
 import { type GitHubIssue, useKanban } from './kanban-context';
@@ -129,31 +130,61 @@ interface IssuesColumnProps {
 
 function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
   const isEmpty = issues.length === 0;
+  const [selectedIssue, setSelectedIssue] = useState<GitHubIssue | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const handleIssueClick = (issue: GitHubIssue) => {
+    setSelectedIssue(issue);
+    setIsSheetOpen(true);
+  };
+
+  const handleSheetOpenChange = (open: boolean) => {
+    setIsSheetOpen(open);
+    if (!open) {
+      // Clear selected issue when sheet closes
+      setSelectedIssue(null);
+    }
+  };
 
   return (
-    <div className="flex flex-col h-full w-[380px] shrink-0">
-      {/* Column Header */}
-      <div className="flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-sm">{column.label}</h3>
-          <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
-            {issues.length}
-          </Badge>
+    <>
+      <div className="flex flex-col h-full w-[380px] shrink-0">
+        {/* Column Header */}
+        <div className="flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-sm">{column.label}</h3>
+            <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
+              {issues.length}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Column Content */}
+        <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-b-lg bg-muted/30">
+          {isEmpty ? (
+            <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
+              {column.description}
+            </div>
+          ) : (
+            issues.map((issue) => (
+              <div key={issue.number} className="shrink-0">
+                <IssueCard
+                  issue={issue}
+                  projectId={projectId}
+                  onClick={() => handleIssueClick(issue)}
+                />
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      {/* Column Content */}
-      <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-b-lg bg-muted/30">
-        {isEmpty ? (
-          <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
-            {column.description}
-          </div>
-        ) : (
-          issues.map((issue) => (
-            <IssueCard key={issue.number} issue={issue} projectId={projectId} />
-          ))
-        )}
-      </div>
-    </div>
+      <IssueDetailsSheet
+        issue={selectedIssue}
+        projectId={projectId}
+        open={isSheetOpen}
+        onOpenChange={handleSheetOpenChange}
+      />
+    </>
   );
 }

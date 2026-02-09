@@ -195,7 +195,7 @@ describe('workflows', () => {
 
       for (const workflow of workflows) {
         // Name should be capitalized (first letter uppercase)
-        expect(workflow.name[0]).toBe(workflow.name[0].toUpperCase());
+        expect(workflow.name[0]!).toBe(workflow.name[0]!.toUpperCase());
       }
     });
   });

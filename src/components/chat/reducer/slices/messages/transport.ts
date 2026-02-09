@@ -20,9 +20,13 @@ export function reduceMessageTransportSlice(state: ChatState, action: ChatAction
         timestamp: new Date().toISOString(),
         order: maxOrder + 1,
       };
+      // Clear loading state if error occurs while loading (e.g., load_session fails)
+      const sessionStatus =
+        state.sessionStatus.phase === 'loading' ? { phase: 'ready' as const } : state.sessionStatus;
       return {
         ...state,
         messages: [...state.messages, errorChatMessage],
+        sessionStatus,
       };
     }
     default:

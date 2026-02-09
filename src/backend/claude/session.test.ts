@@ -149,10 +149,10 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('user');
-      expect(result[0].content).toBe('Hello, Claude!');
-      expect(result[0].timestamp).toBe(timestamp);
-      expect(result[0].uuid).toBe('uuid-123');
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('Hello, Claude!');
+      expect(result[0]!.timestamp).toBe(timestamp);
+      expect(result[0]!.uuid).toBe('uuid-123');
     });
 
     it('should parse user message with text content array', () => {
@@ -166,8 +166,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('user');
-      expect(result[0].content).toBe('Hello from array!');
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('Hello from array!');
     });
 
     it('should parse user message with multiple text content items', () => {
@@ -183,9 +183,8 @@ describe('parseHistoryEntry', () => {
         },
       };
       const result = parseHistoryEntry(entry);
-      expect(result).toHaveLength(2);
-      expect(result[0].content).toBe('First message');
-      expect(result[1].content).toBe('Second message');
+      expect(result).toHaveLength(1);
+      expect(result[0]!.content).toBe('First message\n\nSecond message');
     });
 
     it('should parse user message with tool_result content', () => {
@@ -206,10 +205,177 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('tool_result');
-      expect(result[0].content).toBe('File contents here');
-      expect(result[0].toolId).toBe('tool-123');
-      expect(result[0].isError).toBe(false);
+      const first = result[0];
+      expect(first?.type).toBe('tool_result');
+      expect(first?.content).toBe('File contents here');
+      if (first?.type !== 'tool_result') {
+        throw new Error('Expected tool_result message');
+      }
+      expect(first.toolId).toBe('tool-123');
+      expect(first.isError).toBe(false);
+    });
+
+    it('should preserve mixed user/tool_result payload as a single canonical entry', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Please inspect this' },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-321',
+              content: 'Tool output',
+            },
+          ],
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        type: 'user_tool_result',
+      });
+      if (result[0]?.type !== 'user_tool_result') {
+        throw new Error('Expected user_tool_result message');
+      }
+      expect(result[0].content).toEqual([
+        { type: 'text', text: 'Please inspect this' },
+        {
+          type: 'tool_result',
+          tool_use_id: 'tool-321',
+          content: 'Tool output',
+        },
+      ]);
+    });
+
+    it('should treat system-text + tool_result content as tool_result-only payload', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: '<system_instruction>internal note</system_instruction>' },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-999',
+              content: 'Tool output',
+              is_error: true,
+            },
+          ],
+        },
+      };
+
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.type).toBe('tool_result');
+      if (result[0]?.type !== 'tool_result') {
+        throw new Error('Expected tool_result message');
+      }
+      expect(result[0].toolId).toBe('tool-999');
+      expect(result[0].isError).toBe(true);
+      expect(result[0].content).toBe('Tool output');
+    });
+
+    it('should preserve mixed user/tool_result interleaving within canonical content', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Before tool' },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-321',
+              content: 'Tool output',
+            },
+            { type: 'text', text: 'After tool' },
+          ],
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ type: 'user_tool_result' });
+      if (result[0]?.type !== 'user_tool_result') {
+        throw new Error('Expected user_tool_result message');
+      }
+      expect(result[0].content).toEqual([
+        { type: 'text', text: 'Before tool' },
+        {
+          type: 'tool_result',
+          tool_use_id: 'tool-321',
+          content: 'Tool output',
+        },
+        { type: 'text', text: 'After tool' },
+      ]);
+    });
+
+    it('should parse user image content into attachment metadata', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        uuid: 'uuid-image-1',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'Zm9vYmFy',
+              },
+            },
+          ],
+        },
+      };
+
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('');
+      expect(result[0]!.attachments).toHaveLength(1);
+      expect(result[0]!.attachments?.[0]).toMatchObject({
+        id: 'uuid-image-1-image-0',
+        name: 'image-1.png',
+        type: 'image/png',
+        contentType: 'image',
+        data: 'Zm9vYmFy',
+      });
+      expect(result[0]!.attachments?.[0]?.size).toBe(6);
+    });
+
+    it('should parse text and image user content into a single history entry', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'See screenshot' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: '/9j/4AAQ',
+              },
+            },
+          ],
+        },
+      };
+
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.type).toBe('user');
+      expect(result[0]!.content).toBe('See screenshot');
+      expect(result[0]!.attachments?.[0]).toMatchObject({
+        name: 'image-2.jpeg',
+        type: 'image/jpeg',
+        contentType: 'image',
+      });
     });
 
     it('should parse user message with tool_result error', () => {
@@ -230,11 +396,19 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('tool_result');
-      expect(result[0].isError).toBe(true);
+      const first = result[0];
+      expect(first?.type).toBe('tool_result');
+      if (first?.type !== 'tool_result') {
+        throw new Error('Expected tool_result message');
+      }
+      expect(first.isError).toBe(true);
     });
 
     it('should parse tool_result with array content', () => {
+      const content = [
+        { type: 'text' as const, text: 'Line 1' },
+        { type: 'text' as const, text: 'Line 2' },
+      ];
       const entry = {
         type: 'user',
         timestamp,
@@ -244,17 +418,14 @@ describe('parseHistoryEntry', () => {
             {
               type: 'tool_result',
               tool_use_id: 'tool-789',
-              content: [
-                { type: 'text', text: 'Line 1' },
-                { type: 'text', text: 'Line 2' },
-              ],
+              content,
             },
           ],
         },
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].content).toBe('Line 1\nLine 2');
+      expect(result[0]!.content).toEqual(content);
     });
 
     it('should handle tool_result with empty array content', () => {
@@ -274,7 +445,35 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].content).toBe('');
+      expect(result[0]!.content).toEqual([]);
+    });
+
+    it('should preserve tool_result image content blocks', () => {
+      const content = [
+        {
+          type: 'image' as const,
+          source: { type: 'base64' as const, media_type: 'image/png', data: 'Zm9vYmFy' },
+        },
+      ];
+      const entry = {
+        type: 'user',
+        timestamp,
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-image',
+              content,
+            },
+          ],
+        },
+      };
+
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.type).toBe('tool_result');
+      expect(result[0]!.content).toEqual(content);
     });
   });
 
@@ -290,8 +489,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('assistant');
-      expect(result[0].content).toBe('Hello!');
+      expect(result[0]!.type).toBe('assistant');
+      expect(result[0]!.content).toBe('Hello!');
     });
 
     it('should parse assistant message with string content', () => {
@@ -305,8 +504,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('assistant');
-      expect(result[0].content).toBe('Direct string response');
+      expect(result[0]!.type).toBe('assistant');
+      expect(result[0]!.content).toBe('Direct string response');
     });
 
     it('should parse assistant message with tool_use content', () => {
@@ -327,11 +526,15 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('tool_use');
-      expect(result[0].toolName).toBe('Read');
-      expect(result[0].toolId).toBe('tool-123');
-      expect(result[0].toolInput).toEqual({ file_path: '/test.txt' });
-      expect(result[0].content).toBe(JSON.stringify({ file_path: '/test.txt' }, null, 2));
+      const first = result[0];
+      expect(first?.type).toBe('tool_use');
+      if (first?.type !== 'tool_use') {
+        throw new Error('Expected tool_use message');
+      }
+      expect(first.toolName).toBe('Read');
+      expect(first.toolId).toBe('tool-123');
+      expect(first.toolInput).toEqual({ file_path: '/test.txt' });
+      expect(first.content).toBe(JSON.stringify({ file_path: '/test.txt' }, null, 2));
     });
 
     it('should include thinking content', () => {
@@ -348,10 +551,10 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(2);
-      expect(result[0].type).toBe('thinking');
-      expect(result[0].content).toBe('Let me think...');
-      expect(result[1].type).toBe('assistant');
-      expect(result[1].content).toBe('Here is my response');
+      expect(result[0]!.type).toBe('thinking');
+      expect(result[0]!.content).toBe('Let me think...');
+      expect(result[1]!.type).toBe('assistant');
+      expect(result[1]!.content).toBe('Here is my response');
     });
 
     it('should return thinking content when only thinking content exists', () => {
@@ -365,8 +568,8 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('thinking');
-      expect(result[0].content).toBe('Just thinking...');
+      expect(result[0]!.type).toBe('thinking');
+      expect(result[0]!.content).toBe('Just thinking...');
     });
 
     it('should parse multiple content items in assistant message', () => {
@@ -385,10 +588,10 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(4);
-      expect(result[0].type).toBe('assistant');
-      expect(result[1].type).toBe('tool_use');
-      expect(result[2].type).toBe('assistant');
-      expect(result[3].type).toBe('tool_use');
+      expect(result[0]!.type).toBe('assistant');
+      expect(result[1]!.type).toBe('tool_use');
+      expect(result[2]!.type).toBe('assistant');
+      expect(result[3]!.type).toBe('tool_use');
     });
   });
 
@@ -447,7 +650,7 @@ describe('parseHistoryEntry', () => {
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
       // Timestamp should be after test started
-      expect(new Date(result[0].timestamp).getTime()).toBeGreaterThanOrEqual(
+      expect(new Date(result[0]!.timestamp).getTime()).toBeGreaterThanOrEqual(
         new Date(beforeTest).getTime() - 1000
       );
     });
@@ -476,7 +679,57 @@ describe('parseHistoryEntry', () => {
       };
       const result = parseHistoryEntry(entry);
       expect(result).toHaveLength(1);
-      expect(result[0].uuid).toBeUndefined();
+      expect(result[0]!.uuid).toBeUndefined();
+    });
+  });
+
+  describe('malformed entries', () => {
+    it('should return empty array for entry without type field', () => {
+      const entry = {
+        timestamp,
+        message: {
+          role: 'user',
+          content: 'Missing type',
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should return empty array for entry without message field', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should skip meta messages', () => {
+      const entry = {
+        type: 'user',
+        timestamp,
+        isMeta: true,
+        message: {
+          role: 'user',
+          content: 'Meta message',
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should return empty array for unknown message type', () => {
+      const entry = {
+        type: 'unknown_type',
+        timestamp,
+        message: {
+          role: 'unknown',
+          content: 'Unknown',
+        },
+      };
+      const result = parseHistoryEntry(entry);
+      expect(result).toHaveLength(0);
     });
   });
 });

@@ -9,19 +9,22 @@
  */
 
 import type { WebSocket } from 'ws';
-import { DEFAULT_THINKING_BUDGET, MessageState } from '@/shared/claude';
+import {
+  type ClaudeContentItem,
+  DEFAULT_THINKING_BUDGET,
+  MessageState,
+  type QueuedMessage,
+  resolveSelectedModel,
+} from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
 import type { ClaudeClient } from '../claude/index';
-import type { ClaudeContentItem } from '../claude/types';
-import { chatConnectionService } from './chat-connection.service';
-import { resolveAttachmentContentType } from './chat-message-handlers/attachment-utils';
+import { processAttachmentsAndBuildContent } from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
 import type { ClientCreator } from './chat-message-handlers/types';
 import { createLogger } from './logger.service';
-import { messageQueueService, type QueuedMessage } from './message-queue.service';
-import { messageStateService } from './message-state.service';
 import { sessionService } from './session.service';
+import { sessionStoreService } from './session-store.service';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -73,7 +76,7 @@ class ChatMessageHandlerService {
     this.dispatchInProgress.set(dbSessionId, true);
 
     // Dequeue first to claim the message atomically before any async operations.
-    const msg = messageQueueService.dequeue(dbSessionId);
+    const msg = sessionStoreService.dequeueNext(dbSessionId, { emitSnapshot: false });
     if (!msg) {
       this.dispatchInProgress.set(dbSessionId, false);
       return;
@@ -84,16 +87,13 @@ class ChatMessageHandlerService {
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
-        // Notify frontend that agent is starting BEFORE creating the client
-        // This provides immediate feedback when the first message is sent
-        chatConnectionService.forwardToSession(dbSessionId, { type: 'starting', dbSessionId });
+        sessionStoreService.markStarting(dbSessionId);
 
         const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
         if (!newClient) {
           // Re-queue the message at the front so it's not lost
-          messageQueueService.requeue(dbSessionId, msg);
-          // Notify frontend that starting failed so UI doesn't get stuck
-          chatConnectionService.forwardToSession(dbSessionId, { type: 'stopped', dbSessionId });
+          sessionStoreService.requeueFront(dbSessionId, msg);
+          sessionStoreService.markError(dbSessionId);
           return;
         }
         client = newClient;
@@ -115,7 +115,12 @@ class ChatMessageHandlerService {
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
         });
-        messageQueueService.requeue(dbSessionId, msg);
+        sessionStoreService.requeueFront(dbSessionId, msg);
+        // Avoid clobbering markProcessExit() runtime/lastExit when the process
+        // has already stopped and exit handling is in flight.
+        if (client.isRunning()) {
+          sessionStoreService.markIdle(dbSessionId, 'alive');
+        }
       }
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
@@ -131,7 +136,15 @@ class ChatMessageHandlerService {
     workingDir: string,
     message: ChatMessage
   ): Promise<void> {
-    const handler = this.handlerRegistry[message.type];
+    const handler = this.handlerRegistry[message.type] as
+      | ((context: {
+          ws: WebSocket;
+          sessionId: string;
+          workingDir: string;
+          message: ChatMessage;
+        }) => Promise<void> | void)
+      | undefined;
+
     if (!handler) {
       logger.warn('[Chat WS] No handler registered for message type', { type: message.type });
       return;
@@ -208,25 +221,40 @@ class ChatMessageHandlerService {
     const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
     await client.setMaxThinkingTokens(thinkingTokens);
 
-    // Now that thinking budget is set, update state to DISPATCHED
-    messageStateService.updateState(dbSessionId, msg.id, MessageState.DISPATCHED);
-
-    // Notify frontend that agent is working - this ensures the spinner shows
-    // for subsequent messages when client is already running
-    chatConnectionService.forwardToSession(dbSessionId, {
-      type: 'status',
-      running: true,
-      processAlive: client.isRunning(),
-    });
+    sessionStoreService.markRunning(dbSessionId);
 
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
+    const order = sessionStoreService.allocateOrder(dbSessionId);
+
+    sessionStoreService.emitDelta(dbSessionId, {
+      type: 'message_state_changed',
+      id: msg.id,
+      newState: MessageState.DISPATCHED,
+      userMessage: {
+        text: msg.text,
+        timestamp: msg.timestamp,
+        attachments: msg.attachments,
+        settings: {
+          ...msg.settings,
+          selectedModel: resolveSelectedModel(msg.settings.selectedModel),
+        },
+        order,
+      },
+    });
+
     if (isCompactCommand) {
       client.startCompaction();
     }
 
     try {
       await client.sendMessage(content);
+      sessionStoreService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
+      sessionStoreService.emitDelta(dbSessionId, {
+        type: 'message_state_changed',
+        id: msg.id,
+        newState: MessageState.COMMITTED,
+      });
     } catch (error) {
       if (isCompactCommand) {
         client.endCompaction();
@@ -238,7 +266,7 @@ class ChatMessageHandlerService {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
         dbSessionId,
         messageId: msg.id,
-        remainingInQueue: messageQueueService.getQueueLength(dbSessionId),
+        remainingInQueue: sessionStoreService.getQueueLength(dbSessionId),
       });
     }
   }
@@ -266,51 +294,12 @@ class ChatMessageHandlerService {
     } else if (reason === 'stopped') {
       logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
     }
-    messageQueueService.requeue(dbSessionId, msg);
+    sessionStoreService.requeueFront(dbSessionId, msg);
   }
 
   private isCompactCommand(text: string): boolean {
     const trimmed = text.trim();
     return trimmed === '/compact' || trimmed.startsWith('/compact ');
-  }
-
-  /**
-   * Validate an attachment before processing.
-   * @throws Error if attachment is invalid
-   */
-  private validateAttachment(attachment: {
-    id: string;
-    name: string;
-    type: string;
-    data: string;
-    contentType?: 'image' | 'text';
-  }): void {
-    if (!attachment.data) {
-      logger.error('[Chat WS] Attachment missing data', { attachmentId: attachment.id });
-      throw new Error(`Attachment "${attachment.name}" is missing data`);
-    }
-
-    const resolvedType = resolveAttachmentContentType(attachment);
-    if (resolvedType === 'image') {
-      // Validate base64 for image attachments (basic check - alphanumeric, +, /, =)
-      if (!/^[A-Za-z0-9+/=]+$/.test(attachment.data)) {
-        logger.error('[Chat WS] Invalid base64 data in attachment', {
-          attachmentId: attachment.id,
-          name: attachment.name,
-        });
-        throw new Error(`Attachment "${attachment.name}" has invalid image data`);
-      }
-    }
-  }
-
-  /**
-   * Sanitize attachment name to prevent log injection or display issues.
-   * Removes control characters and limits length.
-   */
-  private sanitizeAttachmentName(name: string): string {
-    // Remove control characters (ASCII 0-31 and 127) and limit length
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matching control chars to remove them
-    return name.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 255);
   }
 
   /**
@@ -320,63 +309,8 @@ class ChatMessageHandlerService {
    * Text attachments are combined into the main text content with a prefix.
    * Image attachments are sent as separate image content blocks.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: attachment validation and branching logic is inherently complex
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
-    // If there are attachments, process them
-    if (msg.attachments && msg.attachments.length > 0) {
-      // Validate all attachments before processing
-      for (const attachment of msg.attachments) {
-        this.validateAttachment(attachment);
-      }
-
-      const resolvedAttachments = msg.attachments.map((attachment) => ({
-        attachment,
-        contentType: resolveAttachmentContentType(attachment),
-      }));
-      const textAttachments = resolvedAttachments
-        .filter((entry) => entry.contentType === 'text')
-        .map((entry) => entry.attachment);
-      const imageAttachments = resolvedAttachments
-        .filter((entry) => entry.contentType === 'image')
-        .map((entry) => entry.attachment);
-
-      // Build the combined text content (user message + text attachments)
-      let combinedText = msg.text || '';
-
-      // Append text attachments with a prefix for context
-      for (const attachment of textAttachments) {
-        const prefix = combinedText ? '\n\n' : '';
-        const safeName = this.sanitizeAttachmentName(attachment.name);
-        combinedText += `${prefix}[Pasted content: ${safeName}]\n${attachment.data}`;
-      }
-
-      // If we only have text (no images), return as string
-      if (imageAttachments.length === 0) {
-        return combinedText;
-      }
-
-      // If we have images, build content array
-      const content: ClaudeContentItem[] = [];
-
-      if (combinedText) {
-        content.push({ type: 'text', text: combinedText });
-      }
-
-      for (const attachment of imageAttachments) {
-        content.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: attachment.type,
-            data: attachment.data,
-          },
-        } as unknown as ClaudeContentItem);
-      }
-
-      return content;
-    }
-
-    return msg.text;
+    return processAttachmentsAndBuildContent(msg.text, msg.attachments);
   }
 
   // ============================================================================

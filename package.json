@@ -1,6 +1,6 @@
 {
   "name": "factory-factory",
-  "version": "0.2.1",
+  "version": "0.2.6",
   "description": "Workspace-based coding environment for running multiple Claude Code sessions in parallel",
   "private": false,
   "license": "MIT",
@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/purplefish-ai/factory-factory/issues"
   },
-  "homepage": "https://github.com/purplefish-ai/factory-factory#readme",
+  "homepage": "https://factoryfactory.ai",
   "keywords": [
     "claude",
     "claude-code",

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { decisionLogAccessor } from '../../resource_accessors/index';
+import { decisionLogQueryService } from '../../services/decision-log-query.service';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server';
 import type { McpToolContext, McpToolResponse } from './types';
 import { McpErrorCode } from './types';
@@ -25,7 +25,7 @@ async function logDecision(context: McpToolContext, input: unknown): Promise<Mcp
     const parsed = LogDecisionInputSchema.parse(input);
     const { title, body } = parsed;
 
-    const log = await decisionLogAccessor.createManual(context.agentId, title, body);
+    const log = await decisionLogQueryService.createManual(context.agentId, title, body);
 
     return createSuccessResponse({
       logId: log.id,

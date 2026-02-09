@@ -2,13 +2,12 @@ import {
   AppWindow,
   Archive,
   CheckCircle2,
-  Circle,
   GitBranch,
   GitPullRequest,
   Loader2,
   PanelRight,
-  XCircle,
 } from 'lucide-react';
+import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -19,6 +18,7 @@ import {
   useWorkspacePanel,
 } from '@/components/workspace';
 import { cn } from '@/lib/utils';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { trpc } from '../../../../frontend/lib/trpc';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
@@ -119,65 +119,28 @@ function WorkspacePrAction({
   return null;
 }
 
-const CI_STATUS_CONFIG = {
-  SUCCESS: {
-    label: 'CI Passing',
-    tooltip: 'All CI checks are passing',
-    className: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300',
-    Icon: CheckCircle2,
-  },
-  FAILURE: {
-    label: 'CI Failing',
-    tooltip: 'Some CI checks are failing',
-    className: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
-    Icon: XCircle,
-  },
-  PENDING: {
-    label: 'CI Running',
-    tooltip: 'CI checks are currently running',
-    className: 'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300',
-    Icon: Circle,
-  },
-  UNKNOWN: {
-    label: 'CI Unknown',
-    tooltip: 'CI status not yet determined',
-    className: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
-    Icon: Circle,
-  },
-} as const;
-
 function WorkspaceCiStatus({
   workspace,
+  running,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  running: boolean;
 }) {
-  if (!workspace.prUrl || workspace.prState !== 'OPEN') {
+  if (!workspace.prUrl) {
     return null;
   }
 
-  const statusConfig = CI_STATUS_CONFIG[workspace.prCiStatus];
-  if (!statusConfig) {
-    return null;
-  }
+  const sidebarStatus =
+    workspace.sidebarStatus ??
+    deriveWorkspaceSidebarStatus({
+      isWorking: running,
+      prUrl: workspace.prUrl,
+      prState: workspace.prState,
+      prCiStatus: workspace.prCiStatus,
+      ratchetState: workspace.ratchetState,
+    });
 
-  const { Icon } = statusConfig;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className={cn(
-            'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
-            statusConfig.className
-          )}
-        >
-          <Icon className={cn('h-3 w-3', workspace.prCiStatus === 'PENDING' && 'animate-pulse')} />
-          <span>{statusConfig.label}</span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>{statusConfig.tooltip}</TooltipContent>
-    </Tooltip>
-  );
+  return <CiStatusChip ciState={sidebarStatus.ciState} prState={workspace.prState} size="md" />;
 }
 
 function RatchetingToggle({
@@ -250,7 +213,7 @@ export function WorkspaceHeader({
           isCreatingSession={isCreatingSession}
           handleQuickAction={handleQuickAction}
         />
-        <WorkspaceCiStatus workspace={workspace} />
+        <WorkspaceCiStatus workspace={workspace} running={running} />
       </div>
       <div className="flex items-center gap-1">
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />

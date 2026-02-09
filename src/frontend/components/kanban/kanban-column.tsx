@@ -55,13 +55,14 @@ export function KanbanColumn({
           </div>
         ) : (
           workspaces.map((workspace) => (
-            <KanbanCard
-              key={workspace.id}
-              workspace={workspace}
-              projectSlug={projectSlug}
-              onToggleRatcheting={onToggleRatcheting}
-              isTogglePending={togglingWorkspaceId === workspace.id}
-            />
+            <div key={workspace.id} className="shrink-0">
+              <KanbanCard
+                workspace={workspace}
+                projectSlug={projectSlug}
+                onToggleRatcheting={onToggleRatcheting}
+                isTogglePending={togglingWorkspaceId === workspace.id}
+              />
+            </div>
           ))
         )}
       </div>

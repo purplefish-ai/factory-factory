@@ -68,7 +68,8 @@ function extractTodosFromStreamEvent(
     if (isTodoWriteInput(block.input)) {
       return calculateTodoState(block.input.todos, timestamp);
     }
-    return calculateTodoState([], timestamp);
+    // Don't return empty state for incomplete input - keep showing previous state
+    return null;
   }
 
   return null;
@@ -90,7 +91,8 @@ function extractTodosFromAssistantMessage(
       if (isTodoWriteInput(item.input)) {
         return calculateTodoState(item.input.todos, timestamp);
       }
-      return calculateTodoState([], timestamp);
+      // Don't return empty state for incomplete input - keep showing previous state
+      return null;
     }
   }
 
@@ -128,7 +130,8 @@ export function useTodoTracker(messages: ChatMessage[]): TodoState {
   return useMemo(() => {
     // Find the most recent TodoWrite tool call by scanning messages in reverse
     for (let i = messages.length - 1; i >= 0; i--) {
-      const todoState = extractTodosFromMessage(messages[i]);
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const todoState = extractTodosFromMessage(messages[i]!);
       if (todoState) {
         return todoState;
       }

@@ -5,7 +5,7 @@
  */
 
 import { TRPCError } from '@trpc/server';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
+import { workspaceDataService } from '../../services/workspace-data.service';
 
 /**
  * Find a workspace by ID or throw a NOT_FOUND error.
@@ -13,7 +13,7 @@ import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
  * @throws TRPCError with NOT_FOUND code if workspace doesn't exist
  */
 export async function getWorkspaceOrThrow(workspaceId: string) {
-  const workspace = await workspaceAccessor.findById(workspaceId);
+  const workspace = await workspaceDataService.findById(workspaceId);
   if (!workspace) {
     throw new TRPCError({
       code: 'NOT_FOUND',
@@ -29,7 +29,7 @@ export async function getWorkspaceOrThrow(workspaceId: string) {
  * @throws TRPCError with NOT_FOUND code if workspace doesn't exist
  */
 export async function getWorkspaceWithProjectOrThrow(workspaceId: string) {
-  const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+  const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
   if (!workspace) {
     throw new TRPCError({
       code: 'NOT_FOUND',
@@ -43,7 +43,7 @@ export async function getWorkspaceWithProjectOrThrow(workspaceId: string) {
  * Result type for workspace with validated worktree.
  */
 export interface WorkspaceWithWorktree {
-  workspace: NonNullable<Awaited<ReturnType<typeof workspaceAccessor.findById>>>;
+  workspace: NonNullable<Awaited<ReturnType<typeof workspaceDataService.findById>>>;
   worktreePath: string;
 }
 
@@ -90,7 +90,7 @@ export async function getWorkspaceWithWorktreeOrThrow(
  * Result type for workspace with project and validated worktree.
  */
 export interface WorkspaceWithProjectAndWorktree {
-  workspace: NonNullable<Awaited<ReturnType<typeof workspaceAccessor.findByIdWithProject>>>;
+  workspace: NonNullable<Awaited<ReturnType<typeof workspaceDataService.findByIdWithProject>>>;
   worktreePath: string;
 }
 
@@ -103,7 +103,7 @@ export interface WorkspaceWithProjectAndWorktree {
 export async function getWorkspaceWithProjectAndWorktreeOrThrow(
   workspaceId: string
 ): Promise<WorkspaceWithProjectAndWorktree> {
-  const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+  const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
   if (!workspace) {
     throw new TRPCError({
       code: 'NOT_FOUND',

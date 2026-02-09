@@ -18,10 +18,9 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '../../app-context';
 import type { ClaudeClient } from '../../claude/index';
-import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
 import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import type { ConnectionInfo } from '../../services/chat-connection.service';
-import { chatTransportAdapterService } from '../../services/chat-transport-adapter.service';
+import { sessionDataService } from '../../services/session-data.service';
 import { toMessageString } from './message-utils';
 
 function sendBadRequest(socket: Duplex, message: string): void {
@@ -40,7 +39,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     chatMessageHandlerService,
     configService,
     createLogger,
-    messageStateService,
     sessionFileLogger,
     sessionService,
   } = appContext.services;
@@ -70,7 +68,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     }
 
     // Check if session workflow forces plan mode
-    const session = await claudeSessionAccessor.findById(dbSessionId);
+    const session = await sessionDataService.findClaudeSessionById(dbSessionId);
     const isPlanWorkflow = session?.workflow === 'plan';
 
     // Delegate client lifecycle to sessionService
@@ -79,6 +77,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       permissionMode: isPlanWorkflow || options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,
     });
+
+    // Set up event forwarding (idempotent - safe to call multiple times)
     const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
     chatEventForwarderService.setupClientEvents(
       dbSessionId,
@@ -166,45 +166,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return viewingCount;
   }
 
-  function getInitialStatus(dbSessionId: string | null): {
-    type: 'status';
-    dbSessionId: string | null;
-    running: boolean;
-    processAlive: boolean;
-  } {
-    const client = dbSessionId ? sessionService.getClient(dbSessionId) : null;
-    const isRunning = client?.isWorking() ?? false;
-    const processAlive = client?.isRunning() ?? false;
-
-    return {
-      type: 'status',
-      dbSessionId,
-      running: isRunning,
-      processAlive,
-    };
-  }
-
-  function sendInitialStatus(
-    ws: WebSocket,
-    dbSessionId: string | null
-  ): { type: 'status'; dbSessionId: string | null; running: boolean; processAlive: boolean } {
-    const initialStatus = getInitialStatus(dbSessionId);
-    if (dbSessionId) {
-      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
-    }
-    ws.send(JSON.stringify(initialStatus));
-    return initialStatus;
-  }
-
-  function sendSnapshotIfNeeded(dbSessionId: string | null, isRunning: boolean): void {
-    if (!dbSessionId) {
-      return;
-    }
-    const pendingRequest = chatEventForwarderService.getPendingRequest(dbSessionId);
-    const sessionStatus = messageStateService.computeSessionStatus(dbSessionId, isRunning);
-    messageStateService.sendSnapshot(dbSessionId, sessionStatus, pendingRequest);
-  }
-
   function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
     const rawMessage: unknown = JSON.parse(toMessageString(data));
     const parseResult = ChatMessageSchema.safeParse(rawMessage);
@@ -242,8 +203,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    // Ensure message state events are forwarded over WebSocket transport.
-    chatTransportAdapterService.setup();
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
     const dbSessionId = url.searchParams.get('sessionId') || null;
     const rawWorkingDir = url.searchParams.get('workingDir');
@@ -311,8 +270,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         });
       }
 
-      const initialStatus = sendInitialStatus(ws, dbSessionId);
-      sendSnapshotIfNeeded(dbSessionId, initialStatus.running);
+      // Session hydration is handled by explicit load_session from the client.
 
       ws.on('message', async (data) => {
         try {

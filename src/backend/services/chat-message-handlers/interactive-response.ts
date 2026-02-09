@@ -1,30 +1,25 @@
-import type { WebSocket } from 'ws';
-import { INTERACTIVE_RESPONSE_TOOLS } from '@/shared/pending-request-types';
+import { isInteractiveResponseTool } from '@/shared/pending-request-types';
 import { AskUserQuestionInputSchema, safeParseToolInput } from '../../schemas/tool-inputs.schema';
-import { chatConnectionService } from '../chat-connection.service';
-import { chatEventForwarderService } from '../chat-event-forwarder.service';
 import { createLogger } from '../logger.service';
-import { messageStateService } from '../message-state.service';
 import { sessionService } from '../session.service';
+import { sessionStoreService } from '../session-store.service';
 import { DEBUG_CHAT_WS } from './constants';
 
 const logger = createLogger('chat-message-handlers');
 
 export function tryHandleAsInteractiveResponse(
-  ws: WebSocket,
   sessionId: string,
   messageId: string,
   text: string
 ): boolean {
-  const pendingRequest = chatEventForwarderService.getPendingRequest(sessionId);
+  const pendingRequest = sessionStoreService.getPendingInteractiveRequest(sessionId);
   if (!pendingRequest) {
     return false;
   }
-  return handleMessageAsInteractiveResponse(ws, sessionId, messageId, text, pendingRequest);
+  return handleMessageAsInteractiveResponse(sessionId, messageId, text, pendingRequest);
 }
 
 function handleMessageAsInteractiveResponse(
-  ws: WebSocket,
   sessionId: string,
   messageId: string,
   text: string,
@@ -37,23 +32,9 @@ function handleMessageAsInteractiveResponse(
   }
 
   // Only handle known interactive request types
-  if (
-    !INTERACTIVE_RESPONSE_TOOLS.includes(
-      pendingRequest.toolName as (typeof INTERACTIVE_RESPONSE_TOOLS)[number]
-    )
-  ) {
+  if (!isInteractiveResponseTool(pendingRequest.toolName)) {
     return false;
   }
-
-  // Always clear the pending request to prevent stale state, regardless of success/failure
-  // This must happen before any operation that could fail
-  chatEventForwarderService.clearPendingRequestIfMatches(sessionId, pendingRequest.requestId);
-
-  // Allocate an order for this message so it sorts correctly on the frontend
-  const order = messageStateService.allocateOrder(sessionId);
-
-  // Prepare the response event - we'll send it even on error to clear frontend state
-  const responseEvent = { type: 'message_used_as_response', id: messageId, text, order };
 
   try {
     if (pendingRequest.toolName === 'AskUserQuestion') {
@@ -71,6 +52,42 @@ function handleMessageAsInteractiveResponse(
         requestId: pendingRequest.requestId,
       });
     }
+
+    // Clear the pending request only after successful delivery to Claude.
+    sessionStoreService.clearPendingInteractiveRequestIfMatches(
+      sessionId,
+      pendingRequest.requestId
+    );
+
+    // Allocate an order for this message so it sorts correctly on the frontend.
+    const order = sessionStoreService.allocateOrder(sessionId);
+    const timestamp = new Date().toISOString();
+
+    // Persist interactive response in transcript so live/reload views stay consistent.
+    sessionStoreService.commitSentUserMessageAtOrder(
+      sessionId,
+      {
+        id: messageId,
+        text,
+        timestamp,
+        settings: {
+          selectedModel: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+      order,
+      { emitSnapshot: false }
+    );
+
+    sessionStoreService.emitDelta(sessionId, {
+      type: 'message_used_as_response',
+      id: messageId,
+      text,
+      order,
+    });
+
+    return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[Chat WS] Failed to handle message as interactive response', {
@@ -79,25 +96,13 @@ function handleMessageAsInteractiveResponse(
       toolName: pendingRequest.toolName,
       error: errorMessage,
     });
-    // Continue to send the response event to clear frontend state
-    // The message will be displayed in chat even though sending to Claude failed
-  }
-
-  // Always notify frontend - clears pending state and displays the message
-  // This happens outside try/catch to ensure frontend state is always updated
-  try {
-    ws.send(JSON.stringify(responseEvent));
-    chatConnectionService.forwardToSession(sessionId, responseEvent, ws);
-  } catch (sendError) {
-    // WebSocket send failed - frontend will recover on reconnect
-    logger.warn('[Chat WS] Failed to send message_used_as_response event', {
-      sessionId,
-      messageId,
-      error: sendError instanceof Error ? sendError.message : String(sendError),
+    sessionStoreService.emitDelta(sessionId, {
+      type: 'error',
+      message: 'Failed to deliver interactive response. Please try again.',
     });
+    // Keep the pending request so the user can retry without losing context.
+    return true;
   }
-
-  return true;
 }
 
 function handleAskUserQuestionResponse(

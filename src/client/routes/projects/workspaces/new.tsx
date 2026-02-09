@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { Loading } from '@/frontend/components/loading';
+import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 import { trpc } from '../../../../frontend/lib/trpc';
 
 export default function NewWorkspacePage() {
@@ -28,8 +29,20 @@ export default function NewWorkspacePage() {
     { enabled: !!project?.id }
   );
 
+  const utils = trpc.useUtils();
   const createWorkspace = trpc.workspace.create.useMutation({
     onSuccess: (workspace: Workspace) => {
+      // Optimistically populate the workspace detail query cache so the status
+      // is immediately visible when navigating to the detail page
+      utils.workspace.get.setData({ id: workspace.id }, (old) => {
+        // If there's already data (shouldn't happen for a new workspace), keep it
+        if (old) {
+          return old;
+        }
+
+        return createOptimisticWorkspaceCacheData(workspace);
+      });
+
       navigate(`/projects/${slug}/workspaces/${workspace.id}`);
     },
     onError: (err) => {

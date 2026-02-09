@@ -5,6 +5,154 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-02-08
+
+### Fixed
+
+- Fix #824: Skip branch rename for additional Claude sessions (#832)
+- Fix tool call message rendering (#834)
+- Fix session hydration and live message parity (#818)
+- Fix tool preview height clipping in live activity box (#817)
+- Fix #810: Adjust tool preview height in resizable live activity box (#813)
+- Fix #802: Indicate factory-factory.json detection during project import (#814)
+
+### Changed
+
+- Harden transcript hydration, lineage guards, and streaming consistency (#836)
+- Show workspace initialization status immediately after creation (#833)
+- Unify chat state with a single SessionStoreService (#827)
+- Simplify and clarify ratcheting UI and documentation (#821)
+- Disable partial assistant message streaming (#829)
+
+### Refactored
+
+- Remove legacy message state bypass APIs and protocol artifacts (#830)
+- Skip pre-commit hooks when archiving workspaces (#828)
+- Fix ratchet to only dispatch when CI is in terminal state (#823)
+- Treat idle non-ratchet sessions as idle for ratchet (#816)
+- Refactor ratchet decision flow and diagnostics (#811)
+
+### Added
+
+- Add visual indicators for pending plan approval and user questions (#771) (#815)
+
+## [0.2.5] - 2026-02-07
+
+### Added
+
+- Centralize sidebar status and add CI chip (#799)
+- Enable concurrent multi-workspace archiving (#787)
+- Enhance GitHub issue prompt with orchestrated workflow (#783)
+
+### Changed
+
+- Unify session runtime status model and transport (#807)
+- Unify CI status icons across workspace views (#806)
+- Simplify ratchet to a single idle-gated dispatch loop (#798)
+- Batch session hydration to eliminate tab-switch replay flicker (#797)
+- Move live activity drag handle from bottom to top (#796)
+- Improve archiving workspace overlay with multi-ring animation (#791)
+- Enable noImplicitOverride TypeScript compiler option (#795)
+- Increase Vite chunk size warning limit to 5MB
+- Update homepage URL to https://factoryfactory.ai
+
+### Fixed
+
+- Fix sidebar width localStorage persistence (#808)
+- Fix #800: Unify the Markdown loading logic (#804)
+- Fix #727: Introduce guarded run-script runtime state machine (#792)
+- Fix #750: Add lint guardrails for unsafe JSON.parse casts and unknown resolver casts (#794)
+- Fix #747: Validate persisted JSON stores with Zod schemas (#793)
+- Fix #748: Use shared schema for frontend backup import parsing (#789)
+- Fix #746: Schema-validate GitHub CLI JSON responses (#788)
+- Fix task list clipping and blank state during TodoWrite (#784, #786)
+- Fix queued message ordering to use dispatch time instead of queue time (#782)
+
+### Refactored
+
+- Validate Claude stream JSON and session JSONL inputs at parse boundaries (#745, #790)
+- Refactor chat handler registry to eliminate message payload casts (#785)
+
+## [0.2.4] - 2026-02-06
+
+### Added
+
+- Show GitHub issue details in side panel (#777)
+
+### Changed
+
+- Improve session status indicators during workspace startup (#774)
+- Format statuses in status dropdown (#776)
+- Lighten secondary text color in dark mode (#769)
+- Unify session start semantics across WebSocket and tRPC (#773)
+
+### Fixed
+
+- Fix workspace WAITING flicker during GitHub issue dispatch (#772)
+- Clear workspace notification glow on selection (#775)
+- Harden Claude protocol control responses with schema validation (#755)
+
+### Refactored
+
+- Refactor attachment validation to reduce complexity (#778)
+- Enforce PRSnapshotService as single writer for workspace PR fields (#770)
+- Phase 4: Backup/Import v2 and Compatibility Hardening (#722)
+
+### Documentation
+
+- Ratchet reliability: design doc + stale CI guard + agent branch sync (#762)
+
+## [0.2.3] - 2026-02-06
+
+### Added
+
+- Add draggable height resize to live activity feed (#757)
+- Show starting state for issue workspace auto-start (#758)
+
+### Changed
+
+- Stabilize live activity dock with internal tool scrolling (#754)
+- Clear ratchetActiveSessionId on session exit (#760)
+
+### Fixed
+
+- Fix chat replay flicker by showing loading state during reconnect (#756)
+- Fix agent messages lost when Claude process is replaced (#752)
+- Fix kanban column scrolling when items overflow (#753)
+- Fix crash when argumentHint is non-string in slash command cache (#743)
+
+## [0.2.2] - 2026-02-06
+
+### Added
+
+- Show factory-factory.json preview on new workspace page (#709)
+- Add missing workspace attention glow animation (#731)
+
+### Changed
+
+- Enable noUncheckedIndexedAccess for safer array/object indexing (#741)
+- Simplify ratchet flow and unify working-state derivation (#711)
+- Improve attachments (#701, #714)
+- Extract workspace list page subcomponents + shared create hook (#703)
+- Stay on kanban view when starting workspace from GitHub issue (#653)
+- Consolidate fixer sessions and PR snapshot writes (#691, #697)
+- Enable text selection in toast notifications (#718)
+
+### Fixed
+
+- Fix ratchet missing repeated CI failures (#736)
+- Fix Claude process timeout during workspace initialization (#729)
+- Fix unhandled promise rejection from ClaudeClient error events (#717, #721)
+- Fix Claude keepalive activity timeout (#712)
+- Fix unhandled promise rejection from stdin stream errors (#702)
+
+### Refactored
+
+- Phase 3: Schema cleanup and legacy surface removal (#693, #719)
+- Phase 2: Unify workspace creation orchestration (#692, #706)
+- Remove workflow/session selectors and default session startup (#720)
+- Remove adaptLegacyCreateInput compatibility path (#713, #715)
+
 ## [0.2.1] - 2026-02-05
 
 ### Added

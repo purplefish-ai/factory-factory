@@ -49,6 +49,7 @@ interface ChatContentProps {
   confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
   cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
   getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
+  autoStartPending?: boolean;
 }
 
 export const ChatContent = memo(function ChatContent({
@@ -87,11 +88,13 @@ export const ChatContent = memo(function ChatContent({
   confirmRewind,
   cancelRewind,
   getUuidForMessageId,
+  autoStartPending = false,
 }: ChatContentProps) {
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
   const latestToolSequence = useMemo(() => {
     for (let i = groupedMessages.length - 1; i >= 0; i -= 1) {
-      const item = groupedMessages[i];
+      // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
+      const item = groupedMessages[i]!;
       if (isToolSequence(item)) {
         return item;
       }
@@ -116,6 +119,7 @@ export const ChatContent = memo(function ChatContent({
   const running = sessionStatus.phase === 'running';
   const stopping = sessionStatus.phase === 'stopping';
   const startingSession = sessionStatus.phase === 'starting';
+  const displayStartingState = startingSession || autoStartPending;
   const loadingSession = sessionStatus.phase === 'loading';
 
   const permissionRequestId =
@@ -135,8 +139,14 @@ export const ChatContent = memo(function ChatContent({
   }, [isPlanApproval, permissionRequestId, inputRef]);
 
   const placeholder = (() => {
+    if (loadingSession) {
+      return 'Loading session...';
+    }
     if (stopping) {
       return 'Stopping...';
+    }
+    if (displayStartingState && !running) {
+      return 'Agent is starting...';
     }
     if (
       pendingRequest.type === 'permission' &&
@@ -147,6 +157,10 @@ export const ChatContent = memo(function ChatContent({
     if (running) {
       return 'Message will be queued...';
     }
+    // Show helpful text when session is ready but agent hasn't started yet
+    if (sessionStatus.phase === 'ready' && messages.length === 0) {
+      return 'Type a message to start the agent...';
+    }
     return 'Type a message...';
   })();
 
@@ -156,7 +170,7 @@ export const ChatContent = memo(function ChatContent({
         <VirtualizedMessageList
           messages={groupedMessages}
           running={running}
-          startingSession={startingSession}
+          startingSession={displayStartingState}
           loadingSession={loadingSession}
           scrollContainerRef={viewportRef}
           onScroll={onScroll}
@@ -188,7 +202,7 @@ export const ChatContent = memo(function ChatContent({
         <AgentLiveDock
           workspaceId={workspaceId}
           running={running}
-          starting={startingSession}
+          starting={displayStartingState}
           stopping={stopping}
           permissionMode={permissionMode}
           latestThinking={latestThinking ?? null}

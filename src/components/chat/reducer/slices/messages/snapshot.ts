@@ -1,9 +1,9 @@
 import { convertPendingRequest } from '../../helpers';
-import type { ChatAction, ChatState, PendingMessageContent, SessionStatus } from '../../types';
+import type { ChatAction, ChatState, PendingMessageContent } from '../../types';
 
 export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
-    case 'MESSAGES_SNAPSHOT': {
+    case 'SESSION_SNAPSHOT': {
       const snapshotMessages = action.payload.messages;
       const snapshotIds = new Set(snapshotMessages.map((m) => m.id));
       const newPendingMessages = new Map<string, PendingMessageContent>();
@@ -13,15 +13,17 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         }
       }
 
-      const sessionStatus: SessionStatus = action.payload.sessionStatus;
       const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
+      const queuedMessages = new Map(
+        action.payload.queuedMessages.map((queued) => [queued.id, queued] as const)
+      );
 
       return {
         ...state,
         messages: snapshotMessages,
-        queuedMessages: new Map(),
-        sessionStatus,
+        queuedMessages,
         pendingRequest,
+        sessionRuntime: action.payload.sessionRuntime,
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,
         lastRejectedMessage: null,

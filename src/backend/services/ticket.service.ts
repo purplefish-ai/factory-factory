@@ -72,7 +72,7 @@ class GitHubTicketProvider implements TicketProvider {
     // gh issue create returns the issue URL
     const url = stdout.trim();
     const numberMatch = url.match(/\/issues\/(\d+)/);
-    const number = numberMatch ? Number.parseInt(numberMatch[1], 10) : 0;
+    const number = numberMatch?.[1] ? Number.parseInt(numberMatch[1], 10) : 0;
 
     logger.info('Created GitHub issue', { number, url });
     return { number, url };

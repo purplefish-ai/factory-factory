@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
 import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
+import { workspaceDataService } from '../../services/workspace-data.service';
 import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import {
   getWorkspaceInitMode,
@@ -35,7 +35,7 @@ export function initializeWorkspaceWorktree(
 export const workspaceInitRouter = router({
   // Get workspace initialization status
   getInitStatus: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const workspace = await workspaceAccessor.findByIdWithProject(input.id);
+    const workspace = await workspaceDataService.findByIdWithProject(input.id);
     if (!workspace) {
       throw new TRPCError({
         code: 'NOT_FOUND',
@@ -60,7 +60,7 @@ export const workspaceInitRouter = router({
   retryInit: publicProcedure
     .input(z.object({ id: z.string(), useExistingBranch: z.boolean().optional() }))
     .mutation(async ({ input }) => {
-      const workspace = await workspaceAccessor.findByIdWithProject(input.id);
+      const workspace = await workspaceDataService.findByIdWithProject(input.id);
       if (!workspace?.project) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -106,7 +106,7 @@ export const workspaceInitRouter = router({
             }
           );
         });
-        return workspaceAccessor.findById(input.id);
+        return workspaceDataService.findById(input.id);
       }
 
       // Worktree exists - just retry the startup script
@@ -126,6 +126,6 @@ export const workspaceInitRouter = router({
         workspace.project
       );
 
-      return workspaceAccessor.findById(input.id);
+      return workspaceDataService.findById(input.id);
     }),
 });

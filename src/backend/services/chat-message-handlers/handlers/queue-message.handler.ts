@@ -1,10 +1,10 @@
+import { MessageState, resolveSelectedModel } from '@/shared/claude';
 import type { QueueMessageInput } from '@/shared/websocket';
-import { messageQueueService } from '../../message-queue.service';
-import { messageStateService } from '../../message-state.service';
+import { sessionStoreService } from '../../session-store.service';
 import { resolveAttachmentContentType } from '../attachment-utils';
 import { tryHandleAsInteractiveResponse } from '../interactive-response';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
-import { buildQueuedMessage, notifyMessageAccepted } from '../utils';
+import { buildQueuedMessage } from '../utils';
 
 /**
  * Extract text content from text attachments.
@@ -30,18 +30,19 @@ function extractTextFromAttachments(
   return textParts.length > 0 ? textParts.join('\n\n') : undefined;
 }
 
-export function createQueueMessageHandler(deps: HandlerRegistryDependencies): ChatMessageHandler {
+export function createQueueMessageHandler(
+  deps: HandlerRegistryDependencies
+): ChatMessageHandler<QueueMessageInput> {
   return async ({ ws, sessionId, message }) => {
-    const typedMessage = message as QueueMessageInput;
-    const text = typedMessage.text?.trim();
-    const hasContent = text || (typedMessage.attachments && typedMessage.attachments.length > 0);
+    const text = message.text?.trim();
+    const hasContent = text || (message.attachments && message.attachments.length > 0);
 
     if (!hasContent) {
       ws.send(JSON.stringify({ type: 'error', message: 'Empty message' }));
       return;
     }
 
-    if (!typedMessage.id) {
+    if (!message.id) {
       ws.send(JSON.stringify({ type: 'error', message: 'Missing message id' }));
       return;
     }
@@ -49,22 +50,41 @@ export function createQueueMessageHandler(deps: HandlerRegistryDependencies): Ch
     // Check if there's a pending interactive request - if so, treat this message as a response
     // Use inline text if available, otherwise extract text from text attachments
     // This handles the case where user pastes large text that becomes an attachment
-    const messageId = typedMessage.id;
-    const responseText = text || extractTextFromAttachments(typedMessage.attachments);
-    if (responseText && tryHandleAsInteractiveResponse(ws, sessionId, messageId, responseText)) {
+    const messageId = message.id;
+    const responseText = text || extractTextFromAttachments(message.attachments);
+    if (responseText && tryHandleAsInteractiveResponse(sessionId, messageId, responseText)) {
       return;
     }
 
-    const queuedMsg = buildQueuedMessage(messageId, typedMessage, text ?? '');
-    const result = messageQueueService.enqueue(sessionId, queuedMsg);
+    const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
+    const result = sessionStoreService.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
-      // Create rejected message in state service - emits message_state_changed event
-      messageStateService.createRejectedMessage(sessionId, messageId, result.error, text);
+      sessionStoreService.emitDelta(sessionId, {
+        type: 'message_state_changed',
+        id: messageId,
+        newState: MessageState.REJECTED,
+        errorMessage: result.error,
+      });
       return;
     }
 
-    notifyMessageAccepted(sessionId, queuedMsg);
+    sessionStoreService.emitDelta(sessionId, {
+      type: 'message_state_changed',
+      id: messageId,
+      newState: MessageState.ACCEPTED,
+      queuePosition: result.position,
+      userMessage: {
+        text: queuedMsg.text,
+        timestamp: queuedMsg.timestamp,
+        attachments: queuedMsg.attachments,
+        settings: {
+          ...queuedMsg.settings,
+          selectedModel: resolveSelectedModel(queuedMsg.settings.selectedModel),
+        },
+      },
+    });
+
     await deps.tryDispatchNextMessage(sessionId);
   };
 }

@@ -11,9 +11,10 @@ import type {
   QueuedMessage,
   SessionInfo,
   SessionInitData,
-  SessionStatus as SharedSessionStatus,
+  SessionRuntimeState,
   TokenStats,
   UserQuestionRequest,
+  WebSocketMessage,
 } from '@/lib/claude-types';
 
 // =============================================================================
@@ -106,6 +107,8 @@ export interface ChatState {
   sessionStatus: SessionStatus;
   /** Claude process lifecycle status (alive vs stopped) */
   processStatus: ProcessStatus;
+  /** Authoritative runtime snapshot for this session. */
+  sessionRuntime: SessionRuntimeState;
   /** Current git branch for the session */
   gitBranch: string | null;
   /** Available Claude CLI sessions */
@@ -183,11 +186,8 @@ export interface ChatState {
 
 export type ChatAction =
   // WebSocket message actions
-  | { type: 'WS_STATUS'; payload: { running: boolean; processAlive?: boolean } }
-  | { type: 'WS_STARTING' }
-  | { type: 'WS_STARTED' }
-  | { type: 'WS_STOPPED' }
-  | { type: 'WS_PROCESS_EXIT'; payload: { code: number | null } }
+  | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
+  | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'WS_CLAUDE_MESSAGE'; payload: { message: ClaudeMessage; order: number } }
   | { type: 'WS_ERROR'; payload: { message: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
@@ -197,6 +197,7 @@ export type ChatAction =
   // Session actions
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
+  | { type: 'SESSION_LOADING_END' }
   // Tool input streaming action
   | { type: 'TOOL_INPUT_UPDATE'; payload: { toolUseId: string; input: Record<string, unknown> } }
   // Track tool use message index
@@ -220,20 +221,23 @@ export type ChatAction =
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
-  // Thinking actions (extended thinking mode)
-  | { type: 'THINKING_DELTA'; payload: { thinking: string } }
-  | { type: 'THINKING_CLEAR' }
   // Clear/reset actions
   | { type: 'CLEAR_CHAT' }
   | { type: 'RESET_FOR_SESSION_SWITCH' }
   // Message state machine actions (primary protocol)
   | {
-      type: 'MESSAGES_SNAPSHOT';
+      type: 'SESSION_SNAPSHOT';
       payload: {
-        /** Pre-built ChatMessages from backend - ready to use directly */
         messages: ChatMessage[];
-        sessionStatus: SharedSessionStatus;
+        queuedMessages: QueuedMessage[];
+        sessionRuntime: SessionRuntimeState;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
+      };
+    }
+  | {
+      type: 'SESSION_REPLAY_BATCH';
+      payload: {
+        replayEvents: WebSocketMessage[];
       };
     }
   | {
@@ -249,8 +253,8 @@ export type ChatAction =
           timestamp: string;
           attachments?: MessageAttachment[];
           settings?: ChatSettings;
-          /** Backend-assigned order for reliable sorting */
-          order: number;
+          /** Backend-assigned order for reliable sorting. Undefined for ACCEPTED, defined for DISPATCHED. */
+          order?: number;
         };
       };
     }

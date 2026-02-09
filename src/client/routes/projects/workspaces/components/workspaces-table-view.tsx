@@ -22,6 +22,7 @@ import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-ba
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { formatStatusLabel } from '@/lib/formatters';
 import { NewWorkspaceButton } from './new-workspace-button';
 import { ResumeBranchButton } from './resume-branch-button';
 import type { ViewMode } from './types';
@@ -69,7 +70,7 @@ export function WorkspacesTableView({
             <SelectItem value="all">All Statuses</SelectItem>
             {workspaceStatuses.map((status) => (
               <SelectItem key={status} value={status}>
-                {status}
+                {formatStatusLabel(status)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -1,5 +1,6 @@
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import { SessionManager } from '../claude/session';
 import { DEFAULT_FOLLOWUP } from '../prompts/workflows';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
@@ -228,10 +229,15 @@ export class WorkspaceCreationService {
     }
 
     try {
+      const workspace = await workspaceAccessor.findById(workspaceId);
+      const claudeProjectPath = workspace?.worktreePath
+        ? SessionManager.getProjectPath(workspace.worktreePath)
+        : null;
       await claudeSessionAccessor.create({
         workspaceId,
         workflow: DEFAULT_FOLLOWUP,
         name: 'Chat 1',
+        claudeProjectPath,
       });
       return true;
     } catch (error) {

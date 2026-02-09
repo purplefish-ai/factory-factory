@@ -9,8 +9,14 @@
  * - Routing interactive tool requests to appropriate message formats
  */
 
+import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import type { PendingInteractiveRequest } from '../../shared/pending-request-types';
+import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
+import {
+  type InteractiveResponseTool,
+  isInteractiveResponseTool,
+  type PendingInteractiveRequest,
+} from '../../shared/pending-request-types';
 import type { ClaudeClient } from '../claude/index';
 import { WS_READY_STATE } from '../constants';
 import { interceptorRegistry } from '../interceptors';
@@ -24,8 +30,8 @@ import {
 import { chatConnectionService } from './chat-connection.service';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
-import { messageStateService } from './message-state.service';
 import { sessionFileLogger } from './session-file-logger.service';
+import { sessionStoreService } from './session-store.service';
 import { slashCommandCacheService } from './slash-command-cache.service';
 import { workspaceActivityService } from './workspace-activity.service';
 
@@ -48,20 +54,55 @@ interface EventForLogging {
 }
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+// biome-ignore lint/suspicious/noExplicitAny: EventEmitter listeners accept any arguments
+type AnyListener = (...args: any[]) => void;
+
+interface RegisteredListener {
+  event: string;
+  handler: AnyListener;
+}
+
+// ============================================================================
 // Service
 // ============================================================================
 
 class ChatEventForwarderService {
-  /** Tracks which sessions have event forwarding set up */
-  private clientEventSetup = new Set<string>();
+  /** Tracks which sessions have event forwarding set up, mapping to the client instance */
+  private clientEventSetup = new Map<string, ClaudeClient>();
 
-  /** Pending interactive requests by session ID (for restore on reconnect) */
-  private pendingInteractiveRequests = new Map<string, PendingInteractiveRequest>();
+  /** Stores the specific listener references this service attached, for precise teardown */
+  private registeredListeners = new Map<string, RegisteredListener[]>();
 
   /** Guard to prevent multiple workspace notification setups */
   private workspaceNotificationsSetup = false;
   /** Track last compact boundary per session to avoid duplicate indicators */
   private lastCompactBoundaryAt = new Map<string, number>();
+
+  private forwardClaudeMessage(dbSessionId: string, message: ClaudeMessage): void {
+    const order = sessionStoreService.appendClaudeEvent(dbSessionId, message);
+    const wsMsg =
+      order === undefined
+        ? ({ type: 'claude_message', data: message } as const)
+        : ({ type: 'claude_message', data: message, order } as const);
+    sessionStoreService.emitDelta(dbSessionId, wsMsg);
+  }
+
+  /**
+   * Remove only the specific listener functions that this service attached to a client.
+   * Preserves listeners from other services (DB handlers, process manager, etc.).
+   */
+  private removeForwardingListeners(dbSessionId: string, client: ClaudeClient): void {
+    const listeners = this.registeredListeners.get(dbSessionId);
+    if (listeners) {
+      for (const { event, handler } of listeners) {
+        client.off(event, handler);
+      }
+      this.registeredListeners.delete(dbSessionId);
+    }
+  }
 
   /**
    * Check if event forwarding is already set up for a session.
@@ -74,7 +115,7 @@ class ChatEventForwarderService {
    * Get pending interactive request for a session.
    */
   getPendingRequest(dbSessionId: string): PendingInteractiveRequest | undefined {
-    return this.pendingInteractiveRequests.get(dbSessionId);
+    return sessionStoreService.getPendingInteractiveRequest(dbSessionId) ?? undefined;
   }
 
   /**
@@ -82,7 +123,7 @@ class ChatEventForwarderService {
    * Used when stopping a session - the pending request is no longer valid.
    */
   clearPendingRequest(dbSessionId: string): void {
-    this.pendingInteractiveRequests.delete(dbSessionId);
+    sessionStoreService.clearPendingInteractiveRequest(dbSessionId);
   }
 
   /**
@@ -90,10 +131,7 @@ class ChatEventForwarderService {
    * Prevents clearing a newer request when responding to a stale one.
    */
   clearPendingRequestIfMatches(dbSessionId: string, requestId: string): void {
-    const pending = this.pendingInteractiveRequests.get(dbSessionId);
-    if (pending?.requestId === requestId) {
-      this.pendingInteractiveRequests.delete(dbSessionId);
-    }
+    sessionStoreService.clearPendingInteractiveRequestIfMatches(dbSessionId, requestId);
   }
 
   /**
@@ -142,18 +180,42 @@ class ChatEventForwarderService {
     context: EventForwarderContext,
     onDispatchNextMessage: () => Promise<void>
   ): void {
-    // Idempotent: skip if already set up for this session
-    if (this.clientEventSetup.has(dbSessionId)) {
+    // Idempotent: skip if already set up for the same client instance
+    const existingClient = this.clientEventSetup.get(dbSessionId);
+    if (existingClient === client) {
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Event forwarding already set up, skipping', { dbSessionId });
+        logger.info('[Chat WS] Event forwarding already set up for same client, skipping', {
+          dbSessionId,
+        });
       }
       return;
     }
-    this.clientEventSetup.add(dbSessionId);
+
+    // If a different client was previously set up, tear down old listeners
+    // This happens when a new Claude process replaces an existing one for the same session
+    if (existingClient) {
+      logger.info('[Chat WS] Replacing event forwarding with new client', { dbSessionId });
+      this.removeForwardingListeners(dbSessionId, existingClient);
+      // Clear stale interactive requests from the old client so the UI
+      // doesn't try to respond to a request the new client knows nothing about
+      sessionStoreService.clearPendingInteractiveRequest(dbSessionId);
+    }
+
+    this.clientEventSetup.set(dbSessionId, client);
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Setting up event forwarding for session', { dbSessionId });
     }
+
+    // Helper to register a listener and track it for precise teardown later.
+    // Uses EventEmitter.prototype.on to bypass ClaudeClient's typed overloads.
+    const emitterOn = EventEmitter.prototype.on.bind(client);
+    const listeners: RegisteredListener[] = [];
+    const on = (event: string, handler: AnyListener) => {
+      emitterOn(event, handler);
+      listeners.push({ event, handler });
+    };
+    this.registeredListeners.set(dbSessionId, listeners);
 
     // Store-then-forward slash commands from initialize response (sent once per session setup)
     const initResponse = client.getInitializeResponse();
@@ -167,16 +229,15 @@ class ChatEventForwarderService {
       const slashCommandsMsg = {
         type: 'slash_commands',
         slashCommands: initResponse.commands,
-      };
-      messageStateService.storeEvent(dbSessionId, slashCommandsMsg);
-      chatConnectionService.forwardToSession(dbSessionId, slashCommandsMsg);
+      } as const;
+      sessionStoreService.emitDelta(dbSessionId, slashCommandsMsg);
       void slashCommandCacheService.setCachedCommands(initResponse.commands);
     }
 
     const pendingToolNames = new Map<string, string>();
     const pendingToolInputs = new Map<string, Record<string, unknown>>();
 
-    client.on('tool_use', (toolUse) => {
+    on('tool_use', (toolUse) => {
       pendingToolNames.set(toolUse.id, toolUse.name);
       pendingToolInputs.set(toolUse.id, toolUse.input);
 
@@ -192,7 +253,7 @@ class ChatEventForwarderService {
     });
 
     // Note: DB update for claudeSessionId is now handled by sessionService.setupClientDbHandlers()
-    client.on('session_id', (claudeSessionId) => {
+    on('session_id', (claudeSessionId) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received session_id from Claude CLI', {
           dbSessionId,
@@ -202,28 +263,34 @@ class ChatEventForwarderService {
 
       // Mark workspace as active
       workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
-
-      // Store-then-forward: store event for replay before forwarding
-      const statusMsg = { type: 'status', running: true, processAlive: client.isRunning() };
-      messageStateService.storeEvent(dbSessionId, statusMsg);
-      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
+      this.syncRuntimeFromClient(dbSessionId, client);
     });
 
     // Hook into idle event to dispatch next queued message
-    client.on('idle', () => {
+    on('idle', () => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Claude became idle, checking queue', { dbSessionId });
       }
       // Fire and forget - don't await
-      onDispatchNextMessage().catch((error) => {
-        logger.error('[Chat WS] Error dispatching queued message on idle', {
-          dbSessionId,
-          error: error instanceof Error ? error.message : String(error),
+      void onDispatchNextMessage()
+        .catch((error) => {
+          logger.error('[Chat WS] Error dispatching queued message on idle', {
+            dbSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          // Result events can arrive before the client flips to idle. Re-sync after
+          // idle callback to avoid leaving runtime stuck in WORKING.
+          // Only mark workspace idle if the client stayed idle after dispatch.
+          if (!client.isWorking()) {
+            workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+          }
+          this.syncRuntimeFromClient(dbSessionId, client);
         });
-      });
     });
 
-    client.on('stream', (event) => {
+    on('stream', (event) => {
       const streamEvent = event as EventForLogging;
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received stream event from client', {
@@ -235,14 +302,11 @@ class ChatEventForwarderService {
 
       // Store-then-forward: store event for replay before forwarding
       // Include order for consistent frontend message sorting
-      const order = messageStateService.allocateOrder(dbSessionId);
-      const msg = { type: 'claude_message', data: event, order };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      this.forwardClaudeMessage(dbSessionId, event as ClaudeMessage);
     });
 
     // SDK message types - forwarded as dedicated event types
-    client.on('tool_progress', (event) => {
+    on('tool_progress', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received tool_progress event', { dbSessionId });
       }
@@ -250,12 +314,10 @@ class ChatEventForwarderService {
         eventType: 'tool_progress',
         data: event,
       });
-      const sdkEvent = event as unknown as { type: string };
-      messageStateService.storeEvent(dbSessionId, sdkEvent);
-      chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
-    client.on('tool_use_summary', (event) => {
+    on('tool_use_summary', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received tool_use_summary event', { dbSessionId });
       }
@@ -263,13 +325,11 @@ class ChatEventForwarderService {
         eventType: 'tool_use_summary',
         data: event,
       });
-      const sdkEvent = event as unknown as { type: string };
-      messageStateService.storeEvent(dbSessionId, sdkEvent);
-      chatConnectionService.forwardToSession(dbSessionId, sdkEvent);
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
     // System subtype event handlers
-    client.on('system_init', (event) => {
+    on('system_init', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received system_init event', {
           dbSessionId,
@@ -291,12 +351,11 @@ class ChatEventForwarderService {
           slashCommands: event.slash_commands,
           plugins: event.plugins,
         },
-      };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      } as const;
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
-    client.on('system_status', (event) => {
+    on('system_status', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received system_status event', {
           dbSessionId,
@@ -311,12 +370,11 @@ class ChatEventForwarderService {
       const msg = {
         type: 'status_update',
         permissionMode: event.permission_mode,
-      };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      } as const;
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
-    client.on('compact_boundary', (event) => {
+    on('compact_boundary', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received compact_boundary event', { dbSessionId });
       }
@@ -330,12 +388,11 @@ class ChatEventForwarderService {
         return;
       }
       this.lastCompactBoundaryAt.set(dbSessionId, now);
-      const boundaryMsg = { type: 'compact_boundary' };
-      messageStateService.storeEvent(dbSessionId, boundaryMsg);
-      chatConnectionService.forwardToSession(dbSessionId, boundaryMsg);
+      const boundaryMsg = { type: 'compact_boundary' } as const;
+      sessionStoreService.emitDelta(dbSessionId, boundaryMsg);
     });
 
-    client.on('hook_started', (event) => {
+    on('hook_started', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received hook_started event', {
           dbSessionId,
@@ -355,12 +412,11 @@ class ChatEventForwarderService {
           hookName: event.hook_name,
           hookEvent: event.hook_event,
         },
-      };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      } as const;
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
-    client.on('hook_response', (event) => {
+    on('hook_response', (event) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received hook_response event', {
           dbSessionId,
@@ -383,103 +439,35 @@ class ChatEventForwarderService {
           exitCode: event.exit_code,
           outcome: event.outcome,
         },
-      };
-      messageStateService.storeEvent(dbSessionId, msg);
-      chatConnectionService.forwardToSession(dbSessionId, msg);
+      } as const;
+      sessionStoreService.emitDelta(dbSessionId, msg);
     });
 
     // Context compaction events
-    client.on('compacting_start', () => {
+    on('compacting_start', () => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Context compaction started', { dbSessionId });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_start' });
-      const event = { type: 'compacting_start' };
-      messageStateService.storeEvent(dbSessionId, event);
-      chatConnectionService.forwardToSession(dbSessionId, event);
+      const event = { type: 'compacting_start' } as const;
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
-    client.on('compacting_end', () => {
+    on('compacting_end', () => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Context compaction ended', { dbSessionId });
       }
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_end' });
-      const event = { type: 'compacting_end' };
-      messageStateService.storeEvent(dbSessionId, event);
-      chatConnectionService.forwardToSession(dbSessionId, event);
+      const event = { type: 'compacting_end' } as const;
+      sessionStoreService.emitDelta(dbSessionId, event);
     });
 
-    client.on('message', (msg) => {
+    on('message', (msg) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });
-
-      const msgWithType = msg as {
-        type?: string;
-        uuid?: string;
-        message?: { content?: Array<{ type?: string }> };
-      };
-      if (msgWithType.type !== 'user') {
-        sessionFileLogger.log(dbSessionId, 'INFO', {
-          action: 'skipped_message',
-          reason: 'not_user_type',
-          type: msgWithType.type,
-        });
-        return;
-      }
-
-      // Forward user message UUID for rewind functionality
-      // This allows the frontend to track which SDK-assigned UUID corresponds to each message
-      if (msgWithType.uuid) {
-        const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid };
-        messageStateService.storeEvent(dbSessionId, uuidMsg);
-        chatConnectionService.forwardToSession(dbSessionId, uuidMsg);
-        if (DEBUG_CHAT_WS) {
-          logger.info('[Chat WS] Forwarding user message UUID', {
-            dbSessionId,
-            uuid: msgWithType.uuid,
-          });
-        }
-      }
-
-      const content = msgWithType.message?.content;
-      if (!Array.isArray(content)) {
-        sessionFileLogger.log(dbSessionId, 'INFO', {
-          action: 'skipped_message',
-          reason: 'no_array_content',
-        });
-        return;
-      }
-
-      const hasToolResult = content.some((item) => item.type === 'tool_result');
-      if (!hasToolResult) {
-        sessionFileLogger.log(dbSessionId, 'INFO', {
-          action: 'skipped_message',
-          reason: 'no_tool_result_content',
-          content_types: content.map((c) => c.type),
-        });
-        return;
-      }
-
-      this.notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
-        sessionId: dbSessionId,
-        workspaceId: context.workspaceId,
-        workingDir: context.workingDir,
-      });
-
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Forwarding user message with tool_result', { dbSessionId });
-      }
-      sessionFileLogger.log(dbSessionId, 'INFO', {
-        action: 'forwarding_user_message_with_tool_result',
-      });
-      // Store-then-forward: store event for replay before forwarding
-      // Include order for consistent frontend message sorting
-      const order = messageStateService.allocateOrder(dbSessionId);
-      const wsMsg = { type: 'claude_message', data: msg, order };
-      messageStateService.storeEvent(dbSessionId, wsMsg);
-      chatConnectionService.forwardToSession(dbSessionId, wsMsg);
+      this.handleMessageEvent(dbSessionId, msg, pendingToolNames, pendingToolInputs, context);
     });
 
-    client.on('result', (result) => {
+    on('result', (result) => {
       if (DEBUG_CHAT_WS) {
         const res = result as { uuid?: string };
         logger.info('[Chat WS] Received result event from client', { dbSessionId, uuid: res.uuid });
@@ -487,21 +475,15 @@ class ChatEventForwarderService {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'result', data: result });
       // Store-then-forward: store events for replay before forwarding
       // Include order for consistent frontend message sorting
-      const order = messageStateService.allocateOrder(dbSessionId);
-      const resultMsg = { type: 'claude_message', data: result, order };
-      messageStateService.storeEvent(dbSessionId, resultMsg);
-      chatConnectionService.forwardToSession(dbSessionId, resultMsg);
+      this.forwardClaudeMessage(dbSessionId, result as ClaudeMessage);
 
       // Mark session as idle
       workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
-
-      const statusMsg = { type: 'status', running: false, processAlive: client.isRunning() };
-      messageStateService.storeEvent(dbSessionId, statusMsg);
-      chatConnectionService.forwardToSession(dbSessionId, statusMsg);
+      this.syncRuntimeFromClient(dbSessionId, client);
     });
 
     // Forward interactive tool requests (e.g., AskUserQuestion) to frontend
-    client.on('interactive_request', (request) => {
+    on('interactive_request', (request) => {
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Received interactive_request from client', {
           dbSessionId,
@@ -514,42 +496,34 @@ class ChatEventForwarderService {
         data: request,
       });
 
-      this.routeInteractiveRequest(dbSessionId, request);
+      this.routeInteractiveRequest(dbSessionId, request, client);
     });
 
-    client.on('exit', (result) => {
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'process_exit',
-        code: result.code,
-        processAlive: false,
-      });
-      client.removeAllListeners();
+    on('exit', (result) => {
+      sessionStoreService.markProcessExit(dbSessionId, result.code);
+      this.removeForwardingListeners(dbSessionId, client);
       this.clientEventSetup.delete(dbSessionId);
       this.lastCompactBoundaryAt.delete(dbSessionId);
-      // Note: We intentionally do NOT clear the message queue on exit
-      // Queue is preserved so messages can be sent when user starts next interaction
-      // Clear any pending interactive requests when process exits
-      this.pendingInteractiveRequests.delete(dbSessionId);
-      // Clear message state to prevent memory leak
-      messageStateService.clearSession(dbSessionId);
+      // Queue and pending interactive request are intentionally dropped on process exit.
+      // Transcript remains in-memory and is always recoverable from Claude JSONL.
     });
 
     // Forward request cancellation to frontend (e.g., when CLI cancels during permission or question prompt)
-    client.on('permission_cancelled', (requestId: string) => {
+    on('permission_cancelled', (requestId: string) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
         eventType: 'permission_cancelled',
         requestId,
       });
       // Only clear if the requestId matches to avoid race conditions with newer requests
       this.clearPendingRequestIfMatches(dbSessionId, requestId);
-      chatConnectionService.forwardToSession(dbSessionId, {
+      sessionStoreService.emitDelta(dbSessionId, {
         type: 'permission_cancelled',
         requestId,
       });
     });
 
-    client.on('error', (error) => {
-      chatConnectionService.forwardToSession(dbSessionId, {
+    on('error', (error) => {
+      sessionStoreService.emitDelta(dbSessionId, {
         type: 'error',
         message: error.message,
       });
@@ -567,14 +541,130 @@ class ChatEventForwarderService {
       toolName: string;
       toolUseId: string;
       input: Record<string, unknown>;
-    }
+    },
+    client: ClaudeClient
   ): void {
-    // Compute planContent for ExitPlanMode, null for others
+    if (!isInteractiveResponseTool(request.toolName)) {
+      const reason = `Unsupported interactive tool: ${request.toolName}`;
+      logger.warn('[Chat WS] Denying unsupported interactive request', {
+        dbSessionId,
+        requestId: request.requestId,
+        toolName: request.toolName,
+      });
+      try {
+        client.denyInteractiveRequest(request.requestId, reason);
+      } catch (error) {
+        logger.error('[Chat WS] Failed to deny unsupported interactive request', {
+          dbSessionId,
+          requestId: request.requestId,
+          toolName: request.toolName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      sessionStoreService.emitDelta(dbSessionId, {
+        type: 'error',
+        message: reason,
+      });
+      return;
+    }
+
     const planContent =
       request.toolName === 'ExitPlanMode' ? this.extractPlanContent(request.input) : null;
 
-    // Store for session restore (single location for all request types)
-    this.pendingInteractiveRequests.set(dbSessionId, {
+    this.routeSupportedInteractiveRequest(
+      dbSessionId,
+      { ...request, toolName: request.toolName as InteractiveResponseTool },
+      planContent,
+      client
+    );
+  }
+
+  private routeSupportedInteractiveRequest(
+    dbSessionId: string,
+    request: {
+      requestId: string;
+      toolName: InteractiveResponseTool;
+      toolUseId: string;
+      input: Record<string, unknown>;
+    },
+    planContent: string | null,
+    client: ClaudeClient
+  ): void {
+    switch (request.toolName) {
+      case 'AskUserQuestion': {
+        const parsed = safeParseToolInput(
+          AskUserQuestionInputSchema,
+          request.input,
+          'AskUserQuestion',
+          logger
+        );
+
+        if (!parsed.success || parsed.data.questions.length === 0) {
+          logger.warn('[Chat WS] Invalid or empty AskUserQuestion input', {
+            dbSessionId,
+            requestId: request.requestId,
+            validationSuccess: parsed.success,
+          });
+          try {
+            client.denyInteractiveRequest(
+              request.requestId,
+              'Invalid question format - unable to display question'
+            );
+          } catch (error) {
+            logger.error('[Chat WS] Failed to deny invalid AskUserQuestion request', {
+              dbSessionId,
+              requestId: request.requestId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          sessionStoreService.emitDelta(dbSessionId, {
+            type: 'error',
+            message: 'Received invalid question format from CLI',
+          });
+          return;
+        }
+
+        this.storePendingInteractiveRequest(dbSessionId, request, planContent);
+
+        sessionStoreService.emitDelta(dbSessionId, {
+          type: 'user_question',
+          requestId: request.requestId,
+          questions: parsed.data.questions,
+        });
+        return;
+      }
+      case 'ExitPlanMode':
+        this.storePendingInteractiveRequest(dbSessionId, request, planContent);
+        sessionStoreService.emitDelta(dbSessionId, {
+          type: 'permission_request',
+          requestId: request.requestId,
+          toolName: request.toolName,
+          toolInput: request.input,
+          planContent,
+        });
+        return;
+      default: {
+        const unreachable: never = request.toolName;
+        logger.error('[Chat WS] Unhandled interactive response tool', {
+          dbSessionId,
+          requestId: request.requestId,
+          toolName: unreachable,
+        });
+      }
+    }
+  }
+
+  private storePendingInteractiveRequest(
+    dbSessionId: string,
+    request: {
+      requestId: string;
+      toolName: InteractiveResponseTool;
+      toolUseId: string;
+      input: Record<string, unknown>;
+    },
+    planContent: string | null
+  ): void {
+    sessionStoreService.setPendingInteractiveRequest(dbSessionId, {
       requestId: request.requestId,
       toolName: request.toolName,
       toolUseId: request.toolUseId,
@@ -582,57 +672,197 @@ class ChatEventForwarderService {
       planContent,
       timestamp: new Date().toISOString(),
     });
+  }
 
-    // Route to appropriate WebSocket message format
-    if (request.toolName === 'AskUserQuestion') {
-      const parsed = safeParseToolInput(
-        AskUserQuestionInputSchema,
-        request.input,
-        'AskUserQuestion',
-        logger
-      );
+  private handleMessageEvent(
+    dbSessionId: string,
+    msg: unknown,
+    pendingToolNames: Map<string, string>,
+    pendingToolInputs: Map<string, Record<string, unknown>>,
+    context: EventForwarderContext
+  ): void {
+    const msgWithType = msg as {
+      type?: string;
+      uuid?: string;
+      message?: { content?: Array<{ type?: string; text?: string }> };
+    };
 
-      // Validate and extract questions
-      if (!parsed.success || parsed.data.questions.length === 0) {
-        logger.warn('[Chat WS] Invalid or empty AskUserQuestion input', {
-          dbSessionId,
-          requestId: request.requestId,
-          validationSuccess: parsed.success,
-        });
-        chatConnectionService.forwardToSession(dbSessionId, {
-          type: 'error',
-          message: 'Received invalid question format from CLI',
-        });
-        return;
+    if (msgWithType.type === 'assistant') {
+      this.forwardAssistantTextMessage(dbSessionId, msg, msgWithType);
+      return;
+    }
+
+    if (msgWithType.type !== 'user') {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'not_user_type',
+        type: msgWithType.type,
+      });
+      return;
+    }
+
+    this.forwardUserMessageWithToolResult(
+      dbSessionId,
+      msg,
+      msgWithType,
+      pendingToolNames,
+      pendingToolInputs,
+      context
+    );
+  }
+
+  private forwardAssistantTextMessage(
+    dbSessionId: string,
+    msg: unknown,
+    msgWithType: {
+      message?: { content?: Array<{ type?: string; text?: string }> };
+    }
+  ): void {
+    const assistantMsg = msg as ClaudeMessage;
+    const fallbackToolUseEvents = this.buildToolUseFallbackStreamEvents(assistantMsg);
+    for (const toolUseEvent of fallbackToolUseEvents) {
+      this.forwardClaudeMessage(dbSessionId, toolUseEvent);
+    }
+
+    const content = msgWithType.message?.content;
+    if (!Array.isArray(content)) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'assistant_no_array_content',
+      });
+      return;
+    }
+
+    const hasNarrativeText = content.some(
+      (item) => item.type === 'text' && typeof item.text === 'string'
+    );
+    if (!hasNarrativeText) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'assistant_no_text_content',
+      });
+      return;
+    }
+
+    // Persist only narrative text from assistant message events.
+    const normalized = this.normalizeAssistantMessageToTextOnly(assistantMsg);
+    if (!normalized) {
+      return;
+    }
+    this.forwardClaudeMessage(dbSessionId, normalized);
+  }
+
+  private buildToolUseFallbackStreamEvents(message: ClaudeMessage): ClaudeMessage[] {
+    if (message.type !== 'assistant') {
+      return [];
+    }
+    const content = message.message?.content;
+    if (!Array.isArray(content)) {
+      return [];
+    }
+
+    const fallbackEvents: ClaudeMessage[] = [];
+    for (const [index, item] of content.entries()) {
+      if (item.type !== 'tool_use') {
+        continue;
       }
+      fallbackEvents.push({
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index,
+          content_block: item,
+        },
+        timestamp: message.timestamp ?? new Date().toISOString(),
+      });
+    }
 
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'user_question',
-        requestId: request.requestId,
-        questions: parsed.data.questions,
+    return fallbackEvents;
+  }
+
+  private normalizeAssistantMessageToTextOnly(message: ClaudeMessage): ClaudeMessage | null {
+    if (message.type !== 'assistant') {
+      return null;
+    }
+    const content = message.message?.content;
+    if (!Array.isArray(content)) {
+      return null;
+    }
+
+    const textBlocks = content.filter(
+      (item): item is ClaudeContentItem & { type: 'text'; text: string } =>
+        item.type === 'text' && typeof item.text === 'string'
+    );
+
+    if (textBlocks.length === 0) {
+      return null;
+    }
+
+    return {
+      ...message,
+      message: {
+        role: 'assistant',
+        content: textBlocks,
+      },
+    };
+  }
+
+  private forwardUserMessageWithToolResult(
+    dbSessionId: string,
+    msg: unknown,
+    msgWithType: {
+      uuid?: string;
+      message?: { content?: Array<{ type?: string }> };
+    },
+    pendingToolNames: Map<string, string>,
+    pendingToolInputs: Map<string, Record<string, unknown>>,
+    context: EventForwarderContext
+  ): void {
+    // Forward user message UUID for rewind functionality.
+    if (msgWithType.uuid) {
+      const uuidMsg = { type: 'user_message_uuid', uuid: msgWithType.uuid } as const;
+      sessionStoreService.emitDelta(dbSessionId, uuidMsg);
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Forwarding user message UUID', {
+          dbSessionId,
+          uuid: msgWithType.uuid,
+        });
+      }
+    }
+
+    const content = msgWithType.message?.content;
+    if (!Array.isArray(content)) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'no_array_content',
       });
       return;
     }
 
-    if (request.toolName === 'ExitPlanMode') {
-      chatConnectionService.forwardToSession(dbSessionId, {
-        type: 'permission_request',
-        requestId: request.requestId,
-        toolName: request.toolName,
-        input: request.input,
-        planContent,
+    const hasToolResult = hasToolResultContent(content as ClaudeContentItem[]);
+    if (!hasToolResult) {
+      sessionFileLogger.log(dbSessionId, 'INFO', {
+        action: 'skipped_message',
+        reason: 'no_tool_result_content',
+        content_types: content.map((c) => c.type),
       });
       return;
     }
 
-    // Fallback: send as generic interactive_request
-    chatConnectionService.forwardToSession(dbSessionId, {
-      type: 'interactive_request',
-      requestId: request.requestId,
-      toolName: request.toolName,
-      toolUseId: request.toolUseId,
-      input: request.input,
+    this.notifyToolResultInterceptors(content, pendingToolNames, pendingToolInputs, {
+      sessionId: dbSessionId,
+      workspaceId: context.workspaceId,
+      workingDir: context.workingDir,
     });
+
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Forwarding user message with tool_result', { dbSessionId });
+    }
+    sessionFileLogger.log(dbSessionId, 'INFO', {
+      action: 'forwarding_user_message_with_tool_result',
+    });
+
+    this.forwardClaudeMessage(dbSessionId, msg as ClaudeMessage);
   }
 
   /**
@@ -690,6 +920,14 @@ class ChatEventForwarderService {
   }
 
   /**
+   * Get all pending interactive requests indexed by session ID.
+   * Used by workspace query service to determine which workspaces have pending requests.
+   */
+  getAllPendingRequests(): Map<string, PendingInteractiveRequest> {
+    return sessionStoreService.getAllPendingRequests();
+  }
+
+  /**
    * Notify interceptors about tool results.
    */
   private notifyToolResultInterceptors(
@@ -731,6 +969,14 @@ class ChatEventForwarderService {
       pendingToolNames.delete(typedItem.tool_use_id);
       pendingToolInputs.delete(typedItem.tool_use_id);
     }
+  }
+
+  private syncRuntimeFromClient(dbSessionId: string, client: ClaudeClient): void {
+    if (client.isWorking()) {
+      sessionStoreService.markRunning(dbSessionId);
+      return;
+    }
+    sessionStoreService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
   }
 }
 

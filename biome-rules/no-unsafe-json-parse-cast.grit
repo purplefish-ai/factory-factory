@@ -1,0 +1,17 @@
+language js
+
+// Prevent unsafe JSON.parse casts that bypass runtime validation
+//
+// BAD:  const data = JSON.parse(input) as SomeType;
+// GOOD: const parsed = JSON.parse(input);
+//       const validated = SomeTypeSchema.parse(parsed);
+//
+// Rationale: Type assertions on JSON.parse results provide no runtime safety.
+// External JSON data should always be validated with Zod schemas.
+
+`JSON.parse($arg) as $type` where {
+  register_diagnostic(
+    span=$arg,
+    message="Do not cast JSON.parse results. Parse with JSON.parse, then validate with a Zod schema (e.g., SomeSchema.parse(parsed)). Type assertions provide no runtime safety."
+  )
+}

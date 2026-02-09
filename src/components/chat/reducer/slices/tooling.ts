@@ -10,13 +10,6 @@ export function reduceToolingSlice(state: ChatState, action: ChatAction): ChatSt
       newToolUseIdToIndex.set(action.payload.toolUseId, action.payload.index);
       return { ...state, toolUseIdToIndex: newToolUseIdToIndex };
     }
-    case 'THINKING_DELTA':
-      return {
-        ...state,
-        latestThinking: (state.latestThinking ?? '') + action.payload.thinking,
-      };
-    case 'THINKING_CLEAR':
-      return { ...state, latestThinking: null };
     case 'SDK_TOOL_PROGRESS': {
       const { toolUseId, toolName, elapsedSeconds } = action.payload;
       const newToolProgress = new Map(state.toolProgress);

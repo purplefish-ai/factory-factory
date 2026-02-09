@@ -286,7 +286,7 @@ function RatchetSettingsSection() {
   const utils = trpc.useUtils();
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
-      toast.success('Ratchet settings updated');
+      toast.success('Auto-fix settings updated');
       utils.userSettings.get.invalidate();
     },
     onError: (error) => {
@@ -297,33 +297,13 @@ function RatchetSettingsSection() {
   const triggerRatchetCheck = trpc.admin.triggerRatchetCheck.useMutation({
     onSuccess: (result) => {
       toast.success(
-        `Ratchet check completed: ${result.checked} checked, ${result.stateChanges} state changes, ${result.actionsTriggered} actions triggered`
+        `Auto-fix check completed: ${result.checked} checked, ${result.stateChanges} state changes, ${result.actionsTriggered} actions triggered`
       );
     },
     onError: (error) => {
-      toast.error(`Failed to trigger ratchet check: ${error.message}`);
+      toast.error(`Failed to trigger auto-fix check: ${error.message}`);
     },
   });
-
-  const [allowedReviewers, setAllowedReviewers] = useState<string>('');
-
-  // Update local state when settings load
-  useEffect(() => {
-    if (settings) {
-      const reviewers = (settings.ratchetAllowedReviewers as string[]) ?? [];
-      setAllowedReviewers(reviewers.join(', '));
-    }
-  }, [settings]);
-
-  const handleSaveAllowedReviewers = () => {
-    const reviewers = allowedReviewers
-      .split(',')
-      .map((u) => u.trim())
-      .filter(Boolean);
-    updateSettings.mutate({
-      ratchetAllowedReviewers: reviewers.length > 0 ? reviewers : null,
-    });
-  };
 
   if (isLoading) {
     return (
@@ -331,10 +311,10 @@ function RatchetSettingsSection() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
-            Ratchet (PR Auto-Progression)
+            Auto-Fix Pull Requests
           </CardTitle>
           <CardDescription>
-            Automatically progress PRs toward merge by fixing issues
+            Automatically dispatch agents to fix CI failures and address code review comments
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -349,35 +329,29 @@ function RatchetSettingsSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
-          Ratchet (PR Auto-Progression)
+          Auto-Fix Pull Requests
         </CardTitle>
         <CardDescription>
-          Configure ratchet defaults and automation behavior for PR progression
+          Automatically dispatch agents to fix CI failures and address code review comments
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-md border bg-muted/40 p-3 space-y-1.5">
-          <p className="text-sm font-medium">How ratcheting works</p>
           <p className="text-sm text-muted-foreground">
-            Ratchet monitors workspaces that have PRs and reacts to the current PR state.
+            When a workspace has an open pull request, Factory Factory can automatically:
           </p>
-          <p className="text-sm text-muted-foreground">
-            If CI fails, conflicts appear, or review comments are left, ratchet can open a fix
-            session, apply changes, and push updates.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            This runs repeatedly until the PR is clean, approved, and ready to merge (or merged
-            automatically if enabled).
-          </p>
+          <ul className="text-sm text-muted-foreground list-disc list-inside space-y-0.5 ml-2">
+            <li>Fix failing CI checks</li>
+            <li>Address code review comments</li>
+          </ul>
         </div>
 
-        {/* Default for all new workspaces */}
+        {/* Default for new workspaces */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label htmlFor="ratchet-enabled">Default for all new workspaces</Label>
+            <Label htmlFor="ratchet-enabled">Default for new workspaces</Label>
             <p className="text-sm text-muted-foreground">
-              Sets the initial ratchet state for new workspaces created manually, from GitHub
-              issues, or from existing branches
+              Enable auto-fix for workspaces created from GitHub issues
             </p>
           </div>
           <Switch
@@ -390,108 +364,13 @@ function RatchetSettingsSection() {
           />
         </div>
 
-        {/* Individual toggles */}
-        <div className="space-y-4 border-t pt-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="ratchet-ci">Auto-fix CI failures</Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically investigate and fix failing CI checks
-              </p>
-            </div>
-            <Switch
-              id="ratchet-ci"
-              checked={settings?.ratchetAutoFixCi ?? true}
-              onCheckedChange={(checked) => {
-                updateSettings.mutate({ ratchetAutoFixCi: checked });
-              }}
-              disabled={updateSettings.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="ratchet-conflicts">Auto-resolve merge conflicts</Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically merge main branch and resolve conflicts
-              </p>
-            </div>
-            <Switch
-              id="ratchet-conflicts"
-              checked={settings?.ratchetAutoFixConflicts ?? true}
-              onCheckedChange={(checked) => {
-                updateSettings.mutate({ ratchetAutoFixConflicts: checked });
-              }}
-              disabled={updateSettings.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="ratchet-reviews">Auto-address review comments</Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically implement changes requested by reviewers
-              </p>
-            </div>
-            <Switch
-              id="ratchet-reviews"
-              checked={settings?.ratchetAutoFixReviews ?? true}
-              onCheckedChange={(checked) => {
-                updateSettings.mutate({ ratchetAutoFixReviews: checked });
-              }}
-              disabled={updateSettings.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="ratchet-merge">Auto-merge when ready</Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically merge PRs when all checks pass and reviews are approved
-              </p>
-            </div>
-            <Switch
-              id="ratchet-merge"
-              checked={settings?.ratchetAutoMerge ?? false}
-              onCheckedChange={(checked) => {
-                updateSettings.mutate({ ratchetAutoMerge: checked });
-              }}
-              disabled={updateSettings.isPending}
-            />
-          </div>
-        </div>
-
-        {/* Allowed reviewers input */}
-        <div className="space-y-2 border-t pt-4">
-          <Label htmlFor="ratchet-reviewers">Allowed Reviewers (GitHub usernames)</Label>
-          <p className="text-sm text-muted-foreground">
-            Only auto-fix comments from these reviewers. Leave empty to process all reviewers.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              id="ratchet-reviewers"
-              placeholder="reviewer1, reviewer2"
-              value={allowedReviewers}
-              onChange={(e) => setAllowedReviewers(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              variant="outline"
-              onClick={handleSaveAllowedReviewers}
-              disabled={updateSettings.isPending}
-            >
-              Save
-            </Button>
-          </div>
-        </div>
-
         {/* Manual trigger button */}
         <div className="border-t pt-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Manual Ratchet Check</Label>
+              <Label>Manual Check</Label>
               <p className="text-sm text-muted-foreground">
-                Manually trigger ratchet check for all workspaces with PRs
+                Check all workspaces with PRs and dispatch agents if needed
               </p>
             </div>
             <Button
@@ -508,7 +387,7 @@ function RatchetSettingsSection() {
               ) : (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Trigger Ratchet Check
+                  Check All PRs Now
                 </>
               )}
             </Button>
@@ -636,7 +515,8 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Factory Configuration */}
-        {projects && projects.length > 0 && <FactoryConfigSection projectId={projects[0].id} />}
+        {/* biome-ignore lint/style/noNonNullAssertion: length > 0 checked */}
+        {projects && projects.length > 0 && <FactoryConfigSection projectId={projects[0]!.id} />}
 
         {/* User Settings */}
         <NotificationSettingsSection />

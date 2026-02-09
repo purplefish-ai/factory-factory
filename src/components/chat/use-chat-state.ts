@@ -10,7 +10,7 @@
  *
  * Message queue is managed on the backend - frontend sends queue_message and
  * receives message_state_changed events for state transitions. On connect,
- * messages_snapshot restores full state.
+ * session_snapshot or session_replay_batch restores full state.
  *
  * Usage:
  * ```ts
@@ -26,7 +26,13 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/claude-types';
-import { type ChatState, chatReducer, createInitialChatState } from './chat-reducer';
+import {
+  type ChatAction,
+  type ChatState,
+  chatReducer,
+  createInitialChatState,
+} from './chat-reducer';
+import { createToolInputAccumulatorState } from './streaming-utils';
 import { useChatActions } from './use-chat-actions';
 import { useChatPersistence } from './use-chat-persistence';
 import { useChatSession } from './use-chat-session';
@@ -73,6 +79,8 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   getUuidForMessageId: (messageId: string) => string | undefined;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
+  // Dispatch function for actions
+  dispatch: React.Dispatch<ChatAction>;
   // Refs for UI
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -99,7 +107,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track dbSessionId in a ref to use without stale closures
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   // Track accumulated tool input JSON per tool_use_id for streaming
-  const toolInputAccumulatorRef = useRef<Map<string, string>>(new Map());
+  const toolInputAccumulatorRef = useRef(createToolInputAccumulatorState());
   // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -212,6 +220,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       setInputAttachments,
       // Message handler for transport (stable - no deps)
       handleMessage,
+      // Dispatch function for actions
+      dispatch,
       // Refs for UI
       inputRef,
       messagesEndRef,

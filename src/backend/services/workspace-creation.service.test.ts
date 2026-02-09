@@ -128,11 +128,6 @@ describe('WorkspaceCreationService', () => {
       workspaceOrder: null,
       cachedSlashCommands: null,
       ratchetEnabled: true,
-      ratchetAutoFixCi: true,
-      ratchetAutoFixConflicts: true,
-      ratchetAutoFixReviews: true,
-      ratchetAutoMerge: false,
-      ratchetAllowedReviewers: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -150,6 +145,7 @@ describe('WorkspaceCreationService', () => {
       status: 'IDLE',
       model: 'sonnet',
       claudeSessionId: null,
+      claudeProjectPath: null,
       claudeProcessPid: null,
       planFilePath: null,
       createdAt: new Date(),
@@ -212,11 +208,6 @@ describe('WorkspaceCreationService', () => {
           workspaceOrder: null,
           cachedSlashCommands: null,
           ratchetEnabled: false,
-          ratchetAutoFixCi: true,
-          ratchetAutoFixConflicts: true,
-          ratchetAutoFixReviews: true,
-          ratchetAutoMerge: false,
-          ratchetAllowedReviewers: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -372,6 +363,7 @@ describe('WorkspaceCreationService', () => {
           workspaceId: 'ws-123',
           workflow: 'followup',
           name: 'Chat 1',
+          claudeProjectPath: null,
         });
       });
 

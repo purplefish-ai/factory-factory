@@ -134,6 +134,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
   const sendRef = useRef<(message: unknown) => boolean>(() => false);
+  const currentLoadRequestIdRef = useRef<string | null>(null);
 
   const chat = useChatState({
     dbSessionId,
@@ -144,6 +145,23 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle incoming messages - delegate to chat state
   const handleMessage = useCallback(
     (data: unknown) => {
+      if (
+        typeof data === 'object' &&
+        data !== null &&
+        'type' in data &&
+        ((data as { type?: string }).type === 'session_replay_batch' ||
+          (data as { type?: string }).type === 'session_snapshot')
+      ) {
+        const batch = data as { loadRequestId?: string; type?: string };
+        if (
+          currentLoadRequestIdRef.current &&
+          batch.loadRequestId &&
+          batch.loadRequestId !== currentLoadRequestIdRef.current
+        ) {
+          return;
+        }
+        currentLoadRequestIdRef.current = null;
+      }
       chat.handleMessage(data);
     },
     [chat.handleMessage]
@@ -151,15 +169,26 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
+    // Dispatch loading state to prevent flicker while replaying events
+    chat.dispatch({ type: 'SESSION_LOADING_START' });
+    const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    currentLoadRequestIdRef.current = loadRequestId;
     sendRef.current({ type: 'list_sessions' });
-    sendRef.current({ type: 'load_session' }); // Loads history and sends messages_snapshot
-  }, []);
+    sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
+  }, [chat.dispatch]);
+
+  // Handle disconnection - clear loading state to avoid stuck spinner
+  const handleDisconnected = useCallback(() => {
+    currentLoadRequestIdRef.current = null;
+    chat.dispatch({ type: 'SESSION_LOADING_END' });
+  }, [chat.dispatch]);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
     url,
     onMessage: handleMessage,
     onConnected: handleConnected,
+    onDisconnected: handleDisconnected,
   });
 
   // Wire up the send function to the transport

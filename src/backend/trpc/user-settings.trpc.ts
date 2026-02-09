@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import { execCommand } from '../lib/shell';
-import { userSettingsAccessor } from '../resource_accessors/index';
+import { userSettingsQueryService } from '../services/user-settings-query.service';
 import { publicProcedure, router } from './trpc';
 
 export const userSettingsRouter = router({
@@ -14,7 +14,7 @@ export const userSettingsRouter = router({
    * Get user settings
    */
   get: publicProcedure.query(async () => {
-    return await userSettingsAccessor.get();
+    return await userSettingsQueryService.get();
   }),
 
   /**
@@ -41,11 +41,6 @@ export const userSettingsRouter = router({
         notificationSoundPath: z.string().nullable().optional(),
         // Ratchet settings
         ratchetEnabled: z.boolean().optional(),
-        ratchetAutoFixCi: z.boolean().optional(),
-        ratchetAutoFixConflicts: z.boolean().optional(),
-        ratchetAutoFixReviews: z.boolean().optional(),
-        ratchetAutoMerge: z.boolean().optional(),
-        ratchetAllowedReviewers: z.array(z.string()).nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -53,17 +48,7 @@ export const userSettingsRouter = router({
       if (input.preferredIde === 'custom' && !input.customIdeCommand) {
         throw new Error('Custom IDE command is required when using custom IDE');
       }
-      // Transform JSON array fields to match Prisma Json type
-      const { ratchetAllowedReviewers, ...rest } = input;
-      return await userSettingsAccessor.update({
-        ...rest,
-        ratchetAllowedReviewers:
-          ratchetAllowedReviewers === null
-            ? { set: null }
-            : ratchetAllowedReviewers !== undefined
-              ? ratchetAllowedReviewers
-              : undefined,
-      });
+      return await userSettingsQueryService.update(input);
     }),
 
   /**
@@ -117,7 +102,7 @@ export const userSettingsRouter = router({
   getWorkspaceOrder: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
-      return await userSettingsAccessor.getWorkspaceOrder(input.projectId);
+      return await userSettingsQueryService.getWorkspaceOrder(input.projectId);
     }),
 
   /**
@@ -131,7 +116,7 @@ export const userSettingsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      await userSettingsAccessor.updateWorkspaceOrder(input.projectId, input.workspaceIds);
+      await userSettingsQueryService.updateWorkspaceOrder(input.projectId, input.workspaceIds);
       return { success: true };
     }),
 });

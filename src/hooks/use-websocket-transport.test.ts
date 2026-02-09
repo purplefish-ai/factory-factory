@@ -242,7 +242,7 @@ describe('WebSocket transport patterns', () => {
       ws.send(JSON.stringify(message));
 
       expect(ws.sentMessages).toHaveLength(1);
-      expect(JSON.parse(ws.sentMessages[0])).toEqual(message);
+      expect(JSON.parse(ws.sentMessages[0]!)).toEqual(message);
     });
 
     it('should throw error when sending on closed connection', () => {
@@ -289,11 +289,11 @@ describe('WebSocket transport patterns', () => {
       };
 
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'status', running: true });
+      ws.simulateMessage({ type: 'output', data: 'hello' });
       ws.simulateMessage({ type: 'claude_message', data: 'hello' });
 
       expect(messages).toHaveLength(2);
-      expect(messages[0]).toEqual({ type: 'status', running: true });
+      expect(messages[0]).toEqual({ type: 'output', data: 'hello' });
       expect(messages[1]).toEqual({ type: 'claude_message', data: 'hello' });
     });
 
@@ -612,7 +612,7 @@ describe('URL change handling', () => {
     ws.simulateOpen();
 
     expect(createdWebSockets).toHaveLength(1);
-    expect(createdWebSockets[0].url).toBe('ws://localhost:3000/chat?sessionId=1');
+    expect(createdWebSockets[0]!.url).toBe('ws://localhost:3000/chat?sessionId=1');
 
     // URL changes to different session
     url = 'ws://localhost:3000/chat?sessionId=2';
@@ -626,6 +626,6 @@ describe('URL change handling', () => {
     ws.simulateOpen();
 
     expect(createdWebSockets).toHaveLength(2);
-    expect(createdWebSockets[1].url).toBe('ws://localhost:3000/chat?sessionId=2');
+    expect(createdWebSockets[1]!.url).toBe('ws://localhost:3000/chat?sessionId=2');
   });
 });

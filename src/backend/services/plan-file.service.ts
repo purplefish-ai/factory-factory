@@ -42,7 +42,7 @@ function generatePlanFilename(branchName?: string | null): string {
  */
 export function parsePlanTitle(content: string): string | null {
   const match = content.match(/^#\s+(.+)$/m);
-  return match ? match[1].trim() : null;
+  return match?.[1]?.trim() ?? null;
 }
 
 /**

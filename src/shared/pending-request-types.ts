@@ -16,6 +16,13 @@ export const INTERACTIVE_RESPONSE_TOOLS = ['AskUserQuestion', 'ExitPlanMode'] as
 export type InteractiveResponseTool = (typeof INTERACTIVE_RESPONSE_TOOLS)[number];
 
 /**
+ * Runtime guard for tool names that support frontend interactive-response routing.
+ */
+export function isInteractiveResponseTool(toolName: string): toolName is InteractiveResponseTool {
+  return (INTERACTIVE_RESPONSE_TOOLS as readonly string[]).includes(toolName);
+}
+
+/**
  * Pending interactive request stored for session restore.
  * When a user navigates away and returns, we need to restore the modal.
  */

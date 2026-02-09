@@ -145,8 +145,8 @@ Project (repository configuration)
 Ratchet is a background monitor that continuously moves open PR workspaces toward merge.
 
 - Runs every minute against READY workspaces with PRs
-- Pulls fresh PR state from GitHub (`gh`) and classifies it into: `CI_RUNNING`, `CI_FAILED`, `MERGE_CONFLICT`, `REVIEW_PENDING`, `READY`, or `MERGED`
-- Triggers (or reuses) a dedicated **ratchet** Claude session to fix CI failures, resolve merge conflicts, or address requested review changes
+- Pulls fresh PR state from GitHub (`gh`) and classifies it into: `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`, `READY`, or `MERGED`
+- Triggers (or reuses) a dedicated **ratchet** Claude session to fix CI failures or address requested review changes (merge conflicts are resolved by agents syncing with main before each fix)
 - Prevents duplicate fixer sessions per workspace and can notify an active fixer if a priority state changes
 - Configurable in **Admin → Ratchet** with toggles for CI fixes, conflict fixes, review fixes, allowed reviewers, and auto-merge behavior
 

@@ -106,7 +106,7 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
     };
   }
 
-  const [nextMsg] = queueArray;
+  const nextMsg = queueArray[0]!;
   const actions: Array<{ type: string; payload?: unknown }> = [];
   const sentMessages: Array<{ type: string; [key: string]: unknown }> = [];
 
@@ -470,8 +470,8 @@ describe('sendMessage pattern', () => {
     const result = simulateSendMessage('Second', [existingMsg], 'session-123');
 
     expect(result.newQueue).toHaveLength(2);
-    expect(result.newQueue?.[0].id).toBe(existingMsg.id);
-    expect(result.newQueue?.[1].text).toBe('Second');
+    expect(result.newQueue?.[0]?.id).toBe(existingMsg.id);
+    expect(result.newQueue?.[1]?.text).toBe('Second');
   });
 
   it('should generate unique ID for each message', () => {
@@ -513,8 +513,8 @@ describe('removeQueuedMessage pattern', () => {
     const result = simulateRemoveQueuedMessage(msg2.id, [msg1, msg2, msg3]);
 
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe(msg1.id);
-    expect(result[1].id).toBe(msg3.id);
+    expect(result[0]!.id).toBe(msg1.id);
+    expect(result[1]!.id).toBe(msg3.id);
   });
 
   it('should return same array if ID not found', () => {
@@ -540,7 +540,7 @@ describe('removeQueuedMessage pattern', () => {
     const result = simulateRemoveQueuedMessage(msg1.id, [msg1, msg2]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(msg2.id);
+    expect(result[0]!.id).toBe(msg2.id);
   });
 
   it('should remove last message when ID matches', () => {
@@ -550,7 +550,7 @@ describe('removeQueuedMessage pattern', () => {
     const result = simulateRemoveQueuedMessage(msg2.id, [msg1, msg2]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(msg1.id);
+    expect(result[0]!.id).toBe(msg1.id);
   });
 });
 
@@ -602,7 +602,7 @@ describe('session switching queue behavior', () => {
 
 describe('queue state transitions', () => {
   // Note: Queue is now managed on the backend. Frontend receives queue state via
-  // MESSAGES_SNAPSHOT action (on connect) and MESSAGE_STATE_CHANGED (for state updates).
+  // SESSION_SNAPSHOT action (on connect) and MESSAGE_STATE_CHANGED (for state updates).
 
   it('should not affect queue when receiving WS messages', () => {
     const queuedMsg = createQueuedMessage('Queued');
@@ -610,14 +610,44 @@ describe('queue state transitions', () => {
       queuedMessages: toQueuedMessagesMap([queuedMsg]),
     });
 
-    // Simulate receiving various WS messages
-    let newState = chatReducer(state, { type: 'WS_STATUS', payload: { running: true } });
+    // Simulate receiving various runtime/session messages
+    let newState = chatReducer(state, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+          updatedAt: '2026-02-08T00:00:00.000Z',
+        },
+      },
+    });
     expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
 
-    newState = chatReducer(newState, { type: 'WS_STARTING' });
+    newState = chatReducer(newState, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'starting',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:01.000Z',
+        },
+      },
+    });
     expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
 
-    newState = chatReducer(newState, { type: 'WS_STOPPED' });
+    newState = chatReducer(newState, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:02.000Z',
+        },
+      },
+    });
     expect(newState.queuedMessages.has(queuedMsg.id)).toBe(true);
   });
 });
@@ -686,11 +716,31 @@ describe('queue edge cases', () => {
     });
 
     // Start running
-    state = chatReducer(state, { type: 'WS_STATUS', payload: { running: true } });
+    state = chatReducer(state, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+          updatedAt: '2026-02-08T00:00:00.000Z',
+        },
+      },
+    });
     expect(shouldDrainOnStateChange('idle', state.sessionStatus.phase, 1)).toBe(false);
 
     // Stop running (becomes ready)
-    state = chatReducer(state, { type: 'WS_STATUS', payload: { running: false } });
+    state = chatReducer(state, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          phase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:01.000Z',
+        },
+      },
+    });
     expect(shouldDrainOnStateChange('running', state.sessionStatus.phase, 1)).toBe(true);
   });
 });

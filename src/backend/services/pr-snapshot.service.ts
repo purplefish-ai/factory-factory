@@ -24,7 +24,77 @@ export type PRSnapshotRefreshResult =
   | { success: true; snapshot: SnapshotData }
   | { success: false; reason: 'workspace_not_found' | 'no_pr_url' | 'fetch_failed' | 'error' };
 
+export type AttachAndRefreshResult =
+  | { success: true; snapshot: SnapshotData }
+  | { success: false; reason: 'workspace_not_found' | 'fetch_failed' | 'error' };
+
 class PRSnapshotService {
+  /**
+   * Canonical operation to attach a PR URL to a workspace and refresh its snapshot.
+   * This is the single entry point for setting prUrl and PR snapshot fields.
+   *
+   * @param workspaceId - The workspace ID to update
+   * @param prUrl - The PR URL to attach
+   * @returns Result with snapshot data or failure reason
+   */
+  async attachAndRefreshPR(workspaceId: string, prUrl: string): Promise<AttachAndRefreshResult> {
+    try {
+      // Verify workspace exists
+      const workspace = await workspaceAccessor.findById(workspaceId);
+      if (!workspace) {
+        return { success: false, reason: 'workspace_not_found' };
+      }
+
+      // Fetch PR snapshot from GitHub
+      const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
+      if (!snapshot) {
+        // Still attach the URL even if we can't fetch details
+        await workspaceAccessor.update(workspaceId, {
+          prUrl,
+          prUpdatedAt: new Date(),
+        });
+        await kanbanStateService.updateCachedKanbanColumn(workspaceId);
+        logger.warn('Attached PR URL but could not fetch snapshot', { workspaceId, prUrl });
+        return { success: false, reason: 'fetch_failed' };
+      }
+
+      // Write full PR snapshot atomically, including prUrl
+      await this.applySnapshot(
+        workspaceId,
+        {
+          prNumber: snapshot.prNumber,
+          prState: snapshot.prState,
+          prReviewState: snapshot.prReviewState,
+          prCiStatus: snapshot.prCiStatus,
+        },
+        prUrl
+      );
+
+      logger.info('Attached PR and refreshed snapshot', {
+        workspaceId,
+        prUrl,
+        prNumber: snapshot.prNumber,
+        prState: snapshot.prState,
+      });
+
+      return {
+        success: true,
+        snapshot: {
+          prNumber: snapshot.prNumber,
+          prState: snapshot.prState,
+          prReviewState: snapshot.prReviewState,
+          prCiStatus: snapshot.prCiStatus,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to attach PR and refresh snapshot', error as Error, {
+        workspaceId,
+        prUrl,
+      });
+      return { success: false, reason: 'error' };
+    }
+  }
+
   async refreshWorkspace(
     workspaceId: string,
     explicitPrUrl?: string | null
@@ -72,14 +142,21 @@ class PRSnapshotService {
     }
   }
 
-  async applySnapshot(workspaceId: string, snapshot: SnapshotData): Promise<void> {
-    await workspaceAccessor.update(workspaceId, {
+  async applySnapshot(workspaceId: string, snapshot: SnapshotData, prUrl?: string): Promise<void> {
+    const updateData: Parameters<typeof workspaceAccessor.update>[1] = {
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,
       prCiStatus: snapshot.prCiStatus,
       prUpdatedAt: new Date(),
-    });
+    };
+
+    // Include prUrl in the atomic update if provided
+    if (prUrl !== undefined) {
+      updateData.prUrl = prUrl;
+    }
+
+    await workspaceAccessor.update(workspaceId, updateData);
 
     await kanbanStateService.updateCachedKanbanColumn(workspaceId);
   }

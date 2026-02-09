@@ -35,8 +35,8 @@ export function parseDetailedDiff(diff: string): DiffLine[] {
       // Parse hunk header: @@ -start,count +start,count @@
       const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
       if (match) {
-        oldLine = Number.parseInt(match[1], 10);
-        newLine = Number.parseInt(match[2], 10);
+        oldLine = Number.parseInt(match[1] as string, 10);
+        newLine = Number.parseInt(match[2] as string, 10);
         inHunk = true;
       }
       result.push({ type: 'hunk', content: line });

@@ -1,5 +1,5 @@
-import { ArrowLeftIcon, FolderOpenIcon } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeftIcon, CheckCircle2Icon, FolderOpenIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
@@ -18,8 +18,24 @@ export default function NewProjectPage() {
   const [error, setError] = useState('');
   const [startupScript, setStartupScript] = useState('');
   const [scriptType, setScriptType] = useState<ScriptType>('command');
+  const [debouncedRepoPath, setDebouncedRepoPath] = useState('');
 
   const isElectron = Boolean(window.electronAPI?.isElectron);
+
+  // Check for factory-factory.json
+  const { data: factoryConfig } = trpc.project.checkFactoryConfig.useQuery(
+    { repoPath: debouncedRepoPath },
+    { enabled: debouncedRepoPath.length > 0 }
+  );
+
+  // Debounce repo path changes for API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedRepoPath(repoPath);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [repoPath]);
 
   const handleBrowse = async () => {
     if (!window.electronAPI?.showOpenDialog) {
@@ -33,7 +49,7 @@ export default function NewProjectPage() {
       });
 
       if (!result.canceled && result.filePaths.length > 0) {
-        setRepoPath(result.filePaths[0]);
+        setRepoPath(result.filePaths[0] as string);
       }
     } catch {
       // Silently handle dialog failure - nothing actionable for user
@@ -123,6 +139,12 @@ export default function NewProjectPage() {
                       </Button>
                     )}
                   </div>
+                  {factoryConfig?.exists && repoPath.trim() && (
+                    <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                      <CheckCircle2Icon className="h-4 w-4" />
+                      <span>factory-factory.json detected</span>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Path to a git repository on your local machine.
                   </p>
@@ -215,6 +237,12 @@ export default function NewProjectPage() {
                   </Button>
                 )}
               </div>
+              {factoryConfig?.exists && repoPath.trim() && (
+                <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                  <CheckCircle2Icon className="h-4 w-4" />
+                  <span>factory-factory.json detected</span>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 Path to a git repository on your local machine. The project name will be derived
                 from the directory name.

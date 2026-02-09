@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { trpc } from '../lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '../lib/workspace-cache-helpers';
 
 /**
  * Shared hook for creating workspaces with consistent behavior across the app.
@@ -41,6 +42,17 @@ export function useCreateWorkspace(
         type: 'MANUAL',
         projectId,
         name,
+      });
+
+      // Optimistically populate the workspace detail query cache so the status
+      // is immediately visible when navigating to the detail page
+      utils.workspace.get.setData({ id: workspace.id }, (old) => {
+        // If there's already data (shouldn't happen for a new workspace), keep it
+        if (old) {
+          return old;
+        }
+
+        return createOptimisticWorkspaceCacheData(workspace);
       });
 
       utils.workspace.list.invalidate({ projectId });

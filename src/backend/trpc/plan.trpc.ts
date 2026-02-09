@@ -5,10 +5,10 @@
  */
 
 import { z } from 'zod';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { planFileService } from '../services/plan-file.service';
+import { sessionDataService } from '../services/session-data.service';
 import { ticketService } from '../services/ticket.service';
+import { workspaceDataService } from '../services/workspace-data.service';
 import { publicProcedure, router } from './trpc';
 
 export const planRouter = router({
@@ -19,7 +19,7 @@ export const planRouter = router({
   getPlanContent: publicProcedure
     .input(z.object({ sessionId: z.string() }))
     .query(async ({ input }) => {
-      const session = await claudeSessionAccessor.findById(input.sessionId);
+      const session = await sessionDataService.findClaudeSessionById(input.sessionId);
       if (!session?.planFilePath) {
         return null;
       }
@@ -38,7 +38,7 @@ export const planRouter = router({
   listPlanFiles: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     .query(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.workspaceId);
+      const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace?.worktreePath) {
         return [];
       }
@@ -59,7 +59,7 @@ export const planRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.workspaceId);
+      const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace) {
         throw new Error(`Workspace not found: ${input.workspaceId}`);
       }

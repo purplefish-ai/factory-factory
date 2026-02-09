@@ -1,8 +1,10 @@
 import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { ratchetService } from '../services/ratchet.service';
+import { sessionService } from '../services/session.service';
 import { WorkspaceCreationService } from '../services/workspace-creation.service';
+import { workspaceDataService } from '../services/workspace-data.service';
 import { deriveWorkspaceFlowStateFromWorkspace } from '../services/workspace-flow-state.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
 import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
@@ -67,7 +69,7 @@ export const workspaceRouter = router({
     )
     .query(({ input }) => {
       const { projectId, ...filters } = input;
-      return workspaceAccessor.findByProjectId(projectId, filters);
+      return workspaceDataService.findByProjectId(projectId, filters);
     }),
 
   // Get unified project summary state for sidebar (workspaces + working status + git stats + review count)
@@ -90,13 +92,23 @@ export const workspaceRouter = router({
 
   // Get workspace by ID
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const workspace = await workspaceAccessor.findById(input.id);
+    const workspace = await workspaceDataService.findById(input.id);
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+    const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
+    const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+    const isWorking = isSessionWorking || flowState.isWorking;
     return {
       ...workspace,
+      sidebarStatus: deriveWorkspaceSidebarStatus({
+        isWorking,
+        prUrl: workspace.prUrl,
+        prState: workspace.prState,
+        prCiStatus: workspace.prCiStatus,
+        ratchetState: workspace.ratchetState,
+      }),
       ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
       flowPhase: flowState.phase,
       ciObservation: flowState.ciObservation,
@@ -137,7 +149,7 @@ export const workspaceRouter = router({
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
-      return workspaceAccessor.update(id, updates);
+      return workspaceDataService.update(id, updates);
     }),
 
   // Toggle workspace-level ratcheting
@@ -149,7 +161,7 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const updatedWorkspace = await workspaceAccessor.update(
+      const updatedWorkspace = await workspaceDataService.update(
         input.workspaceId,
         input.enabled
           ? {
@@ -159,7 +171,7 @@ export const workspaceRouter = router({
               ratchetEnabled: false,
               ratchetState: RatchetState.IDLE,
               ratchetActiveSessionId: null,
-              ratchetLastNotifiedState: null,
+              ratchetLastCiRunId: null,
             }
       );
       if (input.enabled) {
@@ -193,7 +205,7 @@ export const workspaceRouter = router({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return workspaceAccessor.delete(input.id);
+    return workspaceDataService.delete(input.id);
   }),
 
   // Refresh factory-factory.json configuration for all workspaces

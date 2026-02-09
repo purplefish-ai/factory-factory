@@ -6,15 +6,14 @@ import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createRewindFilesHandler(): ChatMessageHandler {
+export function createRewindFilesHandler(): ChatMessageHandler<RewindFilesMessage> {
   return async ({ ws, sessionId, message }) => {
-    const typedMessage = message as RewindFilesMessage;
     const client = sessionService.getClient(sessionId);
     if (!client) {
       ws.send(
         JSON.stringify({
           type: 'rewind_files_error',
-          userMessageId: typedMessage.userMessageId,
+          userMessageId: message.userMessageId,
           rewindError: 'No active client for session',
         })
       );
@@ -22,12 +21,12 @@ export function createRewindFilesHandler(): ChatMessageHandler {
     }
 
     try {
-      const response = await client.rewindFiles(typedMessage.userMessageId, typedMessage.dryRun);
+      const response = await client.rewindFiles(message.userMessageId, message.dryRun);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Rewind files request completed', {
           sessionId,
-          userMessageId: typedMessage.userMessageId,
-          dryRun: typedMessage.dryRun,
+          userMessageId: message.userMessageId,
+          dryRun: message.dryRun,
           affectedFiles: response.affected_files?.length ?? 0,
         });
       }
@@ -35,8 +34,8 @@ export function createRewindFilesHandler(): ChatMessageHandler {
       ws.send(
         JSON.stringify({
           type: 'rewind_files_preview',
-          userMessageId: typedMessage.userMessageId,
-          dryRun: typedMessage.dryRun ?? false,
+          userMessageId: message.userMessageId,
+          dryRun: message.dryRun ?? false,
           affectedFiles: response.affected_files ?? [],
         })
       );
@@ -44,13 +43,13 @@ export function createRewindFilesHandler(): ChatMessageHandler {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to rewind files', {
         sessionId,
-        userMessageId: typedMessage.userMessageId,
+        userMessageId: message.userMessageId,
         error: errorMessage,
       });
       ws.send(
         JSON.stringify({
           type: 'rewind_files_error',
-          userMessageId: typedMessage.userMessageId,
+          userMessageId: message.userMessageId,
           rewindError: `Failed to rewind files: ${errorMessage}`,
         })
       );

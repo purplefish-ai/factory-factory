@@ -895,8 +895,8 @@ describe('Edge Cases', () => {
       };
 
       const contentItems = msg.message.content as ClaudeContentItem[];
-      expect(isTextContent(contentItems[0])).toBe(true);
-      expect(isToolUseContent(contentItems[1])).toBe(true);
+      expect(isTextContent(contentItems[0]!)).toBe(true);
+      expect(isToolUseContent(contentItems[1]!)).toBe(true);
     });
   });
 

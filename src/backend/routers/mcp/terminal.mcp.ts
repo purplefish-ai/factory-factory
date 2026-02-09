@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
+import { sessionDataService } from '../../services/session-data.service';
 import type { TerminalInstance } from '../../services/terminal.service';
 import { terminalService } from '../../services/terminal.service';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server';
@@ -47,7 +47,7 @@ interface GetTerminalOutputResult {
 
 async function resolveWorkspaceId(agentId: string): Promise<string | null> {
   try {
-    const session = await claudeSessionAccessor.findById(agentId);
+    const session = await sessionDataService.findClaudeSessionById(agentId);
     if (!session?.workspace) {
       return null;
     }
@@ -82,7 +82,7 @@ function getActiveOrFirstTerminal(workspaceId: string): TerminalInstance | null 
   }
   // Fall back to first available terminal
   const allTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
-  return allTerminals.length > 0 ? allTerminals[0] : null;
+  return allTerminals.length > 0 ? (allTerminals[0] ?? null) : null;
 }
 
 function formatTerminalOutput(

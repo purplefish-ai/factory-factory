@@ -9,11 +9,6 @@ interface UpdateUserSettingsInput {
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   // Ratchet settings
   ratchetEnabled?: boolean;
-  ratchetAutoFixCi?: boolean;
-  ratchetAutoFixConflicts?: boolean;
-  ratchetAutoFixReviews?: boolean;
-  ratchetAutoMerge?: boolean;
-  ratchetAllowedReviewers?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }

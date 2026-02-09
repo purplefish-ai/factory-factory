@@ -5,9 +5,9 @@
  * Each file has YAML frontmatter with metadata (name, description, expectsPR).
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { createLogger } from '../services/logger.service';
+import { createMarkdownLoader, parseFrontmatter } from './markdown-loader';
 
 const logger = createLogger('workflows');
 
@@ -46,52 +46,10 @@ const WORKFLOWS_DIR = resolve(import.meta.dirname, '../../..', 'prompts/workflow
 // Frontmatter Parser
 // =============================================================================
 
-interface Frontmatter {
+interface Frontmatter extends Record<string, unknown> {
   name?: string;
   description?: string;
   expectsPR?: boolean;
-}
-
-/**
- * Parse simple YAML frontmatter from markdown content.
- * Only handles basic key: value pairs, not nested structures.
- */
-function parseFrontmatter(content: string): { frontmatter: Frontmatter; body: string } {
-  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
-  const match = content.match(frontmatterRegex);
-
-  if (!match) {
-    return { frontmatter: {}, body: content };
-  }
-
-  const frontmatterText = match[1];
-  const body = content.slice(match[0].length);
-  const frontmatter: Frontmatter = {};
-
-  // Parse each line as key: value
-  for (const line of frontmatterText.split('\n')) {
-    const colonIndex = line.indexOf(':');
-    if (colonIndex === -1) {
-      continue;
-    }
-
-    const key = line.slice(0, colonIndex).trim();
-    const value = line.slice(colonIndex + 1).trim();
-
-    switch (key) {
-      case 'name':
-        frontmatter.name = value;
-        break;
-      case 'description':
-        frontmatter.description = value;
-        break;
-      case 'expectsPR':
-        frontmatter.expectsPR = value === 'true';
-        break;
-    }
-  }
-
-  return { frontmatter, body };
 }
 
 // =============================================================================
@@ -99,59 +57,30 @@ function parseFrontmatter(content: string): { frontmatter: Frontmatter; body: st
 // =============================================================================
 
 /**
- * Load a single workflow file.
+ * Parse a single workflow file.
  */
-function loadWorkflowFile(filePath: string): Workflow | null {
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    const id = basename(filePath, '.md');
-    const { frontmatter, body } = parseFrontmatter(content);
+function parseWorkflowFile(_filePath: string, content: string, id: string): Workflow | null {
+  const { frontmatter, body } = parseFrontmatter<Frontmatter>(content, {
+    name: (v) => v,
+    description: (v) => v,
+    expectsPR: (v) => v === 'true',
+  });
 
-    return {
-      id,
-      name: frontmatter.name ?? id,
-      description: frontmatter.description ?? '',
-      expectsPR: frontmatter.expectsPR ?? false,
-      content: body.trim(),
-    };
-  } catch {
-    return null;
-  }
+  return {
+    id,
+    name: frontmatter.name ?? id,
+    description: frontmatter.description ?? '',
+    expectsPR: frontmatter.expectsPR ?? false,
+    content: body.trim(),
+  };
 }
 
-// Cached workflows (loaded once at startup)
-let cachedWorkflows: Workflow[] | null = null;
-
-/**
- * Load all workflows from the workflows directory.
- * Results are cached after first call.
- */
-function loadWorkflows(): Workflow[] {
-  if (cachedWorkflows !== null) {
-    logger.debug('Returning cached workflows', { count: cachedWorkflows.length });
-    return cachedWorkflows;
-  }
-
-  logger.info('Loading workflows from disk', { dir: WORKFLOWS_DIR });
-
-  try {
-    const files = readdirSync(WORKFLOWS_DIR).filter((f) => f.endsWith('.md'));
-    logger.info('Found workflow files', { files });
-    cachedWorkflows = files
-      .map((file) => loadWorkflowFile(join(WORKFLOWS_DIR, file)))
-      .filter((w): w is Workflow => w !== null);
-    logger.info('Loaded workflows', {
-      count: cachedWorkflows.length,
-      ids: cachedWorkflows.map((w) => w.id),
-    });
-    return cachedWorkflows;
-  } catch (error) {
-    // Directory doesn't exist or can't be read
-    logger.error('Failed to load workflows', { dir: WORKFLOWS_DIR, error: String(error) });
-    cachedWorkflows = [];
-    return cachedWorkflows;
-  }
-}
+// Create markdown loader instance
+const workflowLoader = createMarkdownLoader<Workflow>({
+  directory: WORKFLOWS_DIR,
+  logger,
+  parseFile: parseWorkflowFile,
+});
 
 // =============================================================================
 // Public API
@@ -161,14 +90,14 @@ function loadWorkflows(): Workflow[] {
  * List all available workflows.
  */
 export function listWorkflows(): Workflow[] {
-  return loadWorkflows();
+  return workflowLoader.load();
 }
 
 /**
  * Get a workflow by ID.
  */
 export function getWorkflow(id: string): Workflow | null {
-  return loadWorkflows().find((w) => w.id === id) ?? null;
+  return workflowLoader.load().find((w) => w.id === id) ?? null;
 }
 
 /**
@@ -183,5 +112,5 @@ export function getWorkflowContent(id: string): string | null {
  * Clear the workflow cache (useful for testing or hot reloading).
  */
 export function clearWorkflowCache(): void {
-  cachedWorkflows = null;
+  workflowLoader.clearCache();
 }

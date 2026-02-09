@@ -47,7 +47,6 @@ const ACTIVE_PR_STATES = new Set<PRState>([
 
 const RATCHET_FIXING_STATES = new Set<RatchetState>([
   RatchetState.CI_FAILED,
-  RatchetState.MERGE_CONFLICT,
   RatchetState.REVIEW_PENDING,
 ]);
 

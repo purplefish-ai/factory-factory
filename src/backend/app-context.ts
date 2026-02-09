@@ -6,16 +6,16 @@ import { configService } from './services/config.service';
 import { githubCLIService } from './services/github-cli.service';
 import { kanbanStateService } from './services/kanban-state.service';
 import { createLogger } from './services/logger.service';
-import { messageQueueService } from './services/message-queue.service';
-import { messageStateService } from './services/message-state.service';
 import { findAvailablePort } from './services/port.service';
 import { ratchetService } from './services/ratchet.service';
 import { rateLimiter } from './services/rate-limiter.service';
 import { RunScriptService } from './services/run-script.service';
+import { runScriptStateMachine } from './services/run-script-state-machine.service';
 import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
 import { sessionService } from './services/session.service';
 import { type SessionFileLogger, sessionFileLogger } from './services/session-file-logger.service';
+import { sessionStoreService } from './services/session-store.service';
 import { startupScriptService } from './services/startup-script.service';
 import { terminalService } from './services/terminal.service';
 import { workspaceStateMachine } from './services/workspace-state-machine.service';
@@ -30,15 +30,15 @@ export type AppServices = {
   findAvailablePort: typeof findAvailablePort;
   githubCLIService: typeof githubCLIService;
   kanbanStateService: typeof kanbanStateService;
-  messageQueueService: typeof messageQueueService;
-  messageStateService: typeof messageStateService;
   ratchetService: typeof ratchetService;
   rateLimiter: typeof rateLimiter;
   runScriptService: typeof RunScriptService;
+  runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
   serverInstanceService: typeof serverInstanceService;
   sessionFileLogger: SessionFileLogger;
   sessionService: typeof sessionService;
+  sessionStoreService: typeof sessionStoreService;
   startupScriptService: typeof startupScriptService;
   terminalService: typeof terminalService;
   workspaceStateMachine: typeof workspaceStateMachine;
@@ -62,15 +62,15 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     findAvailablePort,
     githubCLIService,
     kanbanStateService,
-    messageQueueService,
-    messageStateService,
     ratchetService,
     rateLimiter,
     runScriptService: RunScriptService,
+    runScriptStateMachine,
     schedulerService,
     serverInstanceService,
     sessionFileLogger,
     sessionService,
+    sessionStoreService,
     startupScriptService,
     terminalService,
     workspaceStateMachine,
