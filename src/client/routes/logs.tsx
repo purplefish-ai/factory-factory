@@ -356,14 +356,14 @@ export default function LogsPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {data?.entries.map((entry) => {
-                // Use content-based ID that's stable across refetches
-                const rowId = `${entry.timestamp}-${entry.level}-${entry.message.slice(0, 50)}`;
+              {data?.entries.map((entry, i) => {
+                // Content-based prefix for stability across refetches, with index suffix for uniqueness
+                const rowId = `${entry.timestamp}-${entry.level}-${entry.component}-${i}`;
                 const isExpanded = expandedRows.has(rowId);
-                // Reconstruct full log entry for JSON display
                 const fullEntry = {
                   level: entry.level,
                   timestamp: entry.timestamp,
+                  component: entry.component,
                   message: entry.message,
                   context: entry.context,
                 };
