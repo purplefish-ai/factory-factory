@@ -9,7 +9,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -356,8 +356,9 @@ export default function LogsPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {data?.entries.map((entry, i) => {
-                const rowId = `${entry.timestamp}-${i}`;
+              {data?.entries.map((entry) => {
+                // Use content-based ID that's stable across refetches
+                const rowId = `${entry.timestamp}-${entry.level}-${entry.message.slice(0, 50)}`;
                 const isExpanded = expandedRows.has(rowId);
                 // Reconstruct full log entry for JSON display
                 const fullEntry = {
@@ -367,9 +368,8 @@ export default function LogsPage() {
                   context: entry.context,
                 };
                 return (
-                  <>
+                  <Fragment key={rowId}>
                     <TableRow
-                      key={rowId}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => toggleRow(rowId)}
                     >
@@ -392,7 +392,7 @@ export default function LogsPage() {
                       </TableCell>
                     </TableRow>
                     {isExpanded && (
-                      <TableRow key={`${rowId}-expanded`}>
+                      <TableRow>
                         <TableCell colSpan={4} className="bg-muted/30 p-4">
                           <div className="space-y-2">
                             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -405,7 +405,7 @@ export default function LogsPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>
