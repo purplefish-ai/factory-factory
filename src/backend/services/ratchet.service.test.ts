@@ -41,8 +41,8 @@ vi.mock('./session.service', () => ({
   },
 }));
 
-vi.mock('./session-store.service', () => ({
-  sessionStoreService: {
+vi.mock('../domains/session/session-domain.service', () => ({
+  sessionDomainService: {
     injectCommittedUserMessage: vi.fn(),
   },
 }));

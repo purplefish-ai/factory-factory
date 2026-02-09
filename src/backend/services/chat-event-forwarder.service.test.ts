@@ -17,8 +17,8 @@ const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
 const mockSetCachedCommands = vi.fn();
 
-vi.mock('./session-store.service', () => ({
-  sessionStoreService: {
+vi.mock('../domains/session/session-domain.service', () => ({
+  sessionDomainService: {
     appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
     emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
     setPendingInteractiveRequest: (...args: unknown[]) => mockSetPendingInteractiveRequest(...args),
