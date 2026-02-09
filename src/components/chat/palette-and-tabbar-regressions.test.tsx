@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
 
+// Mock Prisma client to avoid node: module imports in jsdom - must be before imports
+import { vi } from 'vitest';
+
+vi.mock('@prisma-gen/client', () => ({
+  SessionStatus: {
+    IDLE: 'IDLE',
+    RUNNING: 'RUNNING',
+    ERROR: 'ERROR',
+    STOPPED: 'STOPPED',
+  },
+}));
+
 import { SessionStatus } from '@prisma-gen/client';
 import { createElement, createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { CommandInfo } from '@/lib/claude-types';
 import { type SessionData, SessionTabBar } from './session-tab-bar';
 import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
@@ -127,8 +139,8 @@ describe('session-tab-bar regression coverage', () => {
           createElement(SessionTabBar, {
             sessions: [
               makeSession('s1', '2026-01-01T00:00:00Z'),
-              makeSession('s2', '2026-01-01T00:01:00Z'),
-              makeSession('s3', '2026-01-01T00:02:00Z'),
+              makeSession('s2', '2026-01-01T00:02:00Z'),
+              makeSession('s3', '2026-01-01T00:03:00Z'),
             ],
             currentSessionId: 's1',
             onSelectSession,
