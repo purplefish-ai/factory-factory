@@ -169,7 +169,7 @@ export function TerminalInstance({
     // biome-ignore lint/a11y/useSemanticElements: terminal requires custom element for xterm.js
     <div
       ref={containerRef}
-      className={className}
+      className={`${className} text-left`}
       onClick={handleClick}
       onKeyDown={handleClick}
       role="textbox"
