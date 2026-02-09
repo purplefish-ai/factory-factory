@@ -18,14 +18,21 @@ export interface MigrationOptions {
   log?: (msg: string) => void;
 }
 
+function writeStdout(message: string): void {
+  process.stdout.write(`${message}\n`);
+}
+
+function writeStderr(message: string): void {
+  process.stderr.write(`${message}\n`);
+}
+
 /**
  * Run database migrations.
  * @param options - Migration configuration
  * @throws Error if migrations fail
  */
 export function runMigrations(options: MigrationOptions): void {
-  // biome-ignore lint/suspicious/noConsole: CLI tool uses console as default logger
-  const { databasePath, migrationsPath, log = console.log } = options;
+  const { databasePath, migrationsPath, log = writeStdout } = options;
 
   log(`[migrate] Database: ${databasePath}`);
   log(`[migrate] Migrations: ${migrationsPath}`);
@@ -124,22 +131,20 @@ if (isMainModule) {
   const migrationsPath = process.env.MIGRATIONS_PATH;
 
   if (!databasePath) {
-    // biome-ignore lint/suspicious/noConsole: CLI entry point
-    console.error('DATABASE_PATH environment variable is required');
+    writeStderr('DATABASE_PATH environment variable is required');
     process.exit(1);
   }
 
   if (!migrationsPath) {
-    // biome-ignore lint/suspicious/noConsole: CLI entry point
-    console.error('MIGRATIONS_PATH environment variable is required');
+    writeStderr('MIGRATIONS_PATH environment variable is required');
     process.exit(1);
   }
 
   try {
     runMigrations({ databasePath, migrationsPath });
   } catch (error) {
-    // biome-ignore lint/suspicious/noConsole: CLI entry point
-    console.error('Migration failed:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    writeStderr(`Migration failed: ${message}`);
     process.exit(1);
   }
 }

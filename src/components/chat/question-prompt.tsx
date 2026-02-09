@@ -128,7 +128,7 @@ function SingleQuestionLayout({
     <PromptCard
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
-      aria-label="Question from Claude"
+      label="Question from Claude"
       actions={
         <div className="self-end">
           <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
@@ -186,7 +186,7 @@ function MultiQuestionLayout({
     <PromptCard
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
-      aria-label="Questions from Claude"
+      label="Questions from Claude"
       actions={
         <div className="self-end flex items-center gap-1">
           <Button
@@ -255,30 +255,29 @@ function MultiQuestionLayout({
         </div>
       </div>
 
-      {/* biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by totalQuestions */}
-      {currentQuestion!.multiSelect ? (
-        <MultiSelectQuestion
-          // biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by totalQuestions
-          question={currentQuestion!}
-          index={currentIndex}
-          value={answers[currentIndex] ?? []}
-          onChange={(value) => onAnswerChange(currentIndex, value)}
-          otherText={otherTexts[currentIndex] ?? ''}
-          onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
-          requestId={requestId}
-        />
-      ) : (
-        <SingleSelectQuestion
-          // biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by totalQuestions
-          question={currentQuestion!}
-          index={currentIndex}
-          value={answers[currentIndex] ?? ''}
-          onChange={(value) => onAnswerChange(currentIndex, value)}
-          otherText={otherTexts[currentIndex] ?? ''}
-          onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
-          requestId={requestId}
-        />
-      )}
+      {currentQuestion ? (
+        currentQuestion.multiSelect ? (
+          <MultiSelectQuestion
+            question={currentQuestion}
+            index={currentIndex}
+            value={answers[currentIndex] ?? []}
+            onChange={(value) => onAnswerChange(currentIndex, value)}
+            otherText={otherTexts[currentIndex] ?? ''}
+            onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
+            requestId={requestId}
+          />
+        ) : (
+          <SingleSelectQuestion
+            question={currentQuestion}
+            index={currentIndex}
+            value={answers[currentIndex] ?? ''}
+            onChange={(value) => onAnswerChange(currentIndex, value)}
+            otherText={otherTexts[currentIndex] ?? ''}
+            onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
+            requestId={requestId}
+          />
+        )
+      ) : null}
     </PromptCard>
   );
 }
@@ -585,8 +584,10 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     if (!question) {
       return false;
     }
-    // biome-ignore lint/style/noNonNullAssertion: currentIndex bounded by questions.length
-    const q = question.questions[currentIndex]!;
+    const q = question.questions[currentIndex];
+    if (!q) {
+      return false;
+    }
     return isAnswerComplete(q, answers[currentIndex], otherTexts[currentIndex] ?? '');
   })();
 
@@ -598,11 +599,14 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   const requestId = currentRequestId ?? 'unknown';
 
   if (totalQuestions === 1) {
+    const singleQuestion = question.questions[0];
+    if (!singleQuestion) {
+      return null;
+    }
     return (
       <div ref={containerRef}>
         <SingleQuestionLayout
-          // biome-ignore lint/style/noNonNullAssertion: totalQuestions === 1 checked above
-          question={question.questions[0]!}
+          question={singleQuestion}
           requestId={requestId}
           answers={answers}
           otherTexts={otherTexts}

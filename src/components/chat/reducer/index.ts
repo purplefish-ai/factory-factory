@@ -331,12 +331,11 @@ function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
   return { type: 'HOOK_RESPONSE', payload: { hookId: hookRespData.hookId } };
 }
 
-function handlePermissionCancelledMessage(data: WebSocketMessage): ChatAction {
+function handlePermissionCancelledMessage(data: WebSocketMessage): ChatAction | null {
   if (!data.requestId) {
-    // biome-ignore lint/suspicious/noConsole: Error logging for debugging malformed WebSocket messages
-    console.error('[Chat Reducer] Received permission_cancelled without requestId', data);
+    return null;
   }
-  return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId ?? '' } };
+  return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId } };
 }
 
 function handleMessageUsedAsResponseMessage(data: WebSocketMessage): ChatAction | null {

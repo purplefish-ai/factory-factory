@@ -65,8 +65,13 @@ export function validateAttachment(attachment: MessageAttachment): void {
  */
 export function sanitizeAttachmentName(name: string): string {
   // Remove control characters (ASCII 0-31 and 127) and limit length
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matching control chars to remove them
-  return name.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 255);
+  const sanitized = Array.from(name)
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join('');
+  return sanitized.slice(0, 255);
 }
 
 // ============================================================================

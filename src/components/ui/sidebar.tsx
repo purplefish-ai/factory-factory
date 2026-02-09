@@ -24,6 +24,21 @@ const SIDEBAR_WIDTH_MOBILE = '18rem';
 const SIDEBAR_WIDTH_ICON = '3rem';
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
 
+function getPersistedSidebarState(): boolean | null {
+  try {
+    const savedState = localStorage.getItem(SIDEBAR_COOKIE_NAME);
+    if (savedState === 'true') {
+      return true;
+    }
+    if (savedState === 'false') {
+      return false;
+    }
+  } catch {
+    // Ignore storage access issues and fall back to default state.
+  }
+  return null;
+}
+
 type SidebarContextProps = {
   state: 'expanded' | 'collapsed';
   open: boolean;
@@ -70,7 +85,7 @@ const SidebarProvider = React.forwardRef<
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
-    const [_open, _setOpen] = React.useState(defaultOpen);
+    const [_open, _setOpen] = React.useState(() => getPersistedSidebarState() ?? defaultOpen);
     const open = openProp ?? _open;
     const setOpen = React.useCallback(
       (value: boolean | ((value: boolean) => boolean)) => {
@@ -81,9 +96,20 @@ const SidebarProvider = React.forwardRef<
           _setOpen(openState);
         }
 
-        // This sets the cookie to keep the sidebar state.
-        // biome-ignore lint/suspicious/noDocumentCookie: Required for sidebar persistence
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+        // Persist sidebar state for server-rendered reads where available.
+        if (globalThis.cookieStore) {
+          void globalThis.cookieStore.set({
+            name: SIDEBAR_COOKIE_NAME,
+            value: String(openState),
+            path: '/',
+            expires: Date.now() + SIDEBAR_COOKIE_MAX_AGE * 1000,
+          });
+        }
+        try {
+          localStorage.setItem(SIDEBAR_COOKIE_NAME, String(openState));
+        } catch {
+          // Ignore storage access issues.
+        }
       },
       [setOpenProp, open]
     );

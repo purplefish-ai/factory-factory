@@ -11,7 +11,6 @@ import type { DiffFile, DiffHunk, DiffLine } from './types';
  * @param diff - Unified diff string
  * @returns Array of parsed diff lines with line number tracking
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diff parsing requires checking multiple line types
 export function parseDetailedDiff(diff: string): DiffLine[] {
   const lines = diff.split('\n');
   const result: DiffLine[] = [];
@@ -71,7 +70,6 @@ export function parseDetailedDiff(diff: string): DiffLine[] {
  * @param diff - Unified diff string
  * @returns Array of parsed diff files with hunks and statistics
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diff parsing requires multiple conditions
 export function parseFileDiff(diff: string): DiffFile[] {
   const files: DiffFile[] = [];
   const lines = diff.split('\n');

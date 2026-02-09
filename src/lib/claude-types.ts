@@ -516,10 +516,12 @@ function applyToolResultToCall(
   if (callIndex === undefined) {
     return;
   }
-  // biome-ignore lint/style/noNonNullAssertion: callIndex verified via Map lookup above
-  pairedCalls[callIndex]!.status = resultInfo.isError ? 'error' : 'success';
-  // biome-ignore lint/style/noNonNullAssertion: callIndex verified via Map lookup above
-  pairedCalls[callIndex]!.result = {
+  const call = pairedCalls[callIndex];
+  if (!call) {
+    return;
+  }
+  call.status = resultInfo.isError ? 'error' : 'success';
+  call.result = {
     content: resultInfo.content,
     isError: resultInfo.isError,
   };
@@ -563,14 +565,17 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
     if (currentToolSequence.length === 0) {
       return;
     }
+    const firstToolMessage = currentToolSequence[0];
+    if (!firstToolMessage) {
+      return;
+    }
 
     const pairedCalls = extractPairedToolCalls(currentToolSequence);
 
     // Always create a sequence, even for single tools (so they're paired with results)
     const sequence: ToolSequence = {
       type: 'tool_sequence',
-      // biome-ignore lint/style/noNonNullAssertion: length checked above via early return
-      id: `tool-seq-${currentToolSequence[0]!.id}`,
+      id: `tool-seq-${firstToolMessage.id}`,
       pairedCalls,
     };
     result.push(sequence);

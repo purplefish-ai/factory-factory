@@ -159,6 +159,33 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "src/backend/services/run-script.service.ts",
+        "src/components/agent-activity/tool-renderers/tool-info-renderer.tsx",
+        "src/components/chat/chat-input/hooks/use-chat-input-actions.ts",
+        "src/components/chat/virtualized-message-list.tsx",
+        "src/frontend/components/pr-detail-panel.tsx",
+        "src/lib/diff/parse.ts",
+        "src/shared/claude/protocol.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["prisma/generated/**"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
     }
   ]
 }

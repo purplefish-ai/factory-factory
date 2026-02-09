@@ -70,13 +70,9 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
-  return (
-    <style
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: Required for dynamic CSS variable injection
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
+  const cssText = Object.entries(THEMES)
+    .map(
+      ([theme, prefix]) => `
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
@@ -86,11 +82,10 @@ ${colorConfig
   .join('\n')}
 }
 `
-          )
-          .join('\n'),
-      }}
-    />
-  );
+    )
+    .join('\n');
+
+  return <style>{cssText}</style>;
 };
 
 const ChartTooltip = RechartsPrimitive.Tooltip;

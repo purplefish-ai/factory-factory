@@ -278,11 +278,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
             port: actualPort,
             environment: configService.getEnvironment(),
           });
-
-          // Output port to stdout for CLI to parse (machine-readable format)
-          // This must be on its own line starting with BACKEND_PORT: for the CLI to detect
-          // biome-ignore lint/suspicious/noConsole: Required for CLI to detect actual backend port
-          console.log(`BACKEND_PORT:${actualPort}`);
+          process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
 
           try {
             await reconciliationService.cleanupOrphans();

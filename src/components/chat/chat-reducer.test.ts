@@ -1903,6 +1903,32 @@ describe('chatReducer', () => {
       expect(newState.messages[0]!.id).toBe('msg-0'); // order: 0
       expect(newState.messages[1]!.id).toBe('msg-1'); // order: 1
     });
+
+    it('should still apply ACCEPTED transition when first pending UUID is empty', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingUserMessageUuids: [''],
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-empty-uuid',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Message should still be accepted',
+            timestamp: '2024-01-01T12:00:00.000Z',
+            order: 1,
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.messages.some((message) => message.id === 'msg-empty-uuid')).toBe(true);
+      expect(newState.queuedMessages.has('msg-empty-uuid')).toBe(true);
+      expect(newState.pendingUserMessageUuids).toEqual([]);
+      expect(newState.messageIdToUuid.has('msg-empty-uuid')).toBe(false);
+    });
   });
 });
 
