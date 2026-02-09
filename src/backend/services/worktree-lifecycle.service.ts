@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { MessageState } from '@/shared/claude';
+import { MessageState, resolveSelectedModel } from '@/shared/claude';
 import { resumeModesSchema } from '@/shared/schemas/persisted-stores.schema';
 import { pathExists } from '../lib/file-helpers';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
@@ -569,7 +569,10 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
           userMessage: {
             text: queued.text,
             timestamp: queued.timestamp,
-            settings: queued.settings,
+            settings: {
+              ...queued.settings,
+              selectedModel: resolveSelectedModel(queued.settings.selectedModel),
+            },
           },
         });
         await chatMessageHandlerService.tryDispatchNextMessage(session.id);

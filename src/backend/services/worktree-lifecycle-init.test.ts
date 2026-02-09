@@ -2,6 +2,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolveSelectedModel } from '@/shared/claude';
 import { worktreeLifecycleService } from './worktree-lifecycle.service';
 
 const mocks = vi.hoisted(() => ({
@@ -13,11 +14,15 @@ const mocks = vi.hoisted(() => ({
   createWorktree: vi.fn(),
   createWorktreeFromExistingBranch: vi.fn(),
   getAuthenticatedUsername: vi.fn(),
+  getIssue: vi.fn(),
   readConfig: vi.fn(),
   runStartupScript: vi.fn(),
   hasStartupScript: vi.fn(),
   startClaudeSession: vi.fn(),
   stopWorkspaceSessions: vi.fn(),
+  enqueue: vi.fn(),
+  emitDelta: vi.fn(),
+  tryDispatchNextMessage: vi.fn(),
   startProvisioning: vi.fn(),
   markReady: vi.fn(),
   markFailed: vi.fn(),
@@ -48,6 +53,7 @@ vi.mock('./git-ops.service', () => ({
 vi.mock('./github-cli.service', () => ({
   githubCLIService: {
     getAuthenticatedUsername: mocks.getAuthenticatedUsername,
+    getIssue: mocks.getIssue,
   },
 }));
 
@@ -68,6 +74,19 @@ vi.mock('./session.service', () => ({
   sessionService: {
     startClaudeSession: mocks.startClaudeSession,
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
+  },
+}));
+
+vi.mock('@/backend/domains/session/session-domain.service', () => ({
+  sessionDomainService: {
+    enqueue: mocks.enqueue,
+    emitDelta: mocks.emitDelta,
+  },
+}));
+
+vi.mock('./chat-message-handlers.service', () => ({
+  chatMessageHandlerService: {
+    tryDispatchNextMessage: mocks.tryDispatchNextMessage,
   },
 }));
 
@@ -115,6 +134,7 @@ describe('worktreeLifecycleService initialization', () => {
       branchName: 'feature-1',
     });
     mocks.getAuthenticatedUsername.mockResolvedValue(null);
+    mocks.getIssue.mockResolvedValue(null);
     mocks.updateWorkspace.mockResolvedValue(undefined);
     mocks.hasStartupScript.mockReturnValue(false);
     mocks.readConfig.mockResolvedValue({
@@ -126,6 +146,8 @@ describe('worktreeLifecycleService initialization', () => {
     });
     mocks.startClaudeSession.mockResolvedValue(undefined);
     mocks.stopWorkspaceSessions.mockResolvedValue(undefined);
+    mocks.enqueue.mockReturnValue({ position: 0 });
+    mocks.tryDispatchNextMessage.mockResolvedValue(undefined);
   });
 
   it('starts the default Claude session after startup script completes', async () => {
@@ -151,6 +173,63 @@ describe('worktreeLifecycleService initialization', () => {
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
       initialPrompt: '',
     });
+  });
+
+  it('emits accepted delta with resolved selectedModel for auto-issue prompt', async () => {
+    mocks.runStartupScript.mockResolvedValue({
+      success: true,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+      durationMs: 10,
+    });
+    mocks.findByIdWithProject.mockResolvedValue({
+      id: 'workspace-1',
+      name: 'Workspace 1',
+      description: null,
+      projectId: 'project-1',
+      worktreePath: '/worktrees/workspace-1',
+      branchName: 'feature-1',
+      githubIssueNumber: 123,
+      project: {
+        id: 'project-1',
+        repoPath: '/repo',
+        worktreeBasePath: path.join(os.tmpdir(), 'ff-worktrees'),
+        defaultBranch: 'main',
+        githubOwner: 'owner',
+        githubRepo: 'repo',
+        startupScriptCommand: null,
+        startupScriptPath: null,
+        startupScriptTimeout: 300,
+      },
+    });
+    mocks.getIssue.mockResolvedValue({
+      number: 123,
+      title: 'Issue title',
+      body: 'Issue body',
+      url: 'https://github.com/owner/repo/issues/123',
+    });
+    mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
+    mocks.enqueue.mockReturnValue({ position: 0 });
+
+    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+      branchName: 'main',
+      useExistingBranch: false,
+    });
+
+    expect(mocks.emitDelta).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'message_state_changed',
+        newState: 'ACCEPTED',
+        userMessage: expect.objectContaining({
+          settings: expect.objectContaining({
+            selectedModel: resolveSelectedModel(null),
+          }),
+        }),
+      })
+    );
   });
 
   it('skips auto-start when no idle Claude session exists', async () => {
