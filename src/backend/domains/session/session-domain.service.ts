@@ -82,6 +82,22 @@ class SessionDomainService {
       includeParitySnapshot: true,
     });
 
+    // After hydration and replay, emit a delta to ensure the client transitions
+    // out of 'loading' phase. If still in 'loading' after hydration (brand new session),
+    // transition to 'idle'. Otherwise, emit the current runtime state.
+    if (store.runtime.phase === 'loading') {
+      this.runtimeMachine.markRuntime(store, {
+        phase: 'idle',
+        processState: store.runtime.processState,
+        activity: store.runtime.activity,
+      });
+    } else {
+      this.publisher.emitDelta(sessionId, {
+        type: 'session_runtime_updated',
+        sessionRuntime: store.runtime,
+      });
+    }
+
     logger.info('Session subscribed', {
       sessionId,
       sessionRuntime,
