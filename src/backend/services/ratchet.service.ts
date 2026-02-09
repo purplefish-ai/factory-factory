@@ -185,6 +185,29 @@ class RatchetService {
       };
     }
 
+    // Skip GitHub API calls for disabled workspaces — just settle to IDLE
+    if (!workspace.ratchetEnabled) {
+      const action: RatchetAction = { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
+      const newState = RatchetState.IDLE;
+      await workspaceAccessor.update(workspace.id, {
+        ratchetState: newState,
+        ratchetLastCheckedAt: new Date(),
+      });
+      this.logWorkspaceRatchetingDecision(
+        workspace,
+        workspace.ratchetState,
+        newState,
+        action,
+        null
+      );
+      return {
+        workspaceId: workspace.id,
+        previousState: workspace.ratchetState,
+        newState,
+        action,
+      };
+    }
+
     try {
       const authenticatedUsername = await this.getAuthenticatedUsernameCached();
       const prStateInfo = await this.fetchPRState(workspace, authenticatedUsername);

@@ -4,323 +4,270 @@
 
 ## Tech Debt
 
-**Type Safety: 250+ instances of `any` types**
-- Issue: 116 instances of `@ts-ignore` or type circumvention (casting with `as any`, `as unknown`) scattered across the codebase
-- Files: `src/backend/claude/process.ts`, `src/backend/claude/permissions.ts`, `src/backend/claude/protocol.ts`, `src/backend/resource_accessors/`, `src/backend/services/`
-- Impact: Silent type errors possible, harder to refactor safely, potential runtime bugs
-- Fix approach: Gradual elimination - prioritize high-risk areas (database access, event handlers), use proper type definitions instead of castings, enable stricter tsconfig flags
+**File-Lock Service: Single-Process Limitation**
+- Issue: The advisory file locking system is in-memory only and not shared across multiple Node.js processes. File persistence helps on restart but provides no cross-process synchronization during runtime.
+- Files: `src/backend/services/file-lock.service.ts` (lines 12-16)
+- Impact: In clustered or multi-process deployments, multiple processes can acquire the same lock simultaneously, leading to race conditions and file trampling
+- Fix approach: Implement file-based exclusive locking using flock() or atomic file operations, or introduce a centralized lock server for distributed scenarios
 
-**Large Monolithic Services**
-- Issue: Multiple services exceed 900+ lines of code, making them difficult to test and maintain
-- Files:
-  - `src/backend/services/session-store.service.ts` (938 lines) - manages session state, hydration, replay events
-  - `src/backend/services/chat-event-forwarder.service.ts` (983 lines) - event routing and interactive request handling
-  - `src/backend/services/ratchet.service.ts` (959 lines) - PR state management and auto-fix dispatch
-  - `src/backend/services/session.service.ts` - client lifecycle management
-  - `src/backend/services/github-cli.service.ts` (1073 lines) - GitHub CLI wrapper with multiple schemas
-- Impact: Cognitive load high, changes require understanding entire module, test coverage fragmented
-- Fix approach: Extract focused concerns into separate services (e.g., SessionHydration, ReplayBuilder, PRStateValidator), use composition pattern, document responsibility boundaries
+**Resume Modes Serialization: Race Condition on File Write**
+- Issue: `writeResumeModes()` writes JSON directly without atomic operations. Concurrent calls to `updateResumeModes()` on the same worktree can cause data loss if writes overlap.
+- Files: `src/backend/services/worktree-lifecycle.service.ts` (lines 78-98)
+- Impact: Resume mode state can be lost during concurrent workspace initializations, preventing correct branch selection on resume
+- Fix approach: Implement atomic file writes using temporary file + rename pattern, or add file-level locking around the entire read-modify-write cycle
 
-**Magic Numbers and Constants Scattered**
-- Issue: Hard-coded values throughout codebase instead of centralized constants
-- Examples: MAX_QUEUE_SIZE=100 (`session-store.service.ts`), RATCHET_POLL_INTERVAL_MS=60_000, SPAWN_TIMEOUT=30_000, MAX_FILE_SIZE=1MB
-- Files: `src/backend/services/`, `src/backend/lib/`, `src/backend/claude/`
-- Impact: Difficult to tune performance, inconsistent naming, hard to find where values are used
-- Fix approach: Create `constants.ts` files per domain, centralize thresholds and timeouts, document why each value was chosen
+**Session Store Hydration Logic Complexity**
+- Issue: Complex hydration generation tracking with potential race conditions. `hydrateGeneration` field and multiple concurrent hydration guards could miss state updates.
+- Files: `src/backend/services/session-store.service.ts` (lines 31-46, 114-136)
+- Impact: Session state may not properly hydrate from database during rapid state changes, causing message loss or duplicate processing
+- Fix approach: Simplify by using a single mutual-exclusion pattern (e.g., async lock) rather than generation numbers. Consider queue-based hydration instead of concurrent attempts.
 
-**Console Logging (81 instances)**
-- Issue: 81 instances of `console.*` calls bypass proper logging infrastructure
-- Files: scattered across `src/` backend and components
-- Impact: No log levels, no formatting, cannot be controlled or filtered in production
-- Fix approach: Replace all with `createLogger()` service, define minimum log levels per module
+**Chat WebSocket Event Forwarding: Potential Event Loss**
+- Issue: Event listeners are registered during client setup but cleanup happens on client exit. If listeners fail to register or client crashes before exit handler, events may be silently dropped.
+- Files: `src/backend/services/chat-event-forwarder.service.ts` (lines 180-225, 500-504)
+- Impact: User won't see tool outputs or Claude responses if the event forwarding listener crashes without notification
+- Fix approach: Add try-catch around each listener registration with explicit error logging. Implement health check for listener attachment and re-attach on failure.
 
-## Concurrency & Race Conditions
+**GitHub CLI Service: 10MB Diff Buffer Fixed Limit**
+- Issue: `GH_MAX_BUFFER_BYTES.diff` is hardcoded to 10MB. Large diffs in monorepos or complex PRs will be truncated silently.
+- Files: `src/backend/services/github-cli.service.ts` (lines 27-29)
+- Impact: PR diffs larger than 10MB are silently truncated, causing incomplete code review and incorrect PR analysis
+- Fix approach: Stream large diffs instead of buffering, or increase limit with degradation warnings. Implement chunked processing for very large diffs.
 
-**File-Based Advisory Locks: Single-Process Only**
-- Issue: `src/backend/services/file-lock.service.ts` maintains in-memory lock state that is not shared across multiple Node.js processes
-- Files: `src/backend/services/file-lock.service.ts` (lines 11-16), used by `src/backend/routers/mcp/lock.mcp.ts`
-- Impact: In a multi-process deployment (clustering, load balancing), lock coordination fails; multiple processes could simultaneously modify the same files; file persistence helps on restart but not during runtime
-- Current mitigation: TTL-based expiration (30 minutes) and file-based persistence provide partial recovery
-- Recommendations: Document single-process constraint clearly; if clustering required, migrate to distributed lock (Redis, database-based); add startup warning if cluster mode detected
+**Service Loop Shutdown Timing**
+- Issue: Multiple services (`SchedulerService`, `RatchetService`) use `isShuttingDown` flag but may still be executing operations during shutdown window.
+- Files: `src/backend/services/scheduler.service.ts` (lines 57-71), `src/backend/services/ratchet.service.ts` (lines 106-116)
+- Impact: Operations may be dropped or partially executed during server shutdown, leading to incomplete ratchet dispatches or missed PR syncs
+- Fix approach: Add graceful shutdown window where new operations are rejected but in-flight operations complete. Use Promise.allSettled() to ensure cleanup of all pending work.
 
-**Ratchet State Progression Race**
-- Issue: `src/backend/services/ratchet.service.ts` polls workspace PR state and dispatches fixer sessions, but state transitions between polling intervals can race (e.g., CI finishes, then review posted before ratchet checks)
-- Files: `src/backend/services/ratchet.service.ts` (lines 97-178 - start/check loop)
-- Impact: May dispatch redundant fixer sessions, or miss important state transitions; snapshot key logic attempts to mitigate but not foolproof
-- Current approach: Tracks `prCiLastNotifiedAt`, `prReviewLastCheckedAt`, `ratchetLastCiRunId` to detect changes
-- Recommendations: Add transaction-like semantics around PR state fetch + dispatch decision; consider event-driven updates instead of polling; document race windows clearly
+**Session Store: Message Ordering Dependencies**
+- Issue: `nextOrder` counter increments without atomicity guarantee. Multiple concurrent message enqueues could produce duplicate order values.
+- Files: `src/backend/services/session-store.service.ts` (lines 44, 400-450)
+- Impact: Messages may be processed out of order or cause UI rendering issues when order values collide
+- Fix approach: Use a Mutex/lock around all order allocation, or switch to UUID-based ordering with client-side sorting
 
-**Session Hydration State Machine**
-- Issue: `src/backend/services/session-store.service.ts` (lines 540-600) manages hydration with generation tracking, but concurrent subscribe/unsubscribe patterns could miss state transitions
-- Files: `src/backend/services/session-store.service.ts` (ensureHydrated method)
-- Impact: Stale transcript could be served if rehydration timing aligns with replay emission
-- Current approach: Tracks `hydratingKey`, `hydratedKey`, `hydrateGeneration` with promise-based synchronization
-- Recommendations: Ensure lock-free guarantees; add explicit testing for concurrent hydration scenarios; consider mutex-like semantics
+---
 
-**ClaudeProcess Lifecycle Management**
-- Issue: `src/backend/claude/process.ts` spawns and monitors Claude CLI process with signal handling and cleanup, but rapid stop/start could leak processes
-- Files: `src/backend/claude/process.ts` (lines 97-160), `src/backend/services/session.process-manager.ts`
-- Impact: Orphaned Claude processes consuming resources, potential file descriptor leaks, race between `isStopInProgress` checks and actual stop
-- Current approach: Uses `isStopInProgress` flag and process registration
-- Recommendations: Add strict lifecycle state machine (IDLE → SPAWNING → RUNNING → STOPPING → STOPPED); use atomic operations for transitions; add forced timeout for cleanup
+## Known Bugs
+
+**Resume Mode Validation Silently Fails**
+- Symptoms: Resume mode preference set by user is ignored on workspace reload. User expects to continue with existing branch but starts fresh branch instead.
+- Files: `src/backend/services/worktree-lifecycle.service.ts` (lines 49-76)
+- Trigger: Call `readResumeModes()` when `.ff-resume-modes.json` contains invalid JSON or unexpected structure
+- Workaround: Delete `.ff-resume-modes.json` and restart workspace. Validation falls back to empty object without user feedback.
+
+**Chat WebSocket Connection Leak on Client Exit Without Unregister**
+- Symptoms: WebSocket connection remains active consuming memory/CPU after Claude process crashes before cleanup code runs
+- Files: `src/backend/services/chat-event-forwarder.service.ts` (lines 500-504), `src/backend/routers/websocket/chat.handler.ts` (lines 240-270)
+- Trigger: Claude CLI process killed by OOM or signal before `exit` event handler executes
+- Workaround: Monitor WebSocket connection count in production. Manually close connections via admin API if leaked connections accumulate.
+
+**Ratchet State Machine: Missing IDLE Check Before Dispatch**
+- Symptoms: Ratchet may dispatch fix session while another fix session is already running, creating duplicate fixes
+- Files: `src/backend/services/ratchet.service.ts` (lines 200-250)
+- Trigger: Two ratchet checks fire before first fixer session updates `ratchetActiveSessionId` in database
+- Workaround: Ratchet service includes concurrency limiting, but race window exists. Monitor PR activity for duplicate fix sessions.
+
+---
 
 ## Security Considerations
 
-**Shell Command Escaping Trust Boundary**
-- Issue: `src/backend/lib/shell.ts` implements `escapeShellArg()` for safe command construction, but many call sites don't consistently use it
-- Files: `src/backend/lib/shell.ts`, `src/backend/lib/shell.ts` (lines 40-66), usage in git operations, terminal commands
-- Risk: Command injection if untrusted input (branch names, file paths, session names) bypasses escaping
-- Current validation: Branch name validation (`isValidBranchName`), session name validation (`isValidSessionName`)
-- Recommendations:
-  - Audit all shell.ts usage sites - ensure untrusted inputs always go through validation functions
-  - Add TSLint rule to prevent direct use of `execFile` outside of `shell.ts`
-  - Document which inputs are untrusted (workspace names from GitHub API, user file paths, etc.)
+**GitHub CLI Auth Token Management**
+- Risk: `gh auth` stores tokens in `~/.config/gh/hosts.yml`. If process crashes or is killed, tokens remain on disk indefinitely.
+- Files: `src/backend/services/github-cli.service.ts` (lines 1-100)
+- Current mitigation: Tokens are managed by GitHub CLI, not by application code. User is responsible for token rotation.
+- Recommendations: Document token rotation policy. Consider using fine-grained PATs with time limits. Add monitoring for token age/usage in logs.
 
-**GitHub CLI Integration with Shell Execution**
-- Issue: `src/backend/services/github-cli.service.ts` (1073 lines) wraps `gh` CLI with JSON response parsing, but depends on local gh auth
-- Files: `src/backend/services/github-cli.service.ts` (lines 1-50, schema definitions)
-- Risk: If `gh` binary is missing or auth is stale, API calls fail silently or with unclear errors
-- Current approach: Uses Zod schema validation on gh JSON output
-- Recommendations:
-  - Add pre-flight check for gh binary availability and auth status
-  - Implement gh auth refresh logic
-  - Document gh CLI version requirements
-  - Provide clear error messages when gh is misconfigured
+**Subprocess Command Injection Risk in Shell Execution**
+- Risk: If workspace paths or file names are passed to shell commands without proper escaping, attacker-controlled paths could execute arbitrary code
+- Files: `src/backend/lib/shell.ts`, `src/backend/claude/process.ts` (lines 134-200)
+- Current mitigation: Arguments are passed as array to `spawn()` (not through shell), preventing injection
+- Recommendations: Maintain strict use of `spawn()` with array arguments. Add linting rule to prevent shell string concatenation. Add path validation for user-controlled workspace names.
 
-**Configuration via Environment Variables**
-- Issue: Database path controlled by `DATABASE_PATH` or `BASE_DIR` env var, no encryption for `.env` file
-- Files: `src/backend/services/config.service.ts`, `.env` file (not committed)
-- Risk: Database file path exposure, SQLite file not encrypted at rest
-- Current approach: Default to `~/factory-factory/data.db`
-- Recommendations:
-  - Document that `.env` should never be committed
-  - Consider requiring encryption for prod deployments (SQLCipher)
-  - Document what secrets go in .env (if any)
+**Database File Permissions on Multi-User Systems**
+- Risk: SQLite database file at `~/factory-factory/data.db` has default permissions. On shared systems, other users could read/modify data.
+- Files: `src/backend/db.ts` (lines 17-30), `src/backend/lib/env.ts` (database path logic)
+- Current mitigation: Default creates directory with mode `0o777`. Application should restrict but doesn't explicitly set permissions.
+- Recommendations: After directory creation, explicitly chmod to `0o700` (user-only). Warn in logs if directory is world-readable. Document secure multi-user setup.
 
-**Missing Input Validation on Tool Inputs**
-- Issue: `src/backend/schemas/tool-inputs.schema.ts` defines Zod schemas but parsing failures could leave invalid state
-- Files: `src/backend/schemas/tool-inputs.schema.ts`, used in `src/backend/services/chat-event-forwarder.service.ts` (safeParseToolInput)
-- Risk: Invalid tool input passed to Claude could cause unexpected behavior
-- Current approach: `safeParseToolInput` function handles parse errors
-- Recommendations: Log failed validations for monitoring, document which tool inputs are most critical
+**Sensitive Data in Session Logs**
+- Risk: Session file logs may contain user-provided prompts, file paths, or tool outputs that include secrets
+- Files: `src/backend/services/session-file-logger.service.ts`, `src/backend/services/chat-event-forwarder.service.ts` (lines 107-112)
+- Current mitigation: Logs are written to filesystem under workspace directory. No explicit redaction of secrets.
+- Recommendations: Implement regex patterns to redact common secret formats (API keys, tokens, passwords). Add configuration for sensitive data redaction. Document log security implications.
+
+---
 
 ## Performance Bottlenecks
 
-**Session Store In-Memory Transcript with No Size Limit**
-- Problem: `src/backend/services/session-store.service.ts` keeps entire transcript in memory; no explicit limit on queue size (MAX_QUEUE_SIZE=100)
-- Files: `src/backend/services/session-store.service.ts` (lines 30-46, SessionStore interface)
-- Cause: All messages (user + Claude) accumulated without pruning; rehydration from JSONL adds to memory
-- Scale limit: Long-running sessions (>1000 messages) could consume significant heap
-- Improvement path:
-  - Implement message pruning strategy (keep last N messages in memory, rest in JSONL)
-  - Add memory usage monitoring (already in `src/backend/claude/monitoring.ts` for processes)
-  - Consider streaming large transcripts rather than full load on subscribe
-  - Profile with real workload data
+**GitHub CLI Timeout: All Requests at 30s Default**
+- Problem: All gh CLI calls use `GH_TIMEOUT_MS.default` (30s). Complex queries (diff, review details) timeout on large repos.
+- Files: `src/backend/services/github-cli.service.ts` (lines 18-25, 200-250)
+- Cause: Single-process blocking execution. Timeout of 30s is global for all operations.
+- Improvement path: Implement adaptive timeouts based on payload size (diff size = longer timeout). Use streaming for large responses. Cache repeated queries.
 
-**Ratchet Polling Interval**
-- Problem: RATCHET_POLL_INTERVAL_MS = 60_000 (1 minute) means 1-minute delay before detecting PR state changes
-- Files: `src/backend/services/ratchet.service.ts` (line 23)
-- Cause: Polling strategy instead of event-driven
-- Scale limit: With N workspaces, becomes N polling calls per minute; scales linearly with workspace count
-- Improvement path:
-  - Add GitHub webhook support for push/PR events
-  - Reduce polling interval for high-priority PRs (failing CI)
-  - Add exponential backoff for inactive PRs
-  - Implement caching to avoid redundant GitHub API calls
+**Session Store Hydration: Full History Re-serialization on Every Snapshot**
+- Problem: Every state change causes full transcript serialization for snapshot logging. With 1000+ messages, this is expensive.
+- Files: `src/backend/services/session-store.service.ts` (lines 86-112, 400-450)
+- Cause: No incremental snapshot strategy. All snapshots include full message list.
+- Improvement path: Implement delta snapshots that only log changed messages. Add compression for large transcripts. Batch snapshot writes during idle periods.
 
-**GitHub CLI Output Parsing**
-- Problem: `github-cli.service.ts` spawns `gh` CLI for each query; no batch operations or caching
-- Files: `src/backend/services/github-cli.service.ts`
-- Cause: One `execFile` call per API method; Zod schema validation on every response
-- Scale limit: With N workspaces with PRs, becomes N * polling_frequency calls to gh
-- Improvement path:
-  - Cache PR state for configured TTL (5-10 minutes)
-  - Batch workspace PR checks in single command
-  - Use gh GraphQL API directly for complex queries
-  - Add circuit breaker for gh command failures
+**Ratchet Service: Linear Workspace Scan on Every Poll**
+- Problem: `checkAllWorkspaces()` scans ALL workspaces with PRs every minute, even if most have no state change
+- Files: `src/backend/services/ratchet.service.ts` (lines 136-160)
+- Cause: No change detection before fetching PR details. Database query includes all workspaces.
+- Improvement path: Query only workspaces with recent PR activity. Use ETags from GitHub API for conditional fetches. Increase poll interval or use webhook events instead.
 
-**File Lock Persistence**
-- Problem: `src/backend/services/file-lock.service.ts` reads/writes `advisory-locks.json` file on every lock operation
-- Files: `src/backend/services/file-lock.service.ts` (lines 76-100)
-- Cause: Synchronous file I/O for lock state durability
-- Scale limit: With many concurrent lock operations, file I/O becomes bottleneck
-- Improvement path:
-  - Batch persistence writes (write every N seconds instead of per-operation)
-  - Use in-memory-only mode for non-durable workloads
-  - Migrate to database-backed locks if cross-process support needed
+**File Lock Expiration: Linear Scan on Every Operation**
+- Problem: `expireLocks()` iterates all locks in store to find expired entries. With thousands of locks, this is O(n).
+- Files: `src/backend/services/file-lock.service.ts` (lines 300-330)
+- Cause: No index on expiration time. Map iteration happens on every lock operation.
+- Improvement path: Use heap-based priority queue for expiration times. Implement background cleanup task instead of per-operation expiration.
 
-**Session Store Hydration on Every Subscribe**
-- Problem: `ensureHydrated()` in session-store.service.ts reads JSONL file from disk every subscribe
-- Files: `src/backend/services/session-store.service.ts` (lines 540-600)
-- Cause: No in-memory cache of hydrated sessions; generational checking adds complexity
-- Scale limit: Repeated subscribes to same session cause redundant disk reads
-- Improvement path:
-  - Cache hydrated sessions in memory with TTL
-  - Lazy hydration (defer until first message request)
-  - Pre-warm cache on session creation
+---
 
 ## Fragile Areas
 
-**Chat Event Forwarder: Interdependent Event Routing**
-- Files: `src/backend/services/chat-event-forwarder.service.ts` (983 lines)
-- Why fragile:
-  - Routes events from ClaudeClient → WebSocket → React UI state
-  - Multiple message types (user, claude, streaming, interactive) with overlapping handlers
-  - Pending interactive requests (AskUserQuestion, permissions) stored in-memory
-  - State recovery from JSONL requires exact message order and type matching
-- Safe modification:
-  - Add comprehensive logging before changing event flow
-  - Test with recorded session replays
-  - Document state transition diagram
-- Test coverage gaps:
-  - No tests for interrupted sessions (process crash mid-message)
-  - Limited testing of permission request lifecycle
-  - No chaos testing for WebSocket reconnections during streaming
+**Session State Machine: Lifecycle Coordination Between Multiple Services**
+- Files: `src/backend/services/session.service.ts`, `src/backend/services/chat-event-forwarder.service.ts`, `src/backend/services/chat-message-handlers.service.ts`, `src/backend/domains/session/session-domain.service.ts`
+- Why fragile: Session lifecycle involves at least 4 separate services with interdependencies. Client creation, event setup, message dispatch, and cleanup are spread across files. A missing cleanup step in one service leaks resources.
+- Safe modification: Add integration tests that start → send message → stop a session and verify all resources are cleaned up. Create a "session lifecycle checklist" document. Any change to client creation must update cleanup paths.
+- Test coverage: Gaps in error path testing. No tests for "client dies during event forwarding" or "cleanup called twice" scenarios.
 
-**Workspace State Machine Transitions**
-- Files: `src/backend/services/workspace-state-machine.service.ts`, `src/backend/services/worktree-lifecycle.service.ts` (785 lines)
-- Why fragile:
-  - Multiple async operations (git worktree creation, startup script, run script) can fail independently
-  - State transitions from NEW → PROVISIONING → READY depend on all scripts succeeding
-  - Retry logic and stale state detection (STALE_PROVISIONING_THRESHOLD_MS = 10 minutes) could conflict
-  - Resume mode tracking (`writResumeModes` function) persists to JSON, concurrent writes could corrupt
-- Safe modification:
-  - Never modify state directly; always go through state machine
-  - Test failure scenarios (network loss, script timeout, disk full)
-  - Add state transition logging
-- Test coverage gaps:
-  - No tests for resume mode file corruption recovery
-  - Limited concurrency tests for simultaneous workspace creation
-  - No tests for mid-initialization failure recovery
+**Claude Process Monitor: Resource Tracking with Process Signals**
+- Files: `src/backend/claude/process.ts`, `src/backend/claude/monitoring.ts`
+- Why fragile: Process monitoring relies on signal handling (`SIGTERM`, `SIGKILL`). On Windows or in containerized environments, signals behave differently. Resource tracking may not work as designed.
+- Safe modification: Add platform detection tests. Mock process signals in unit tests for all platforms. Verify monitoring works in Docker/container environments before deploying.
+- Test coverage: Monitoring tests likely only run on Linux. No Windows-specific testing.
 
-**Claude Protocol NDJSON Parsing**
-- Files: `src/backend/claude/protocol.ts` (718 lines), `src/backend/claude/types.ts` (991 lines)
-- Why fragile:
-  - readline.Interface processes stdin line-by-line; max line length (1MB default) prevents DoS but truncates legitimately large messages
-  - Zod validation validates structure but doesn't catch semantic errors (e.g., invalid sessionId format)
-  - PendingRequest tracking uses `unknown` for responses, relies on runtime validation (lines 45-52)
-  - Timeout handling with NodeJS.Timeout could leak if promise rejected before timeout cleared
-- Safe modification:
-  - Never bypass Zod validation for "efficiency"
-  - Test with pathological inputs (max-length lines, invalid JSON)
-  - Document protocol versioning strategy
-- Test coverage gaps:
-  - No tests for max line length truncation scenarios
-  - Limited error recovery tests (stdin closed, stdout pipe broken)
-  - No tests for timeout edge cases
+**GitHub CLI Integration: Zod Schema Parsing with Null/Empty String Handling**
+- Files: `src/backend/services/github-cli.service.ts` (lines 48-62)
+- Why fragile: `reviewDecisionSchema` uses custom preprocessing to convert empty strings to null. If GitHub API response format changes, schema breaks silently. No version detection.
+- Safe modification: Add explicit API version detection. Log when empty string preprocessing occurs. Test against historical API responses.
+- Test coverage: No tests for API response variations. Schema may drift from actual API behavior.
+
+**Workspace State Machine: Event-Driven State Transitions Without Serialization**
+- Files: `src/backend/services/workspace-state-machine.service.ts`
+- Why fragile: Multiple services emit state change events. If events fire out of order or duplicate, state becomes inconsistent.
+- Safe modification: Implement state transition validation. Add guards that reject invalid state transitions. Log all state changes with before/after snapshots.
+- Test coverage: Unit tests cover happy path. No state transition error tests.
+
+---
 
 ## Scaling Limits
 
-**In-Memory Session Store**
-- Current capacity: Depends on node heap size; no explicit limit
-- Limit: Will crash if total transcript + queue size exceeds available heap (default ~1.4GB on 64-bit Node)
-- Scaling path:
-  - Implement transcript pagination (load chunks on demand)
-  - Stream large transcripts to client instead of buffering
-  - Move cold sessions to disk cache
-  - Add memory pressure alarms
+**SQLite Database: Concurrent Write Contention**
+- Current capacity: SQLite handles ~10 concurrent writes with single WAL mode. Better WAL mode improves to ~50 concurrent writers, but still not suitable for high concurrency.
+- Limit: At scale (100+ workspaces, 10+ concurrent sessions), database write latency becomes noticeable. Lock timeouts possible.
+- Scaling path: Migrate to PostgreSQL or equivalent multi-client database for concurrent write support. Plan for data migration strategy. Consider sharding by project ID.
 
-**Claude Process Registry**
-- Current capacity: Single global map in memory (`src/backend/claude/registry.ts`)
-- Limit: No explicit limit on concurrent processes; resource monitoring has 10GB memory limit per process
-- Scaling path:
-  - Add hard limit on concurrent processes (prevent runaway spawning)
-  - Implement process prioritization (FIFO eviction or LRU)
-  - Add queuing for process spawn requests
-  - Monitor actual resource usage against limits
+**Session Store In-Memory Storage: Unbounded Growth**
+- Current capacity: All session transcript history stored in memory (`this.stores` map). With 1000 concurrent sessions × 1000 messages each = 1GB+ RAM.
+- Limit: Server memory exhaustion at ~500 concurrent sessions with typical message volumes.
+- Scaling path: Implement LRU eviction policy for old sessions. Move inactive session state to disk. Add memory usage monitoring and alert thresholds.
 
-**File Lock Storage**
-- Current capacity: In-memory Map per workspace, persisted to JSON file
-- Limit: File I/O becomes bottleneck with >1000 locks per workspace
-- Scaling path:
-  - Migrate to SQLite backend for locks
-  - Implement lock cleanup more aggressively
-  - Add batch operations for bulk lock operations
+**GitHub CLI Command-Line Tool: Sequential Request Bottleneck**
+- Current capacity: Each gh CLI invocation spawns a subprocess. With 50+ PR syncs, subprocess spawn overhead becomes significant.
+- Limit: PR sync batch can take 30+ seconds to complete for 100 workspaces.
+- Scaling path: Implement GitHub API client library instead of CLI wrapping. Batch API requests. Use GraphQL for complex queries to reduce round trips.
 
-**Database Queries**
-- Issue: No explicit query performance analysis; Prisma client used with no indexing documentation beyond schema comments
-- Files: `prisma/schema.prisma` (indexes defined but not documented for performance)
-- Scaling path:
-  - Add query monitoring / slow query logging
-  - Benchmark N+1 scenarios (workspace → sessions → messages)
-  - Document query patterns for future maintainers
-  - Profile on realistic data volumes (1000+ workspaces)
+**File Lock Service: TTL-Based Cleanup Complexity**
+- Current capacity: In-memory storage with no distributed coordination. Works for single process.
+- Limit: In cluster setup, each process has its own lock state. Cannot scale beyond single process.
+- Scaling path: Move to external lock service (Redis, etcd). Implement distributed lease protocol. Document single-process-only limitation prominently.
+
+---
 
 ## Dependencies at Risk
 
-**GitHub CLI (gh) Dependency**
-- Risk: External binary dependency; version not pinned in codebase, no version check at runtime
-- Impact: If gh is missing or version incompatible, GitHub operations silently fail or behave unexpectedly
-- Migration plan:
-  - Switch to Octokit.js library (npm package, more portable)
-  - Implement proper version checking at startup
-  - Add fallback to REST API if gh command fails
+**Claude CLI Binary: External Dependency Not Versioned**
+- Risk: Application spawns `claude` command without version check. If CLI behavior changes or is removed, application breaks silently.
+- Impact: Breaking changes in Claude CLI mean application must update code + users must upgrade CLI. No fallback or graceful degradation.
+- Migration plan: Implement CLI version check on startup. Document required Claude CLI version in README. Add integration tests with specific CLI version. Consider bundling CLI if possible.
 
-**Claude CLI (claude) Process**
-- Risk: Spawned as external process; no version pinning, process lifecycle not fully isolated
-- Impact: If Claude CLI crashes, session state could become stale; rapid restarts could DOS system resources
-- Migration plan:
-  - Implement strict rate limiting on Claude process respawn
-  - Add health checks to detect crashed processes
-  - Consider bundling Claude CLI version with app
+**Zod Validation Schemas: Drift From GitHub API Responses**
+- Risk: GitHub API changes response format. If schema is not updated, responses silently fail validation and operation fails without clear error.
+- Impact: PR syncs fail silently. Users don't know PR data is stale.
+- Migration plan: Add GitHub API response validation tests against real API (or snapshot tests). Implement schema versioning. Add monitoring for validation errors.
 
-**SQLite Database**
-- Risk: Single file at `~/factory-factory/data.db`; no backup strategy enforced
-- Impact: Data loss if file corrupted or storage fails; no WAL (write-ahead logging) mentioned
-- Migration plan:
-  - Enable WAL mode in Prisma config for durability
-  - Add scheduled backup to separate storage
-  - Implement data export/import for migrations
+**p-limit Concurrency Library: Version Pin**
+- Risk: If p-limit is upgraded and behavior changes, all concurrency limits throughout codebase may be affected.
+- Impact: Potential resource exhaustion if concurrency limits suddenly don't work as expected.
+- Migration plan: Pin p-limit version. Add integration tests that verify concurrency limits are respected. Document purpose of each concurrency limit.
+
+---
+
+## Missing Critical Features
+
+**No Structured Logging at Application Level**
+- Problem: Logs are created via `createLogger()` but no structured output format. Hard to parse and aggregate in production.
+- Blocks: Cannot implement log aggregation, alerting, or analytics. Error tracking requires manual log review.
+- Fix approach: Implement structured logging (JSON format) with correlation IDs across requests. Use standard logging library. Add log level configuration.
+
+**No Health Check Endpoint for External Monitoring**
+- Problem: Application has internal health checks but no `/health` endpoint for load balancers/orchestrators to monitor.
+- Blocks: Cannot implement automated recovery or load balancing based on application health.
+- Fix approach: Add `/api/health` endpoint that checks database, file system, and Claude CLI availability. Return structured health status.
+
+**No Rate Limiting on API Endpoints**
+- Problem: All tRPC endpoints accept unlimited concurrent requests. No protection against resource exhaustion attacks.
+- Blocks: Malicious user can exhaust server resources by sending many concurrent requests.
+- Fix approach: Implement per-user rate limiting. Track requests by session/user. Return 429 status when limit exceeded. Configurable limits per endpoint.
+
+**No Request Tracing or Distributed Tracing Support**
+- Problem: Cannot trace a request through multiple services. Debugging production issues requires manual log correlation.
+- Blocks: Cannot implement service mesh or distributed tracing. Hard to debug performance issues.
+- Fix approach: Add request correlation ID to all requests. Pass through service calls. Support OpenTelemetry or similar. Add trace ID to all log entries.
+
+---
 
 ## Test Coverage Gaps
 
-**Session Recovery from Process Crash**
-- What's not tested: Process exits unexpectedly mid-message; session store must recover from JSONL without data loss
-- Files: `src/backend/services/session-store.service.ts`, `src/backend/services/chat-event-forwarder.service.ts`
-- Risk: If JSONL reading fails or is partially written, session could be lost or corrupted
-- Priority: **High** - affects data integrity
+**Chat Event Forwarding: Error Recovery Scenarios**
+- What's not tested: What happens if WebSocket connection drops mid-event? What if a listener throws an error? What if client.off() fails?
+- Files: `src/backend/services/chat-event-forwarder.service.ts`
+- Risk: Events are silently dropped if listener crashes. User sees no error.
+- Priority: **High** - This is a critical user-facing feature
 
-**Concurrent Workspace Operations**
-- What's not tested: Multiple simultaneous workspace creation/deletion, git operations on same project
-- Files: `src/backend/services/worktree-lifecycle.service.ts`, `src/backend/services/git-ops.service.ts`
-- Risk: Race conditions could corrupt git state or leave orphaned worktrees
-- Priority: **High** - affects workspace reliability
+**Session Lifecycle: Concurrent Start/Stop Scenarios**
+- What's not tested: Start session, then immediately start again before first completes. Stop session, then immediately try to send message.
+- Files: `src/backend/services/session.service.ts`, `src/backend/services/session.process-manager.ts`
+- Risk: Race conditions lead to duplicate processes or orphaned resources.
+- Priority: **High** - Session lifecycle is foundational
 
-**GitHub API Error Handling**
-- What's not tested: gh command failures, GitHub API rate limiting, network timeouts
+**Ratchet Service: State Machine Transitions**
+- What's not tested: PR state changes rapidly between checks. Ratchet state updated by external entity during check. Fixer session fails while ratchet monitors.
+- Files: `src/backend/services/ratchet.service.ts`
+- Risk: Ratchet state becomes inconsistent. Fixes don't trigger when needed.
+- Priority: **High** - Auto-fix is core feature
+
+**Database Transaction Rollback Scenarios**
+- What's not tested: What happens if a Prisma transaction is aborted mid-way? Are all stores consistent?
+- Files: `src/backend/resource_accessors/claude-session.accessor.ts`, database-related services
+- Risk: Database corruption or silent failures in transactions.
+- Priority: **Medium** - Data integrity issue but less likely to trigger
+
+**GitHub API Error Responses**
+- What's not tested: GitHub API returns 403 (rate limited), 500 (server error), or 401 (auth failed). Does application handle gracefully?
 - Files: `src/backend/services/github-cli.service.ts`
-- Risk: Silent failures or cascading errors when GitHub is down
-- Priority: **Medium** - degrades gracefully but with poor UX
+- Risk: Application hangs or returns stale PR data without alerting user.
+- Priority: **Medium** - Error path is important but less frequently executed
 
-**Terminal Session Lifecycle**
-- What's not tested: Rapid terminal close/reopen, TTY resize during process, SIGINT handling
-- Files: `src/backend/routers/websocket/terminal.handler.ts`
-- Risk: Terminal could become unresponsive or leak process resources
-- Priority: **Medium** - affects terminal reliability
+---
 
-**Interactive Requests (Permissions/Questions)**
-- What's not tested: User never responds to permission prompt, timeout behavior, session disconnect during request
-- Files: `src/backend/services/chat-event-forwarder.service.ts`, `src/backend/services/chat-message-handlers/handlers/permission-response.handler.ts`
-- Risk: Session could hang indefinitely waiting for response
-- Priority: **Medium** - affects user experience
+## Architecture Concerns
 
-## Complexity Hotspots
+**Over-Reliance on EventEmitter for Critical Paths**
+- Issue: Critical state changes (session start, message dispatch) rely on EventEmitter listeners that are loosely coupled. A missing listener registration is a silent failure.
+- Files: `src/backend/services/chat-event-forwarder.service.ts`, `src/backend/domains/session/session-domain.service.ts`
+- Impact: State can change without all required listeners being notified, leading to inconsistency
+- Fix approach: Implement explicit callback registration with validation. Use interfaces to enforce listener types. Add registry verification at startup.
 
-**Session Lifecycle State Coordination**
-- Multiple state sources: ClaudeSession DB status, in-memory ClaudeProcess state, ratchet active session ID, session store hydration state
-- Challenge: Keeping these in sync requires careful ordering of operations
-- Files: `src/backend/services/session.service.ts`, `src/backend/domains/session/session-domain.service.ts`
-- Recommendation: Document authoritative state source for each query
-
-**Message Order and Reconciliation**
-- Problem: Messages have order field for sorting, but rehydration from JSONL must maintain order; queue operations (dequeue, requeue, remove) modify order
-- Files: `src/backend/services/session-store.service.ts` (messageSort function), chat reducer
-- Recommendation: Use append-only log semantics; order should never change for persisted messages
-
-**Interceptor Chain**
-- Problem: Multiple interceptors modify messages (conversation-rename, branch-rename, pr-detection) in sequence; ordering matters
-- Files: `src/backend/interceptors/`, `src/backend/interceptors/registry.ts`
-- Recommendation: Document interceptor ordering contract, add explicit ordering in registry
+**Circular Dependencies Between Services**
+- Issue: Many services depend on each other (session.service → session-store → session-domain → session.service). Hard to test in isolation.
+- Files: `src/backend/services/session.service.ts`, `src/backend/services/session-store.service.ts`, `src/backend/domains/session/session-domain.service.ts`
+- Impact: Cannot unit test individual services without mocking entire dependency graph. Changes ripple across services.
+- Fix approach: Implement dependency injection explicitly. Create interfaces for each service's public API. Use factories to construct service instances with dependencies.
 
 ---
 
