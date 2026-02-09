@@ -12,6 +12,7 @@ import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import { getLogFilePath } from '@/backend/services/logger.service';
 
 const execPromise = promisify(exec);
 
@@ -338,6 +339,26 @@ function registerShutdownHandlers(shutdown: (signal: string) => void): void {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
+function printReadyBanner(opts: {
+  isDev: boolean;
+  host: string;
+  frontendPort: number;
+  backendPort: number;
+  databasePath: string;
+}): void {
+  console.log(chalk.gray('\n  ─────────────────────────────────────'));
+  if (opts.isDev) {
+    console.log(chalk.gray(`  Frontend:  http://${opts.host}:${opts.frontendPort}`));
+    console.log(chalk.gray(`  Backend:   http://${opts.host}:${opts.backendPort}`));
+  } else {
+    console.log(chalk.gray(`  Server:    http://${opts.host}:${opts.backendPort}`));
+  }
+  console.log(chalk.gray(`  Database:  ${opts.databasePath}`));
+  console.log(chalk.gray(`  Mode:      ${opts.isDev ? 'development' : 'production'}`));
+  console.log(chalk.gray(`  Logs:      ${getLogFilePath()}`));
+  console.log(chalk.gray('  ─────────────────────────────────────'));
+}
+
 function buildServeEnv(
   options: ServeOptions,
   databasePath: string,
@@ -399,23 +420,17 @@ program
     registerShutdownHandlers(shutdown);
 
     const createOnReady = (actualBackendPort: number) => async () => {
-      // In production mode, frontend and backend run on the same port (actualBackendPort)
-      // In development mode, frontend runs on frontendPort, backend runs on actualBackendPort
       const url = options.dev
         ? `http://${options.host}:${frontendPort}`
         : `http://${options.host}:${actualBackendPort}`;
 
-      console.log(chalk.gray('\n  ─────────────────────────────────────'));
-      if (options.dev) {
-        console.log(chalk.gray(`  Frontend:  http://${options.host}:${frontendPort}`));
-        console.log(chalk.gray(`  Backend:   http://${options.host}:${actualBackendPort}`));
-      } else {
-        // In production, frontend and backend are on the same port
-        console.log(chalk.gray(`  Server:    http://${options.host}:${actualBackendPort}`));
-      }
-      console.log(chalk.gray(`  Database:  ${databasePath}`));
-      console.log(chalk.gray(`  Mode:      ${options.dev ? 'development' : 'production'}`));
-      console.log(chalk.gray('  ─────────────────────────────────────'));
+      printReadyBanner({
+        isDev: !!options.dev,
+        host: options.host,
+        frontendPort,
+        backendPort: actualBackendPort,
+        databasePath,
+      });
       console.log(chalk.bold.green(`\n  ✅ Ready at ${chalk.cyan(url)}\n`));
       console.log(chalk.dim('  Press Ctrl+C to stop\n'));
 
