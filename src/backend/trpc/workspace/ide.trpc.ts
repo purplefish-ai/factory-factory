@@ -1,15 +1,15 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { checkIdeAvailable, openPathInIde } from '../../lib/ide-helpers';
-import { userSettingsAccessor } from '../../resource_accessors/user-settings.accessor';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
+import { userSettingsQueryService } from '../../services/user-settings-query.service';
+import { workspaceDataService } from '../../services/workspace-data.service';
 import { publicProcedure, router } from '../trpc';
 
 export const workspaceIdeRouter = router({
   // Get list of available IDEs
   getAvailableIdes: publicProcedure.query(async () => {
     const ides: Array<{ id: string; name: string }> = [];
-    const settings = await userSettingsAccessor.get();
+    const settings = await userSettingsQueryService.get();
 
     // Check Cursor
     const cursorAvailable = await checkIdeAvailable('cursor');
@@ -35,7 +35,7 @@ export const workspaceIdeRouter = router({
   openInIde: publicProcedure
     .input(z.object({ id: z.string(), ide: z.string().optional() }))
     .mutation(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.id);
+      const workspace = await workspaceDataService.findById(input.id);
       if (!workspace) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -51,7 +51,7 @@ export const workspaceIdeRouter = router({
       }
 
       // Get user settings to determine which IDE to use
-      const settings = await userSettingsAccessor.get();
+      const settings = await userSettingsQueryService.get();
       const ideToUse = input.ide ?? settings.preferredIde;
 
       // Validate custom IDE configuration

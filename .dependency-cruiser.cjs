@@ -59,6 +59,20 @@ module.exports = {
       from: { path: "^src/app" },
       to: { path: "^src/backend" },
     },
+    {
+      name: "no-trpc-importing-accessors",
+      severity: "error",
+      comment: "tRPC routers should use services, not access data directly via resource accessors",
+      from: { path: "^src/backend/trpc" },
+      to: { path: "^src/backend/resource_accessors" },
+    },
+    {
+      name: "no-routers-importing-accessors",
+      severity: "error",
+      comment: "Routers should use services, not access data directly via resource accessors",
+      from: { path: "^src/backend/routers" },
+      to: { path: "^src/backend/resource_accessors" },
+    },
   ],
   options: {
     doNotFollow: {

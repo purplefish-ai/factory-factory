@@ -10,9 +10,9 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '../../app-context';
 import { WS_READY_STATE } from '../../constants';
-import { terminalSessionAccessor } from '../../resource_accessors/terminal-session.accessor';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
 import { type TerminalMessageInput, TerminalMessageSchema } from '../../schemas/websocket';
+import { sessionDataService } from '../../services/session-data.service';
+import { workspaceDataService } from '../../services/workspace-data.service';
 import { toMessageString } from './message-utils';
 
 // ============================================================================
@@ -136,7 +136,7 @@ function sendExistingTerminals(
       if (exitCleanupMap) {
         exitCleanupMap.delete(terminal.id);
       }
-      terminalSessionAccessor.clearPid(terminal.id).catch((err) => {
+      sessionDataService.clearTerminalPid(terminal.id).catch((err) => {
         logger.warn('Failed to clear terminal PID', { terminalId: terminal.id, error: err });
       });
     });
@@ -181,7 +181,7 @@ async function handleCreateMessage(
     cols: message.cols,
     rows: message.rows,
   });
-  const workspace = await workspaceAccessor.findById(workspaceId);
+  const workspace = await workspaceDataService.findById(workspaceId);
   if (!workspace?.worktreePath) {
     logger.warn('Workspace not found or has no worktree', { workspaceId });
     sendSocketError(ws, 'Workspace not found or has no worktree');
@@ -199,7 +199,7 @@ async function handleCreateMessage(
     rows: message.rows ?? 24,
   });
 
-  await terminalSessionAccessor.create({
+  await sessionDataService.createTerminalSession({
     workspaceId,
     name: terminalId,
     pid,
@@ -237,7 +237,7 @@ async function handleCreateMessage(
     if (exitCleanupMap) {
       exitCleanupMap.delete(terminalId);
     }
-    terminalSessionAccessor.clearPid(terminalId).catch((err) => {
+    sessionDataService.clearTerminalPid(terminalId).catch((err) => {
       logger.warn('Failed to clear terminal PID', { terminalId, error: err });
     });
   });

@@ -18,9 +18,9 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '../../app-context';
 import type { ClaudeClient } from '../../claude/index';
-import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
 import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import type { ConnectionInfo } from '../../services/chat-connection.service';
+import { sessionDataService } from '../../services/session-data.service';
 import { toMessageString } from './message-utils';
 
 function sendBadRequest(socket: Duplex, message: string): void {
@@ -75,7 +75,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     });
 
     // Set up event forwarding (idempotent - safe to call multiple times)
-    const session = await claudeSessionAccessor.findById(dbSessionId);
+    const session = await sessionDataService.findClaudeSessionById(dbSessionId);
     const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
     chatEventForwarderService.setupClientEvents(
       dbSessionId,

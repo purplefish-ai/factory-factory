@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { type AppContext, createAppContext } from '../../app-context';
 import { HTTP_STATUS } from '../../constants';
-import { projectAccessor } from '../../resource_accessors/index';
+import { projectManagementService } from '../../services/project-management.service';
 
 // ============================================================================
 // Input Schemas
@@ -39,7 +39,9 @@ export function createProjectRouter(appContext: AppContext): Router {
       const validatedInput = CreateProjectSchema.parse(req.body);
 
       // Validate repo path
-      const repoValidation = await projectAccessor.validateRepoPath(validatedInput.repoPath);
+      const repoValidation = await projectManagementService.validateRepoPath(
+        validatedInput.repoPath
+      );
       if (!repoValidation.valid) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
@@ -51,7 +53,7 @@ export function createProjectRouter(appContext: AppContext): Router {
       }
 
       // Create project - name/slug/worktree derived from repoPath
-      const project = await projectAccessor.create(
+      const project = await projectManagementService.create(
         { repoPath: validatedInput.repoPath },
         { worktreeBaseDir: configService.getWorktreeBaseDir() }
       );
@@ -98,7 +100,7 @@ export function createProjectRouter(appContext: AppContext): Router {
   router.get('/list', async (req, res) => {
     try {
       const isArchived = req.query.isArchived === 'true';
-      const projects = await projectAccessor.list({ isArchived });
+      const projects = await projectManagementService.list({ isArchived });
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
@@ -137,7 +139,7 @@ export function createProjectRouter(appContext: AppContext): Router {
   router.get('/:projectId', async (req, res) => {
     try {
       const projectId = req.params.projectId;
-      const project = await projectAccessor.findById(projectId);
+      const project = await projectManagementService.findById(projectId);
 
       if (!project) {
         return res.status(HTTP_STATUS.NOT_FOUND).json({
@@ -188,7 +190,7 @@ export function createProjectRouter(appContext: AppContext): Router {
       const validatedInput = UpdateProjectSchema.parse(req.body);
 
       // Check project exists
-      const existingProject = await projectAccessor.findById(projectId);
+      const existingProject = await projectManagementService.findById(projectId);
       if (!existingProject) {
         return res.status(HTTP_STATUS.NOT_FOUND).json({
           success: false,
@@ -201,7 +203,9 @@ export function createProjectRouter(appContext: AppContext): Router {
 
       // Validate repoPath if updating
       if (validatedInput.repoPath) {
-        const repoValidation = await projectAccessor.validateRepoPath(validatedInput.repoPath);
+        const repoValidation = await projectManagementService.validateRepoPath(
+          validatedInput.repoPath
+        );
         if (!repoValidation.valid) {
           return res.status(HTTP_STATUS.BAD_REQUEST).json({
             success: false,
@@ -214,7 +218,7 @@ export function createProjectRouter(appContext: AppContext): Router {
       }
 
       // Update project
-      const project = await projectAccessor.update(projectId, validatedInput);
+      const project = await projectManagementService.update(projectId, validatedInput);
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
@@ -264,7 +268,7 @@ export function createProjectRouter(appContext: AppContext): Router {
       const projectId = req.params.projectId;
 
       // Check project exists
-      const existingProject = await projectAccessor.findById(projectId);
+      const existingProject = await projectManagementService.findById(projectId);
       if (!existingProject) {
         return res.status(HTTP_STATUS.NOT_FOUND).json({
           success: false,
@@ -276,7 +280,7 @@ export function createProjectRouter(appContext: AppContext): Router {
       }
 
       // Archive (soft delete)
-      const project = await projectAccessor.archive(projectId);
+      const project = await projectManagementService.archive(projectId);
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
@@ -305,7 +309,7 @@ export function createProjectRouter(appContext: AppContext): Router {
     try {
       const projectId = req.params.projectId;
 
-      const project = await projectAccessor.findById(projectId);
+      const project = await projectManagementService.findById(projectId);
       if (!project) {
         return res.status(HTTP_STATUS.NOT_FOUND).json({
           success: false,
@@ -316,7 +320,7 @@ export function createProjectRouter(appContext: AppContext): Router {
         });
       }
 
-      const repoValidation = await projectAccessor.validateRepoPath(project.repoPath);
+      const repoValidation = await projectManagementService.validateRepoPath(project.repoPath);
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
