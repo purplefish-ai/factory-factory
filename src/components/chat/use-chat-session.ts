@@ -45,6 +45,7 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
 
   const prevDbSessionIdRef = useRef<string | null>(null);
   const loadedDraftRef = useRef<string>('');
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const prevDbSessionId = prevDbSessionIdRef.current;
@@ -56,6 +57,12 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     // If switching to a different session, reset local state
     if (prevDbSessionId !== null && prevDbSessionId !== newDbSessionId) {
       debug.log('Session switch detected', { from: prevDbSessionId, to: newDbSessionId });
+
+      // Clear any existing loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
 
       // Dispatch session switch to reset reducer state
       dispatch({ type: 'SESSION_SWITCH_START' });
@@ -75,11 +82,26 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       // For session switches, SESSION_SWITCH_START already set loadingSession: true
       if (prevDbSessionId === null) {
         dispatch({ type: 'SESSION_LOADING_START' });
+
+        // Safety timeout: if loading takes more than 10 seconds, clear the loading state
+        // This prevents sessions from getting stuck in loading state forever
+        loadingTimeoutRef.current = setTimeout(() => {
+          debug.log('Loading timeout reached, clearing loading state');
+          dispatch({ type: 'SESSION_LOADING_END' });
+          loadingTimeoutRef.current = null;
+        }, 10_000);
       }
     } else {
       loadedDraftRef.current = '';
       dispatch({ type: 'SET_SETTINGS', payload: DEFAULT_CHAT_SETTINGS });
     }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
   }, [dbSessionId, dispatch, toolInputAccumulatorRef]);
 
   return {

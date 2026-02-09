@@ -2,6 +2,11 @@ import { createSessionSwitchResetState } from '../state';
 import type { ChatAction, ChatState } from '../types';
 
 function deriveSessionStatus(runtime: ChatState['sessionRuntime']): ChatState['sessionStatus'] {
+  // If process is stopped, always show stopped state (overrides loading)
+  if (runtime.processState === 'stopped') {
+    return { phase: 'ready' };
+  }
+
   switch (runtime.phase) {
     case 'loading':
       return { phase: 'loading' };
